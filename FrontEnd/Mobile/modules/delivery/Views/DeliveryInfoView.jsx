@@ -12,7 +12,7 @@ import useAuthStore from '@modules/auth/Models/authModel'
 import { usePlanController } from '@modules/production/Controllers/planController'
 import { useWebSocket } from '@shared/hooks/useWebSocket'
 import useUiStore from '@shared/store/uiStore'
-import apiClient from '@shared/services/api'
+import { useDeliveryController } from '@modules/delivery/Controllers/deliveryController'
 
 /**
  * MH2 - Thông tin bàn giao
@@ -21,6 +21,7 @@ import apiClient from '@shared/services/api'
  */
 const DeliveryInfo = () => {
   const { plans, fetchPlans, fetchDeliveriesByPlan, fetchPlanDetail } = usePlanController()
+  const { fetchReturnsByPlan, fetchInspectionsByPlan, fetchPartProducts } = useDeliveryController()
   const navigate = useNavigate()
   const { user } = useAuthStore()
   const [activeTab, setActiveTab] = useState('plan')
@@ -173,17 +174,17 @@ const DeliveryInfo = () => {
 
           // Load danh sách phiếu trả hàng
           try {
-            const returnsResp = await apiClient.get(`/returns/${selectedPlanId}`)
-            setReturns(returnsResp.data || [])
+            const returnsData = await fetchReturnsByPlan(selectedPlanId)
+            setReturns(returnsData || [])
           } catch (err) {
             console.error('Lỗi tải danh sách trả hàng:', err)
             setReturns([])
           }
 
           // Load kết quả kiểm tra (nhẹ, giữ lại)
-          const inspRes = await apiClient.get(`/inspections/plan/${selectedPlanId}?stage=${encodeURIComponent(stageToFilter || '')}`)
+          const inspectionsData = await fetchInspectionsByPlan(selectedPlanId, stageToFilter || '')
           const map = {}
-          ;(inspRes.data || []).forEach(insp => {
+          ;(inspectionsData || []).forEach(insp => {
             const key = (insp.part_name || '').trim().toLowerCase()
             if (!map[key]) map[key] = []
             map[key].push(insp)
@@ -249,23 +250,23 @@ const DeliveryInfo = () => {
     
     try {
       // [OPTIMIZED] Gọi song song để tăng tốc độ phản hồi
-      const [list, detail, returnsResp] = await Promise.all([
+      const [list, detail, returnsData] = await Promise.all([
         fetchDeliveriesByPlan(targetId),
         fetchPlanDetail(targetId, stageToFilter),
-        apiClient.get(`/returns/${targetId}`).catch(err => {
+        fetchReturnsByPlan(targetId).catch(err => {
           console.error('Lỗi tải danh sách trả hàng trong refreshData:', err);
-          return { data: [] };
+          return [];
         })
       ]);
       
       if (list) setDeliveries(list);
       if (detail) setCurrentPlan(detail);
-      if (returnsResp && returnsResp.data) setReturns(returnsResp.data);
+      if (returnsData) setReturns(returnsData);
       
       // Load kết quả kiểm tra (giữ lại logic cũ)
-      const inspRes = await apiClient.get(`/inspections/plan/${targetId}?stage=${encodeURIComponent(stageToFilter || '')}`);
+      const inspectionsData = await fetchInspectionsByPlan(targetId, stageToFilter || '');
       const map = {};
-      (inspRes.data || []).forEach(insp => {
+      (inspectionsData || []).forEach(insp => {
         const key = (insp.part_name || '').trim().toLowerCase();
         if (!map[key]) map[key] = [];
         map[key].push(insp);
@@ -281,13 +282,8 @@ const DeliveryInfo = () => {
       const matchedDelivery = deliveries.find(d => d.id === ticket.id)
       if (!matchedDelivery) return
 
-      const params = new URLSearchParams()
-      params.append('part_name', matchedDelivery.part_name || '')
-      if (matchedDelivery.specification) {
-        params.append('spec', matchedDelivery.specification)
-      }
-      const res = await apiClient.get(`/plans/${selectedPlanId}/part-products?${params.toString()}`)
-      setPalletPartProducts(res.data || [])
+      const partProductsData = await fetchPartProducts(selectedPlanId, matchedDelivery.part_name || '', matchedDelivery.specification || '')
+      setPalletPartProducts(partProductsData || [])
 
       const palletData = {
         ...matchedDelivery,

@@ -9,7 +9,7 @@ import FormSearchSelect from '@mobile/Shared/Views/components/form/FormSearchSel
 import FormMultiSearchSelect from '@mobile/Shared/Views/components/form/FormMultiSearchSelect'
 import ConfirmModal from '@mobile/Shared/Views/components/feedback/ConfirmModal'
 import MessageModal from '@mobile/Shared/Views/components/feedback/MessageModal'
-import apiClient from '@shared/services/api'
+import { useDeliveryController } from '@modules/delivery/Controllers/deliveryController'
 import useAuthStore from '@modules/auth/Models/authModel'
 import { usePlanController } from '@modules/production/Controllers/planController'
 import { Camera, QrCode, Trash2, X, Check, RotateCcw, AlertCircle, Info, CheckCircle, ChevronDown, Save, ArrowLeft, Truck, Package, ScanLine, Eye } from 'lucide-react'
@@ -113,7 +113,8 @@ const DeliveryCreate = () => {
   const editDeliveryId = location.state?.editDeliveryId || null // [NEW] ID phiếu đang chỉnh sửa
   const editData = location.state?.editData || null // [NEW] Dữ liệu phiếu đang chỉnh sửa
   const isEditMode = !!editDeliveryId
-  const { plans, fetchPlans, fetchDeliveriesByPlan } = usePlanController()
+  const { plans, fetchPlans, fetchDeliveriesByPlan, fetchPlanDetail } = usePlanController()
+  const { createOrUpdateDelivery, fetchPartProducts, fetchInspectionsByPlan, fetchNextDeliveryId, isSubmitting } = useDeliveryController()
   const [deliveries, setDeliveries] = useState([])
 
   // State
@@ -124,7 +125,6 @@ const DeliveryCreate = () => {
   const [inspections, setInspections] = useState([])
   const [totalHandover, setTotalHandover] = useState('')
   const [photos, setPhotos] = useState([])
-  const [isSubmitting, setIsSubmitting] = useState(false)
   const [residual, setResidual] = useState('0')
   const [receivingStage, setReceivingStage] = useState('')
   const [note, setNote] = useState('')
@@ -160,7 +160,7 @@ const DeliveryCreate = () => {
         // Gọi song song các API để tăng tốc độ load
         const [deliveryList, planResp] = await Promise.all([
           fetchDeliveriesByPlan(selectedPlanId),
-          apiClient.get(`/plans/${selectedPlanId}?stage=${encodeURIComponent(fetchStage)}`)
+          fetchPlanDetail(selectedPlanId, fetchStage)
         ])
 
         setDeliveries(deliveryList || [])
@@ -169,7 +169,7 @@ const DeliveryCreate = () => {
            const poParts = [];
            const userStageNorm = stageParam.toLowerCase().trim();
 
-           (planResp.data?.orders || []).forEach(o => {
+           (planResp?.orders || []).forEach(o => {
                (o.products || []).forEach(p => {
                    const checkTree = (nodes) => {
                        if (!nodes || !Array.isArray(nodes)) return false;
@@ -199,14 +199,14 @@ const DeliveryCreate = () => {
            });
            setAggregatedParts(poParts);
         } else {
-           setAggregatedParts(planResp.data?.bom_details?.handover || [])
+           setAggregatedParts(planResp?.bom_details?.handover || [])
         }
       } catch (err) {
         console.error("Lỗi khi tải dữ liệu chi tiết:", err)
       }
     }
     loadData()
-  }, [selectedPlanId, fetchDeliveriesByPlan, user])
+  }, [selectedPlanId, fetchDeliveriesByPlan, user, fetchPlanDetail])
 
   // [MỚI] Pre-fill form khi ở chế độ chỉnh sửa
   useEffect(() => {
@@ -364,9 +364,8 @@ const DeliveryCreate = () => {
     setShowPalletModal(true)
     try {
       // Lấy ID dự kiến
-      apiClient.get('/deliveries/next-id').then(res => {
-        if (res.data?.next_id) setPredictedId(res.data.next_id)
-      })
+      const nextId = await fetchNextDeliveryId()
+      if (nextId) setPredictedId(nextId)
     } catch (e) {
       console.error('Lỗi fetch pallet next-id:', e)
     }
@@ -415,16 +414,11 @@ const DeliveryCreate = () => {
           return;
         }
 
-        const params = new URLSearchParams({ part_name: selectedPart?.name || selectedPartKey })
-        if (selectedSpecification && selectedSpecification !== 'Không có') {
-          params.append('spec', selectedSpecification)
-        }
+        const partName = selectedPart?.name || selectedPartKey
+        const spec = selectedSpecification !== 'Không có' ? selectedSpecification : ''
         const stageParam = selectedPart?.input_stage || stageParamActive
-        if (stageParam) {
-          params.append('stage', stageParam)
-        }
-        const res = await apiClient.get(`/plans/${selectedPlanId}/part-products?${params.toString()}`)
-        const data = res.data || []
+
+        const data = await fetchPartProducts(selectedPlanId, partName, spec, stageParam)
         setPartProducts(data)
 
         // Chỉ chọn nếu là Edit Mode và lần đầu load, còn lại để trống không tự chọn mặc định nữa
@@ -442,7 +436,7 @@ const DeliveryCreate = () => {
       }
     }
     loadPartProducts()
-  }, [selectedPlanId, selectedPartKey, selectedSpecification, selectedPart, user])
+  }, [selectedPlanId, selectedPartKey, selectedSpecification, selectedPart, user, fetchPartProducts])
 
   // [NEW] Kiểm tra xem chi tiết đã được KT đầu vào chưa
   useEffect(() => {
@@ -454,9 +448,9 @@ const DeliveryCreate = () => {
       try {
         const stageParam = user?.activeStageDescription || user?.activeStageName || user?.stage_description || user?.stage_name || ''
         // Lấy tất cả KT của KHSX này theo công đoạn
-        const res = await apiClient.get(`/inspections/plan/${selectedPlanId}?stage=${encodeURIComponent(stageParam)}`)
+        const allInsps = await fetchInspectionsByPlan(selectedPlanId, stageParam)
         // Lọc đúng chi tiết đang chọn
-        const partInsps = (res.data || []).filter(i =>
+        const partInsps = allInsps.filter(i =>
           (i.part_name || '').trim().toLowerCase() === selectedPartKey.trim().toLowerCase()
         )
         setInspections(partInsps)
@@ -466,7 +460,7 @@ const DeliveryCreate = () => {
       }
     }
     checkInspection()
-  }, [selectedPlanId, selectedPartKey, user])
+  }, [selectedPlanId, selectedPartKey, user, fetchInspectionsByPlan])
 
   const handleAddPhoto = () => {
     if (photos.length < 3 && fileInputRef.current) {
@@ -541,51 +535,29 @@ const DeliveryCreate = () => {
 
   const executeSubmit = async () => {
     try {
-      setIsSubmitting(true)
       setShowConfirmModal(false)
 
-      const formData = new FormData()
-      formData.append('plan_id', selectedPlanId)
-      formData.append('receiving_stage', receivingStage)
-      formData.append('note', note)
-      formData.append('user_id', user?.id || 1)
-      formData.append('quantity', parseInt(totalHandover) || 0)
-      formData.append('residual', parseInt(residual) || 0)
-      formData.append('part_name', selectedPart?.displayName || selectedPart?.name || 'Chi tiết không tên')
-      formData.append('specification', selectedSpecification) // [NEW] Gửi quy cách
-      formData.append('delivery_stage', user?.activeStageDescription || user?.activeStageName || user?.stage_description || user?.stage_name || 'Chưa xác định')
-      formData.append('status', 'Chờ Nhận Hàng')
-      if (backupQrCode) {
-          formData.append('backup_qr', backupQrCode)
-      }
-      if (moistureMin) formData.append('moisture_min', moistureMin)
-      if (moistureMax) formData.append('moisture_max', moistureMax)
-      if (orderIdsToSend && orderIdsToSend.length > 0) {
-        formData.append('order_ids', orderIdsToSend.join(','))
+      const payload = {
+        plan_id: selectedPlanId,
+        receiving_stage: receivingStage,
+        note: note,
+        user_id: user?.id || 1,
+        quantity: parseInt(totalHandover) || 0,
+        residual: parseInt(residual) || 0,
+        part_name: selectedPart?.displayName || selectedPart?.name || 'Chi tiết không tên',
+        specification: selectedSpecification,
+        delivery_stage: user?.activeStageDescription || user?.activeStageName || user?.stage_description || user?.stage_name || 'Chưa xác định',
+        status: 'Chờ Nhận Hàng',
+        backup_qr: backupQrCode,
+        moisture_min: moistureMin,
+        moisture_max: moistureMax,
+        order_ids: orderIdsToSend && orderIdsToSend.length > 0 ? orderIdsToSend.join(',') : null
       }
 
-      // [EDIT MODE] Nếu đang chỉnh sửa, gọi PATCH thay vì POST
-      let response;
-      if (isEditMode) {
-        const updatePayload = {
-          part_name: selectedPart?.displayName || selectedPart?.name || 'Chi tiết không tên',
-          specification: selectedSpecification,
-          quantity_total: parseInt(totalHandover) || 0,
-          residual: parseInt(residual) || 0,
-          note: note,
-          moisture_min: moistureMin ? parseFloat(moistureMin) : null,
-          moisture_max: moistureMax ? parseFloat(moistureMax) : null
-        }
-        response = await apiClient.patch(`/deliveries/${editDeliveryId}/update`, updatePayload)
-      } else {
-        photos.forEach(p => {
-          if (p.file) formData.append('files', p.file)
-        })
-        response = await apiClient.post('/deliveries/', formData)
-      }
+      const resData = await createOrUpdateDelivery(payload, isEditMode, editDeliveryId, photos)
 
       setQrData({
-        ...response.data,
+        ...resData,
         plan_name: currentPlan?.name || '',
         part_name: selectedPart?.displayName || selectedPart?.name || '',
         quantity: parseInt(totalHandover) || 0,
@@ -594,7 +566,7 @@ const DeliveryCreate = () => {
 
       // Chuẩn bị dữ liệu Thẻ Pallet
       setPalletData({
-        ...response.data,
+        ...resData,
         plan_name: currentPlan?.name || '',
         part_name: selectedPart?.displayName || selectedPart?.name || '',
         specification: selectedSpecification || '',
@@ -619,10 +591,8 @@ const DeliveryCreate = () => {
         isOpen: true,
         type: 'error',
         title: 'Lỗi hệ thống',
-        message: 'Không thể lưu phiếu bàn giao: ' + (error.response?.data?.detail || error.message)
+        message: 'Không thể lưu phiếu bàn giao: ' + error.message
       })
-    } finally {
-      setIsSubmitting(false)
     }
   }
 

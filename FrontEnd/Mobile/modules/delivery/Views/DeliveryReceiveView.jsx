@@ -7,9 +7,10 @@ import FormInput from '@mobile/Shared/Views/components/form/FormInput'
 import FormSelect from '@mobile/Shared/Views/components/form/FormSelect'
 import MessageModal from '@mobile/Shared/Views/components/feedback/MessageModal'
 import ConfirmModal from '@mobile/Shared/Views/components/feedback/ConfirmModal'
-import apiClient, { API_URL, API_ROOT } from '@shared/services/api'
+import { API_URL, API_ROOT } from '@shared/services/api'
 import useAuthStore from '@modules/auth/Models/authModel'
 import { usePlanController } from '@modules/production/Controllers/planController'
+import { useDeliveryController } from '@modules/delivery/Controllers/deliveryController'
 import { ChevronLeft, Info, Package, Check, X, Pencil, Camera, RotateCcw, Image as ImageIcon, History, Truck, ArrowLeftRight } from 'lucide-react';
 
 // --- Sub-components (extracted for better maintainability) ---
@@ -43,6 +44,17 @@ const DeliveryReceive = () => {
   const location = useLocation()
   const { user } = useAuthStore()
   const { plans, fetchPlans, fetchDeliveriesByPlan } = usePlanController()
+  const {
+    fetchDeliveryDetail,
+    confirmDeliveryReceipt,
+    deleteDelivery,
+    saveQCResults,
+    createReturnSlip,
+    confirmReturnSlip,
+    fetchReturnsByDelivery,
+    fetchQCDetail,
+    fetchInspectionsByPlan
+  } = useDeliveryController()
 
   // State
   const [delivery, setDelivery] = useState(null)
@@ -156,49 +168,24 @@ const DeliveryReceive = () => {
     try {
       setIsSubmitting(true);
 
-      const formData = new FormData();
-      formData.append('plan_id', delivery.plan_id);
-      formData.append('delivery_id', id);
-      formData.append('from_stage', user?.activeStageDescription || user?.activeStageName || user?.stage_description || user?.stage_name || 'QC');
-      formData.append('to_stage', delivery.delivery_stage);
-      formData.append('part_name', delivery.part_name || 'Chi tiết không tên');
-      formData.append('quantity', parseInt(returnQty) || 0);
-      formData.append('note', returnNote);
-      formData.append('user_id', user?.id || 1);
-      formData.append('status', 'Chờ SX Xác Nhận');
-      formData.append('allocation_method', 'LIFO'); // Mặc định trừ PO cuối
-
-      returnPhotos.forEach(p => {
-        if (p.file) formData.append('files', p.file);
-      });
-
-      await apiClient.post('/returns/', formData);
+      const fromStage = user?.activeStageDescription || user?.activeStageName || user?.stage_description || user?.stage_name || 'QC';
+      await createReturnSlip(
+        id,
+        delivery.plan_id,
+        fromStage,
+        delivery.delivery_stage,
+        delivery.part_name || 'Chi tiết không tên',
+        returnQty,
+        returnNote,
+        returnPhotos,
+        user?.id || 1
+      );
 
       // Tự động đồng bộ gửi dữ liệu QC của phiếu bàn giao lên /qc/{delivery_id} (nếu QC chưa lưu trước đó)
       const hasQCSaved = delivery.quantity_error > 0 || delivery.quantity_returned > 0 || delivery.status === 'Trả Hàng' || delivery.status === 'Hoàn thành';
       if (!hasQCSaved) {
         try {
-          const qcFormData = new FormData();
-          const resultsToSave = {};
-          const tags = [];
-
-          Object.keys(qcData).forEach(cat => {
-            if (['note', 'error_qty', 'scrap_qty'].includes(cat)) return;
-            if (qcData[cat] && typeof qcData[cat] === 'object') {
-              const { images, ...data } = qcData[cat];
-              resultsToSave[cat] = data;
-            }
-          });
-
-          qcFormData.append('results_json', JSON.stringify(resultsToSave));
-          qcFormData.append('note', qcData.note || returnNote);
-          qcFormData.append('category_tags', JSON.stringify(tags));
-          qcFormData.append('quantity_error', parseInt(delivery.quantity_error) || 0); // Giữ nguyên quantity_error, không gán bằng returnQty
-          qcFormData.append('quantity_returned', 0); // Không gửi quantity_returned vì đã được cập nhật bởi /returns/
-          qcFormData.append('quantity_inspection', parseInt(totalInspected) || parseInt(delivery.quantity_inspection) || 0);
-          qcFormData.append('status', 'Trả Hàng');
-
-          await apiClient.post(`/qc/${id}`, qcFormData);
+          await saveQCResults(id, qcData, totalInspected || delivery.quantity_inspection || 0);
         } catch (qcErr) {
           console.error('Lỗi đồng bộ QC khi tạo phiếu trả hàng:', qcErr);
         }
@@ -206,19 +193,15 @@ const DeliveryReceive = () => {
 
       // Tải lại thông tin phiếu trả hàng
       try {
-        const returnsResp = await apiClient.get(`/returns/by-delivery/${id}`);
-        if (returnsResp.data) {
-          setReturns([returnsResp.data]);
-        } else {
-          setReturns([]);
-        }
+        const returnsData = await fetchReturnsByDelivery(id);
+        setReturns(returnsData || []);
       } catch (err) {
         setReturns([]);
       }
 
       // Tải lại thông tin delivery
-      const dResp = await apiClient.get(`/deliveries/detail/${id}`);
-      setDelivery(dResp.data);
+      const dResp = await fetchDeliveryDetail(id);
+      if (dResp) setDelivery(dResp);
 
       setMessageModal({
         isOpen: true,
@@ -231,7 +214,7 @@ const DeliveryReceive = () => {
         isOpen: true,
         type: 'error',
         title: 'Lỗi hệ thống',
-        message: 'Không thể lập phiếu trả hàng: ' + (error.response?.data?.detail || error.message)
+        message: 'Không thể lập phiếu trả hàng: ' + error.message
       });
     } finally {
       setIsSubmitting(false);
@@ -274,32 +257,20 @@ const DeliveryReceive = () => {
     const noteInput = document.getElementById(`return-note-${returnId}`);
     const note = noteInput ? noteInput.value : '';
 
-    console.log('User object:', user);
-    console.log('User ID:', user?.id);
-    console.log('Return ID:', returnId);
-    console.log('Note:', note);
-
     try {
-      await apiClient.patch(`/returns/${returnId}/confirm`, {
-        user_id: user?.id,
-        sx_confirmation_note: note
-      });
+      await confirmReturnSlip(returnId, user?.id, note);
 
       // Refresh returns list
       try {
-        const returnsResp = await apiClient.get(`/returns/by-delivery/${id}`)
-        if (returnsResp.data) {
-          setReturns([returnsResp.data])
-        } else {
-          setReturns([])
-        }
+        const returnsData = await fetchReturnsByDelivery(id);
+        setReturns(returnsData || []);
       } catch (err) {
-        setReturns([])
+        setReturns([]);
       }
 
       // Refresh delivery details
-      const dResp = await apiClient.get(`/deliveries/detail/${id}`)
-      setDelivery(dResp.data)
+      const dResp = await fetchDeliveryDetail(id);
+      if (dResp) setDelivery(dResp);
 
       setMessageModal({
         isOpen: true,
@@ -309,12 +280,11 @@ const DeliveryReceive = () => {
       });
     } catch (err) {
       console.error('Lỗi xác nhận phiếu trả hàng:', err)
-      const errorMessage = err.response?.data?.detail || err.message || 'Không thể xác nhận phiếu trả hàng. Vui lòng thử lại.'
       setMessageModal({
         isOpen: true,
         type: 'error',
         title: 'Lỗi',
-        message: errorMessage
+        message: err.message
       });
     } finally {
       setIsReturnConfirmModalOpen(false);
@@ -328,13 +298,13 @@ const DeliveryReceive = () => {
   // (component remount khi navigate → pending phải được merge trong initial load)
   const fetchQCData = async (currentDelivery) => {
     try {
-      const resp = await apiClient.get(`/qc/${id}`)
+      const data = await fetchQCDetail(id);
       let newQCData = { ...INITIAL_QC_DATA }
 
-      if (resp.data && resp.data.qc_info) {
-        const info = resp.data.qc_info;
+      if (data && data.qc_info) {
+        const info = data.qc_info;
         const results = typeof info.results_json === 'string' ? JSON.parse(info.results_json) : info.results_json;
-        const serverImages = resp.data.images || [];
+        const serverImages = data.images || [];
 
         const deliveryData = currentDelivery || delivery;
         const errVal = deliveryData?.quantity_error !== undefined && deliveryData?.quantity_error !== null ? deliveryData.quantity_error : (results.error_qty || 0);
@@ -361,7 +331,6 @@ const DeliveryReceive = () => {
       }
 
       // Merge pending store lên trên API data
-      // (pending = những mục đã xác nhận trong sub-screen nhưng chưa bấm Xác nhận ngoài)
       if (pendingQCStore.hasPending(id)) {
         const pending = pendingQCStore.getAll(id)
         Object.entries(pending).forEach(([cat, result]) => {
@@ -377,7 +346,6 @@ const DeliveryReceive = () => {
 
       setQcData(newQCData);
     } catch (err) {
-      // Nếu API lỗi nhưng có pending, vẫn hiển thị pending
       if (pendingQCStore.hasPending(id)) {
         const pending = pendingQCStore.getAll(id)
         setQcData(prev => {
@@ -396,8 +364,8 @@ const DeliveryReceive = () => {
   const initDeliveryData = async () => {
     try {
       setLoading(true)
-      const resp = await apiClient.get(`/deliveries/detail/${id}`)
-      const data = resp.data
+      const data = await fetchDeliveryDetail(id);
+      if (!data) throw new Error('Không thể tải chi tiết phiếu');
       setDelivery(data)
       const initialQty = data.quantity_total || 0;
       setTotalHandover(initialQty.toString())
@@ -433,12 +401,8 @@ const DeliveryReceive = () => {
 
       // Load phiếu trả hàng liên kết trực tiếp bằng delivery_id
       try {
-        const returnsResp = await apiClient.get(`/returns/by-delivery/${id}`)
-        if (returnsResp.data) {
-          setReturns([returnsResp.data])
-        } else {
-          setReturns([])
-        }
+        const returnsData = await fetchReturnsByDelivery(id);
+        setReturns(returnsData || []);
       } catch (err) {
         setReturns([])
       }
@@ -450,8 +414,8 @@ const DeliveryReceive = () => {
       if (data.plan_id && data.part_name) {
           try {
               const stageParam = data.delivery_stage || '';
-              const inspResp = await apiClient.get(`/inspections/plan/${data.plan_id}?stage=${encodeURIComponent(stageParam)}`);
-              const hasInsp = inspResp.data.some(i => 
+              const inspData = await fetchInspectionsByPlan(data.plan_id, stageParam);
+              const hasInsp = inspData.some(i => 
                   (i.part_name === data.part_name || (i.part_name && i.part_name.startsWith(data.part_name + " - ")))
               );
               setDelivery(prev => ({ ...prev, qc_status: hasInsp ? 'Đã kiểm tra' : 'Chưa test' }));
@@ -593,57 +557,17 @@ const DeliveryReceive = () => {
   const handleConfirmDelete = async () => {
     setIsDeleteConfirmOpen(false)
     try {
-      setIsSubmitting(true)
-      await apiClient.delete(`/deliveries/${id}`)
+      await deleteDelivery(id)
       setMessageModal({ isOpen: true, type: 'success', title: 'Đã xóa', message: 'Phiếu bàn giao đã được xóa thành công.' })
     } catch (err) {
-      setMessageModal({ isOpen: true, type: 'error', title: 'Lỗi', message: err?.response?.data?.detail || 'Không thể xóa phiếu bàn giao.' })
-    } finally {
-      setIsSubmitting(false)
+      setMessageModal({ isOpen: true, type: 'error', title: 'Lỗi', message: err.message })
     }
   }
 
   const handleSaveQC = async () => {
     try {
-      setIsSubmitting(true)
-
-      // 1. Chuẩn bị dữ liệu JSON — bao gồm tất cả hạng mục QC
-      const resultsToSave = {};
-      Object.keys(qcData).forEach(cat => {
-        if (['note', 'error_qty', 'scrap_qty'].includes(cat)) return;
-        if (qcData[cat] && typeof qcData[cat] === 'object') {
-          const { images, ...data } = qcData[cat];
-          resultsToSave[cat] = data;
-        }
-      });
-
-      const formData = new FormData();
-      formData.append('results_json', JSON.stringify(resultsToSave));
-      formData.append('note', qcData.note);
-
-      // 2. Gom ảnh từ TẤT CẢ 8 hạng mục (bao gồm visual_ext và functional)
-      const tags = [];
-      ['size', 'structure', 'visual', 'moisture', 'bend', 'accessories', 'visual_ext', 'functional'].forEach(cat => {
-        if (!qcData[cat]) return;
-        qcData[cat].images.forEach(imgFile => {
-          if (imgFile instanceof File) {
-            formData.append('files', imgFile);
-            tags.push(`qc_${cat}`);
-          }
-        });
-      });
-
-      formData.append('category_tags', JSON.stringify(tags));
-      formData.append('quantity_error', parseInt(qcData.scrap_qty) || 0); // SL Loại -> quantity_error
-      formData.append('quantity_returned', 0); // Xác nhận QC thì chưa trả hàng
-      formData.append('quantity_inspection', parseInt(totalInspected) || 0); // [NEW] Dùng đúng biến thực kiểm
-      // [FIX] Không lưu số lượng thực kiểm vào cột số lượng nhận (quantity_received)
-
-      const resp = await apiClient.post(`/qc/${id}`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
-
-      if (resp.data.status === 'success') {
+      const data = await saveQCResults(id, qcData, totalInspected);
+      if (data.status === 'success') {
         pendingQCStore.clear(id) // Xóa pending của phiếu này sau khi đã lưu thành công
         setMessageModal({
           isOpen: true,
@@ -657,30 +581,18 @@ const DeliveryReceive = () => {
         });
       }
     } catch (err) {
-      let errorMsg = 'Không thể kết nối đến máy chủ.';
-
-      if (err.response?.data?.detail) {
-        const detail = err.response.data.detail;
-        errorMsg = typeof detail === 'string' ? detail : JSON.stringify(detail);
-      }
-      setMessageModal({ isOpen: true, type: 'error', title: 'Lỗi lưu trữ', message: errorMsg })
-    } finally {
-      setIsSubmitting(false)
+      setMessageModal({ isOpen: true, type: 'error', title: 'Lỗi lưu trữ', message: err.message })
     }
   }
 
   const handleFinalConfirm = async () => {
     try {
       setIsConfirmModalOpen(false)
-      setIsSubmitting(true)
       // SX xác nhận nhận hàng → trạng thái Chờ Kiểm Tra
-      const payload = { user_id: user?.id || 1, sx_receipt: user?.id || 1, quantity_received: parseInt(totalReceived) || 0, status: 'Chờ Kiểm Tra' }
-      await apiClient.patch(`/deliveries/${id}/confirm`, payload)
+      await confirmDeliveryReceipt(id, totalReceived, user?.id || 1)
       setMessageModal({ isOpen: true, type: 'success', title: 'Thành công', message: 'Đã xác nhận nhận hàng thành công!' })
     } catch (err) {
-      setMessageModal({ isOpen: true, type: 'error', title: 'Lỗi', message: 'Có lỗi xảy ra khi xác nhận nhận hàng.' })
-    } finally {
-      setIsSubmitting(false)
+      setMessageModal({ isOpen: true, type: 'error', title: 'Lỗi', message: err.message })
     }
   }
 
