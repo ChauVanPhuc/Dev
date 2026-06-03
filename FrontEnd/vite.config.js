@@ -9,7 +9,23 @@ export default defineConfig({
     alias: {
       '@shared': path.resolve(__dirname, './shared'),
       '@web': path.resolve(__dirname, './Web'),
-      '@mobile': path.resolve(__dirname, './Mobile')
+      '@mobile': path.resolve(__dirname, './Mobile'),
+      '@webShared': path.resolve(__dirname, './Web/Shared'),
+      '@modules': path.resolve(__dirname, './Web/modules'),
+      '@modules/auth': path.resolve(__dirname, './Web/modules/Auth'),
+      '@modules/capa': path.resolve(__dirname, './Web/modules/CAPA'),
+      '@modules/dashboard': path.resolve(__dirname, './Web/modules/Dashboard'),
+      '@modules/delivery': path.resolve(__dirname, './Web/modules/Delivery'),
+      '@modules/equipment': path.resolve(__dirname, './Web/modules/Equipment'),
+      '@modules/inspection': path.resolve(__dirname, './Web/modules/Inspection'),
+      '@modules/kpi': path.resolve(__dirname, './Web/modules/KPI'),
+      '@modules/notification': path.resolve(__dirname, './Web/modules/Notification'),
+      '@modules/order': path.resolve(__dirname, './Web/modules/Order'),
+      '@modules/pallet': path.resolve(__dirname, './Web/modules/Pallet'),
+      '@modules/plan': path.resolve(__dirname, './Web/modules/Plan'),
+      '@modules/product': path.resolve(__dirname, './Web/modules/Product'),
+      '@modules/report': path.resolve(__dirname, './Web/modules/Report'),
+      '@modules/system': path.resolve(__dirname, './Web/modules/System')
     }
   },
   server: {

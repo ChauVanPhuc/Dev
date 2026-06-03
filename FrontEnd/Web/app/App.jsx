@@ -1,42 +1,42 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import LoginPage from '@web/Auth/Views/LoginView';
-import AdminLayout from '@web/Shared/Views/components/layout/AdminLayout';
+import LoginPage from '@modules/Auth/Views/LoginView';
+import AdminLayout from '@webShared/Views/components/layout/AdminLayout';
 
 // Import các trang Admin
-import Dashboard from '@web/Dashboard/Views/DashboardView';
-import UserManagement from '@web/Auth/Views/UserManagementView';
-import UserCreate from '@web/Auth/Views/UserCreateView';
-import UserEdit from '@web/Auth/Views/UserEditView';
-import HandoverList from '@web/Delivery/Views/HandoverListView';
-import IncidentLogs from '@web/System/Views/IncidentLogsView';
-import InspectionReports from '@web/Inspection/Views/InspectionReportsView';
-import KPIReports from '@web/KPI/Views/KPIReportsView';
-import Improvements from '@web/CAPA/Views/ImprovementsView';
-import Hotspots from '@web/System/Views/HotspotsView';
-import DataPackaging from '@web/System/Views/DataPackagingView';
-import BackupQRManagement from '@web/System/Views/BackupQRManagementView';
-import ScreenManagement from '@web/System/Views/ScreenManagementView';
-import ScreenDetail from '@web/System/Views/ScreenDetailView';
+import Dashboard from '@modules/Dashboard/Views/DashboardView';
+import UserManagement from '@modules/Auth/Views/UserManagementView';
+import UserCreate from '@modules/Auth/Views/UserCreateView';
+import UserEdit from '@modules/Auth/Views/UserEditView';
+import HandoverList from '@modules/Delivery/Views/HandoverListView';
+import IncidentLogs from '@modules/System/Views/IncidentLogsView';
+import InspectionReports from '@modules/Inspection/Views/InspectionReportsView';
+import KPIReports from '@modules/KPI/Views/KPIReportsView';
+import Improvements from '@modules/CAPA/Views/ImprovementsView';
+import Hotspots from '@modules/System/Views/HotspotsView';
+import DataPackaging from '@modules/System/Views/DataPackagingView';
+import BackupQRManagement from '@modules/System/Views/BackupQRManagementView';
+import ScreenManagement from '@modules/System/Views/ScreenManagementView';
+import ScreenDetail from '@modules/System/Views/ScreenDetailView';
 
 // Import Manufacture module
-import ManufactureLayout from '@web/Shared/Views/components/layout/ManufactureLayout';
-import ManufactureDashboard from '@web/Dashboard/Views/ManufactureDashboardView';
-import ManufacturePlan from '@web/Plan/Views/PlanListView';
-import PlanDetail from '@web/Plan/Views/PlanDetailView';
-import ManufactureHandover from '@web/Delivery/Views/DeliveryHandoverView';
-import ManufactureReceive from '@web/Delivery/Views/DeliveryReceiveView';
-import ManufactureProducts from '@web/Product/Views/ProductsListView';
-import ProductDetail from '@web/Product/Views/ProductDetailView';
-import ProductCreate from '@web/Product/Views/ProductCreateView';
-import ManufactureOrders from '@web/Order/Views/OrdersListView';
-import OrderCreate from '@web/Order/Views/OrderCreateView';
-import AddProductionPlan from '@web/Plan/Views/AddProductionPlanView';
-import ProductionProgress from '@web/Plan/Views/ProductionProgressView';
-import DeliveryTracking from '@web/Delivery/Views/DeliveryTrackingView';
-import ExceptionDeliveries from '@web/Pallet/Views/PalletCardView';
+import ManufactureLayout from '@webShared/Views/components/layout/ManufactureLayout';
+import ManufactureDashboard from '@modules/Dashboard/Views/ManufactureDashboardView';
+import ManufacturePlan from '@modules/Plan/Views/PlanListView';
+import PlanDetail from '@modules/Plan/Views/PlanDetailView';
+import ManufactureHandover from '@modules/Delivery/Views/DeliveryHandoverView';
+import ManufactureReceive from '@modules/Delivery/Views/DeliveryReceiveView';
+import ManufactureProducts from '@modules/Product/Views/ProductsListView';
+import ProductDetail from '@modules/Product/Views/ProductDetailView';
+import ProductCreate from '@modules/Product/Views/ProductCreateView';
+import ManufactureOrders from '@modules/Order/Views/OrdersListView';
+import OrderCreate from '@modules/Order/Views/OrderCreateView';
+import AddProductionPlan from '@modules/Plan/Views/AddProductionPlanView';
+import ProductionProgress from '@modules/Plan/Views/ProductionProgressView';
+import DeliveryTracking from '@modules/Delivery/Views/DeliveryTrackingView';
+import ExceptionDeliveries from '@modules/Pallet/Views/PalletCardView';
 
-import { authService } from '@web/Auth/Models/auth.service';
+import { authService } from '@modules/Auth/Models/auth.service';
 import { ScreenProvider } from '@shared/context/ScreenContext';
 
 /**

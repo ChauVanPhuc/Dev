@@ -42,7 +42,7 @@ const apiClient = axios.create({
   timeout: 15000
 })
 
-import useAuthStore from '@mobile/Auth/Models/authModel'
+import useAuthStore from '@modules/auth/Models/authModel'
 
 // Interceptor để tự động gắn Token vào mọi request
 apiClient.interceptors.request.use((config) => {

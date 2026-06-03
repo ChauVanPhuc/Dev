@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { GripVertical, X, Save, Star, Search, CheckCircle2 } from 'lucide-react';
-import { planService } from '@web/Plan/Models/plan.service';
-import { orderService } from '@web/Order/Models/order.service';
+import { planService } from '@modules/Plan/Models/plan.service';
+import { orderService } from '@modules/Order/Models/order.service';
 
 export default function PriorityManagerModal({ orders, onClose, onSaved }) {
     const [items, setItems] = useState(() =>

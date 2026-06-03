@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { authService } from '@web/Auth/Models/auth.service';
+import { authService } from '@modules/Auth/Models/auth.service';
 
 /**
  * Controller: Hook xử lý logic đăng nhập

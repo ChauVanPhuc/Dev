@@ -7,11 +7,22 @@
     "baseUrl": "./",
     "paths": {
       "@mobile/*": ["./*"],
-      "@shared/*": ["../shared/*"]
+      "@shared/*": ["../shared/*"],
+      "@modules/*": ["./modules/*"],
+      "@modules/auth/*": ["./modules/auth/*"],
+      "@modules/capa/*": ["./modules/capa/*"],
+      "@modules/delivery/*": ["./modules/delivery/*"],
+      "@modules/equipment/*": ["./modules/equipment/*"],
+      "@modules/inspection/*": ["./modules/inspection/*"],
+      "@modules/kpi/*": ["./modules/kpi/*"],
+      "@modules/notification/*": ["./modules/notification/*"],
+      "@modules/production/*": ["./modules/production/*"],
+      "@modules/report/*": ["./modules/report/*"]
     }
   },
   "include": [
     ".",
-    "../shared"
+    "../shared",
+    "./modules"
   ]
 }

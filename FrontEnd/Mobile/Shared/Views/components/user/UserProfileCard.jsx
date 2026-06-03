@@ -1,6 +1,6 @@
 import React from 'react'
 import { X, Shield, Activity, MapPin, LogOut, Layers } from 'lucide-react'
-import useAuthStore from '@mobile/Auth/Models/authModel'
+import useAuthStore from '@modules/auth/Models/authModel'
 import { useNavigate } from 'react-router-dom'
 import useUiStore from '@shared/store/uiStore'
 

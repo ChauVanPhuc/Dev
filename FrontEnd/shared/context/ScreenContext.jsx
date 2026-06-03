@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { screenService } from '@web/System/Models/screen.service';
+import { screenService } from '@modules/System/Models/screen.service';
 
 const ScreenContext = createContext(null);
 

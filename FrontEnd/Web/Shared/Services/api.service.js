@@ -6,15 +6,19 @@ export const getBaseURL = () => {
   // chúng ta cần trỏ cứng về cổng 8000 của BackEnd
   const { hostname, port } = window.location;
   if (port === '5173' || port === '3000') {
-    return `http://${hostname}:8000/api/v1`;
+    return `http://${hostname}:8000`;
   }
   
   // Nếu đang chạy Production (đã build) hoặc qua Ngrok, dùng đường dẫn tương đối
-  return '/api/v1';
+  return window.location.origin;
 };
 
+// Export API_ROOT cho WebSocket (không có /api/v1 prefix)
+export const API_ROOT = `${getBaseURL()}/`;
+export const API_URL = `${API_ROOT}api/v1/`;
+
 const api = axios.create({
-  baseURL: getBaseURL(),
+  baseURL: API_URL,
   timeout: 300000, // 5 phút cho các file lớn
   headers: {
     'Content-Type': 'application/json',

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
-import useAuthStore from '@mobile/Auth/Models/authModel';
+import useAuthStore from '@modules/auth/Models/authModel';
 
 /**
  * ProtectedRoute Component
