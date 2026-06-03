@@ -1,0 +1,297 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
+from datetime import timedelta
+from config.database import get_db
+from config.security import verify_password, create_access_token
+from modules.auth.schemas.accounts import Account, AccountBase, AccountCreate, AccountUpdate, Token, PaginatedAccountResponse, FCMTokenUpdate
+from modules.auth.controllers import account_controller
+from config.settings import settings
+from modules.auth.models.departments import Department
+from modules.auth.models.role import Role
+from modules.auth.models.permissions import Permission
+from modules.production.models.stages import Stage
+from modules.auth.models.accounts import Account as AccountModel
+
+router = APIRouter()
+
+@router.post("/update-fcm-token")
+def update_fcm_token(data: FCMTokenUpdate, db: Session = Depends(get_db)):
+    """
+    [POST] API cập nhật mã định danh thiết bị (FCM Token).
+    
+    API này được gọi từ app Mobile ngay sau khi người dùng đăng nhập thành công.
+    Mã Token này là duy nhất cho mỗi điện thoại, dùng để Google biết cần đẩy thông báo đến máy nào.
+    """
+    # 1. Xóa Token này khỏi tất cả các tài khoản khác (tránh lỗi 1 máy nhiều người dùng bị nhận nhầm tin)
+    # Thêm cơ chế retry để tránh lỗi Deadlock khi nhiều người cùng login
+    max_retries = 3
+    for i in range(max_retries):
+        try:
+            db.query(AccountModel).filter(AccountModel.fcm_token == data.fcm_token).update({"fcm_token": None})
+            db.commit()
+            break
+        except Exception as e:
+            db.rollback()
+            if i == max_retries - 1: raise e
+            import time
+            time.sleep(0.1) # Đợi 100ms rồi thử lại
+    
+    # 2. Tìm người dùng trong Database dựa trên ID gửi từ Mobile
+    user = db.query(AccountModel).filter(AccountModel.id == data.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Người dùng không tồn tại")
+    
+    # 3. Cập nhật mã Token mới nhất vào cột fcm_token của bảng accounts
+    user.fcm_token = data.fcm_token
+    db.commit() # Lưu thay đổi vào SQL Server
+    
+    return {"message": "Đã đồng bộ mã Token thiết bị thành công"}
+
+@router.get("/", response_model=PaginatedAccountResponse)
+def list_accounts(
+    page: int = 1, 
+    size: int = 10,
+    search: str = None,
+    status: str = None,
+    sort_by: str = "id",
+    sort_dir: str = "desc",
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy danh sách tài khoản người dùng có phân trang.
+    
+    Hỗ trợ các tính năng:
+    - Phân trang (page, size).
+    - Tìm kiếm theo tên/username (search).
+    - Lọc theo trạng thái (status).
+    - Sắp xếp linh hoạt (sort_by, sort_dir).
+    """
+    skip = (page - 1) * size
+    items, total = account_controller.get_accounts(
+        db, skip=skip, limit=size, search=search,
+        status=status, sort_by=sort_by, sort_dir=sort_dir
+    )
+    return {"items": items, "total": total, "page": page, "size": size}
+
+@router.post("/login", response_model=Token)
+def login_for_access_token(db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()):
+    """
+    [POST] Xử lý đăng nhập và cấp phát Access Token.
+    
+    Quy trình:
+    1. Kiểm tra username/password từ database.
+    2. Nếu hợp lệ, tạo JWT token bao gồm thông tin username.
+    3. Truy vấn bổ sung thông tin phòng ban (Department), vai trò (Role), quyền (Permission) và công đoạn (Stage).
+    4. Trả về token kèm Profile người dùng đầy đủ.
+    """
+    user = account_controller.get_account_by_username(db, username=form_data.username)
+    
+    # 1. Kiểm tra nếu người dùng không tồn tại
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Tên đăng nhập hoặc mật khẩu không chính xác",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # 2. Kiểm tra nếu tài khoản đang bị khóa
+    if getattr(user, 'status', '') == "Bị khóa":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tài khoản đã bị khóa do nhập sai quá nhiều lần. Vui lòng liên hệ Admin để mở khóa.",
+        )
+
+    # 3. Xác thực mật khẩu
+    if not verify_password(form_data.password, user.hashed_password):
+        # Tăng số lần nhập sai
+        user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+        
+        # Nếu nhập sai quá 5 lần, thực hiện khóa tài khoản
+        if user.failed_login_attempts >= 5:
+            user.status = "Bị khóa"
+            detail_msg = "Tài khoản đã bị khóa do nhập sai quá 5 lần. Vui lòng liên hệ Admin."
+        else:
+            remaining = 5 - user.failed_login_attempts
+            detail_msg = f"Tên đăng nhập hoặc mật khẩu không chính xác. Bạn còn {remaining} lần thử."
+        
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=detail_msg,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # 4. Đăng nhập thành công -> Reset số lần nhập sai
+    user.failed_login_attempts = 0
+    db.commit()
+    
+    # Tạo access token với thời gian hết hạn từ cấu hình
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+
+    # Lấy thông tin ngữ cảnh nghiệp vụ (Role/Permission/Stage) từ bảng Department
+    depts = db.query(Department).filter(Department.account_id == user.id).all()
+    
+    role_name = None
+    role_description = None
+    permission_name = None
+    permission_description = None
+    stage_names = []
+    stage_descriptions = []
+
+    for dept in depts:
+        if dept.role_id and not role_name:
+            role = db.query(Role).filter(Role.id == dept.role_id).first()
+            if role:
+                role_name = role.name
+                role_description = role.description
+        if dept.permission_id and not permission_name:
+            perm = db.query(Permission).filter(Permission.id == dept.permission_id).first()
+            if perm:
+                permission_name = perm.name
+                permission_description = perm.description
+        if dept.stage_id:
+            stage = db.query(Stage).filter(Stage.id == dept.stage_id).first()
+            if stage and stage.name not in stage_names:
+                stage_names.append(stage.name)
+                stage_descriptions.append(stage.description or stage.name)
+
+    stage_name = " | ".join(stage_names) if stage_names else None
+    stage_description = " | ".join(stage_descriptions) if stage_descriptions else None
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "username": user.username,
+        "full_name": getattr(user, 'full_name', None) or user.username,
+        "email": getattr(user, 'email', '') or '',
+        "employee_id": getattr(user, 'employee_id', None) or '',
+        "role_name": role_name or '',
+        "role_description": role_description or role_name or '',
+        "permission_name": permission_name or '',
+        "permission_description": permission_description or permission_name or '',
+        "stage_name": stage_name or '',
+        "stage_description": stage_description or stage_name or '',
+        "id": user.id,
+    }
+
+@router.get("/stages")
+def get_all_stages(db: Session = Depends(get_db)):
+    """
+    [GET] Lấy danh sách tất cả các công đoạn sản xuất.
+    """
+    stages = db.query(Stage).all()
+    return [{"id": s.id, "name": s.name, "description": s.description} for s in stages]
+
+@router.post("/", response_model=Account)
+def register_user(account: AccountCreate, db: Session = Depends(get_db)):
+    """
+    [POST] Đăng ký một tài khoản người dùng mới.
+    
+    Kiểm tra sự tồn tại của username trước khi tạo để tránh trùng lặp.
+    """
+    db_account = account_controller.get_account_by_username(db, username=account.username)
+    if db_account:
+        raise HTTPException(status_code=400, detail="Tên người dùng đã được đăng ký")
+    return account_controller.create_account(db=db, account=account)
+
+@router.get("/{account_id}")
+def get_user_detail(account_id: int, db: Session = Depends(get_db)):
+    """
+    [GET] Lấy chi tiết thông tin tài khoản và phân quyền liên quan.
+    """
+    db_account = db.query(AccountModel).filter(AccountModel.id == account_id).first()
+    if not db_account:
+        raise HTTPException(status_code=404, detail="Tài khoản không tồn tại")
+    
+    # Lấy thông tin phân quyền từ bảng Department
+    depts = db.query(Department).filter(Department.account_id == account_id).all()
+    
+    role_id = None
+    permission_id = None
+    stage_ids = []
+    
+    for dept in depts:
+        if dept.role_id and not role_id:
+            role_id = dept.role_id
+        if dept.permission_id and not permission_id:
+            permission_id = dept.permission_id
+        if dept.stage_id and dept.stage_id not in stage_ids:
+            stage_ids.append(dept.stage_id)
+            
+    return {
+        "id": db_account.id,
+        "username": db_account.username,
+        "email": db_account.email,
+        "employee_id": db_account.employee_id,
+        "full_name": db_account.full_name,
+        "status": db_account.status,
+        "is_active": db_account.is_active,
+        "created_at": db_account.created_at,
+        "role_id": role_id,
+        "permission_id": permission_id,
+        "stage_ids": stage_ids
+    }
+
+@router.put("/{account_id}", response_model=Account)
+def update_user(account_id: int, account: AccountUpdate, db: Session = Depends(get_db)):
+    """
+    [PUT] Cập nhật thông tin cơ bản của một tài khoản.
+    """
+    db_account = account_controller.update_account(db=db, account_id=account_id, account=account)
+    if not db_account:
+        raise HTTPException(status_code=404, detail="Tài khoản không tồn tại")
+    return db_account
+
+@router.post("/{account_id}/sync-departments/")
+def sync_account_departments(account_id: int, payload: dict, db: Session = Depends(get_db)):
+    """
+    [POST] Đồng bộ hóa phòng ban / vai trò / quyền / công đoạn cho một tài khoản.
+    """
+    # Xóa toàn bộ các bản ghi cũ của user này trong bảng departments
+    db.query(Department).filter(Department.account_id == account_id).delete()
+    
+    role_id = payload.get("role_id")
+    permission_id = payload.get("permission_id")
+    stage_id = payload.get("stage_id")
+    stage_ids = payload.get("stage_ids")
+    
+    if stage_ids:
+        for s_id in stage_ids:
+            db_dept = Department(
+                account_id=account_id,
+                role_id=role_id,
+                permission_id=permission_id,
+                stage_id=s_id
+            )
+            db.add(db_dept)
+    else:
+        db_dept = Department(
+            account_id=account_id,
+            role_id=role_id,
+            permission_id=permission_id,
+            stage_id=stage_id
+        )
+        db.add(db_dept)
+        
+    db.commit()
+    return {"message": "Đồng bộ quyền hạn phòng ban thành công"}
+
+@router.delete("/{account_id}")
+def delete_user(account_id: int, db: Session = Depends(get_db)):
+    """
+    [DELETE] Xóa một tài khoản người dùng và toàn bộ liên kết departments của họ.
+    """
+    db_account = db.query(AccountModel).filter(AccountModel.id == account_id).first()
+    if not db_account:
+        raise HTTPException(status_code=404, detail="Tài khoản không tồn tại")
+    
+    # Xóa departments liên quan trước
+    db.query(Department).filter(Department.account_id == account_id).delete()
+    # Xóa account
+    db.delete(db_account)
+    db.commit()
+    return {"message": "Xóa tài khoản thành công"}

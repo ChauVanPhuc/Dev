@@ -1,0 +1,23 @@
+{
+  "appId": "com.erpg7.mobile",
+  "appName": "ERP G7",
+  "webDir": "dist",
+  "server": {
+    "cleartext": true,
+    "allowNavigation": [
+      "192.168.1.222",
+      "172.20.10.2",
+      "localhost",
+      "10.0.2.2",
+      "toeless-unarchitecturally-genevie.ngrok-free.dev"
+    ]
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    },
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  }
+}

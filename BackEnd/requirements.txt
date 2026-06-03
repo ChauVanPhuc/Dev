@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+sqlalchemy>=2.0.0
+pyodbc
+python-dotenv
+pydantic-settings
+python-multipart
+passlib[bcrypt]
+python-jose[cryptography]
+pydantic[email]
+rich
+colorama
+websockets
+firebase-admin

@@ -1,0 +1,533 @@
+/* =========================================================================
+   UserManagement.css
+   Chứa các style (định dạng) cho trang Quản lý người dùng.
+   Thiết kế hỗ trợ Responsive cho cả Desktop (Bảng) và Mobile (Thẻ/Cards).
+   ========================================================================= */
+
+/* -------------------------------------------------------------------------
+   1. BỐ CỤC TỔNG THỂ (General Layout)
+   ------------------------------------------------------------------------- */
+.user-mgmt-container {
+  display: flex;
+  gap: 30px;
+  align-items: flex-start;
+  width: 100%;
+}
+
+/* Phần nội dung chính (bảng người dùng, toolbar) */
+.user-mgmt-main {
+  flex: 1;
+}
+
+/* Cột bên phải (Feed hoạt động), cố định khi cuộn trang */
+.user-mgmt-aside {
+  width: 350px;
+  position: sticky;
+  top: 100px;
+}
+
+/* -------------------------------------------------------------------------
+   2. TIÊU ĐỀ TRANG (Header)
+   ------------------------------------------------------------------------- */
+.mgmt-header {
+   margin-bottom: 20px;
+}
+.header-title {
+   font-size: 1.5rem;
+   color: #2D1A12;
+   margin: 0;
+   font-weight: 700;
+}
+.header-subtitle {
+   color: #888;
+   margin: 0;
+   font-size: 0.9rem;
+}
+
+/* -------------------------------------------------------------------------
+   3. THANH CÔNG CỤ (Toolbar: Search, Filter, Buttons)
+   ------------------------------------------------------------------------- */
+.mgmt-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background: white;
+  border-radius: 8px;
+  margin-bottom: 25px;
+  border: 1px solid #E0E0E0;
+}
+.toolbar-left, .toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+/* Khung tìm kiếm */
+.search-wrapper {
+  position: relative;
+  width: 320px;
+}
+.search-wrapper input {
+  width: 100%;
+  padding: 8px 12px 8px 38px;
+  border-radius: 6px;
+  border: 1px solid #E0E0E0;
+  outline: none;
+  color: #2D1A12;
+  font-size: 0.95rem;
+}
+.search-wrapper input::placeholder {
+  color: #A0A0A0;
+}
+.search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+}
+
+/* Các nút biểu tượng nhỏ gọn (minimal icons) */
+.icon-btn-minimal {
+  background: none;
+  border: none;
+  padding: 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: transform 0.2s;
+}
+.icon-btn-minimal:hover {
+  transform: scale(1.1);
+  color: #7B5233;
+}
+.icon-btn-minimal.active {
+  color: #7B5233;
+  background: #F5EDE5;
+  border-radius: 6px;
+}
+
+/* Chấm đỏ chỉ báo khi đang áp dụng bộ lọc */
+.filter-indicator {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 7px;
+  height: 7px;
+  background: #D32F2F;
+  border-radius: 50%;
+}
+
+/* Khung wrapper chứa nút + dropdown */
+.dropdown-wrapper {
+  position: relative;
+}
+
+/* Panel dropdown (Lọc & Sắp xếp) */
+.dropdown-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  background: white;
+  border: 1px solid #E0E0E0;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+  min-width: 180px;
+  z-index: 999;
+  padding: 8px 0;
+  animation: fadeInDown 0.15s ease;
+}
+.dropdown-title {
+  font-size: 0.75rem;
+  color: #999;
+  text-transform: uppercase;
+  padding: 4px 14px 8px;
+  margin: 0;
+  font-weight: 600;
+}
+.dropdown-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 9px 14px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  color: #444;
+  transition: background 0.1s;
+}
+.dropdown-item:hover { background: #F9F9F9; }
+.dropdown-item.selected { background: #FDEBD0; color: #7B5233; font-weight: 600; }
+
+/* Menu thao tác ••• */
+.action-menu {
+  position: absolute;
+  right: 100%;
+  top: 0;
+  background: white;
+  border: 1px solid #E0E0E0;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  min-width: 160px;
+  z-index: 1000;
+  padding: 6px 0;
+  animation: fadeInDown 0.15s ease;
+}
+.action-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 9px 16px;
+  font-size: 0.88rem;
+  cursor: pointer;
+  color: #444;
+  transition: background 0.1s;
+}
+.action-menu-item:hover { background: #F5F5F5; }
+.action-menu-item.warn { color: #ED6C02; }
+.action-menu-item.warn:hover { background: #FFF3E0; }
+.action-menu-item.danger { color: #D32F2F; }
+.action-menu-item.danger:hover { background: #FEECEB; }
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Bộ lọc hiển thị Dropdown */
+.display-filter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.95rem;
+  color: #4A4A4A;
+}
+.filter-label {
+  color: #616161;
+}
+.filter-select {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #E0E0E0;
+  color: #2D1A12;
+  outline: none;
+  background: white;
+  cursor: pointer;
+}
+
+/* Nút bấm (Buttons general) */
+.btn {
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.btn-primary {
+  background-color: #7B5233;
+  color: white;
+  border: none;
+}
+.btn-outline {
+  background: white;
+  border: 1px solid #7B5233;
+  color: #7B5233;
+}
+
+/* -------------------------------------------------------------------------
+   4. BẢNG DỮ LIỆU ĐĂNG KÝ (Table Layout - Desktop)
+   ------------------------------------------------------------------------- */
+.mgmt-table {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #D3C1B4;
+  overflow: hidden;
+}
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.data-table th {
+  background-color: #FBFBFB;
+  color: #888;
+  text-align: left;
+  padding: 15px 20px;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  border-bottom: 1px solid #EEE;
+}
+.data-table td {
+  padding: 10px 20px;
+  border-bottom: 1px solid #F5F5F5;
+  font-size: 0.9rem;
+  color: #444;
+  height: 52px;
+  position: relative;
+}
+
+/* Dòng trống để giữ chiều cao bảng khi ít dữ liệu */
+.empty-row td {
+  border-bottom: 1px solid #F9F9F9;
+}
+.no-data-text {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: #A0A0A0;
+  font-size: 1rem;
+  white-space: nowrap;
+}
+
+/* Chữ in đậm và Nút thao tác trong bảng */
+.font-bold { font-weight: 700; color: #333; }
+.action-btn { background: none; border: none; font-size: 1.2rem; cursor: pointer; color: #888; }
+
+/* -------------------------------------------------------------------------
+   5. PHÂN TRANG (Pagination)
+   ------------------------------------------------------------------------- */
+.pagination {
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fdfdfd;
+}
+.pagination-info { font-size: 0.85rem; color: #888; }
+.pagination-controls { display: flex; gap: 5px; }
+.page-btn {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.page-btn.active {
+  background-color: #7B5233;
+  color: white;
+  border-color: #7B5233;
+}
+.page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* -------------------------------------------------------------------------
+   6. TRẠNG THÁI & HIỂN THỊ CƠ BẢN
+   ------------------------------------------------------------------------- */
+.loading-state { padding: 50px; text-align: center; color: #888; }
+.desktop-only { display: block; }
+.mobile-only { display: none; }
+
+
+/* =========================================================================
+   7. RESPONSIVE QUERIES (Mobile & Tablet)
+   ========================================================================= */
+
+/* Tablet & Màn hình nhỏ gọn (<= 1400px) */
+@media (max-width: 1400px) {
+  /* Chuyển cột Feed hoạt động xuống dưới */
+  .user-mgmt-container { flex-direction: column; }
+  .user-mgmt-aside { width: 100%; position: static; }
+}
+
+/* Mobile & Điện thoại (<= 768px) */
+@media (max-width: 768px) {
+  /* Đảo ngược hiển thị: Ẩn Table Desktop, Hiện Card Mobile */
+  .desktop-only { display: none; }
+  .mobile-only { display: block; }
+  
+  .dashboard-content {
+    padding: 10px;
+  }
+
+  /* Toolbar xếp dọc thay vì ngang */
+  .mgmt-toolbar {
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+    margin-bottom: 15px;
+  }
+  
+  /* Hàng 1: Thanh Tìm kiếm + Các nút icon */
+  .toolbar-left {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 8px;
+    align-items: center;
+  }
+  .search-wrapper {
+     grid-column: 1 / 2;
+     width: 100%;
+  }
+  .icon-btn-minimal {
+     padding: 8px;
+     background: #F5F5F5;
+     border-radius: 6px;
+  }
+
+  /* Hàng 2: Bộ lọc hiển thị */
+  .display-filter {
+    grid-column: 1 / 4;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 8px;
+    border-top: 1px dashed #EEE;
+    width: 100%;
+  }
+  .filter-select {
+    flex: 1;
+    margin-left: 10px;
+    max-width: 200px;
+  }
+
+  /* Hàng 3: Các nút hành động chính (Tạo mới, Xuất) */
+  .toolbar-right {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+  }
+  .toolbar-right .btn {
+    flex: 1; /* Chia đều kích thước 2 nút */
+    padding: 10px;
+    font-size: 0.9rem;
+  }
+  
+  /* -----------------------------------------------------------------------
+     GIAO DIỆN THẺ (User Cards - Chỉ dùng cho Mobile)
+     ----------------------------------------------------------------------- */
+  .user-cards-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 5px;
+  }
+  .user-card {
+    background: white;
+    border-radius: 12px;
+    border: 1px solid #EAEAEA;
+    padding: 12px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    position: relative;
+  }
+  
+  /* Phần thân trên của thẻ */
+  .user-card-main {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  
+  /* Avatar tròn với chữ cái đầu của tên */
+  .user-avatar {
+    width: 44px;
+    height: 44px;
+    background: #F3EFEA;
+    color: #7B5233;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+    border: 1px solid #E0D5CB;
+  }
+  
+  /* Chi tiết người dùng (Tên, ID, Nhãn) */
+  .user-details {
+    flex: 1;
+  }
+  .user-name-row {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .card-full-name {
+    margin: 0;
+    font-size: 1rem;
+    color: #2D1A12;
+    font-weight: 700;
+  }
+  .card-emp-id {
+    font-size: 0.75rem;
+    color: #999;
+  }
+  
+  /* Nhãn nhỏ mô tả bộ phận/công đoạn */
+  .user-meta-chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .meta-chip {
+    font-size: 0.7rem;
+    background: #F0F0F0;
+    padding: 3px 8px;
+    border-radius: 6px;
+    color: #666;
+    font-weight: 500;
+  }
+  .meta-chip.secondary {
+    background: #EBF7ED;
+    color: #2E7D32;
+  }
+  
+  /* Nút thao tác mở menu trên thẻ */
+  .card-actions-minimal {
+    position: absolute;
+    right: 10px;
+    top: 10px;
+  }
+  
+  /* Chân thẻ: Chứa chức danh và trạng thái có chấm tròn */
+  .user-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #F5F5F5;
+  }
+  .card-role-text {
+    font-size: 0.75rem;
+    color: #888;
+    font-weight: 600;
+  }
+  .status-dot-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+  .status-dot-badge .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  /* Đoạn text khi không có dữ liệu */
+  .no-data-text-mobile {
+    text-align: center;
+    padding: 30px;
+    color: #AAA;
+  }
+
+  /* Điều chỉnh phân trang Mobile */
+  .pagination {
+    flex-direction: column;
+    gap: 12px;
+    padding: 15px;
+    text-align: center;
+  }
+}

@@ -1,0 +1,208 @@
+/* 
+  FILE: sidebar.css
+  MÔ TẢ: Định dạng riêng cho thanh Sidebar của hệ thống ERP G7.
+  PHONG CÁCH: Màu nâu chuyên nghiệp, thiết kế hiện đại, premium.
+*/
+
+.admin-sidebar {
+    width: var(--sidebar-width);
+    height: 100vh;
+    background-color: #FFFFFF; /* Màu trắng theo yêu cầu */
+    color: #757575; /* Màu chữ xám cho trạng thái bình thường */
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 2000;
+    transition: var(--transition);
+    border-right: 1px solid #EEEEEE;
+}
+
+/* 1. Phần thông tin User ở trên cùng - Giữ màu nâu đậm */
+.sidebar-user-section {
+    padding: 25px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background-color: #7B5233; /* Màu nâu theo ảnh mẫu */
+    border-bottom: none;
+}
+
+.user-avatar {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #9B8272;
+}
+
+.user-info {
+    flex: 1;
+    overflow: hidden;
+}
+
+.user-name {
+    display: block;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #FFFFFF;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.user-email {
+    display: block;
+    font-size: 0.8rem;
+    color: #9B8272;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.logout-icon {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2rem;
+    color: #9B8272;
+    transition: var(--transition);
+}
+
+.logout-icon:hover {
+    color: #FF5252;
+}
+
+/* 2. Danh sách Menu điều hướng */
+.sidebar-nav {
+    flex: 1;
+    padding: 20px 0;
+    overflow-y: auto;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+    width: 4px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+    background: rgba(155, 130, 114, 0.2);
+    border-radius: 10px;
+}
+
+.nav-list {
+    list-style: none;
+}
+
+.nav-item {
+    margin-bottom: 4px;
+}
+
+.nav-link {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 12px 25px;
+    text-decoration: none;
+    color: #757575; /* Màu xám trung tính */
+    font-size: 0.95rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    border-left: 4px solid transparent;
+}
+
+.nav-link:hover {
+    color: #A34A2E;
+}
+
+.nav-link.active {
+    color: #A34A2E; /* Màu đỏ nâu/cam đậm cho mục đang chọn */
+    border-left-color: #D35D33;
+    background-color: transparent;
+}
+
+.nav-icon {
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.nav-link svg {
+    stroke: currentColor;
+}
+
+/* 3. Phần chân trang Sidebar */
+.sidebar-footer {
+    padding: 15px 25px;
+    font-size: 0.75rem;
+    color: #A34A2E;
+    background-color: #FFFFFF;
+}
+
+/* Responsive cho Sidebar */
+@media (max-width: 992px) {
+    .admin-sidebar {
+        width: 80px;
+    }
+    .user-info, .user-name, .user-email, .nav-text, .sidebar-footer {
+        display: none;
+    }
+    .sidebar-user-section, .nav-link {
+        justify-content: center;
+        padding-left: 0;
+        padding-right: 0;
+    }
+    .nav-icon {
+        font-size: 1.5rem;
+    }
+
+    /* Khi Sidebar được kích hoạt chủ động (Active) trên Tablet/Mobile, nó phải hiện ĐẦY ĐỦ */
+    .admin-sidebar.active {
+        width: var(--sidebar-width);
+    }
+    .admin-sidebar.active .user-info, 
+    .admin-sidebar.active .user-name, 
+    .admin-sidebar.active .user-email, 
+    .admin-sidebar.active .nav-text, 
+    .admin-sidebar.active .sidebar-footer {
+        display: block;
+    }
+    .admin-sidebar.active .sidebar-user-section, 
+    .admin-sidebar.active .nav-link {
+        justify-content: flex-start;
+        padding-left: 20px;
+    }
+}
+
+@media (max-width: 768px) {
+    .admin-sidebar {
+        transform: translateX(-100%);
+    }
+    .admin-sidebar.active {
+        transform: translateX(0);
+    }
+}
+/* 4. Overlay cho Mobile */
+.sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1900; /* Thấp hơn sidebar (2000) */
+    display: none; /* Mặc định ẩn */
+}
+
+.sidebar-overlay.visible {
+    display: block;
+}
+
+@media (max-width: 992px) {
+    /* Overlay chỉ cần thiết trên tablet/mobile */
+}
+
+@media (max-width: 768px) {
+    /* Khi sidebar hiện ra trên mobile, overlay cũng phải hiện */
+}
