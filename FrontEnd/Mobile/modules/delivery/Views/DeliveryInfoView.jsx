@@ -118,17 +118,20 @@ const DeliveryInfo = () => {
   // Tính số lượng phiếu cần xử lý (badge báo đỏ)
   const pendingActionBadge = useMemo(() => {
     if (!Array.isArray(deliveries)) return 0;
-    return deliveries.filter(d => {
+    const count = deliveries.filter(d => {
       const isMyDelivery = isMatchStage(userStageDesc, d.delivery_stage);
       const isMyReceiving = isMatchStage(userStageDesc, d.receiving_stage);
 
       if (isMyDelivery && d.status === 'Chờ Xác Nhận') return true;
       if (isMyReceiving) {
-        if (isQC) return d.status === 'Chờ QC Kiểm Tra';
+        if (isQC) return d.status === 'Chờ Kiểm Tra';
         return d.status === 'Chờ Nhận Hàng';
       }
       return false;
     }).length;
+    
+    console.log('[Badge Calculation] isQC:', isQC, 'userStageDesc:', userStageDesc, 'pendingActionBadge:', count);
+    return count;
   }, [deliveries, userStageDesc, isQC]);
 
   const tabs = [
@@ -299,6 +302,7 @@ const DeliveryInfo = () => {
 
   const handleSocketMessage = useCallback((message) => {
     console.log('[WS Message Received]:', message);
+    console.log('[WS Debug] isQC:', isQC, 'userStageDesc:', userStageDesc, 'selectedPlanId:', selectedPlanId);
     
     // Các sự kiện cần tải lại dữ liệu: 
     // - NEW_DELIVERY: Có người vừa tạo phiếu mới
@@ -311,9 +315,11 @@ const DeliveryInfo = () => {
       if (planToFetch) {
         console.log('[Realtime] Triggering auto-refresh for Plan:', planToFetch);
         refreshData(planToFetch);
+      } else {
+        console.log('[Realtime] No plan to fetch, skipping refresh');
       }
     }
-  }, [selectedPlanId, planOptions, refreshData]);
+  }, [selectedPlanId, planOptions, refreshData, isQC, userStageDesc]);
 
   // [Realtime] Lắng nghe sự kiện từ WebSocket
   const socket = useWebSocket(handleSocketMessage);
@@ -607,7 +613,6 @@ const DeliveryInfo = () => {
   const getStatusColor = (status) => {
     switch (status) {
       case 'Chờ Xác Nhận': return { bg: '#fef2f2', border: '#fecaca', text: '#ef4444' };
-      case 'Chờ QC Kiểm Tra':
       case 'Chờ Kiểm Tra':
         return { bg: '#eff6ff', border: '#bfdbfe', text: '#3b82f6' };
       case 'Chờ Nhận Hàng': return { bg: '#fff7ed', border: '#fed7aa', text: '#f97316' };
@@ -1189,7 +1194,7 @@ const DeliveryInfo = () => {
                   ] : [
                     { label: 'Tất cả', value: 'ALL' },
                     { label: 'Chờ xác nhận', value: 'Chờ Xác Nhận' },
-                    { label: 'Chờ QC', value: 'Chờ QC Kiểm Tra' },
+                    { label: 'Chờ QC', value: 'Chờ Kiểm Tra' },
                     { label: 'Chờ nhận', value: 'Chờ Nhận Hàng' },
                     { label: 'Hoàn thành', value: 'Hoàn thành' }
                   ]).map(opt => (
@@ -1416,7 +1421,7 @@ const DeliveryInfo = () => {
           { label: 'Hoàn thành', value: 'Hoàn thành' }
         ] : [
           { label: 'Tất cả', value: 'ALL' },
-          { label: 'Chờ QC Kiểm Tra', value: 'Chờ QC Kiểm Tra' },
+          { label: 'Chờ Kiểm Tra', value: 'Chờ Kiểm Tra' },
           { label: 'Đã Nhận / Hoàn thành', value: 'Hoàn thành' },
           { label: 'Chờ Nhận Hàng', value: 'Chờ Nhận Hàng' },
           { label: 'Chờ Xác Nhận', value: 'Chờ Xác Nhận' }

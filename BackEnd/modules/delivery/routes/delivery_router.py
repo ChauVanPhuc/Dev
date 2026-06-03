@@ -865,7 +865,8 @@ async def confirm_delivery(
                 socket_manager.broadcast_to_stage,
                 db, 
                 stage_name=delivery.receiving_stage, 
-                message={"type": "DELIVERY_RECEIVED", "delivery_id": delivery.id, "status": delivery.status}
+                message={"type": "DELIVERY_RECEIVED", "delivery_id": delivery.id, "status": delivery.status},
+                role_filter="QC"
             )
             # Báo cho bộ phận GIAO (Sản xuất đầu nguồn)
             background_tasks.add_task(

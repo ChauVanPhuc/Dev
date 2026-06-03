@@ -64,7 +64,7 @@ class ConnectionManager:
             # Chuẩn hóa từ khóa tìm kiếm (Ví dụ: 'SX' sẽ tìm cả 'Sản xuất', 'QC' tìm cả 'Kiểm tra')
             search_terms = [role_filter]
             if role_filter.upper() == "SX": search_terms.append("Sản xuất")
-            if role_filter.upper() == "QC": search_terms.append("Kiểm tra")
+            if role_filter.upper() == "QC": search_terms.extend(["Kiểm tra", "QLCL", "Chất lượng"])
             
             conditions = []
             for term in search_terms:
@@ -74,6 +74,8 @@ class ConnectionManager:
             query = query.join(Role, Department.role_id == Role.id).filter(or_(*conditions))
             
         target_user_ids = [r[0] for r in query.all()]
+        
+        print(f"[WS Broadcast] stage_name={stage_name}, role_filter={role_filter}, target_user_ids={target_user_ids}")
 
         # 3. Gửi tin nhắn cho những ai đang online
         for uid in target_user_ids:

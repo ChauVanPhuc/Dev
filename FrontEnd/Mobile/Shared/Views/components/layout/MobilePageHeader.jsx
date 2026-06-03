@@ -92,7 +92,12 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
 
     // Nếu tin nhắn báo có phiếu mới hoặc QC xong
 
-    if (message.type === 'NEW_DELIVERY' || message.type === 'QC_CONFIRMED') {
+    if (
+      message.type === 'NEW_DELIVERY' || 
+      message.type === 'QC_CONFIRMED' || 
+      message.type === 'DELIVERY_RECEIVED' || 
+      message.type === 'UPDATE_DELIVERY'
+    ) {
 
       // Gọi fetchUnreadCount để Backend tự tính toán dựa trên quyền hạn thực tế của User
 
@@ -102,7 +107,13 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
 
       // [DEBUG] Theo dõi tham số gửi lên
 
-      const roleName = user?.role_name || user?.role || user?.permission_description || '';
+      const rawRole = user?.role_name || user?.role || user?.permission_description || '';
+      let groupParam = rawRole;
+      if (rawRole.includes('Sản xuất') || rawRole === 'SX') {
+        groupParam = 'SX';
+      } else if (rawRole.includes('Kiểm tra') || rawRole.includes('QC') || rawRole.includes('Chất lượng') || rawRole.includes('Quản lý') || rawRole.includes('QLCL')) {
+        groupParam = 'QC';
+      }
 
 
 
@@ -114,9 +125,9 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
 
       // 2. Đồng bộ từ server sau 0.5s và 2s
 
-      setTimeout(() => fetchUnreadCount(user?.id, roleName, targetStage), 500);
+      setTimeout(() => fetchUnreadCount(user?.id, groupParam, targetStage), 500);
 
-      setTimeout(() => fetchUnreadCount(user?.id, roleName, targetStage), 2000);
+      setTimeout(() => fetchUnreadCount(user?.id, groupParam, targetStage), 2000);
 
     }
 
@@ -336,7 +347,13 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
 
     if (user) {
 
-      const roleName = user.role_name || user.role || user.permission_description || '';
+      const rawRole = user.role_name || user.role || user.permission_description || '';
+      let roleName = rawRole;
+      if (rawRole.includes('Sản xuất') || rawRole === 'SX') {
+        roleName = 'SX';
+      } else if (rawRole.includes('Kiểm tra') || rawRole.includes('QC') || rawRole.includes('Chất lượng') || rawRole.includes('Quản lý') || rawRole.includes('QLCL')) {
+        roleName = 'QC';
+      }
 
       const targetStage = user.stage_description || user.stage_name || '';
 

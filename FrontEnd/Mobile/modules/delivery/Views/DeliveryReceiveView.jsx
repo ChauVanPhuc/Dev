@@ -509,13 +509,13 @@ const DeliveryReceive = () => {
   // [FLOW REVERSED] Theo yêu cầu mới: SX Nhận trước -> QC Test sau
   // SX được nhận ngay khi phiếu mới tạo (Chờ Nhận Hàng)
   const isPendingReceiving = delivery?.status === 'Chờ Nhận Hàng';
-  // QC được kiểm sau khi SX đã nhận (Chờ QC Kiểm Tra hoặc Đã Nhận)
-  const isPendingInspection = delivery?.status === 'Chờ QC Kiểm Tra' || delivery?.status === 'Đã Nhận';
+  // QC được kiểm sau khi SX đã nhận (Chờ Kiểm Tra hoặc Đã Nhận)
+  const isPendingInspection = delivery?.status === 'Chờ Kiểm Tra' || delivery?.status === 'Đã Nhận';
 
   const canEdit = isSender && (delivery?.status === 'Chờ Nhận Hàng');
   const canConfirm = isReceiver && isProduction && isPendingReceiving;
 
-  // QC được vào tab để xem hoặc chuẩn bị, nhưng chỉ được lưu khi status là Chờ QC Kiểm Tra / Đã Nhận
+  // QC được vào tab để xem hoặc chuẩn bị, nhưng chỉ được lưu khi status là Chờ Kiểm Tra / Đã Nhận
   const canAccessQCTab = (isQC || isAdmin) && isReceiver;
   const canSaveQC = (isQC || isAdmin) && (isPendingInspection || delivery?.status === 'Hoàn thành');
 
@@ -673,8 +673,8 @@ const DeliveryReceive = () => {
     try {
       setIsConfirmModalOpen(false)
       setIsSubmitting(true)
-      // SX xác nhận nhận hàng → trạng thái Chờ QC Kiểm Tra
-      const payload = { user_id: user?.id || 1, sx_receipt: user?.id || 1, quantity_received: parseInt(totalReceived) || 0, status: 'Chờ QC Kiểm Tra' }
+      // SX xác nhận nhận hàng → trạng thái Chờ Kiểm Tra
+      const payload = { user_id: user?.id || 1, sx_receipt: user?.id || 1, quantity_received: parseInt(totalReceived) || 0, status: 'Chờ Kiểm Tra' }
       await apiClient.patch(`/deliveries/${id}/confirm`, payload)
       setMessageModal({ isOpen: true, type: 'success', title: 'Thành công', message: 'Đã xác nhận nhận hàng thành công!' })
     } catch (err) {

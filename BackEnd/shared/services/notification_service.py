@@ -104,7 +104,12 @@ def notify_qc_stage(db: Session, stage_name: str, title: str, body: str):
         ).join(
             Role, Department.role_id == Role.id
         ).filter(
-            Role.name.like('%QC%'),
+            or_(
+                Role.name.like('%QC%'),
+                Role.name.like('%QLCL%'),
+                Role.description.like('%Chất lượng%'),
+                Role.description.like('%Kiểm tra%')
+            ),
             Department.stage_id == target_stage.id,
             Account.fcm_token != None
         ).all()
@@ -170,9 +175,17 @@ def notify_stage(db: Session, stage_name: str, title: str, body: str, role_filte
         
         # Nếu có lọc theo Role (ví dụ 'SX' hoặc 'QC')
         if role_filter:
-            query = query.join(Role, Department.role_id == Role.id).filter(
-                Role.name.like(f'%{role_filter}%')
-            )
+            role_terms = [role_filter]
+            if role_filter.upper() == "QC":
+                role_terms.extend(["QLCL", "Chất lượng", "Kiểm tra"])
+            elif role_filter.upper() == "SX":
+                role_terms.extend(["Sản xuất"])
+            
+            conditions = []
+            for term in role_terms:
+                conditions.append(Role.name.like(f'%{term}%'))
+                conditions.append(Role.description.like(f'%{term}%'))
+            query = query.join(Role, Department.role_id == Role.id).filter(or_(*conditions))
 
         users = query.filter(
             Department.stage_id == target_stage.id,

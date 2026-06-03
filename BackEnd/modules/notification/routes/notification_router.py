@@ -66,7 +66,7 @@ def get_notifications(
         
         # 1. Lọc theo bộ phận (Group) với sự linh hoạt cao (SX <=> Sản xuất)
         if target_group and target_group.strip():
-            if "QC" in tg_upper or "CHẤT LƯỢNG" in tg_upper or "KIỂM TRA" in tg_upper or "QUẢN LÝ" in tg_upper:
+            if "QC" in tg_upper or "QLCL" in tg_upper or "CHẤT LƯỢNG" in tg_upper or "KIỂM TRA" in tg_upper or "QUẢN LÝ" in tg_upper:
                 query = query.filter((NotificationModel.target_group.like('%QC%')) | (NotificationModel.target_group.like('%Kiểm tra%')) | (NotificationModel.target_group == "Toàn công ty"))
             elif "SX" in tg_upper or "SẢN XUẤT" in tg_upper:
                 query = query.filter(
@@ -194,7 +194,7 @@ def get_unread_count(
     else:
         # NHÂN VIÊN: Lọc nghiêm ngặt theo Nhóm và Công đoạn
         tg_upper = target_group.upper() if target_group else ""
-        if "QC" in tg_upper or "CHẤT LƯỢNG" in tg_upper or "KIỂM TRA" in tg_upper:
+        if "QC" in tg_upper or "QLCL" in tg_upper or "CHẤT LƯỢNG" in tg_upper or "KIỂM TRA" in tg_upper:
             query = query.filter((NotificationModel.target_group.ilike('%QC%')) | (NotificationModel.target_group.ilike('%Kiểm tra%')) | (NotificationModel.target_group == "Toàn công ty"))
         elif "SX" in tg_upper or "SẢN XUẤT" in tg_upper:
             query = query.filter(
@@ -292,7 +292,7 @@ def mark_as_read(
     else:
         # NHÂN VIÊN: Reset theo Nhóm và Công đoạn
         if target_group:
-            if "QC" in tg_upper or "CHẤT LƯỢNG" in tg_upper or "KIỂM TRA" in tg_upper:
+            if "QC" in tg_upper or "QLCL" in tg_upper or "CHẤT LƯỢNG" in tg_upper or "KIỂM TRA" in tg_upper:
                 query = query.filter((NotificationModel.target_group.ilike('%QC%')) | (NotificationModel.target_group.ilike('%Kiểm tra%')) | (NotificationModel.target_group == "Toàn công ty"))
             elif "SX" in tg_upper or "SẢN XUẤT" in tg_upper:
                 query = query.filter((NotificationModel.target_group == "SX") | (NotificationModel.target_group.ilike("%Sản xuất%")) | (NotificationModel.target_group == "Toàn công ty"))
