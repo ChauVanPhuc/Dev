@@ -14,6 +14,33 @@ import { useWebSocket } from '@shared/hooks/useWebSocket'
 import useUiStore from '@shared/store/uiStore'
 import { useDeliveryController } from '@modules/delivery/Controllers/deliveryController'
 
+// Helper trích xuất số Cont từ mã PO (Ví dụ "APT-0060-09" -> "APT-0060")
+const getContName = (orderName) => {
+  if (!orderName) return '';
+  const parts = orderName.split('-');
+  if (parts.length >= 2) {
+    return `${parts[0]}-${parts[1]}`;
+  }
+  return orderName;
+};// Helper định dạng ngày giờ kiểm tra (Ví dụ "15:26 04/06/2026")
+const formatInspectedAt = (dateStr) => {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    
+    const pad = (num) => String(num).padStart(2, '0');
+    const hours = pad(d.getHours());
+    const mins = pad(d.getMinutes());
+    const date = pad(d.getDate());
+    const month = pad(d.getMonth() + 1);
+    const year = d.getFullYear();
+    
+    return `${hours}:${mins} ${date}/${month}/${year}`;
+  } catch (e) {
+    return dateStr;
+  }
+};
 /**
  * MH2 - Thông tin bàn giao
  * DeliveryInfo Screen
@@ -26,6 +53,7 @@ const DeliveryInfo = () => {
   const { user } = useAuthStore()
   const [activeTab, setActiveTab] = useState('plan')
   const [selectedPlanId, setSelectedPlanId] = useState('')
+  const [selectedCont, setSelectedCont] = useState('ALL')
   const [currentPlan, setCurrentPlan] = useState(null)
   
   const pageHeaderRef = useRef(null)
@@ -57,6 +85,7 @@ const DeliveryInfo = () => {
 
   // State cho Thẻ Pallet Modal
   const [palletModal, setPalletModal] = useState({ isOpen: false, data: null })
+  const [inspectionsModal, setInspectionsModal] = useState({ isOpen: false, partName: '', insps: [], navState: {} })
   const [palletPartProducts, setPalletPartProducts] = useState([])
 
   // [DEBUG] Theo dõi trạng thái kết nối WS
@@ -152,11 +181,28 @@ const DeliveryInfo = () => {
   }, [latestNotifId, selectedPlanId, fetchDeliveriesByPlan]);
   useEffect(() => {
     const loadData = async () => {
-      await fetchPlans()
+      const stage = userStageDesc || userStageName || ''
+      await fetchPlans(stage)
       setLoading(false)
     }
     loadData()
-  }, [fetchPlans])
+  }, [fetchPlans, userStageDesc, userStageName])
+
+  const orderMatchesCont = useCallback((orderId, targetCont) => {
+    if (!orderId) return false;
+    const plan = plans.find(p => p.id.toString() === selectedPlanId);
+    if (!plan || !plan.orders) return false;
+    const order = plan.orders.find(o => o.id.toString() === orderId.toString());
+    return order ? getContName(order.name) === targetCont : false;
+  }, [plans, selectedPlanId]);
+
+  const selectedOrderIdsString = useMemo(() => {
+    if (!selectedCont || selectedCont === 'ALL') return null;
+    const plan = plans.find(p => p.id.toString() === selectedPlanId);
+    if (!plan || !plan.orders) return null;
+    const matchedOrders = plan.orders.filter(o => getContName(o.name) === selectedCont);
+    return matchedOrders.map(o => o.id).join(',');
+  }, [plans, selectedPlanId, selectedCont]);
 
   useEffect(() => {
     const loadDeliveries = async () => {
@@ -166,7 +212,9 @@ const DeliveryInfo = () => {
         const stageToFilter = rawStage.toLowerCase().includes('đóng gói') ? null : rawStage
 
         try {
-          const detail = await fetchPlanDetail(selectedPlanId, stageToFilter)
+          console.log('[DEBUG Frontend] Calling fetchPlanDetail with selectedOrderIdsString:', selectedOrderIdsString);
+          const detail = await fetchPlanDetail(selectedPlanId, stageToFilter, null, false, selectedOrderIdsString)
+          console.log('[DEBUG Frontend] fetchPlanDetail returned detail:', detail);
           setCurrentPlan(detail)
 
           const deliveryList = await fetchDeliveriesByPlan(selectedPlanId)
@@ -198,12 +246,13 @@ const DeliveryInfo = () => {
       }
     }
     loadDeliveries()
-  }, [selectedPlanId, userStageName, userStageDesc, fetchDeliveriesByPlan, fetchPlanDetail])
+  }, [selectedPlanId, selectedOrderIdsString, userStageName, userStageDesc, fetchDeliveriesByPlan, fetchPlanDetail])
 
-  // Reset phân trang khi đổi KHSX
+  // Reset phân trang và Cont khi đổi KHSX
   useEffect(() => {
     setVisibleCount(30)
     setVisibleOrderCount(10)
+    setSelectedCont('ALL')
   }, [selectedPlanId])
 
   // Hàm rút gọn tên kế hoạch để hiển thị trên Mobile
@@ -238,6 +287,29 @@ const DeliveryInfo = () => {
     value: p.id ? p.id.toString() : ''
   }))
 
+  const contOptions = useMemo(() => {
+    const plan = plans.find(p => p.id.toString() === selectedPlanId)
+    if (!plan || !plan.orders) return [{ label: 'Tất cả Cont', value: 'ALL' }]
+    
+    const conts = new Set()
+    plan.orders.forEach(o => {
+      const contName = getContName(o.name)
+      if (contName) conts.add(contName)
+    })
+    
+    const sortedConts = Array.from(conts).sort((a, b) => {
+      return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+    })
+    
+    return [
+      { label: 'Tất cả Cont', value: 'ALL' },
+      ...sortedConts.map(c => ({
+        label: c,
+        value: c
+      }))
+    ]
+  }, [plans, selectedPlanId])
+
   /**
    * [Realtime] Hàm làm mới toàn bộ dữ liệu trang
    * Được gọi khi: Chọn KHSX mới, Chuyển Tab hoặc nhận tín hiệu WebSocket
@@ -249,10 +321,11 @@ const DeliveryInfo = () => {
     const stageToFilter = userStageDesc || userStageName;
     
     try {
+      console.log('[DEBUG Frontend] refreshData - Calling fetchPlanDetail with selectedOrderIdsString:', selectedOrderIdsString);
       // [OPTIMIZED] Gọi song song để tăng tốc độ phản hồi
       const [list, detail, returnsData] = await Promise.all([
         fetchDeliveriesByPlan(targetId),
-        fetchPlanDetail(targetId, stageToFilter),
+        fetchPlanDetail(targetId, stageToFilter, null, false, selectedOrderIdsString),
         fetchReturnsByPlan(targetId).catch(err => {
           console.error('Lỗi tải danh sách trả hàng trong refreshData:', err);
           return [];
@@ -275,7 +348,7 @@ const DeliveryInfo = () => {
     } catch (err) {
       console.error('[Refresh Error]:', err);
     }
-  }, [selectedPlanId, userStageDesc, userStageName, fetchDeliveriesByPlan, fetchPlanDetail]);
+  }, [selectedPlanId, selectedOrderIdsString, userStageDesc, userStageName, fetchDeliveriesByPlan, fetchPlanDetail]);
 
   const handleShowPalletCard = async (ticket) => {
     try {
@@ -376,6 +449,9 @@ const DeliveryInfo = () => {
             displayName: key,
             quantity: item.quantity || 0,
             delivered: item.delivered || 0,
+            specifications: item.specification 
+              ? [{ spec: item.specification, orderNames: item.order_names || [] }] 
+              : [],
             date: (currentPlan.finished_date && !isNaN(new Date(currentPlan.finished_date).getTime()))
               ? new Date(currentPlan.finished_date).toLocaleDateString('vi-VN')
               : new Date().toLocaleDateString('vi-VN')
@@ -384,6 +460,20 @@ const DeliveryInfo = () => {
           // Cộng dồn số lượng Kế hoạch và Thực tế cho các chi tiết cùng tên
           partMap[key].quantity += (item.quantity || 0);
           partMap[key].delivered += (item.delivered || 0);
+          if (item.specification) {
+            const existingSpecObj = partMap[key].specifications.find(s => s.spec === item.specification);
+            if (existingSpecObj) {
+              // Gộp orderNames mới vào, tránh trùng lặp
+              const newNames = item.order_names || [];
+              newNames.forEach(name => {
+                if (!existingSpecObj.orderNames.includes(name)) {
+                  existingSpecObj.orderNames.push(name);
+                }
+              });
+            } else {
+              partMap[key].specifications.push({ spec: item.specification, orderNames: item.order_names || [] });
+            }
+          }
         }
       });
     }
@@ -434,6 +524,10 @@ const DeliveryInfo = () => {
     });
 
     let result = [...filteredOrders];
+
+    if (selectedCont && selectedCont !== 'ALL') {
+      result = result.filter(o => getContName(o.name) === selectedCont);
+    }
     
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
@@ -447,7 +541,7 @@ const DeliveryInfo = () => {
       });
     }
     return result;
-  }, [currentPlan, searchQuery, userStageDesc]);
+  }, [currentPlan, searchQuery, userStageDesc, selectedCont]);
 
   const pagedDisplayOrders = useMemo(() => {
     return displayOrders.slice(0, visibleOrderCount);
@@ -503,6 +597,15 @@ const DeliveryInfo = () => {
 
   const filteredAndSortedDeliveries = useMemo(() => {
     let result = deliveries;
+
+    // Lọc theo Cont được chọn
+    if (selectedCont && selectedCont !== 'ALL') {
+      result = result.filter(d => {
+        if (d.order_id && orderMatchesCont(d.order_id, selectedCont)) return true;
+        if (d.details && d.details.some(det => det.order_id && orderMatchesCont(det.order_id, selectedCont))) return true;
+        return false;
+      });
+    }
 
     // 1. Lọc theo trạm của user và phân loại phiếu (Giao đi / Nhận về)
     if (isAdmin) {
@@ -603,7 +706,7 @@ const DeliveryInfo = () => {
     }
 
     return result
-  }, [deliveries, userStageDesc, typeFilter, statusFilter, searchQuery, sortOrder, isAdmin, userStageName, user])
+  }, [deliveries, userStageDesc, typeFilter, statusFilter, searchQuery, sortOrder, isAdmin, userStageName, user, selectedCont, orderMatchesCont])
 
   // Helper cho màu sắc trạng thái (Đồng bộ với Tracking)
   const getStatusColor = (status) => {
@@ -646,10 +749,27 @@ const DeliveryInfo = () => {
       nowrap: true,
       render: (row) => {
         const key = (row.displayName || row.name || '').trim().toLowerCase();
-        const insps = inspectionMap[key] || [];
+        const allInsps = inspectionMap[key] || [];
         const partName = row.displayName || row.name;
         const stageToFilter = userStageDesc || userStageName;
-        const navState = { partName, planId: selectedPlanId, stage: stageToFilter };
+        const isAllCont = !selectedCont || selectedCont === 'ALL';
+
+        // Lọc inspections theo Cont đã chọn
+        const insps = isAllCont 
+          ? allInsps 
+          : allInsps.filter(insp => {
+              if (!insp.cont_name) return true; // Bản ghi cũ (không có cont_name) luôn hiển thị
+              return getContName(insp.cont_name) === selectedCont;
+            });
+
+        const navState = { 
+          partName, 
+          planId: selectedPlanId, 
+          stage: stageToFilter,
+          contName: isAllCont ? '' : selectedCont,
+          specifications: row.specifications || [],
+          inspections: insps
+        };
 
         // [NEW] Phân quyền hiển thị: Ưu tiên nhận diện QC trước, sau đó mới đến Sản xuất
         const uRole = (user?.role_name || '').toLowerCase();
@@ -679,13 +799,71 @@ const DeliveryInfo = () => {
           whiteSpace: 'nowrap',
           textAlign: 'center',
           border: 'none',
-          display: 'block'
+          display: 'block',
+          position: 'relative'
         };
+
+        // Helper: Trích số Cont từ "Cont 60" → "60"
+        const getContNum = (contName) => {
+          if (!contName) return '';
+          const parts = contName.split('-');
+          if (parts.length >= 2) {
+            return `${parts[0]}-${parts[1]}`;
+          }
+          return contName;
+        };
+
+        // Helper: Render badge Cont ở góc dưới
+        const renderContBadge = (insp) => {
+          if (!isAllCont) return null; // Không hiển thị badge khi đã chọn Cont cụ thể
+          if (!insp.cont_name) return null; // Không hiển thị badge khi chưa gắn Cont
+          const contNum = getContNum(insp.cont_name);
+          return (
+            <span style={{
+              position: 'absolute',
+              bottom: '1px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              backgroundColor: 'rgba(0,0,0,0.45)',
+              color: '#fff',
+              fontSize: '0.48rem',
+              fontWeight: '900',
+              borderRadius: '3px',
+              padding: '0px 2px',
+              lineHeight: '1.2',
+              whiteSpace: 'nowrap'
+            }}>
+              {contNum}
+            </span>
+          );
+        };
+
+        // Lấy 1 cái mới nhất duy nhất
+        const newestInsp = insps.length > 0 ? insps[insps.length - 1] : null;
+        const hasMore = insps.length > 1;
+        const moreCount = insps.length - 1;
+
+        const showMoreBtn = hasMore && (
+          <button
+            onClick={() => setInspectionsModal({ isOpen: true, partName, insps, navState })}
+            style={{
+              ...btnBase,
+              background: '#f1f5f9',
+              color: '#475569',
+              border: '1.2px dashed #cbd5e1',
+              padding: '2.5px 0',
+              fontSize: '0.62rem',
+              fontWeight: '800'
+            }}
+          >
+            +{moreCount} xem
+          </button>
+        );
 
         if (isProduction) {
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
-              {insps.length === 0 && (
+              {insps.length === 0 ? (
                 <div style={{ 
                   padding: 'clamp(4px, 1vw, 6px) clamp(4px, 1vw, 8px)', 
                   borderRadius: '6px', 
@@ -698,40 +876,44 @@ const DeliveryInfo = () => {
                 }}>
                   Chưa KT
                 </div>
+              ) : (
+                <>
+                  {(() => {
+                    const isDat = newestInsp.result === 'Đạt';
+                    return (
+                      <button
+                        onClick={() => navigate('/input-inspection', { state: { ...navState, viewOnly: true, inspection: newestInsp } })}
+                        style={{ ...btnBase, background: isDat ? '#86efac' : '#fca5a5', color: isDat ? '#14532d' : '#7f1d1d' }}
+                      >
+                        {isDat ? '✓ Đạt' : '✗ KĐ'}
+                        {renderContBadge(newestInsp)}
+                      </button>
+                    );
+                  })()}
+                  {showMoreBtn}
+                </>
               )}
-              {insps.map((insp, idx) => {
-                const isDat = insp.result === 'Đạt';
-                return (
-                  <button
-                    key={insp.id || idx}
-                    onClick={() => navigate('/input-inspection', { state: { ...navState, viewOnly: true, inspection: insp } })}
-                    style={{ ...btnBase, background: isDat ? '#86efac' : '#fca5a5', color: isDat ? '#14532d' : '#7f1d1d' }}
-                  >
-                    {isDat ? '✓ Đạt' : '✗ KĐ'}
-                  </button>
-                );
-              })}
             </div>
           );
         }
 
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
-            {/* Hiển thị tất cả các lượt đã KT */}
-            {insps.map((insp, idx) => {
-              const isDat = insp.result === 'Đạt';
+            {newestInsp && (() => {
+              const isDat = newestInsp.result === 'Đạt';
               return (
                 <button
-                  key={insp.id || idx}
-                  onClick={() => navigate('/input-inspection', { state: { ...navState, viewOnly: true, inspection: insp } })}
+                  onClick={() => navigate('/input-inspection', { state: { ...navState, viewOnly: true, inspection: newestInsp } })}
                   style={{ ...btnBase, background: isDat ? '#86efac' : '#fca5a5', color: isDat ? '#14532d' : '#7f1d1d' }}
                 >
                   {isDat ? '✓ Đạt' : '✗ KĐ'}
+                  {renderContBadge(newestInsp)}
                 </button>
               );
-            })}
+            })()}
+
+            {showMoreBtn}
             
-            {/* Nút KT mới (luôn hiển thị hoặc hiển thị "+ KT" nếu đã có kết quả) */}
             <button
               onClick={() => navigate('/input-inspection', { state: navState })}
               style={{ 
@@ -1076,6 +1258,14 @@ const DeliveryInfo = () => {
                 value={selectedPlanId}
                 options={planOptions.length > 0 ? planOptions : [{ label: 'Đang tải...', value: '' }]}
                 onChange={setSelectedPlanId}
+              />
+            </div>
+
+            <div id="delivery-po-select" style={{ flex: 1 }}>
+              <CustomSelect
+                value={selectedCont}
+                options={contOptions}
+                onChange={setSelectedCont}
               />
             </div>
 
@@ -1452,6 +1642,152 @@ const DeliveryInfo = () => {
           data={palletModal.data}
           partProducts={palletPartProducts}
         />
+      )}
+
+      {inspectionsModal.isOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: '#fff',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '360px',
+            maxHeight: '80vh',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)',
+            overflow: 'hidden'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '16px',
+              borderBottom: '1px solid #f1f5f9',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: 'linear-gradient(135deg, #4a2c1d 0%, #78523b 100%)',
+              color: '#fff'
+            }}>
+              <div>
+                <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.7)', fontWeight: '700', textTransform: 'uppercase' }}>
+                  Lịch sử kiểm tra
+                </div>
+                <div style={{ fontSize: '0.95rem', fontWeight: '800', marginTop: '2px' }}>
+                  {inspectionsModal.partName}
+                </div>
+              </div>
+              <button
+                onClick={() => setInspectionsModal({ isOpen: false, partName: '', insps: [], navState: {} })}
+                style={{
+                  border: 'none',
+                  background: 'rgba(255,255,255,0.15)',
+                  color: '#fff',
+                  borderRadius: '50%',
+                  width: '28px',
+                  height: '28px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer'
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            
+            {/* Modal Body */}
+            <div style={{ padding: '16px', overflowY: 'auto', flex: 1 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {inspectionsModal.insps.map((insp, idx) => {
+                  const isDat = insp.result === 'Đạt';
+                  const dateFormatted = formatInspectedAt(insp.inspected_at);
+                  return (
+                    <button
+                      key={insp.id || idx}
+                      onClick={() => {
+                        setInspectionsModal({ isOpen: false, partName: '', insps: [], navState: {} });
+                        navigate('/input-inspection', { state: { ...inspectionsModal.navState, viewOnly: true, inspection: insp } });
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        borderRadius: '12px',
+                        border: '1px solid #e2e8f0',
+                        backgroundColor: '#fff',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                        transition: 'all 0.15s ease',
+                        boxSizing: 'border-box'
+                      }}
+                    >
+                      {/* Dòng 1: Kết quả & Container */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '4px 8px',
+                          borderRadius: '6px',
+                          fontWeight: '800',
+                          fontSize: '0.75rem',
+                          background: isDat ? '#dcfce7' : '#fee2e2',
+                          color: isDat ? '#15803d' : '#b91c1c'
+                        }}>
+                          {isDat ? '✓ Đạt' : '✗ Không đạt'}
+                        </span>
+                        
+                        {insp.cont_name && (
+                          <span style={{
+                            backgroundColor: '#f1f5f9',
+                            color: '#475569',
+                            fontSize: '0.72rem',
+                            fontWeight: '800',
+                            borderRadius: '6px',
+                            padding: '4px 8px',
+                            border: '1px solid #e2e8f0'
+                          }}>
+                            {insp.cont_name}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Dòng 2: Quy cách */}
+                      {insp.specification && (
+                        <div style={{ fontSize: '0.78rem', color: '#1e293b', fontWeight: '700' }}>
+                          <span style={{ color: '#64748b', fontWeight: '600' }}>Quy cách: </span>
+                          {insp.specification}
+                        </div>
+                      )}
+
+                      {/* Dòng 3: Ngày giờ kiểm tra */}
+                      {dateFormatted && (
+                        <div style={{ fontSize: '0.72rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ fontWeight: '600' }}>Thời gian:</span>
+                          <span>{dateFormatted}</span>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </Layout>
   )

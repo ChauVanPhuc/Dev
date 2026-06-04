@@ -438,7 +438,7 @@ const DeliveryCreate = () => {
     loadPartProducts()
   }, [selectedPlanId, selectedPartKey, selectedSpecification, selectedPart, user, fetchPartProducts])
 
-  // [NEW] Kiểm tra xem chi tiết đã được KT đầu vào chưa
+  // [NEW] Kiểm tra xem chi tiết và quy cách đã được KT đầu vào chưa
   useEffect(() => {
     const checkInspection = async () => {
       if (!selectedPlanId || !selectedPartKey) {
@@ -449,10 +449,14 @@ const DeliveryCreate = () => {
         const stageParam = user?.activeStageDescription || user?.activeStageName || user?.stage_description || user?.stage_name || ''
         // Lấy tất cả KT của KHSX này theo công đoạn
         const allInsps = await fetchInspectionsByPlan(selectedPlanId, stageParam)
-        // Lọc đúng chi tiết đang chọn
-        const partInsps = allInsps.filter(i =>
-          (i.part_name || '').trim().toLowerCase() === selectedPartKey.trim().toLowerCase()
-        )
+        
+        // Lọc đúng chi tiết và quy cách đang chọn
+        const partInsps = allInsps.filter(i => {
+          const nameMatches = (i.part_name || '').trim().toLowerCase() === selectedPartKey.trim().toLowerCase()
+          const spec1 = (i.specification || 'Không có').trim().toLowerCase()
+          const spec2 = (selectedSpecification || 'Không có').trim().toLowerCase()
+          return nameMatches && spec1 === spec2
+        })
         setInspections(partInsps)
       } catch (err) {
         console.error("Lỗi khi kiểm tra dữ liệu KT:", err)
@@ -460,7 +464,7 @@ const DeliveryCreate = () => {
       }
     }
     checkInspection()
-  }, [selectedPlanId, selectedPartKey, user, fetchInspectionsByPlan])
+  }, [selectedPlanId, selectedPartKey, selectedSpecification, user, fetchInspectionsByPlan])
 
   const handleAddPhoto = () => {
     if (photos.length < 3 && fileInputRef.current) {
@@ -508,11 +512,12 @@ const DeliveryCreate = () => {
 
     // [NEW] Ràng buộc: Phải có kết quả kiểm tra đầu vào mới được tạo phiếu
     if (inspections.length === 0) {
+      const specText = selectedSpecification ? ` với quy cách "${selectedSpecification}"` : '';
       setMessageModal({
         isOpen: true,
         type: 'error',
         title: 'Chưa kiểm tra đầu vào',
-        message: `Chi tiết "${selectedPartKey}" chưa thực hiện kiểm tra đầu vào tại công đoạn này. Vui lòng thực hiện KT trước khi tạo phiếu bàn giao!`
+        message: `Chi tiết "${selectedPartKey}"${specText} chưa thực hiện kiểm tra đầu vào tại công đoạn này. Vui lòng thực hiện kiểm tra chất lượng đầu vào trước khi bàn giao!`
       })
       return
     }

@@ -62,8 +62,8 @@ export const usePlanController = () => {
     }
   }, [])
 
-  // Lấy chi tiết đầy đủ của một kế hoạch (Bao gồm cả BOM, có hỗ trợ lọc công đoạn)
-  const fetchPlanDetail = useCallback(async (planId, stage = null, userStage = null, simple = false) => {
+  // Lấy chi tiết đầy đủ của một kế hoạch (Bao gồm cả BOM, có hỗ trợ lọc công đoạn, lọc theo PO/Cont)
+  const fetchPlanDetail = useCallback(async (planId, stage = null, userStage = null, simple = false, orderIds = null) => {
     if (!planId) return null
     setLoading(true)
     try {
@@ -74,6 +74,9 @@ export const usePlanController = () => {
       }
       if (simple) {
         url += `&simple=true`
+      }
+      if (orderIds && orderIds !== 'ALL') {
+        url += `&order_ids=${orderIds}`
       }
       const response = await apiClient.get(url)
       return response.data

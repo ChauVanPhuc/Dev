@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout'
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader'
@@ -19,7 +19,66 @@ const InputInspection = () => {
   const location = useLocation()
   const { user } = useAuthStore()
 
-  const { partName = '', planId = '', viewOnly = false, inspection = null, stage = '' } = location.state || {}
+  const { 
+    partName = '', 
+    planId = '', 
+    viewOnly = false, 
+    inspection = null, 
+    stage = '',
+    contName = '',
+    specifications = [],
+    inspections = []
+  } = location.state || {}
+
+  // Danh sách quy cách hỗ trợ hiển thị — hỗ trợ cả format cũ (string) và mới ({spec, orderNames})
+  const specList = useMemo(() => {
+    const raw = [...(specifications || [])].filter(Boolean)
+    const list = raw.map(item => {
+      if (typeof item === 'string') return { spec: item, orderNames: [] }
+      return { spec: item.spec, orderNames: item.orderNames || [] }
+    })
+    if (viewOnly && inspection?.specification) {
+      const exists = list.some(s => s.spec === inspection.specification)
+      if (!exists) list.push({ spec: inspection.specification, orderNames: [] })
+    }
+    return list
+  }, [specifications, viewOnly, inspection])
+
+  // Khởi tạo quy cách đã chọn. Tự động chọn nếu chỉ có duy nhất 1 quy cách
+  const [selectedSpec, setSelectedSpec] = useState(() => {
+    if (viewOnly) return inspection?.specification ?? ''
+    return specList.length === 1 ? specList[0].spec : ''
+  })
+
+  // Lấy danh sách Cont của quy cách đang chọn
+  const selectedSpecObj = useMemo(() => {
+    return specList.find(s => s.spec === selectedSpec)
+  }, [specList, selectedSpec])
+
+  const specOrderNames = selectedSpecObj?.orderNames || []
+
+  // Nhóm các PO/Cont chi tiết về dạng APT-(số chung), ví dụ APT-0060, APT-0073
+  const commonContNames = useMemo(() => {
+    const list = specOrderNames.map(name => {
+      if (!name) return '';
+      const parts = name.split('-');
+      return parts.length >= 2 ? `${parts[0]}-${parts[1]}` : name;
+    }).filter(Boolean);
+    return Array.from(new Set(list));
+  }, [specOrderNames])
+
+  const [chosenCont, setChosenCont] = useState('')
+
+  // Tự động gán/reset chosenCont khi thay đổi quy cách chọn
+  useEffect(() => {
+    if (!viewOnly) {
+      if (commonContNames.length === 1) {
+        setChosenCont(commonContNames[0])
+      } else {
+        setChosenCont('')
+      }
+    }
+  }, [commonContNames, viewOnly])
 
   // Form state — khi viewOnly thì khởi tạo từ inspection
   const [length, setLength] = useState(viewOnly ? (inspection?.measured_length ?? '') : '')
@@ -114,6 +173,14 @@ const InputInspection = () => {
   }
 
   const triggerSubmitConfirm = () => {
+    if (specList.length > 0 && !selectedSpec) {
+      setError('Vui lòng chọn Quy cách cần kiểm tra.')
+      return
+    }
+    if (!contName && commonContNames.length > 1 && !chosenCont) {
+      setError('Vui lòng chọn Container thực hiện kiểm tra.')
+      return
+    }
     if (!result) { setError('Vui lòng chọn Đạt hoặc Không đạt.'); return }
     setError('')
     setIsConfirmOpen(true)
@@ -126,6 +193,11 @@ const InputInspection = () => {
       const fd = new FormData()
       fd.append('plan_id', planId)
       fd.append('part_name', partName)
+      if (selectedSpec) fd.append('specification', selectedSpec)
+      
+      const finalContName = contName || chosenCont
+      if (finalContName) fd.append('cont_name', finalContName)
+      
       if (stage) fd.append('stage', stage)
       if (user?.id) fd.append('inspector_id', user.id)
       fd.append('result', result)
@@ -206,7 +278,9 @@ const InputInspection = () => {
             {partName || 'Không xác định'}
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
-            <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.55)', fontWeight: '600' }}>KHSX #{planId}</div>
+            <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.55)', fontWeight: '600' }}>
+              KHSX #{planId} {(contName || inspection?.cont_name || chosenCont) ? ` | Cont: ${contName || inspection?.cont_name || chosenCont}` : ''}
+            </div>
             {viewOnly && inspection?.inspected_at && (
               <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.55)', fontWeight: '600' }}>
                 {new Date(inspection.inspected_at).toLocaleString('vi-VN')}
@@ -214,6 +288,140 @@ const InputInspection = () => {
             )}
           </div>
         </div>
+
+        {/* Chọn Quy cách */}
+        {specList.length > 0 && (
+          <div id="input-specifications-card" style={card}>
+            <span style={sectionLabel}>📐 Chọn Quy cách</span>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))',
+              gap: '8px',
+              maxHeight: '175px',
+              overflowY: 'auto',
+              paddingRight: '4px'
+            }}>
+              {specList.map(({ spec, orderNames }) => {
+                const isSelected = selectedSpec === spec
+                // Đếm số lần quy cách này đã được kiểm tra từ trước
+                const count = (inspections || []).filter(insp => 
+                  (insp.specification || '').trim().toLowerCase() === spec.trim().toLowerCase()
+                ).length
+
+                // Trích Cont number từ order name (VD: "APT-0073" → "73")
+                const contLabels = Array.from(
+                  new Set(
+                    (orderNames || []).map(name => {
+                      const parts = name.split('-')
+                      return parts.length >= 2 ? parseInt(parts[1], 10) || parts[1] : name
+                    })
+                  )
+                )
+
+                return (
+                  <button
+                    key={spec}
+                    type="button"
+                    disabled={viewOnly}
+                    onClick={() => setSelectedSpec(spec)}
+                    style={{
+                      position: 'relative',
+                      padding: '14px 8px 12px 8px',
+                      borderRadius: '12px',
+                      border: isSelected ? '2px solid #78523b' : '1.5px solid #e2e8f0',
+                      backgroundColor: isSelected ? '#fdf8f5' : '#fafafa',
+                      color: isSelected ? '#78523b' : '#64748b',
+                      fontWeight: '800',
+                      fontSize: '0.82rem',
+                      textAlign: 'center',
+                      cursor: viewOnly ? 'default' : 'pointer',
+                      transition: 'all 0.15s ease',
+                      opacity: viewOnly && !isSelected ? 0.4 : 1
+                    }}
+                  >
+                    {/* Badge order/cont ở góc trên bên phải */}
+                    {contLabels.length > 0 && (
+                      <span style={{
+                        position: 'absolute',
+                        top: '2px',
+                        right: '3px',
+                        backgroundColor: isSelected ? '#78523b' : '#94a3b8',
+                        color: '#fff',
+                        fontSize: '0.5rem',
+                        fontWeight: '900',
+                        borderRadius: '4px',
+                        padding: '1px 3px',
+                        lineHeight: '1.2',
+                        maxWidth: '90%',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {contLabels.join(',')}
+                      </span>
+                    )}
+
+                    {spec}
+                    
+                    {/* Badge số lần kiểm tra ở góc nhỏ trái (bottom-left) */}
+                    {count > 0 && (
+                      <span style={{
+                        position: 'absolute',
+                        bottom: '3px',
+                        left: '3px',
+                        backgroundColor: '#78523b',
+                        color: '#fff',
+                        fontSize: '0.62rem',
+                        fontWeight: '900',
+                        borderRadius: '50%',
+                        width: '16px',
+                        height: '16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.15)'
+                      }}>
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Chọn Container (chỉ hiển thị khi thêm mới từ chế độ Tất cả Cont) */}
+        {!viewOnly && !contName && selectedSpec && commonContNames.length > 0 && (
+          <div id="input-container-selection-card" style={card}>
+            <span style={sectionLabel}>📦 Chọn Container kiểm tra</span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              {commonContNames.map(name => {
+                const isSelected = chosenCont === name;
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => setChosenCont(name)}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '10px',
+                      border: isSelected ? '2px solid #78523b' : '1.5px solid #e2e8f0',
+                      backgroundColor: isSelected ? '#fdf8f5' : '#fafafa',
+                      color: isSelected ? '#78523b' : '#64748b',
+                      fontWeight: '800',
+                      fontSize: '0.82rem',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Kích thước (Đã ẩn theo yêu cầu) */}
         <div id="input-dims-card" style={{...card, display: 'none'}}>
@@ -393,7 +601,7 @@ const InputInspection = () => {
       <ConfirmModal 
         isOpen={isConfirmOpen} 
         title="Xác nhận lưu kết quả" 
-        message={`Bạn có chắc chắn muốn lưu kết quả kiểm tra đầu vào cho chi tiết "${partName}" là "${result.toUpperCase()}" không?`} 
+        message={`Bạn có chắc chắn muốn lưu kết quả kiểm tra đầu vào cho chi tiết "${partName}"${selectedSpec ? ` (Quy cách: ${selectedSpec})` : ''} là "${result.toUpperCase()}" không?`} 
         onConfirm={handleSubmit} 
         onCancel={() => setIsConfirmOpen(false)} 
         confirmText="Xác nhận" 
@@ -413,7 +621,16 @@ const InputInspection = () => {
         }}
       />
 
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        #input-specifications-card > div::-webkit-scrollbar {
+          width: 4px;
+        }
+        #input-specifications-card > div::-webkit-scrollbar-thumb {
+          background-color: #cbd5e1;
+          border-radius: 4px;
+        }
+      `}</style>
     </Layout>
   )
 }
