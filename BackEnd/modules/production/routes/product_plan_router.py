@@ -467,6 +467,7 @@ def get_plan_detail(
     exact_order: Optional[str] = 'ALL',
     user_stage: Optional[str] = None,
     simple: bool = False,
+    order_ids: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     # Tự động kích hoạt simple=True nếu limit == 0 và stage is None (luồng xem nhanh từ di động)
@@ -474,6 +475,7 @@ def get_plan_detail(
         simple = True
 
     # 1. Lấy thông tin kế hoạch
+    print(f"[DEBUG API] get_plan_detail called: id={id}, stage={stage}, order_ids={order_ids}")
     plan_info = db.query(ProductPlan).filter(ProductPlan.id == id).first()
     if not plan_info:
         plan_info = db.query(ProductPlan).filter(ProductPlan.code == str(id)).first()
@@ -582,8 +584,24 @@ def get_plan_detail(
     try:
         if stage:
             try:
+                # Phân tích danh sách order_ids
+                order_ids_filter_plan = ""
+                order_ids_filter_deliv = ""
+                if order_ids:
+                    try:
+                        valid_ids = [int(x.strip()) for x in order_ids.split(",") if x.strip()]
+                        if valid_ids:
+                            ids_str = ",".join(map(str, valid_ids))
+                            order_ids_filter_plan = f"AND o.id IN ({ids_str})"
+                            order_ids_filter_deliv = f"""AND (d.order_id IN ({ids_str}) OR EXISTS (
+                                SELECT 1 FROM delivery_details dd 
+                                WHERE dd.delivery_id = d.id AND dd.order_id IN ({ids_str})
+                            ))"""
+                    except ValueError:
+                        pass
+
                 # [SAFE VERSION] Sử dụng các cột cơ bản để tránh lỗi Invalid Column Name
-                sql = text("""
+                sql = text(f"""
                     WITH PlanDetails AS (
                         SELECT 
                             -- [CHỈNH SỬA] Nhóm theo tên sạch và quy cách để tránh nhân bản số lượng khi JOIN
@@ -596,7 +614,7 @@ def get_plan_detail(
                         FROM bom_details b
                         JOIN products p ON b.product_id = p.id
                         JOIN orders o ON p.order_id = o.id
-                        WHERE o.plan_id = :pid
+                        WHERE o.plan_id = :pid {order_ids_filter_plan}
                         GROUP BY 
                             CASE 
                                 WHEN CHARINDEX(' - ', b.name) > 0 THEN SUBSTRING(b.name, 1, CHARINDEX(' - ', b.name) - 1)
@@ -614,6 +632,7 @@ def get_plan_detail(
                             ) as total_delivered_qty
                         FROM deliveries d
                         WHERE d.plan_id = :pid AND d.status IN (N'Đã nhận', N'Hoàn thành', N'Đã Nhận', N'Hoàn Thành', N'Hoàn thảnh', N'Đã nhận hàng', N'Trả Hàng', N'Trả hàng', N'Đã trả hàng', N'Trả một phần')
+                          {order_ids_filter_deliv}
                         GROUP BY d.part_name, d.specification
                     )
                     SELECT 
@@ -626,6 +645,32 @@ def get_plan_detail(
                 """)
                 
                 rows = db.execute(sql, {"pid": plan_info.id}).fetchall()
+
+                # [NEW] Truy vấn phụ: Lấy danh sách order names cho mỗi (name_clean, specification)
+                spec_order_sql = text(f"""
+                    SELECT DISTINCT
+                        CASE 
+                            WHEN CHARINDEX(' - ', b.name) > 0 THEN SUBSTRING(b.name, 1, CHARINDEX(' - ', b.name) - 1)
+                            ELSE b.name
+                        END as name_clean,
+                        COALESCE(b.specification, '') as specification,
+                        o.order_code as order_name
+                    FROM bom_details b
+                    JOIN products p ON b.product_id = p.id
+                    JOIN orders o ON p.order_id = o.id
+                    WHERE o.plan_id = :pid {order_ids_filter_plan}
+                """)
+                spec_order_rows = db.execute(spec_order_sql, {"pid": plan_info.id}).fetchall()
+                
+                # Gom: (name_clean, spec) → [order_name1, order_name2, ...]
+                spec_order_map = {}
+                for sor in spec_order_rows:
+                    key = (sor.name_clean.strip().lower(), (sor.specification or '').strip().lower())
+                    if key not in spec_order_map:
+                        spec_order_map[key] = []
+                    if sor.order_name and sor.order_name not in spec_order_map[key]:
+                        spec_order_map[key].append(sor.order_name)
+
                 # Hỗ trợ tham số stage chứa nhiều công đoạn cách nhau bởi dấu phẩy
                 target_stages = [normalize_vn(s.strip()) for s in stage.split(",") if s.strip()] if stage else []
                 
@@ -636,6 +681,10 @@ def get_plan_detail(
                     input_norm = normalize_vn(row.input_stage)
                     output_norm = normalize_vn(row.output_stage)
                     
+                    # Tra cứu order_names cho item này
+                    lookup_key = (row.name_clean.strip().lower(), (row.specification or '').strip().lower())
+                    order_names = spec_order_map.get(lookup_key, [])
+
                     item = {
                         "sku": "", # SKU không còn ý nghĩa khi đã gộp nhiều sản phẩm
                         "name": row.name_clean, 
@@ -644,7 +693,8 @@ def get_plan_detail(
                         "delivered": int(row.total_delivered_qty or 0),
                         "input_stage": row.input_stage,
                         "output_stage": row.output_stage,
-                        "specification": row.specification or ""
+                        "specification": row.specification or "",
+                        "order_names": order_names
                     }
                     
                     is_handover = any(ts in input_norm for ts in target_stages) if target_stages else True
@@ -693,6 +743,14 @@ def get_plan_detail(
             if exact_order and exact_order != 'ALL':
                 where_clauses.append("o.order_code = :exact_order")
                 base_params["exact_order"] = exact_order
+            if order_ids:
+                try:
+                    valid_ids = [int(x.strip()) for x in order_ids.split(",") if x.strip()]
+                    if valid_ids:
+                        ids_str = ",".join(map(str, valid_ids))
+                        where_clauses.append(f"o.id IN ({ids_str})")
+                except ValueError:
+                    pass
             if factory:
                 where_clauses.append("""
                     EXISTS (

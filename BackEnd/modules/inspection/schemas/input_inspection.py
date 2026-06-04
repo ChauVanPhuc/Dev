@@ -5,6 +5,8 @@ from datetime import datetime
 class InputInspectionBase(BaseModel):
     plan_id:         int
     part_name:       str
+    specification:   Optional[str] = None
+    cont_name:       Optional[str] = None
     stage:           Optional[str] = None
     inspector_id:    Optional[int] = None
     measured_length: Optional[float] = None

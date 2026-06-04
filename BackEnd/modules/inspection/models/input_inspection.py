@@ -15,6 +15,8 @@ class InputInspection(Base):
     id              = Column(Integer, primary_key=True, index=True)
     plan_id         = Column(Integer, ForeignKey("product_plans.id"), nullable=False)
     part_name       = Column(NVARCHAR(255), nullable=False)  # Tên chi tiết cần KT
+    specification   = Column(NVARCHAR(255), nullable=True)   # Quy cách chi tiết cần KT
+    cont_name       = Column(NVARCHAR(50), nullable=True)    # Container (VD: "Cont 60")
     stage           = Column(NVARCHAR(255), nullable=True)   # Công đoạn thực hiện KT
     inspector_id    = Column(Integer, nullable=True)         # ID người kiểm tra
     inspected_at    = Column(DateTime, default=get_vietnam_time)

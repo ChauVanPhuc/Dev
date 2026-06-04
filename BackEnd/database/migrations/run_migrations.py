@@ -58,6 +58,54 @@ def run_sx_confirmation_migration():
         print(f"[ERROR] SX confirmation migration failed: {str(e)}")
         raise
 
+def run_input_inspection_specification_migration():
+    """Add specification column to input_inspections table"""
+    db = next(get_db())
+    try:
+        check_sql = text("""
+            SELECT COUNT(*) as count 
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_NAME = 'input_inspections' 
+            AND COLUMN_NAME = 'specification'
+        """)
+        result = db.execute(check_sql).fetchone()
+        
+        if result[0] == 0:
+            db.execute(text("ALTER TABLE input_inspections ADD specification NVARCHAR(255) NULL"))
+            db.commit()
+            print("[OK] Added specification column to input_inspections table")
+        else:
+            print("[SKIP] specification column already exists")
+            
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] input_inspection migration failed: {str(e)}")
+        raise
+
+def run_input_inspection_cont_name_migration():
+    """Add cont_name column to input_inspections table"""
+    db = next(get_db())
+    try:
+        check_sql = text("""
+            SELECT COUNT(*) as count 
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_NAME = 'input_inspections' 
+            AND COLUMN_NAME = 'cont_name'
+        """)
+        result = db.execute(check_sql).fetchone()
+        
+        if result[0] == 0:
+            db.execute(text("ALTER TABLE input_inspections ADD cont_name NVARCHAR(50) NULL"))
+            db.commit()
+            print("[OK] Added cont_name column to input_inspections table")
+        else:
+            print("[SKIP] cont_name column already exists")
+            
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] cont_name migration failed: {str(e)}")
+        raise
+
 if __name__ == "__main__":
     print("Running database migrations...")
     print("-" * 50)
@@ -65,6 +113,8 @@ if __name__ == "__main__":
     try:
         run_allocation_method_migration()
         run_sx_confirmation_migration()
+        run_input_inspection_specification_migration()
+        run_input_inspection_cont_name_migration()
         print("-" * 50)
         print("[SUCCESS] All migrations completed successfully!")
     except Exception as e:

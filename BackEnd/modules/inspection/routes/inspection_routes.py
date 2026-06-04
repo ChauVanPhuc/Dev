@@ -131,6 +131,8 @@ if not os.path.exists(UPLOAD_DIR):
 async def create_inspection(
     plan_id:         int   = Form(...),
     part_name:       str   = Form(...),
+    specification:   Optional[str]   = Form(None),
+    cont_name:       Optional[str]   = Form(None),
     stage:           Optional[str]   = Form(None),
     inspector_id:    Optional[int]   = Form(None),
     measured_length: Optional[float] = Form(None),
@@ -158,6 +160,8 @@ async def create_inspection(
         new_inspection = InputInspection(
             plan_id         = plan_id,
             part_name       = part_name,
+            specification   = specification,
+            cont_name       = cont_name,
             stage           = stage,
             inspector_id    = inspector_id,
             measured_length = measured_length,
@@ -184,6 +188,7 @@ async def create_inspection(
                     "type": "QC_CONFIRMED", 
                     "plan_id": plan_id, 
                     "part_name": part_name, 
+                    "specification": specification,
                     "result": result
                 }
             )
