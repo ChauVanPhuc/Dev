@@ -9,27 +9,40 @@ Chào mừng bạn đến với hệ thống API của ERP G7. Hệ thống đư
 - **ORM**: SQLAlchemy
 - **Authentication**: JWT (JSON Web Tokens)
 
-## 📂 Cấu trúc thư mục (`/src/app`)
+## 📂 Cấu trúc thư mục (Directory Structure)
 
-### 1. `api/` (Tầng Giao tiếp)
-Chứa các định nghĩa Route (Endpoints). 
-- `deliveries.py`: Quản lý luồng bàn giao hàng hóa.
-- `qc_router.py`: Xử lý logic kiểm tra chất lượng và lưu kết quả.
-- `auth.py`: Xử lý đăng nhập, cấp token.
+```txt
+SmartFlow_v2/
+├── BackEnd/        # Backend API (FastAPI)
+│   ├── app/        # Main application
+│   │   ├── main.py # Entry point
+│   │   ├── routes.py # API routes
+│   │   └── dependencies.py # Dependencies
+│   ├── modules/     # Business logic modules
+│   │   ├── auth/    # Authentication
+│   │   ├── production/ # Production management
+│   │   ├── delivery/ # Delivery management
+│   │   ├── inspection/ # QC inspection
+│   │   ├── notification/ # Notifications
+│   │   ├── equipment/ # Equipment management
+│   │   ├── kpi/     # KPI tracking
+│   │   ├── capa/    # CAPA management
+│   │   └── system/  # System settings
+│   ├── config/      # Configuration
+│   │   └── database.py # Database connection
+│   ├── database/    # Database scripts
+│   │   ├── migrations/ # Migration scripts
+│   │   └── seeders/ # Seed data
+│   └── docs/        # Documentation
+│       ├── DATABASE.md # Database schema
+│       └── AUTH_SYSTEM.md # Auth system
+```
 
-### 2. `models/` (Tầng Dữ liệu)
-Định nghĩa cấu trúc các bảng trong Database thông qua SQLAlchemy.
-- `deliveries.py`: Model bảng `deliveries` (Id, Status, Quantity...).
-- `users.py`: Thông tin tài khoản và phân quyền.
-
-### 3. `schemas/` (Tầng Kiểm định)
-Sử dụng **Pydantic** để định nghĩa kiểu dữ liệu Input/Output. Đảm bảo dữ liệu gửi/nhận luôn đúng định dạng trước khi vào xử lý logic hoặc lưu vào DB.
-
-### 4. `controllers/` (Tầng Logic)
-Nơi xử lý các nghiệp vụ phức tạp. Giúp tách biệt logic khỏi router để code sạch sẽ và dễ viết unit test.
-
-### 5. `core/` (Cấu hình)
-Chứa file cấu hình DB (`database.py`), các hằng số hệ thống và các hàm bổ trợ (Utils).
+Kiến trúc Backend của SmartFlow v2 được tổ chức theo mô hình **Modular MVC (Domain-Driven)**. Mỗi module nghiệp vụ nằm trong thư mục `modules/` đều tự đóng gói các thành phần riêng biệt:
+- **`routes/`**: Định nghĩa các API endpoints cho module đó.
+- **`models/`**: Khai báo cấu trúc bảng cơ sở dữ liệu qua SQLAlchemy.
+- **`schemas/`**: Định nghĩa các Pydantic Models để validate dữ liệu đầu vào/đầu ra.
+- **`controllers/`**: Chứa toàn bộ logic nghiệp vụ thực thi của module.
 
 ## 📝 Quy trình phát triển (Dev Flow)
 1. **Thay đổi DB**: Cập nhật file trong `models/` -> Chạy migrations.
