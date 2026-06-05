@@ -17,6 +17,7 @@
     z-index: 2000;
     transition: var(--transition);
     border-right: 1px solid #EEEEEE;
+    overflow-x: hidden;
 }
 
 /* 1. Phần thông tin User ở trên cùng - Giữ màu nâu đậm */
@@ -177,9 +178,11 @@
 
 @media (max-width: 768px) {
     .admin-sidebar {
+        width: var(--sidebar-width) !important;
         transform: translateX(-100%);
     }
     .admin-sidebar.active {
+        width: var(--sidebar-width) !important;
         transform: translateX(0);
     }
 }

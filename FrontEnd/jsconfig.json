@@ -10,6 +10,8 @@
       "@web/*": ["Web/*"],
       "@mobile/*": ["Mobile/*"],
       "@webShared/*": ["Web/Shared/*"],
+      "@styles/*": ["Web/Shared/styles/*"],
+      "@assets/*": ["Web/Shared/assets/*"],
       "@modules/*": ["Web/modules/*"],
       "@modules/auth/*": ["Web/modules/Auth/*"],
       "@modules/capa/*": ["Web/modules/CAPA/*"],

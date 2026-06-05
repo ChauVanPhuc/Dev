@@ -1,5 +1,4 @@
 import React from 'react';
-import '@web/styles/Manufacture/Plan.css'; // Tái sử dụng style
 
 
 const ManufactureDashboard = () => {

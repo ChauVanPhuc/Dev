@@ -17,7 +17,6 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { bomService } from '@modules/Product/Models/bom.service';
 import { orderService } from '@modules/Order/Models/order.service';
-import '@web/styles/Manufacture/Plan.css';
 
 // --- SEARCHABLE SELECT COMPONENT ---
 const SearchableSelect = ({ value, onChange, placeholder }) => {

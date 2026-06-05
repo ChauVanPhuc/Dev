@@ -8,7 +8,7 @@ from config.database import get_db
 from modules.inspection.models.input_inspection import InputInspection
 from modules.inspection.schemas.input_inspection import InputInspection as InspectionSchema
 from modules.inspection.models.defect_type import DefectType
-from modules.inspection.schemas.defect_type import DefectType as DefectTypeSchema
+from modules.inspection.schemas.defect_type import DefectType as DefectTypeSchema, DefectTypeCreate
 from modules.inspection.schemas.daily_inspection import DailyInspectionRecordCreate, DailyInspectionRecordRead
 from modules.inspection.models.daily_inspection import DailyInspectionRecord, DailyInspectionDefect
 from modules.inspection.models.stage_inspection import StageInspection
@@ -250,14 +250,54 @@ def get_inspection_by_part(
     return result
 
 @router.get("/defect-types", response_model=List[DefectTypeSchema])
-def get_defect_types(category: Optional[str] = None, db: Session = Depends(get_db)):
+def get_defect_types(
+    category: Optional[str] = None, 
+    include_inactive: bool = False, 
+    db: Session = Depends(get_db)
+):
     """
     [GET] Lấy danh sách các loại lỗi từ danh mục. Có thể lọc theo nhóm.
     """
-    query = db.query(DefectType).filter(DefectType.is_active == True)
+    query = db.query(DefectType)
+    if not include_inactive:
+        query = query.filter(DefectType.is_active == True)
     if category:
         query = query.filter(DefectType.category == category)
     return query.all()
+
+@router.post("/defect-types", response_model=DefectTypeSchema)
+def create_defect_type(data: DefectTypeCreate, db: Session = Depends(get_db)):
+    """
+    [POST] Tạo mới một loại lỗi.
+    """
+    defect = DefectType(
+        name=data.name,
+        category=data.category,
+        needs_tracking=data.needs_tracking,
+        is_active=data.is_active
+    )
+    db.add(defect)
+    db.commit()
+    db.refresh(defect)
+    return defect
+
+@router.put("/defect-types/{defect_id}", response_model=DefectTypeSchema)
+def update_defect_type(defect_id: int, data: DefectTypeCreate, db: Session = Depends(get_db)):
+    """
+    [PUT] Cập nhật thông tin loại lỗi.
+    """
+    defect = db.query(DefectType).filter(DefectType.id == defect_id).first()
+    if not defect:
+        raise HTTPException(status_code=404, detail="Không tìm thấy loại lỗi")
+    
+    defect.name = data.name
+    defect.category = data.category
+    defect.needs_tracking = data.needs_tracking
+    defect.is_active = data.is_active
+    
+    db.commit()
+    db.refresh(defect)
+    return defect
 
 @router.patch("/defect-types/{defect_id}/toggle-tracking", response_model=DefectTypeSchema)
 def toggle_defect_tracking(defect_id: int, db: Session = Depends(get_db)):
@@ -272,3 +312,17 @@ def toggle_defect_tracking(defect_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(defect)
     return defect
+
+@router.delete("/defect-types/{defect_id}")
+def delete_defect_type(defect_id: int, db: Session = Depends(get_db)):
+    """
+    [DELETE] Xóa mềm loại lỗi (is_active = False).
+    """
+    defect = db.query(DefectType).filter(DefectType.id == defect_id).first()
+    if not defect:
+        raise HTTPException(status_code=404, detail="Không tìm thấy loại lỗi")
+    
+    defect.is_active = False
+    db.commit()
+    return {"status": "success", "message": "Đã ngưng hoạt động loại lỗi thành công"}
+

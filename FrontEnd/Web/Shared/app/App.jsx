@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from '@modules/Auth/Views/LoginView';
-import AdminLayout from '@webShared/Views/components/layout/AdminLayout';
+import PortalLayout from '@webShared/Views/components/layout/PortalLayout';
 
 // Import các trang Admin
 import Dashboard from '@modules/Dashboard/Views/DashboardView';
@@ -18,9 +18,9 @@ import DataPackaging from '@modules/System/Views/DataPackagingView';
 import BackupQRManagement from '@modules/System/Views/BackupQRManagementView';
 import ScreenManagement from '@modules/System/Views/ScreenManagementView';
 import ScreenDetail from '@modules/System/Views/ScreenDetailView';
+import DefectManagement from '@modules/Inspection/Views/DefectManagementView';
 
 // Import Manufacture module
-import ManufactureLayout from '@webShared/Views/components/layout/ManufactureLayout';
 import ManufactureDashboard from '@modules/Dashboard/Views/ManufactureDashboardView';
 import ManufacturePlan from '@modules/Plan/Views/PlanListView';
 import PlanDetail from '@modules/Plan/Views/PlanDetailView';
@@ -55,7 +55,7 @@ function App() {
           } />
 
           {/* Route Admin (Sử dụng Layout chung) */}
-          <Route path="/admin" element={<AdminLayout />}>
+          <Route path="/admin" element={<PortalLayout />}>
             <Route index element={<Navigate to="/admin/dashboard" />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="users" element={<UserManagement />} />
@@ -63,6 +63,7 @@ function App() {
             <Route path="users/edit/:id" element={<UserEdit />} />
             <Route path="handovers" element={<HandoverList />} />
             <Route path="logs" element={<IncidentLogs />} />
+            <Route path="defects" element={<DefectManagement />} />
             <Route path="reports" element={<InspectionReports />} />
             <Route path="kpi" element={<KPIReports />} />
             <Route path="feedback" element={<Improvements />} />
@@ -73,7 +74,7 @@ function App() {
           </Route>
 
           {/* Route Manufacture */}
-          <Route path="/manufacture" element={<ManufactureLayout />}>
+          <Route path="/manufacture" element={<PortalLayout />}>
             <Route index element={<Navigate to="/manufacture/dashboard" />} />
             <Route path="dashboard" element={<ManufactureDashboard />} />
             <Route path="plan" element={<ManufacturePlan />} />

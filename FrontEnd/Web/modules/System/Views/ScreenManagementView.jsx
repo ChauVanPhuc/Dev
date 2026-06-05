@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { screenService } from '@modules/System/Models/screen.service';
 import { useScreen } from '@shared/context/ScreenContext';
-import '@web/styles/Admin/ScreenManagement.css';
+import '@styles/components.css';
 
 const ScreenManagement = () => {
   const navigate = useNavigate();
@@ -94,7 +94,7 @@ const ScreenManagement = () => {
   });
 
   return (
-    <div className="screen-management-container">
+    <div className="mgmt-container screen-management-container">
       {/* Toast Notification */}
       {toast && (
         <div className={`toast-notification ${toast.type}`}>
@@ -149,77 +149,155 @@ const ScreenManagement = () => {
       </div>
 
       {/* Bảng dữ liệu cấu hình */}
-      <div className="table-card">
+      <div className="mgmt-table card">
         {loading ? (
-          <div className="loading-spinner">Đang tải cấu hình màn hình...</div>
+          <div className="loading-state">
+            <div className="spinner"></div>
+            <span>Đang tải cấu hình màn hình...</span>
+          </div>
         ) : filteredScreens.length === 0 ? (
-          <div className="empty-state">Không tìm thấy màn hình nào phù hợp</div>
+          <div className="empty-state" style={{ padding: 40, textAlign: 'center', color: '#888' }}>Không tìm thấy màn hình nào phù hợp</div>
         ) : (
-          <div className="table-wrapper">
-            <table className="screens-table">
-              <thead>
-                <tr>
-                  <th>Nền tảng</th>
-                  <th>Mã mặc định</th>
-                  <th>Mã hiện tại</th>
-                  <th>Tiêu đề hiển thị</th>
-                  <th>Phụ đề mô tả</th>
-                  <th>Đường dẫn Route</th>
-                  <th style={{ textAlign: 'center' }}>Hành động</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredScreens.map((screen) => {
-                  const isModified = screen.current_code !== screen.default_code;
-                  return (
-                    <tr 
-                      key={screen.id}
-                      onClick={(e) => {
-                        if (e.target.closest('.actions-cell') || e.target.closest('button')) return;
-                        navigate(`/admin/screens/${screen.id}`);
-                      }}
-                      className="clickable-row"
-                    >
-                      <td>
-                        <span className={`platform-badge ${screen.platform}`}>
-                          {screen.platform === 'Web' ? '🖥️ Web' : '📱 Mobile'}
-                        </span>
-                      </td>
-                      <td className="code-text font-mono">{screen.default_code}</td>
-                      <td className="code-text font-mono">
-                        <span className={isModified ? 'modified-code' : 'normal-code'}>
-                          {screen.current_code}
-                        </span>
-                      </td>
-                      <td className="title-text font-semibold">{screen.title}</td>
-                      <td className="subtitle-text text-gray-500">{screen.subtitle || '-'}</td>
-                      <td className="route-text font-mono text-xs">{screen.route_path}</td>
-                      <td>
-                        <div className="actions-cell">
-                          <button 
-                            className="btn-edit"
-                            onClick={() => handleEditClick(screen)}
-                            title="Chỉnh sửa cấu hình"
-                          >
-                            Sửa
-                          </button>
-                          {isModified && (
+          <>
+            {/* Giao diện Desktop */}
+            <div className="table-responsive desktop-only">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Nền tảng</th>
+                    <th>Mã mặc định</th>
+                    <th>Mã hiện tại</th>
+                    <th>Tiêu đề hiển thị</th>
+                    <th>Phụ đề mô tả</th>
+                    <th>Đường dẫn Route</th>
+                    <th style={{ textAlign: 'center', width: '150px' }}>Hành động</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredScreens.map((screen) => {
+                    const isModified = screen.current_code !== screen.default_code;
+                    return (
+                      <tr 
+                        key={screen.id}
+                        onClick={(e) => {
+                          if (e.target.closest('.actions-cell') || e.target.closest('button')) return;
+                          navigate(`/admin/screens/${screen.id}`);
+                        }}
+                        className="clickable-row"
+                      >
+                        <td>
+                          <span className={`platform-badge ${screen.platform}`}>
+                            {screen.platform === 'Web' ? '🖥️ Web' : '📱 Mobile'}
+                          </span>
+                        </td>
+                        <td className="code-text font-mono">{screen.default_code}</td>
+                        <td className="code-text font-mono">
+                          <span className={isModified ? 'modified-code' : 'normal-code'}>
+                            {screen.current_code}
+                          </span>
+                        </td>
+                        <td className="font-semibold">{screen.title}</td>
+                        <td style={{ color: '#666' }}>{screen.subtitle || '-'}</td>
+                        <td className="font-mono" style={{ fontSize: '0.8rem' }}>{screen.route_path}</td>
+                        <td>
+                          <div className="actions-cell">
                             <button 
-                              className="btn-reset"
-                              onClick={() => handleReset(screen)}
-                              title="Khôi phục mã mặc định"
+                              className="btn-edit"
+                              onClick={() => handleEditClick(screen)}
+                              title="Chỉnh sửa cấu hình"
                             >
-                              Khôi phục
+                              Sửa
                             </button>
+                            {isModified && (
+                              <button 
+                                className="btn-reset"
+                                onClick={() => handleReset(screen)}
+                                title="Khôi phục mã mặc định"
+                              >
+                                Khôi phục
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Giao diện Mobile */}
+            <div className="mobile-only mgmt-cards-container">
+              {filteredScreens.map((screen) => {
+                const isModified = screen.current_code !== screen.default_code;
+                return (
+                  <div 
+                    key={screen.id} 
+                    className="mgmt-card"
+                    onClick={(e) => {
+                      if (e.target.closest('.mgmt-card-actions') || e.target.closest('button')) return;
+                      navigate(`/admin/screens/${screen.id}`);
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <div className="mgmt-card-main">
+                      <div className="mgmt-card-avatar">
+                        {screen.platform === 'Web' ? '🖥️' : '📱'}
+                      </div>
+                      <div className="mgmt-card-details">
+                        <div className="mgmt-card-title-row">
+                          <h4 className="mgmt-card-title">{screen.title}</h4>
+                          <span className={`platform-badge ${screen.platform}`}>
+                            {screen.platform}
+                          </span>
+                        </div>
+                        <p style={{ fontSize: '0.82rem', color: '#666', margin: '4px 0', lineHeight: '1.4' }}>
+                          {screen.subtitle || 'Không có mô tả phụ'}
+                        </p>
+                        <div className="mgmt-card-meta-chips">
+                          <span className="mgmt-card-chip font-mono" style={{ fontSize: '0.7rem' }}>
+                            {screen.route_path}
+                          </span>
+                          {isModified && (
+                            <span className="mgmt-card-chip warning font-semibold" style={{ fontSize: '0.7rem' }}>
+                              Đã sửa
+                            </span>
                           )}
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                      </div>
+                      <div className="mgmt-card-actions">
+                        <button 
+                          className="action-icon-btn"
+                          onClick={() => handleEditClick(screen)}
+                          title="Sửa"
+                          style={{ border: '1px solid #EADCC9' }}
+                        >
+                          ✏️
+                        </button>
+                        {isModified && (
+                          <button 
+                            className="action-icon-btn delete"
+                            onClick={() => handleReset(screen)}
+                            title="Khôi phục"
+                          >
+                            🔄
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="mgmt-card-footer">
+                      <div className="mgmt-card-footer-left font-mono" style={{ fontSize: '0.8rem' }}>
+                        Mã: <span className={isModified ? 'modified-code' : 'normal-code'}>{screen.current_code}</span>
+                      </div>
+                      <div className="mgmt-card-footer-right font-mono" style={{ fontSize: '0.75rem', color: '#999' }}>
+                        Mặc định: {screen.default_code}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
 

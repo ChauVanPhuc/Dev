@@ -22,6 +22,12 @@ const deliveryService = {
 
   },
 
+  getQCDetailedResult: (deliveryId) => {
+
+    return api.get(`/qc/${deliveryId}`);
+
+  },
+
   getExceptionDeliveries: (skip = 0, limit = 100) => {
 
     return api.get(`/deliveries/exceptions?skip=${skip}&limit=${limit}`);

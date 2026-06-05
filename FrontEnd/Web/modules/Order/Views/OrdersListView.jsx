@@ -15,7 +15,6 @@ import {
   Trash2
 } from 'lucide-react';
 import { orderService } from '@modules/Order/Models/order.service';
-import '@web/styles/Manufacture/Plan.css';
 
 const Orders = () => {
     const navigate = useNavigate();

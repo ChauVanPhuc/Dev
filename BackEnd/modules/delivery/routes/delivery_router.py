@@ -516,11 +516,22 @@ def get_delivery_detail(delivery_id: int, db: Session = Depends(get_db)):
     from sqlalchemy.orm import joinedload
     from sqlalchemy import text
     try:
+        from modules.delivery.models.order import Order as OrderModel
         delivery = db.query(Delivery).options(
-            joinedload(Delivery.details).joinedload(DeliveryDetailsModel.order)
+            joinedload(Delivery.details).joinedload(DeliveryDetailsModel.order).joinedload(OrderModel.products)
         ).filter(Delivery.id == delivery_id).first()
         if not delivery:
             raise HTTPException(status_code=404, detail="Không tìm thấy phiếu bàn giao này.")
+            
+        # Gán tên người thực hiện giao, nhận và kiểm QC
+        sender = db.query(AccountModel).filter(AccountModel.id == delivery.sx_delivery).first() if delivery.sx_delivery else None
+        receiver = db.query(AccountModel).filter(AccountModel.id == delivery.sx_receipt).first() if delivery.sx_receipt else None
+        qc = db.query(AccountModel).filter(AccountModel.id == delivery.qc_receipt).first() if delivery.qc_receipt else None
+        
+        delivery.sx_delivery_name = sender.full_name if sender else "N/A"
+        delivery.sx_receipt_name = receiver.full_name if receiver else "---"
+        delivery.qc_receipt_name = qc.full_name if qc else "---"
+        
         return delivery
     except Exception as e:
         if "moisture_min" in str(e) or "moisture_max" in str(e) or "Invalid column name" in str(e):

@@ -11,6 +11,8 @@ export default defineConfig({
       '@web': path.resolve(__dirname, './Web'),
       '@mobile': path.resolve(__dirname, './Mobile'),
       '@webShared': path.resolve(__dirname, './Web/Shared'),
+      '@styles': path.resolve(__dirname, './Web/Shared/styles'),
+      '@assets': path.resolve(__dirname, './Web/Shared/assets'),
       '@modules': path.resolve(__dirname, './Web/modules'),
       '@modules/auth': path.resolve(__dirname, './Web/modules/Auth'),
       '@modules/capa': path.resolve(__dirname, './Web/modules/CAPA'),

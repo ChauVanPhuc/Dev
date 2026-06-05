@@ -166,6 +166,10 @@ async def lifespan(app: FastAPI):
 
             print(f"Auto-seeding components error: {e}")
 
+
+
+
+
             
 
     except Exception as e:

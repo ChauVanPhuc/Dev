@@ -102,75 +102,40 @@ uvicorn src.app.main:app --reload
 
 
 
----
+## 3. Thiết lập Frontend (Web Admin & Mobile App qua Workspaces)
 
+Từ nay, dự án sử dụng **npm Workspaces** để quản lý thư viện tập trung. Toàn bộ thư viện của cả bản Web và bản Mobile đều được cài đặt và lưu chung tại duy nhất thư mục gốc `FrontEnd/node_modules/`.
 
-
-## 3. Thiết lập Frontend (Web Admin)
-
-
+### Bước 3.1: Cài đặt thư viện (Dùng chung cho cả Web và Mobile)
 
 Di chuyển vào thư mục `FrontEnd/`:
-
-
-
-### Bước 3.1: Cài đặt thư viện
-
 ```powershell
-
 npm install
-
 ```
 
+> [!IMPORTANT]
+> **KHÔNG** di chuyển vào thư mục `FrontEnd/Mobile/` để chạy `npm install`. Lệnh cài đặt ở thư mục gốc `FrontEnd/` sẽ tự động cài đặt đầy đủ thư viện cho cả hai bên.
 
+### Bước 3.2: Chạy Frontend (Web Admin)
 
-### Bước 3.2: Chạy Frontend
-
+Tại thư mục `FrontEnd/`:
 ```powershell
-
 npm run dev
-
 ```
-
--   **Ứng dụng sẽ chạy tại:** `http://localhost:5173` (Xem thông tin cụ thể trong terminal).
-
-
+-   **Ứng dụng sẽ chạy tại:** `http://localhost:5173`
 
 ---
-
-
 
 ## 4. Thiết lập Mobile App (Web-based Mobile UI)
 
+### Bước 4.1: Chạy Mobile UI
 
-
-Di chuyển vào thư mục `Mobile/`:
-
-
-
-### Bước 4.1: Cài đặt thư viện
-
+Di chuyển vào thư mục `FrontEnd/Mobile/`:
 ```powershell
-
-npm install
-
-```
-
-
-
-### Bước 4.2: Chạy Mobile UI
-
-```powershell
-
 npm run dev
-
 ```
-
--   **Ứng dụng sẽ chạy tại:** `http://localhost:5174` (Hoặc port khác nếu 5173 đã bị chiếm).
-
+-   **Ứng dụng sẽ chạy tại:** `http://localhost:3000` (Xem thông tin cụ thể trong terminal).
 -   **Lưu ý:** Mobile UI dùng lệnh `vite --host` để bạn có thể truy cập từ điện thoại trong cùng mạng LAN bằng địa chỉ IP của máy tính.
-
-
 
 ---
 

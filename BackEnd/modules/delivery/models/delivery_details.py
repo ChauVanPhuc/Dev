@@ -27,3 +27,21 @@ class DeliveryDetails(Base):
     def order_code(self):
         return self.order.order_code if self.order else "Dư"
 
+    @property
+    def partner_po(self):
+        return self.order.partner_po if self.order else ""
+
+    @property
+    def production_code(self):
+        return self.order.production_code if self.order else ""
+
+    @property
+    def customer(self):
+        return self.order.customer if self.order else ""
+
+    @property
+    def product_names(self):
+        if not self.order or not self.order.products:
+            return ""
+        return ", ".join([p.name for p in self.order.products])
+

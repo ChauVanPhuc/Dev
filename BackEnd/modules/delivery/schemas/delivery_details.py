@@ -12,6 +12,10 @@ class DeliveryDetailsBase(BaseModel):
     order_id: Optional[int] = None      # ID đơn hàng liên kết
     order_code: Optional[str] = None    # [NEW] Mã đơn hàng (để hiển thị)
     element_name: Optional[str] = None  # Tên bộ phận/Element
+    partner_po: Optional[str] = None
+    production_code: Optional[str] = None
+    customer: Optional[str] = None
+    product_names: Optional[str] = None
 
 class DeliveryDetailsCreate(DeliveryDetailsBase):
     """

@@ -14,7 +14,6 @@ import {
 import * as XLSX from 'xlsx';
 import { planService } from '@modules/Plan/Models/plan.service';
 import { getBaseURL } from '@webShared/Services/api.service';
-import '@web/styles/Manufacture/Plan.css';
 
 const ManufacturePlan = () => {
     const navigate = useNavigate();

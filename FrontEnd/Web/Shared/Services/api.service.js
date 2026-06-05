@@ -80,6 +80,14 @@ api.interceptors.request.use((config) => {
         ],
         total: 2
       };
+    } else if (url.includes('/defect-types')) {
+      mockResponse = [
+        { id: 1, name: 'Bề mặt xước (Mock)', category: 'visual', needs_tracking: true, is_active: true },
+        { id: 2, name: 'Lệch màu (Mock)', category: 'visual', needs_tracking: false, is_active: true },
+        { id: 3, name: 'Nứt tét (Mock)', category: 'structure', needs_tracking: true, is_active: true },
+        { id: 4, name: 'Lẫn tạp chất (Mock)', category: 'material', needs_tracking: false, is_active: true },
+        { id: 5, name: 'Độ ẩm cao (Mock)', category: 'material', needs_tracking: true, is_active: true }
+      ];
     } else {
       mockResponse = { items: [], total: 0 };
     }

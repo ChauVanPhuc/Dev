@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import ActivityFeed from '@modules/Dashboard/Views/components/ActivityFeed';
 import api from '@webShared/Services/api.service';
 
-import '@web/styles/Admin/UserManagement.css';
+import '@styles/components.css';
 
 /**
  * View: Trang Quản lý người dùng
@@ -81,7 +81,7 @@ const UserManagement = () => {
   // ─── State menu thao tác ─────────────────────────────────────────────────────
   const [actionMenuId, setActionMenuId] = useState(null); // ID user đang mở menu
 
-  const pageSize = 10;
+  const pageSize = 8;
   const filterRef = useRef(null);
   const sortRef = useRef(null);
 
@@ -170,9 +170,9 @@ const UserManagement = () => {
   const totalPages = Math.ceil(total / pageSize);
 
   return (
-    <div className="user-mgmt-container">
+    <div className="mgmt-container">
       {/* ── Phần nội dung chính ── */}
-      <div className="user-mgmt-main">
+      <div className="mgmt-main">
 
         {/* ── Thanh công cụ ── */}
         <div className="mgmt-toolbar card">
@@ -340,20 +340,20 @@ const UserManagement = () => {
               </div>
 
               {/* Thẻ Mobile */}
-              <div className="mobile-only user-cards-container">
+              <div className="mobile-only mgmt-cards-container">
                 {users.length === 0 && !loading && <div className="no-data-text-mobile">Không tìm thấy dữ liệu</div>}
                 {users.map((user) => (
-                  <div key={user.id} className="user-card">
-                    <div className="user-card-main">
-                      <div className="user-avatar">{user.full_name?.charAt(0) || 'U'}</div>
-                      <div className="user-details">
-                        <div className="user-name-row">
-                          <h4 className="card-full-name">{user.full_name}</h4>
-                          <span className="card-emp-id">#{user.employee_id}</span>
+                  <div key={user.id} className="mgmt-card">
+                    <div className="mgmt-card-main">
+                      <div className="mgmt-card-avatar">{user.full_name?.charAt(0) || 'U'}</div>
+                      <div className="mgmt-card-details">
+                        <div className="mgmt-card-title-row">
+                          <h4 className="mgmt-card-title">{user.full_name}</h4>
+                          <span className="mgmt-card-subtitle">#{user.employee_id}</span>
                         </div>
-                        <div className="user-meta-chips">
-                          <span className="meta-chip">{user.role_name === 'IT' || user.role_name === 'BGD' ? 'Hành chính' : 'Sản xuất'}</span>
-                          <span className="meta-chip secondary" title={user.stage_name}>
+                        <div className="mgmt-card-meta-chips">
+                          <span className="mgmt-card-chip">{user.role_name === 'IT' || user.role_name === 'BGD' ? 'Hành chính' : 'Sản xuất'}</span>
+                          <span className="mgmt-card-chip secondary" title={user.stage_name}>
                             {user.stage_name ? (
                               user.stage_name.split(',').length > 1 ? (
                                 `${user.stage_name.split(',')[0].trim()} +${user.stage_name.split(',').length - 1}`
@@ -366,7 +366,7 @@ const UserManagement = () => {
                           </span>
                         </div>
                       </div>
-                      <div className="card-actions-minimal" style={{ position: 'relative' }}>
+                      <div className="mgmt-card-actions" style={{ position: 'relative' }}>
                         <button
                           className="action-btn"
                           onClick={() => setActionMenuId(actionMenuId === user.id ? null : user.id)}
@@ -380,8 +380,8 @@ const UserManagement = () => {
                         )}
                       </div>
                     </div>
-                    <div className="user-card-footer">
-                      <div className="card-role-text">{user.role_name}</div>
+                    <div className="mgmt-card-footer">
+                      <div className="mgmt-card-footer-left font-semibold">{user.role_name}</div>
                       <span className="status-dot-badge" style={getStatusStyle(user.status)}>
                         <span className="dot" style={{ backgroundColor: getStatusStyle(user.status).color }}></span>
                         {user.status}
@@ -414,7 +414,7 @@ const UserManagement = () => {
       </div>
 
       {/* ── Feed hoạt động ── */}
-      <div className="user-mgmt-aside">
+      <div className="mgmt-aside">
         <ActivityFeed />
       </div>
     </div>
@@ -422,3 +422,4 @@ const UserManagement = () => {
 };
 
 export default UserManagement;
+

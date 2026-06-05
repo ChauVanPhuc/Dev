@@ -52,6 +52,14 @@ export const ScreenProvider = ({ children }) => {
     }
 
     // Dynamic fallback titles based on route
+    if (path.includes('defects')) {
+      return {
+        screenCode: '',
+        title: 'Quản lý danh mục lỗi',
+        subtitle: 'Cấu hình danh sách các lỗi kiểm tra chất lượng',
+        isActive: true
+      };
+    }
     if (path.includes('screens')) {
       return {
         screenCode: '',

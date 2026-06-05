@@ -466,19 +466,98 @@ const StageInspection = () => {
   };
 
   const ImageSection = ({ title }) => {
-    // Tìm kiếm ảnh với logic linh hoạt (trường hợp có khoảng trắng thừa hoặc sai khác nhỏ về ký tự)
-    const normalizedTitle = title.trim();
-    let images = formData.inspection_images[normalizedTitle] || [];
 
-    // Fallback: Tìm key gần giống nhất bằng cách loại bỏ dấu tiếng Việt
-    if (images.length === 0) {
-      const searchKey = removeVietnameseTones(normalizedTitle);
-      const allKeys = Object.keys(formData.inspection_images);
-      const similarKey = allKeys.find(k => removeVietnameseTones(k) === searchKey || removeVietnameseTones(k).includes(searchKey));
-      if (similarKey) {
-        images = formData.inspection_images[similarKey];
+    const normalizedTitle = title.trim();
+
+    let images = [];
+
+
+
+    if (Array.isArray(formData.inspection_images)) {
+
+      images = formData.inspection_images;
+
+    } else if (formData.inspection_images && typeof formData.inspection_images === 'object') {
+
+      images = formData.inspection_images[normalizedTitle] || [];
+
+
+
+      // Fallback 1: Tìm key gần giống nhất bằng cách loại bỏ dấu tiếng Việt
+
+      if (images.length === 0) {
+
+        const searchKey = removeVietnameseTones(normalizedTitle);
+
+        const allKeys = Object.keys(formData.inspection_images);
+
+        const similarKey = allKeys.find(k => removeVietnameseTones(k) === searchKey || removeVietnameseTones(k).includes(searchKey));
+
+        if (similarKey) {
+
+          images = formData.inspection_images[similarKey] || [];
+
+        }
+
       }
+
+
+
+      // Fallback 2: Nếu loại kiểm tra không phải sau-dong-goi (chỉ có 1 phần ảnh duy nhất)
+
+      if (images.length === 0 && inspectionType !== 'sau-dong-goi') {
+
+        const allValues = Object.values(formData.inspection_images);
+
+        images = allValues.flat().filter(Boolean);
+
+      }
+
+
+
+      // Fallback 3: Khớp dựa trên từ khóa (đối phó với lỗi mã hóa hiển thị dấu hỏi "?" từ SQL Server)
+
+      if (images.length === 0) {
+
+        const allKeys = Object.keys(formData.inspection_images);
+
+        let matchedKey = null;
+
+        const lowerTitle = normalizedTitle.toLowerCase();
+
+
+
+        if (lowerTitle.includes('quy trình') || lowerTitle.includes('quy trinh')) {
+
+          matchedKey = allKeys.find(k => k.toLowerCase().includes('quy tr') || k.toLowerCase().includes('dong goi') || k.toLowerCase().includes('dóng gói'));
+
+        } else if (lowerTitle.includes('tem') || lowerTitle.includes('nhãn') || lowerTitle.includes('nhan')) {
+
+          matchedKey = allKeys.find(k => k.toLowerCase().includes('tem') || k.toLowerCase().includes('nhan') || k.toLowerCase().includes('nhãn'));
+
+        } else if (lowerTitle.includes('khác') || lowerTitle.includes('khac')) {
+
+          matchedKey = allKeys.find(k => k.toLowerCase().includes('khac') || k.toLowerCase().includes('khác'));
+
+        } else if (lowerTitle.includes('kiểm tra') || lowerTitle.includes('kiem tra')) {
+
+          matchedKey = allKeys.find(k => k.toLowerCase().includes('kiem') || k.toLowerCase().includes('kiểm') || k.toLowerCase().includes('tra') || k.toLowerCase().includes('?nh'));
+
+        }
+
+
+
+        if (matchedKey) {
+
+          images = formData.inspection_images[matchedKey] || [];
+
+        }
+
+      }
+
     }
+
+
 
     if (logId && images.length === 0) return null; // Ẩn hoàn toàn nếu xem log mà không có ảnh
 

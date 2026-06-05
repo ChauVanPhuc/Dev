@@ -20,6 +20,9 @@ class DeliveryBase(BaseModel):
     sx_delivery: Optional[int] = 0        # ID người giao
     qc_receipt: Optional[int] = 0         # ID người QC nhận
     sx_receipt: Optional[int] = 0         # ID người nhận
+    sx_delivery_name: Optional[str] = None
+    sx_receipt_name: Optional[str] = None
+    qc_receipt_name: Optional[str] = None
 
     quantity_total: Optional[int] = 0    # Số lượng giao tổng
     quantity_received: Optional[int] = 0 # Số lượng thực nhận
