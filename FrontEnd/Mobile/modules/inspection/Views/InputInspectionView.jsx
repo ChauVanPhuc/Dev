@@ -2,6 +2,7 @@ import { useState, useRef, useMemo, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout'
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader'
+import PassFailSelector from '@mobile/Shared/Views/components/ui/PassFailSelector'
 import { Camera, CheckCircle2, XCircle, X, Loader2 } from 'lucide-react'
 import useAuthStore from '@modules/auth/Models/authModel'
 import apiClient, { API_ROOT } from '@shared/services/api'
@@ -460,34 +461,14 @@ const InputInspection = () => {
         {/* Kết quả kiểm tra */}
         <div id="input-result-card" style={card}>
           <span style={sectionLabel}>📋 Kết quả kiểm tra</span>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-            {[
-              { val: 'Đạt',       icon: CheckCircle2, activeColor: '#22c55e', activeBg: '#f0fdf4', label: 'ĐẠT' },
-              { val: 'Không đạt', icon: XCircle,      activeColor: '#ef4444', activeBg: '#fef2f2', label: 'KHÔNG ĐẠT' }
-            ].map(({ val, icon: Icon, activeColor, activeBg, label }) => {
-              const active = result === val
-              return (
-                <button
-                  key={val}
-                  onClick={() => !viewOnly && setResult(val)}
-                  style={{
-                    padding: '10px 8px', borderRadius: '12px',
-                    border: active ? `2px solid ${activeColor}` : '1.5px solid #e2e8f0',
-                    backgroundColor: active ? activeBg : '#fafafa',
-                    display: 'flex', alignItems: 'center', gap: '8px',
-                    cursor: viewOnly ? 'default' : 'pointer',
-                    transition: 'backgroundColor 0.15s ease, opacity 0.15s ease',
-                    opacity: viewOnly && !active ? 0.4 : 1
-                  }}
-                >
-                  <Icon size={20} color={active ? activeColor : '#cbd5e1'} strokeWidth={2.5} />
-                  <span style={{ fontWeight: '800', fontSize: '0.82rem', color: active ? activeColor : '#94a3b8' }}>
-                    {label}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
+          <PassFailSelector
+            value={result === 'Đạt' ? 'pass' : (result === 'Không đạt' ? 'fail' : null)}
+            onChange={(val) => !viewOnly && setResult(val === 'pass' ? 'Đạt' : 'Không đạt')}
+            disabled={viewOnly}
+            variant="button"
+            passLabel="ĐẠT"
+            failLabel="KHÔNG ĐẠT"
+          />
         </div>
 
         {/* Ảnh minh chứng */}

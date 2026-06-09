@@ -4,7 +4,10 @@ from typing import Optional
 class DefectTypeBase(BaseModel):
     name: str
     category: str
-    needs_tracking: bool = False
+    stage: Optional[str] = None
+    description: Optional[str] = None
+    needs_tracking: bool = False # QA tracking
+    qc_tracking: bool = False    # QC tracking
     is_active: bool = True
 
 class DefectTypeCreate(DefectTypeBase):
@@ -12,6 +15,7 @@ class DefectTypeCreate(DefectTypeBase):
 
 class DefectType(DefectTypeBase):
     id: int
+    is_tracked_by_me: bool = False # Personalized QC tracking status
 
     class Config:
         from_attributes = True

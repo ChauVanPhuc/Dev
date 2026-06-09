@@ -6,6 +6,8 @@ import FormSelect from '@mobile/Shared/Views/components/form/FormSelect';
 import CollapsibleCard from '@mobile/Shared/Views/components/ui/CollapsibleCard';
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout';
 import SearchableSelect from '@mobile/Shared/Views/components/form/SearchableSelect';
+import PassFailSelector from '@mobile/Shared/Views/components/ui/PassFailSelector';
+import InspectionDetailPopup, { formatDateTime, getTypeName } from './components/InspectionDetailPopup';
 import { Camera, X, Image as ImageIcon, Check, RotateCcw } from 'lucide-react';
 import apiClient from '@shared/services/api';
 import useAuthStore from '@modules/auth/Models/authModel';
@@ -32,7 +34,7 @@ const StageInspection = () => {
     unit: 'Cái',
     supplier: '',
     intended_use: '',
-    check_type: 'AQL',
+    check_type: '',
     check_qty: '0',
     results: {
       visual: 'pass',
@@ -41,15 +43,24 @@ const StageInspection = () => {
       conclusion: 'pass'
     },
     notes: '',
-    inspection_images: {} // { sectionTitle: [path1, path2...] }
+    inspection_images: {}, // { sectionTitle: [path1, path2...] }
+    action: '' // 'luu-kho', 'cach-ly', 'tra-ve'
   });
 
   const [currentProducts, setCurrentProducts] = useState([]); // Danh sách sản phẩm của PO đang chọn
   const [isProductLoading, setIsProductLoading] = useState(false); // Trạng thái tải sản phẩm
   const [isSaving, setIsSaving] = useState(false); // Trạng thái đang lưu dữ liệu
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [isMessageOpen, setIsMessageOpen] = useState(false);
+  const [messageConfig, setMessageConfig] = useState({ type: 'success', title: '', message: '' });
 
   const [historyList, setHistoryList] = useState([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [loadedAction, setLoadedAction] = useState(null); // Action loaded from history
+  const [selectedHistoryItem, setSelectedHistoryItem] = useState(null); // State for history detail popup
+
+  // Check if editing is allowed (only if action is 'cach-ly')
+  const canEdit = loadedAction === 'cach-ly';
 
   const fetchHistory = async () => {
     try {
@@ -100,116 +111,17 @@ const StageInspection = () => {
   }, [inspectionType, logId]);
 
   const filteredHistory = useMemo(() => {
-    return historyList.filter(item => {
-      const mappedType = item.inspection_type === 'phu-kien' ? 'dau-vao' : item.inspection_type;
-      return mappedType === inspectionType;
-    });
+    return historyList
+      .filter(item => {
+        const mappedType = item.inspection_type === 'phu-kien' ? 'dau-vao' : item.inspection_type;
+        return mappedType === inspectionType;
+      })
+      .slice(0, 3); // Only show top 3
   }, [historyList, inspectionType]);
 
-  const formatDateTime = (dateStr) => {
-    if (!dateStr) return '';
-    try {
-      const d = new Date(dateStr);
-      const hours = String(d.getHours()).padStart(2, '0');
-      const minutes = String(d.getMinutes()).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const year = d.getFullYear();
-      return `${hours}:${minutes} | ${day}-${month}-${year}`;
-    } catch (e) {
-      return dateStr;
-    }
-  };
-
-  const getTypeName = (type) => {
-    switch (type) {
-      case 'dau-vao':
-      case 'phu-kien':
-        return 'Kiểm tra đầu vào';
-      case 'bam-dinh':
-        return 'Kiểm tra bám dính';
-      case 'sau-dong-goi':
-        return 'Kiểm tra sau đóng gói';
-      default:
-        return 'Kiểm tra công đoạn';
-    }
-  };
-
   const handleViewHistoryItem = (item) => {
-    navigate('/inspection-stage', { state: { logId: item.id, type: item.inspection_type } });
+    setSelectedHistoryItem(item);
   };
-
-  // State cho Modal
-  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
-  const [isMessageOpen, setIsMessageOpen] = useState(false);
-  const [messageConfig, setMessageConfig] = useState({ type: 'success', title: '', message: '' });
-
-  // 1. Fetch danh sách PO khi load trang
-  useEffect(() => {
-    const fetchOrders = async () => {
-      try {
-        const res = await apiClient.get('orders/simple?limit=1000');
-
-        let orderList = [];
-        if (Array.isArray(res.data) && res.data.length > 0) {
-          orderList = res.data;
-        } else {
-          orderList = [];
-        }
-
-        setOrders(orderList);
-      } catch (err) {
-        console.error("Lỗi khi tải danh sách PO:", err.message);
-        setOrders([]);
-      }
-    };
-    fetchOrders();
-  }, []);
-
-  // 1.1 Fetch sản phẩm chi tiết của PO khi thay đổi PO (Lazy Loading)
-  useEffect(() => {
-    const batch_no = (formData.batch_no || '').trim();
-    if (batch_no.length < 3) {
-      setCurrentProducts([]);
-      return;
-    }
-
-    const fetchProducts = async () => {
-      setIsProductLoading(true);
-      try {
-        const res = await apiClient.get(`orders/by-code/${batch_no}/products`);
-
-        const { items = [], products = [] } = res.data;
-        // Ưu tiên products (đã phân rã có chi tiết) lên trước items (chưa phân rã)
-        const combined = [...products, ...items];
-        setCurrentProducts(combined);
-      } catch (err) {
-        // Chỉ log lỗi nếu không phải là 404 (do đang gõ chưa xong)
-        if (err.response?.status !== 404) {
-          console.error("Lỗi khi tải sản phẩm:", err.message);
-        }
-        setCurrentProducts([]);
-      } finally {
-        setIsProductLoading(false);
-      }
-    };
-    fetchProducts();
-  }, [formData.batch_no]);
-
-  // 1.2 Tự động chọn sản phẩm đầu tiên khi danh sách sản phẩm được tải
-  useEffect(() => {
-    if (currentProducts.length > 0) {
-      const firstProd = currentProducts[0];
-      // Chỉ tự động chọn nếu chưa có giá trị hoặc giá trị cũ không còn hợp lệ
-      const isValid = currentProducts.some(p => p.sku === formData.product_sku);
-      if (!formData.product_sku || !isValid) {
-        setFormData(prev => ({ ...prev, product_sku: firstProd.sku, detail_bam_dinh: '' }));
-      }
-    } else {
-      // Reset khi PO đổi
-      setFormData(prev => ({ ...prev, product_sku: '', detail_bam_dinh: '' }));
-    }
-  }, [currentProducts]);
 
   // 2. Chuyển đổi danh sách sản phẩm hiện tại sang format của dropdown
   const productOptions = useMemo(() => {
@@ -228,14 +140,21 @@ const StageInspection = () => {
     }
 
     if (!selectedProd || !selectedProd.elements || selectedProd.elements.length === 0) {
+      // Đối với phiếu đầu vào, không tự động lấy SKU làm chi tiết
+      if (inspectionType === 'dau-vao') {
+        return [{ label: 'Nhập tên chi tiết', value: '' }];
+      }
       return [{ label: 'Không có chi tiết (Mặc định)', value: formData.product_sku }];
     }
     
     return selectedProd.elements.map(e => ({ label: e.name || e.sku, value: e.name || e.sku }));
-  }, [formData.product_sku, currentProducts]);
+  }, [formData.product_sku, currentProducts, inspectionType]);
 
   // Tự động chọn chi tiết đầu tiên khi đổi sản phẩm
   useEffect(() => {
+    // Không tự động chọn nếu là phiếu đầu vào (để người dùng tự nhập)
+    if (inspectionType === 'dau-vao') return;
+
     if (detailOptions.length > 0 && detailOptions[0].value) {
       // Kiểm tra xem giá trị hiện tại có nằm trong danh sách mới không
       const isValid = detailOptions.some(opt => opt.value === formData.detail_bam_dinh);
@@ -243,7 +162,7 @@ const StageInspection = () => {
         setFormData(prev => ({ ...prev, detail_bam_dinh: detailOptions[0].value }));
       }
     }
-  }, [formData.product_sku, detailOptions]);
+  }, [formData.product_sku, detailOptions, inspectionType]);
 
   const handleFieldChange = (field, value) => {
     // Chỉ cho phép số dương cho các trường số lượng
@@ -292,7 +211,7 @@ const StageInspection = () => {
         unit: 'Cái',
         supplier: '',
         intended_use: '',
-        check_type: 'Định hình',
+        check_type: '',
         check_qty: '0',
         detail_bam_dinh: '',
         results: {
@@ -302,8 +221,10 @@ const StageInspection = () => {
           conclusion: 'pass'
         },
         notes: '',
-        inspection_images: {}
+        inspection_images: {},
+        action: ''
       });
+      setLoadedAction(null);
       return;
     }
 
@@ -331,7 +252,7 @@ const StageInspection = () => {
             unit: extra.unit || 'Cái',
             supplier: extra.supplier || '',
             intended_use: extra.intended_use || '',
-            check_type: extra.check_type || 'Định hình',
+            check_type: extra.check_type || '',
             check_qty: extra.check_qty || '0',
             detail_bam_dinh: extra.detail_bam_dinh || '',
             results: {
@@ -341,8 +262,10 @@ const StageInspection = () => {
               conclusion: item.conclusion || 'pass'
             },
             notes: item.notes || '',
-            inspection_images: images
+            inspection_images: images,
+            action: extra.action || '' // Load action from history to display
           });
+          setLoadedAction(extra.action || null); // Store loaded action separately
 
           if (item.inspection_type) {
             // Map giá trị cũ 'phu-kien' sang 'dau-vao'
@@ -363,33 +286,6 @@ const StageInspection = () => {
     { label: 'Kiểm tra sau đóng gói', value: 'sau-dong-goi' },
   ];
 
-  const RadioResult = ({ label, value, onChange, readOnly }) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '12px' }}>
-      <span style={{ flex: 1, fontWeight: '700', color: '#1e293b', fontSize: '0.95rem' }}>{label}</span>
-      <div style={{ display: 'flex', gap: '15px' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: readOnly ? 'default' : 'pointer' }}>
-          <input
-            type="radio"
-            checked={value === 'pass'}
-            onChange={() => !readOnly && onChange && onChange('pass')}
-            disabled={readOnly}
-            style={{ accentColor: '#22c55e', width: '18px', height: '18px' }}
-          />
-          <span style={{ fontSize: '0.9rem', color: '#22c55e', fontWeight: '700' }}>Đạt</span>
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: readOnly ? 'default' : 'pointer' }}>
-          <input
-            type="radio"
-            checked={value === 'fail'}
-            onChange={() => !readOnly && onChange && onChange('fail')}
-            disabled={readOnly}
-            style={{ accentColor: '#ef4444', width: '18px', height: '18px' }}
-          />
-          <span style={{ fontSize: '0.9rem', color: '#ef4444', fontWeight: '700' }}>Chưa Đạt</span>
-        </label>
-      </div>
-    </div>
-  );
 
   const fileInputRef = useRef(null);
   const [activeSection, setActiveSection] = useState(null);
@@ -618,7 +514,7 @@ const StageInspection = () => {
                   value={formData.batch_no}
                   onChange={(e) => handleFieldChange('batch_no', e.target.value)}
                   placeholder="Nhập mã PO"
-                  readOnly={!!logId}
+                  readOnly={!!logId && !canEdit}
                 />
               </div>
               <div style={{ flex: 1 }}>
@@ -627,7 +523,7 @@ const StageInspection = () => {
                   value={formData.total_qty}
                   onChange={(e) => handleFieldChange('total_qty', e.target.value)}
                   inputStyle={{ textAlign: 'center' }}
-                  readOnly={!!logId}
+                  readOnly={!!logId && !canEdit}
                 />
               </div>
               <div style={{ width: '100px' }}>
@@ -640,7 +536,7 @@ const StageInspection = () => {
                     { label: 'pallet', value: 'pallet' }
                   ]}
                   onChange={(e) => handleFieldChange('unit', e.target.value)}
-                  readOnly={!!logId}
+                  readOnly={!!logId && !canEdit}
                 />
               </div>
             </div>
@@ -649,7 +545,7 @@ const StageInspection = () => {
               value={formData.supplier}
               onChange={(e) => handleFieldChange('supplier', e.target.value)}
               placeholder="Nhập tên nhà cung cấp (VD: Long Thanh wood)"
-              readOnly={!!logId}
+              readOnly={!!logId && !canEdit}
             />
             <div style={{ display: 'flex', gap: '10px' }}>
               <div style={{ flex: 1 }}>
@@ -658,7 +554,7 @@ const StageInspection = () => {
                   value={formData.product_sku}
                   onChange={(e) => handleFieldChange('product_sku', e.target.value)}
                   placeholder="Nhập mã SP"
-                  readOnly={!!logId}
+                  readOnly={!!logId && !canEdit}
                 />
               </div>
               <div style={{ flex: 1 }}>
@@ -667,7 +563,7 @@ const StageInspection = () => {
                   value={formData.detail_bam_dinh}
                   onChange={(e) => handleFieldChange('detail_bam_dinh', e.target.value)}
                   placeholder="Tên chi tiết"
-                  readOnly={!!logId}
+                  readOnly={!!logId && !canEdit}
                 />
               </div>
             </div>
@@ -678,7 +574,7 @@ const StageInspection = () => {
                   value={formData.check_type}
                   onChange={(e) => handleFieldChange('check_type', e.target.value)}
                   placeholder="VD: Định hình"
-                  readOnly={!!logId}
+                  readOnly={!!logId && !canEdit}
                 />
               </div>
               <div style={{ flex: 1 }}>
@@ -687,16 +583,24 @@ const StageInspection = () => {
                   value={formData.check_qty}
                   onChange={(e) => handleFieldChange('check_qty', e.target.value)}
                   inputStyle={{ textAlign: 'center' }}
-                  readOnly={!!logId}
+                  readOnly={!!logId && !canEdit}
                 />
               </div>
             </div>
             <hr style={{ border: 'none', borderTop: '1px solid #f1f5f9', margin: '4px 0' }} />
-            <div id="stage-results-group" style={{ display: 'flex', flexDirection: 'column' }}>
-              <RadioResult label="Ngoại quan:" value={formData.results.visual} onChange={(val) => handleResultChange('visual', val)} readOnly={!!logId} />
-              <RadioResult label="Kích thước:" value={formData.results.size} onChange={(val) => handleResultChange('size', val)} readOnly={!!logId} />
-              <RadioResult label="Chức năng:" value={formData.results.function} onChange={(val) => handleResultChange('function', val)} readOnly={!!logId} />
-              <RadioResult label="Kết luận:" value={formData.results.conclusion} onChange={(val) => handleResultChange('conclusion', val)} readOnly={!!logId} />
+            <div id="stage-results-group" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#1e293b', marginBottom: '8px' }}>Ngoại quan:</div>
+                <PassFailSelector value={formData.results.visual} onChange={(val) => handleResultChange('visual', val)} disabled={!!logId && !canEdit} variant="button" />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#1e293b', marginBottom: '8px' }}>Kích thước:</div>
+                <PassFailSelector value={formData.results.size} onChange={(val) => handleResultChange('size', val)} disabled={!!logId && !canEdit} variant="button" />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#1e293b', marginBottom: '8px' }}>Chức năng:</div>
+                <PassFailSelector value={formData.results.function} onChange={(val) => handleResultChange('function', val)} disabled={!!logId && !canEdit} variant="button" />
+              </div>
             </div>
           </div>
         );
@@ -712,7 +616,7 @@ const StageInspection = () => {
                   options={orders.map(o => ({ label: o.order_code, value: o.order_code }))}
                   onChange={(e) => handleFieldChange('batch_no', e.target.value)}
                   placeholder="Tìm mã PO..."
-                  readOnly={!!logId}
+                  readOnly={!!logId && !canEdit}
                 />
               </div>
               <div style={{ flex: 1 }}>
@@ -726,7 +630,7 @@ const StageInspection = () => {
                   value={formData.product_sku}
                   onChange={(e) => handleFieldChange('product_sku', e.target.value)}
                   options={productOptions}
-                  readOnly={!!logId}
+                  readOnly={!!logId && !canEdit}
                 />
               </div>
               <div style={{ flex: 1 }}>
@@ -735,18 +639,9 @@ const StageInspection = () => {
                   value={formData.detail_bam_dinh}
                   onChange={(e) => handleFieldChange('detail_bam_dinh', e.target.value)}
                   options={detailOptions}
-                  readOnly={!!logId}
+                  readOnly={!!logId && !canEdit}
                 />
               </div>
-            </div>
-            <hr style={{ border: 'none', borderTop: '1px solid #f1f5f9', margin: '4px 0' }} />
-            <div id="stage-results-group">
-              <RadioResult
-                label="Kết luận:"
-                value={formData.results.conclusion}
-                onChange={(val) => handleResultChange('conclusion', val)}
-                readOnly={!!logId}
-              />
             </div>
           </div>
         );
@@ -762,7 +657,7 @@ const StageInspection = () => {
                   options={orders.map(o => ({ label: o.order_code, value: o.order_code }))}
                   onChange={(e) => handleFieldChange('batch_no', e.target.value)}
                   placeholder="Tìm mã PO..."
-                  readOnly={!!logId}
+                  readOnly={!!logId && !canEdit}
                 />
               </div>
               <div style={{ flex: 1 }}>
@@ -776,26 +671,7 @@ const StageInspection = () => {
                   value={formData.product_sku}
                   onChange={(e) => handleFieldChange('product_sku', e.target.value)}
                   options={productOptions}
-                  readOnly={!!logId}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <FormSelect
-                  label="Chi tiết"
-                  value={formData.detail_bam_dinh}
-                  onChange={(e) => handleFieldChange('detail_bam_dinh', e.target.value)}
-                  options={detailOptions}
-                  readOnly={!!logId}
-                />
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <div style={{ flex: 1 }}>
-                <FormInput
-                  label="Công đoạn"
-                  value={formData.check_type || 'Đóng gói'}
-                  onChange={(e) => handleFieldChange('check_type', e.target.value)}
-                  readOnly={!!logId}
+                  readOnly={!!logId && !canEdit}
                 />
               </div>
               <div style={{ flex: 1 }}></div>
@@ -805,16 +681,6 @@ const StageInspection = () => {
             <ImageSection title="Quy trình đóng gói" />
             <ImageSection title="Tem nhãn sau đóng gói" />
             <ImageSection title="Ảnh khác" />
-
-            <hr style={{ border: 'none', borderTop: '1px solid #f1f5f9', margin: '4px 0' }} />
-            <div id="stage-results-group">
-              <RadioResult
-                label="Kết luận:"
-                value={formData.results.conclusion}
-                onChange={(val) => handleResultChange('conclusion', val)}
-                readOnly={!!logId}
-              />
-            </div>
           </div>
         );
 
@@ -822,6 +688,16 @@ const StageInspection = () => {
       default:
         return null;
     }
+  };
+
+  const handleAction = (action) => {
+    if (!formData.results.conclusion) {
+      setMessageConfig({ type: 'error', title: 'Thiếu thông tin', message: 'Vui lòng chọn kết quả kiểm tra trước!' });
+      setIsMessageOpen(true);
+      return;
+    }
+    
+    setFormData(prev => ({ ...prev, action }));
   };
 
   const handleValidateAndConfirm = () => {
@@ -840,8 +716,23 @@ const StageInspection = () => {
       setIsMessageOpen(true);
       return;
     }
-    if (inspectionType === 'dau-vao' && !formData.supplier.trim()) {
-      setMessageConfig({ type: 'error', title: 'Thiếu thông tin', message: 'Vui lòng nhập tên Nhà cung cấp!' });
+    if (inspectionType === 'dau-vao') {
+      if (!formData.supplier.trim()) {
+        setMessageConfig({ type: 'error', title: 'Thiếu thông tin', message: 'Vui lòng nhập tên Nhà cung cấp!' });
+        setIsMessageOpen(true);
+        return;
+      }
+      const totalQty = parseFloat(formData.total_qty) || 0;
+      const checkQty = parseFloat(formData.check_qty) || 0;
+      if (checkQty > totalQty) {
+        setMessageConfig({ type: 'error', title: 'Dữ liệu không hợp lệ', message: `Số lượng kiểm (${checkQty}) không được lớn hơn tổng số lượng (${totalQty})!` });
+        setIsMessageOpen(true);
+        return;
+      }
+    }
+
+    if (inspectionType === 'dau-vao' && !formData.action) {
+      setMessageConfig({ type: 'error', title: 'Thiếu thông tin', message: 'Vui lòng chọn hành động!' });
       setIsMessageOpen(true);
       return;
     }
@@ -858,9 +749,13 @@ const StageInspection = () => {
         extraData.supplier = formData.supplier;
         extraData.check_type = formData.check_type;
         extraData.detail_bam_dinh = formData.detail_bam_dinh;
+        extraData.total_qty = formData.total_qty;
+        extraData.unit = formData.unit;
+        extraData.check_qty = formData.check_qty;
       } else if (inspectionType === 'bam-dinh') {
         extraData.detail_bam_dinh = formData.detail_bam_dinh;
       }
+      extraData.action = formData.action;
 
       const payload = {
         inspection_type: inspectionType,
@@ -873,7 +768,16 @@ const StageInspection = () => {
         images_json: JSON.stringify(formData.inspection_images)
       };
 
-      await apiClient.post('inspections/stage', payload);
+      console.log('Saving payload:', payload);
+      console.log('Action being saved:', formData.action);
+
+      if (logId) {
+        // Use POST for update as well to bypass potential PUT restrictions (405)
+        await apiClient.post(`inspections/stage/${logId}`, payload);
+      } else {
+        await apiClient.post('inspections/stage', payload);
+      }
+
       setMessageConfig({
         type: 'success',
         title: 'Thành công',
@@ -953,21 +857,100 @@ const StageInspection = () => {
                   value={formData.notes}
                   onChange={(e) => handleFieldChange('notes', e.target.value)}
                   placeholder="Nhập ghi chú"
-                  readOnly={!!logId}
-                  style={{ 
-                    width: '100%', 
-                    padding: '10px 12px', 
-                    borderRadius: '8px', 
-                    border: '1px solid #cbd5e1', 
-                    fontSize: '0.9rem', 
-                    color: !!logId ? '#94a3b8' : '#1e293b', 
-                    backgroundColor: !!logId ? '#f8fafc' : '#fff',
-                    cursor: !!logId ? 'not-allowed' : 'text',
-                    resize: 'none', 
-                    outline: 'none' 
+                  readOnly={!!logId && !canEdit}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.9rem',
+                    color: (!!logId && !canEdit) ? '#94a3b8' : '#1e293b',
+                    backgroundColor: (!!logId && !canEdit) ? '#f8fafc' : '#fff',
+                    cursor: (!!logId && !canEdit) ? 'not-allowed' : 'text',
+                    resize: 'none',
+                    outline: 'none'
                   }}
                 />
               </div>
+
+              <div style={{ marginTop: '16px' }}>
+                <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#1e293b', marginBottom: '8px' }}>Kết quả:</div>
+                <PassFailSelector value={formData.results.conclusion} onChange={(val) => handleResultChange('conclusion', val)} disabled={!!logId && !canEdit} variant="button" />
+              </div>
+
+              {inspectionType === 'dau-vao' && (
+                <div style={{ marginTop: '16px' }}>
+                  <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#1e293b', marginBottom: '8px' }}>Hành động:</div>
+                  <div style={{ display: 'flex', backgroundColor: '#f1f5f9', padding: '3px', borderRadius: '10px', gap: '3px' }}>
+                    <div
+                      onClick={() => (!logId || canEdit) && handleAction('luu-kho')}
+                      style={{
+                        flex: 1,
+                        padding: '8px',
+                        textAlign: 'center',
+                        borderRadius: '8px',
+                        cursor: (!!logId && !canEdit) ? 'default' : 'pointer',
+                        transition: '0.3s',
+                        backgroundColor: formData.action === 'luu-kho' ? '#22c55e' : 'transparent',
+                        color: formData.action === 'luu-kho' ? '#fff' : '#64748b',
+                        fontWeight: '800',
+                        fontSize: '0.85rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        opacity: (!!logId && !canEdit) ? 0.4 : 1
+                      }}
+                    >
+                      Lưu kho
+                    </div>
+                    <div
+                      onClick={() => (!logId || canEdit) && handleAction('cach-ly')}
+                      style={{
+                        flex: 1,
+                        padding: '8px',
+                        textAlign: 'center',
+                        borderRadius: '8px',
+                        cursor: (!!logId && !canEdit) ? 'default' : 'pointer',
+                        transition: '0.3s',
+                        backgroundColor: formData.action === 'cach-ly' ? '#f59e0b' : 'transparent',
+                        color: formData.action === 'cach-ly' ? '#fff' : '#64748b',
+                        fontWeight: '800',
+                        fontSize: '0.85rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        opacity: (!!logId && !canEdit) ? 0.4 : 1
+                      }}
+                    >
+                      Cách ly
+                    </div>
+                    <div
+                      onClick={() => (!logId || canEdit) && handleAction('tra-ve')}
+                      style={{
+                        flex: 1,
+                        padding: '8px',
+                        textAlign: 'center',
+                        borderRadius: '8px',
+                        cursor: (!!logId && !canEdit) ? 'default' : 'pointer',
+                        transition: '0.3s',
+                        backgroundColor: formData.action === 'tra-ve' ? '#ef4444' : 'transparent',
+                        color: formData.action === 'tra-ve' ? '#fff' : '#64748b',
+                        fontWeight: '800',
+                        fontSize: '0.85rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        opacity: (!!logId && !canEdit) ? 0.4 : 1
+                      }}
+                    >
+                      Trả về
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Ảnh kiểm tra đặt ở cuối cùng */}
               {inspectionType !== 'sau-dong-goi' && <ImageSection title="Ảnh kiểm tra" />}
@@ -1023,25 +1006,57 @@ const StageInspection = () => {
 
         <div className="responsive-fixed-footer" style={{ backgroundColor: '#f8f4f0', padding: '16px', display: 'flex', gap: '12px', borderTop: '1px solid #e2e8f0', zIndex: 100 }}>
           {logId ? (
-            <button
-              onClick={() => navigate(-1)}
-              style={{
-                flex: 1,
-                backgroundColor: '#4b301e',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '10px',
-                padding: '14px',
-                fontSize: '1rem',
-                fontWeight: '700',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px'
-              }}
-            >
-              <RotateCcw size={20} /> Quay lại
-            </button>
+            canEdit ? (
+              <>
+                <button
+                  disabled={isSaving}
+                  onClick={handleValidateAndConfirm}
+                  style={{
+                    flex: 1,
+                    backgroundColor: isSaving ? '#94a3b8' : '#4b301e',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '10px',
+                    padding: '14px',
+                    fontSize: '1rem',
+                    fontWeight: '700',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    opacity: isSaving ? 0.7 : 1
+                  }}
+                >
+                  {isSaving ? 'Đang lưu...' : <><Check size={20} /> Xác nhận</>}
+                </button>
+                <button
+                  onClick={() => navigate(-1)}
+                  style={{ flex: 1, backgroundColor: '#fff', color: '#94a3b8', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '14px', fontSize: '1rem', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                >
+                  <RotateCcw size={20} /> Hủy
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => navigate(-1)}
+                style={{
+                  flex: 1,
+                  backgroundColor: '#4b301e',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '10px',
+                  padding: '14px',
+                  fontSize: '1rem',
+                  fontWeight: '700',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}
+              >
+                <RotateCcw size={20} /> Quay lại
+              </button>
+            )
           ) : (
             <>
               <button
@@ -1096,6 +1111,11 @@ const StageInspection = () => {
               navigate('/plan'); // Quay về trang MHC (Plan Tracking)
             }
           }}
+        />
+
+        <InspectionDetailPopup 
+          item={selectedHistoryItem} 
+          onClose={() => setSelectedHistoryItem(null)} 
         />
       </div>
     </Layout>

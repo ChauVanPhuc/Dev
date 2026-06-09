@@ -24,6 +24,34 @@ class DailyInspectionDefectRead(BaseModel):
     class Config:
         from_attributes = True
 
+class DailyInspectionSummary(BaseModel):
+    total_records: int
+    total_products: int
+    total_defects: int
+    avg_defect_rate: float
+
+class ParetoItem(BaseModel):
+    defect_name: str
+    count: int
+    percentage: float
+    cumulative_percentage: float
+
+class TrendItem(BaseModel):
+    date: date
+    defect_count: int
+    product_count: int
+    defect_rate: float
+
+class DistributionItem(BaseModel):
+    label: str
+    value: int
+
+class DailyInspectionAnalytics(BaseModel):
+    summary: DailyInspectionSummary
+    pareto: List[ParetoItem]
+    trend: List[TrendItem]
+    distribution: List[DistributionItem]
+
 class DailyInspectionRecordRead(BaseModel):
     id: int
     inspection_date: date

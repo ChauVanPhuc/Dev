@@ -47,7 +47,7 @@ const FormSelect = ({
         </div>
       )}
       <select
-        value={value}
+        value={value ?? ''}
         onChange={onChange}
         disabled={readOnly}
         style={baseSelectStyle}

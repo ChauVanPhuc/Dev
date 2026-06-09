@@ -55,7 +55,7 @@ const DailyInspection = () => {
   const { user } = useAuthStore();
   const [showConfirm, setShowConfirm] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [activeTab, setActiveTab] = useState('tracking');
+  const [activeTab, setActiveTab] = useState('tracking_tab'); // Default tab
   const defaultStage = user?.activeStageDescription || user?.activeStageName || user?.stage_description || user?.stage_name || 'NM1 - Định hình 1';
   const [department, setDepartment] = useState(defaultStage);
   const [totalProducts, setTotalProducts] = useState(0);
@@ -63,6 +63,19 @@ const DailyInspection = () => {
   const [counts, setCounts] = useState({}); // { defect_id: count }
   const [visibleDefectIds, setVisibleDefectIds] = useState([]); // [id1, id2...]
   const [isAddingOther, setIsAddingOther] = useState(false);
+  const [newCustomDefectName, setNewCustomDefectName] = useState('');
+  const [newCustomDefectQty, setNewCustomDefectQty] = useState(0);
+  const [isCreatingDefect, setIsCreatingDefect] = useState(false);
+  const [todayRecords, setTodayRecords] = useState([]); // Today's inspection records
+
+  // Group categories for rendering
+  const CATEGORIES = [
+    { id: 'tracking_tab', label: 'Cần theo dõi', isTracking: true },
+    { id: 'visual', label: 'Ngoại quan' },
+    { id: 'structure', label: 'Kết cấu' },
+    { id: 'material', label: 'Nguyên liệu' },
+    { id: 'other', label: 'Khác' },
+  ];
 
   // Đồng bộ công đoạn hoạt động mặc định khi thông tin người dùng được tải
   useEffect(() => {
@@ -104,7 +117,8 @@ const DailyInspection = () => {
   useEffect(() => {
     const fetchDefectTypes = async () => {
       try {
-        const res = await apiClient.get('/inspections/defect-types');
+        const url = user?.id ? `/inspections/defect-types?user_id=${user.id}` : '/inspections/defect-types';
+        const res = await apiClient.get(url);
         let data = [];
         if (Array.isArray(res.data)) {
           data = res.data;
@@ -113,9 +127,9 @@ const DailyInspection = () => {
         }
         setDefectTypes(data);
         
-        // Mặc định: Hiển thị những lỗi quan trọng (needs_tracking = true)
-        const importantIds = data.filter(d => d.needs_tracking).map(d => d.id);
-        setVisibleDefectIds(importantIds);
+        // Mặc định: Hiển thị TẤT CẢ các lỗi để "sổ hết" theo yêu cầu người dùng
+        const allIds = data.map(d => d.id);
+        setVisibleDefectIds(allIds);
 
         // Khởi tạo count = 0 cho tất cả
         const initialCounts = {};
@@ -138,8 +152,8 @@ const DailyInspection = () => {
           { id: 303, name: 'Nứt vân', category: 'material', needs_tracking: false, is_active: true },
         ];
         setDefectTypes(fallbackData);
-        const importantIds = fallbackData.filter(d => d.needs_tracking).map(d => d.id);
-        setVisibleDefectIds(importantIds);
+        const allIds = fallbackData.map(d => d.id);
+        setVisibleDefectIds(allIds);
         const initialCounts = {};
         fallbackData.forEach(d => {
           initialCounts[d.id] = 0;
@@ -149,6 +163,31 @@ const DailyInspection = () => {
     };
     fetchDefectTypes();
   }, []);
+
+  // 3. Lấy danh sách phiếu kiểm tra trong ngày hôm nay
+  useEffect(() => {
+    const fetchTodayRecords = async () => {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const res = await apiClient.get('/inspections/daily');
+        if (Array.isArray(res.data)) {
+          // Filter for today's records only and for current department
+          const todayData = res.data.filter(record => {
+            const recordDate = new Date(record.inspection_date).toISOString().split('T')[0];
+            const isToday = recordDate === today;
+            const isCurrentStage = record.stage_name === department;
+            return isToday && isCurrentStage;
+          });
+          // Sort by time descending (newest first)
+          const sortedData = todayData.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+          setTodayRecords(sortedData);
+        }
+      } catch (err) {
+        console.error("Lỗi khi tải danh sách phiếu kiểm tra hôm nay:", err);
+      }
+    };
+    fetchTodayRecords();
+  }, [department]);
 
   const handleUpdateCount = (id, val) => {
     setCounts(prev => ({ ...prev, [id]: val }));
@@ -164,18 +203,33 @@ const DailyInspection = () => {
 
   const handleToggleTracking = async (defectId) => {
     try {
-      const res = await apiClient.patch(`/inspections/defect-types/${defectId}/toggle-tracking`);
+      // Find the defect object
+      const defect = defectTypes.find(d => d.id === defectId);
+      if (!defect) return;
+
+      // Logic: Mobile user usually is QC. They toggle qc_tracking.
+      // QA tracking (needs_tracking) cannot be toggled by QC if it's already true.
+      
+      const url = user?.id 
+        ? `/inspections/defect-types/${defectId}/toggle-qc-tracking?user_id=${user.id}` 
+        : `/inspections/defect-types/${defectId}/toggle-qc-tracking`;
+        
+      const res = await apiClient.patch(url);
       if (res.data) {
         // Cập nhật state defectTypes cục bộ
-        setDefectTypes(prev => prev.map(d => d.id === defectId ? { ...d, needs_tracking: res.data.needs_tracking } : d));
+        setDefectTypes(prev => prev.map(d => d.id === defectId ? { 
+          ...d, 
+          qc_tracking: res.data.qc_tracking,
+          is_tracked_by_me: res.data.is_tracked_by_me
+        } : d));
         
         // Nếu vừa bật tracking, đảm bảo nó có trong danh sách hiển thị
-        if (res.data.needs_tracking && !visibleDefectIds.includes(defectId)) {
+        if ((res.data.is_tracked_by_me || res.data.qc_tracking) && !visibleDefectIds.includes(defectId)) {
           setVisibleDefectIds(prev => [...prev, defectId]);
         }
       }
     } catch (err) {
-      console.error("Lỗi khi thay đổi trạng thái theo dõi:", err);
+      console.error("Lỗi khi thay đổi trạng thái theo dõi QC:", err);
     }
   };
 
@@ -195,16 +249,28 @@ const DailyInspection = () => {
       { id: 'visual', label: 'Ngoại quan' },
       { id: 'structure', label: 'Kết cấu' },
       { id: 'material', label: 'Nguyên liệu' },
+      { id: 'other', label: 'Khác' },
     ];
-    // Tab "Cần theo dõi" chỉ xuất hiện nếu có dữ liệu needs_tracking
-    const hasTracking = defectTypes.some(d => d.needs_tracking);
+    // Tab "Cần theo dõi" xuất hiện nếu có lỗi được QA hoặc QC theo dõi và thuộc công đoạn hiện tại
+    const matchesStage = (defect) => {
+      if (!department) return true;
+      if (!defect.stage) return false;
+      try {
+        const stages = defect.stage.startsWith('[') ? JSON.parse(defect.stage) : [defect.stage];
+        return Array.isArray(stages) && stages.some(s => s === department);
+      } catch (e) {
+        return defect.stage === department;
+      }
+    };
+
+    const hasTracking = defectTypes.some(d => (d.needs_tracking || d.is_tracked_by_me || d.qc_tracking) && matchesStage(d));
     if (hasTracking) {
       return [{ id: 'tracking_tab', label: 'Cần theo dõi' }, ...baseTabs];
     }
     return baseTabs;
-  }, [defectTypes]);
+  }, [defectTypes, department]);
 
-  // 3. Đảm bảo activeTab luôn hợp lệ khi danh sách tab thay đổi
+  // Đảm bảo activeTab luôn hợp lệ khi danh sách tab thay đổi
   useEffect(() => {
     if (availableTabs.length > 0) {
       const isValid = availableTabs.some(t => t.id === activeTab);
@@ -214,21 +280,87 @@ const DailyInspection = () => {
     }
   }, [availableTabs, activeTab]);
 
-  // Lọc lỗi hiện tại của tab đang chọn mà CÓ TRONG danh sách hiển thị
+  // Lọc lỗi hiện tại của tab đang chọn + Lọc theo công đoạn đang chọn
   const currentDefects = useMemo(() => {
-    if (activeTab === 'tracking_tab') {
-      return defectTypes.filter(d => d.needs_tracking && visibleDefectIds.includes(d.id));
-    }
-    return defectTypes.filter(d => d.category === activeTab && visibleDefectIds.includes(d.id));
-  }, [defectTypes, activeTab, visibleDefectIds]);
+    // Helper function to check if defect belongs to current stage
+    const matchesStage = (defect) => {
+      if (!department) return true;
+      if (!defect.stage) return false;
+      try {
+        const stages = defect.stage.startsWith('[') ? JSON.parse(defect.stage) : [defect.stage];
+        return Array.isArray(stages) && stages.some(s => s === department);
+      } catch (e) {
+        return defect.stage === department;
+      }
+    };
 
-  // Danh sách lỗi CÙNG TAB nhưng CHƯA hiển thị (để đưa vào combo box)
-  const availableDefectsToSelect = useMemo(() => {
     if (activeTab === 'tracking_tab') {
-      return defectTypes.filter(d => d.needs_tracking && !visibleDefectIds.includes(d.id));
+      return defectTypes.filter(d => (d.needs_tracking || d.is_tracked_by_me || d.qc_tracking) && visibleDefectIds.includes(d.id) && matchesStage(d));
     }
-    return defectTypes.filter(d => d.category === activeTab && !visibleDefectIds.includes(d.id));
-  }, [defectTypes, activeTab, visibleDefectIds]);
+    return defectTypes.filter(d => d.category === activeTab && visibleDefectIds.includes(d.id) && matchesStage(d));
+  }, [defectTypes, activeTab, visibleDefectIds, department]);
+
+  // Danh sách lỗi chưa hiển thị (để đưa vào combo box)
+  const availableDefectsToSelect = useMemo(() => {
+    const matchesStage = (defect) => {
+      if (!department) return true;
+      if (!defect.stage) return false;
+      try {
+        const stages = defect.stage.startsWith('[') ? JSON.parse(defect.stage) : [defect.stage];
+        return Array.isArray(stages) && stages.some(s => s === department);
+      } catch (e) {
+        return defect.stage === department;
+      }
+    };
+
+    if (activeTab === 'tracking_tab') {
+      return defectTypes.filter(d => (d.needs_tracking || d.is_tracked_by_me || d.qc_tracking) && !visibleDefectIds.includes(d.id) && matchesStage(d));
+    }
+    return defectTypes.filter(d => d.category === activeTab && !visibleDefectIds.includes(d.id) && matchesStage(d));
+  }, [defectTypes, activeTab, visibleDefectIds, department]);
+
+  const handleAddCustomDefect = async () => {
+    if (!newCustomDefectName.trim()) {
+      alert("Vui lòng nhập tên lỗi!");
+      return;
+    }
+
+    setIsCreatingDefect(true);
+    try {
+      // 1. Tạo loại lỗi mới trong category 'other'
+      const payload = {
+        name: newCustomDefectName.trim(),
+        category: 'other',
+        needs_tracking: false,
+        is_active: true
+      };
+
+      const res = await apiClient.post('/inspections/defect-types', payload);
+      
+      if (res.data && res.data.id) {
+        const newDefect = res.data;
+        
+        // 2. Cập nhật danh sách defectTypes
+        setDefectTypes(prev => [...prev, newDefect]);
+        
+        // 3. Cho phép hiển thị lỗi này
+        setVisibleDefectIds(prev => [...prev, newDefect.id]);
+        
+        // 4. Cập nhật số lượng
+        setCounts(prev => ({ ...prev, [newDefect.id]: newCustomDefectQty }));
+        
+        // 5. Reset input
+        setNewCustomDefectName('');
+        setNewCustomDefectQty(0);
+        alert("Đã thêm lỗi khác thành công!");
+      }
+    } catch (err) {
+      console.error("Lỗi khi tạo loại lỗi mới:", err);
+      alert("Không thể tạo lỗi mới. Vui lòng thử lại!");
+    } finally {
+      setIsCreatingDefect(false);
+    }
+  };
 
   const handleConfirmSave = async () => {
     setShowConfirm(false);
@@ -291,22 +423,23 @@ const DailyInspection = () => {
                 />
               </div>
               <div style={{ flex: 1 }}>
-                <FormInput label="Người nhập" value={user?.full_name || "Hồ Sỹ Khẩn"} readOnly={true} />
-              </div>
-            </div>
-
-            {/* Summary Row */}
-            <div id="daily-stats-summary" style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '24px' }}>
-              <div style={{ flex: 1 }}>
                 <FormInput
-                  label="Tổng sản phẩm"
+                  label="Số lượng SX"
                   type="number"
                   value={totalProducts}
                   onChange={e => setTotalProducts(e.target.value)}
                   inputStyle={{ textAlign: 'center', color: '#94a3b8' }}
                 />
               </div>
-              <div style={{ flex: 1 }}>
+              {/* Hidden: Người nhập field */}
+              {/* <div style={{ flex: 1 }}>
+                <FormInput label="Người nhập" value={user?.full_name || "Hồ Sỹ Khẩn"} readOnly={true} />
+              </div> */}
+            </div>
+
+            {/* Summary Row */}
+            <div id="daily-stats-summary" style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '24px' }}>
+              <div style={{ width: '150px' }}>
                 <FormInput
                   label="Tổng lỗi ghi nhận"
                   type="number"
@@ -315,10 +448,70 @@ const DailyInspection = () => {
                   inputStyle={{ textAlign: 'center', color: '#4b301e', fontWeight: '800' }}
                 />
               </div>
-              <div style={{ paddingTop: '20px', fontSize: '1rem', fontWeight: '700', color: '#1e293b' }}>
+              <div style={{ marginLeft: 'auto', paddingTop: '20px', fontSize: '1rem', fontWeight: '700', color: '#1e293b' }}>
                 Tỷ lệ: <span style={{ color: '#ef4444' }}>{rate}%</span>
               </div>
             </div>
+
+            {/* Today's Records Table */}
+            {todayRecords.length > 0 && (
+              <div style={{ marginBottom: '24px' }}>
+                <h4 style={{ fontSize: '0.9rem', fontWeight: '800', color: '#4b301e', marginBottom: '12px' }}>
+                  Phiếu kiểm tra hôm nay
+                </h4>
+                <div style={{ 
+                  backgroundColor: '#f8fafc', 
+                  borderRadius: '12px', 
+                  overflow: 'hidden',
+                  border: '1px solid #e2e8f0',
+                  maxHeight: '200px',
+                  overflowY: 'auto'
+                }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#e2e8f0', position: 'sticky', top: 0, zIndex: 1 }}>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: '700', color: '#475569', fontSize: '0.8rem' }}>
+                          Thời gian
+                        </th>
+                        <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: '700', color: '#475569', fontSize: '0.8rem' }}>
+                          Số lượng lỗi
+                        </th>
+                        <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: '700', color: '#475569', fontSize: '0.8rem' }}>
+                          Tỷ lệ
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {todayRecords.map((record, index) => {
+                        const time = new Date(record.created_at).toLocaleTimeString('vi-VN', { 
+                          hour: '2-digit', 
+                          minute: '2-digit' 
+                        });
+                        const calculatedRate = totalProducts > 0 
+                          ? ((record.total_defects / totalProducts) * 100).toFixed(1) 
+                          : '0.0';
+                        return (
+                          <tr key={record.id} style={{ 
+                            borderBottom: index < todayRecords.length - 1 ? '1px solid #e2e8f0' : 'none',
+                            backgroundColor: index % 2 === 0 ? '#fff' : '#f8fafc'
+                          }}>
+                            <td style={{ padding: '10px 12px', color: '#1e293b', fontWeight: '600' }}>
+                              {time}
+                            </td>
+                            <td style={{ padding: '10px 12px', textAlign: 'center', color: '#4b301e', fontWeight: '700' }}>
+                              {record.total_defects}
+                            </td>
+                            <td style={{ padding: '10px 12px', textAlign: 'center', color: '#ef4444', fontWeight: '700' }}>
+                              {calculatedRate}%
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {/* Tabs */}
             <div id="daily-defect-tabs" style={{
@@ -353,48 +546,96 @@ const DailyInspection = () => {
 
             {/* Defects List */}
             <div id="daily-defects-list" style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '24px' }}>
+              
+              {/* Special Input for "Khác" tab */}
+              {activeTab === 'other' && (
+                <div style={{ 
+                  backgroundColor: '#f8fafc', 
+                  padding: '16px', 
+                  borderRadius: '16px', 
+                  border: '1px dashed #cbd5e1',
+                  marginBottom: '10px'
+                }}>
+                  <h4 style={{ fontSize: '0.9rem', fontWeight: '800', color: '#4b301e', marginBottom: '12px' }}>Thêm lỗi ngoài danh mục</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <FormInput 
+                      label="Tên lỗi mới" 
+                      placeholder="VD: Trầy xước nhẹ..." 
+                      value={newCustomDefectName}
+                      onChange={(e) => setNewCustomDefectName(e.target.value)}
+                    />
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#1e293b', marginBottom: '8px' }}>Số lượng</div>
+                        <CustomStepper 
+                          value={newCustomDefectQty}
+                          onChange={(val) => setNewCustomDefectQty(val)}
+                        />
+                      </div>
+                      <button
+                        onClick={handleAddCustomDefect}
+                        disabled={isCreatingDefect || !newCustomDefectName.trim()}
+                        style={{
+                          padding: '12px 20px',
+                          backgroundColor: (isCreatingDefect || !newCustomDefectName.trim()) ? '#cbd5e1' : '#4b301e',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '10px',
+                          fontWeight: '700',
+                          fontSize: '0.9rem',
+                          height: '40px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        {isCreatingDefect ? 'Đang thêm...' : <><Plus size={18} /> Thêm</>}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {currentDefects.length > 0 ? (
                 currentDefects.map(defect => (
                   <div key={defect.id} style={{ display: 'flex', alignItems: 'flex-end', gap: '12px' }}>
                     <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifycontent: 'space-between', marginBottom: '8px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#1e293b' }}>Tên lỗi</div>
-                          {defect.needs_tracking && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', minHeight: '20px' }}>
+                        {defect.needs_tracking && (
+                          <div style={{ 
+                            backgroundColor: '#fee2e2', color: '#ef4444', fontSize: '0.7rem', fontWeight: '800',
+                            padding: '2px 8px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '4px',
+                            border: '1px solid #fecaca'
+                          }}>
+                            <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#ef4444' }} />
+                            QA TRACK
+                          </div>
+                        )}
+                          {defect.is_tracked_by_me && (
                             <div style={{ 
-                              backgroundColor: '#fee2e2', color: '#ef4444', fontSize: '0.7rem', fontWeight: '800',
+                              backgroundColor: '#fef3c7', color: '#f59e0b', fontSize: '0.7rem', fontWeight: '800',
                               padding: '2px 8px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '4px',
-                              border: '1px solid #fecaca'
+                              border: '1px solid #fde68a'
                             }}>
-                              <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#ef4444' }} />
-                              THEO DÕI
+                              <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#f59e0b' }} />
+                              QC TRACK
                             </div>
                           )}
                         </div>
-                        
-                        {/* Toggle Tracking Button */}
-                        <button 
-                          onClick={() => handleToggleTracking(defect.id)}
-                          style={{
-                            width: '32px', height: '32px', borderRadius: '50%', border: 'none',
-                            backgroundColor: defect.needs_tracking ? '#fee2e2' : '#f1f5f9',
-                            color: defect.needs_tracking ? '#ef4444' : '#94a3b8',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                        <div 
+                          onDoubleClick={() => handleToggleTracking(defect.id)}
+                          style={{ 
+                            width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0',
+                            fontSize: '0.9rem', color: '#1e293b', 
+                            backgroundColor: defect.needs_tracking ? '#fff5f5' : (defect.is_tracked_by_me ? '#fffbeb' : '#f8fafc'), 
+                            fontWeight: '600',
+                            userSelect: 'none', // Tránh bôi đen khi click đúp
+                            cursor: 'pointer'
                           }}
-                          title={defect.needs_tracking ? 'Bỏ theo dõi' : 'Bật theo dõi'}
                         >
-                          {defect.needs_tracking ? <EyeOff size={16} /> : <Eye size={16} />}
-                        </button>
+                          {defect.name}
+                        </div>
                       </div>
-                      <div style={{ 
-                        width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0',
-                        fontSize: '0.9rem', color: '#1e293b', backgroundColor: defect.needs_tracking ? '#fff5f5' : '#f8fafc', 
-                        fontWeight: '600'
-                      }}>
-                        {defect.name}
-                      </div>
-                    </div>
                     <CustomStepper
                       value={counts[defect.id] || 0}
                       onChange={(val) => handleUpdateCount(defect.id, val)}
@@ -403,7 +644,13 @@ const DailyInspection = () => {
                 ))
               ) : (
                 <div style={{ textAlign: 'center', color: '#94a3b8', padding: '10px', fontStyle: 'italic' }}>
-                   Chưa có lỗi quan trọng cần hiển thị.
+                   Chưa có lỗi nào được ghi nhận cho danh mục này.
+                </div>
+              )}
+
+              {defectTypes.length === 0 && (
+                <div style={{ textAlign: 'center', color: '#94a3b8', padding: '40px 0' }}>
+                   Đang tải danh mục lỗi...
                 </div>
               )}
             </div>

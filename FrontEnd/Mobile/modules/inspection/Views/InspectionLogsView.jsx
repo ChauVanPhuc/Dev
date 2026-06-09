@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader';
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout';
-import { Search, Filter, Calendar, User, FileText, ChevronRight, Pencil, Loader2 } from 'lucide-react';
+import { Search, Filter, Calendar, User, FileText, ChevronRight, Pencil, Loader2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '@shared/services/api';
+import InspectionDetailPopup from './components/InspectionDetailPopup';
 
 /**
  * InspectionLogs Screen
@@ -14,6 +15,31 @@ const InspectionLogs = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [logs, setLogs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedLog, setSelectedLog] = useState(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+
+  const handleLogClick = async (log) => {
+    if (log.id.includes('daily')) {
+      // For daily logs, currently navigate to detail page as before
+      // or implement another popup if needed
+      const path = '/inspection-daily';
+      navigate(path, { state: { logId: log.originalId, type: log.type } });
+      return;
+    }
+
+    // For stage logs, fetch full detail and show popup
+    setIsDetailLoading(true);
+    try {
+      const res = await apiClient.get(`inspections/stage/${log.originalId}`);
+      if (res.data) {
+        setSelectedLog(res.data);
+      }
+    } catch (err) {
+      console.error("Lỗi khi tải chi tiết nhật ký:", err);
+    } finally {
+      setIsDetailLoading(false);
+    }
+  };
 
   useEffect(() => {
     const fetchLogs = async () => {
@@ -129,10 +155,7 @@ const InspectionLogs = () => {
                 <div 
                   key={log.id} 
                   id={idx === 0 ? "logs-first-item" : undefined}
-                  onClick={() => {
-                    const path = log.id.includes('daily') ? '/inspection-daily' : '/inspection-stage';
-                    navigate(path, { state: { logId: log.originalId, type: log.type } });
-                  }}
+                  onClick={() => handleLogClick(log)}
                   style={{ 
                     backgroundColor: '#fff', 
                     borderRadius: '16px', 
@@ -197,6 +220,19 @@ const InspectionLogs = () => {
             )}
           </div>
         </div>
+
+        {/* Popup chi tiết */}
+        <InspectionDetailPopup 
+          item={selectedLog} 
+          onClose={() => setSelectedLog(null)} 
+        />
+
+        {/* Overlay loading khi tải chi tiết */}
+        {isDetailLoading && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 3000, backgroundColor: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Loader2 size={40} className="animate-spin" color="#4b301e" />
+          </div>
+        )}
       </div>
     </Layout>
   );

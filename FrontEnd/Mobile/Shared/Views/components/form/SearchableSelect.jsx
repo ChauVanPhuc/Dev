@@ -75,7 +75,7 @@ const SearchableSelect = ({
         <input
           type="text"
           readOnly={readOnly}
-          value={isOpen ? searchTerm : displayValue}
+          value={(isOpen ? searchTerm : displayValue) ?? ''}
           onChange={(e) => setSearchTerm(e.target.value)}
           onFocus={handleInputFocus}
           placeholder={placeholder}

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout'
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader'
+import PassFailSelector from '@mobile/Shared/Views/components/ui/PassFailSelector'
 import { Check, Camera, X, ArrowLeft, Image as ImageIcon, RotateCcw } from 'lucide-react'
 import apiClient, { API_URL, API_ROOT } from '@shared/services/api'
 import useAuthStore from '@modules/auth/Models/authModel'
@@ -210,32 +211,12 @@ const QualityInspectionDetail = () => {
                 {/* Kết quả Section */}
                 <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9' }}>
                     <div style={{ fontSize: '1.1rem', fontWeight: '900', color: '#1e293b', marginBottom: '18px' }}>Kết quả kiểm tra</div>
-                    <div style={{ display: 'flex', backgroundColor: '#f1f5f9', padding: '4px', borderRadius: '15px', gap: '4px', marginBottom: '25px' }}>
-                        <div 
-                            onClick={() => setIsPass(true)}
-                            style={{ 
-                                flex: 1, padding: '14px', textAlign: 'center', borderRadius: '12px', cursor: 'pointer', transition: '0.3s',
-                                backgroundColor: isPass === true ? '#22c55e' : 'transparent',
-                                color: isPass === true ? '#fff' : '#64748b',
-                                fontWeight: '800', fontSize: '1.1rem',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
-                            }}
-                        >
-                            {isPass === true && <Check size={20} strokeWidth={3} />} Đạt
-                        </div>
-                        <div 
-                            onClick={() => setIsPass(false)}
-                            style={{ 
-                                flex: 1, padding: '14px', textAlign: 'center', borderRadius: '12px', cursor: 'pointer', transition: '0.3s',
-                                backgroundColor: isPass === false ? '#ef4444' : 'transparent',
-                                color: isPass === false ? '#fff' : '#64748b',
-                                fontWeight: '800', fontSize: '1.1rem',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
-                            }}
-                        >
-                            {isPass === false && <X size={20} strokeWidth={3} />} Chưa Đạt
-                        </div>
-                    </div>
+                    <PassFailSelector
+                        value={isPass}
+                        onChange={(val) => setIsPass(val === 'pass')}
+                        disabled={false}
+                        variant="button"
+                    />
 
                     {/* Ảnh minh chứng */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '15px' }}>

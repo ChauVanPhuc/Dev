@@ -54,7 +54,7 @@ const FormInput = ({
       )}
       <input
         type={type}
-        value={value}
+        value={value ?? ''}
         onChange={onChange}
         readOnly={readOnly}
         placeholder={placeholder}

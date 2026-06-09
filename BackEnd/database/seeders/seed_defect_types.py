@@ -44,6 +44,7 @@ def seed_defect_types():
                     name=d["name"],
                     category=d["category"],
                     needs_tracking=d["needs_tracking"],
+                    qc_tracking=False, # Default QC tracking to false
                     is_active=True
                 )
                 db.add(new_defect)
