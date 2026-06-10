@@ -5,6 +5,7 @@ import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from config.database import get_db
 from modules.delivery.models.delivery_qc import DeliveryQC
 from modules.delivery.models.delivery_images import DeliveryImage
@@ -171,6 +172,74 @@ async def save_qc_results(
         db.rollback()
         print(f"Error saving QC: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Lỗi hệ thống khi lưu kết quả QC: {str(e)}")
+
+@router.get("/po/{order_code}")
+def get_qc_history_by_po(order_code: str, db: Session = Depends(get_db)):
+    """
+    [GET] Lấy lịch sử QC của một PO dựa trên mã order_code.
+    Truy vấn qua cả liên kết trực tiếp order_id và qua delivery_details.
+    Trả về TOÀN BỘ thông tin kiểm tra QC từ results_json.
+    """
+    from modules.delivery.models.order import Order
+    from modules.delivery.models.delivery_details import DeliveryDetails
+    from modules.auth.models.accounts import Account
+
+    order = db.query(Order).filter(Order.order_code == order_code).first()
+    if not order:
+        return []
+
+    # Tìm tất cả delivery_id liên quan đến order này
+    delivery_ids = db.query(Delivery.id).filter(
+        or_(
+            Delivery.order_id == order.id,
+            Delivery.id.in_(
+                db.query(DeliveryDetails.delivery_id).filter(DeliveryDetails.order_id == order.id)
+            )
+        )
+    ).all()
+
+    ids = [d.id for d in delivery_ids]
+    if not ids:
+        return []
+
+    qc_records = db.query(DeliveryQC).filter(DeliveryQC.delivery_id.in_(ids)).order_by(DeliveryQC.created_at.desc()).all()
+
+    results = []
+    for qc in qc_records:
+        # Lấy tên người QC (thường là qc_receipt trong bảng deliveries)
+        delivery = db.query(Delivery).filter(Delivery.id == qc.delivery_id).first()
+        inspector = db.query(Account).filter(Account.id == delivery.qc_receipt).first() if delivery and delivery.qc_receipt else None
+
+        # Parse TOÀN BỘ kết quả JSON
+        res_data = {}
+        try:
+            res_data = json.loads(qc.results_json) if qc.results_json else {}
+        except:
+            pass
+
+        # Xác định kết luận dựa trên số lượng trả/lỗi
+        result_text = "Đạt"
+        if delivery and (delivery.quantity_returned > 0 or delivery.status == "Trả Hàng"):
+            result_text = "Không Đạt"
+
+        # Lấy ảnh QC
+        qc_images = db.query(DeliveryImage).filter(
+            DeliveryImage.delivery_id == qc.delivery_id,
+            DeliveryImage.description.like("qc_%")
+        ).all()
+
+        results.append({
+            "id": qc.id,
+            "delivery_id": qc.delivery_id,
+            "created_at": qc.created_at,
+            "qc_inspector_name": inspector.full_name if inspector else "---",
+            "result": result_text,
+            "note": qc.note,
+            "images": [{"image_path": img.image_path} for img in qc_images],
+            "results_data": res_data  # [FIX] Trả về toàn bộ dữ liệu kiểm tra QC
+        })
+
+    return results
 
 @router.get("/{delivery_id}")
 def get_qc_results(delivery_id: int, db: Session = Depends(get_db)):

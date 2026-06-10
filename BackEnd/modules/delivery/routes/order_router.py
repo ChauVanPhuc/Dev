@@ -123,6 +123,16 @@ def read_order_products_by_code(order_code: str, db: Session = Depends(get_db)):
     
     return {"items": item_list, "products": product_list}
 
+@router.get("/code/{order_code}", response_model=OrderResponse)
+def read_order_by_code(order_code: str, db: Session = Depends(get_db)):
+    """
+    [GET] Lấy thông tin chi tiết của một đơn hàng theo mã hiệu (order_code).
+    """
+    db_order = db.query(Order).filter(Order.order_code == order_code).first()
+    if not db_order:
+        raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
+    return db_order
+
 @router.get("/{order_id}", response_model=OrderResponse)
 def read_order(order_id: int, db: Session = Depends(get_db)):
     """

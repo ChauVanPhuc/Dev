@@ -19,6 +19,8 @@ import BackupQRManagement from '@modules/System/Views/BackupQRManagementView';
 import ScreenManagement from '@modules/System/Views/ScreenManagementView';
 import ScreenDetail from '@modules/System/Views/ScreenDetailView';
 import DefectManagement from '@modules/Inspection/Views/DefectManagementView';
+import QualityRecords from '@modules/QualityRecords/Views/QualityRecordsListView';
+import QualityRecordsDetail from '@modules/QualityRecords/Views/QualityRecordsDetailView';
 
 // Import Manufacture module
 import ManufactureDashboard from '@modules/Dashboard/Views/ManufactureDashboardView';
@@ -65,6 +67,8 @@ function App() {
             <Route path="logs" element={<IncidentLogs />} />
             <Route path="defects" element={<DefectManagement />} />
             <Route path="reports" element={<InspectionReports />} />
+            <Route path="quality-records" element={<QualityRecords />} />
+            <Route path="quality-records/:id" element={<QualityRecordsDetail />} />
             <Route path="kpi" element={<KPIReports />} />
             <Route path="feedback" element={<Improvements />} />
             <Route path="hotspots" element={<Hotspots />} />

@@ -35,7 +35,8 @@ class DeliveryDashboardResponse(BaseModel):
     sx_delivery_name: Optional[str]
     sx_receipt_name: Optional[str]
     note: Optional[str]
-    residual: int
+    residual: Optional[int] = 0  # [FIX] Cho phép NULL, default = 0
+    images: Optional[List[dict]] = []
 
     class Config:
         from_attributes = True
@@ -347,8 +348,8 @@ async def create_delivery(
 
 @router.get("/", response_model=List[DeliveryDashboardResponse])
 def get_all_deliveries(
-    skip: int = 0, 
-    limit: int = 100, 
+    skip: int = 0,
+    limit: int = 100,
     db: Session = Depends(get_db)
 ):
     """
@@ -480,6 +481,75 @@ async def get_image_proxy(path: str):
         with open(log_file, "a", encoding="utf-8") as f:
             f.write(f"{datetime.datetime.now()}: CRITICAL ERROR: {err_msg}\n")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/po/{order_code}", response_model=List[DeliveryDashboardResponse])
+def get_handover_history_by_po(order_code: str, db: Session = Depends(get_db)):
+    """
+    [GET] Lấy lịch sử bàn giao của một PO dựa trên mã order_code.
+    Kết quả bao gồm cả các phiếu giao gán trực tiếp order_id và các phiếu giao qua delivery_details.
+    Số lượng hiển thị là số lượng thực tế gán cho PO này (không phải quantity_total của phiếu).
+    """
+    from modules.delivery.models.order import Order as OrderModel
+    from modules.delivery.models.delivery_images import DeliveryImage
+    from sqlalchemy.orm import aliased, joinedload
+
+    order = db.query(OrderModel).filter(OrderModel.order_code == order_code).first()
+    if not order:
+        return []
+
+    Sender = aliased(AccountModel)
+    Receiver = aliased(AccountModel)
+
+    # Truy vấn các phiếu giao có liên quan đến order_id này
+    query = db.query(DeliveryModel).options(
+        joinedload(DeliveryModel.images)
+    ).filter(
+        or_(
+            DeliveryModel.order_id == order.id,
+            DeliveryModel.id.in_(
+                db.query(DeliveryDetailsModel.delivery_id).filter(DeliveryDetailsModel.order_id == order.id)
+            )
+        )
+    ).order_by(DeliveryModel.created_at.desc())
+
+    deliveries = query.all()
+
+    results = []
+    for d in deliveries:
+        # Lấy tên người giao/nhận thủ công
+        sender = db.query(AccountModel).filter(AccountModel.id == d.sx_delivery).first()
+        receiver = db.query(AccountModel).filter(AccountModel.id == d.sx_receipt).first()
+
+        # Tính số lượng thực tế gán cho PO này
+        if d.order_id == order.id:
+            # Phiếu giao gán trực tiếp cho PO này
+            actual_quantity = d.quantity_total
+        else:
+            # Phiếu giao chia nhỏ qua delivery_details, lấy tổng quantity cho order_id này
+            actual_quantity = db.query(func.sum(DeliveryDetailsModel.quantity)).filter(
+                DeliveryDetailsModel.delivery_id == d.id,
+                DeliveryDetailsModel.order_id == order.id
+            ).scalar() or 0
+
+        results.append({
+            "id": d.id,
+            "delivery_stage": d.delivery_stage,
+            "receiving_stage": d.receiving_stage,
+            "part_name": d.part_name,
+            "specification": d.specification,
+            "quantity_total": actual_quantity,  # [FIX] Số lượng thực tế gán cho PO này
+            "quantity_received": d.quantity_received,
+            "quantity_returned": d.quantity_returned,
+            "status": d.status,
+            "created_at": d.created_at,
+            "note": d.note,
+            "residual": d.residual,
+            "sx_delivery_name": sender.full_name if sender else "N/A",
+            "sx_receipt_name": receiver.full_name if receiver else "---",
+            "images": [{"image_path": img.image_path} for img in d.images if img.description == "ảnh giao"]
+        })
+
+    return results
 
 @router.get("/{plan_id}", response_model=List[DeliverySchema])
 def get_deliveries_by_plan(plan_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):

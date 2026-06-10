@@ -4,7 +4,7 @@ import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, or_
 from config.database import get_db
 from modules.inspection.models.input_inspection import InputInspection
 from modules.inspection.schemas.input_inspection import InputInspection as InspectionSchema
@@ -280,6 +280,49 @@ async def upload_inspection_images(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi khi tải ảnh lên: {str(e)}")
 
+
+@router.get("/inbound/po/{order_code}")
+def get_inbound_inspections_by_po(order_code: str, db: Session = Depends(get_db)):
+    """
+    [GET] Lấy lịch sử kiểm tra đầu vào của một PO dựa trên mã order_code.
+    Tự động tìm kiếm các bản ghi kiểm tra liên quan đến đơn hàng này thông qua cont_name hoặc mapping.
+    """
+    from modules.delivery.models.order import Order
+    order = db.query(Order).filter(Order.order_code == order_code).first()
+    if not order:
+        return []
+
+    # Tìm các bản ghi kiểm tra liên quan đến đơn hàng này
+    # Sử dụng ilike để khớp linh hoạt (VD: 'APT-0069' khớp với 'APT-0069-05')
+    search_term = order_code.split('-')[0] + '-' + order_code.split('-')[1] if '-' in order_code else order_code
+
+    query = db.query(InputInspection).filter(
+        or_(
+            InputInspection.cont_name == order_code,
+            InputInspection.cont_name == search_term,
+            InputInspection.cont_name.ilike(f"%{search_term}%"),
+            InputInspection.cont_name == order.production_code,
+            InputInspection.part_name.ilike(f"%{order_code}%")
+        )
+    ).order_by(InputInspection.inspected_at.desc())
+
+    inspections = query.all()
+    results = []
+
+    for r in inspections:
+        inspector = db.query(Account).filter(Account.id == r.inspector_id).first() if r.inspector_id else None
+        results.append({
+            "id": r.id,
+            "created_at": r.inspected_at, # Mapping inspected_at -> created_at for frontend
+            "part_name": r.part_name,
+            "specification": r.specification,  # [FIX] Specification chứa kích thước
+            "inspector_name": inspector.full_name if inspector else "---",
+            "result": "Pass" if r.result == "Đạt" else "Fail", # Mapping for frontend
+            "note": r.note,
+            "images": [img for img in [r.image_path_1, r.image_path_2, r.image_path_3] if img]
+        })
+
+    return results
 
 @router.get("/plan/{plan_id}", response_model=List[InspectionSchema])
 def get_inspections_by_plan(plan_id: int, stage: Optional[str] = None, db: Session = Depends(get_db)):

@@ -135,6 +135,17 @@ const PortalLayout = () => {
     }
   };
 
+  // --- MEMOIZE CONTEXT TO PREVENT UNNECESSARY CHILD RE-RENDERS ---
+  const outletContext = React.useMemo(() => ({
+    setCustomTitle, 
+    setCustomSubtitle, 
+    setCustomScreenCode,
+    setHeaderExtra, 
+    showModal,
+    startGlobalUpload,
+    activeUploads: uploads.length
+  }), [uploads.length]); // Only update when upload count changes, setters are stable
+
   // --- PREVIEW MODE HANDLER ---
   const queryParams = new URLSearchParams(location.search);
   const isPreview = queryParams.get('preview') === 'true';
@@ -291,15 +302,7 @@ const PortalLayout = () => {
 
         {/* Core dynamic content template */}
         <div className="dashboard-content">
-          <Outlet context={{ 
-            setCustomTitle, 
-            setCustomSubtitle, 
-            setCustomScreenCode,
-            setHeaderExtra, 
-            showModal,
-            startGlobalUpload,
-            activeUploads: uploads.length
-          }} />
+          <Outlet context={outletContext} />
         </div>
       </div>
 

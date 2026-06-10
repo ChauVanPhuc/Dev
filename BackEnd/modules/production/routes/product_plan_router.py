@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from config.database import get_db
 from modules.production.models.product_plan import ProductPlan
 from modules.delivery.models.order import Order
+from modules.delivery.models.deliveries import Delivery
+from modules.delivery.models.delivery_details import DeliveryDetails
 from modules.production.models.product import Product
 from modules.production.models.bom_detail import BOMDetail
 from modules.production.schemas.product_plan import ProductPlanCreate, ProductPlan as PlanResponse
@@ -534,6 +536,20 @@ def get_plan_detail(
             
             orders = orders_query.order_by(Order.is_priority.desc(), Order.priority_score.desc(), Order.id.desc()).all()
             
+            from modules.inspection.models.input_inspection import InputInspection
+            # [NEW] Lấy danh sách ID đơn hàng đã có dữ liệu bàn giao (không phụ thuộc plan_id của delivery)
+            # 1. Trực tiếp từ deliveries.order_id
+            has_data_ids = {r[0] for r in db.query(Delivery.order_id).filter(Delivery.order_id != None).distinct().all()}
+            # 2. Từ delivery_details.order_id
+            has_data_details = {r[0] for r in db.query(DeliveryDetails.order_id).filter(DeliveryDetails.order_id != None).distinct().all()}
+            has_data_ids.update(has_data_details)
+
+            # 3. Từ InputInspection (Kiểm tra đầu vào) - Khớp theo mã PO trong cùng KHSX
+            has_inspection_codes = {r[0] for r in db.query(InputInspection.cont_name).filter(
+                InputInspection.plan_id == plan_info.id, 
+                InputInspection.cont_name != None
+            ).distinct().all()}
+
             result_orders = []
             total_plan_qty = 0
             for o in orders:
@@ -553,12 +569,17 @@ def get_plan_detail(
                         "bom_details": []
                     })
                 
+                # Check has_data: Có bàn giao (ID) hoặc Có kiểm tra đầu vào (Mã code)
+                order_has_data = (o.id in has_data_ids) or (o.order_code in has_inspection_codes)
+                
                 result_orders.append({
                     "id": o.id,
                     "name": o.order_code,
                     "customer": o.customer,
                     "is_priority": getattr(o, 'is_priority', 0),
                     "priority_score": getattr(o, 'priority_score', 0),
+                    "order_status": o.order_status or 0,
+                    "has_data": order_has_data,
                     "order_progress": 0.0,
                     "products": products_list
                 })
