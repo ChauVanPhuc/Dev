@@ -162,7 +162,7 @@ export const useDeliveryController = () => {
   }, [])
 
   // 8. Lưu kết quả kiểm tra chất lượng QC
-  const saveQCResults = useCallback(async (id, qcData, totalInspected) => {
+  const saveQCResults = useCallback(async (id, qcData, totalInspected, userId) => {
     setIsSubmitting(true)
     setError(null)
     try {
@@ -196,6 +196,9 @@ export const useDeliveryController = () => {
       formData.append('quantity_error', parseInt(qcData.scrap_qty) || 0)
       formData.append('quantity_returned', 0)
       formData.append('quantity_inspection', parseInt(totalInspected) || 0)
+      if (userId) {
+        formData.append('user_id', userId)
+      }
 
       const res = await apiClient.post(`/qc/${id}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }

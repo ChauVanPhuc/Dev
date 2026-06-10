@@ -900,7 +900,6 @@ async def confirm_delivery(
     delivery.sx_receipt = request.sx_receipt # Lưu ID người xác nhận nhận
     delivery.quantity_received = request.quantity_received # Lưu số lượng thực nhận
     delivery.status = request.status
-    delivery.qc_receipt = request.user_id # Có thể dùng user_id của người đang login để lưu vết
     
     # QR code is no longer released here. It will be released after QC confirms.
 

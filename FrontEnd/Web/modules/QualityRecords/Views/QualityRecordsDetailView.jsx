@@ -131,7 +131,7 @@ const QualityRecordsDetailView = () => {
     const tabs = [
         { id: 'handover', label: 'Lịch sử bàn giao', icon: <Truck size={18} /> },
         { id: 'inbound', label: 'Kiểm tra đầu vào', icon: <ClipboardCheck size={18} /> },
-        { id: 'qc', label: 'QC nhận hàng', icon: <ShieldCheck size={18} /> }
+        { id: 'qc', label: 'QC kiểm tra hàng', icon: <ShieldCheck size={18} /> }
     ];
 
     const formatDate = (dateStr) => {
@@ -599,7 +599,7 @@ const QualityRecordsDetailView = () => {
                                 {qcData.length === 0 ? (
                                     <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem', color: '#8D6E63' }}>
                                         <ShieldCheck size={48} style={{ opacity: 0.3, marginBottom: '1rem' }} />
-                                        <p>Chưa có dữ liệu QC nhận hàng cho PO này.</p>
+                                        <p>Chưa có dữ liệu QC kiểm tra hàng cho PO này.</p>
                                     </div>
                                 ) : (
                                     qcData.map((item, idx) => (

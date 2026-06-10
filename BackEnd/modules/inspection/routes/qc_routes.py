@@ -29,6 +29,7 @@ async def save_qc_results(
     quantity_received: int = Form(0),
     quantity_inspection: int = Form(0), # [NEW] Số lượng thực tế QC đã kiểm tra
     status: Optional[str] = Form(None), # [NEW] Cho phép truyền trạng thái chủ động (ví dụ: 'Trả Hàng')
+    user_id: Optional[int] = Form(None), # [NEW] Nhận ID người kiểm QC
     files: List[UploadFile] = File([]),
     db: Session = Depends(get_db)
 ):
@@ -85,6 +86,9 @@ async def save_qc_results(
         current_returned = delivery.quantity_returned or 0
         delivery.quantity_returned = current_returned + quantity_returned
         delivery.quantity_inspection = quantity_inspection # [NEW] Lưu giá trị thực kiểm mới
+        if user_id:
+            delivery.qc_receipt = user_id
+        
         
         # [QUAN TRỌNG] Logic chuyển trạng thái: 
         # Ưu tiên status truyền vào (vd: 'Trả Hàng'), 

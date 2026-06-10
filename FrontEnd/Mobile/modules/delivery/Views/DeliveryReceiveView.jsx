@@ -185,7 +185,7 @@ const DeliveryReceive = () => {
       const hasQCSaved = delivery.quantity_error > 0 || delivery.quantity_returned > 0 || delivery.status === 'Trả Hàng' || delivery.status === 'Hoàn thành';
       if (!hasQCSaved) {
         try {
-          await saveQCResults(id, qcData, totalInspected || delivery.quantity_inspection || 0);
+          await saveQCResults(id, qcData, totalInspected || delivery.quantity_inspection || 0, user?.id || 1);
         } catch (qcErr) {
           console.error('Lỗi đồng bộ QC khi tạo phiếu trả hàng:', qcErr);
         }
@@ -566,7 +566,7 @@ const DeliveryReceive = () => {
 
   const handleSaveQC = async () => {
     try {
-      const data = await saveQCResults(id, qcData, totalInspected);
+      const data = await saveQCResults(id, qcData, totalInspected, user?.id || 1);
       if (data.status === 'success') {
         pendingQCStore.clear(id) // Xóa pending của phiếu này sau khi đã lưu thành công
         setMessageModal({
