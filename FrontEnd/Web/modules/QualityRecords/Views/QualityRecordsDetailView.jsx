@@ -506,6 +506,13 @@ const QualityRecordsDetailView = () => {
                                                 
                                                 <div className="card-row">
                                                     <div className="card-col">
+                                                        <div className="card-label">Linh kiện</div>
+                                                        <div className="card-value" style={{ color: '#7B5233' }}>{item.part_name || item.product_name || '---'}</div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="card-row">
+                                                    <div className="card-col">
                                                         <div className="card-label">Công đoạn</div>
                                                         <div className="card-value">{item.delivery_stage} → {item.receiving_stage}</div>
                                                     </div>
@@ -654,6 +661,10 @@ const QualityRecordsDetailView = () => {
                                     <div className="detail-row">
                                         <div className="detail-label">PO Code</div>
                                         <div className="detail-value">{selectedItem.po_code || id}</div>
+                                    </div>
+                                    <div className="detail-row">
+                                        <div className="detail-label">Linh kiện</div>
+                                        <div className="detail-value" style={{ color: '#7B5233', fontWeight: '600' }}>{selectedItem.part_name || selectedItem.product_name || '---'}</div>
                                     </div>
                                     <div className="detail-row">
                                         <div className="detail-label">Trạng thái</div>
