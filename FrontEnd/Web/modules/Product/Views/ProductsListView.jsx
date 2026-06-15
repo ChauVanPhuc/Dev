@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import api, { getBaseURL } from '@webShared/Services/api.service';
-import { Search, Plus, FileSpreadsheet, FileText, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Plus, FileSpreadsheet, FileText, ArrowUpDown, ChevronLeft, ChevronRight, Package, ShoppingBag } from 'lucide-react';
 
 const ManufactureProducts = () => {
   const navigate = useNavigate();
@@ -70,6 +70,17 @@ const ManufactureProducts = () => {
     }
   };
 
+  const handleDelete = async (id) => {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa sản phẩm này?")) return;
+    try {
+      await api.delete(`/master-products/${id}`);
+      fetchProducts();
+    } catch (error) {
+      console.error("Lỗi khi xóa sản phẩm:", error);
+      alert("Không thể xóa sản phẩm này. Vui lòng thử lại sau.");
+    }
+  };
+
   const purpleButtonStyle = (isActive) => ({
     minWidth: '36px',
     height: '36px',
@@ -88,24 +99,14 @@ const ManufactureProducts = () => {
   });
 
   return (
-    <div className="orders-container" style={{ padding: '0 20px 20px 20px' }}>
-      {/* Sticky Header Section */}
-      <div style={{ 
-        position: 'sticky', 
-        top: '60px', 
-        zIndex: 110, 
-        backgroundColor: '#FAFAFA',
-        margin: '0 -20px',
-        padding: '10px 20px',
-        borderBottom: '1px solid #e5e7eb',
-        height: '60px',
-        display: 'flex',
-        alignItems: 'center'
-      }}>
-        <div className="orders-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-          <div className="search-bar" style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, maxWidth: '600px' }}>
-            <div style={{ position: 'relative', width: '300px' }}>
-              <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
+    <div className="manufacture-plan-container">
+      {/* ── STICKY TOP ZONE ── */}
+      <div className="sticky-top-zone">
+        {/* Table Toolbar */}
+        <div className="mgmt-toolbar card" style={{ marginBottom: 0 }}>
+          <div className="toolbar-left" style={{ flex: 1 }}>
+            <div className="search-wrapper">
+              <Search size={18} className="search-icon" />
               <input 
                 type="text" 
                 placeholder="Tìm kiếm mã sản phẩm..." 
@@ -115,208 +116,246 @@ const ManufactureProducts = () => {
                   setPage(0);
                 }}
                 onKeyDown={(e) => e.key === 'Enter' && fetchProducts(true)}
-                style={{ 
-                  padding: '8px 12px 8px 40px', 
-                  borderRadius: '8px', 
-                  border: '1px solid #e5e7eb', 
-                  width: '100%',
-                  fontSize: '14px',
-                  outline: 'none'
-                }}
               />
             </div>
             
-            <button 
-              onClick={() => fetchProducts(true)}
-              style={{ padding: '8px', backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-            >
-              <ArrowUpDown size={18} />
-            </button>
-
             <select 
               value={limit}
               onChange={(e) => {
                 setLimit(parseInt(e.target.value));
                 setPage(0);
               }}
-              style={{ 
-                padding: '8px 12px', 
-                borderRadius: '8px', 
-                border: '1px solid #e5e7eb', 
-                backgroundColor: 'white', 
-                cursor: 'pointer',
-                fontSize: '14px',
-                color: '#374151',
-                outline: 'none'
-              }}
+              className="page-size-select"
             >
               <option value={15}>15 dòng</option>
-              <option value={20}>20 dòng</option>
+              <option value={30}>30 dòng</option>
               <option value={50}>50 dòng</option>
               <option value={100}>100 dòng</option>
             </select>
+
+            <button 
+              onClick={() => fetchProducts(true)}
+              className="btn btn-outline desktop-only"
+              style={{ padding: '8px', border: '1px solid #e5e7eb', background: 'white' }}
+            >
+              <ArrowUpDown size={18} />
+            </button>
           </div>
           
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div className="toolbar-right">
             <input type="file" id="excel-upload" style={{ display: 'none' }} accept=".xlsx, .xls" onChange={handleImportExcel} />
             <button 
               onClick={() => navigate('/manufacture/products/create')}
-              style={{ padding: '8px 16px', backgroundColor: 'white', color: '#374151', border: '1px solid #e5e7eb', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}
+              className="btn"
+              style={{ padding: '8px 16px', backgroundColor: '#7B5233', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}
             >
-              <Plus size={16} /> Thêm trực tiếp
+              <Plus size={16} />
+              <span className="btn-text-desktop">Thêm trực tiếp</span>
+              <span className="btn-text-mobile">Thêm</span>
             </button>
             <button 
               onClick={() => document.getElementById('excel-upload').click()}
+              className="btn"
               style={{ padding: '8px 16px', backgroundColor: 'white', color: '#374151', border: '1px solid #e5e7eb', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}
             >
-              <FileSpreadsheet size={16} /> Nhập Excel
+              <FileSpreadsheet size={16} />
+              <span className="btn-text-desktop">Nhập Excel</span>
+              <span className="btn-text-mobile">Nhập</span>
             </button>
-            <button style={{ padding: '8px 16px', backgroundColor: 'white', color: '#374151', border: '1px solid #e5e7eb', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <FileSpreadsheet size={16} /> Xuất Excel
+            <button className="btn" style={{ padding: '8px 16px', backgroundColor: 'white', color: '#374151', border: '1px solid #e5e7eb', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <FileSpreadsheet size={16} />
+              <span className="btn-text-desktop">Xuất Excel</span>
+              <span className="btn-text-mobile">Xuất</span>
             </button>
-            <button style={{ padding: '8px 16px', backgroundColor: 'white', color: '#374151', border: '1px solid #e5e7eb', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <FileText size={16} /> Xuất PDF
+            <button className="btn desktop-only" style={{ padding: '8px 16px', backgroundColor: 'white', color: '#374151', border: '1px solid #e5e7eb', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <FileText size={16} /> <span>Xuất PDF</span>
             </button>
           </div>
         </div>
       </div>
 
-      <div className="orders-table-container" style={{ position: 'relative', backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', minHeight: '400px' }}>
-        {/* Gỡ bỏ Progress Bar Overlay tại chỗ để dùng Progress Card toàn cục */}
-
-        {loading && activeUploads === 0 ? (
-          <div style={{ padding: '40px', textAlign: 'center' }}>
-            <div style={{ position: 'relative', width: '60px', height: '60px', margin: '0 auto 15px' }}>
-              <div className="spinner" style={{ 
-                border: '4px solid #f3f3f3', 
-                borderTop: '4px solid #A0301B', 
-                borderRadius: '50%', 
-                width: '60px', 
-                height: '60px', 
-                animation: 'spin 1s linear infinite' 
-              }}></div>
-              <div style={{
-                position: 'absolute',
-                top: '50%', left: '50%',
-                transform: 'translate(-50%, -50%)',
-                fontSize: '12px', fontWeight: 'bold', color: '#A0301B'
-              }}>
-                {loadingProgress}%
-              </div>
+      {loading && activeUploads === 0 ? (
+        <div style={{ padding: '40px', textAlign: 'center', backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <div style={{ position: 'relative', width: '60px', height: '60px', margin: '0 auto 15px' }}>
+            <div className="spinner" style={{ 
+              border: '4px solid #f3f3f3', 
+              borderTop: '4px solid #7B5233', 
+              borderRadius: '50%', 
+              width: '60px', 
+              height: '60px', 
+              animation: 'spin 1s linear infinite' 
+            }}></div>
+            <div style={{
+              position: 'absolute',
+              top: '50%', left: '50%',
+              transform: 'translate(-50%, -50%)',
+              fontSize: '12px', fontWeight: 'bold', color: '#7B5233'
+            }}>
+              {loadingProgress}%
             </div>
-            <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
-            Đang tải dữ liệu...
           </div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-              <tr>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: '#4b5563', backgroundColor: '#f9fafb', position: 'sticky', top: '120px', zIndex: 90 }}>STT</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: '#4b5563', backgroundColor: '#f9fafb', position: 'sticky', top: '120px', zIndex: 90 }}>Mã SKU</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: '#4b5563', backgroundColor: '#f9fafb', position: 'sticky', top: '120px', zIndex: 90 }}>Tên Sản Phẩm</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: '#4b5563', backgroundColor: '#f9fafb', position: 'sticky', top: '120px', zIndex: 90 }}>Kích Thước (L-W-H)</th>
-                <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '600', color: '#4b5563', backgroundColor: '#f9fafb', position: 'sticky', top: '120px', zIndex: 90 }}>Thao Tác</th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.length === 0 ? (
-                <tr>
-                  <td colSpan="5" style={{ padding: '20px', textAlign: 'center', color: '#6b7280' }}>
-                    Chưa có sản phẩm mẫu nào
-                  </td>
-                </tr>
-              ) : (
-                products.map((product, index) => (
-                  <tr key={product.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                    <td style={{ padding: '12px 16px' }}>{index + 1}</td>
-                    <td style={{ padding: '12px 16px', fontWeight: '500' }}>{product.sku || 'N/A'}</td>
-                    <td style={{ padding: '12px 16px' }}>{product.name}</td>
-                    <td style={{ padding: '12px 16px' }}>
-                      {product.length}x{product.width}x{product.height}
-                    </td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                      <button 
-                        onClick={() => navigate(`/manufacture/products/${product.id}`)}
-                        style={{ marginRight: '8px', color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer' }}
-                      >
-                        Chi tiết
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(product.id)}
-                        style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}
-                      >
-                        Xóa
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        )}
-
-        {/* Purple Style Pagination Controls */}
-        {!loading && (
-          <div style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
-            <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#111827' }}>
-              {products.length} of {total}
-            </div>
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <button 
-                onClick={() => setPage(p => Math.max(0, p - 1))}
-                disabled={page === 0}
-                style={{ 
-                  ...purpleButtonStyle(false),
-                  backgroundColor: page === 0 ? '#F3F4F6' : 'white',
-                  cursor: page === 0 ? 'not-allowed' : 'pointer',
-                  color: page === 0 ? '#D1D5DB' : '#374151'
-                }}
-              >
-                <ChevronLeft size={18} />
-              </button>
+          <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+          Đang tải dữ liệu...
+        </div>
+      ) : (
+        <>
+          {/* Desktop view */}
+          <div className="admin-list-layout desktop-only">
+            <div className="mgmt-table admin-table-card card-shadow" style={{ position: 'relative', backgroundColor: 'white', minHeight: '400px' }}>
+              <div className="table-responsive admin-table-scroll">
+                <table className="manufacture-table">
+                  <thead>
+                    <tr>
+                      <th>STT</th>
+                      <th>Mã SKU</th>
+                      <th>Tên Sản Phẩm</th>
+                      <th>Kích Thước (L-W-H)</th>
+                      <th style={{ textAlign: 'right' }}>Thao Tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {products.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" style={{ textAlign: 'center', color: '#6b7280' }}>
+                          Chưa có sản phẩm mẫu nào
+                        </td>
+                      </tr>
+                    ) : (
+                      products.map((product, index) => (
+                        <tr key={product.id} className="animate-card-entrance">
+                          <td data-label="STT">{index + 1}</td>
+                          <td data-label="Mã SKU" style={{ fontWeight: '500' }}>{product.sku || 'N/A'}</td>
+                          <td data-label="Tên Sản Phẩm">{product.name}</td>
+                          <td data-label="Kích Thước (L-W-H)">
+                            {product.length}x{product.width}x{product.height}
+                          </td>
+                          <td data-label="Thao Tác" style={{ textAlign: 'right' }}>
+                            <button 
+                              onClick={() => navigate(`/manufacture/products/${product.id}`)}
+                              style={{ marginRight: '8px', color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer' }}
+                            >
+                              Chi tiết
+                            </button>
+                            <button 
+                              onClick={() => handleDelete(product.id)}
+                              style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}
+                            >
+                              Xóa
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
               
-              <div style={{ display: 'flex' }}>
-                {(() => {
-                  const totalPages = Math.ceil(total / limit);
-                  const pages = [];
-                  let start = Math.max(0, page - 1);
-                  let end = Math.min(totalPages - 1, start + 2);
-                  if (end - start < 2) start = Math.max(0, end - 2);
-
-                  if (start > 0) {
-                    pages.push(<button key={0} onClick={() => setPage(0)} style={purpleButtonStyle(page === 0)}>1</button>);
-                    if (start > 1) pages.push(<span key="s1" style={{ padding: '0 8px', alignSelf: 'center', color: '#6B7280' }}>...</span>);
-                  }
-
-                  for (let i = start; i <= end; i++) {
-                    pages.push(<button key={i} onClick={() => setPage(i)} style={purpleButtonStyle(page === i)}>{i + 1}</button>);
-                  }
-
-                  if (end < totalPages - 1) {
-                    if (end < totalPages - 2) pages.push(<span key="s2" style={{ padding: '0 8px', alignSelf: 'center', color: '#6B7280' }}>...</span>);
-                    pages.push(<button key={totalPages - 1} onClick={() => setPage(totalPages - 1)} style={purpleButtonStyle(page === totalPages - 1)}>{totalPages}</button>);
-                  }
+              {/* Desktop Pagination */}
+              {!loading && (
+                <div className="admin-pagination-desktop desktop-only">
+                  <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#111827' }}>
+                    {products.length} of {total}
+                  </div>
                   
-                  return pages;
-                })()}
-              </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button 
+                      onClick={() => setPage(p => Math.max(0, p - 1))}
+                      disabled={page === 0}
+                      style={{ 
+                        ...purpleButtonStyle(false),
+                        backgroundColor: page === 0 ? '#F3F4F6' : 'white',
+                        cursor: page === 0 ? 'not-allowed' : 'pointer',
+                        color: page === 0 ? '#D1D5DB' : '#374151'
+                      }}
+                    >
+                      <ChevronLeft size={18} />
+                    </button>
+                    
+                    <div style={{ display: 'flex' }}>
+                      {(() => {
+                        const totalPages = Math.ceil(total / limit);
+                        const pages = [];
+                        let start = Math.max(0, page - 1);
+                        let end = Math.min(totalPages - 1, start + 2);
+                        if (end - start < 2) start = Math.max(0, end - 2);
 
-              <button 
-                onClick={() => setPage(p => p + 1)}
-                disabled={(page + 1) * limit >= total}
-                style={{ 
-                  ...purpleButtonStyle(false),
-                  backgroundColor: (page + 1) * limit >= total ? '#F3F4F6' : 'white',
-                  cursor: (page + 1) * limit >= total ? 'not-allowed' : 'pointer',
-                  color: (page + 1) * limit >= total ? '#D1D5DB' : '#374151'
-                }}
-              >
-                <ChevronRight size={18} />
-              </button>
+                        if (start > 0) {
+                          pages.push(<button key={0} onClick={() => setPage(0)} style={purpleButtonStyle(page === 0)}>1</button>);
+                          if (start > 1) pages.push(<span key="s1" style={{ padding: '0 8px', alignSelf: 'center', color: '#6B7280' }}>...</span>);
+                        }
+
+                        for (let i = start; i <= end; i++) {
+                          pages.push(<button key={i} onClick={() => setPage(i)} style={purpleButtonStyle(page === i)}>{i + 1}</button>);
+                        }
+
+                        if (end < totalPages - 1) {
+                          if (end < totalPages - 2) pages.push(<span key="s2" style={{ padding: '0 8px', alignSelf: 'center', color: '#6B7280' }}>...</span>);
+                          pages.push(<button key={totalPages - 1} onClick={() => setPage(totalPages - 1)} style={purpleButtonStyle(page === totalPages - 1)}>{totalPages}</button>);
+                        }
+                        
+                        return pages;
+                      })()}
+                    </div>
+
+                    <button 
+                      onClick={() => setPage(p => p + 1)}
+                      disabled={(page + 1) * limit >= total}
+                      style={{ 
+                        ...purpleButtonStyle(false),
+                        backgroundColor: (page + 1) * limit >= total ? '#F3F4F6' : 'white',
+                        cursor: (page + 1) * limit >= total ? 'not-allowed' : 'pointer',
+                        color: (page + 1) * limit >= total ? '#D1D5DB' : '#374151'
+                      }}
+                    >
+                      <ChevronRight size={18} />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        )}
+
+          {/* Mobile view */}
+          <div className="mobile-only manufacture-cards-scroll">
+            <div className="manufacture-cards-container">
+              {products.map((product, idx) => (
+                <div key={product.id} className="plan-mobile-card status-completed card-shadow animate-card-entrance" onClick={() => navigate(`/manufacture/products/${product.id}`)}>
+                  <div className="card-header">
+                    <span className="card-khsx">{product.name}</span>
+                    <span className="status-badge" style={{ backgroundColor: '#ecfdf5', color: '#10b981', border: '1px solid #a7f3d0' }}>
+                      #{page * limit + idx + 1}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '12px', marginTop: '8px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.8rem', color: '#64748b', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <Package size={14} color="#8D6E63" /> SKU: {product.sku || 'N/A'}
+                    </span>
+                    <span style={{ fontSize: '0.8rem', color: '#64748b', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <ShoppingBag size={14} color="#8D6E63" /> {product.length}x{product.width}x{product.height} mm
+                    </span>
+                  </div>
+                  <div style={{ marginTop: '8px', fontSize: '0.75rem', color: '#94a3b8', textAlign: 'right' }}>Nhấn để xem chi tiết ›</div>
+                </div>
+              ))}
+              {products.length === 0 && (
+                <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
+                  Không có sản phẩm nào.
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Mobile Sticky Pagination */}
+      <div className="pagination-mobile-sticky mobile-only">
+          <button className="page-btn" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>
+              <ChevronLeft size={16} />
+          </button>
+          <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#7B5233' }}>Trang {page + 1} / {Math.ceil(total / limit) || 1}</span>
+          <button className="page-btn" onClick={() => setPage(p => p + 1)} disabled={(page + 1) * limit >= total}>
+              <ChevronRight size={16} />
+          </button>
       </div>
     </div>
   );

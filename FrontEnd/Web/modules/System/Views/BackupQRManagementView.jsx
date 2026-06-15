@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import api from '@webShared/Services/api.service';
 import { useOutletContext } from 'react-router-dom';
-import { RefreshCw, Unlock, Plus, Printer, Search, X, CheckSquare, Square, Files } from 'lucide-react';
+import { Unlock, Plus, Printer, Search, X, CheckSquare, Square, Files, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const BackupQRManagement = () => {
     const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = useOutletContext();
     const [qrCodes, setQrCodes] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(15);
     const [selectedIds, setSelectedIds] = useState([]);
     const [message, setMessage] = useState({ type: '', text: '' });
     
@@ -173,77 +175,93 @@ const BackupQRManagement = () => {
         if (selectedIds.length === filteredQRs.length) {
             setSelectedIds([]);
         } else {
-            setSelectedIds(filteredQRs.map(qr => qr.id));
+            setSelectedIds(filteredQRs.slice((page - 1) * pageSize, page * pageSize).map(qr => qr.id));
         }
     };
 
     const filteredQRs = qrCodes.filter(qr => qr.code.toLowerCase().includes(searchTerm.toLowerCase()));
 
     return (
-        <div className="backup-qr-page">
-            {/* Thanh công cụ lọc và in - Đã đồng bộ style */}
-            <div style={{ 
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
-                backgroundColor: '#fff', padding: '16px 20px', borderRadius: '16px',
-                marginBottom: '20px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                border: '1px solid #e2e8f0'
-            }}>
-                <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flex: 1 }}>
-                    <div style={{ position: 'relative', maxWidth: '400px', flex: 1 }}>
-                        <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} size={18} />
-                        <input 
-                            type="text" 
-                            placeholder="Tìm kiếm mã thẻ..." 
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            style={{ 
-                                width: '100%', padding: '10px 15px 10px 42px', border: '1px solid #e2e8f0', 
-                                borderRadius: '10px', outline: 'none', fontSize: '14px',
-                                backgroundColor: '#f8fafc', transition: 'all 0.2s'
-                            }}
-                            onFocus={(e) => e.target.style.borderColor = '#A0301B'}
-                            onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
-                        />
-                    </div>
-                    {selectedIds.length > 0 && (
-                        <button 
-                            onClick={() => printQRsA5(qrCodes.filter(qr => selectedIds.includes(qr.id)))}
-                            style={{ 
-                                display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', 
-                                backgroundColor: '#1e293b', color: '#fff', border: 'none', borderRadius: '10px',
-                                cursor: 'pointer', fontWeight: '700', fontSize: '13px',
-                                boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
-                            }}
+        <div className="manufacture-plan-container">
+            <div className="sticky-top-zone">
+                {/* Thanh công cụ lọc và in - Đã đồng bộ style */}
+                <div className="mgmt-toolbar card" style={{ 
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+                    backgroundColor: '#fff', padding: '16px 20px', borderRadius: '16px',
+                    marginBottom: 0, boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                    border: '1px solid #e2e8f0', width: '100%'
+                }}>
+                    <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flex: 1 }}>
+                        <div style={{ position: 'relative', maxWidth: '400px', flex: 1 }}>
+                            <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} size={18} />
+                            <input 
+                                type="text" 
+                                placeholder="Tìm kiếm mã thẻ..." 
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                style={{ 
+                                    width: '100%', padding: '10px 15px 10px 42px', border: '1px solid #e2e8f0', 
+                                    borderRadius: '10px', outline: 'none', fontSize: '14px',
+                                    backgroundColor: '#f8fafc', transition: 'all 0.2s'
+                                }}
+                                onFocus={(e) => e.target.style.borderColor = '#A0301B'}
+                                onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
+                            />
+                        </div>
+
+                        <select 
+                            value={pageSize} 
+                            onChange={(e) => { setPageSize(parseInt(e.target.value)); setPage(1); }}
+                            className="page-size-select"
                         >
-                            <Printer size={18} /> In thẻ đã chọn ({selectedIds.length})
-                        </button>
-                    )}
+                            <option value={15}>15 dòng</option>
+                            <option value={30}>30 dòng</option>
+                            <option value={50}>50 dòng</option>
+                            <option value={100}>100 dòng</option>
+                        </select>
+
+                        {selectedIds.length > 0 && (
+                            <button 
+                                onClick={() => printQRsA5(qrCodes.filter(qr => selectedIds.includes(qr.id)))}
+                                style={{ 
+                                    display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', 
+                                    backgroundColor: '#1e293b', color: '#fff', border: 'none', borderRadius: '10px',
+                                    cursor: 'pointer', fontWeight: '700', fontSize: '13px',
+                                    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+                                }}
+                            >
+                                <Printer size={18} /> In thẻ đã chọn ({selectedIds.length})
+                            </button>
+                        )}
+                    </div>
+                    <div style={{ color: '#64748b', fontSize: '13px', fontWeight: '600', marginLeft: '20px' }}>
+                        {filteredQRs.length} / {qrCodes.length} mã QR
+                    </div>
                 </div>
-                <div style={{ color: '#64748b', fontSize: '13px', fontWeight: '600', marginLeft: '20px' }}>
-                    {filteredQRs.length} / {qrCodes.length} mã QR
-                </div>
+
+                {/* Thông báo */}
+                {message.text && (
+                    <div style={{ 
+                        padding: '12px 20px', borderRadius: '12px', marginTop: '10px', marginBottom: 0,
+                        backgroundColor: message.type === 'success' ? '#f0fdf4' : '#fef2f2',
+                        color: message.type === 'success' ? '#166534' : '#991b1b',
+                        border: `1px solid ${message.type === 'success' ? '#bbf7d0' : '#fecaca'}`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        animation: 'slideDown 0.3s ease'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            {message.type === 'success' ? <CheckSquare size={18} /> : <X size={18} />}
+                            <span style={{ fontWeight: '500' }}>{message.text}</span>
+                        </div>
+                        <X size={18} onClick={() => setMessage({type:'', text:''})} style={{ cursor: 'pointer', opacity: 0.5 }} />
+                    </div>
+                )}
             </div>
 
-            {/* Thông báo */}
-            {message.text && (
-                <div style={{ 
-                    padding: '12px 20px', borderRadius: '12px', marginBottom: '20px',
-                    backgroundColor: message.type === 'success' ? '#f0fdf4' : '#fef2f2',
-                    color: message.type === 'success' ? '#166534' : '#991b1b',
-                    border: `1px solid ${message.type === 'success' ? '#bbf7d0' : '#fecaca'}`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    animation: 'slideDown 0.3s ease'
-                }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        {message.type === 'success' ? <CheckSquare size={18} /> : <X size={18} />}
-                        <span style={{ fontWeight: '500' }}>{message.text}</span>
-                    </div>
-                    <X size={18} onClick={() => setMessage({type:'', text:''})} style={{ cursor: 'pointer', opacity: 0.5 }} />
-                </div>
-            )}
-
-            {/* Bảng dữ liệu - Sử dụng khung card chuẩn */}
-            <div className="page-card" style={{ padding: 0, overflow: 'hidden' }}>
+            {/* Bảng dữ liệu - Sử dụng admin-list-layout chuẩn */}
+            <div className="admin-list-layout">
+                <div className="mgmt-table admin-table-card page-card" style={{ padding: 0, overflow: 'hidden' }}>
+                    <div className="admin-table-scroll">
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                         <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
@@ -259,7 +277,7 @@ const BackupQRManagement = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {filteredQRs.map((qr) => (
+                        {filteredQRs.slice((page - 1) * pageSize, page * pageSize).map((qr) => (
                             <tr key={qr.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                                 <td style={{ padding: '12px 24px' }}>
                                     <div onClick={() => toggleSelect(qr.id)} style={{ cursor: 'pointer' }}>
@@ -313,6 +331,53 @@ const BackupQRManagement = () => {
                     </tbody>
                 </table>
             </div>
+
+            {/* Phân trang - Desktop */}
+                <div className="admin-pagination-desktop desktop-only">
+                    <span className="pagination-info">
+                        Hiển thị {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredQRs.length)} / {filteredQRs.length} kết quả
+                    </span>
+                    <div className="pagination-controls" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <button 
+                            disabled={page === 1} 
+                            onClick={() => setPage(prev => Math.max(prev - 1, 1))} 
+                            className="page-btn"
+                        >
+                            &lt; Trước
+                        </button>
+                        {[...Array(Math.ceil(filteredQRs.length / pageSize))].map((_, i) => (
+                            <button
+                                key={i}
+                                className={`page-btn ${page === i + 1 ? 'active' : ''}`}
+                                onClick={() => setPage(i + 1)}
+                            >
+                                {i + 1}
+                            </button>
+                        ))}
+                        <button 
+                            disabled={page >= Math.ceil(filteredQRs.length / pageSize)} 
+                            onClick={() => setPage(prev => Math.min(prev + 1, Math.ceil(filteredQRs.length / pageSize)))} 
+                            className="page-btn"
+                        >
+                            Sau &gt;
+                        </button>
+                    </div>
+                </div>
+                </div>
+            </div>
+
+            {/* Phân trang - Mobile Sticky */}
+            {Math.ceil(filteredQRs.length / pageSize) > 1 && (
+                <div className="pagination-mobile-sticky mobile-only">
+                    <button className="page-btn" onClick={() => setPage(prev => Math.max(prev - 1, 1))} disabled={page === 1}>
+                        <ChevronLeft size={16} />
+                    </button>
+                    <span style={{ fontWeight: '700', fontSize: '0.9rem', color: '#7B5233' }}>Trang {page} / {Math.ceil(filteredQRs.length / pageSize) || 1}</span>
+                    <button className="page-btn" onClick={() => setPage(prev => Math.min(prev + 1, Math.ceil(filteredQRs.length / pageSize)))} disabled={page >= Math.ceil(filteredQRs.length / pageSize)}>
+                        <ChevronRight size={16} />
+                    </button>
+                </div>
+            )}
 
             {/* Modal */}
             {showAddModal && (

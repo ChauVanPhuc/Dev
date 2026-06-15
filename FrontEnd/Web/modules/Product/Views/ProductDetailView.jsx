@@ -143,7 +143,7 @@ const ProductDetail = () => {
                 </div>
             </div>
 
-            <div className="table-container-wood card-shadow">
+            <div className="table-container-wood card-shadow desktop-only">
                 <div className="table-header-title">
                     <div className="table-title-left">
                         <Settings size={16} /> Cấu trúc định mức vật tư (BOM)
@@ -251,6 +251,94 @@ const ProductDetail = () => {
                     </tbody>
                 </table>
             </div>
+
+            {/* Mobile View - High-density List */}
+            <div className="bom-mobile-list-container mobile-only">
+                <div className="table-header-title" style={{ borderRadius: '12px 12px 0 0' }}>
+                    <div className="table-title-left">
+                        <Settings size={16} /> Định mức BOM
+                    </div>
+                    <div className="tree-control-actions">
+                        <button className="control-btn-wood" onClick={handleExpandAll} style={{ padding: '6px 8px', fontSize: '11px' }}>
+                            <Expand size={10} /> Mở hết
+                        </button>
+                        <button className="control-btn-wood" onClick={handleCollapseAll} style={{ padding: '6px 8px', fontSize: '11px' }}>
+                            <Shrink size={10} /> Thu hết
+                        </button>
+                    </div>
+                </div>
+
+                <div className="bom-mobile-list">
+                    {visibleRows.length > 0 ? (
+                        visibleRows.map((item, idx) => (
+                            <div 
+                                key={item.path || idx} 
+                                className={`bom-mobile-row level-${item.level}`}
+                                style={{ paddingLeft: `${Math.min(item.level * 12 + 10, 60)}px` }}
+                            >
+                                <div className="bom-mobile-left">
+                                    {item.level > 0 && <span className="tree-connector" style={{ marginRight: '4px' }}>└─</span>}
+                                    {item.hasChildren ? (
+                                        <button 
+                                            className="tree-toggle-btn" 
+                                            onClick={() => toggleNode(item.path)}
+                                            style={{ marginRight: '4px' }}
+                                        >
+                                            {expandedPaths.has(item.path) ? (
+                                                <ChevronDown size={14} />
+                                            ) : (
+                                                <ChevronRight size={14} />
+                                            )}
+                                        </button>
+                                    ) : (
+                                        <span className="tree-toggle-placeholder-mobile" style={{ width: '18px' }} />
+                                    )}
+
+                                    <span className={`tree-node-icon ${item.is_raw_material ? 'raw' : (item.hasChildren ? 'assembly' : 'item')}`} style={{ width: '20px', height: '20px', marginRight: '6px' }}>
+                                        {item.is_raw_material ? (
+                                            <Database size={10} />
+                                        ) : item.hasChildren ? (
+                                            <Layers size={10} />
+                                        ) : (
+                                            <Box size={10} />
+                                        )}
+                                    </span>
+
+                                    <div className="bom-mobile-details">
+                                        <div className="bom-mobile-name-row">
+                                            <span className="bom-mobile-name">{item.name}</span>
+                                        </div>
+                                        <div className="bom-mobile-meta">
+                                            <span className="bom-mobile-sku">{item.sku}</span>
+                                            {item.specification && (
+                                                <>
+                                                    <span className="bullet" style={{ margin: '0 3px', color: '#cbd5e1' }}>•</span>
+                                                    <span className="bom-mobile-spec">{item.specification}</span>
+                                                </>
+                                            )}
+                                        </div>
+                                        {(item.input_stage || item.output_stage) && (
+                                            <div className="bom-mobile-stages">
+                                                {item.input_stage && <span className="stage-badge-mobile in">In: {item.input_stage}</span>}
+                                                {item.input_stage && item.output_stage && <span className="arrow">→</span>}
+                                                {item.output_stage && <span className="stage-badge-mobile out">Out: {item.output_stage}</span>}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                
+                                <div className="bom-mobile-right">
+                                    <span className="bom-mobile-qty">{item.quantity}</span>
+                                    <span className="bom-mobile-unit">{item.unit}</span>
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <div className="empty-state">Sản phẩm này chưa có cấu trúc BOM.</div>
+                    )}
+                </div>
+            </div>
+
             <style dangerouslySetInnerHTML={{ __html: `
 .product-detail-page {
     padding: 24px;
@@ -555,6 +643,169 @@ const ProductDetail = () => {
 }
 .table-wood tr:hover {
     background: #FAF9F8;
+}
+
+@media (max-width: 768px) {
+    .product-detail-page {
+        padding: 12px;
+    }
+    .product-header-wood {
+        padding: 16px;
+        margin-bottom: 12px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    .product-title h1 {
+        font-size: 18px;
+    }
+    .info-grid-wood {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        margin-bottom: 16px;
+    }
+    .info-card-wood {
+        padding: 10px 12px;
+    }
+    .info-card-wood .value {
+        font-size: 14px;
+    }
+    .table-container-wood {
+        border-radius: 12px;
+    }
+    .table-header-title {
+        padding: 10px 12px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    .tree-control-actions {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+    }
+    .control-btn-wood {
+        flex: 1;
+        justify-content: center;
+        padding: 8px;
+    }
+    
+    /* Mobile BOM list design */
+    .bom-mobile-list {
+        background: white;
+        border-radius: 0 0 12px 12px;
+        padding: 8px 0;
+        box-shadow: 0 4px 15px rgba(93, 64, 55, 0.05);
+        border: 1px solid #EFEBE9;
+        border-top: none;
+    }
+    .bom-mobile-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px;
+        border-bottom: 1px solid #FAF9F8;
+        transition: background-color 0.15s ease;
+    }
+    .bom-mobile-row:last-child {
+        border-bottom: none;
+    }
+    .bom-mobile-row:active {
+        background-color: #FAF9F8;
+    }
+    .bom-mobile-left {
+        display: flex;
+        align-items: center;
+        flex: 1;
+        min-width: 0;
+    }
+    .tree-toggle-placeholder-mobile {
+        width: 16px;
+        display: inline-block;
+        flex-shrink: 0;
+    }
+    .bom-mobile-row .tree-toggle-btn {
+        width: 16px;
+        height: 16px;
+        margin-right: 4px;
+        flex-shrink: 0;
+    }
+    .bom-mobile-details {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        flex: 1;
+    }
+    .bom-mobile-name {
+        font-size: 13px;
+        font-weight: 700;
+        color: #3E2723;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: block;
+    }
+    .bom-mobile-meta {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin-top: 2px;
+        font-size: 11px;
+        color: #8D6E63;
+    }
+    .bom-mobile-sku {
+        font-weight: 600;
+    }
+    .bom-mobile-spec {
+        font-style: italic;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 120px;
+    }
+    .bom-mobile-stages {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin-top: 4px;
+    }
+    .stage-badge-mobile {
+        font-size: 9px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: 700;
+        border: 1px solid transparent;
+    }
+    .stage-badge-mobile.in {
+        background: #ECEFF1; 
+        color: #455A64; 
+        border-color: #CFD8DC;
+    }
+    .stage-badge-mobile.out {
+        background: #EFEBE9; 
+        color: #5D4037; 
+        border-color: #D7CCC8;
+    }
+    .bom-mobile-stages .arrow {
+        font-size: 10px;
+        color: #8D6E63;
+    }
+    .bom-mobile-right {
+        display: flex;
+        align-items: baseline;
+        gap: 2px;
+        margin-left: 8px;
+        flex-shrink: 0;
+        font-size: 13px;
+        font-weight: 800;
+        color: #2E7D32;
+    }
+    .bom-mobile-unit {
+        font-size: 10px;
+        color: #8D6E63;
+        font-weight: 600;
+    }
 }
             `}} />
         </div>

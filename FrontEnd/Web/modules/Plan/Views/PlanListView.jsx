@@ -9,7 +9,10 @@ import {
   Clock,
   Plus,
   ChevronRight,
-  FileText
+  FileText,
+  Package,
+  ShoppingBag,
+  Calendar
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { planService } from '@modules/Plan/Models/plan.service';
@@ -25,6 +28,11 @@ const ManufacturePlan = () => {
     const [showFilterDropdown, setShowFilterDropdown] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [currentTime, setCurrentTime] = useState(new Date());
+    // Mobile pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(15);
+    // Mobile popup detail
+    const [popupPlan, setPopupPlan] = useState(null);
 
     // Cập nhật đồng hồ mỗi giây
     useEffect(() => {
@@ -188,50 +196,108 @@ const ManufacturePlan = () => {
         return result;
     }, [plans, searchTerm, filterStatus, sortDirection]);
 
-    return (
-        <div className="manufacture-plan-container" style={{ padding: '0.5rem 1rem' }}>
+    const totalPages = Math.ceil(filteredPlans.length / itemsPerPage);
+    const paginatedPlans = filteredPlans.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-            {/* Stats Grid - Chuẩn hóa đồng bộ */}
-            <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '30px' }}>
-                {stats.map((stat, idx) => (
-                    <div 
-                        key={idx} 
-                        className="card-shadow"
-                        style={{ 
-                            backgroundColor: stat.bg, 
-                            padding: '20px 15px', 
-                            borderRadius: '12px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            minHeight: '120px',
-                            textAlign: 'center',
-                            border: '1px solid rgba(226, 232, 240, 0.8)',
-                            transition: 'all 0.2s ease',
-                            boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
-                        }}
-                    >
-                        <p style={{ margin: '0 0 10px 0', fontSize: '12px', fontWeight: '700', color: '#757575', letterSpacing: '0.5px', textTransform: 'uppercase' }}>{stat.label}</p>
-                        <h3 style={{ margin: '0 0 5px 0', fontSize: '28px', fontWeight: '800', color: stat.color }}>{stat.value}</h3>
-                        <p style={{ margin: 0, fontSize: '12px', color: '#9E9E9E', fontWeight: '500' }}>{stat.sub}</p>
+    return (
+        <div className="manufacture-plan-container">
+
+            {/* ── POPUP MODAL (Mobile detail) ── */}
+            {popupPlan && (
+                <div className="bottom-sheet-backdrop" onClick={() => setPopupPlan(null)}>
+                    <div className="bottom-sheet-container" onClick={e => e.stopPropagation()}>
+                        <div className="bottom-sheet-handle"></div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                            <h3 style={{ color: '#5d3b32', fontWeight: 800, fontSize: '1.1rem', margin: 0 }}>{popupPlan.name}</h3>
+                            <button onClick={() => setPopupPlan(null)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                        </div>
+                        {[['Trạng thái', getStatusStyle(popupPlan).text], ['Số đơn hàng', `${popupPlan.orders?.length || 0} đơn`], ['Sản phẩm', `${popupPlan.orders?.reduce((a,o)=>a+(o.products?.length||0),0)||0} loại`], ['Tổng SL', popupPlan.orders?.reduce((a,o)=>a+o.products?.reduce((p,pr)=>p+(pr.quantity||0),0),0)||0], ['Hoàn thành', popupPlan.finished_date ? new Date(popupPlan.finished_date).toLocaleDateString('vi-VN') : 'Chưa định']].map(([k,v])=>(
+                            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid #FAF6F0' }}>
+                                <span style={{ color: '#8D6E63', fontWeight: 600, fontSize: '0.9rem' }}>{k}</span>
+                                <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#2D1A12' }}>{v}</span>
+                            </div>
+                        ))}
+                        <button className="btn btn-primary" style={{ width: '100%', marginTop: 20, padding: '12px' }} onClick={() => navigate(`/manufacture/plan/${popupPlan.id}`)}>Xem chi tiết kế hoạch</button>
                     </div>
-                ))}
-            </div>
+                </div>
+            )}
+
+            {/* ── STICKY TOP ZONE (Desktop: stats-grid; Mobile: stats-strip + toolbar) ── */}
+            <div className="sticky-top-zone">
+                {/* Desktop stats grid */}
+                <div className="stats-grid animate-card-entrance desktop-only" style={{ padding: '16px 16px 0' }}>
+                    {stats.map((stat, idx) => {
+                        const isActive = filterStatus === stat.id;
+                        return (
+                            <div 
+                                key={idx} 
+                                className="stat-card" 
+                                style={{ 
+                                    backgroundColor: isActive ? stat.color : stat.bg, 
+                                    color: isActive ? '#fff' : '#1e293b',
+                                    border: isActive ? `1px solid ${stat.color}` : '1px solid rgba(226, 232, 240, 0.8)', 
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s'
+                                }}
+                                onClick={() => { setFilterStatus(stat.id); setCurrentPage(1); }}
+                            >
+                                <p className="stat-title" style={{ color: isActive ? 'rgba(255,255,255,0.85)' : '#64748b', transition: 'all 0.2s' }}>{stat.label}</p>
+                                <h3 className="stat-value" style={{ color: isActive ? '#fff' : stat.color, transition: 'all 0.2s' }}>{stat.value}</h3>
+                            </div>
+                        );
+                    })}
+                </div>
+                {/* Mobile compact stats strip */}
+                <div className="stats-strip">
+                    {stats.map((stat, idx) => {
+                        const isActive = filterStatus === stat.id;
+                        return (
+                            <div 
+                                key={idx} 
+                                className={`stats-strip-item ${isActive ? 'active' : ''}`}
+                                style={{ 
+                                    backgroundColor: isActive ? stat.color : '#fff',
+                                    cursor: 'pointer'
+                                }}
+                                onClick={() => { setFilterStatus(stat.id); setCurrentPage(1); }}
+                            >
+                                <span className="strip-value" style={{ color: isActive ? '#fff' : stat.color }}>
+                                    {stat.value.replace(' KH', '')}
+                                </span>
+                                <span className="strip-label" style={{ color: isActive ? 'rgba(255,255,255,0.9)' : '#8D6E63' }}>
+                                    {stat.label.replace('TỔNG SỐ ', '').replace('ĐANG ', '').replace('ĐÃ ', '')}
+                                </span>
+                            </div>
+                        );
+                    })}
+                </div>
 
 
             {/* Toolbar */}
-            <div className="action-bar card-shadow" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
-                    <div className="search-input-wrapper">
-                        <Search size={16} style={{ color: '#94a3b8' }} />
+            <div className="mgmt-toolbar card" style={{ marginBottom: 0 }}>
+                <div className="toolbar-left" style={{ flex: 1 }}>
+                    <div className="search-wrapper">
+                        <Search className="search-icon" size={18} />
                         <input 
                             type="text" 
                             placeholder="Tìm kiếm lệnh, đơn, sản phẩm..." 
                             value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                         />
                     </div>
+
+                    <select 
+                        value={itemsPerPage} 
+                        onChange={(e) => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
+                        className="page-size-select"
+                    >
+                        <option value={15}>15 dòng</option>
+                        <option value={30}>30 dòng</option>
+                        <option value={50}>50 dòng</option>
+                        <option value={100}>100 dòng</option>
+                    </select>
+
                     <div style={{ position: 'relative' }}>
                         <button 
                             className="btn" 
@@ -319,13 +385,15 @@ const ManufacturePlan = () => {
                     </button>
                 </div>
 
-                <div className="action-buttons">
+                <div className="toolbar-right">
                     <button 
                         onClick={() => navigate('/manufacture/plan/create')}
                         className="btn btn-primary"
                         style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
                     >
-                        <Plus size={18} /> Thêm Kế hoạch
+                        <Plus size={18} />
+                        <span className="btn-text-desktop">Thêm Kế hoạch</span>
+                        <span className="btn-text-mobile">Thêm</span>
                     </button>
                     <div className="desktop-only" style={{ width: '1px', height: '24px', backgroundColor: '#e2e8f0' }}></div>
                     <input 
@@ -341,25 +409,31 @@ const ManufacturePlan = () => {
                         onClick={() => fileInputRef.current?.click()}
                     >
                         <FileUp size={18} /> 
-                        <span className="desktop-only">Nhập Excel</span>
+                        <span className="btn-text-desktop">Nhập Excel</span>
+                        <span className="btn-text-mobile">Nhập</span>
                     </button>
                     <button 
                         onClick={handleExportExcel}
                         className="btn" 
                         style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
                     >
-                        <FileDown size={18} /> <span className="desktop-only">Xuất Excel</span>
+                        <FileDown size={18} />
+                        <span className="btn-text-desktop">Xuất Excel</span>
+                        <span className="btn-text-mobile">Xuất</span>
                     </button>
                 </div>
             </div>
+            </div> {/* end sticky-top-zone */}
 
             {/* Data View: Desktop Table */}
-            <div className="desktop-only card-shadow" style={{ overflow: 'hidden' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
-                    <thead>
-                        <tr style={{ backgroundColor: '#fcfcfc', borderBottom: '1px solid #f1f5f9' }}>
+            <div className="admin-list-layout desktop-only">
+                <div className="mgmt-table admin-table-card card-shadow" style={{ background: '#fff' }}>
+                    <div className="admin-table-scroll">
+                        <table className="manufacture-table data-table">
+                            <thead>
+                        <tr>
                             {['STT', 'KHSX', 'Đơn hàng', 'Sản phẩm', 'SL', 'Trạng thái'].map(header => (
-                                <th key={header} style={{ padding: '0.75rem 0.5rem', textAlign: 'left', color: '#64748b', fontWeight: '700', fontSize: '0.75rem', textTransform: 'uppercase' }}>{header}</th>
+                                <th key={header}>{header}</th>
                             ))}
                         </tr>
                     </thead>
@@ -370,19 +444,13 @@ const ManufacturePlan = () => {
                             return (
                                 <tr 
                                     key={plan.id}
-                                    className="plan-row-hover"
+                                    className="plan-row-hover animate-card-entrance"
                                     onClick={() => navigate(`/manufacture/plan/${plan.id}`)}
-                                    style={{ 
-                                        cursor: 'pointer', 
-                                        backgroundColor: 'white', 
-                                        borderBottom: '1px solid #e2e8f0',
-                                        transition: 'background-color 0.2s'
-                                    }}
                                 >
-                                    <td style={{ padding: '1rem 0.5rem', textAlign: 'center', color: '#94a3b8' }}>
+                                    <td style={{ textAlign: 'center', color: '#94a3b8' }}>
                                         {index + 1}
                                     </td>
-                                    <td style={{ padding: '1rem 0.5rem' }}>
+                                    <td>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                             <div style={{ color: '#5d3b32' }}>
                                                 <FileText size={18} />
@@ -390,16 +458,16 @@ const ManufacturePlan = () => {
                                             <span style={{ fontWeight: '800', color: '#1e293b', fontSize: '0.95rem' }}>{plan.name}</span>
                                         </div>
                                     </td>
-                                    <td style={{ padding: '1rem 0.5rem', color: '#64748b', fontWeight: '600' }}>
+                                    <td style={{ color: '#64748b', fontWeight: '600' }}>
                                         {plan.orders?.length || 0} Đơn hàng
                                     </td>
-                                    <td style={{ padding: '1rem 0.5rem', color: '#64748b' }}>
+                                    <td style={{ color: '#64748b' }}>
                                         {totalProducts} Sản phẩm
                                     </td>
-                                    <td style={{ padding: '1rem 0.5rem', fontWeight: '700', color: '#1e293b' }}>
+                                    <td style={{ fontWeight: '700', color: '#1e293b' }}>
                                         {plan.orders?.reduce((acc, o) => acc + o.products?.reduce((pAcc, p) => pAcc + (p.quantity || 0), 0), 0) || 0}
                                     </td>
-                                    <td style={{ padding: '1rem 0.5rem' }}>
+                                    <td>
                                         <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '0.7rem', fontWeight: '700', backgroundColor: getStatusStyle(plan).bg, color: getStatusStyle(plan).color, border: getStatusStyle(plan).border }}>{getStatusStyle(plan).text}</span>
                                     </td>
                                 </tr>
@@ -414,67 +482,75 @@ const ManufacturePlan = () => {
                         )}
                     </tbody>
                 </table>
+                </div>
 
                 {/* Footer Section */}
-                <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fcfcfc' }}>
-                    <div>
-                        <span style={{ fontWeight: '600', color: '#1e293b' }}>Tổng cộng ({filteredPlans.length} Kế hoạch)</span>
-                        <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#64748b' }}>Trang 1 trên {Math.max(1, Math.ceil(filteredPlans.length / 50))}</p>
+                <div className="admin-pagination-desktop">
+                    <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
+                        Tổng cộng <b>{filteredPlans.length}</b> Kế hoạch
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <button style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', background: 'white', fontSize: '0.85rem', color: '#94a3b8' }}>Trước</button>
-                        <button style={{ width: '32px', height: '32px', borderRadius: '6px', backgroundColor: '#5d3b32', color: 'white', border: 'none', fontSize: '0.85rem', fontWeight: '700' }}>1</button>
-                        <button style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', background: 'white', fontSize: '0.85rem', color: '#475569', fontWeight: '500' }}>Tiếp</button>
+                    <div style={{ display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+                        <button 
+                            className="page-btn"
+                            disabled={true}
+                        >
+                            &lt; Trước
+                        </button>
+                        <button className="page-btn active">
+                            1
+                        </button>
+                        <button 
+                            className="page-btn"
+                            disabled={true}
+                        >
+                            Sau &gt;
+                        </button>
                     </div>
                 </div>
             </div>
-
-            {/* Mobile Cards View */}
-            <div className="mobile-only manufacture-cards-container">
-                {filteredPlans.map((plan) => (
-                    <div key={plan.id} className="plan-mobile-card card-shadow">
-                        <div className="card-header">
-                            <span className="card-khsx">{plan.name}</span>
-                            <span className="status-badge" style={{
-                                backgroundColor: getStatusStyle(plan).bg,
-                                color: getStatusStyle(plan).color,
-                                border: getStatusStyle(plan).border
-                            }}>
-                                {getStatusStyle(plan).text}
-                            </span>
-                        </div>
-                        <div className="card-body">
-                            <div className="info-row">
-                                <span className="label">Đơn hàng:</span>
-                                <span className="value">{plan.orders?.length || 0} lệnh</span>
-                            </div>
-                            <div className="info-row">
-                                <span className="label">Sản phẩm:</span>
-                                <span className="value">
-                                    {plan.orders?.reduce((acc, o) => acc + (o.products?.length || 0), 0) || 0} loại
-                                </span>
-                            </div>
-                            <div className="info-row highlight">
-                                <span className="label">Ngày hoàn thành:</span>
-                                <span className="value">{plan.finished_date ? new Date(plan.finished_date).toLocaleDateString() : 'Chưa định'}</span>
-                            </div>
-                        </div>
-                        <div className="card-footer">
-                            <button className="btn-card-action" onClick={() => navigate(`/manufacture/plan/${plan.id}`)}>
-                                Chi tiết Kế hoạch
-                            </button>
-                        </div>
-                    </div>
-                ))}
-                {filteredPlans.length === 0 && (
-                    <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
-                        Không có kế hoạch nào.
-                    </div>
-                )}
             </div>
 
-            {/* Gỡ bỏ Progress Overlay tại chỗ */}
+            {/* Mobile Cards View - scrollable */}
+            <div className="mobile-only manufacture-cards-scroll">
+                <div className="manufacture-cards-container">
+                    {paginatedPlans.map((plan) => {
+                        const detailedStatus = getDetailedStatus(plan);
+                        return (
+                            <div key={plan.id} className={`plan-mobile-card status-${detailedStatus} animate-card-entrance`} onClick={() => setPopupPlan(plan)}>
+                                <div className="card-header">
+                                    <span className="card-khsx">{plan.name}</span>
+                                    <span className="status-badge" style={{ backgroundColor: getStatusStyle(plan).bg, color: getStatusStyle(plan).color, border: getStatusStyle(plan).border }}>
+                                        {getStatusStyle(plan).text}
+                                    </span>
+                                </div>
+                                <div style={{ display: 'flex', gap: '12px', marginTop: '8px', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '0.8rem', color: '#64748b', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                        <Package size={14} color="#8D6E63" /> {plan.orders?.length || 0} đơn
+                                    </span>
+                                    <span style={{ fontSize: '0.8rem', color: '#64748b', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                        <ShoppingBag size={14} color="#8D6E63" /> {plan.orders?.reduce((a,o)=>a+(o.products?.length||0),0)||0} loại
+                                    </span>
+                                    <span style={{ fontSize: '0.8rem', color: '#64748b', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                        <Calendar RefreshCw size={14} color="#8D6E63" /> {plan.finished_date ? new Date(plan.finished_date).toLocaleDateString('vi-VN') : '---'}
+                                    </span>
+                                </div>
+                                <div style={{ marginTop: '8px', fontSize: '0.75rem', color: '#94a3b8', textAlign: 'right' }}>Nhấn để xem chi tiết ›</div>
+                            </div>
+                        );
+                    })}
+                    {filteredPlans.length === 0 && (
+                        <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>Không có kế hoạch nào.</div>
+                    )}
+                </div>
+            </div>
+
+            {/* Mobile Sticky Pagination - Always visible */}
+            <div className="pagination-mobile-sticky">
+                <button className="page-btn" onClick={() => setCurrentPage(p => Math.max(p-1,1))} disabled={currentPage===1}>‹</button>
+                <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#7B5233' }}>Trang {currentPage} / {totalPages || 1}</span>
+                <button className="page-btn" onClick={() => setCurrentPage(p => Math.min(p+1,totalPages))} disabled={currentPage===totalPages || totalPages <= 1}>›</button>
+            </div>
         </div>
     );
 };

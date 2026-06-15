@@ -21,7 +21,7 @@ const TreeNode = ({ node }) => {
     return (
         <div className="tree-node-wrapper">
             <div className={`stage-item ${node.status === 'Hoàn thành' ? 'completed' : ''} ${node.status === 'Đang thực hiện' ? 'in-progress' : ''}`}>
-                <div className="stage-content-wrapper" style={{ paddingLeft: `${node.level * 24}px` }}>
+                <div className="stage-content-wrapper" style={{ paddingLeft: `calc(${node.level} * var(--indent-gap, 24px))` }}>
                     <div className="stage-left">
                         <div className="toggle-control-wood">
                             {hasChildren ? (
@@ -114,27 +114,14 @@ const ProductionProgress = () => {
 
     return (
         <div className="production-progress-page">
-            {/* Header Info Cards - Chuẩn hóa đồng bộ */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '30px' }}>
+               <div className="progress-stats-grid">
                 {[
                     { label: 'KẾ HOẠCH', value: productData.khsx || "---", bg: '#F5F5F5', color: '#424242' },
                     { label: 'MÃ SẢN PHẨM', value: productData.sku || "---", bg: '#F5F5F5', color: '#424242' },
                     { label: 'TỔNG SỐ LƯỢNG SP', value: `${productData.totalQty} Bộ/Cái`, bg: '#F5F5F5', color: '#424242' },
                     { label: 'THỜI HẠN TỔNG', value: productData.deadline || "30/06/2026", bg: '#FFF3E0', color: '#E65100' },
                 ].map((stat, i) => (
-                    <div key={i} style={{ 
-                        background: stat.bg, 
-                        padding: '16px 15px', 
-                        borderRadius: '12px', 
-                        display: 'flex', 
-                        flexDirection: 'column', 
-                        alignItems: 'center', 
-                        justifyContent: 'center',
-                        textAlign: 'center',
-                        minHeight: '80px',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
-                        border: '1px solid rgba(0,0,0,0.05)'
-                    }}>
+                    <div key={i} className="progress-stat-card" style={{ background: stat.bg }}>
                         <p style={{ margin: '0 0 6px 0', fontSize: '11px', fontWeight: '700', color: '#757575', letterSpacing: '0.5px' }}>{stat.label}</p>
                         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: stat.color }}>{stat.value}</h3>
                     </div>
@@ -196,6 +183,24 @@ const ProductionProgress = () => {
     background: #FAF9F8;
     min-height: calc(100vh - 64px);
     font-family: 'Inter', sans-serif;
+}
+.progress-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    margin-bottom: 30px;
+}
+.progress-stat-card {
+    padding: 16px 15px;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    min-height: 80px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    border: 1px solid rgba(0,0,0,0.05);
 }
 .btn-back-wood {
     display: flex;
@@ -496,6 +501,54 @@ const ProductionProgress = () => {
     align-items: center;
     justify-content: center;
     height: 400px;
+}
+
+@media (max-width: 768px) {
+    .production-progress-page {
+        padding: 12px;
+    }
+    .progress-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+    .progress-stat-card {
+        padding: 12px 10px;
+        min-height: 60px;
+    }
+    .progress-stat-card h3 {
+        font-size: 15px !important;
+    }
+    .progress-body-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    .progress-summary-card {
+        padding: 16px;
+        border-radius: 12px;
+    }
+    .stage-content-wrapper {
+        padding: 12px;
+        --indent-gap: 12px;
+    }
+    .stage-left {
+        gap: 6px;
+    }
+    .stage-icon {
+        width: 28px;
+        height: 28px;
+    }
+    .stage-info h4 {
+        font-size: 13px;
+    }
+    .stage-sku {
+        margin-left: 4px;
+        font-size: 9px;
+    }
+    .status-tag-wood {
+        padding: 2px 8px;
+        font-size: 8px;
+    }
 }
             `}} />
         </div>

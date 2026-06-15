@@ -27,7 +27,7 @@ const QualityRecordsListView = () => {
     
     // State cho phân trang
     const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage] = useState(20);
+    const [itemsPerPage, setItemsPerPage] = useState(15);   
 
     // Cập nhật Title và Subtitle lên Header
     useEffect(() => {
@@ -116,17 +116,16 @@ const QualityRecordsListView = () => {
             <style dangerouslySetInnerHTML={{ __html: `
                 .quality-records-container {
                     width: 100%;
-                    padding-top: 160px; /* Mobile toolbar space */
-                    padding-bottom: 80px; /* Mobile pagination space */
+                    padding: 10px;
                     display: flex;
                     flex-direction: column;
+                    box-sizing: border-box;
                 }
                 
                 @media (min-width: 1024px) {
                     .quality-records-container {
                         height: calc(100vh - 100px); /* Fit within desktop viewport */
-                        padding-top: 0;
-                        padding-bottom: 0;
+                        padding: 0;
                         overflow: hidden;
                     }
                 }
@@ -140,7 +139,7 @@ const QualityRecordsListView = () => {
                 @media (max-width: 1023px) {
                     .qr-grid-scroll-area {
                         overflow-y: visible;
-                        padding: 1.5rem 0; /* Add top margin for mobile gap */
+                        padding: 0.5rem 0; /* Add top margin for mobile gap */
                     }
                 }
                 .qr-grid {
@@ -156,19 +155,17 @@ const QualityRecordsListView = () => {
 
                 .qr-toolbar {
                     padding: 0.75rem 1rem;
-                    margin-bottom: 2rem;
+                    margin-bottom: 0.75rem;
                     background-color: #fff;
                     border-radius: 12px;
                     border: 1px solid #EADCC9;
                     display: flex;
                     flex-direction: column;
                     gap: 1rem;
-                    position: fixed;
-                    top: 70px;
-                    left: 0;
-                    right: 0;
-                    z-index: 50;
-                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+                    position: sticky;
+                    top: 60px;
+                    z-index: 100;
+                    box-shadow: 0 4px 12px rgba(123, 82, 51, 0.08);
                 }
                 @media (min-width: 1024px) {
                     .qr-toolbar {
@@ -198,13 +195,25 @@ const QualityRecordsListView = () => {
                     flex-direction: column;
                     gap: 12px;
                     width: 100%;
-                    overflow: hidden;
                 }
                 @media (min-width: 1024px) {
                     .qr-controls {
                         flex-direction: row;
                         align-items: center;
                         width: auto;
+                    }
+                }
+                
+                .qr-mobile-row {
+                    display: flex;
+                    gap: 8px;
+                    width: 100%;
+                    align-items: center;
+                }
+                @media (min-width: 1024px) {
+                    .qr-mobile-row {
+                        width: auto;
+                        gap: 12px;
                     }
                 }
 
@@ -257,12 +266,11 @@ const QualityRecordsListView = () => {
                     flex-direction: column;
                     align-items: center;
                     gap: 0.5rem;
-                    position: fixed;
+                    position: sticky;
                     bottom: 0;
-                    left: 0;
-                    right: 0;
-                    z-index: 50;
-                    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);
+                    z-index: 100;
+                    box-shadow: 0 -4px 12px rgba(123, 82, 51, 0.08);
+                    margin-top: 1.5rem;
                 }
                 @media (min-width: 1024px) {
                     .qr-pagination-container {
@@ -288,108 +296,147 @@ const QualityRecordsListView = () => {
 
             {/* Toolbar & Filters */}
             <div className="qr-toolbar card-shadow">
-                <div className="qr-controls">
-                    {/* KHSX Selection Filter */}
-                    <div style={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: '100%', overflow: 'hidden' }}>
-                        <select
-                            className="qr-khsx-select"
-                            value={selectedPlanId}
-                            onChange={handlePlanChange}
-                            style={{
-                                padding: '6px 28px 6px 10px',
-                                borderRadius: '8px',
-                                border: '1px solid #EADCC9',
-                                backgroundColor: '#FAF6F0',
-                                fontSize: '0.8rem',
-                                color: '#7B5233',
-                                fontWeight: '700',
-                                cursor: 'pointer',
-                                appearance: 'none',
-                                height: '36px',
-                                maxWidth: '100%',
-                                width: '100%',
-                                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%237B5233'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-                                backgroundRepeat: 'no-repeat',
-                                backgroundPosition: 'right 8px center',
-                                backgroundSize: '14px'
-                            }}
+                <div className="qr-controls" style={{ flex: 1 }}>
+                    {/* Row 1: KHSX Selection Filter (Full width on mobile) */}
+                    <div className="qr-mobile-row">
+                        <div style={{ display: 'flex', alignItems: 'center', flex: 1, overflow: 'hidden' }}>
+                            <select
+                                className="qr-khsx-select"
+                                value={selectedPlanId}
+                                onChange={handlePlanChange}
+                                style={{
+                                    padding: '6px 28px 6px 10px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #EADCC9',
+                                    backgroundColor: '#FAF6F0',
+                                    fontSize: '0.8rem',
+                                    color: '#7B5233',
+                                    fontWeight: '700',
+                                    cursor: 'pointer',
+                                    appearance: 'none',
+                                    height: '36px',
+                                    width: '100%',
+                                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%237B5233'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                                    backgroundRepeat: 'no-repeat',
+                                    backgroundPosition: 'right 8px center',
+                                    backgroundSize: '14px'
+                                }}
+                            >
+                                {plans.length > 0 ? plans.map(p => (
+                                    <option key={p.id} value={p.id}>
+                                        {p.name || `KHSX T${p.month} - ${p.year}`}
+                                    </option>
+                                )) : <option value="">Đang tải kế hoạch...</option>}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="desktop-only" style={{ width: '1px', height: '20px', backgroundColor: '#EADCC9' }}></div>
+
+                    {/* Row 2: Status Filter + Items Per Page */}
+                    <div className="qr-mobile-row">
+                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flex: 1 }}>
+                            <Filter size={14} color="#7B5233" style={{ position: 'absolute', left: '10px', pointerEvents: 'none' }} />
+                            <select
+                                value={statusFilter}
+                                onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+                                style={{
+                                    padding: '6px 10px 6px 30px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #EADCC9',
+                                    backgroundColor: '#FAF6F0',
+                                    fontSize: '0.8rem',
+                                    color: '#7B5233',
+                                    fontWeight: '600',
+                                    cursor: 'pointer',
+                                    outline: 'none',
+                                    height: '36px',
+                                    width: '100%'
+                                }}
+                            >
+                                <option value="all">Tất cả hồ sơ</option>
+                                <option value="has_data">Đã có bàn giao/dữ liệu</option>
+                                <option value="no_data">Chưa có dữ liệu</option>
+                            </select>
+                        </div>
+
+                        <select 
+                            value={itemsPerPage} 
+                            onChange={(e) => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
+                            className="page-size-select"
+                            style={{ height: '36px' }}
                         >
-                            {plans.length > 0 ? plans.map(p => (
-                                <option key={p.id} value={p.id}>
-                                    {p.name || `KHSX T${p.month} - ${p.year}`}
-                                </option>
-                            )) : <option value="">Đang tải kế hoạch...</option>}
+                            <option value={15}>15 dòng</option>
+                            <option value={30}>30 dòng</option>
+                            <option value={50}>50 dòng</option>
+                            <option value={100}>100 dòng</option>
                         </select>
                     </div>
 
                     <div className="desktop-only" style={{ width: '1px', height: '20px', backgroundColor: '#EADCC9' }}></div>
 
-                    {/* Bộ lọc trạng thái dữ liệu */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Filter size={16} color="#7B5233" />
-                        <select
-                            value={statusFilter}
-                            onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
-                            style={{
-                                padding: '6px 10px',
-                                borderRadius: '8px',
-                                border: '1px solid #EADCC9',
-                                backgroundColor: '#FAF6F0',
-                                fontSize: '0.8rem',
+                    {/* Row 3: Search Input + Export Button (Mobile only) */}
+                    <div className="qr-mobile-row">
+                        <div className="qr-search-wrapper" style={{ flex: 1 }}>
+                            <Search size={16} style={{ 
+                                position: 'absolute', 
+                                left: '12px', 
                                 color: '#7B5233',
-                                fontWeight: '600',
-                                cursor: 'pointer',
-                                outline: 'none'
-                            }}
+                                pointerEvents: 'none'
+                            }} />
+                            <input 
+                                type="text" 
+                                placeholder="Tìm kiếm theo Mã PO..." 
+                                value={searchTerm} 
+                                onChange={e => {setSearchTerm(e.target.value); setCurrentPage(1);}}
+                                style={{ 
+                                    padding: '8px 12px 8px 36px', 
+                                    borderRadius: '10px', 
+                                    border: '1px solid #EADCC9', 
+                                    backgroundColor: '#FAF6F0', 
+                                    fontSize: '0.85rem', 
+                                    width: '100%',
+                                    transition: 'all 0.2s ease',
+                                    outline: 'none',
+                                    color: '#5D3B32',
+                                    fontWeight: '600',
+                                    height: '36px'
+                                }}
+                                onFocus={(e) => {
+                                    e.target.style.backgroundColor = '#fff';
+                                    e.target.style.borderColor = '#7B5233';
+                                    e.target.style.boxShadow = '0 0 0 3px rgba(123, 82, 51, 0.1)';
+                                }}
+                                onBlur={(e) => {
+                                    e.target.style.backgroundColor = '#FAF6F0';
+                                    e.target.style.borderColor = '#EADCC9';
+                                    e.target.style.boxShadow = 'none';
+                                }}
+                            />
+                        </div>
+
+                        <button className="btn qr-export-btn mobile-only" style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            width: '40px',
+                            height: '36px',
+                            padding: 0,
+                            borderRadius: '8px', 
+                            border: '1px solid #EADCC9', 
+                            background: '#fff', 
+                            color: '#7B5233', 
+                            cursor: 'pointer',
+                        }}
+                        title="Xuất báo cáo"
                         >
-                            <option value="all">Tất cả hồ sơ</option>
-                            <option value="has_data">Đã có bàn giao/dữ liệu</option>
-                            <option value="no_data">Chưa có dữ liệu</option>
-                        </select>
-                    </div>
-
-                    <div className="desktop-only" style={{ width: '1px', height: '20px', backgroundColor: '#EADCC9' }}></div>
-
-                    {/* Beautiful Search Input (Focus on order_code) */}
-                    <div className="qr-search-wrapper">
-                        <Search size={16} style={{ 
-                            position: 'absolute', 
-                            left: '12px', 
-                            color: '#7B5233',
-                            pointerEvents: 'none'
-                        }} />
-                        <input 
-                            type="text" 
-                            placeholder="Tìm kiếm theo Mã PO (#APT...)" 
-                            value={searchTerm} 
-                            onChange={e => {setSearchTerm(e.target.value); setCurrentPage(1);}}
-                            style={{ 
-                                padding: '8px 12px 8px 36px', 
-                                borderRadius: '10px', 
-                                border: '1px solid #EADCC9', 
-                                backgroundColor: '#FAF6F0', 
-                                fontSize: '0.85rem', 
-                                width: '100%',
-                                transition: 'all 0.2s ease',
-                                outline: 'none',
-                                color: '#5D3B32',
-                                fontWeight: '600'
-                            }}
-                            onFocus={(e) => {
-                                e.target.style.backgroundColor = '#fff';
-                                e.target.style.borderColor = '#7B5233';
-                                e.target.style.boxShadow = '0 0 0 3px rgba(123, 82, 51, 0.1)';
-                            }}
-                            onBlur={(e) => {
-                                e.target.style.backgroundColor = '#FAF6F0';
-                                e.target.style.borderColor = '#EADCC9';
-                                e.target.style.boxShadow = 'none';
-                            }}
-                        />
+                            <FileDown size={18} />
+                        </button>
                     </div>
                 </div>
+
                 
-                <button className="btn qr-export-btn" style={{ 
+                <button className="btn qr-export-btn desktop-only" style={{ 
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center',
@@ -530,8 +577,8 @@ const QualityRecordsListView = () => {
             </div>
             </div>
 
-            {/* Pagination Container */}
-            <div className="qr-pagination-container card-shadow">
+            {/* Pagination Container - Desktop */}
+            <div className="qr-pagination-container card-shadow desktop-only">
                     <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600', textAlign: 'center' }}>
                         Hiển thị <b>{currentOrders.length}</b> trên <b>{filteredOrders.length}</b> hồ sơ
                     </div>
@@ -598,9 +645,22 @@ const QualityRecordsListView = () => {
                             >
                                 <ChevronRight size={14} />
                             </button>
+                        </div>
+                    )}
+            </div>
+
+            {/* Phân trang - Mobile Sticky */}
+            {totalPages > 1 && (
+                <div className="pagination-mobile-sticky mobile-only">
+                    <button className="page-btn" onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>
+                        <ChevronLeft size={16} />
+                    </button>
+                    <span style={{ fontWeight: '700', fontSize: '0.9rem', color: '#7B5233' }}>Trang {currentPage} / {totalPages || 1}</span>
+                    <button className="page-btn" onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages || totalPages <= 1}>
+                        <ChevronRight size={16} />
+                    </button>
                 </div>
             )}
-        </div>
     </div>
 );
 };

@@ -4,12 +4,12 @@ import { API_ROOT } from '@webShared/Services/api.service';
 import { 
     Search, Filter, Download, MoreHorizontal, 
     FileText, CheckCircle, Clock, AlertTriangle,
-    ArrowUpRight, ArrowDownRight, ChevronRight,
-    ChevronDown, RefreshCw, X, User, Calendar, 
+    ArrowUpRight, ArrowDownRight, ChevronLeft, ChevronRight,
+    ChevronDown, X, User, Calendar, 
     MapPin, Activity, CheckCircle2, AlertCircle, 
     Undo2, Droplet, Maximize2, FileSpreadsheet, Layers, Info
 } from 'lucide-react';
-
+import '@styles/components.css';
 
 const DeliveryTracking = () => {
     const [deliveries, setDeliveries] = useState([]);
@@ -21,7 +21,13 @@ const DeliveryTracking = () => {
         error: 0
     });
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 50;
+    const [itemsPerPage, setItemsPerPage] = useState(15);
+
+    // Search and filter states
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterStatus, setFilterStatus] = useState('all');
+    const [selectedDeliveryStage, setSelectedDeliveryStage] = useState('all');
+    const [selectedReceivingStage, setSelectedReceivingStage] = useState('all');
 
     // State for Details Modal
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -125,234 +131,332 @@ const DeliveryTracking = () => {
         return '#FFFFFF';
     };
 
+    const deliveryStages = ['all', ...new Set(deliveries.map(d => d.delivery_stage).filter(Boolean))];
+    const receivingStages = ['all', ...new Set(deliveries.map(d => d.receiving_stage).filter(Boolean))];
+
+    const filteredDeliveries = deliveries.filter(row => {
+        // 1. Status Filter
+        if (filterStatus !== 'all') {
+            const statusInfo = getStatusStyle(row.status);
+            if (filterStatus === 'completed' && statusInfo.label !== 'HOÀN THÀNH') return false;
+            if (filterStatus === 'pending' && statusInfo.label !== 'CHỜ NHẬN') return false;
+            if (filterStatus === 'error' && statusInfo.label !== 'LỖI/TRẢ') return false;
+        }
+
+        // 2. Delivery Stage Filter
+        if (selectedDeliveryStage !== 'all' && row.delivery_stage !== selectedDeliveryStage) return false;
+
+        // 3. Receiving Stage Filter
+        if (selectedReceivingStage !== 'all' && row.receiving_stage !== selectedReceivingStage) return false;
+
+        // 4. Search Term Filter
+        if (searchTerm.trim() !== '') {
+            const term = searchTerm.toLowerCase();
+            const matchId = `bg-${row.id}`.toLowerCase().includes(term);
+            const matchPartName = (row.part_name || '').toLowerCase().includes(term);
+            const matchStageIn = (row.delivery_stage || '').toLowerCase().includes(term);
+            const matchStageOut = (row.receiving_stage || '').toLowerCase().includes(term);
+            const matchSender = (row.sx_delivery_name || '').toLowerCase().includes(term);
+            const matchReceiver = (row.sx_receipt_name || '').toLowerCase().includes(term);
+            
+            return matchId || matchPartName || matchStageIn || matchStageOut || matchSender || matchReceiver;
+        }
+
+        return true;
+    });
+
 
     return (
-        <div style={{ padding: '20px', background: '#FAF9F8', minHeight: '100vh' }}>
-            {/* Filter Bar - Cập nhật Action */}
-            <div style={{ 
-                background: 'white', 
-                padding: '12px 20px', 
-                borderRadius: '16px', 
-                marginBottom: '24px', 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '15px',
-                boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
-                border: '1px solid #F0F0F0'
-            }}>
-                <div style={{ position: 'relative', flex: 1, maxWidth: '200px' }}>
-                    <select style={{ width: '100%', padding: '10px 15px', borderRadius: '12px', border: '1px solid #EFEBE9', background: '#FFFFFF', fontSize: '13px', fontWeight: '800', color: '#3E2723', outline: 'none', appearance: 'none' }}>
-                        <option>KHSX</option>
-                    </select>
-                    <ChevronDown size={14} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#8D6E63', pointerEvents: 'none' }} />
+        <div className="manufacture-plan-container">
+            
+            {/* ── STICKY TOP ZONE (Desktop: filters + stats-grid; Mobile: stats-strip + filters) ── */}
+            <div className="sticky-top-zone">
+                {/* Desktop/Mobile Toolbar filters */}
+                <div className="mgmt-toolbar card" style={{ width: '100%', marginBottom: 0 }}>
+                    <div className="toolbar-left" style={{ flex: 1 }}>
+                        <div className="search-wrapper">
+                            <Search size={16} className="search-icon" />
+                            <input 
+                                type="text" 
+                                placeholder="Tìm kiếm phiếu, chi tiết..." 
+                                value={searchTerm}
+                                onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                                style={{ width: '100%', padding: '10px 14px 10px 42px', borderRadius: '8px', border: '1px solid #EFEBE9', fontSize: '13px', outline: 'none' }}
+                            />
+                        </div>
+
+                        <select 
+                            value={itemsPerPage} 
+                            onChange={(e) => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
+                            className="page-size-select"
+                        >
+                            <option value={15}>15 dòng</option>
+                            <option value={30}>30 dòng</option>
+                            <option value={50}>50 dòng</option>
+                            <option value={100}>100 dòng</option>
+                        </select>
+                    </div>
+
+                    {/* Tạm ẩn bộ lọc chặng theo yêu cầu */}
+                    {/* <div className="toolbar-right desktop-only">
+                        <div style={{ position: 'relative', minWidth: '160px' }}>
+                            <select 
+                                value={selectedDeliveryStage} 
+                                onChange={(e) => { setSelectedDeliveryStage(e.target.value); setCurrentPage(1); }}
+                                style={{ width: '100%', padding: '10px 30px 10px 15px', borderRadius: '12px', border: '1px solid #EFEBE9', background: '#FFFFFF', fontSize: '13px', fontWeight: '800', color: '#3E2723', outline: 'none', appearance: 'none', cursor: 'pointer' }}
+                            >
+                                <option value="all">Chặng giao (Tất cả)</option>
+                                {deliveryStages.filter(s => s !== 'all').map(s => (
+                                    <option key={s} value={s}>{s}</option>
+                                ))}
+                            </select>
+                            <ChevronDown size={14} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#8D6E63', pointerEvents: 'none' }} />
+                        </div>
+
+                        <div style={{ position: 'relative', minWidth: '160px' }}>
+                            <select 
+                                value={selectedReceivingStage} 
+                                onChange={(e) => { setSelectedReceivingStage(e.target.value); setCurrentPage(1); }}
+                                style={{ width: '100%', padding: '10px 30px 10px 15px', borderRadius: '12px', border: '1px solid #EFEBE9', background: '#FFFFFF', fontSize: '13px', fontWeight: '800', color: '#3E2723', outline: 'none', appearance: 'none', cursor: 'pointer' }}
+                            >
+                                <option value="all">Chặng nhận (Tất cả)</option>
+                                {receivingStages.filter(s => s !== 'all').map(s => (
+                                    <option key={s} value={s}>{s}</option>
+                                ))}
+                            </select>
+                            <ChevronDown size={14} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#8D6E63', pointerEvents: 'none' }} />
+                        </div>
+                    </div> */}
                 </div>
-                <div style={{ position: 'relative', flex: 1, maxWidth: '200px' }}>
-                    <select style={{ width: '100%', padding: '10px 15px', borderRadius: '12px', border: '1px solid #EFEBE9', background: '#FFFFFF', fontSize: '13px', fontWeight: '800', color: '#3E2723', outline: 'none', appearance: 'none' }}>
-                        <option>Công đoạn giao</option>
-                    </select>
-                    <ChevronDown size={14} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#8D6E63', pointerEvents: 'none' }} />
+
+                {/* Desktop Stats Grid */}
+                <div className="stats-grid animate-card-entrance desktop-only" style={{ marginTop: '16px' }}>
+                    {[
+                        { id: 'all', label: 'TỔNG SỐ PHIẾU', value: `${stats.total} Phiếu`, sub: 'Cập nhật thời gian thực', bg: '#F5F5F5', color: '#424242' },
+                        { id: 'completed', label: 'ĐÃ HOÀN THÀNH', value: stats.completed, sub: `${stats.total > 0 ? Math.round((stats.completed/stats.total)*100) : 0}% tổng số`, bg: '#E8F5E9', color: '#2E7D32' },
+                        { id: 'pending', label: 'ĐANG CHỜ NHẬN', value: stats.pending, sub: 'Cần xác nhận', bg: '#FFF3E0', color: '#E65100' },
+                        { id: 'error', label: 'PHIẾU LỖI/TRẢ', value: stats.error, sub: 'Cần xử lý gấp', bg: '#FFEBEE', color: '#C62828' },
+                    ].map((stat, i) => {
+                        const isActive = filterStatus === stat.id;
+                        return (
+                            <div 
+                                key={i} 
+                                className={`stat-card ${isActive ? 'active' : ''}`} 
+                                style={{ 
+                                    background: isActive ? stat.color : stat.bg, 
+                                    color: isActive ? '#fff' : '#1e293b',
+                                    boxShadow: isActive ? '0 4px 12px rgba(123, 82, 51, 0.15)' : '0 2px 4px rgba(0,0,0,0.02)',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                    border: isActive ? `1px solid ${stat.color}` : '1px solid transparent'
+                                }}
+                                onClick={() => { setFilterStatus(stat.id); setCurrentPage(1); }}
+                            >
+                                <p className="stat-title" style={{ color: isActive ? 'rgba(255,255,255,0.85)' : '#64748b' }}>{stat.label}</p>
+                                <h3 className="stat-value" style={{ color: isActive ? '#fff' : stat.color }}>{stat.value}</h3>
+                                <p style={{ margin: 0, fontSize: '11px', color: isActive ? 'rgba(255,255,255,0.7)' : '#9E9E9E', fontWeight: '500' }}>{stat.sub}</p>
+                            </div>
+                        );
+                    })}
                 </div>
-                <div style={{ position: 'relative', flex: 1, maxWidth: '200px' }}>
-                    <select style={{ width: '100%', padding: '10px 15px', borderRadius: '12px', border: '1px solid #EFEBE9', background: '#FFFFFF', fontSize: '13px', fontWeight: '800', color: '#3E2723', outline: 'none', appearance: 'none' }}>
-                        <option>Công đoạn nhận</option>
-                    </select>
-                    <ChevronDown size={14} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#8D6E63', pointerEvents: 'none' }} />
+
+                {/* Mobile Stats Strip */}
+                <div className="stats-strip mobile-only">
+                    {[
+                        { id: 'all', label: 'TỔNG PHIẾU', value: stats.total, color: '#424242' },
+                        { id: 'completed', label: 'HOÀN THÀNH', value: stats.completed, color: '#2E7D32' },
+                        { id: 'pending', label: 'CHỜ NHẬN', value: stats.pending, color: '#E65100' },
+                        { id: 'error', label: 'LỖI/TRẢ', value: stats.error, color: '#C62828' }
+                    ].map((stat, idx) => {
+                        const isActive = filterStatus === stat.id;
+                        return (
+                            <div 
+                                key={idx} 
+                                className={`stats-strip-item ${isActive ? 'active' : ''}`}
+                                style={{ 
+                                    backgroundColor: isActive ? stat.color : '#fff',
+                                    cursor: 'pointer'
+                                }}
+                                onClick={() => { setFilterStatus(stat.id); setCurrentPage(1); }}
+                            >
+                                <span className="strip-value" style={{ color: isActive ? '#fff' : stat.color }}>
+                                    {stat.value}
+                                </span>
+                                <span className="strip-label" style={{ color: isActive ? 'rgba(255,255,255,0.9)' : '#8D6E63' }}>
+                                    {stat.label}
+                                </span>
+                            </div>
+                        );
+                    })}
                 </div>
-                <div style={{ position: 'relative', flex: 1, maxWidth: '200px' }}>
-                    <select style={{ width: '100%', padding: '10px 15px', borderRadius: '12px', border: '1px solid #EFEBE9', background: '#FFFFFF', fontSize: '13px', fontWeight: '800', color: '#3E2723', outline: 'none', appearance: 'none' }}>
-                        <option>Thời gian</option>
-                    </select>
-                    <ChevronDown size={14} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#8D6E63', pointerEvents: 'none' }} />
+            </div>
+
+            {/* Desktop list block */}
+            <div className="admin-list-layout desktop-only">
+                <div className="mgmt-table admin-table-card card-shadow" style={{ background: 'white' }}>
+                    <div className="admin-table-scroll">
+                        <table className="manufacture-table">
+                            <thead>
+                                <tr>
+                                    <th style={{ textAlign: 'center' }}>STT</th>
+                                    <th>Mã phiếu</th>
+                                    <th>Tên chi tiết</th>
+                                    <th>Công đoạn vào</th>
+                                    <th>Công đoạn ra</th>
+                                    <th>SL Giao</th>
+                                    <th>SL Nhận</th>
+                                    <th>SL Trả</th>
+                                    <th>Trạng thái</th>
+                                    <th>Thời gian</th>
+                                    <th>Người giao</th>
+                                    <th>Người nhận</th>
+                                    <th>Thao tác</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {loading ? (
+                                    <tr><td colSpan="13" style={{ padding: '50px', textAlign: 'center', color: '#757575' }}>Đang tải dữ liệu...</td></tr>
+                                ) : filteredDeliveries.length === 0 ? (
+                                    <tr><td colSpan="13" style={{ padding: '50px', textAlign: 'center', color: '#757575' }}>Không có dữ liệu bàn giao.</td></tr>
+                                ) : filteredDeliveries.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((row, idx) => {
+                                    const statusInfo = getStatusStyle(row.status);
+                                    return (
+                                        <tr key={row.id} className="animate-card-entrance">
+                                            <td data-label="STT" style={{ textAlign: 'center' }}>{(currentPage - 1) * itemsPerPage + idx + 1}</td>
+                                            <td data-label="Mã phiếu" style={{ fontWeight: '700', color: '#3E2723' }}>BG-{row.id}</td>
+                                            <td data-label="Tên chi tiết" style={{ color: '#424242' }}>{row.part_name || 'N/A'}</td>
+                                            <td data-label="Công đoạn vào">{row.delivery_stage}</td>
+                                            <td data-label="Công đoạn ra">{row.receiving_stage}</td>
+                                            <td data-label="SL Giao" style={{ fontWeight: '800' }}>{row.quantity_total}</td>
+                                            <td data-label="SL Nhận" style={{ fontWeight: '800', color: '#2E7D32' }}>{row.quantity_received}</td>
+                                            <td data-label="SL Trả" style={{ color: row.quantity_returned > 0 ? '#C62828' : '#757575' }}>{row.quantity_returned}</td>
+                                            <td data-label="Trạng thái">
+                                                <span style={{ 
+                                                    padding: '4px 10px', 
+                                                    borderRadius: '20px', 
+                                                    fontSize: '11px', 
+                                                    background: statusInfo.bg, 
+                                                    color: statusInfo.color, 
+                                                    fontWeight: '800' 
+                                                }}>
+                                                    {statusInfo.label}
+                                                </span>
+                                            </td>
+                                            <td data-label="Thời gian" style={{ fontSize: '12px', color: '#757575' }}>
+                                                {row.created_at ? new Date(row.created_at).toLocaleString('vi-VN', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}) : 'N/A'}
+                                            </td>
+                                            <td data-label="Người giao">{row.sx_delivery_name || 'N/A'}</td>
+                                            <td data-label="Người nhận">{row.sx_receipt_name || '---'}</td>
+                                            <td data-label="Thao tác">
+                                                <span 
+                                                    onClick={() => handleOpenDetailModal(row)}
+                                                    style={{ fontSize: '13px', color: '#5D4037', fontWeight: '700', cursor: 'pointer', textDecoration: 'underline' }}
+                                                >
+                                                    Chi tiết
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Pagination */}
+                    <div className="admin-pagination-desktop">
+                        <div style={{ fontSize: '14px', color: '#424242' }}>
+                            Hiển thị <b>{filteredDeliveries.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}-{Math.min(currentPage * itemsPerPage, filteredDeliveries.length)}</b> trên <b>{filteredDeliveries.length}</b> kết quả
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <button 
+                                className="page-btn"
+                                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                disabled={currentPage === 1}
+                            >
+                                &lt; Trước
+                            </button>
+                            <button className="page-btn active">{currentPage}</button>
+                            <button 
+                                className="page-btn"
+                                onClick={() => setCurrentPage(prev => prev + 1)}
+                                disabled={currentPage * itemsPerPage >= filteredDeliveries.length}
+                            >
+                                Sau &gt;
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                <button onClick={fetchData} style={{ background: '#7B5233', border: 'none', borderRadius: '10px', padding: '10px', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+            </div>
+
+            {/* Mobile list view */}
+            <div className="mobile-only manufacture-cards-scroll">
+                <div className="manufacture-cards-container">
+                    {loading ? (
+                        <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>Đang tải dữ liệu...</div>
+                    ) : filteredDeliveries.length === 0 ? (
+                        <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>Không có dữ liệu bàn giao.</div>
+                    ) : (
+                        filteredDeliveries.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((row) => {
+                            const statusInfo = getStatusStyle(row.status);
+                            let cardStatusClass = 'pending';
+                            if (statusInfo.label === 'HOÀN THÀNH') cardStatusClass = 'completed';
+                            else if (statusInfo.label === 'LỖI/TRẢ') cardStatusClass = 'overdue';
+                            
+                            return (
+                                <div 
+                                    key={row.id} 
+                                    className={`plan-mobile-card status-${cardStatusClass} card-shadow animate-card-entrance`} 
+                                    onClick={() => handleOpenDetailModal(row)}
+                                >
+                                    <div className="card-header">
+                                        <span className="card-khsx" style={{ fontWeight: '800' }}>BG-{row.id}</span>
+                                        <span className="status-badge" style={{ backgroundColor: statusInfo.bg, color: statusInfo.color }}>
+                                            {statusInfo.label}
+                                        </span>
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px' }}>
+                                        <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#2D1A12' }}>
+                                            {row.part_name || 'N/A'}
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#64748b', marginTop: '4px' }}>
+                                            <span>Giao: {row.delivery_stage} ({row.quantity_total})</span>
+                                            <span>Nhận: {row.receiving_stage} ({row.quantity_received})</span>
+                                        </div>
+                                        {row.quantity_returned > 0 && (
+                                            <div style={{ fontSize: '0.8rem', color: '#C62828', fontWeight: '700', marginTop: '2px' }}>
+                                                Trả lại: {row.quantity_returned} chiếc
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', borderTop: '1px solid #FAF6F0', paddingTop: '8px' }}>
+                                        <span style={{ fontSize: '0.75rem', color: '#9E9E9E', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                            <Calendar size={12} color="#8D6E63" /> 
+                                            {row.created_at ? new Date(row.created_at).toLocaleDateString('vi-VN') : '---'}
+                                        </span>
+                                        <span style={{ fontSize: '0.75rem', color: '#7B5233', fontWeight: '700' }}>Chi tiết ›</span>
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+            </div>
+
+            {/* Mobile Sticky Pagination */}
+            <div className="pagination-mobile-sticky mobile-only">
+                <button className="page-btn" onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>
+                    <ChevronLeft size={16} />
+                </button>
+                <span style={{ fontWeight: '700', fontSize: '0.9rem', color: '#7B5233' }}>Trang {currentPage} / {Math.ceil(filteredDeliveries.length / itemsPerPage) || 1}</span>
+                <button className="page-btn" onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(filteredDeliveries.length / itemsPerPage)))} disabled={currentPage >= Math.ceil(filteredDeliveries.length / itemsPerPage)}>
+                    <ChevronRight size={16} />
                 </button>
             </div>
 
-
-            {/* Stats Cards - Chuẩn hóa đồng bộ toàn hệ thống */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '30px' }}>
-                {[
-                    { label: 'TỔNG SỐ PHIẾU', value: `${stats.total} Phiếu`, sub: 'Cập nhật thời gian thực', bg: '#F5F5F5', color: '#424242' },
-                    { label: 'ĐÃ HOÀN THÀNH', value: stats.completed, sub: `${stats.total > 0 ? Math.round((stats.completed/stats.total)*100) : 0}% tổng số`, bg: '#E8F5E9', color: '#2E7D32' },
-                    { label: 'ĐANG CHỜ NHẬN', value: stats.pending, sub: 'Cần xác nhận', bg: '#FFF3E0', color: '#E65100' },
-                    { label: 'PHIẾU LỖI/TRẢ', value: stats.error, sub: 'Cần xử lý gấp', bg: '#FFEBEE', color: '#C62828' },
-                ].map((stat, i) => (
-                    <div key={i} style={{ 
-                        background: stat.bg, 
-                        padding: '20px 15px', 
-                        borderRadius: '12px', 
-                        display: 'flex', 
-                        flexDirection: 'column', 
-                        alignItems: 'center', 
-                        justifyContent: 'center',
-                        textAlign: 'center',
-                        minHeight: '120px',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
-                    }}>
-                        <p style={{ margin: '0 0 10px 0', fontSize: '12px', fontWeight: '700', color: '#757575', letterSpacing: '0.5px' }}>{stat.label}</p>
-                        <h3 style={{ margin: '0 0 5px 0', fontSize: '28px', fontWeight: '800', color: stat.color }}>{stat.value}</h3>
-                        <p style={{ margin: 0, fontSize: '12px', color: '#9E9E9E', fontWeight: '500' }}>{stat.sub}</p>
-                    </div>
-                ))}
-            </div>
-
-
-
-
-
-            {/* Table Section */}
-            <div style={{ background: 'white', borderRadius: '20px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
-                {/* Table Toolbar */}
-                <div style={{ padding: '20px 25px', borderBottom: '1px solid #F5F5F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
-                        <div style={{ position: 'relative', width: '380px' }}>
-                            <Search size={16} style={{ position: 'absolute', left: '15px', top: '50%', transform: 'translateY(-50%)', color: '#A0A0A0' }} />
-                            <input 
-                                type="text" 
-                                placeholder="Tìm kiếm mã Đơn, sản phẩm..." 
-                                style={{ width: '100%', padding: '12px 45px 12px 40px', borderRadius: '12px', border: '1px solid #EFEBE9', fontSize: '13px', outline: 'none' }}
-                            />
-                            <Filter size={16} style={{ position: 'absolute', right: '15px', top: '50%', transform: 'translateY(-50%)', color: '#8D6E63' }} />
-                        </div>
-                        <button style={{ background: 'white', border: '1.5px solid #EFEBE9', borderRadius: '12px', padding: '10px', color: '#8D6E63', cursor: 'pointer' }}>
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M11 5h10M11 9h7M11 13h4"></path>
-                                <path d="M3 17l3 3 3-3M6 18V4"></path>
-                            </svg>
-                        </button>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '12px' }}>
-                        {['Thêm trực tiếp', 'Nhập Excel', 'Xuất Excel', 'Xuất PDF'].map((btn, i) => (
-                            <button key={i} style={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                gap: '8px', 
-                                padding: '10px 18px', 
-                                background: 'white', 
-                                border: '1px solid #EFEBE9', 
-                                borderRadius: '12px', 
-                                fontSize: '13px', 
-                                fontWeight: '700', 
-                                color: '#4E342E' 
-                            }}>
-                                {i < 2 ? <FileText size={16} /> : <Download size={16} />}
-                                {btn}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1600px' }}>
-                        <thead>
-                            <tr style={{ textAlign: 'left', background: '#F5F7F2' }}>
-                                <th style={{ padding: '18px 12px', fontSize: '13px', color: '#3E2723', fontWeight: '800', textAlign: 'center' }}>STT</th>
-                                <th style={{ padding: '18px 12px', fontSize: '13px', color: '#3E2723', fontWeight: '800' }}>Mã phiếu</th>
-                                <th style={{ padding: '18px 12px', fontSize: '13px', color: '#3E2723', fontWeight: '800' }}>Tên chi tiết</th>
-                                <th style={{ padding: '18px 12px', fontSize: '13px', color: '#3E2723', fontWeight: '800' }}>Công đoạn vào</th>
-                                <th style={{ padding: '18px 12px', fontSize: '13px', color: '#3E2723', fontWeight: '800' }}>Công đoạn ra</th>
-                                <th style={{ padding: '18px 12px', fontSize: '13px', color: '#3E2723', fontWeight: '800' }}>SL Giao</th>
-                                <th style={{ padding: '18px 12px', fontSize: '13px', color: '#3E2723', fontWeight: '800' }}>SL Nhận</th>
-                                <th style={{ padding: '18px 12px', fontSize: '13px', color: '#3E2723', fontWeight: '800' }}>SL Trả</th>
-                                <th style={{ padding: '18px 12px', fontSize: '13px', color: '#3E2723', fontWeight: '800' }}>Trạng thái</th>
-                                <th style={{ padding: '18px 12px', fontSize: '13px', color: '#3E2723', fontWeight: '800' }}>Thời gian</th>
-                                <th style={{ padding: '18px 12px', fontSize: '13px', color: '#3E2723', fontWeight: '800' }}>Người giao</th>
-                                <th style={{ padding: '18px 12px', fontSize: '13px', color: '#3E2723', fontWeight: '800' }}>Người nhận</th>
-                                <th style={{ padding: '18px 12px', fontSize: '13px', color: '#3E2723', fontWeight: '800' }}>Thao tác</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {loading ? (
-                                <tr><td colSpan="13" style={{ padding: '50px', textAlign: 'center', color: '#757575' }}>Đang tải dữ liệu...</td></tr>
-                            ) : deliveries.length === 0 ? (
-                                <tr><td colSpan="13" style={{ padding: '50px', textAlign: 'center', color: '#757575' }}>Không có dữ liệu bàn giao.</td></tr>
-                            ) : deliveries.map((row, idx) => {
-                                const statusInfo = getStatusStyle(row.status);
-                                return (
-                                    <tr key={row.id} style={{ 
-                                        borderBottom: '1px solid #F0F0F0', 
-                                        background: getRowBgColor(row)
-                                    }}>
-                                        <td style={{ padding: '18px 12px', fontSize: '13px', textAlign: 'center' }}>{idx + 1}</td>
-                                        <td style={{ padding: '18px 12px', fontSize: '13px', fontWeight: '700', color: '#3E2723' }}>BG-{row.id}</td>
-                                        <td style={{ padding: '18px 12px', fontSize: '13px', color: '#424242' }}>{row.part_name || 'N/A'}</td>
-                                        <td style={{ padding: '18px 12px', fontSize: '13px' }}>{row.delivery_stage}</td>
-                                        <td style={{ padding: '18px 12px', fontSize: '13px' }}>{row.receiving_stage}</td>
-                                        <td style={{ padding: '18px 12px', fontSize: '13px', fontWeight: '800' }}>{row.quantity_total}</td>
-                                        <td style={{ padding: '18px 12px', fontSize: '13px', fontWeight: '800', color: '#2E7D32' }}>{row.quantity_received}</td>
-                                        <td style={{ padding: '18px 12px', fontSize: '13px', color: row.quantity_returned > 0 ? '#C62828' : '#757575' }}>{row.quantity_returned}</td>
-                                        <td style={{ padding: '18px 12px' }}>
-                                            <span style={{ 
-                                                padding: '4px 10px', 
-                                                borderRadius: '20px', 
-                                                fontSize: '11px', 
-                                                background: statusInfo.bg, 
-                                                color: statusInfo.color, 
-                                                fontWeight: '800' 
-                                            }}>
-                                                {statusInfo.label}
-                                            </span>
-                                        </td>
-                                        <td style={{ padding: '18px 12px', fontSize: '12px', color: '#757575' }}>
-                                            {row.created_at ? new Date(row.created_at).toLocaleString('vi-VN', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}) : 'N/A'}
-                                        </td>
-                                        <td style={{ padding: '18px 12px', fontSize: '13px' }}>{row.sx_delivery_name || 'N/A'}</td>
-                                        <td style={{ padding: '18px 12px', fontSize: '13px' }}>{row.sx_receipt_name || '---'}</td>
-                                        <td style={{ padding: '18px 12px' }}>
-                                            <span 
-                                                onClick={() => handleOpenDetailModal(row)}
-                                                style={{ fontSize: '13px', color: '#5D4037', fontWeight: '700', cursor: 'pointer', textDecoration: 'underline' }}
-                                            >
-                                                Chi tiết
-                                            </span>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-
-                    </table>
-                </div>
-
-                {/* Pagination - Số liệu thực */}
-                <div style={{ 
-                    padding: '20px 30px', 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center',
-                    borderTop: '1px solid #F5F5F5'
-                }}>
-                    <div style={{ fontSize: '14px', color: '#424242' }}>
-                        Hiển thị <b>{deliveries.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}-{Math.min(currentPage * itemsPerPage, deliveries.length)}</b> trên <b>{deliveries.length}</b> kết quả
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <button 
-                            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                            disabled={currentPage === 1}
-                            style={{ padding: '10px 20px', borderRadius: '10px', border: '1px solid #EFEBE9', background: 'white', color: currentPage === 1 ? '#BDBDBD' : '#424242', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '600' }}
-                        >
-                            Trước
-                        </button>
-                        
-                        <button style={{ width: '40px', height: '40px', borderRadius: '10px', border: 'none', background: '#7B5233', color: 'white', fontWeight: '800', cursor: 'pointer' }}>{currentPage}</button>
-                        
-                        <button 
-                            onClick={() => setCurrentPage(prev => prev + 1)}
-                            disabled={currentPage * itemsPerPage >= deliveries.length}
-                            style={{ padding: '10px 20px', borderRadius: '10px', border: '1px solid #EFEBE9', background: 'white', color: currentPage * itemsPerPage >= deliveries.length ? '#BDBDBD' : '#424242', cursor: currentPage * itemsPerPage >= deliveries.length ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '600' }}
-                        >
-                            Tiếp
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Modal Overlay / Backdrop */}
+            {/* Modal Overlay / Backdrop - Desktop only */}
             {isDetailModalOpen && (
                 <div 
-                    className="modal-backdrop" 
+                    className="modal-backdrop desktop-only" 
                     style={{ 
                         position: 'fixed', 
                         top: 0, 
@@ -900,6 +1004,211 @@ const DeliveryTracking = () => {
                 </div>
             )}
 
+            {/* Mobile Bottom Sheet Modal */}
+            {isDetailModalOpen && (
+                <div className="bottom-sheet-backdrop mobile-only" onClick={handleCloseDetailModal}>
+                    <div className="bottom-sheet-container bottom-sheet-full" onClick={e => e.stopPropagation()} style={{ padding: '20px 16px' }}>
+                        <div className="bottom-sheet-handle"></div>
+                        
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ padding: '3px 8px', borderRadius: '6px', background: '#f5f5f5', fontSize: '0.75rem', fontWeight: '800', color: '#5D4037' }}>
+                                    BG-{selectedDelivery?.id}
+                                </span>
+                                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '800', color: '#5D4037' }}>
+                                    {selectedDelivery?.part_name || 'Chi tiết bàn giao'}
+                                </h3>
+                            </div>
+                            <button onClick={handleCloseDetailModal} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '1.25rem', cursor: 'pointer' }}>×</button>
+                        </div>
+
+                        {/* Tabs bar */}
+                        <div style={{ display: 'flex', borderBottom: '1px solid #EADCC9', marginBottom: '16px' }}>
+                            <button 
+                                onClick={() => setModalTab('handover')}
+                                style={{ 
+                                    flex: 1, padding: '12px', background: 'none', border: 'none', 
+                                    borderBottom: modalTab === 'handover' ? '2px solid #7B5233' : '2px solid transparent', 
+                                    color: modalTab === 'handover' ? '#7B5233' : '#757575', fontWeight: '700', fontSize: '0.85rem' 
+                                }}
+                            >
+                                Bàn Giao & PO
+                            </button>
+                            <button 
+                                onClick={() => setModalTab('qc')}
+                                style={{ 
+                                    flex: 1, padding: '12px', background: 'none', border: 'none', 
+                                    borderBottom: modalTab === 'qc' ? '2px solid #7B5233' : '2px solid transparent', 
+                                    color: modalTab === 'qc' ? '#7B5233' : '#757575', fontWeight: '700', fontSize: '0.85rem' 
+                                }}
+                            >
+                                Kiểm Tra QC
+                            </button>
+                        </div>
+
+                        {modalLoading ? (
+                            <div style={{ padding: '40px 0', textAlign: 'center' }}>
+                                <div className="spinner" style={{ margin: '0 auto 10px' }}></div>
+                                <div style={{ fontSize: '0.8rem', color: '#8D6E63' }}>Đang tải...</div>
+                            </div>
+                        ) : modalTab === 'handover' ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                {/* General info */}
+                                <div style={{ background: '#FAF8F6', padding: '12px', borderRadius: '12px', border: '1px solid #EADCC9' }}>
+                                    {[
+                                        ['Người giao', deliveryDetail?.sx_delivery_name || 'N/A'],
+                                        ['Người nhận', deliveryDetail?.sx_receipt_name || '---'],
+                                        ['Thời gian', deliveryDetail?.created_at ? new Date(deliveryDetail.created_at).toLocaleString('vi-VN') : '---'],
+                                        ['Chặng giao', `${deliveryDetail?.delivery_stage || '---'} ➔ ${deliveryDetail?.receiving_stage || '---'}`],
+                                        ['Ghi chú', deliveryDetail?.note || 'Không có ghi chú']
+                                    ].map(([k, v]) => (
+                                        <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #fcfcfc', fontSize: '0.8rem' }}>
+                                            <span style={{ color: '#8D6E63' }}>{k}</span>
+                                            <span style={{ fontWeight: '700', color: '#2D1A12' }}>{v}</span>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Quantities */}
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                                    {[
+                                        ['GIAO', deliveryDetail?.quantity_total, '#7B5233', '#FAF6F0'],
+                                        ['NHẬN', deliveryDetail?.quantity_received, '#2E7D32', '#E8F5E9'],
+                                        ['TRẢ', deliveryDetail?.quantity_returned, '#C62828', '#FFEBEE']
+                                    ].map(([lbl, val, col, bg]) => (
+                                        <div key={lbl} style={{ background: bg, padding: '8px', borderRadius: '8px', textAlign: 'center', border: `1px solid ${col}20` }}>
+                                            <div style={{ fontSize: '0.65rem', color: '#757575', fontWeight: '800' }}>{lbl}</div>
+                                            <div style={{ fontSize: '1.1rem', fontWeight: '900', color: col, marginTop: '2px' }}>{val !== null ? val : '---'}</div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* PO Allocations */}
+                                <div>
+                                    <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#5D4037', marginBottom: '8px' }}>PHÂN BỔ ĐƠN HÀNG</div>
+                                    <div style={{ background: 'white', borderRadius: '8px', border: '1px solid #EADCC9', overflow: 'hidden' }}>
+                                        {!deliveryDetail?.details || deliveryDetail.details.length === 0 ? (
+                                            <div style={{ padding: '16px', textAlign: 'center', fontSize: '0.75rem', color: '#8D6E63', fontStyle: 'italic' }}>Không có phân bổ PO.</div>
+                                        ) : (
+                                            deliveryDetail.details.map((detail, dIdx) => (
+                                                <div key={dIdx} style={{ padding: '8px 12px', borderBottom: '1px solid #FAF6F0', fontSize: '0.75rem' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '700' }}>
+                                                        <span style={{ color: '#7B5233' }}>PO: {detail.partner_po || '---'}</span>
+                                                        <span style={{ color: '#2D1A12' }}>SL: {detail.quantity}</span>
+                                                    </div>
+                                                    <div style={{ color: '#666', marginTop: '2px' }}>Đơn: {detail.order_code || '---'} | KH: {detail.customer || '---'}</div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Evidence Images */}
+                                <div>
+                                    <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#5D4037', marginBottom: '8px' }}>ẢNH MINH CHỨNG GIAO</div>
+                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                        {!deliveryDetail?.images || deliveryDetail.images.filter(img => !img.description?.startsWith('qc_')).length === 0 ? (
+                                            <span style={{ fontSize: '0.75rem', color: '#9E9E9E', fontStyle: 'italic' }}>Không có ảnh.</span>
+                                        ) : (
+                                            deliveryDetail.images.filter(img => !img.description?.startsWith('qc_')).map((img, imgIdx) => {
+                                                const url = `${API_ROOT}${img.image_path.replace(/^\//, '')}`;
+                                                return (
+                                                    <img key={imgIdx} src={url} alt="Proof" onClick={() => setActiveImage(url)} style={{ width: '70px', height: '55px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #EADCC9', cursor: 'zoom-in' }} />
+                                                );
+                                            })
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                {/* QC Tab content */}
+                                {!qcDetail || !qcDetail.qc_info ? (
+                                    <div style={{ padding: '24px 12px', textAlign: 'center', background: '#FAF6F0', borderRadius: '12px', border: '1px solid #EADCC9' }}>
+                                        <div style={{ fontSize: '0.8rem', color: '#8D6E63', fontWeight: '700' }}>Chưa có thông tin kiểm định QC</div>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div style={{ background: '#FAF8F6', padding: '12px', borderRadius: '12px', border: '1px solid #EADCC9' }}>
+                                            {[
+                                                ['QC kiểm tra', deliveryDetail?.qc_receipt_name || 'N/A'],
+                                                ['Thời gian QC', qcDetail.qc_info.created_at ? new Date(qcDetail.qc_info.created_at).toLocaleString('vi-VN') : '---'],
+                                                ['Kết luận', (deliveryDetail?.quantity_returned > 0 || deliveryDetail?.status === 'Lỗi') ? 'KHÔNG ĐẠT / TRẢ HÀNG' : 'ĐẠT CHẤT LƯỢNG']
+                                            ].map(([k, v]) => (
+                                                <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #fcfcfc', fontSize: '0.8rem' }}>
+                                                    <span style={{ color: '#8D6E63' }}>{k}</span>
+                                                    <span style={{ fontWeight: '700', color: (k === 'Kết luận' && v.includes('KHÔNG')) ? '#C62828' : '#2E7D32' }}>{v}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        {/* Specs detailed list */}
+                                        <div>
+                                            <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#5D4037', marginBottom: '8px' }}>THÔNG SỐ QC ĐO ĐẠC</div>
+                                            {(() => {
+                                                let results = {};
+                                                try {
+                                                    results = typeof qcDetail.qc_info.results_json === 'string' 
+                                                        ? JSON.parse(qcDetail.qc_info.results_json) 
+                                                        : (qcDetail.qc_info.results_json || {});
+                                                } catch (e) {}
+
+                                                const getPassText = (isPass) => {
+                                                    if (isPass === null || isPass === undefined) return 'CHƯA KIỂM';
+                                                    return isPass ? 'ĐẠT' : 'HỎNG/LỖI';
+                                                };
+
+                                                return (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                        {[
+                                                            ['1. Độ ẩm', results.moisture?.is_pass, `Min: ${results.moisture?.min || '---'}% | Max: ${results.moisture?.max || '---'}%`],
+                                                            ['2. Độ cong vênh', results.bend?.is_pass, `Min: ${results.bend?.min || '---'}mm | Max: ${results.bend?.max || '---'}mm`],
+                                                            ['3. Kích thước', results.size?.is_pass, `L: ${results.size?.long || '---'} | W: ${results.size?.wide || '---'} | T: ${results.size?.thick || '---'}`],
+                                                            ['4. Kết cấu sản phẩm', results.structure?.is_pass, `Cong góc: ${results.structure?.bend || '---'} | Cao: ${results.structure?.high || '---'}`]
+                                                        ].map(([lbl, pass, val]) => (
+                                                            <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '10px 12px', borderRadius: '8px', border: '1px solid #EADCC9', fontSize: '0.75rem' }}>
+                                                                <div>
+                                                                    <div style={{ fontWeight: '700', color: '#5D4037' }}>{lbl}</div>
+                                                                    <div style={{ color: '#666', marginTop: '2px' }}>{val}</div>
+                                                                </div>
+                                                                <span style={{ padding: '3px 8px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: '800', background: pass ? '#E8F5E9' : '#FFEBEE', color: pass ? '#2E7D32' : '#C62828' }}>
+                                                                    {getPassText(pass)}
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+
+                                        {/* QC images */}
+                                        <div>
+                                            <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#5D4037', marginBottom: '8px' }}>ẢNH KIỂM QC</div>
+                                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                {!qcDetail.images || qcDetail.images.length === 0 ? (
+                                                    <span style={{ fontSize: '0.75rem', color: '#9E9E9E', fontStyle: 'italic' }}>Không có ảnh QC.</span>
+                                                ) : (
+                                                    qcDetail.images.map((img, imgIdx) => {
+                                                        const url = `${API_ROOT}${img.image_path.replace(/^\//, '')}`;
+                                                        return (
+                                                            <img key={imgIdx} src={url} alt="QC" onClick={() => setActiveImage(url)} style={{ width: '70px', height: '55px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #EADCC9', cursor: 'zoom-in' }} />
+                                                        );
+                                                    })
+                                                )}
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        )}
+                        
+                        <button className="btn btn-primary" onClick={handleCloseDetailModal} style={{ width: '100%', marginTop: '20px', padding: '12px' }}>
+                            Đóng
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Lightbox Image Popup */}
             {activeImage && (
                 <div 
@@ -913,7 +1222,7 @@ const DeliveryTracking = () => {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        zIndex: 1200,
+                        zIndex: 20000,
                         cursor: 'zoom-out'
                     }}
                     onClick={() => setActiveImage(null)}

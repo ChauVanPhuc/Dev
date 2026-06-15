@@ -917,7 +917,7 @@ const PlanDetail = () => {
 
             {/* Stat Cards - Chuẩn hóa đồng bộ toàn hệ thống */}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '30px' }}>
+            <div className="plan-detail-stats-grid">
 
                 {[
 
@@ -1077,7 +1077,7 @@ const PlanDetail = () => {
 
                 <div className="list-toolbar card-shadow">
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                    <div className="toolbar-left">
 
                         <div className="search-box" style={{ flex: 1, maxWidth: '400px' }}>
 
@@ -1331,45 +1331,9 @@ const PlanDetail = () => {
 
                 {addOrderModal.isOpen && (
 
-                    <div style={{
+                    <div className="modal-backdrop-responsive" onClick={() => setAddOrderModal(prev => ({ ...prev, isOpen: false }))}>
 
-                        position: 'fixed',
-
-                        top: 0,
-
-                        left: 0,
-
-                        right: 0,
-
-                        bottom: 0,
-
-                        background: 'rgba(0,0,0,0.5)',
-
-                        display: 'flex',
-
-                        alignItems: 'center',
-
-                        justifyContent: 'center',
-
-                        zIndex: 1000
-
-                    }}>
-
-                        <div style={{
-
-                            background: '#FFFFFF',
-
-                            borderRadius: 12,
-
-                            padding: '24px',
-
-                            width: '90%',
-
-                            maxWidth: 500,
-
-                            boxShadow: '0 8px 32px rgba(0,0,0,0.2)'
-
-                        }}>
+                        <div className="modal-container-responsive" onClick={e => e.stopPropagation()}>
 
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
 
@@ -1707,7 +1671,7 @@ const PlanDetail = () => {
 
 
 
-                                <div className="table-wrapper">
+                                <div className="table-wrapper desktop-only">
 
                                     <table className="modern-table">
 
@@ -1807,6 +1771,70 @@ const PlanDetail = () => {
 
                                 </div>
 
+                                <div className="mobile-product-list mobile-only">
+
+                                    {order.products?.map((product, idx) => (
+
+                                        <div key={idx} className="mobile-product-card">
+
+                                            <div className="mobile-product-card-header">
+
+                                                <div className="product-info-left">
+
+                                                    <span className="product-index">{idx + 1}.</span>
+
+                                                    <span className="product-sku">{product.sku}</span>
+
+                                                </div>
+
+                                                <span className={`badge-status-dot ${product.progress >= 100 ? 'success' : 'warning'}`}>
+
+                                                    {product.progress >= 100 ? 'Hoàn thành' : 'Đang chạy'}
+
+                                                </span>
+
+                                            </div>
+
+                                            <div className="product-name">{product.name}</div>
+
+                                            <div className="mobile-product-card-footer">
+
+                                                <div className="qty-and-progress">
+
+                                                    <span className="qty-label">SL:</span>
+
+                                                    <span className="qty-value">{product.finished_quantity || 0} / {product.quantity}</span>
+
+                                                    <span className="progress-percent-text">({product.progress || 0}%)</span>
+
+                                                </div>
+
+                                                <span
+
+                                                    onClick={() => navigate(`/manufacture/progress/${product.id}`)}
+
+                                                    className="detail-link"
+
+                                                >
+
+                                                    Chi tiết
+
+                                                </span>
+
+                                            </div>
+
+                                            <div className="mini-progress-bar-bg">
+
+                                                <div className="mini-progress-bar-fill" style={{ width: `${Math.min(product.progress || 0, 100)}%` }}></div>
+
+                                            </div>
+
+                                        </div>
+
+                                    ))}
+
+                                </div>
+
                             </div>
 
                         </div>
@@ -1817,49 +1845,42 @@ const PlanDetail = () => {
 
 
 
-                <div className="pagination-bar card-shadow">
-
+                {/* Phân Trang - Desktop */}
+                <div className="pagination-bar card-shadow desktop-only">
                     <div className="page-info">
-
                         {Math.min(page * limit + 1, totalOrders)} - {Math.min((page + 1) * limit, totalOrders)} of {totalOrders} Lệnh sản xuất
-
                     </div>
-
                     <div className="page-nav">
-
                         <button className="nav-btn" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>
-
                             <ChevronLeft size={18} />
-
                         </button>
-
                         {Array.from({ length: Math.min(5, Math.ceil(totalOrders / limit)) }, (_, i) => (
-
                             <button
-
                                 key={i}
-
                                 className={`page-num ${page === i ? 'active' : ''}`}
-
                                 onClick={() => setPage(i)}
-
                             >
-
                                 {i + 1}
-
                             </button>
-
                         ))}
-
                         <button className="nav-btn" onClick={() => setPage(p => p + 1)} disabled={page >= Math.ceil(totalOrders / limit) - 1}>
-
                             <ChevronRight size={18} />
-
                         </button>
-
                     </div>
-
                 </div>
+
+                {/* Phân Trang - Mobile Sticky */}
+                {totalOrders > limit && (
+                    <div className="pagination-mobile-sticky mobile-only">
+                        <button className="page-btn" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>
+                            <ChevronLeft size={16} />
+                        </button>
+                        <span style={{ fontWeight: '700', fontSize: '0.9rem', color: '#7B5233' }}>Trang {page + 1} / {Math.ceil(totalOrders / limit) || 1}</span>
+                        <button className="page-btn" onClick={() => setPage(p => p + 1)} disabled={page >= Math.ceil(totalOrders / limit) - 1}>
+                            <ChevronRight size={16} />
+                        </button>
+                    </div>
+                )}
 
             </div>
 
@@ -2234,6 +2255,235 @@ const PlanDetail = () => {
 .status-tag.success {
     background: #DCFCE7;
     color: #166534;
+}
+
+.plan-detail-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+}
+
+.modal-backdrop-responsive {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(45, 26, 18, 0.5);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.modal-container-responsive {
+    background: #FFFFFF;
+    border-radius: 12px;
+    padding: 24px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+
+@media (max-width: 768px) {
+    .plan-detail-dashboard {
+        padding: 12px;
+        gap: 16px;
+    }
+    .plan-detail-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+    .charts-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    .list-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+    .toolbar-left {
+        flex-wrap: wrap;
+        width: 100%;
+    }
+    .search-box {
+        width: 100%;
+        max-width: none !important;
+    }
+    .action-btns {
+        width: 100%;
+        justify-content: flex-start;
+    }
+    .btn-action {
+        flex: 1;
+        justify-content: center;
+    }
+    .accordion-header {
+        padding: 12px;
+        flex-direction: row !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        gap: 8px !important;
+    }
+    .box-icon {
+        display: none !important;
+    }
+    .header-left-info {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 6px !important;
+        width: auto !important;
+    }
+    .header-left-info h3 {
+        font-size: 14px !important;
+        margin: 0 !important;
+    }
+    .header-meta-pills {
+        margin-left: 0 !important;
+        gap: 8px !important;
+    }
+    .header-right-info {
+        flex-direction: column-reverse !important;
+        align-items: flex-end !important;
+        gap: 6px !important;
+        width: auto !important;
+    }
+    .header-right-info button {
+        padding: 4px 8px !important;
+        font-size: 10px !important;
+    }
+    
+    /* Mobile product card style */
+    .mobile-product-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 12px;
+        background: #FDFBF9;
+    }
+    .mobile-product-card {
+        background: #FFFFFF;
+        border: 1px solid #EADCC9;
+        border-radius: 10px;
+        padding: 12px 14px;
+        box-shadow: 0 2px 4px rgba(45, 26, 18, 0.03);
+    }
+    .mobile-product-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+    }
+    .product-info-left {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .product-index {
+        font-weight: 800;
+        color: #5D4037;
+        font-size: 12px;
+    }
+    .product-sku {
+        font-family: monospace;
+        color: #7C7267;
+        font-size: 11px;
+        font-weight: 600;
+    }
+    .badge-status-dot {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+    }
+    .badge-status-dot.success {
+        background: #E8F5E9;
+        color: #2E7D32;
+    }
+    .badge-status-dot.warning {
+        background: #FFF3E0;
+        color: #E65100;
+    }
+    .product-name {
+        font-weight: 600;
+        font-size: 13px;
+        color: #2D1A12;
+        line-height: 1.4;
+        margin: 4px 0 10px 0;
+    }
+    .mobile-product-card-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 8px;
+        font-size: 12px;
+    }
+    .qty-and-progress {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    .qty-label {
+        color: #7C7267;
+        font-weight: 500;
+    }
+    .qty-value {
+        color: #2D1A12;
+        font-weight: 700;
+    }
+    .progress-percent-text {
+        color: #26A69A;
+        font-weight: 800;
+        margin-left: 2px;
+    }
+    .detail-link {
+        color: #5D4037;
+        font-weight: 700;
+        text-decoration: underline;
+        cursor: pointer;
+    }
+    .mini-progress-bar-bg {
+        height: 4px;
+        background: #EFEBE9;
+        border-radius: 2px;
+        overflow: hidden;
+        margin-top: 10px;
+    }
+    .mini-progress-bar-fill {
+        height: 100%;
+        background: #26A69A;
+        border-radius: 2px;
+    }
+    .table-wrapper {
+        padding: 12px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .modal-backdrop-responsive {
+        align-items: flex-end;
+    }
+    .modal-container-responsive {
+        width: 100%;
+        max-width: none;
+        height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+        padding: 20px 16px;
+        overflow-y: auto;
+    }
 }
         `}} />
         </>

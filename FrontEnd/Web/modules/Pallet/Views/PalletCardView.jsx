@@ -19,7 +19,7 @@ const ExceptionDeliveries = () => {
     
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 15;
+    const [itemsPerPage, setItemsPerPage] = useState(15);
 
     // Stats
     const [stats, setStats] = useState({
@@ -140,7 +140,7 @@ const ExceptionDeliveries = () => {
     };
 
     return (
-        <div style={{ padding: '20px', background: '#FAF9F8', minHeight: '100vh', fontFamily: 'Inter, system-ui, sans-serif' }}>
+        <div className="manufacture-plan-container" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
             
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
@@ -176,152 +176,117 @@ const ExceptionDeliveries = () => {
             </div>
 
             {/* Thống Kê Tổng Quan */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px', marginBottom: '24px' }}>
+            <div className="stats-grid five-cols animate-card-entrance" style={{ marginBottom: '24px' }}>
                 <div 
                     onClick={() => { setFilterType('ALL'); setCurrentPage(1); }}
+                    className="stat-card"
                     style={{ 
                         background: filterType === 'ALL' ? '#7B5233' : 'white', 
                         color: filterType === 'ALL' ? 'white' : '#3E2723',
-                        padding: '16px', 
-                        borderRadius: '16px', 
                         cursor: 'pointer',
-                        boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
                         border: filterType === 'ALL' ? '1px solid #7B5233' : '1px solid #EFEBE9',
-                        transition: 'all 0.2s'
                     }}
                 >
-                    <p style={{ fontSize: '12px', fontWeight: '700', color: filterType === 'ALL' ? '#EFEBE9' : '#8D6E63', margin: 0, textTransform: 'uppercase' }}>TỔNG SỐ NGOẠI LỆ</p>
-                    <h3 style={{ fontSize: '24px', fontWeight: '800', margin: '8px 0 0 0' }}>{stats.total} <span style={{ fontSize: '14px', fontWeight: '400' }}>Phiếu</span></h3>
+                    <p className="stat-title" style={{ color: filterType === 'ALL' ? '#EFEBE9' : '#8D6E63' }}>TỔNG SỐ NGOẠI LỆ</p>
+                    <h3 className="stat-value" style={{ color: 'inherit' }}>{stats.total} <span style={{ fontSize: '14px', fontWeight: '400' }}>Phiếu</span></h3>
                 </div>
 
                 <div 
                     onClick={() => { setFilterType('LECH_THIEU'); setCurrentPage(1); }}
+                    className="stat-card"
                     style={{ 
                         background: filterType === 'LECH_THIEU' ? '#EF4444' : 'white', 
                         color: filterType === 'LECH_THIEU' ? 'white' : '#3E2723',
-                        padding: '16px', 
-                        borderRadius: '16px', 
                         cursor: 'pointer',
-                        boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
                         border: filterType === 'LECH_THIEU' ? '1px solid #EF4444' : '1px solid #FEE2E2',
-                        transition: 'all 0.2s'
                     }}
                 >
-                    <p style={{ fontSize: '12px', fontWeight: '700', color: filterType === 'LECH_THIEU' ? '#FEE2E2' : '#EF4444', margin: 0, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <ArrowDownRight size={14} /> LỆCH THIẾU (NHẬN &lt; GIAO)
+                    <p className="stat-title" style={{ color: filterType === 'LECH_THIEU' ? '#FEE2E2' : '#EF4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <ArrowDownRight size={14} /> LỆCH THIẾU
                     </p>
-                    <h3 style={{ fontSize: '24px', fontWeight: '800', margin: '8px 0 0 0' }}>{stats.lechThieu} <span style={{ fontSize: '14px', fontWeight: '400' }}>Phiếu</span></h3>
+                    <h3 className="stat-value" style={{ color: 'inherit' }}>{stats.lechThieu} <span style={{ fontSize: '14px', fontWeight: '400' }}>Phiếu</span></h3>
                 </div>
 
                 <div 
                     onClick={() => { setFilterType('LECH_THUA'); setCurrentPage(1); }}
+                    className="stat-card"
                     style={{ 
                         background: filterType === 'LECH_THUA' ? '#3B82F6' : 'white', 
                         color: filterType === 'LECH_THUA' ? 'white' : '#3E2723',
-                        padding: '16px', 
-                        borderRadius: '16px', 
                         cursor: 'pointer',
-                        boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
                         border: filterType === 'LECH_THUA' ? '1px solid #3B82F6' : '1px solid #DBEAFE',
-                        transition: 'all 0.2s'
                     }}
                 >
-                    <p style={{ fontSize: '12px', fontWeight: '700', color: filterType === 'LECH_THUA' ? '#DBEAFE' : '#3B82F6', margin: 0, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <ArrowUpRight size={14} /> LỆCH THỪA (GIAO &lt; NHẬN)
+                    <p className="stat-title" style={{ color: filterType === 'LECH_THUA' ? '#DBEAFE' : '#3B82F6', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <ArrowUpRight size={14} /> LỆCH THỪA
                     </p>
-                    <h3 style={{ fontSize: '24px', fontWeight: '800', margin: '8px 0 0 0' }}>{stats.lechThua} <span style={{ fontSize: '14px', fontWeight: '400' }}>Phiếu</span></h3>
+                    <h3 className="stat-value" style={{ color: 'inherit' }}>{stats.lechThua} <span style={{ fontSize: '14px', fontWeight: '400' }}>Phiếu</span></h3>
                 </div>
 
                 <div 
                     onClick={() => { setFilterType('TRA_HANG'); setCurrentPage(1); }}
+                    className="stat-card"
                     style={{ 
                         background: filterType === 'TRA_HANG' ? '#D97706' : 'white', 
                         color: filterType === 'TRA_HANG' ? 'white' : '#3E2723',
-                        padding: '16px', 
-                        borderRadius: '16px', 
                         cursor: 'pointer',
-                        boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
                         border: filterType === 'TRA_HANG' ? '1px solid #D97706' : '1px solid #FEF3C7',
-                        transition: 'all 0.2s'
                     }}
                 >
-                    <p style={{ fontSize: '12px', fontWeight: '700', color: filterType === 'TRA_HANG' ? '#FEF3C7' : '#D97706', margin: 0, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <p className="stat-title" style={{ color: filterType === 'TRA_HANG' ? '#FEF3C7' : '#D97706', display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <AlertTriangle size={14} /> TRẢ HÀNG QC
                     </p>
-                    <h3 style={{ fontSize: '24px', fontWeight: '800', margin: '8px 0 0 0' }}>{stats.traHang} <span style={{ fontSize: '14px', fontWeight: '400' }}>Phiếu</span></h3>
+                    <h3 className="stat-value" style={{ color: 'inherit' }}>{stats.traHang} <span style={{ fontSize: '14px', fontWeight: '400' }}>Phiếu</span></h3>
                 </div>
 
                 <div 
                     onClick={() => { setFilterType('LOI_QC'); setCurrentPage(1); }}
+                    className="stat-card"
                     style={{ 
                         background: filterType === 'LOI_QC' ? '#8B5CF6' : 'white', 
                         color: filterType === 'LOI_QC' ? 'white' : '#3E2723',
-                        padding: '16px', 
-                        borderRadius: '16px', 
                         cursor: 'pointer',
-                        boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
                         border: filterType === 'LOI_QC' ? '1px solid #8B5CF6' : '1px solid #EDE9FE',
-                        transition: 'all 0.2s'
                     }}
                 >
-                    <p style={{ fontSize: '12px', fontWeight: '700', color: filterType === 'LOI_QC' ? '#EDE9FE' : '#8B5CF6', margin: 0, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <p className="stat-title" style={{ color: filterType === 'LOI_QC' ? '#EDE9FE' : '#8B5CF6', display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <AlertCircle size={14} /> LỖI ĐÁNH GIÁ QC
                     </p>
-                    <h3 style={{ fontSize: '24px', fontWeight: '800', margin: '8px 0 0 0' }}>{stats.loiQC} <span style={{ fontSize: '14px', fontWeight: '400' }}>Phiếu</span></h3>
+                    <h3 className="stat-value" style={{ color: 'inherit' }}>{stats.loiQC} <span style={{ fontSize: '14px', fontWeight: '400' }}>Phiếu</span></h3>
                 </div>
             </div>
 
             {/* Bộ Lọc & Tìm Kiếm */}
-            <div style={{ 
-                background: 'white', 
-                padding: '16px 20px', 
-                borderRadius: '16px', 
-                marginBottom: '20px', 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '16px',
-                boxShadow: '0 2px 10px rgba(0,0,0,0.01)',
-                border: '1px solid #EFEBE9'
-            }}>
-                <div style={{ position: 'relative', flex: 1 }}>
-                    <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#8D6E63' }} />
-                    <input 
-                        type="text" 
-                        placeholder="Tìm kiếm theo mã phiếu, tên chi tiết, ghi chú..."
-                        value={searchQuery}
-                        onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                        style={{ 
-                            width: '100%', 
-                            padding: '10px 15px 10px 42px', 
-                            borderRadius: '12px', 
-                            border: '1px solid #EFEBE9', 
-                            background: '#FAF9F8', 
-                            fontSize: '14px', 
-                            color: '#3E2723', 
-                            outline: 'none',
-                            transition: 'all 0.2s'
-                        }}
-                        onFocus={(e) => e.target.style.borderColor = '#7B5233'}
-                        onBlur={(e) => e.target.style.borderColor = '#EFEBE9'}
-                    />
+            <div className="mgmt-toolbar card" style={{ marginBottom: '20px' }}>
+                <div className="toolbar-left" style={{ flex: 1 }}>
+                    <div className="search-wrapper">
+                        <Search size={18} className="search-icon" />
+                        <input 
+                            type="text" 
+                            placeholder="Tìm phiếu ngoại lệ, linh kiện..."
+                            value={searchQuery}
+                            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                        />
+                    </div>
+
+                    <select 
+                        value={itemsPerPage} 
+                        onChange={(e) => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
+                        className="page-size-select"
+                    >
+                        <option value={15}>15 dòng</option>
+                        <option value={30}>30 dòng</option>
+                        <option value={50}>50 dòng</option>
+                        <option value={100}>100 dòng</option>
+                    </select>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: '700', color: '#8D6E63' }}>Loại ngoại lệ:</span>
+                <div className="toolbar-right desktop-only">
+                    <span style={{ fontSize: '13px', fontWeight: '700', color: '#8D6E63', whiteSpace: 'nowrap' }}>Loại ngoại lệ:</span>
                     <select 
                         value={filterType}
                         onChange={(e) => { setFilterType(e.target.value); setCurrentPage(1); }}
-                        style={{ 
-                            padding: '10px 16px', 
-                            borderRadius: '12px', 
-                            border: '1px solid #EFEBE9', 
-                            background: '#FFFFFF', 
-                            fontSize: '13px', 
-                            fontWeight: '700', 
-                            color: '#3E2723', 
-                            outline: 'none',
-                            cursor: 'pointer'
-                        }}
+                        className="filter-select"
                     >
                         <option value="ALL">Tất cả ngoại lệ</option>
                         <option value="LECH_THIEU">Lệch Thiếu (Nhận &lt; Giao)</option>
@@ -333,7 +298,8 @@ const ExceptionDeliveries = () => {
             </div>
 
             {/* Nội Dung Bảng */}
-            <div style={{ background: 'white', borderRadius: '16px', border: '1px solid #EFEBE9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)', overflow: 'hidden' }}>
+            <div className="admin-list-layout">
+                <div className="mgmt-table admin-table-card" style={{ background: 'white', border: '1px solid #EFEBE9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
                 {loading ? (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 0', gap: '16px' }}>
                         <RefreshCw size={36} className="animate-spin" style={{ color: '#7B5233' }} />
@@ -346,19 +312,19 @@ const ExceptionDeliveries = () => {
                         <p style={{ fontSize: '13px', color: '#8D6E63', margin: 0 }}>Mọi phiếu giao nhận đều khớp số lượng và đạt tiêu chuẩn chất lượng</p>
                     </div>
                 ) : (
-                    <>
-                        <div style={{ overflowX: 'auto' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                    <div className="admin-table-scroll">
+                        <div className="table-responsive">
+                            <table className="manufacture-table">
                                 <thead>
-                                    <tr style={{ background: '#FAF9F8', borderBottom: '1px solid #EFEBE9' }}>
-                                        <th style={{ padding: '16px 20px', fontSize: '13px', fontWeight: '800', color: '#3E2723', width: '80px' }}>ID</th>
-                                        <th style={{ padding: '16px 20px', fontSize: '13px', fontWeight: '800', color: '#3E2723' }}>Mã phiếu</th>
-                                        <th style={{ padding: '16px 20px', fontSize: '13px', fontWeight: '800', color: '#3E2723' }}>Linh kiện / Quy cách</th>
-                                        <th style={{ padding: '16px 20px', fontSize: '13px', fontWeight: '800', color: '#3E2723' }}>Hành trình</th>
-                                        <th style={{ padding: '16px 20px', fontSize: '13px', fontWeight: '800', color: '#3E2723', textAlign: 'center' }}>Giao / Nhận</th>
-                                        <th style={{ padding: '16px 20px', fontSize: '13px', fontWeight: '800', color: '#3E2723', textAlign: 'center' }}>Tỷ lệ</th>
-                                        <th style={{ padding: '16px 20px', fontSize: '13px', fontWeight: '800', color: '#3E2723' }}>Loại ngoại lệ</th>
-                                        <th style={{ padding: '16px 20px', fontSize: '13px', fontWeight: '800', color: '#3E2723', textAlign: 'center' }}>Thao tác</th>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Mã phiếu</th>
+                                        <th>Linh kiện / Quy cách</th>
+                                        <th>Hành trình</th>
+                                        <th style={{ textAlign: 'center' }}>Giao / Nhận</th>
+                                        <th style={{ textAlign: 'center' }}>Tỷ lệ</th>
+                                        <th>Loại ngoại lệ</th>
+                                        <th style={{ textAlign: 'center' }}>Thao tác</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -371,19 +337,18 @@ const ExceptionDeliveries = () => {
                                         return (
                                             <tr 
                                                 key={item.id} 
-                                                style={{ borderBottom: '1px solid #F5F5F5', transition: 'all 0.15s', cursor: 'pointer' }}
-                                                onMouseOver={(e) => e.currentTarget.style.background = '#FAF9F8'}
-                                                onMouseOut={(e) => e.currentTarget.style.background = 'white'}
+                                                className="animate-card-entrance"
+                                                style={{ cursor: 'pointer' }}
                                                 onClick={() => handleViewDetail(item)}
                                             >
-                                                <td style={{ padding: '14px 20px', fontSize: '14px', fontWeight: '700', color: '#8D6E63' }}>#{item.id}</td>
-                                                <td style={{ padding: '14px 20px' }}>
+                                                <td data-label="ID" style={{ fontWeight: '700', color: '#8D6E63' }}>#{item.id}</td>
+                                                <td data-label="Mã phiếu">
                                                     <div style={{ fontSize: '14px', fontWeight: '800', color: '#3E2723' }}>{item.delivery_code || `PL-${item.id}`}</div>
                                                     <div style={{ fontSize: '11px', color: '#8D6E63', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                         <Calendar size={10} /> {formatDate(item.created_at)}
                                                     </div>
                                                 </td>
-                                                <td style={{ padding: '14px 20px' }}>
+                                                <td data-label="Linh kiện / Quy cách">
                                                     <div style={{ fontSize: '14px', fontWeight: '700', color: '#3E2723' }}>{item.part_name || 'N/A'}</div>
                                                     {item.specification && (
                                                         <div style={{ fontSize: '11px', color: '#8D6E63', background: '#F5F5F5', display: 'inline-block', padding: '1px 6px', borderRadius: '4px', marginTop: '4px' }}>
@@ -391,19 +356,19 @@ const ExceptionDeliveries = () => {
                                                         </div>
                                                     )}
                                                 </td>
-                                                <td style={{ padding: '14px 20px' }}>
+                                                <td data-label="Hành trình">
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: '700', color: '#424242' }}>
                                                         <span style={{ color: '#7B5233' }}>{item.delivery_stage}</span>
                                                         <ArrowRight size={14} style={{ color: '#8D6E63' }} />
                                                         <span style={{ color: '#2E7D32' }}>{item.receiving_stage}</span>
                                                     </div>
                                                 </td>
-                                                <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                                                <td data-label="Giao / Nhận" style={{ textAlign: 'center' }}>
                                                     <div style={{ fontSize: '14px', fontWeight: '800', color: '#424242' }}>
                                                         {item.quantity_total} <span style={{ color: '#8D6E63', fontWeight: '400', fontSize: '12px' }}>/</span> <span style={{ color: '#2E7D32' }}>{item.quantity_received}</span>
                                                     </div>
                                                 </td>
-                                                <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                                                <td data-label="Tỷ lệ" style={{ textAlign: 'center' }}>
                                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                                                         {diff !== 0 && (
                                                             <span style={{ 
@@ -428,7 +393,7 @@ const ExceptionDeliveries = () => {
                                                         )}
                                                     </div>
                                                 </td>
-                                                <td style={{ padding: '14px 20px' }}>
+                                                <td data-label="Loại ngoại lệ">
                                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                                                         {badges.map((badge, idx) => (
                                                             <span 
@@ -451,7 +416,7 @@ const ExceptionDeliveries = () => {
                                                         ))}
                                                     </div>
                                                 </td>
-                                                <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                                                <td data-label="Thao tác" style={{ textAlign: 'center' }}>
                                                     <button 
                                                         onClick={(e) => { e.stopPropagation(); }}
                                                         style={{ 
@@ -477,67 +442,57 @@ const ExceptionDeliveries = () => {
                                     })}
                                 </tbody>
                             </table>
-                        </div>
+                    </div>
 
-                        {/* Phân Trang */}
-                        {totalPages > 1 && (
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderTop: '1px solid #EFEBE9', background: '#FAF9F8' }}>
-                                <span style={{ fontSize: '13px', color: '#8D6E63', fontWeight: '600' }}>
-                                    Hiển thị {indexOfFirstItem + 1} - {Math.min(indexOfLastItem, filteredDeliveries.length)} trong tổng số {filteredDeliveries.length} dòng
-                                </span>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {/* Phân Trang - Desktop */}
+                    {totalPages > 1 && (
+                        <div className="admin-pagination-desktop desktop-only">
+                            <span style={{ fontSize: '13px', color: '#8D6E63', fontWeight: '600' }}>
+                                Hiển thị {indexOfFirstItem + 1} - {Math.min(indexOfLastItem, filteredDeliveries.length)} trong tổng số {filteredDeliveries.length} dòng
+                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <button 
+                                    className="page-btn"
+                                    onClick={() => paginate(Math.max(1, currentPage - 1))}
+                                    disabled={currentPage === 1}
+                                >
+                                    &lt; Trước
+                                </button>
+                                {[...Array(totalPages)].map((_, idx) => (
                                     <button 
-                                        onClick={() => paginate(Math.max(1, currentPage - 1))}
-                                        disabled={currentPage === 1}
-                                        style={{ 
-                                            background: 'white', 
-                                            border: '1px solid #EFEBE9', 
-                                            borderRadius: '8px', 
-                                            padding: '6px 10px', 
-                                            cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-                                            opacity: currentPage === 1 ? 0.5 : 1
-                                        }}
+                                        key={idx} 
+                                        className={`page-btn ${currentPage === idx + 1 ? 'active' : ''}`}
+                                        onClick={() => paginate(idx + 1)}
                                     >
-                                        <ChevronLeft size={16} />
+                                        {idx + 1}
                                     </button>
-                                    {[...Array(totalPages)].map((_, idx) => (
-                                        <button 
-                                            key={idx} 
-                                            onClick={() => paginate(idx + 1)}
-                                            style={{ 
-                                                background: currentPage === idx + 1 ? '#7B5233' : 'white', 
-                                                color: currentPage === idx + 1 ? 'white' : '#3E2723', 
-                                                border: '1px solid #EFEBE9', 
-                                                borderRadius: '8px', 
-                                                width: '32px',
-                                                height: '32px',
-                                                fontWeight: '700',
-                                                fontSize: '13px',
-                                                cursor: 'pointer'
-                                            }}
-                                        >
-                                            {idx + 1}
-                                        </button>
-                                    ))}
-                                    <button 
-                                        onClick={() => paginate(Math.min(totalPages, currentPage + 1))}
-                                        disabled={currentPage === totalPages}
-                                        style={{ 
-                                            background: 'white', 
-                                            border: '1px solid #EFEBE9', 
-                                            borderRadius: '8px', 
-                                            padding: '6px 10px', 
-                                            cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
-                                            opacity: currentPage === totalPages ? 0.5 : 1
-                                        }}
-                                    >
-                                        <ChevronRight size={16} />
-                                    </button>
-                                </div>
+                                ))}
+                                <button 
+                                    className="page-btn"
+                                    onClick={() => paginate(Math.min(totalPages, currentPage + 1))}
+                                    disabled={currentPage === totalPages}
+                                >
+                                    Sau &gt;
+                                </button>
                             </div>
-                        )}
-                    </>
+                        </div>
+                    )}
+
+                    {/* Phân Trang - Mobile Sticky */}
+                    {totalPages > 1 && (
+                        <div className="pagination-mobile-sticky mobile-only">
+                            <button className="page-btn" onClick={() => paginate(Math.max(1, currentPage - 1))} disabled={currentPage === 1}>
+                                <ChevronLeft size={16} />
+                            </button>
+                            <span style={{ fontWeight: '700', fontSize: '0.9rem', color: '#7B5233' }}>Trang {currentPage} / {totalPages || 1}</span>
+                            <button className="page-btn" onClick={() => paginate(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages || totalPages <= 1}>
+                                <ChevronRight size={16} />
+                            </button>
+                        </div>
+                    )}
+                </div>
                 )}
+                </div>
             </div>
 
             {/* Chi Tiết Phiếu Modal */}

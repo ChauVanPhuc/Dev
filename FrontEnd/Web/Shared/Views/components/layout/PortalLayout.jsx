@@ -324,7 +324,6 @@ const PortalLayout = () => {
           background-color: #FAFAFA;
           position: relative;
           max-width: 100vw;
-          overflow-x: clip;
         }
         .sidebar-backdrop {
           position: fixed;
@@ -343,7 +342,6 @@ const PortalLayout = () => {
           display: flex;
           flex-direction: column;
           min-height: 100vh;
-          overflow-x: clip;
           position: relative;
         }
         @media (min-width: 993px) {
@@ -388,10 +386,10 @@ const PortalLayout = () => {
           font-weight: 500;
         }
         .dashboard-content {
-          padding: 12px 24px;
+          padding: 8px 24px;
           flex: 1;
           background-color: #F8FAFC;
-          min-height: calc(100vh - 60px);
+          min-height: auto;
         }
         .toggle-sidebar-btn {
           background: #FAF6F0;
@@ -443,31 +441,38 @@ const PortalLayout = () => {
           }
           .admin-header {
             padding: 0 16px !important;
-            height: 60px !important;
+            height: 50px !important;
             box-sizing: border-box !important;
             display: flex !important;
             align-items: center !important;
+            background-color: #FAF6F0 !important;
+            border-bottom: 1px solid #EADCC9 !important;
           }
           .header-left {
-            gap: 12px !important;
+            gap: 8px !important;
             flex: 1 !important;
             min-width: 0 !important;
           }
           .header-titles {
             min-width: 0 !important;
             flex: 1 !important;
+            padding: 2px 0 !important;
           }
           .header-page-title {
             font-size: 1.1rem !important;
             white-space: nowrap !important;
             overflow: hidden !important;
             text-overflow: ellipsis !important;
+            margin: 0 !important;
+            line-height: 1.2 !important;
           }
           .header-page-subtitle {
-            font-size: 0.7rem !important;
+            font-size: 0.75rem !important;
             white-space: nowrap !important;
             overflow: hidden !important;
             text-overflow: ellipsis !important;
+            margin: 2px 0 0 0 !important;
+            line-height: 1.1 !important;
           }
           .toggle-sidebar-btn {
             display: inline-flex !important;
@@ -476,10 +481,14 @@ const PortalLayout = () => {
           
           /* Main container safety constraints */
           .dashboard-content {
-            padding: 8px !important;
+            padding: 0 4px !important;
             width: 100% !important;
             max-width: 100% !important;
             box-sizing: border-box !important;
+            min-height: auto !important;
+            margin-top: 0 !important;
+            display: block !important;
+            background-color: #FAF6F0 !important;
           }
         }
       `}} />

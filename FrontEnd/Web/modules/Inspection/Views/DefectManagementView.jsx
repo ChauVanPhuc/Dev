@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
   LineChart, Line, PieChart, Pie, Cell, ComposedChart 
 } from 'recharts';
-import { Calendar, Filter, ChevronDown, ChevronUp, BarChart3, PieChart as PieChartIcon, TrendingUp } from 'lucide-react';
+import { Calendar, Filter, ChevronDown, ChevronUp, BarChart3, PieChart as PieChartIcon, TrendingUp, RefreshCw, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import '@styles/components.css';
 
 const COLORS = ['#7B5233', '#A67C52', '#D9B99B', '#F2E2CE', '#4b301e', '#8c6a51'];
@@ -204,7 +204,7 @@ const DefectAnalytics = ({ stage }) => {
       </div>
 
       {/* Stats Summary */}
-      <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', marginBottom: '25px' }}>
+      <div className="stats-grid" style={{ marginBottom: '25px' }}>
         <div className="stat-card card" style={{ padding: '15px', textAlign: 'center' }}>
           <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '700' }}>TỔNG PHIẾU</div>
           <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#7B5233' }}>{data.summary.total_records}</div>
@@ -223,7 +223,7 @@ const DefectAnalytics = ({ stage }) => {
         </div>
       </div>
 
-      <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '20px' }}>
+      <div className="charts-grid">
         {/* Pareto Chart */}
         <div className="chart-container card" style={{ padding: '20px' }}>
           <h4 style={{ margin: '0 0 20px 0', fontSize: '1rem', color: '#1e293b' }}>Biểu đồ Pareto (Lỗi trọng yếu)</h4>
@@ -272,7 +272,7 @@ const DefectAnalytics = ({ stage }) => {
         </div>
 
         {/* Trend Chart */}
-        <div className="chart-container card" style={{ padding: '20px', gridColumn: 'span 2' }}>
+        <div className="chart-container card chart-full-width" style={{ padding: '20px' }}>
           <h4 style={{ margin: '0 0 20px 0', fontSize: '1rem', color: '#1e293b' }}>Biến động tỷ lệ lỗi theo thời gian</h4>
           <div style={{ height: '250px', width: '100%' }}>
             <ResponsiveContainer>
@@ -321,7 +321,7 @@ const DefectManagement = () => {
 
   // ─── Phân trang ─────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 8;
+  const [pageSize, setPageSize] = useState(15);
 
   // ─── Quản lý Modals / Trạng thái Form ────────────────────────
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -549,7 +549,67 @@ const DefectManagement = () => {
   ];
 
   return (
-    <div className="mgmt-container defect-mgmt-container">
+    <>
+      <div className="mgmt-container defect-mgmt-container">
+      <style dangerouslySetInnerHTML={{ __html: `
+        .defect-list-layout {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        @media (min-width: 769px) {
+          .defect-list-layout {
+            height: calc(100vh - 250px);
+            display: flex;
+            flex-direction: column;
+            min-width: 0; /* Ngăn flex item giãn ngang theo bảng */
+            width: 100%;
+          }
+          .defect-table-card {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            min-width: 0; /* Ngăn flex item giãn ngang theo bảng */
+            width: 100%;
+            margin-bottom: 0 !important;
+            padding: 0 !important;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(123, 82, 51, 0.08) !important;
+          }
+          .defect-table-scroll {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: auto;
+            min-height: 0;
+            min-width: 0;
+            width: 100%;
+          }
+          .defect-table-scroll .data-table {
+            margin-bottom: 0 !important;
+          }
+          .defect-table-scroll .data-table thead th {
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 10 !important;
+            background-color: #FAF6F0 !important;
+          }
+          .defect-pagination-desktop {
+            flex-shrink: 0;
+            display: flex !important;
+            justify-content: space-between;
+            align-items: center;
+            background: #fff;
+            border-top: 1px solid #EADCC9; /* Đường kẻ trên thay vì viền bao quanh */
+            padding: 15px 20px;
+          }
+        }
+        @media (max-width: 768px) {
+          .defect-pagination-desktop { display: none !important; }
+          .defect-table-scroll { overflow-y: visible !important; max-height: none !important; }
+        }
+      `}} />
       <div className="mgmt-main">
         {/* Toast Alert */}
         {toast.show && (
@@ -560,96 +620,46 @@ const DefectManagement = () => {
         )}
 
         {/* ── Main Tab Navigation ── */}
-        <div className="main-tabs" style={{ display: 'flex', gap: '5px', marginBottom: '20px', borderBottom: '2px solid #f1f5f9', overflowX: 'auto' }}>
+        <div className="main-tabs defect-mgmt-tabs">
           <button
             className={`tab-btn ${viewTab === 'analytics' ? 'active' : ''}`}
             onClick={() => setViewTab('analytics')}
-            style={{
-              padding: '12px 24px',
-              fontSize: '1rem',
-              fontWeight: '700',
-              border: 'none',
-              backgroundColor: 'transparent',
-              borderBottom: viewTab === 'analytics' ? '3px solid #4b301e' : '3px solid transparent',
-              color: viewTab === 'analytics' ? '#4b301e' : '#94a3b8',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              whiteSpace: 'nowrap'
-            }}
           >
-            📊 Biểu đồ phân tích
+            <span className="tab-emoji">📊</span>
+            <span className="tab-text-desktop">Biểu đồ phân tích</span>
+            <span className="tab-text-mobile">Biểu đồ</span>
           </button>
           <button
             className={`tab-btn ${viewTab === 'list' ? 'active' : ''}`}
             onClick={() => setViewTab('list')}
-            style={{
-              padding: '12px 24px',
-              fontSize: '1rem',
-              fontWeight: '700',
-              border: 'none',
-              backgroundColor: 'transparent',
-              borderBottom: viewTab === 'list' ? '3px solid #4b301e' : '3px solid transparent',
-              color: viewTab === 'list' ? '#4b301e' : '#94a3b8',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              whiteSpace: 'nowrap'
-            }}
           >
-            📋 Danh sách lỗi
+            <span className="tab-emoji">📋</span>
+            <span className="tab-text-desktop">Danh sách lỗi</span>
+            <span className="tab-text-mobile">Danh sách</span>
           </button>
           <button
             className={`tab-btn ${viewTab === 'field' ? 'active' : ''}`}
             onClick={() => setViewTab('field')}
-            style={{
-              padding: '12px 24px',
-              fontSize: '1rem',
-              fontWeight: '700',
-              border: 'none',
-              backgroundColor: 'transparent',
-              borderBottom: viewTab === 'field' ? '3px solid #4b301e' : '3px solid transparent',
-              color: viewTab === 'field' ? '#4b301e' : '#94a3b8',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              whiteSpace: 'nowrap'
-            }}
           >
-            🏭 Lỗi hiện trường
+            <span className="tab-emoji">🏭</span>
+            <span className="tab-text-desktop">Lỗi hiện trường</span>
+            <span className="tab-text-mobile">Hiện trường</span>
           </button>
           <button
             className={`tab-btn ${viewTab === 'complaint' ? 'active' : ''}`}
             onClick={() => setViewTab('complaint')}
-            style={{
-              padding: '12px 24px',
-              fontSize: '1rem',
-              fontWeight: '700',
-              border: 'none',
-              backgroundColor: 'transparent',
-              borderBottom: viewTab === 'complaint' ? '3px solid #4b301e' : '3px solid transparent',
-              color: viewTab === 'complaint' ? '#4b301e' : '#94a3b8',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              whiteSpace: 'nowrap'
-            }}
           >
-            ⚠️ Lỗi khiếu nại
+            <span className="tab-emoji">⚠️</span>
+            <span className="tab-text-desktop">Lỗi khiếu nại</span>
+            <span className="tab-text-mobile">Khiếu nại</span>
           </button>
           <button
             className={`tab-btn ${viewTab === 'capa' ? 'active' : ''}`}
             onClick={() => setViewTab('capa')}
-            style={{
-              padding: '12px 24px',
-              fontSize: '1rem',
-              fontWeight: '700',
-              border: 'none',
-              backgroundColor: 'transparent',
-              borderBottom: viewTab === 'capa' ? '3px solid #4b301e' : '3px solid transparent',
-              color: viewTab === 'capa' ? '#4b301e' : '#94a3b8',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              whiteSpace: 'nowrap'
-            }}
           >
-            🔧 Quản lý CAPA
+            <span className="tab-emoji">🔧</span>
+            <span className="tab-text-desktop">Quản lý CAPA</span>
+            <span className="tab-text-mobile">CAPA</span>
           </button>
         </div>
 
@@ -664,46 +674,39 @@ const DefectManagement = () => {
         {viewTab === 'list' && (
           <div className="list-view animate-fade-in">
             {/* ── Thanh điều khiển chính (Gộp gọn gàng Toolbar + Filters) ── */}
-            <div className="mgmt-toolbar card" style={{ flexDirection: 'column', alignItems: 'stretch', marginBottom: '20px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 15 }}>
-                <div className="toolbar-left" style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
-                  {/* Ô tìm kiếm */}
-                  <div className="search-wrapper">
-                    <span className="search-icon">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7B5233" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="11" cy="11" r="8"></circle>
-                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                      </svg>
-                    </span>
-                    <input
-                      type="text"
-                      placeholder="Tìm kiếm theo tên lỗi..."
-                      value={searchQuery}
-                      onChange={(e) => {
-                        setSearchQuery(e.target.value);
-                        setCurrentPage(1); // Reset page về 1 khi tìm kiếm
-                      }}
-                    />
-                  </div>
-
-                  {/* Combobox lọc Nhóm lỗi (Normal Combobox) */}
-                  <div className="filter-group">
+            <div className="qr-toolbar card-shadow" style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                padding: '10px 15px', 
+                background: '#fff', 
+                borderRadius: '12px',
+                border: '1px solid #EADCC9',
+                marginBottom: '20px'
+            }}>
+              <div className="qr-controls" style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {/* Row 1: Category Filter + Items Per Page */}
+                <div className="qr-mobile-row">
+                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flex: 1 }}>
+                    <Filter size={14} color="#7B5233" style={{ position: 'absolute', left: '10px', pointerEvents: 'none' }} />
                     <select
                       value={activeTab}
                       onChange={(e) => {
                         setActiveTab(e.target.value);
                         setCurrentPage(1);
                       }}
+                      className="filter-select qr-select-with-icon"
                       style={{
-                        padding: '10px 16px',
-                        borderRadius: '10px',
-                        border: '1px solid #e2e8f0',
-                        fontSize: '0.9rem',
-                        fontWeight: '600',
-                        color: '#4b301e',
-                        backgroundColor: '#fff',
-                        minWidth: '180px',
-                        cursor: 'pointer'
+                        padding: '6px 10px 6px 30px',
+                        borderRadius: '8px',
+                        border: '1px solid #EADCC9',
+                        backgroundColor: '#FAF6F0',
+                        fontSize: '0.8rem',
+                        fontWeight: '700',
+                        color: '#7B5233',
+                        cursor: 'pointer',
+                        height: '36px',
+                        width: '100%'
                       }}
                     >
                       <option value="all">Tất cả danh mục</option>
@@ -714,53 +717,111 @@ const DefectManagement = () => {
                     </select>
                   </div>
 
-                  {/* Lọc theo công đoạn (Dùng cho cả list nếu cần) */}
-                  <div className="filter-group">
-                    <select 
-                      value={selectedStage} 
-                      onChange={(e) => setSelectedStage(e.target.value)}
-                      style={{ 
-                        padding: '10px 16px', 
-                        borderRadius: '10px', 
-                        border: '1px solid #e2e8f0', 
-                        fontSize: '0.9rem',
-                        color: '#4b301e',
-                        backgroundColor: '#fff',
-                        fontWeight: '600',
-                        minWidth: '180px'
-                      }}
-                    >
-                      <option value="">Tất cả công đoạn</option>
-                      {FACTORY_STAGES.map(s => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Toggle hiển thị lỗi ngừng hoạt động */}
-                  <label className="checkbox-filter" style={{ margin: 0 }}>
-                    <input 
-                      type="checkbox" 
-                      checked={showInactive} 
-                      onChange={(e) => {
-                        setShowInactive(e.target.checked);
-                        setCurrentPage(1);
-                      }} 
-                    />
-                    <span className="checkbox-text" style={{ fontSize: '0.9rem', fontWeight: '600', color: '#64748b' }}>Hiển thị lỗi ngưng kích hoạt</span>
-                  </label>
+                  <select 
+                    value={pageSize} 
+                    onChange={(e) => { setPageSize(parseInt(e.target.value)); setCurrentPage(1); }}
+                    className="page-size-select"
+                    style={{ 
+                        height: '36px',
+                        padding: '0 10px',
+                        borderRadius: '8px',
+                        border: '1px solid #EADCC9',
+                        backgroundColor: '#FAF6F0',
+                        color: '#7B5233',
+                        fontWeight: '700',
+                        fontSize: '0.8rem'
+                    }}
+                  >
+                    <option value={15}>15 dòng</option>
+                    <option value={30}>30 dòng</option>
+                    <option value={50}>50 dòng</option>
+                    <option value={100}>100 dòng</option>
+                  </select>
                 </div>
 
-                <div className="toolbar-right">
-                  <button className="btn btn-primary" onClick={handleOpenCreate} style={{ padding: '12px 24px', fontWeight: '800' }}>
-                    + Thêm lỗi mới
+                <div className="desktop-only" style={{ width: '1px', height: '20px', backgroundColor: '#EADCC9' }}></div>
+
+                {/* Row 2: Search Input + Stage Filter */}
+                <div className="qr-mobile-row">
+                  <div className="qr-search-wrapper" style={{ flex: 1 }}>
+                    <Search size={16} style={{ position: 'absolute', left: '12px', color: '#7B5233', pointerEvents: 'none' }} />
+                    <input
+                      type="text"
+                      placeholder="Tìm kiếm theo tên lỗi..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setCurrentPage(1);
+                      }}
+                      style={{
+                        padding: '8px 12px 8px 36px',
+                        borderRadius: '10px',
+                        border: '1px solid #EADCC9',
+                        backgroundColor: '#FAF6F0',
+                        fontSize: '0.85rem',
+                        width: '100%',
+                        transition: 'all 0.2s ease',
+                        outline: 'none',
+                        color: '#5D3B32',
+                        fontWeight: '700',
+                        height: '36px'
+                      }}
+                    />
+                  </div>
+
+                  <select 
+                    value={selectedStage} 
+                    onChange={(e) => setSelectedStage(e.target.value)}
+                    className="filter-select"
+                    style={{ 
+                      padding: '6px 10px', 
+                      borderRadius: '8px', 
+                      border: '1px solid #EADCC9', 
+                      backgroundColor: '#FAF6F0',
+                      fontSize: '0.8rem',
+                      color: '#7B5233',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      height: '36px',
+                      flex: 1
+                    }}
+                  >
+                    <option value="">Tất cả công đoạn</option>
+                    {FACTORY_STAGES.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="desktop-only" style={{ width: '1px', height: '20px', backgroundColor: '#EADCC9' }}></div>
+
+                {/* Row 3: Toggle + Action Button */}
+                <div className="qr-mobile-row">
+                  <div className="display-filter" style={{ display: 'flex', alignItems: 'center' }}>
+                    <label className="checkbox-filter" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={showInactive} 
+                        onChange={(e) => {
+                          setShowInactive(e.target.checked);
+                          setCurrentPage(1);
+                        }} 
+                      />
+                      <span className="checkbox-text" style={{ fontSize: '0.75rem', fontWeight: '700', color: '#7B5233', whiteSpace: 'nowrap' }}>Hiện ngưng dùng</span>
+                    </label>
+                  </div>
+                  <button className="btn btn-primary" onClick={handleOpenCreate} style={{ height: '36px', padding: '0 15px', whiteSpace: 'nowrap', borderRadius: '8px', fontWeight: '700' }}>
+                    + Thêm lỗi
                   </button>
                 </div>
               </div>
             </div>
 
+            {/* ── Layout wrapper: table cuộn nội bộ, pagination cố định đáy ── */}
+            <div className="defect-list-layout">
+
             {/* ── Bảng dữ liệu chính ── */}
-            <div className="mgmt-table card">
+            <div className="mgmt-table card defect-table-card">
               {loading ? (
                 <div className="loading-state" style={{ padding: '60px', textAlign: 'center' }}>
                   <div className="spinner"></div>
@@ -769,7 +830,7 @@ const DefectManagement = () => {
               ) : (
                 <>
                   {/* Bảng Desktop */}
-                  <div className="table-responsive desktop-only">
+                  <div className="table-responsive desktop-only defect-table-scroll">
                     <table className="data-table">
                       <thead>
                         <tr>
@@ -786,7 +847,7 @@ const DefectManagement = () => {
                       <tbody>
                         {paginatedDefects.length > 0 ? (
                           paginatedDefects.map((defect) => (
-                            <tr key={defect.id} className={!defect.is_active ? 'inactive-row' : ''}>
+                            <tr key={defect.id} className={`${!defect.is_active ? 'inactive-row' : ''} animate-card-entrance`}>
                               <td style={{ textAlign: 'center', color: '#888', fontWeight: 'bold' }}>#{defect.id}</td>
                               <td className="font-bold defect-name-cell">
                                 <div>{defect.name}</div>
@@ -874,7 +935,7 @@ const DefectManagement = () => {
                   <div className="mobile-only mgmt-cards-container">
                     {paginatedDefects.length > 0 ? (
                       paginatedDefects.map((defect) => (
-                        <div key={defect.id} className={`mgmt-card ${!defect.is_active ? 'inactive-row' : ''}`}>
+                        <div key={defect.id} className={`mgmt-card animate-card-entrance ${!defect.is_active ? 'inactive-row' : ''}`}>
                           <div className="mgmt-card-main">
                             <div className="mgmt-card-avatar">
                               #{defect.id}
@@ -959,42 +1020,56 @@ const DefectManagement = () => {
                     )}
                   </div>
 
-                  {/* Phân trang */}
+                  {/* Phân trang - Mobile Sticky */}
                   {totalItems > 0 && (
-                    <div className="pagination" style={{ borderTop: '1px solid #f1f5f9', paddingTop: '20px' }}>
-                      <span className="pagination-info" style={{ color: '#64748b', fontSize: '0.9rem' }}>
-                        Hiển thị {startIndex + 1}–{Math.min(startIndex + pageSize, totalItems)} / {totalItems} kết quả
-                      </span>
-                      <div className="pagination-controls">
-                        <button 
-                          disabled={currentPage === 1} 
-                          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
-                          className="page-btn"
-                        >
-                          &lt; Trước
+                    <div className="pagination-mobile-sticky mobile-only">
+                        <button className="page-btn" onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>
+                            <ChevronLeft size={16} />
                         </button>
-                        {[...Array(totalPages)].map((_, i) => (
-                          <button
-                            key={i}
-                            className={`page-btn ${currentPage === i + 1 ? 'active' : ''}`}
-                            onClick={() => setCurrentPage(i + 1)}
-                          >
-                            {i + 1}
-                          </button>
-                        ))}
-                        <button 
-                          disabled={currentPage >= totalPages} 
-                          onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
-                          className="page-btn"
-                        >
-                          Sau &gt;
+                        <span style={{ fontWeight: '700', fontSize: '0.9rem', color: '#7B5233' }}>Trang {currentPage} / {totalPages || 1}</span>
+                        <button className="page-btn" onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages || totalPages <= 1}>
+                            <ChevronRight size={16} />
                         </button>
-                      </div>
                     </div>
                   )}
-                </>
-              )}
-            </div>
+                    {/* Phân trang - Desktop */}
+                    {totalItems > 0 && (
+                      <div className="defect-pagination-desktop">
+                          <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
+                              Hiển thị <b>{paginatedDefects.length}</b> trên <b>{totalItems}</b> loại lỗi
+                          </div>
+                          
+                          <div style={{ display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+                              <button 
+                                disabled={currentPage === 1} 
+                                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
+                                className="page-btn"
+                              >
+                                &lt; Trước
+                              </button>
+                              {[...Array(totalPages)].map((_, i) => (
+                                <button
+                                  key={i}
+                                  className={`page-btn ${currentPage === i + 1 ? 'active' : ''}`}
+                                  onClick={() => setCurrentPage(i + 1)}
+                                >
+                                  {i + 1}
+                                </button>
+                              ))}
+                              <button 
+                                disabled={currentPage >= totalPages} 
+                                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
+                                className="page-btn"
+                              >
+                                Sau &gt;
+                              </button>
+                          </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>{/* end mgmt-table card */}
+            </div>{/* end defect-list-layout */}
           </div>
         )}
 
@@ -1040,6 +1115,7 @@ const DefectManagement = () => {
           </div>
         )}
       </div>
+    </div>
 
       {/* ── MODAL: THÊM MỚI / CHỈNH SỬA ── */}
       {isFormOpen && (
@@ -1207,7 +1283,7 @@ const DefectManagement = () => {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
 
