@@ -986,6 +986,8 @@ const ScreenDetail = () => {
 
   const [inspectorTab, setInspectorTab] = useState('user'); // 'user' or 'dev'
 
+  const [mobilePane, setMobilePane] = useState('simulator'); // 'tree', 'simulator', or 'inspector' on mobile
+
 
 
   // States for Scenarios Walkthrough
@@ -1476,7 +1478,7 @@ const ScreenDetail = () => {
 
             >
 
-              🖥️ Bản vẽ mô phỏng
+              🖥️<span className="desktop-inline"> Bản vẽ mô phỏng</span><span className="mobile-inline"> Bản vẽ</span>
 
             </button>
 
@@ -1494,7 +1496,7 @@ const ScreenDetail = () => {
 
             >
 
-              📊 Luồng nghiệp vụ
+              📊<span className="desktop-inline"> Luồng nghiệp vụ</span><span className="mobile-inline"> Nghiệp vụ</span>
 
             </button>
 
@@ -1506,7 +1508,7 @@ const ScreenDetail = () => {
 
             >
 
-              🗂️ Danh sách thẻ
+              🗂️<span className="desktop-inline"> Danh sách thẻ</span><span className="mobile-inline"> Dạng thẻ</span>
 
             </button>
 
@@ -1534,15 +1536,57 @@ const ScreenDetail = () => {
 
       {viewMode === 'blueprint' && (
 
-        /* Layout 3 cột: Components (trái) | Bản vẽ (giữa) | Chi tiết (phải) */
+        <>
 
-        <div className={`detail-layout-grid platform-${screen.platform?.toLowerCase() || 'web'}`}>
+          {/* Mobile sub-tabs selector */}
 
-          
+          <div className="mobile-pane-tabs mobile-only">
 
-          {/* CỘT TRÁI: Danh sách Components chi tiết */}
+            <button 
 
-          <div className="component-tree-pane">
+              className={`mobile-pane-tab ${mobilePane === 'tree' ? 'active' : ''}`}
+
+              onClick={() => setMobilePane('tree')}
+
+            >
+
+              🧩 Cấu trúc
+
+            </button>
+
+            <button 
+
+              className={`mobile-pane-tab ${mobilePane === 'simulator' ? 'active' : ''}`}
+
+              onClick={() => setMobilePane('simulator')}
+
+            >
+
+              🖥️ Mô phỏng
+
+            </button>
+
+            <button 
+
+              className={`mobile-pane-tab ${mobilePane === 'inspector' ? 'active' : ''}`}
+
+              onClick={() => setMobilePane('inspector')}
+
+            >
+
+              📋 Chi tiết
+
+            </button>
+
+          </div>
+
+
+
+          <div className={`detail-layout-grid platform-${screen.platform?.toLowerCase() || 'web'}`}>
+
+            {/* CỘT TRÁI: Danh sách Components chi tiết */}
+
+            <div className={`component-tree-pane ${mobilePane === 'tree' ? 'mobile-active' : 'mobile-hidden'}`}>
 
             <div className="pane-header">
 
@@ -1622,7 +1666,7 @@ const ScreenDetail = () => {
 
                           <div key={comp.id} className={`tree-comp-item ${isSelected ? 'selected' : ''}`}
 
-                            onClick={() => setActiveComponent(comp.name)}
+                            onClick={() => { setActiveComponent(comp.name); setMobilePane('inspector'); }}
 
                             onMouseEnter={() => setHoveredComponent(comp.name)}
 
@@ -1676,7 +1720,7 @@ const ScreenDetail = () => {
 
           {/* CỘT GIỮA: Bản vẽ thiết kế tương tác */}
 
-          <div className="detail-simulator-pane">
+          <div className={`detail-simulator-pane ${mobilePane === 'simulator' ? 'mobile-active' : 'mobile-hidden'}`}>
 
             <div className="pane-header" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
 
@@ -1746,7 +1790,7 @@ const ScreenDetail = () => {
 
                 components={screen.components} activeComponent={activeComponent} hoveredComponent={hoveredComponent}
 
-                onHover={setHoveredComponent} onClick={(name) => { setActiveComponent(name); scrollToComponent(name); }}
+                onHover={setHoveredComponent} onClick={(name) => { setActiveComponent(name); setMobilePane('inspector'); scrollToComponent(name); }}
 
                 startGlobalUpload={startGlobalUpload} onRefresh={handleRefresh} simulationMode="mockup" />
 
@@ -1758,7 +1802,7 @@ const ScreenDetail = () => {
 
           {/* CỘT PHẢI: Chi tiết giải thích component đang chọn */}
 
-          <div className="detail-inspector-pane">
+          <div className={`detail-inspector-pane ${mobilePane === 'inspector' ? 'mobile-active' : 'mobile-hidden'}`}>
 
             <div className="pane-header">
 
@@ -2331,7 +2375,7 @@ const ScreenDetail = () => {
           </div>
 
         </div>
-
+        </>
       )}
 
 
@@ -2677,7 +2721,6 @@ const ScreenDetail = () => {
           </div>
 
         </div>
-
       )}
 
 
@@ -4145,6 +4188,14 @@ const ScreenDetail = () => {
   border-radius: 4px;
 }
 
+.desktop-inline {
+  display: inline;
+}
+
+.mobile-inline {
+  display: none;
+}
+
 /* View Mode Tab Buttons - Clean & Premium for White Background */
 .view-mode-tabs {
   display: flex;
@@ -4960,6 +5011,220 @@ const ScreenDetail = () => {
 .api-doc-block:last-child {
   border-bottom: none;
   padding-bottom: 0;
+}
+
+/* Helper class for mobile only elements */
+.mobile-only {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  .mobile-only {
+    display: flex !important;
+  }
+
+  /* Make page fit screen without global scroll */
+  .dashboard-content:has(.detail-container) {
+    padding: 8px 10px !important;
+    height: calc(100vh - 64px) !important;
+    overflow: hidden !important;
+  }
+
+  .detail-container {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+  }
+
+  /* Hide auto-sync banner or make it extremely compact on mobile */
+  .auto-sync-banner {
+    padding: 6px 12px !important;
+    margin-bottom: 8px !important;
+    font-size: 0.72rem !important;
+  }
+
+  /* Toolbar styling for mobile */
+  .mgmt-toolbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    padding: 8px 12px !important;
+    margin-bottom: 8px !important;
+    gap: 8px !important;
+  }
+
+  .toolbar-left, .toolbar-right {
+
+    width: 100% !important;
+
+    justify-content: space-between !important;
+
+  }
+
+
+
+  .desktop-inline {
+
+    display: none !important;
+
+  }
+
+
+
+  .mobile-inline {
+
+    display: inline !important;
+
+  }
+
+
+
+  .toolbar-right {
+
+    display: flex !important;
+
+    width: 100% !important;
+
+    margin: 0 !important;
+
+    padding: 0 !important;
+
+  }
+
+
+
+  .view-mode-tabs {
+
+    display: grid !important;
+
+    grid-template-columns: repeat(3, 1fr) !important;
+
+    width: 100% !important;
+
+    margin-right: 0 !important;
+
+    gap: 4px !important;
+
+    padding: 3px !important;
+
+    box-sizing: border-box !important;
+
+    background: #FAF6F0 !important;
+
+    border: 1px solid #EADCC9 !important;
+
+    border-radius: 8px !important;
+
+  }
+
+
+
+  .view-mode-btn {
+
+    padding: 6px 2px !important;
+
+    font-size: 0.74rem !important;
+
+    text-align: center !important;
+
+    white-space: nowrap !important;
+
+    overflow: hidden !important;
+
+    text-overflow: ellipsis !important;
+
+    display: block !important;
+
+    width: 100% !important;
+
+  }
+
+  .screen-info {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    width: 100% !important;
+  }
+
+  .platform-badge, .code-badge, .route-info-box {
+    padding: 4px 8px !important;
+    font-size: 0.7rem !important;
+  }
+
+  /* Mobile sub-tabs selector */
+  .mobile-pane-tabs {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 6px !important;
+    background: #FAF6F0 !important;
+    padding: 4px !important;
+    border-radius: 8px !important;
+    border: 1px solid #EADCC9 !important;
+    margin-bottom: 8px !important;
+  }
+
+  .mobile-pane-tab {
+    background: transparent;
+    border: none;
+    padding: 8px 4px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #7B5233;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+  }
+
+  .mobile-pane-tab.active {
+    background: #7B5233;
+    color: #FFFFFF;
+    box-shadow: 0 2px 4px rgba(123, 82, 51, 0.2);
+  }
+
+  /* Detail Grid on mobile */
+  .detail-layout-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0 !important;
+    margin-bottom: 0 !important;
+    flex-grow: 1 !important;
+    overflow: hidden !important;
+  }
+
+  /* Hide inactive panes and make active pane full height with scroll */
+  .detail-layout-grid .mobile-hidden {
+    display: none !important;
+  }
+
+  .detail-layout-grid .mobile-active {
+    display: flex !important;
+    flex-direction: column !important;
+    height: calc(100vh - 270px) !important;
+    min-height: auto !important;
+    border-radius: 12px !important;
+    overflow-y: auto !important;
+    background: #FFFFFF !important;
+    box-shadow: 0 4px 12px rgba(45, 26, 18, 0.05) !important;
+  }
+
+  /* Specific pane adjustments for mobile */
+  .component-tree-pane {
+    height: calc(100vh - 270px) !important;
+  }
+
+  .detail-simulator-pane {
+    height: calc(100vh - 270px) !important;
+    position: relative !important;
+    top: 0 !important;
+  }
+
+  .detail-inspector-pane {
+    height: calc(100vh - 270px) !important;
+  }
+
+  .tree-scroll-area {
+    flex-grow: 1 !important;
+    overflow-y: auto !important;
+  }
 }
 ` }} />
     </div>
