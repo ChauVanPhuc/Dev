@@ -44,5 +44,5 @@ class Product(Base):
     # Các quan hệ liên kết
     category = relationship("Category", back_populates="products")
     order = relationship("Order", back_populates="products")
-    bom_details = relationship("BOMDetail", back_populates="product")
+    bom_details = relationship("BOMDetail", back_populates="product", cascade="all, delete-orphan")
 

@@ -156,6 +156,17 @@ const Sidebar = ({ active, onLogout, onClose, uploads = [] }) => {
         </svg>
       ),
       text: 'Quản lý màn hình'
+    },
+    {
+      id: 'monitor',
+      path: '/admin/monitor',
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="2" y="2" width="20" height="20" rx="2" ry="2"></rect>
+          <path d="M6 12h4l2-6 2 12 2-6h4"></path>
+        </svg>
+      ),
+      text: 'Giám sát hệ thống'
     }
   ];
 
@@ -376,7 +387,7 @@ const Sidebar = ({ active, onLogout, onClose, uploads = [] }) => {
                 <div style={{ fontSize: '9px', color: '#7B5233', display: 'flex', justifyContent: 'space-between', fontWeight: '700' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                     {upload.status === 'uploading' && (
-                      <div style={{ width: '8px', height: '8px', border: '1.5px solid #A0301B', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                      <div style={{ width: '8px', height: '8px', border: '1.5px solid #A0301B', borderTopColor: 'transparent', borderRadius: '50%', animation: 'mgmtSpin 0.8s linear infinite' }} />
                     )}
                     <span>
                       {upload.status === 'uploading' ? 'Đang xử lý...' : 

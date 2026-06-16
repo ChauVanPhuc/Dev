@@ -31,6 +31,7 @@ from modules.capa.models.capa_occurrence import CAPAOccurrence
 from modules.capa.models.capa_evaluation import CAPAEvaluation
 from modules.system.models.system_screen import SystemScreen
 from modules.system.models.system_component import SystemComponent
+from modules.inspection.models.defect_type import DefectType, ClientDefect, DefectGlossary
 
 __all__ = [
     "Base", "Account", "Category", "Delivery", "DeliveryDetails", "DeliveryImage",
@@ -38,5 +39,7 @@ __all__ = [
     "ProductPlan", "Role", "Stage", "Notification", "MasterCategory", "MasterProduct",
     "MasterBOMDetail", "DeliveryQC", "DeliveryReturn", "permission_stage", "role_permission",
     "BackupQRCode", "PalletCard", "KPI", "AwardDiscipline", "StaffEvaluation", "CAPA",
-    "CAPAOccurrence", "CAPAEvaluation", "SystemScreen", "SystemComponent"
+    "CAPAOccurrence", "CAPAEvaluation", "SystemScreen", "SystemComponent", "DefectType",
+    "ClientDefect", "DefectGlossary"
 ]
+

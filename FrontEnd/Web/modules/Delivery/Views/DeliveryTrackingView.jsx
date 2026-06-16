@@ -330,15 +330,27 @@ const DeliveryTracking = () => {
                                             <td data-label="SL Giao" style={{ fontWeight: '800' }}>{row.quantity_total}</td>
                                             <td data-label="SL Nhận" style={{ fontWeight: '800', color: '#2E7D32' }}>{row.quantity_received}</td>
                                             <td data-label="SL Trả" style={{ color: row.quantity_returned > 0 ? '#C62828' : '#757575' }}>{row.quantity_returned}</td>
-                                            <td data-label="Trạng thái">
+                                            <td data-label="Trạng thái" style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                                                 <span style={{ 
-                                                    padding: '4px 10px', 
-                                                    borderRadius: '20px', 
+                                                    padding: '5px 10px', 
+                                                    borderRadius: '12px', 
                                                     fontSize: '11px', 
                                                     background: statusInfo.bg, 
                                                     color: statusInfo.color, 
-                                                    fontWeight: '800' 
+                                                    fontWeight: '800',
+                                                    whiteSpace: 'nowrap',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '5px',
+                                                    border: `1px solid ${statusInfo.color}20`
                                                 }}>
+                                                    <span style={{ 
+                                                        width: '6px', 
+                                                        height: '6px', 
+                                                        borderRadius: '50%', 
+                                                        backgroundColor: statusInfo.color,
+                                                        display: 'inline-block'
+                                                    }}></span>
                                                     {statusInfo.label}
                                                 </span>
                                             </td>

@@ -201,6 +201,7 @@ def import_master_products_from_excel(db: Session, file_content: bytes):
     idx_waste = get_col_idx(['hao hụt'], 12)
     idx_desc = get_col_idx(['ghi chú', 'mô tả'], 14)
     idx_is_raw = get_col_idx(['vật tư thô'], 15)
+    idx_exclude = get_col_idx(['loại trừ sản xuất', 'không sản xuất', 'loại trừ'], 13)
     idx_in_stage = get_col_idx(['công đoạn vào', 'cộng đoạn vào'], 17)
     idx_out_stage = get_col_idx(['công đoạn ra', 'cộng đoạn ra'], 18)
 
@@ -262,7 +263,9 @@ def import_master_products_from_excel(db: Session, file_content: bytes):
                 db.query(MasterProduct).filter(MasterProduct.id.in_(target_ids)).delete(synchronize_session=False)
         db.commit()
 
-    # 5. Import đệ quy
+    # 5. Khởi tạo tất cả Root Products
+    db_roots = []
+    root_obj_map = {}
     for r_code in root_codes:
         r_info = info_map.get(r_code, {})
         r_name = r_info.get('name') or r_code
@@ -280,25 +283,45 @@ def import_master_products_from_excel(db: Session, file_content: bytes):
             color=root_color,
             status="Active"
         )
-        db.add(db_root)
-        db.flush()
-        processed_count += 1
+        db_roots.append(db_root)
+        root_obj_map[r_code] = db_root
+
+    # Batch add and flush roots in chunks to update progress smoothly
+    if db_roots:
+        chunk_size = 2000
+        for i in range(0, len(db_roots), chunk_size):
+            chunk = db_roots[i:i + chunk_size]
+            db.add_all(chunk)
+            db.flush()
+            processed_count += len(chunk)
+            yield json.dumps({"status": "processing", "processed": processed_count, "total": total_rows}) + "\n"
+
+    # 6. Global level-by-level BFS để chèn dữ liệu theo nhóm
+    current_level = []
+    for r_code in root_codes:
+        db_root = root_obj_map[r_code]
+        current_level.append((r_code, db_root, {r_code}, db_root.id, db_root.color))
+
+    level_index = 0
+    while current_level:
+        print(f"--- [IMPORT] Đang xử lý Level {level_index} với {len(current_level)} nút cha...")
+        next_level = []
+        objects_to_add = []
         
-        queue = [(r_code, None, {r_code})]
-        while queue:
-            current_p_sku, current_p_db_obj, visited_skus = queue.pop(0)
-            current_p_db_id = current_p_db_obj.id if current_p_db_obj else None
-            children = adj_list.get(current_p_sku, [])
+        for p_sku, p_db_obj, visited_skus, db_root_id, root_color in current_level:
+            p_db_id = p_db_obj.id if isinstance(p_db_obj, MasterBOMDetail) else None
+            children = adj_list.get(p_sku, [])
             
             unique_children = {}
             for row in children:
                 c_sku = clean_val(row[col_names[idx_child_code]])
-                if not c_sku or c_sku == current_p_sku: continue
+                if not c_sku or c_sku == p_sku: continue
                 if c_sku not in unique_children: unique_children[c_sku] = row
             
             # Tự động chèn bản ghi chuyển tiếp nếu có khoảng trống công đoạn (e.g. Lắp ráp -> Sơn)
-            if current_p_db_obj and current_p_db_obj.input_stage:
-                parent_in_stage = current_p_db_obj.input_stage
+            stage_bridge_parents = {}
+            if isinstance(p_db_obj, MasterBOMDetail) and p_db_obj.input_stage:
+                parent_in_stage = p_db_obj.input_stage
                 child_stages = set()
                 for c_sku, row in unique_children.items():
                     if c_sku in visited_skus: continue
@@ -308,30 +331,60 @@ def import_master_products_from_excel(db: Session, file_content: bytes):
                 
                 for child_out_stage in child_stages:
                     if child_out_stage != parent_in_stage:
-                        if get_stage_rank(child_out_stage) < get_stage_rank(parent_in_stage):
-                            trans_obj = MasterBOMDetail(
-                                master_product_id=current_p_db_obj.master_product_id,
-                                parent_id=current_p_db_obj.parent_id,
-                                sku=current_p_db_obj.sku,
-                                name=current_p_db_obj.name,
-                                unit=current_p_db_obj.unit,
-                                specification=current_p_db_obj.specification,
-                                length=current_p_db_obj.length,
-                                width=current_p_db_obj.width,
-                                height=current_p_db_obj.height,
-                                color=current_p_db_obj.color,
-                                quantity=current_p_db_obj.quantity,
-                                waste_ratio=current_p_db_obj.waste_ratio,
-                                is_raw_material=False,
-                                exclude_production=current_p_db_obj.exclude_production,
-                                input_stage=child_out_stage,
-                                output_stage=parent_in_stage,
-                                status="Active"
-                            )
-                            db.add(trans_obj)
-                            db.flush()
+                        rank_child = get_stage_rank(child_out_stage)
+                        rank_parent = get_stage_rank(parent_in_stage)
+                        if rank_child > 0 and rank_parent > 0 and rank_child < rank_parent:
+                            # Tự động trích xuất mã nhà máy (NM1, NM2...) từ tên công đoạn
+                            factory = None
+                            for stage_text in [child_out_stage, parent_in_stage]:
+                                match = re.search(r'(NM\d+)', stage_text)
+                                if match:
+                                    factory = match.group(1)
+                                    break
 
-            batch_objects = []
+                            # Hàm helper để lấy tên công đoạn chuẩn kèm mã nhà máy
+                            def get_stage_name_by_rank(r):
+                                base_stages = {
+                                    1: "Định hình",
+                                    2: "Lắp ráp",
+                                    3: "Sơn",
+                                    4: "Đóng gói"
+                                }
+                                base_name = base_stages.get(r, "")
+                                if factory and base_name:
+                                    return f"{factory} - {base_name}"
+                                return base_name
+
+                            # Tạo các bản ghi chuyển tiếp qua từng bước công đoạn trung gian bị thiếu
+                            last_parent_id = p_db_obj.id
+                            for r in range(rank_parent - 1, rank_child - 1, -1):
+                                in_stg = child_out_stage if r == rank_child else get_stage_name_by_rank(r)
+                                out_stg = parent_in_stage if r + 1 == rank_parent else get_stage_name_by_rank(r + 1)
+                                
+                                trans_obj = MasterBOMDetail(
+                                    master_product_id=p_db_obj.master_product_id,
+                                    parent_id=last_parent_id,
+                                    sku=p_db_obj.sku,
+                                    name=p_db_obj.name,
+                                    unit=p_db_obj.unit,
+                                    specification=p_db_obj.specification,
+                                    length=p_db_obj.length,
+                                    width=p_db_obj.width,
+                                    height=p_db_obj.height,
+                                    color=p_db_obj.color,
+                                    quantity=p_db_obj.quantity,
+                                    waste_ratio=p_db_obj.waste_ratio,
+                                    is_raw_material=False,
+                                    exclude_production=p_db_obj.exclude_production,
+                                    input_stage=in_stg,
+                                    output_stage=out_stg,
+                                    status="Active"
+                                )
+                                db.add(trans_obj)
+                                db.flush()
+                                last_parent_id = trans_obj.id
+                            stage_bridge_parents[child_out_stage] = last_parent_id
+
             for c_sku, row in unique_children.items():
                 if c_sku in visited_skus: continue
                 c_name = clean_val(row[col_names[idx_child_name]]) or c_sku
@@ -344,8 +397,11 @@ def import_master_products_from_excel(db: Session, file_content: bytes):
                 c_desc = clean_val(row[col_names[idx_desc]])
                 c_color = parse_color(c_sku, c_name, c_desc) or root_color
                 
+                c_out_stage = clean_val(row[col_names[idx_out_stage]])
+                grandchild_parent_id = stage_bridge_parents.get(c_out_stage, p_db_id)
+
                 obj = MasterBOMDetail(
-                    master_product_id=db_root.id, parent_id=current_p_db_id,
+                    master_product_id=db_root_id, parent_id=grandchild_parent_id,
                     sku=c_sku, name=c_name, unit=clean_val(row[col_names[idx_child_unit]]),
                     specification=c_spec, length=dl, width=dw, height=dh,
                     color=c_color,
@@ -354,25 +410,25 @@ def import_master_products_from_excel(db: Session, file_content: bytes):
                     description=c_desc,
                     is_raw_material=to_bool(clean_val(row[col_names[idx_is_raw]])),
                     exclude_production=to_bool(clean_val(row[col_names[idx_exclude]])),
-                    output_stage=clean_val(row[col_names[idx_out_stage]]),
+                    output_stage=c_out_stage,
                     input_stage=clean_val(row[col_names[idx_in_stage]]),
                     status="Active"
                 )
-                batch_objects.append((obj, c_sku, visited_skus | {c_sku}))
+                objects_to_add.append(obj)
+                next_level.append((c_sku, obj, visited_skus | {c_sku}, db_root_id, root_color))
 
-            if batch_objects:
-                db.add_all([o[0] for o in batch_objects])
+        # Batch insert cho cấp độ hiện tại theo từng chunk để cập nhật tiến độ liên tục
+        if objects_to_add:
+            chunk_size = 2000
+            for i in range(0, len(objects_to_add), chunk_size):
+                chunk = objects_to_add[i:i + chunk_size]
+                db.add_all(chunk)
                 db.flush()
-                processed_count += len(batch_objects)
-                for obj, sku, new_visited in batch_objects:
-                    queue.append((sku, obj, new_visited))
-            
-            # Yield tiến độ thường xuyên hơn (mỗi 50 bản ghi)
-            if processed_count % 50 == 0:
+                processed_count += len(chunk)
                 yield json.dumps({"status": "processing", "processed": processed_count, "total": total_rows}) + "\n"
-        
-        db.commit()
-        # Cập nhật tiến độ sau mỗi sản phẩm gốc
-        yield json.dumps({"status": "processing", "processed": processed_count, "total": total_rows}) + "\n"
 
+        current_level = next_level
+        level_index += 1
+
+    db.commit()
     yield json.dumps({"status": "completed", "processed": processed_count, "total": total_rows}) + "\n"

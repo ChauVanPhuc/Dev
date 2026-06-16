@@ -1,4 +1,4 @@
-# Reload triggered after DB migration: Added Moisture Columns
+# Reload triggered: Change active device tracking window to 1 minute
 
 from fastapi import FastAPI, HTTPException, Request
 
@@ -57,12 +57,9 @@ async def lifespan(app: FastAPI):
         sys.path.insert(0, backend_path)
 
     
-
     # Print the beautiful startup banner
 
     print_banner()
-
-
 
     # [MANDATORY MIGRATION] Tự động thêm cột độ ẩm nếu chưa có
 
@@ -166,6 +163,69 @@ async def lifespan(app: FastAPI):
 
             print(f"Auto-seeding components error: {e}")
 
+        # [AUTO-MIGRATION] Defect Classification Columns & Table
+        try:
+            print("Checking for defect classification columns & tables...")
+            try:
+                db.execute(text("ALTER TABLE defect_types ADD code NVARCHAR(50) NULL"))
+                db.commit()
+                db.execute(text("CREATE UNIQUE INDEX ix_defect_types_code ON defect_types (code) WHERE code IS NOT NULL"))
+                db.commit()
+                print("Successfully added 'code' column and unique index to defect_types.")
+            except Exception:
+                db.rollback()
+
+            try:
+                db.execute(text("ALTER TABLE defect_types ADD aql_class NVARCHAR(50) NULL"))
+                db.commit()
+                print("Successfully added 'aql_class' column to defect_types.")
+            except Exception:
+                db.rollback()
+
+            # Kiểm tra bảng client_defects
+            table_check = db.execute(text("""
+                SELECT 1 FROM INFORMATION_SCHEMA.TABLES 
+                WHERE TABLE_NAME = 'client_defects'
+            """)).fetchone()
+
+            if not table_check:
+                db.execute(text("""
+                    CREATE TABLE client_defects (
+                        id INT IDENTITY(1,1) PRIMARY KEY,
+                        code NVARCHAR(50) NOT NULL UNIQUE,
+                        name NVARCHAR(250) NOT NULL,
+                        name_en NVARCHAR(250) NULL,
+                        minor_criteria NVARCHAR(500) NULL,
+                        major_criteria NVARCHAR(500) NULL,
+                        critical_criteria NVARCHAR(500) NULL,
+                        detection_method NVARCHAR(250) NULL,
+                        g7_code NVARCHAR(50) NULL,
+                        defect_type_id INT NULL,
+                        is_active BIT NOT NULL DEFAULT 1,
+                        CONSTRAINT FK_client_defects_defect_types FOREIGN KEY (defect_type_id) 
+                            REFERENCES defect_types(id) ON DELETE CASCADE
+                    )
+                """))
+                db.commit()
+                db.execute(text("CREATE INDEX ix_client_defects_code ON client_defects (code)"))
+                db.commit()
+                print("Successfully created client_defects table and index.")
+        except Exception as e:
+            db.rollback()
+            print(f"Failed to auto-migrate defect classification: {e}")
+
+        # [AUTO-SEED] Excel Defect Ingestion
+        try:
+            print("Running auto-import for defect classifications from Excel...")
+            import sys
+            import os
+            sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+            from scripts.import_defects import import_defects
+            import_defects()
+        except Exception as e:
+            print(f"Auto-import defect classifications error: {e}")
+
+
 
 
 
@@ -262,24 +322,29 @@ app.add_middleware(
 
 
 
-# [DEBUG] Middleware ghi nhật ký mọi yêu cầu gửi đến Server
-
+# [DEBUG] Middleware ghi nhật ký mọi yêu cầu gửi đến Server và theo dõi thiết bị hoạt động
 @app.middleware("http")
-
 async def log_requests(request: Request, call_next):
-
     url_str = str(request.url)
-
     if "/plans/" in url_str:
-
         with open("request_history.log", "a", encoding="utf-8") as f:
-
             import time
-
             f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {request.method} {url_str}\n")
+            
+    # Ghi nhận hoạt động thiết bị truy cập
+    try:
+        from shared.utils.device_tracker import device_tracker
+        client_host = request.client.host if request.client else "unknown"
+        user_agent = request.headers.get("user-agent", "unknown")
+        url_path = request.url.path
+        
+        # Bỏ qua các tài nguyên tĩnh và kiểm tra sức khỏe
+        if not any(url_path.startswith(prefix) for prefix in ["/static", "/favicon", "/health"]):
+            device_tracker.record_activity(ip=client_host, user_agent=user_agent)
+    except Exception as e:
+        pass
 
     response = await call_next(request)
-
     return response
 
 

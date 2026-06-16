@@ -8,9 +8,9 @@ from sqlalchemy import func, and_, or_
 from config.database import get_db
 from modules.inspection.models.input_inspection import InputInspection
 from modules.inspection.schemas.input_inspection import InputInspection as InspectionSchema
-from modules.inspection.models.defect_type import DefectType
+from modules.inspection.models.defect_type import DefectType, ClientDefect, DefectGlossary
 from modules.inspection.models.user_defect_tracking import UserDefectTracking
-from modules.inspection.schemas.defect_type import DefectType as DefectTypeSchema, DefectTypeCreate
+from modules.inspection.schemas.defect_type import DefectType as DefectTypeSchema, DefectTypeCreate, ClientDefect as ClientDefectSchema
 from modules.inspection.schemas.daily_inspection import (
     DailyInspectionRecordCreate, 
     DailyInspectionRecordRead,
@@ -351,6 +351,20 @@ def get_inspection_by_part(
     ).order_by(InputInspection.inspected_at.desc()).first()
     return result
 
+@router.get("/defect-glossary")
+def get_defect_glossary(
+    source: Optional[str] = None, 
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy bảng chú thích các ký tự viết tắt / phân loại lỗi.
+    Có thể lọc theo source: 'ATLAS' hoặc 'G7'.
+    """
+    query = db.query(DefectGlossary)
+    if source:
+        query = query.filter(DefectGlossary.source.ilike(source))
+    return query.all()
+
 @router.get("/defect-types", response_model=List[DefectTypeSchema])
 def get_defect_types(
     category: Optional[str] = None, 
@@ -397,7 +411,9 @@ def create_defect_type(data: DefectTypeCreate, db: Session = Depends(get_db)):
         description=data.description,
         needs_tracking=data.needs_tracking,
         qc_tracking=data.qc_tracking,
-        is_active=data.is_active
+        is_active=data.is_active,
+        code=data.code,
+        aql_class=data.aql_class
     )
     db.add(defect)
     db.commit()
@@ -420,10 +436,25 @@ def update_defect_type(defect_id: int, data: DefectTypeCreate, db: Session = Dep
     defect.needs_tracking = data.needs_tracking
     defect.qc_tracking = data.qc_tracking
     defect.is_active = data.is_active
+    defect.code = data.code
+    defect.aql_class = data.aql_class
     
     db.commit()
     db.refresh(defect)
     return defect
+
+@router.get("/client-defects", response_model=List[ClientDefectSchema])
+def get_client_defects(
+    g7_code: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy danh sách các lỗi phía khách hàng.
+    """
+    query = db.query(ClientDefect)
+    if g7_code:
+        query = query.filter(ClientDefect.g7_code == g7_code)
+    return query.all()
 
 @router.patch("/defect-types/{defect_id}/toggle-tracking", response_model=DefectTypeSchema)
 def toggle_defect_tracking(defect_id: int, db: Session = Depends(get_db)):

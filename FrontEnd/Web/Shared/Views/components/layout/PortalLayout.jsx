@@ -117,6 +117,12 @@ const PortalLayout = () => {
                 return u;
               }));
             }
+            if (data.status === 'error') {
+              updateUpload(uploadId, { status: 'error' });
+              showModal("Lỗi", data.message || `Lỗi khi xử lý file ${file.name}`, "error");
+              removeUpload(uploadId);
+              return;
+            }
             if (data.status === 'completed') {
               updateUpload(uploadId, { status: 'completed', progress: 100 });
               showModal("Thành công", `Đã xử lý xong file ${file.name}`, "success");
@@ -127,6 +133,7 @@ const PortalLayout = () => {
           } catch (e) {}
         }
       }
+      throw new Error('Kết nối bị đóng đột ngột trước khi nhận được trạng thái hoàn thành.');
     } catch (error) {
       console.error("Lỗi upload ngầm:", error);
       updateUpload(uploadId, { status: 'error' });

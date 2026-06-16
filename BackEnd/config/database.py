@@ -7,7 +7,10 @@ from config.settings import settings
 # Sử dụng chuỗi kết nối (connection string) được cấu hình trong file .env
 engine = create_engine(
     settings.SQLALCHEMY_DATABASE_URL,
-    # SQL Server không cần tham số check_same_thread như SQLite
+    pool_size=50,
+    max_overflow=100,
+    pool_recycle=1800,
+    pool_pre_ping=True
 )
 
 # Tạo SessionLocal class, bản thân nó không phải là database session thực sự

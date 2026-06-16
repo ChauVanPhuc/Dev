@@ -21,6 +21,8 @@ import ScreenDetail from '@modules/System/Views/ScreenDetailView';
 import DefectManagement from '@modules/Inspection/Views/DefectManagementView';
 import QualityRecords from '@modules/QualityRecords/Views/QualityRecordsListView';
 import QualityRecordsDetail from '@modules/QualityRecords/Views/QualityRecordsDetailView';
+import SystemMonitor from '@modules/System/Views/SystemMonitorView';
+
 
 // Import Manufacture module
 import ManufactureDashboard from '@modules/Dashboard/Views/ManufactureDashboardView';
@@ -75,6 +77,7 @@ function App() {
             <Route path="data" element={<DataPackaging />} />
             <Route path="screens" element={<ScreenManagement />} />
             <Route path="screens/:id" element={<ScreenDetail />} />
+            <Route path="monitor" element={<SystemMonitor />} />
           </Route>
 
           {/* Route Manufacture */}

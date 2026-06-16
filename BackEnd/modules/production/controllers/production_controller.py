@@ -113,6 +113,34 @@ def import_production_plan_from_excel(file_path: str, db: Session):
         df_records = df.to_dict('records')
         total_rows = len(df_records)
         processed = 0
+
+        # Thu thập các mã đơn hàng từ file Excel mới
+        excel_order_codes = set()
+        for row in df_records:
+            sales_order_code = clean_val(row[col_names[idxs['sales_order']]]) if idxs['sales_order'] != -1 else None
+            if sales_order_code:
+                excel_order_codes.add(sales_order_code)
+
+        # Xóa các đơn hàng cũ của KHSX này không có trong file Excel mới
+        if db_plan.id:
+            if excel_order_codes:
+                orders_to_delete = db.query(Order).filter(
+                    Order.plan_id == db_plan.id,
+                    ~Order.order_code.in_(excel_order_codes)
+                ).all()
+            else:
+                orders_to_delete = db.query(Order).filter(
+                    Order.plan_id == db_plan.id
+                ).all()
+            if orders_to_delete:
+                from modules.delivery.models.deliveries import Delivery
+                from modules.delivery.models.delivery_details import DeliveryDetails
+                for order in orders_to_delete:
+                    # Gỡ liên kết với Delivery và DeliveryDetails để tránh lỗi khóa ngoại
+                    db.query(Delivery).filter(Delivery.order_id == order.id).update({Delivery.order_id: None})
+                    db.query(DeliveryDetails).filter(DeliveryDetails.order_id == order.id).update({DeliveryDetails.order_id: None})
+                    db.delete(order)
+            db.flush()
         
         # Cache for Master Data to avoid repeated queries
         master_product_cache = {}

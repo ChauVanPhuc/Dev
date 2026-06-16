@@ -315,9 +315,13 @@ const DefectManagement = () => {
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
+  // Trạng thái mở rộng các hàng (lỗi khách hàng ánh xạ)
+  const [expandedRows, setExpandedRows] = useState({});
+
   // ─── Lọc & Bộ lọc ──────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState('all'); // all, visual, structure, material, tracking
+  const [activeTab, setActiveTab] = useState('all'); // all, visual, paint, structure, material, tracking
   const [showInactive, setShowInactive] = useState(true); // hiển thị cả lỗi ngừng dùng
+  const [selectedAql, setSelectedAql] = useState('all'); // all, Critical, Major, Minor
 
   // ─── Phân trang ─────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState(1);
@@ -333,7 +337,9 @@ const DefectManagement = () => {
     description: '',
     needs_tracking: false, // QA tracking
     qc_tracking: false,    // QC tracking
-    is_active: true
+    is_active: true,
+    code: '',
+    aql_class: 'Minor'
   });
   
   // ─── Xác nhận Xóa ──────────────────────────────────────────
@@ -348,6 +354,10 @@ const DefectManagement = () => {
     setTimeout(() => {
       setToast(prev => ({ ...prev, show: false }));
     }, 3000);
+  };
+
+  const toggleRowExpand = (id) => {
+    setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
   // Tải dữ liệu từ API
@@ -372,19 +382,49 @@ const DefectManagement = () => {
     fetchDefects();
   }, [showInactive]);
 
-  // Bộ lọc theo Tab và Ô tìm kiếm
+  // Bộ lọc theo Tab, Ô tìm kiếm, Công đoạn và Mức AQL
   const filteredDefects = defects.filter(item => {
-    // 1. Tìm kiếm theo tên
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
+    // 1. Tìm kiếm theo tên hoặc mã lỗi G7 hoặc mã lỗi khách hàng
+    const query = searchQuery.toLowerCase();
+    const matchesSearch = 
+      item.name.toLowerCase().includes(query) ||
+      (item.code && item.code.toLowerCase().includes(query)) ||
+      (item.client_defects && item.client_defects.some(cd => 
+        cd.code.toLowerCase().includes(query) || 
+        cd.name.toLowerCase().includes(query) ||
+        (cd.name_en && cd.name_en.toLowerCase().includes(query))
+      ));
     
     // 2. Lọc theo Tab chuyên biệt
     let matchesTab = true;
     if (activeTab === 'visual') matchesTab = item.category === 'visual';
+    else if (activeTab === 'paint') matchesTab = item.category === 'paint';
     else if (activeTab === 'structure') matchesTab = item.category === 'structure';
     else if (activeTab === 'material') matchesTab = item.category === 'material';
     else if (activeTab === 'tracking') matchesTab = item.needs_tracking === true;
 
-    return matchesSearch && matchesTab;
+    // 3. Lọc theo Công đoạn (stage)
+    let matchesStage = true;
+    if (selectedStage) {
+      try {
+        if (item.stage) {
+          const parsedStages = typeof item.stage === 'string' ? JSON.parse(item.stage) : item.stage;
+          matchesStage = Array.isArray(parsedStages) && parsedStages.includes(selectedStage);
+        } else {
+          matchesStage = false;
+        }
+      } catch (e) {
+        matchesStage = item.stage && item.stage.includes(selectedStage);
+      }
+    }
+
+    // 4. Lọc theo Mức AQL
+    let matchesAql = true;
+    if (selectedAql !== 'all') {
+      matchesAql = item.aql_class === selectedAql;
+    }
+
+    return matchesSearch && matchesTab && matchesStage && matchesAql;
   });
 
   // Tính toán phân trang
@@ -399,11 +439,13 @@ const DefectManagement = () => {
     setFormData({
       name: '',
       category: 'visual',
-      stage: [], // Thay đổi thành array
+      stage: ["NM1 - Đóng gói 1", "NM2 - Đóng gói 2", "NM3 - Đóng gói 3"], // Mặc định cho Ngoại quan (Visual / APP)
       description: '',
       needs_tracking: false,
       qc_tracking: false,
-      is_active: true
+      is_active: true,
+      code: '',
+      aql_class: 'Minor'
     });
     setIsFormOpen(true);
   };
@@ -435,7 +477,9 @@ const DefectManagement = () => {
       description: defect.description || '',
       needs_tracking: defect.needs_tracking,
       qc_tracking: defect.qc_tracking || false,
-      is_active: defect.is_active
+      is_active: defect.is_active,
+      code: defect.code || '',
+      aql_class: defect.aql_class || 'Minor'
     });
     setIsFormOpen(true);
   };
@@ -443,16 +487,35 @@ const DefectManagement = () => {
   // Thay đổi giá trị Form
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }));
+    if (name === 'category') {
+      let defaultStages = [];
+      if (value === 'material') {
+        defaultStages = ["NM1 - Định hình 1", "NM1 - Định hình ván 1", "NM2 - Định hình mặt tiền 2", "NM2 - Định hình tủ 2", "NM3 - Tạo phôi 3", "NM3 - Định hình 3"];
+      } else if (value === 'structure') {
+        defaultStages = ["NM1 - Lắp ráp, chà nhám 1", "NM2 - Lắp ráp mặt tiền 2", "NM2 - Lắp ráp tủ 2", "NM3 - Lắp ráp 3"];
+      } else if (value === 'paint') {
+        defaultStages = ["NM1 - Sơn 1", "NM2 - Sơn Pallet 2", "NM2 - Sơn treo 2", "NM3 - Sơn 3"];
+      } else if (value === 'visual') {
+        defaultStages = ["NM1 - Đóng gói 1", "NM2 - Đóng gói 2", "NM3 - Đóng gói 3"];
+      }
+      setFormData(prev => ({
+        ...prev,
+        category: value,
+        stage: defaultStages
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: type === 'checkbox' ? checked : value
+      }));
+    }
   };
 
   // Lưu Form (Tạo mới hoặc Cập nhật)
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name.trim()) {
+
       showToast('Vui lòng nhập tên lỗi', 'error');
       return;
     }
@@ -522,11 +585,13 @@ const DefectManagement = () => {
 
   // Mảng định nghĩa nhóm lỗi
   const categoryLabels = {
-    visual: 'Ngoại quan',
-    structure: 'Kết cấu',
-    material: 'Nguyên liệu',
+    visual: 'Ngoại quan & Bao bì (APP)',
+    structure: 'Kết cấu & Kỹ thuật (STR)',
+    material: 'Nguyên liệu & Phụ kiện (MAT)',
+    paint: 'Sơn & Bề mặt (PAI)',
     other: 'Khác',
   };
+
 
   const FACTORY_STAGES = [
     "NM1 - Định hình 1",
@@ -547,6 +612,37 @@ const DefectManagement = () => {
     "NM3 - Sơn 3",
     "NM3 - Đóng gói 3"
   ];
+
+  const renderCompactStages = (stageStr) => {
+    try {
+      if (!stageStr) return null;
+      const stages = stageStr.startsWith('[') ? JSON.parse(stageStr) : [stageStr];
+      if (!Array.isArray(stages) || stages.length === 0) return null;
+      
+      if (stages.length <= 2) {
+        return stages.map((s, idx) => (
+          <span key={idx} className="mgmt-card-chip info">
+            ⚙️ {s}
+          </span>
+        ));
+      } else {
+        return (
+          <>
+            {stages.slice(0, 2).map((s, idx) => (
+              <span key={idx} className="mgmt-card-chip info">
+                ⚙️ {s}
+              </span>
+            ))}
+            <span className="mgmt-card-chip info" style={{ backgroundColor: '#e2e8f0', color: '#475569', fontWeight: 'bold' }}>
+              +{stages.length - 2}
+            </span>
+          </>
+        );
+      }
+    } catch (e) {
+      return null;
+    }
+  };
 
   return (
     <>
@@ -608,6 +704,25 @@ const DefectManagement = () => {
         @media (max-width: 768px) {
           .defect-pagination-desktop { display: none !important; }
           .defect-table-scroll { overflow-y: visible !important; max-height: none !important; }
+          .mgmt-card-meta-chips {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 6px !important;
+            align-items: center !important;
+            margin: 8px 0 !important;
+          }
+          .mgmt-card-meta-chips .category-badge,
+          .mgmt-card-meta-chips .mgmt-card-chip {
+            display: inline-flex !important;
+            align-items: center !important;
+            margin: 0 !important;
+            font-size: 0.7rem !important;
+            padding: 4px 8px !important;
+            height: auto !important;
+            line-height: 1.2 !important;
+            border-radius: 6px !important;
+            white-space: nowrap !important;
+          }
         }
       `}} />
       <div className="mgmt-main">
@@ -674,111 +789,204 @@ const DefectManagement = () => {
         {viewTab === 'list' && (
           <div className="list-view animate-fade-in">
             {/* ── Thanh điều khiển chính (Gộp gọn gàng Toolbar + Filters) ── */}
-            <div className="qr-toolbar card-shadow" style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center', 
-                padding: '10px 15px', 
-                background: '#fff', 
-                borderRadius: '12px',
-                border: '1px solid #EADCC9',
-                marginBottom: '20px'
-            }}>
-              <div className="qr-controls" style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px' }}>
-                {/* Row 1: Category Filter + Items Per Page */}
-                <div className="qr-mobile-row">
-                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flex: 1 }}>
-                    <Filter size={14} color="#7B5233" style={{ position: 'absolute', left: '10px', pointerEvents: 'none' }} />
-                    <select
-                      value={activeTab}
-                      onChange={(e) => {
-                        setActiveTab(e.target.value);
-                        setCurrentPage(1);
-                      }}
-                      className="filter-select qr-select-with-icon"
-                      style={{
-                        padding: '6px 10px 6px 30px',
-                        borderRadius: '8px',
-                        border: '1px solid #EADCC9',
-                        backgroundColor: '#FAF6F0',
-                        fontSize: '0.8rem',
-                        fontWeight: '700',
-                        color: '#7B5233',
-                        cursor: 'pointer',
-                        height: '36px',
-                        width: '100%'
-                      }}
-                    >
-                      <option value="all">Tất cả danh mục</option>
-                      <option value="visual">Ngoại quan (Visual)</option>
-                      <option value="structure">Kết cấu (Structure)</option>
-                      <option value="material">Nguyên liệu (Material)</option>
-                      <option value="tracking">Đang theo dõi đặc biệt</option>
-                    </select>
-                  </div>
+            {/* ── Thanh điều khiển chính (Gộp gọn gàng Toolbar + Filters) ── */}
+            {/* ── Thanh điều khiển chính (Gộp gọn gàng Toolbar + Filters) ── */}
+            <style>{`
+              .defect-toolbar-container {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+                padding: 15px; 
+                background: #fff; 
+                border-radius: 12px;
+                border: 1px solid #EADCC9;
+                margin-bottom: 20px;
+              }
+              .defect-row-1, .defect-row-2, .defect-row-3 {
+                display: flex;
+                gap: 8px;
+                width: 100%;
+                align-items: center;
+              }
+              .defect-row-3 {
+                justify-content: space-between;
+                flex-wrap: wrap;
+              }
+              @media (min-width: 1024px) {
+                .defect-toolbar-container {
+                  flex-direction: row !important;
+                  flex-wrap: nowrap !important;
+                  align-items: center !important;
+                  padding: 10px 15px !important;
+                }
+                .defect-row-1 {
+                  width: auto !important;
+                  flex: 2.5 !important;
+                }
+                .defect-row-2 {
+                  width: auto !important;
+                  flex: 2 !important;
+                }
+                .defect-row-3 {
+                  width: auto !important;
+                  flex: 3 !important;
+                  justify-content: flex-end !important;
+                  flex-wrap: nowrap !important;
+                }
+                .defect-toolbar-container select {
+                  min-width: 110px !important;
+                  max-width: 165px !important;
+                }
+                .defect-toolbar-container .page-size-select {
+                  min-width: 95px !important;
+                }
+              }
+              @media (max-width: 768px) {
+                .defect-mgmt-tabs {
+                  margin-bottom: 0 !important;
+                }
+                .defect-toolbar-container {
+                  position: sticky !important;
+                  top: 104px !important;
+                  z-index: 100 !important;
+                  background: #FAF6F0 !important;
+                  border-radius: 0 !important;
+                  border-left: none !important;
+                  border-right: none !important;
+                  border-top: none !important;
+                  border-bottom: 1px solid #EADCC9 !important;
+                  margin-left: -15px !important;
+                  margin-right: -15px !important;
+                  margin-bottom: 15px !important;
+                  padding: 10px 15px !important;
+                  box-shadow: 0 4px 6px rgba(123, 82, 51, 0.05) !important;
+                }
+              }
+            `}</style>
+            <div className="defect-toolbar-container card-shadow">
+              {/* Hàng 1: Tìm kiếm + 15 dòng */}
+              <div className="defect-row-1">
+                <div className="qr-search-wrapper" style={{ flex: 1, position: 'relative' }}>
+                  <Search size={16} style={{ position: 'absolute', left: '12px', color: '#7B5233', pointerEvents: 'none', top: '50%', transform: 'translateY(-50%)' }} />
+                  <input
+                    type="text"
+                    placeholder="Tìm theo tên, mã G7, lỗi khách..."
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    style={{
+                      padding: '8px 12px 8px 36px',
+                      borderRadius: '10px',
+                      border: '1px solid #EADCC9',
+                      backgroundColor: '#FAF6F0',
+                      fontSize: '0.85rem',
+                      width: '100%',
+                      transition: 'all 0.2s ease',
+                      outline: 'none',
+                      color: '#5D3B32',
+                      fontWeight: '700',
+                      height: '38px'
+                    }}
+                  />
+                </div>
+                <select 
+                  value={pageSize} 
+                  onChange={(e) => { setPageSize(parseInt(e.target.value)); setCurrentPage(1); }}
+                  className="page-size-select"
+                  style={{ 
+                      height: '38px',
+                      padding: '0 8px',
+                      borderRadius: '10px',
+                      border: '1px solid #EADCC9',
+                      backgroundColor: '#FAF6F0',
+                      color: '#7B5233',
+                      fontWeight: '700',
+                      fontSize: '0.82rem',
+                      minWidth: '95px'
+                  }}
+                >
+                  <option value={15}>15 dòng</option>
+                  <option value={30}>30 dòng</option>
+                  <option value={50}>50 dòng</option>
+                  <option value={100}>100 dòng</option>
+                </select>
+              </div>
 
-                  <select 
-                    value={pageSize} 
-                    onChange={(e) => { setPageSize(parseInt(e.target.value)); setCurrentPage(1); }}
-                    className="page-size-select"
-                    style={{ 
-                        height: '36px',
-                        padding: '0 10px',
-                        borderRadius: '8px',
-                        border: '1px solid #EADCC9',
-                        backgroundColor: '#FAF6F0',
-                        color: '#7B5233',
-                        fontWeight: '700',
-                        fontSize: '0.8rem'
+              {/* Hàng 2: Danh mục + Mức AQL */}
+              <div className="defect-row-2">
+                {/* 1. Lọc theo Phân nhóm */}
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flex: 1 }}>
+                  <Filter size={12} color="#7B5233" style={{ position: 'absolute', left: '8px', pointerEvents: 'none' }} />
+                  <select
+                    value={activeTab}
+                    onChange={(e) => {
+                      setActiveTab(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="filter-select qr-select-with-icon"
+                    style={{
+                      padding: '6px 6px 6px 24px',
+                      borderRadius: '8px',
+                      border: '1px solid #EADCC9',
+                      backgroundColor: '#FAF6F0',
+                      fontSize: '0.78rem',
+                      fontWeight: '700',
+                      color: '#7B5233',
+                      cursor: 'pointer',
+                      height: '36px',
+                      width: '100%'
                     }}
                   >
-                    <option value={15}>15 dòng</option>
-                    <option value={30}>30 dòng</option>
-                    <option value={50}>50 dòng</option>
-                    <option value={100}>100 dòng</option>
+                    <option value="all">Danh mục</option>
+                    <option value="visual">Ngoại quan (APP)</option>
+                    <option value="paint">Sơn (PAI)</option>
+                    <option value="structure">Kết cấu (STR)</option>
+                    <option value="material">Nguyên liệu (MAT)</option>
+                    <option value="tracking">Theo dõi đặc biệt</option>
                   </select>
                 </div>
 
-                <div className="desktop-only" style={{ width: '1px', height: '20px', backgroundColor: '#EADCC9' }}></div>
+                {/* 2. Lọc theo mức AQL */}
+                <select 
+                  value={selectedAql} 
+                  onChange={(e) => { setSelectedAql(e.target.value); setCurrentPage(1); }}
+                  className="filter-select"
+                  style={{ 
+                    padding: '6px 8px', 
+                    borderRadius: '8px', 
+                    border: '1px solid #EADCC9', 
+                    backgroundColor: '#FAF6F0',
+                    fontSize: '0.78rem',
+                    color: '#7B5233',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    height: '36px',
+                    flex: 1
+                  }}
+                >
+                  <option value="all">Mức AQL</option>
+                  <option value="Critical">Critical</option>
+                  <option value="Major">Major</option>
+                  <option value="Minor">Minor</option>
+                </select>
+              </div>
 
-                {/* Row 2: Search Input + Stage Filter */}
-                <div className="qr-mobile-row">
-                  <div className="qr-search-wrapper" style={{ flex: 1 }}>
-                    <Search size={16} style={{ position: 'absolute', left: '12px', color: '#7B5233', pointerEvents: 'none' }} />
-                    <input
-                      type="text"
-                      placeholder="Tìm kiếm theo tên lỗi..."
-                      value={searchQuery}
-                      onChange={(e) => {
-                        setSearchQuery(e.target.value);
-                        setCurrentPage(1);
-                      }}
-                      style={{
-                        padding: '8px 12px 8px 36px',
-                        borderRadius: '10px',
-                        border: '1px solid #EADCC9',
-                        backgroundColor: '#FAF6F0',
-                        fontSize: '0.85rem',
-                        width: '100%',
-                        transition: 'all 0.2s ease',
-                        outline: 'none',
-                        color: '#5D3B32',
-                        fontWeight: '700',
-                        height: '36px'
-                      }}
-                    />
-                  </div>
-
+              {/* Hàng 3: Còn lại (Công đoạn + Checkbox + Thêm mới) */}
+              <div className="defect-row-3">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '200px' }}>
+                  {/* Lọc theo Công đoạn */}
                   <select 
                     value={selectedStage} 
-                    onChange={(e) => setSelectedStage(e.target.value)}
+                    onChange={(e) => { setSelectedStage(e.target.value); setCurrentPage(1); }}
                     className="filter-select"
                     style={{ 
-                      padding: '6px 10px', 
+                      padding: '6px 8px', 
                       borderRadius: '8px', 
                       border: '1px solid #EADCC9', 
                       backgroundColor: '#FAF6F0',
-                      fontSize: '0.8rem',
+                      fontSize: '0.78rem',
                       color: '#7B5233',
                       fontWeight: '700',
                       cursor: 'pointer',
@@ -786,34 +994,28 @@ const DefectManagement = () => {
                       flex: 1
                     }}
                   >
-                    <option value="">Tất cả công đoạn</option>
+                    <option value="">Công đoạn</option>
                     {FACTORY_STAGES.map(s => (
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
+
+                  <label className="checkbox-filter" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={showInactive} 
+                      onChange={(e) => {
+                        setShowInactive(e.target.checked);
+                        setCurrentPage(1);
+                      }} 
+                    />
+                    <span className="checkbox-text" style={{ fontSize: '0.75rem', fontWeight: '700', color: '#7B5233', whiteSpace: 'nowrap' }}>Hiện ngưng dùng</span>
+                  </label>
                 </div>
 
-                <div className="desktop-only" style={{ width: '1px', height: '20px', backgroundColor: '#EADCC9' }}></div>
-
-                {/* Row 3: Toggle + Action Button */}
-                <div className="qr-mobile-row">
-                  <div className="display-filter" style={{ display: 'flex', alignItems: 'center' }}>
-                    <label className="checkbox-filter" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                      <input 
-                        type="checkbox" 
-                        checked={showInactive} 
-                        onChange={(e) => {
-                          setShowInactive(e.target.checked);
-                          setCurrentPage(1);
-                        }} 
-                      />
-                      <span className="checkbox-text" style={{ fontSize: '0.75rem', fontWeight: '700', color: '#7B5233', whiteSpace: 'nowrap' }}>Hiện ngưng dùng</span>
-                    </label>
-                  </div>
-                  <button className="btn btn-primary" onClick={handleOpenCreate} style={{ height: '36px', padding: '0 15px', whiteSpace: 'nowrap', borderRadius: '8px', fontWeight: '700' }}>
-                    + Thêm lỗi
-                  </button>
-                </div>
+                <button className="btn btn-primary" onClick={handleOpenCreate} style={{ height: '36px', padding: '0 16px', whiteSpace: 'nowrap', borderRadius: '8px', fontWeight: '700' }}>
+                  + Thêm lỗi
+                </button>
               </div>
             </div>
 
@@ -834,95 +1036,188 @@ const DefectManagement = () => {
                     <table className="data-table">
                       <thead>
                         <tr>
-                          <th style={{ width: '80px', textAlign: 'center' }}>ID</th>
-                          <th>Tên lỗi</th>
-                          <th>Mô tả chi tiết</th>
+                          <th style={{ width: '110px', textAlign: 'center' }}>Mã G7 / ID</th>
+                          <th>Tên lỗi / Mô tả</th>
                           <th style={{ width: '180px' }}>Phân nhóm</th>
+                          <th style={{ width: '110px', textAlign: 'center' }}>Mức AQL</th>
                           <th style={{ width: '150px' }}>Công đoạn</th>
-                          <th style={{ width: '120px', textAlign: 'center' }}>QA Track</th>
-                          <th style={{ width: '160px', textAlign: 'center' }}>Trạng thái</th>
-                          <th style={{ width: '150px', textAlign: 'center' }}>Thao tác</th>
+                          <th style={{ width: '130px', textAlign: 'center' }}>Lỗi Khách</th>
+                          <th style={{ width: '110px', textAlign: 'center' }}>QA Track</th>
+                          <th style={{ width: '140px', textAlign: 'center' }}>Trạng thái</th>
+                          <th style={{ width: '120px', textAlign: 'center' }}>Thao tác</th>
                         </tr>
                       </thead>
                       <tbody>
                         {paginatedDefects.length > 0 ? (
                           paginatedDefects.map((defect) => (
-                            <tr key={defect.id} className={`${!defect.is_active ? 'inactive-row' : ''} animate-card-entrance`}>
-                              <td style={{ textAlign: 'center', color: '#888', fontWeight: 'bold' }}>#{defect.id}</td>
-                              <td className="font-bold defect-name-cell">
-                                <div>{defect.name}</div>
-                              </td>
-                              <td style={{ fontSize: '0.85rem', color: '#666' }}>
-                                {defect.description || '---'}
-                              </td>
-                              <td>
-                                <span className={`category-badge ${defect.category}`}>
-                                  {categoryLabels[defect.category] || defect.category}
-                                </span>
-                              </td>
-                              <td>
-                                <div style={{ color: '#555', fontSize: '0.85rem', maxWidth: '200px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                  {(() => {
-                                    try {
-                                      if (!defect.stage) return '---';
-                                      const stages = defect.stage.startsWith('[') ? JSON.parse(defect.stage) : [defect.stage];
-                                      if (!Array.isArray(stages) || stages.length === 0) return '---';
-                                      return stages.map((s, idx) => (
-                                        <span key={idx} className="mgmt-card-chip info" style={{ fontSize: '0.65rem', padding: '2px 6px' }}>
-                                          {s}
-                                        </span>
-                                      ));
-                                    } catch (e) {
-                                      return defect.stage || '---';
-                                    }
-                                  })()}
-                                </div>
-                              </td>
-                              <td style={{ textAlign: 'center' }}>
-                                <div style={{ display: 'flex', justifyContent: 'center' }}>
-                                  <label className="switch">
-                                    <input
-                                      type="checkbox"
-                                      checked={defect.needs_tracking}
-                                      onChange={() => handleToggleTracking(defect, 'qa')}
-                                      disabled={!defect.is_active}
-                                    />
-                                    <span className="slider round" style={{ backgroundColor: defect.needs_tracking ? '#ef4444' : '#ccc' }}></span>
-                                  </label>
-                                </div>
-                              </td>
-                              <td style={{ textAlign: 'center' }}>
-                                {defect.is_active ? (
-                                  <span className="status-badge active">Đang sử dụng</span>
-                                ) : (
-                                  <span className="status-badge inactive">Ngừng sử dụng</span>
-                                )}
-                              </td>
-                              <td style={{ textAlign: 'center' }}>
-                                <div className="action-buttons-cell">
-                                  <button
-                                    className="action-icon-btn edit"
-                                    onClick={() => handleOpenEdit(defect)}
-                                    title="Chỉnh sửa thông tin"
-                                  >
-                                    ✏️
-                                  </button>
-                                  {defect.is_active && (
-                                    <button
-                                      className="action-icon-btn delete"
-                                      onClick={() => handleDeleteRequest(defect)}
-                                      title="Ngưng kích hoạt"
-                                    >
-                                      🗑️
-                                    </button>
+                            <React.Fragment key={defect.id}>
+                              <tr className={`${!defect.is_active ? 'inactive-row' : ''} animate-card-entrance`}>
+                                <td style={{ textAlign: 'center', color: '#4b301e', fontWeight: 'bold', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                                  {defect.code ? defect.code : `#${defect.id}`}
+                                </td>
+                                <td className="defect-name-cell">
+                                  <div style={{ fontWeight: '700', color: '#4b301e' }}>{defect.name}</div>
+                                  {defect.description && (
+                                    <div style={{ fontSize: '0.75rem', color: '#777', fontWeight: 'normal', marginTop: '2px', lineHeight: '1.3' }}>
+                                      {defect.description}
+                                    </div>
                                   )}
-                                </div>
-                              </td>
-                            </tr>
+                                </td>
+                                <td>
+                                  <span className={`category-badge ${defect.category}`} style={defect.category === 'paint' ? { backgroundColor: '#F2D2BD', color: '#7B5233', border: '1px solid #EADCC9' } : {}}>
+                                    {categoryLabels[defect.category] || defect.category}
+                                  </span>
+                                </td>
+                                <td style={{ textAlign: 'center' }}>
+                                  {defect.aql_class ? (
+                                    <span className="status-badge" style={{
+                                      backgroundColor: 
+                                        defect.aql_class === 'Critical' ? '#fee2e2' : 
+                                        defect.aql_class === 'Major' ? '#ffedd5' : '#f0fdf4',
+                                      color: 
+                                        defect.aql_class === 'Critical' ? '#991b1b' : 
+                                        defect.aql_class === 'Major' ? '#9a3412' : '#166534',
+                                      border: '1px solid currentColor',
+                                      fontWeight: '700',
+                                      fontSize: '0.7rem',
+                                      padding: '2px 8px',
+                                      borderRadius: '4px'
+                                    }}>
+                                      {defect.aql_class}
+                                    </span>
+                                  ) : (
+                                    <span style={{ color: '#999' }}>---</span>
+                                  )}
+                                </td>
+                                <td>
+                                  <div style={{ color: '#555', fontSize: '0.85rem', maxWidth: '200px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                    {(() => {
+                                      try {
+                                        if (!defect.stage) return '---';
+                                        const stages = defect.stage.startsWith('[') ? JSON.parse(defect.stage) : [defect.stage];
+                                        if (!Array.isArray(stages) || stages.length === 0) return '---';
+                                        return stages.map((s, idx) => (
+                                          <span key={idx} className="mgmt-card-chip info" style={{ fontSize: '0.65rem', padding: '2px 6px' }}>
+                                            {s}
+                                          </span>
+                                        ));
+                                      } catch (e) {
+                                        return defect.stage || '---';
+                                      }
+                                    })()}
+                                  </div>
+                                </td>
+                                <td style={{ textAlign: 'center' }}>
+                                  {defect.client_defects && defect.client_defects.length > 0 ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleRowExpand(defect.id)}
+                                      style={{
+                                        padding: '4px 8px',
+                                        backgroundColor: expandedRows[defect.id] ? '#7B5233' : '#FAF6F0',
+                                        border: '1px solid #EADCC9',
+                                        borderRadius: '6px',
+                                        fontSize: '0.75rem',
+                                        fontWeight: 'bold',
+                                        color: expandedRows[defect.id] ? '#fff' : '#7B5233',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px'
+                                      }}
+                                    >
+                                      <span>🤝 {defect.client_defects.length} lỗi</span>
+                                      <span style={{ fontSize: '0.65rem' }}>{expandedRows[defect.id] ? '▲' : '▼'}</span>
+                                    </button>
+                                  ) : (
+                                    <span style={{ color: '#999' }}>---</span>
+                                  )}
+                                </td>
+                                <td style={{ textAlign: 'center' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                                    <label className="switch">
+                                      <input
+                                        type="checkbox"
+                                        checked={defect.needs_tracking}
+                                        onChange={() => handleToggleTracking(defect, 'qa')}
+                                        disabled={!defect.is_active}
+                                      />
+                                      <span className="slider round" style={{ backgroundColor: defect.needs_tracking ? '#ef4444' : '#ccc' }}></span>
+                                    </label>
+                                  </div>
+                                </td>
+                                <td style={{ textAlign: 'center' }}>
+                                  {defect.is_active ? (
+                                    <span className="status-badge active">Đang sử dụng</span>
+                                  ) : (
+                                    <span className="status-badge inactive">Ngừng sử dụng</span>
+                                  )}
+                                </td>
+                                <td style={{ textAlign: 'center' }}>
+                                  <div className="action-buttons-cell">
+                                    <button
+                                      className="action-icon-btn edit"
+                                      onClick={() => handleOpenEdit(defect)}
+                                      title="Chỉnh sửa thông tin"
+                                    >
+                                      ✏️
+                                    </button>
+                                    {defect.is_active && (
+                                      <button
+                                        className="action-icon-btn delete"
+                                        onClick={() => handleDeleteRequest(defect)}
+                                        title="Ngưng kích hoạt"
+                                      >
+                                        🗑️
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                              {expandedRows[defect.id] && defect.client_defects && defect.client_defects.length > 0 && (
+                                <tr className="expanded-row-container" style={{ backgroundColor: '#FAF6F0' }}>
+                                  <td colSpan="9" style={{ padding: '15px 20px', borderBottom: '1px solid #EADCC9' }}>
+                                    <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '8px', border: '1px solid #EADCC9', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.05)' }}>
+                                      <h5 style={{ margin: '0 0 12px 0', color: '#4b301e', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        🤝 Mã lỗi khách hàng ánh xạ tương ứng (Atlas Vanity)
+                                      </h5>
+                                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                                        <thead>
+                                          <tr style={{ borderBottom: '1px solid #EADCC9', color: '#7B5233', fontWeight: 'bold' }}>
+                                            <th style={{ padding: '6px 8px', textAlign: 'left', width: '120px' }}>Mã lỗi khách</th>
+                                            <th style={{ padding: '6px 8px', textAlign: 'left', width: '200px' }}>Tên tiếng Việt / Anh</th>
+                                            <th style={{ padding: '6px 8px', textAlign: 'left' }}>Tiêu chuẩn lỗi nhẹ (Minor)</th>
+                                            <th style={{ padding: '6px 8px', textAlign: 'left' }}>Tiêu chuẩn lỗi nặng (Major)</th>
+                                            <th style={{ padding: '6px 8px', textAlign: 'left' }}>Tiêu chuẩn nghiêm trọng (Critical)</th>
+                                            <th style={{ padding: '6px 8px', textAlign: 'left', width: '120px' }}>Phương pháp</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {defect.client_defects.map(cd => (
+                                            <tr key={cd.id} style={{ borderBottom: '1px dotted #EADCC9' }}>
+                                              <td style={{ padding: '8px', fontWeight: 'bold', color: '#4b301e', fontFamily: 'monospace' }}>{cd.code}</td>
+                                              <td style={{ padding: '8px' }}>
+                                                <div style={{ fontWeight: '600', color: '#4b301e' }}>{cd.name}</div>
+                                                <div style={{ fontSize: '0.7rem', color: '#666' }}>{cd.name_en || '---'}</div>
+                                              </td>
+                                              <td style={{ padding: '8px', color: '#555' }}>{cd.minor_criteria || '---'}</td>
+                                              <td style={{ padding: '8px', color: '#555' }}>{cd.major_criteria || '---'}</td>
+                                              <td style={{ padding: '8px', color: '#555' }}>{cd.critical_criteria || '---'}</td>
+                                              <td style={{ padding: '8px', fontStyle: 'italic', color: '#666' }}>{cd.detection_method || '---'}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
                           ))
                         ) : (
                           <tr>
-                            <td colSpan="7" style={{ textAlign: 'center', padding: '50px 20px', color: '#888' }}>
+                            <td colSpan="9" style={{ textAlign: 'center', padding: '50px 20px', color: '#888' }}>
                                Không tìm thấy loại lỗi nào khớp với bộ lọc hiện tại.
                             </td>
                           </tr>
@@ -937,42 +1232,98 @@ const DefectManagement = () => {
                       paginatedDefects.map((defect) => (
                         <div key={defect.id} className={`mgmt-card animate-card-entrance ${!defect.is_active ? 'inactive-row' : ''}`}>
                           <div className="mgmt-card-main">
-                            <div className="mgmt-card-avatar">
-                              #{defect.id}
+                            <div className="mgmt-card-avatar" style={{ fontSize: '0.65rem', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                              {defect.code ? defect.code : `#${defect.id}`}
                             </div>
                             <div className="mgmt-card-details">
                               <div className="mgmt-card-title-row">
-                                <h4 className="mgmt-card-title defect-name-cell">{defect.name}</h4>
+                                <h4 className="mgmt-card-title defect-name-cell" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', width: '100%' }}>
+                                  <span>{defect.name}</span>
+                                  {defect.aql_class && (
+                                    <span style={{
+                                      fontSize: '0.65rem',
+                                      fontWeight: 'bold',
+                                      padding: '1px 6px',
+                                      borderRadius: '4px',
+                                      backgroundColor: defect.aql_class === 'Critical' ? '#fee2e2' : defect.aql_class === 'Major' ? '#ffedd5' : '#f0fdf4',
+                                      color: defect.aql_class === 'Critical' ? '#991b1b' : defect.aql_class === 'Major' ? '#9a3412' : '#166534',
+                                    }}>
+                                      {defect.aql_class}
+                                    </span>
+                                  )}
+                                </h4>
                               </div>
                               {defect.description && (
-                                <div style={{ fontSize: '0.8rem', color: '#666', marginBottom: '8px' }}>{defect.description}</div>
+                                <div style={{ fontSize: '0.8rem', color: '#666', marginBottom: '8px', lineHeight: '1.3' }}>{defect.description}</div>
                               )}
                               <div className="mgmt-card-meta-chips">
-                                <span className={`category-badge ${defect.category}`}>
+                                <span className={`category-badge ${defect.category}`} style={defect.category === 'paint' ? { backgroundColor: '#F2D2BD', color: '#7B5233', border: '1px solid #EADCC9' } : {}}>
                                   {categoryLabels[defect.category] || defect.category}
                                 </span>
-                                {(() => {
-                                    try {
-                                      if (!defect.stage) return null;
-                                      const stages = defect.stage.startsWith('[') ? JSON.parse(defect.stage) : [defect.stage];
-                                      if (!Array.isArray(stages)) return null;
-                                      return stages.map((s, idx) => (
-                                        <span key={idx} className="mgmt-card-chip info" style={{ fontSize: '0.7rem' }}>
-                                          ⚙️ {s}
-                                        </span>
-                                      ));
-                                    } catch (e) {
-                                      return null;
-                                    }
-                                  })()}
+                                {renderCompactStages(defect.stage)}
                                 {defect.needs_tracking && (
-                                  <span className="mgmt-card-chip danger" style={{ fontSize: '0.7rem', backgroundColor: '#fee2e2', color: '#ef4444', border: '1px solid #fecaca' }}>
+                                  <span className="mgmt-card-chip danger" style={{ backgroundColor: '#fee2e2', color: '#ef4444', border: '1px solid #fecaca' }}>
                                     ● QA Track
                                   </span>
                                 )}
                               </div>
+
+                              {/* Ánh xạ lỗi khách trên Mobile */}
+                              {defect.client_defects && defect.client_defects.length > 0 && (
+                                <div style={{ marginTop: '10px', width: '100%' }}>
+                                  <button 
+                                    type="button"
+                                    onClick={() => toggleRowExpand(defect.id)}
+                                    style={{
+                                      width: '100%',
+                                      padding: '6px 12px',
+                                      backgroundColor: '#FAF6F0',
+                                      border: '1px solid #EADCC9',
+                                      borderRadius: '6px',
+                                      fontSize: '0.75rem',
+                                      fontWeight: 'bold',
+                                      color: '#4b301e',
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center'
+                                    }}
+                                  >
+                                    <span>🤝 Ánh xạ {defect.client_defects.length} lỗi khách</span>
+                                    <span>{expandedRows[defect.id] ? '▲' : '▼'}</span>
+                                  </button>
+                                  
+                                  {expandedRows[defect.id] && (
+                                    <div style={{
+                                      marginTop: '8px',
+                                      padding: '10px',
+                                      backgroundColor: '#fff',
+                                      border: '1px solid #EADCC9',
+                                      borderRadius: '6px',
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: '8px',
+                                      maxHeight: '200px',
+                                      overflowY: 'auto'
+                                    }}>
+                                      {defect.client_defects.map(cd => (
+                                        <div key={cd.id} style={{ borderBottom: '1px dotted #EADCC9', paddingBottom: '6px', fontSize: '0.75rem' }}>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+                                            <span style={{ fontWeight: 'bold', color: '#7B5233', fontFamily: 'monospace' }}>{cd.code}</span>
+                                            <span style={{ fontStyle: 'italic', fontSize: '0.65rem', color: '#666' }}>{cd.detection_method}</span>
+                                          </div>
+                                          <div style={{ fontWeight: '600', color: '#4b301e' }}>{cd.name} {cd.name_en && `(${cd.name_en})`}</div>
+                                          {cd.minor_criteria && <div style={{ color: '#555', fontSize: '0.7rem', marginTop: '2px' }}>• Minor: {cd.minor_criteria}</div>}
+                                          {cd.major_criteria && <div style={{ color: '#555', fontSize: '0.7rem' }}>• Major: {cd.major_criteria}</div>}
+                                          {cd.critical_criteria && <div style={{ color: '#555', fontSize: '0.7rem' }}>• Critical: {cd.critical_criteria}</div>}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
-                            <div className="mgmt-card-actions">
+                            <div className="mgmt-card-actions" style={{ alignSelf: 'flex-start' }}>
                               <button 
                                 className="action-icon-btn"
                                 onClick={() => handleOpenEdit(defect)}
@@ -1019,6 +1370,7 @@ const DefectManagement = () => {
                       </div>
                     )}
                   </div>
+
 
                   {/* Phân trang - Mobile Sticky */}
                   {totalItems > 0 && (
@@ -1141,15 +1493,38 @@ const DefectManagement = () => {
                   />
                 </div>
 
+                <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                  <div>
+                    <label>Mã lỗi G7 (Code)</label>
+                    <input
+                      type="text"
+                      name="code"
+                      value={formData.code || ''}
+                      onChange={handleInputChange}
+                      placeholder="Ví dụ: MAT-01..."
+                    />
+                  </div>
+                  <div>
+                    <label>Cấp độ nghiêm trọng AQL</label>
+                    <select name="aql_class" value={formData.aql_class || 'Minor'} onChange={handleInputChange}>
+                      <option value="Minor">Nhẹ (Minor)</option>
+                      <option value="Major">Nặng (Major)</option>
+                      <option value="Critical">Nghiêm trọng (Critical)</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div className="form-group">
                   <label>Phân nhóm QC</label>
                   <select name="category" value={formData.category} onChange={handleInputChange}>
-                    <option value="visual">Ngoại quan (Visual)</option>
-                    <option value="structure">Kết cấu (Structure)</option>
-                    <option value="material">Nguyên liệu (Material)</option>
+                    <option value="visual">Ngoại quan (Visual / APP)</option>
+                    <option value="structure">Kết cấu (Structure / STR)</option>
+                    <option value="material">Nguyên liệu (Material / MAT)</option>
+                    <option value="paint">Sơn & Bề mặt (Paint / PAI)</option>
                     <option value="other">Khác (Other)</option>
                   </select>
                 </div>
+
 
                 <div className="form-group">
                   <label>Công đoạn phát sinh <span className="required">*</span></label>
