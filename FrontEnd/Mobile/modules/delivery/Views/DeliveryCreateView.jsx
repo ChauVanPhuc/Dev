@@ -183,7 +183,7 @@ const DeliveryCreate = () => {
                        return false;
                    };
                    
-                   if (!userStageNorm || checkTree(p.bom_details)) {
+                    if (!userStageNorm || userStageNorm.includes('đóng gói') || userStageNorm.includes('đg') || checkTree(p.bom_details)) {
                        poParts.push({
                           ...p,
                           name: p.name || p.sku,

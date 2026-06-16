@@ -31,6 +31,13 @@ const InputInspection = () => {
     inspections = []
   } = location.state || {}
 
+  const uRole = (user?.role_name || '').toLowerCase();
+  const uPerm = (user?.permission_name || '').toLowerCase();
+  const isQC = uRole.includes('qc') || uRole.includes('chất lượng') || 
+               uPerm.includes('qc') || uPerm.includes('chất lượng');
+
+  const effectiveViewOnly = viewOnly || !isQC;
+
   // Danh sách quy cách hỗ trợ hiển thị — hỗ trợ cả format cũ (string) và mới ({spec, orderNames})
   const specList = useMemo(() => {
     const raw = [...(specifications || [])].filter(Boolean)
@@ -38,16 +45,16 @@ const InputInspection = () => {
       if (typeof item === 'string') return { spec: item, orderNames: [] }
       return { spec: item.spec, orderNames: item.orderNames || [] }
     })
-    if (viewOnly && inspection?.specification) {
+    if (effectiveViewOnly && inspection?.specification) {
       const exists = list.some(s => s.spec === inspection.specification)
       if (!exists) list.push({ spec: inspection.specification, orderNames: [] })
     }
     return list
-  }, [specifications, viewOnly, inspection])
+  }, [specifications, effectiveViewOnly, inspection])
 
   // Khởi tạo quy cách đã chọn. Tự động chọn nếu chỉ có duy nhất 1 quy cách
   const [selectedSpec, setSelectedSpec] = useState(() => {
-    if (viewOnly) return inspection?.specification ?? ''
+    if (effectiveViewOnly) return inspection?.specification ?? ''
     return specList.length === 1 ? specList[0].spec : ''
   })
 
@@ -72,21 +79,21 @@ const InputInspection = () => {
 
   // Tự động gán/reset chosenCont khi thay đổi quy cách chọn
   useEffect(() => {
-    if (!viewOnly) {
+    if (!effectiveViewOnly) {
       if (commonContNames.length === 1) {
         setChosenCont(commonContNames[0])
       } else {
         setChosenCont('')
       }
     }
-  }, [commonContNames, viewOnly])
+  }, [commonContNames, effectiveViewOnly])
 
   // Form state — khi viewOnly thì khởi tạo từ inspection
-  const [length, setLength] = useState(viewOnly ? (inspection?.measured_length ?? '') : '')
-  const [width, setWidth]   = useState(viewOnly ? (inspection?.measured_width  ?? '') : '')
-  const [height, setHeight] = useState(viewOnly ? (inspection?.measured_height ?? '') : '')
-  const [result, setResult] = useState(viewOnly ? (inspection?.result ?? '') : '')
-  const [note, setNote]     = useState(viewOnly ? (inspection?.note ?? '') : '')
+  const [length, setLength] = useState(effectiveViewOnly ? (inspection?.measured_length ?? '') : '')
+  const [width, setWidth]   = useState(effectiveViewOnly ? (inspection?.measured_width  ?? '') : '')
+  const [height, setHeight] = useState(effectiveViewOnly ? (inspection?.measured_height ?? '') : '')
+  const [result, setResult] = useState(effectiveViewOnly ? (inspection?.result ?? '') : '')
+  const [note, setNote]     = useState(effectiveViewOnly ? (inspection?.note ?? '') : '')
   const [loading, setLoading] = useState(false)
   const [compressing, setCompressing] = useState(false) // Trạng thái nén ảnh
   const [error, setError]   = useState('')
@@ -99,7 +106,7 @@ const InputInspection = () => {
   const fileInputRef = useRef(null)
 
   // Ảnh hiện có (khi viewOnly)
-  const existingImages = viewOnly
+  const existingImages = effectiveViewOnly
     ? [inspection?.image_path_1, inspection?.image_path_2, inspection?.image_path_3].filter(Boolean)
     : []
 
@@ -252,20 +259,20 @@ const InputInspection = () => {
     padding: '9px 10px',
     borderRadius: '10px',
     border: '1.5px solid #e2e8f0',
-    backgroundColor: viewOnly ? '#f1f5f9' : '#fafafa',
+    backgroundColor: effectiveViewOnly ? '#f1f5f9' : '#fafafa',
     fontSize: '0.9rem',
     fontWeight: '600',
-    color: viewOnly ? '#64748b' : '#1e293b',
+    color: effectiveViewOnly ? '#64748b' : '#1e293b',
     outline: 'none',
     boxSizing: 'border-box',
-    cursor: viewOnly ? 'not-allowed' : 'text'
+    cursor: effectiveViewOnly ? 'not-allowed' : 'text'
   }
 
   return (
     <Layout>
       <PageHeader
         title="G7 - Smart Flow"
-        subTitle={viewOnly ? 'MB2.4 | Kết quả kiểm tra' : 'MB2.4 | Kiểm tra đầu vào'}
+        subTitle={effectiveViewOnly ? 'MB2.4 | Kết quả kiểm tra' : 'MB2.4 | Kiểm tra đầu vào'}
       />
 
       <div className="page-content" style={{ padding: '12px', flex: 1, backgroundColor: 'var(--bg-cream)', overflowY: 'auto' }}>
@@ -273,7 +280,7 @@ const InputInspection = () => {
         {/* Header chi tiết */}
         <div id="input-info-card" style={{ ...card, background: 'linear-gradient(135deg, #4a2c1d 0%, #78523b 100%)', border: 'none', padding: '12px 16px', marginBottom: '10px' }}>
           <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.65)', fontWeight: '700', letterSpacing: '0.5px' }}>
-            {viewOnly ? 'CHI TIẾT ĐÃ KIỂM TRA' : 'CHI TIẾT KIỂM TRA'}
+            {effectiveViewOnly ? 'CHI TIẾT ĐÃ KIỂM TRA' : 'CHI TIẾT KIỂM TRA'}
           </div>
           <div style={{ fontSize: '1.05rem', fontWeight: '900', color: '#fff', marginTop: '2px' }}>
             {partName || 'Không xác định'}
@@ -282,7 +289,7 @@ const InputInspection = () => {
             <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.55)', fontWeight: '600' }}>
               KHSX #{planId} {(contName || inspection?.cont_name || chosenCont) ? ` | Cont: ${contName || inspection?.cont_name || chosenCont}` : ''}
             </div>
-            {viewOnly && inspection?.inspected_at && (
+            {effectiveViewOnly && inspection?.inspected_at && (
               <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.55)', fontWeight: '600' }}>
                 {new Date(inspection.inspected_at).toLocaleString('vi-VN')}
               </div>
@@ -323,7 +330,7 @@ const InputInspection = () => {
                   <button
                     key={spec}
                     type="button"
-                    disabled={viewOnly}
+                    disabled={effectiveViewOnly}
                     onClick={() => setSelectedSpec(spec)}
                     style={{
                       position: 'relative',
@@ -335,9 +342,9 @@ const InputInspection = () => {
                       fontWeight: '800',
                       fontSize: '0.82rem',
                       textAlign: 'center',
-                      cursor: viewOnly ? 'default' : 'pointer',
+                      cursor: effectiveViewOnly ? 'default' : 'pointer',
                       transition: 'all 0.15s ease',
-                      opacity: viewOnly && !isSelected ? 0.4 : 1
+                      opacity: effectiveViewOnly && !isSelected ? 0.4 : 1
                     }}
                   >
                     {/* Badge order/cont ở góc trên bên phải */}
@@ -393,7 +400,7 @@ const InputInspection = () => {
         )}
 
         {/* Chọn Container (chỉ hiển thị khi thêm mới từ chế độ Tất cả Cont) */}
-        {!viewOnly && !contName && selectedSpec && commonContNames.length > 0 && (
+        {!effectiveViewOnly && !contName && selectedSpec && commonContNames.length > 0 && (
           <div id="input-container-selection-card" style={card}>
             <span style={sectionLabel}>📦 Chọn Container kiểm tra</span>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
@@ -443,13 +450,13 @@ const InputInspection = () => {
                   placeholder="0"
                   value={value}
                   onChange={e => {
-                    if (viewOnly) return;
+                    if (effectiveViewOnly) return;
                     const val = e.target.value;
                     if (val === '' || (parseFloat(val) >= 0 && parseFloat(val) <= 1000)) {
                       set(val);
                     }
                   }}
-                  readOnly={viewOnly}
+                  readOnly={effectiveViewOnly}
                   max="1000"
                   style={{ ...inputBase, textAlign: 'center', padding: '8px 4px', fontSize: '0.95rem' }}
                 />
@@ -463,8 +470,8 @@ const InputInspection = () => {
           <span style={sectionLabel}>📋 Kết quả kiểm tra</span>
           <PassFailSelector
             value={result === 'Đạt' ? 'pass' : (result === 'Không đạt' ? 'fail' : null)}
-            onChange={(val) => !viewOnly && setResult(val === 'pass' ? 'Đạt' : 'Không đạt')}
-            disabled={viewOnly}
+            onChange={(val) => !effectiveViewOnly && setResult(val === 'pass' ? 'Đạt' : 'Không đạt')}
+            disabled={effectiveViewOnly}
             variant="button"
             passLabel="ĐẠT"
             failLabel="KHÔNG ĐẠT"
@@ -474,10 +481,10 @@ const InputInspection = () => {
         {/* Ảnh minh chứng */}
         <div id="input-images-card" style={card}>
           <span style={sectionLabel}>
-            📷 Ảnh minh chứng ({viewOnly ? existingImages.length : images.length}/3)
+            📷 Ảnh minh chứng ({effectiveViewOnly ? existingImages.length : images.length}/3)
           </span>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            {viewOnly
+            {effectiveViewOnly
               ? existingImages.map((src, i) => (
                   <img
                     key={i}
@@ -519,7 +526,7 @@ const InputInspection = () => {
                 </>
               )
             }
-            {viewOnly && existingImages.length === 0 && (
+            {effectiveViewOnly && existingImages.length === 0 && (
               <span style={{ fontSize: '0.82rem', color: '#94a3b8', fontStyle: 'italic' }}>Không có ảnh</span>
             )}
           </div>
@@ -527,26 +534,26 @@ const InputInspection = () => {
 
         {/* Ghi chú */}
         <div style={card}>
-          <span style={sectionLabel}>📝 Ghi chú {!viewOnly && '(tuỳ chọn)'}</span>
+          <span style={sectionLabel}>📝 Ghi chú {!effectiveViewOnly && '(tuỳ chọn)'}</span>
           <textarea
-            placeholder={viewOnly ? 'Không có ghi chú' : 'Nhập ghi chú...'}
+            placeholder={effectiveViewOnly ? 'Không có ghi chú' : 'Nhập ghi chú...'}
             value={note}
-            onChange={e => !viewOnly && setNote(e.target.value)}
-            readOnly={viewOnly}
+            onChange={e => !effectiveViewOnly && setNote(e.target.value)}
+            readOnly={effectiveViewOnly}
             rows={2}
             style={{ ...inputBase, resize: 'none', lineHeight: '1.5' }}
           />
         </div>
 
         {/* Error (chỉ khi không viewOnly) */}
-        {!viewOnly && error && (
+        {!effectiveViewOnly && error && (
           <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '10px 12px', marginBottom: '10px', color: '#dc2626', fontSize: '0.8rem', fontWeight: '700' }}>
             {error}
           </div>
         )}
 
         {/* Nút hành động */}
-        {viewOnly ? (
+        {effectiveViewOnly ? (
           <button
             onClick={() => navigate(-1)}
             style={{
@@ -559,23 +566,36 @@ const InputInspection = () => {
             ← Quay lại
           </button>
         ) : (
-          <button
-            id="input-submit-btn"
-            onClick={triggerSubmitConfirm}
-            disabled={loading || compressing}
-            style={{
-              width: '100%', padding: '14px', borderRadius: '14px', border: 'none',
-              background: (loading || compressing) ? '#94a3b8' : 'linear-gradient(135deg, #4a2c1d 0%, #78523b 100%)',
-              color: '#fff', fontWeight: '800', fontSize: '0.95rem',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-              boxShadow: (loading || compressing) ? 'none' : '0 4px 14px rgba(74,44,29,0.3)',
-              cursor: (loading || compressing) ? 'not-allowed' : 'pointer',
-              marginBottom: '20px', transition: 'boxShadow 0.2s ease, cursor 0.2s ease'
-            }}
-          >
-            {loading ? <Loader2 size={17} style={{ animation: 'spin 1s linear infinite' }} /> : <CheckCircle2 size={17} />}
-            {loading ? 'Đang lưu...' : 'Lưu kết quả'}
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'row', gap: '10px', marginBottom: '20px' }}>
+            <button
+              id="input-submit-btn"
+              onClick={triggerSubmitConfirm}
+              disabled={loading || compressing}
+              style={{
+                flex: 1, padding: '14px', borderRadius: '14px', border: 'none',
+                background: (loading || compressing) ? '#94a3b8' : 'linear-gradient(135deg, #4a2c1d 0%, #78523b 100%)',
+                color: '#fff', fontWeight: '800', fontSize: '0.95rem',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                boxShadow: (loading || compressing) ? 'none' : '0 4px 14px rgba(74,44,29,0.3)',
+                cursor: (loading || compressing) ? 'not-allowed' : 'pointer',
+                transition: 'boxShadow 0.2s ease, cursor 0.2s ease'
+              }}
+            >
+              {loading ? <Loader2 size={17} style={{ animation: 'spin 1s linear infinite' }} /> : <CheckCircle2 size={17} />}
+              {loading ? 'Đang lưu...' : 'Xác nhận'}
+            </button>
+            <button
+              onClick={() => navigate(-1)}
+              style={{
+                flex: 1, padding: '14px', borderRadius: '14px',
+                border: '1.5px solid #e2e8f0', background: '#fff',
+                color: '#475569', fontWeight: '800', fontSize: '0.92rem',
+                cursor: 'pointer'
+              }}
+            >
+              Hủy
+            </button>
+          </div>
         )}
       </div>
 

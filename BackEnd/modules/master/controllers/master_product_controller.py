@@ -9,6 +9,30 @@ from modules.production.models.bom_detail import BOMDetail
 from modules.master.models.master_bom_detail import MasterBOMDetail
 from modules.master.schemas.master_product import MasterProductCreate, MasterProductUpdate
 
+def to_master_product_dict(master: MasterProduct):
+    if not master:
+        return None
+    return {
+        "id": master.id,
+        "sku": master.sku,
+        "name": master.name,
+        "category_id": master.category_id,
+        "price": master.price,
+        "material": master.material,
+        "color": master.color,
+        "length": master.length,
+        "width": master.width,
+        "height": master.height,
+        "weight": master.weight,
+        "status": master.status,
+        "quantity": master.quantity,
+        "unit": master.unit,
+        "specification": master.specification,
+        "description": master.description,
+        "created_at": master.created_at,
+        "master_bom_details": [b for b in master.master_bom_details if b.parent_id is None]
+    }
+
 def get_master_products(db: Session, skip: int = 0, limit: int = 50, q: str = None):
     query = db.query(MasterProduct)
     if q and q.strip():
@@ -22,7 +46,8 @@ def get_master_products(db: Session, skip: int = 0, limit: int = 50, q: str = No
     return {"items": items, "total": total}
 
 def get_master_product(db: Session, master_product_id: int):
-    return db.query(MasterProduct).filter(MasterProduct.id == master_product_id).first()
+    master = db.query(MasterProduct).filter(MasterProduct.id == master_product_id).first()
+    return to_master_product_dict(master)
 
 def create_master_product(db: Session, master_product: MasterProductCreate):
     data = master_product.model_dump(exclude={'master_bom_details'})
@@ -47,7 +72,7 @@ def create_master_product(db: Session, master_product: MasterProductCreate):
         insert_bom_detail(root_node)
     db.commit()
     db.refresh(db_master)
-    return db_master
+    return to_master_product_dict(db_master)
 
 def update_master_product(db: Session, master_product_id: int, master_product: MasterProductUpdate):
     db_master = db.query(MasterProduct).filter(MasterProduct.id == master_product_id).first()
@@ -57,7 +82,7 @@ def update_master_product(db: Session, master_product_id: int, master_product: M
             setattr(db_master, key, value)
         db.commit()
         db.refresh(db_master)
-    return db_master
+    return to_master_product_dict(db_master)
 
 def delete_master_product(db: Session, master_product_id: int):
     db_master = db.query(MasterProduct).filter(MasterProduct.id == master_product_id).first()
@@ -325,24 +350,35 @@ def import_master_products_from_excel(db: Session, file_content: bytes):
                 child_stages = set()
                 for c_sku, row in unique_children.items():
                     if c_sku in visited_skus: continue
-                    out_stage = clean_val(row[col_names[idx_out_stage]])
-                    if out_stage:
-                        child_stages.add(out_stage)
+                    in_stage = clean_val(row[col_names[idx_in_stage]])
+                    if in_stage:
+                        child_stages.add(in_stage)
                 
-                for child_out_stage in child_stages:
-                    if child_out_stage != parent_in_stage:
-                        rank_child = get_stage_rank(child_out_stage)
+                for child_in_stage in child_stages:
+                    if child_in_stage != parent_in_stage:
+                        rank_child = get_stage_rank(child_in_stage)
                         rank_parent = get_stage_rank(parent_in_stage)
                         if rank_child > 0 and rank_parent > 0 and rank_child < rank_parent:
-                            # Tự động trích xuất mã nhà máy (NM1, NM2...) từ tên công đoạn
+                            # Tự động trích xuất mã nhà máy (NM1, NM2...) và hậu tố (e.g. tủ 2, mặt tiền 2) từ tên công đoạn
                             factory = None
-                            for stage_text in [child_out_stage, parent_in_stage]:
-                                match = re.search(r'(NM\d+)', stage_text)
-                                if match:
-                                    factory = match.group(1)
-                                    break
+                            suffix = ""
+                            for stage_text in [child_in_stage, parent_in_stage]:
+                                if not factory:
+                                    match = re.search(r'(NM\d+)', stage_text)
+                                    if match:
+                                        factory = match.group(1)
+                                if not suffix:
+                                    parts = stage_text.split('-', 1)
+                                    if len(parts) > 1:
+                                        stage_part = parts[1].strip()
+                                        for kw in ["Định hình", "Lắp ráp", "Sơn", "Đóng gói"]:
+                                            if kw in stage_part:
+                                                suff = stage_part.replace(kw, "").strip()
+                                                if suff:
+                                                    suffix = suff
+                                                    break
 
-                            # Hàm helper để lấy tên công đoạn chuẩn kèm mã nhà máy
+                            # Hàm helper để lấy tên công đoạn chuẩn kèm mã nhà máy và hậu tố
                             def get_stage_name_by_rank(r):
                                 base_stages = {
                                     1: "Định hình",
@@ -352,13 +388,16 @@ def import_master_products_from_excel(db: Session, file_content: bytes):
                                 }
                                 base_name = base_stages.get(r, "")
                                 if factory and base_name:
-                                    return f"{factory} - {base_name}"
+                                    res = f"{factory} - {base_name}"
+                                    if suffix:
+                                        res = f"{res} {suffix}"
+                                    return res
                                 return base_name
 
                             # Tạo các bản ghi chuyển tiếp qua từng bước công đoạn trung gian bị thiếu
                             last_parent_id = p_db_obj.id
                             for r in range(rank_parent - 1, rank_child - 1, -1):
-                                in_stg = child_out_stage if r == rank_child else get_stage_name_by_rank(r)
+                                in_stg = child_in_stage if r == rank_child else get_stage_name_by_rank(r)
                                 out_stg = parent_in_stage if r + 1 == rank_parent else get_stage_name_by_rank(r + 1)
                                 
                                 trans_obj = MasterBOMDetail(
@@ -383,7 +422,7 @@ def import_master_products_from_excel(db: Session, file_content: bytes):
                                 db.add(trans_obj)
                                 db.flush()
                                 last_parent_id = trans_obj.id
-                            stage_bridge_parents[child_out_stage] = last_parent_id
+                            stage_bridge_parents[child_in_stage] = last_parent_id
 
             for c_sku, row in unique_children.items():
                 if c_sku in visited_skus: continue
@@ -397,8 +436,9 @@ def import_master_products_from_excel(db: Session, file_content: bytes):
                 c_desc = clean_val(row[col_names[idx_desc]])
                 c_color = parse_color(c_sku, c_name, c_desc) or root_color
                 
+                c_in_stage = clean_val(row[col_names[idx_in_stage]])
                 c_out_stage = clean_val(row[col_names[idx_out_stage]])
-                grandchild_parent_id = stage_bridge_parents.get(c_out_stage, p_db_id)
+                grandchild_parent_id = stage_bridge_parents.get(c_in_stage, p_db_id)
 
                 obj = MasterBOMDetail(
                     master_product_id=db_root_id, parent_id=grandchild_parent_id,
@@ -410,8 +450,8 @@ def import_master_products_from_excel(db: Session, file_content: bytes):
                     description=c_desc,
                     is_raw_material=to_bool(clean_val(row[col_names[idx_is_raw]])),
                     exclude_production=to_bool(clean_val(row[col_names[idx_exclude]])),
-                    output_stage=c_out_stage,
-                    input_stage=clean_val(row[col_names[idx_in_stage]]),
+                    output_stage=c_in_stage,
+                    input_stage=c_out_stage,
                     status="Active"
                 )
                 objects_to_add.append(obj)

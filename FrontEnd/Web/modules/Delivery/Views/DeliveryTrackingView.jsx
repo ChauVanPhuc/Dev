@@ -489,10 +489,10 @@ const DeliveryTracking = () => {
                         className="modal-container" 
                         style={{ 
                             background: '#FFFFFF', 
-                            width: '1000px', 
+                            width: '800px', 
                             maxWidth: '95%', 
-                            height: '90vh', 
-                            maxHeight: '900px', 
+                            height: '80vh', 
+                            maxHeight: '750px', 
                             borderRadius: '20px', 
                             boxShadow: '0 25px 50px -12px rgba(45, 26, 18, 0.25)', 
                             display: 'flex', 

@@ -166,21 +166,56 @@ const SystemMonitorView = () => {
             box-sizing: border-box !important;
           }
           .monitor-toolbar {
-            flex-shrink: 0 !important;
-            padding: 12px 16px !important;
-            border-radius: 12px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
             gap: 10px !important;
+            padding: 10px 14px !important;
+            flex-shrink: 0 !important;
+          }
+          .toolbar-left {
+            display: flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+            width: 100% !important;
+          }
+          .toolbar-right {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            gap: 8px !important;
+            width: 100% !important;
+          }
+          .refresh-config {
+            display: flex !important;
+            align-items: center !important;
+            gap: 6px !important;
+            flex-shrink: 0 !important;
+          }
+          .interval-select {
+            width: auto !important;
+            min-width: unset !important;
+            flex: 1 !important;
+            max-width: 120px !important;
+          }
+          .reload-btn {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            flex-shrink: 0 !important;
           }
           .monitor-toolbar span {
-            font-size: 14px !important;
+            font-size: 13px !important;
           }
           .monitor-toolbar select, .monitor-toolbar button, .monitor-toolbar label {
-            font-size: 14px !important;
-            padding: 8px 14px !important;
+            font-size: 13px !important;
+            padding: 6px 12px !important;
           }
           .monitor-toolbar button svg {
-            width: 15px !important;
-            height: 15px !important;
+            width: 14px !important;
+            height: 14px !important;
           }
           .monitor-grid {
             flex: 1.3 !important;
@@ -289,15 +324,51 @@ const SystemMonitorView = () => {
             min-height: calc(100dvh - 50px - 10px) !important;
           }
           .monitor-toolbar {
-            padding: 10px 14px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
             gap: 8px !important;
+            padding: 8px 10px !important;
+          }
+          .toolbar-left {
+            display: flex !important;
+            align-items: center !important;
+            gap: 6px !important;
+            width: 100% !important;
+          }
+          .toolbar-right {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            gap: 6px !important;
+            width: 100% !important;
+          }
+          .refresh-config {
+            display: flex !important;
+            align-items: center !important;
+            gap: 4px !important;
+            flex-shrink: 0 !important;
+          }
+          .interval-select {
+            width: auto !important;
+            min-width: unset !important;
+            flex: 1 !important;
+            max-width: 110px !important;
+          }
+          .reload-btn {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            flex-shrink: 0 !important;
           }
           .monitor-toolbar span {
-            font-size: 13px !important;
+            font-size: 12px !important;
           }
           .monitor-toolbar select, .monitor-toolbar button, .monitor-toolbar label {
-            font-size: 13px !important;
-            padding: 6px 12px !important;
+            font-size: 12px !important;
+            padding: 5px 10px !important;
           }
           .monitor-grid {
             gap: 8px !important;
@@ -353,18 +424,18 @@ const SystemMonitorView = () => {
           }
         }
       `}</style>
-      
+
       {/* Control Toolbar */}
       <div className="monitor-toolbar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="toolbar-left" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block' }} />
           <span style={{ fontSize: '14px', fontWeight: '700', color: '#7B5233' }}>Giám sát thời gian thực: Đang hoạt động</span>
         </div>
-        
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '700', color: '#7B5233' }}>
-            <input 
-              type="checkbox" 
+
+        <div className="toolbar-right" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <div className="refresh-config" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '700', color: '#7B5233' }}>
+            <input
+              type="checkbox"
               id="auto-refresh"
               checked={autoRefresh}
               onChange={(e) => setAutoRefresh(e.target.checked)}
@@ -372,12 +443,13 @@ const SystemMonitorView = () => {
             />
             <label htmlFor="auto-refresh" style={{ cursor: 'pointer' }}>Tự động làm mới</label>
           </div>
-          <select 
+          <select
             value={refreshInterval}
             onChange={(e) => setRefreshInterval(Number(e.target.value))}
             disabled={!autoRefresh}
-            style={{ 
-              padding: '6px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', 
+            className="interval-select"
+            style={{
+              padding: '6px 12px', border: '1px solid #e2e8f0', borderRadius: '8px',
               fontSize: '13px', fontWeight: '700', backgroundColor: '#fff', color: '#334155', outline: 'none'
             }}
           >
@@ -386,11 +458,12 @@ const SystemMonitorView = () => {
             <option value={5000}>Mỗi 5 giây</option>
             <option value={10000}>Mỗi 10 giây</option>
           </select>
-          <button 
+          <button
             onClick={fetchStats}
             disabled={loading}
-            style={{ 
-              display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', 
+            className="reload-btn"
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px',
               backgroundColor: '#A0301B', color: '#fff', border: 'none', borderRadius: '8px',
               cursor: 'pointer', fontWeight: '700', fontSize: '13px', transition: 'background 0.2s'
             }}
@@ -402,7 +475,7 @@ const SystemMonitorView = () => {
 
       {/* 5 Cards Overview */}
       <div className="monitor-grid">
-        
+
         {/* Active Devices Monitoring */}
         <div className="monitor-card card-active-devices">
           <div className="monitor-card-header">
@@ -415,15 +488,15 @@ const SystemMonitorView = () => {
             <span className="value-text" style={{ fontSize: '36px', fontWeight: '900', color: '#2D1A12' }}>{active_devices.total ?? 0}</span>
             <span className="sub-text" style={{ fontSize: '13px', color: '#6B7280', fontWeight: '600' }}>Online (1 phút qua)</span>
           </div>
-          
+
           <div className="progress-bar" style={{ height: '8px', backgroundColor: '#F3EFEA', borderRadius: '4px', overflow: 'hidden', marginBottom: '15px' }}>
-            <div style={{ 
-              width: '100%', 
-              height: '100%', 
+            <div style={{
+              width: '100%',
+              height: '100%',
               backgroundColor: '#A0301B'
             }} />
           </div>
-          
+
           <div className="footer-text" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#7B5233', fontWeight: '700' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <Monitor size={12} /> Web: {active_devices.web ?? 0}
@@ -446,16 +519,16 @@ const SystemMonitorView = () => {
             <span className="value-text" style={{ fontSize: '36px', fontWeight: '900', color: '#2D1A12' }}>{system.cpu?.percent ?? 'N/A'}%</span>
             <span className="sub-text" style={{ fontSize: '13px', color: '#6B7280', fontWeight: '600' }}>({system.cpu?.count} Cores)</span>
           </div>
-          
+
           <div className="progress-bar" style={{ height: '8px', backgroundColor: '#F3EFEA', borderRadius: '4px', overflow: 'hidden', marginBottom: '15px' }}>
-            <div style={{ 
-              width: `${system.cpu?.percent ?? 0}%`, 
-              height: '100%', 
+            <div style={{
+              width: `${system.cpu?.percent ?? 0}%`,
+              height: '100%',
               backgroundColor: (system.cpu?.percent ?? 0) > 80 ? '#EF4444' : '#A0301B',
               transition: 'width 0.5s ease'
             }} />
           </div>
-          
+
           <div className="footer-text" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#7B5233', fontWeight: '700' }}>
             <span>Backend chiếm:</span>
             <span>{system.cpu?.process_percent ?? 0}%</span>
@@ -474,16 +547,16 @@ const SystemMonitorView = () => {
             <span className="value-text" style={{ fontSize: '36px', fontWeight: '900', color: '#2D1A12' }}>{system.ram?.percent ?? 'N/A'}%</span>
             <span className="sub-text" style={{ fontSize: '13px', color: '#6B7280', fontWeight: '600' }}>Dùng {formatBytes(system.ram?.used)}</span>
           </div>
-          
+
           <div className="progress-bar" style={{ height: '8px', backgroundColor: '#F3EFEA', borderRadius: '4px', overflow: 'hidden', marginBottom: '15px' }}>
-            <div style={{ 
-              width: `${system.ram?.percent ?? 0}%`, 
-              height: '100%', 
+            <div style={{
+              width: `${system.ram?.percent ?? 0}%`,
+              height: '100%',
               backgroundColor: (system.ram?.percent ?? 0) > 85 ? '#EF4444' : '#A0301B',
               transition: 'width 0.5s ease'
             }} />
           </div>
-          
+
           <div className="footer-text" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#7B5233', fontWeight: '700' }}>
             <span>Backend (RSS):</span>
             <span>{formatBytes(system.process_ram)}</span>
@@ -502,16 +575,16 @@ const SystemMonitorView = () => {
             <span className="value-text" style={{ fontSize: '36px', fontWeight: '900', color: '#2D1A12' }}>{system.disk?.percent ?? 'N/A'}%</span>
             <span className="sub-text" style={{ fontSize: '13px', color: '#6B7280', fontWeight: '600' }}>Dùng {formatBytes(system.disk?.used)}</span>
           </div>
-          
+
           <div className="progress-bar" style={{ height: '8px', backgroundColor: '#F3EFEA', borderRadius: '4px', overflow: 'hidden', marginBottom: '15px' }}>
-            <div style={{ 
-              width: `${system.disk?.percent ?? 0}%`, 
-              height: '100%', 
+            <div style={{
+              width: `${system.disk?.percent ?? 0}%`,
+              height: '100%',
               backgroundColor: (system.disk?.percent ?? 0) > 90 ? '#EF4444' : '#A0301B',
               transition: 'width 0.5s ease'
             }} />
           </div>
-          
+
           <div className="footer-text" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#7B5233', fontWeight: '700' }}>
             <span>Còn trống:</span>
             <span>{formatBytes(system.disk?.free)}</span>
@@ -530,15 +603,15 @@ const SystemMonitorView = () => {
             <span className="value-text" style={{ fontSize: '36px', fontWeight: '900', color: '#2D1A12' }}>{database.database_size_mb ?? 'N/A'}</span>
             <span className="sub-text" style={{ fontSize: '14px', color: '#6B7280', fontWeight: '800' }}>MB</span>
           </div>
-          
+
           <div className="progress-bar" style={{ height: '8px', backgroundColor: '#F3EFEA', borderRadius: '4px', overflow: 'hidden', marginBottom: '15px' }}>
-            <div style={{ 
-              width: '100%', 
-              height: '100%', 
+            <div style={{
+              width: '100%',
+              height: '100%',
               backgroundColor: '#A0301B'
             }} />
           </div>
-          
+
           <div className="footer-text" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#7B5233', fontWeight: '700' }}>
             <span>Trạng thái:</span>
             <span style={{ color: database.status === 'Healthy' ? '#10B981' : '#EF4444' }}>
@@ -554,9 +627,9 @@ const SystemMonitorView = () => {
         <h4 style={{ margin: '0 0 20px 0', fontSize: '16px', fontWeight: '800', color: '#2D1A12', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Database size={18} color="#A0301B" /> THÔNG SỐ CHI TIẾT MICROSOFT SQL SERVER
         </h4>
-        
+
         <div className="sql-grid">
-          
+
           <div className="sql-box box-connections">
             <span className="sql-title">SỐ KẾT NỐI MẠNG ĐANG MỞ (CONNECTIONS)</span>
             <span className="sql-value" style={{ color: '#A0301B' }}>{database.active_connections ?? 'N/A'}</span>
@@ -585,7 +658,7 @@ const SystemMonitorView = () => {
           <strong>Phiên bản SQL Server đang chạy:</strong> {database.version ?? 'Không rõ'}
         </div>
       </div>
-      
+
     </div>
   );
 };

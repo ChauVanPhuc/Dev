@@ -511,8 +511,8 @@ const DeliveryInfo = () => {
                  }
                  return false;
              }
-             // Nếu user không có stage (admin) hoặc product có chứa stage trong BOM tree
-             return !userStageNorm || checkTree(p.bom_details);
+             // Nếu user không có stage (admin), hoặc là công đoạn Đóng gói/ĐG, hoặc product có chứa stage trong BOM tree
+             return !userStageNorm || userStageNorm.includes('đóng gói') || userStageNorm.includes('đg') || checkTree(p.bom_details);
         });
         
         if (validProducts.length > 0) {
@@ -780,14 +780,8 @@ const DeliveryInfo = () => {
         const isQC = uRole.includes('qc') || uRole.includes('chất lượng') || 
                      uPerm.includes('qc') || uPerm.includes('chất lượng');
         
-        // Nếu KHÔNG PHẢI QC và thuộc các nhóm sản xuất -> Chỉ được xem
-        const isProduction = !isQC && (
-                             uRole.includes('sản xuất') || 
-                             uPerm.includes('sản xuất') || 
-                             uStage.includes('sản xuất') ||
-                             uStage.includes('định hình') ||
-                             uStage.includes('lắp ráp')
-                            );
+        // Nếu KHÔNG PHẢI QC -> Chỉ được xem (tương đương Sản xuất)
+        const isProduction = !isQC;
 
         const btnBase = {
           width: 'clamp(50px, 18vw, 65px)',
@@ -953,9 +947,35 @@ const DeliveryInfo = () => {
     }
   ]
 
+  const getProductDeliveredQty = useCallback((productName, orderId) => {
+    if (!Array.isArray(deliveries)) return 0;
+    let sum = 0;
+    deliveries.forEach(d => {
+      // 1. Kiểm tra trực tiếp trên delivery chính
+      if (d.order_id === orderId && (d.part_name || '').toLowerCase() === productName.toLowerCase()) {
+        sum += (d.quantity_received || d.quantity_total || 0);
+      }
+      // 2. Kiểm tra trong chi tiết details
+      if (Array.isArray(d.details)) {
+        d.details.forEach(detail => {
+          if (detail.order_id === orderId && (detail.part_name || '').toLowerCase() === productName.toLowerCase()) {
+            sum += (detail.quantity || 0);
+          }
+        });
+      }
+    });
+    return sum;
+  }, [deliveries]);
+
+  const getProductStatus = useCallback((delivered, quantity) => {
+    if (delivered >= quantity) return 'Hoàn thành';
+    if (delivered > 0) return 'Đang giao';
+    return 'Chờ giao';
+  }, []);
+
   const poColumns = [
     {
-      header: 'Mã SP',
+      header: 'chi tiết',
       key: 'name',
       render: (row) => (
         <div style={{ fontWeight: '700', color: 'var(--text-main)', padding: '8px 0', textAlign: 'left' }}>
@@ -964,40 +984,211 @@ const DeliveryInfo = () => {
       )
     },
     {
-      header: 'KH',
-      key: 'quantity',
-      nowrap: true,
-      render: (row) => (
-        <div style={{ textAlign: 'center', color: '#64748b' }}>
-          {row.quantity || 0}
-        </div>
-      )
-    },
-    {
-      header: 'Tiến độ',
-      key: 'progress',
+      header: 'Số lượng',
+      key: 'plan_qty',
       nowrap: true,
       render: (row) => {
-        const prog = Math.round(row.progress || 0);
+        const delivered = getProductDeliveredQty(row.name || row.sku || '', row.orderId);
         return (
-          <div style={{ textAlign: 'center', fontWeight: '800', color: prog >= 100 ? 'var(--status-success)' : 'var(--text-main)' }}>
-            {prog}%
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontWeight: '800', color: 'var(--accent-color)' }}>{delivered}</div>
+            <div style={{ fontSize: '0.7rem', color: '#94a3b8', borderTop: '1px solid #e2e8f0', marginTop: '2px' }}>KH: {row.quantity || 0}</div>
           </div>
-        )
+        );
+      }
+    },
+    {
+      header: 'KT',
+      key: 'kt',
+      nowrap: true,
+      render: (row) => {
+        const key = (row.name || row.sku || '').trim().toLowerCase();
+        const allInsps = inspectionMap[key] || [];
+        const partName = row.name || row.sku;
+        const stageToFilter = userStageDesc || userStageName;
+        
+        // Lọc inspections theo Cont/PO của row
+        const insps = allInsps.filter(insp => {
+          if (!insp.cont_name) return true;
+          return insp.cont_name === row.orderName || getContName(insp.cont_name) === getContName(row.orderName);
+        });
+
+        const navState = { 
+          partName, 
+          planId: selectedPlanId, 
+          stage: stageToFilter,
+          contName: row.orderName || '',
+          specifications: [],
+          inspections: insps
+        };
+
+        const uRole = (user?.role_name || '').toLowerCase();
+        const uPerm = (user?.permission_name || '').toLowerCase();
+        const uStage = userStageDesc.toLowerCase();
+        
+        const isQC = uRole.includes('qc') || uRole.includes('chất lượng') || 
+                     uPerm.includes('qc') || uPerm.includes('chất lượng');
+        
+        const isProduction = !isQC;
+
+        const btnBase = {
+          width: 'clamp(50px, 18vw, 65px)',
+          padding: 'clamp(3px, 1vw, 5px) 0',
+          borderRadius: '8px',
+          fontWeight: '800',
+          fontSize: 'clamp(0.6rem, 1.8vw, 0.7rem)',
+          cursor: 'pointer',
+          whiteSpace: 'nowrap',
+          textAlign: 'center',
+          border: 'none',
+          display: 'block',
+          position: 'relative'
+        };
+
+        const getContNum = (contName) => {
+          if (!contName) return '';
+          const parts = contName.split('-');
+          if (parts.length >= 2) {
+            return `${parts[0]}-${parts[1]}`;
+          }
+          return contName;
+        };
+
+        const renderContBadge = (insp) => {
+          if (!insp.cont_name) return null;
+          const contNum = getContNum(insp.cont_name);
+          return (
+            <span style={{
+              position: 'absolute',
+              bottom: '1px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              backgroundColor: 'rgba(0,0,0,0.45)',
+              color: '#fff',
+              fontSize: '0.48rem',
+              fontWeight: '900',
+              borderRadius: '3px',
+              padding: '0px 2px',
+              lineHeight: '1.2',
+              whiteSpace: 'nowrap'
+            }}>
+              {contNum}
+            </span>
+          );
+        };
+
+        const newestInsp = insps.length > 0 ? insps[insps.length - 1] : null;
+        const hasMore = insps.length > 1;
+        const moreCount = insps.length - 1;
+
+        const showMoreBtn = hasMore && (
+          <button
+            onClick={() => setInspectionsModal({ isOpen: true, partName, insps, navState })}
+            style={{
+              ...btnBase,
+              background: '#f1f5f9',
+              color: '#475569',
+              border: '1.2px dashed #cbd5e1',
+              padding: '2.5px 0',
+              fontSize: '0.62rem',
+              fontWeight: '800'
+            }}
+          >
+            +{moreCount} xem
+          </button>
+        );
+
+        if (isProduction) {
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+              {insps.length === 0 ? (
+                <div style={{ 
+                  padding: 'clamp(4px, 1vw, 6px) clamp(4px, 1vw, 8px)', 
+                  borderRadius: '6px', 
+                  fontSize: 'clamp(0.6rem, 1.8vw, 0.7rem)', 
+                  fontWeight: '800',
+                  backgroundColor: '#f8fafc', color: '#94a3b8', border: '1px solid #e2e8f0',
+                  width: 'clamp(50px, 18vw, 65px)',
+                  textAlign: 'center',
+                  whiteSpace: 'nowrap'
+                }}>
+                  Chưa KT
+                </div>
+              ) : (
+                <>
+                  {(() => {
+                    const isDat = newestInsp.result === 'Đạt';
+                    return (
+                      <button
+                        onClick={() => navigate('/input-inspection', { state: { ...navState, viewOnly: true, inspection: newestInsp } })}
+                        style={{ ...btnBase, background: isDat ? '#86efac' : '#fca5a5', color: isDat ? '#14532d' : '#7f1d1d' }}
+                      >
+                        {isDat ? '✓ Đạt' : '✗ KĐ'}
+                        {renderContBadge(newestInsp)}
+                      </button>
+                    );
+                  })()}
+                  {showMoreBtn}
+                </>
+              )}
+            </div>
+          );
+        }
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+            {newestInsp && (() => {
+              const isDat = newestInsp.result === 'Đạt';
+              return (
+                <button
+                  onClick={() => navigate('/input-inspection', { state: { ...navState, viewOnly: true, inspection: newestInsp } })}
+                  style={{ ...btnBase, background: isDat ? '#86efac' : '#fca5a5', color: isDat ? '#14532d' : '#7f1d1d' }}
+                >
+                  {isDat ? '✓ Đạt' : '✗ KĐ'}
+                  {renderContBadge(newestInsp)}
+                </button>
+              );
+            })()}
+
+            {showMoreBtn}
+            
+            <button
+              onClick={() => navigate('/input-inspection', { state: navState })}
+              style={{ 
+                ...btnBase, 
+                background: insps.length > 0 ? 'transparent' : '#93c5fd', 
+                color: insps.length > 0 ? '#93c5fd' : '#fff',
+                border: insps.length > 0 ? '1.5px solid #93c5fd' : 'none'
+              }}
+            >
+              {insps.length > 0 ? '+ KT' : 'Chưa KT'}
+            </button>
+          </div>
+        );
       }
     },
     {
       header: 'Trạng thái',
       key: 'status',
       render: (row) => {
-        const prog = Math.round(row.progress || 0);
-        const txt = prog >= 100 ? 'Hoàn thành' : (prog > 0 ? 'Đang làm' : 'Chờ làm');
-        const color = prog >= 100 ? 'var(--status-success)' : (prog > 0 ? 'var(--accent-color)' : '#94a3b8');
+        const delivered = getProductDeliveredQty(row.name || row.sku || '', row.orderId);
+        const status = getProductStatus(delivered, row.quantity || 0);
+        const colors = getStatusColor(status === 'Hoàn thành' ? 'Hoàn thành' : (status === 'Đang giao' ? 'Chờ Kiểm Tra' : 'Default'));
         return (
-          <div style={{ textAlign: 'center', color }}>
-            {txt}
-          </div>
-        )
+          <span style={{
+            backgroundColor: colors.bg,
+            color: colors.text,
+            border: `1px solid ${colors.border}`,
+            padding: '3px clamp(4px, 1.5vw, 8px)',
+            borderRadius: '10px',
+            fontSize: 'clamp(0.65rem, 1.8vw, 0.75rem)',
+            fontWeight: '700',
+            whiteSpace: 'nowrap',
+            display: 'inline-block'
+          }}>
+            {status}
+          </span>
+        );
       }
     }
   ];
@@ -1491,10 +1682,16 @@ const DeliveryInfo = () => {
                       <CollapsibleCard
                         key={order.id}
                         title={order.name}
-                        progress={order.order_progress * 100}
                         defaultOpen={false}
                       >
-                        <DataTable columns={poColumns} data={order.products || []} />
+                        <DataTable 
+                          columns={poColumns} 
+                          data={(order.products || []).map(p => ({ 
+                            ...p, 
+                            orderId: order.id, 
+                            orderName: order.name 
+                          }))} 
+                        />
                       </CollapsibleCard>
                     ))}
                     {visibleOrderCount < displayOrders.length && (
