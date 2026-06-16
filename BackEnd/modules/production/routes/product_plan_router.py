@@ -74,7 +74,70 @@ def debug_bom(db: Session = Depends(get_db)):
         "delivery_details": dd_names
     }
 
+import time
+import threading
+from functools import wraps
+
+class SWRCache:
+    def __init__(self, ttl=5.0):
+        self.ttl = ttl
+        self.cache = {}
+        self.lock = threading.Lock()
+
+    def __call__(self, func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            cache_args = []
+            for arg in args:
+                if not hasattr(arg, 'execute') and not hasattr(arg, 'commit'):
+                    cache_args.append(arg)
+            cache_kwargs = {}
+            for k, v in kwargs.items():
+                if k not in ('db', 'background_tasks') and not hasattr(v, 'execute') and not hasattr(v, 'commit'):
+                    cache_kwargs[k] = v
+            key = (func.__name__, tuple(cache_args), frozenset(cache_kwargs.items()))
+            
+            current_time = time.time()
+            if key in self.cache:
+                cached_time, cached_data, is_updating = self.cache[key]
+                if current_time - cached_time < self.ttl:
+                    return cached_data
+                if is_updating:
+                    return cached_data
+                with self.lock:
+                    cached_time, cached_data, is_updating = self.cache.get(key, (0, None, False))
+                    if is_updating:
+                        return cached_data
+                    self.cache[key] = (cached_time, cached_data, True)
+                try:
+                    fresh_data = func(*args, **kwargs)
+                    self.cache[key] = (time.time(), fresh_data, False)
+                    return fresh_data
+                except Exception as e:
+                    self.cache[key] = (cached_time, cached_data, False)
+                    return cached_data
+            else:
+                with self.lock:
+                    if key in self.cache:
+                        return self.cache[key][1]
+                    fresh_data = func(*args, **kwargs)
+                    self.cache[key] = (time.time(), fresh_data, False)
+                    return fresh_data
+        return wrapper
+
+    def clear(self):
+        with self.lock:
+            self.cache.clear()
+
+_plans_swr_cache = SWRCache(ttl=5.0)
+_plan_detail_swr_cache = SWRCache(ttl=5.0)
+
+def clear_plans_cache():
+    _plans_swr_cache.clear()
+    _plan_detail_swr_cache.clear()
+
 @router.get("/")
+@_plans_swr_cache
 def get_plans(user_stage: Optional[str] = None, db: Session = Depends(get_db)):
     from sqlalchemy.orm import selectinload
     plans = db.query(ProductPlan).options(
@@ -168,6 +231,7 @@ async def swap_order_priority(order_id_1: int, order_id_2: int, db: Session = De
         db.execute(text("UPDATE orders SET priority_score = :s WHERE id = :id"), {"s": score1, "id": order_id_2})
         
         db.commit()
+        clear_plans_cache()
         return {"success": True, "message": "Đã hoán đổi thứ tự ưu tiên thành công"}
     except Exception as e:
         db.rollback()
@@ -188,6 +252,7 @@ async def reorder_priorities(order_ids: list[int], db: Session = Depends(get_db)
                 {"s": score, "id": oid}
             )
         db.commit()
+        clear_plans_cache()
         return {"success": True, "message": f"Đã cập nhật thứ tự {total} đơn hàng ưu tiên"}
     except Exception as e:
         db.rollback()
@@ -457,6 +522,7 @@ async def get_product_progress(product_id: int, db: Session = Depends(get_db)):
         return {"error": str(e)}
 
 @router.get("/{id}")
+@_plan_detail_swr_cache
 def get_plan_detail(
     id: int, 
     stage: Optional[str] = None, 
@@ -538,11 +604,16 @@ def get_plan_detail(
             
             from modules.inspection.models.input_inspection import InputInspection
             # [NEW] Lấy danh sách ID đơn hàng đã có dữ liệu bàn giao (không phụ thuộc plan_id của delivery)
-            # 1. Trực tiếp từ deliveries.order_id
-            has_data_ids = {r[0] for r in db.query(Delivery.order_id).filter(Delivery.order_id != None).distinct().all()}
-            # 2. Từ delivery_details.order_id
-            has_data_details = {r[0] for r in db.query(DeliveryDetails.order_id).filter(DeliveryDetails.order_id != None).distinct().all()}
-            has_data_ids.update(has_data_details)
+            # Tối ưu hóa: Chỉ lọc theo danh sách ID đơn hàng thuộc kế hoạch này thay vị quét toàn bộ bảng
+            order_ids_list = [o.id for o in orders]
+            if order_ids_list:
+                # 1. Trực tiếp từ deliveries.order_id
+                has_data_ids = {r[0] for r in db.query(Delivery.order_id).filter(Delivery.order_id.in_(order_ids_list)).distinct().all()}
+                # 2. Từ delivery_details.order_id
+                has_data_details = {r[0] for r in db.query(DeliveryDetails.order_id).filter(DeliveryDetails.order_id.in_(order_ids_list)).distinct().all()}
+                has_data_ids.update(has_data_details)
+            else:
+                has_data_ids = set()
 
             # 3. Từ InputInspection (Kiểm tra đầu vào) - Khớp theo mã PO trong cùng KHSX
             has_inspection_codes = {r[0] for r in db.query(InputInspection.cont_name).filter(
@@ -1136,6 +1207,7 @@ def create_plan(plan_data: ProductPlanCreate, db: Session = Depends(get_db)):
         db.add(new_plan)
         db.commit()
         db.refresh(new_plan)
+        clear_plans_cache()
         return new_plan
     except Exception as e:
         db.rollback()

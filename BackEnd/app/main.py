@@ -43,8 +43,15 @@ colorama.init(autoreset=True)
 
 
 @asynccontextmanager
-
 async def lifespan(app: FastAPI):
+    # Tăng giới hạn thread pool của AnyIO để tránh nghẽn hàng đợi (queue bottleneck) khi có 500+ users
+    import anyio
+    try:
+        limiter = anyio.to_thread.current_default_thread_limiter()
+        limiter.total_tokens = 800
+        print(f"Set AnyIO thread pool limit (tokens) to: {limiter.total_tokens}")
+    except Exception as thread_err:
+        print(f"Error setting AnyIO thread pool: {thread_err}")
 
     import sys
 
@@ -225,6 +232,41 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"Auto-import defect classifications error: {e}")
 
+        # [AUTO-INDEX MIGRATION] Tự động tạo index cho các cột khóa ngoại hay truy vấn
+        try:
+            print("Checking and creating missing database indexes...")
+            indexes_to_create = [
+                ("input_inspections", "plan_id", "ix_input_inspections_plan_id"),
+                ("deliveries", "plan_id", "ix_deliveries_plan_id"),
+                ("deliveries", "order_id", "ix_deliveries_order_id"),
+                ("delivery_details", "order_id", "ix_delivery_details_order_id"),
+                ("delivery_details", "delivery_id", "ix_delivery_details_delivery_id"),
+                ("delivery_returns", "plan_id", "ix_delivery_returns_plan_id"),
+                ("delivery_returns", "delivery_id", "ix_delivery_returns_delivery_id"),
+                ("products", "order_id", "ix_products_order_id"),
+                ("bom_details", "product_id", "ix_bom_details_product_id"),
+                ("bom_details", "parent_id", "ix_bom_details_parent_id"),
+                ("orders", "plan_id", "ix_orders_plan_id")
+            ]
+            for table, col, index_name in indexes_to_create:
+                try:
+                    # Kiểm tra xem index đã tồn tại hay chưa (SQL Server syntax)
+                    check_sql = text(f"""
+                        SELECT 1 FROM sys.indexes 
+                        WHERE name = '{index_name}' AND object_id = OBJECT_ID('{table}')
+                    """)
+                    exists = db.execute(check_sql).fetchone()
+                    if not exists:
+                        print(f"Creating index {index_name} on {table}({col})...")
+                        db.execute(text(f"CREATE INDEX {index_name} ON {table} ({col})"))
+                        db.commit()
+                except Exception as index_err:
+                    db.rollback()
+                    print(f"Error creating index {index_name}: {index_err}")
+            print("Successfully processed database indexes.")
+        except Exception as e:
+            print(f"Auto-index migration error: {e}")
+
 
 
 
@@ -326,10 +368,7 @@ app.add_middleware(
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     url_str = str(request.url)
-    if "/plans/" in url_str:
-        with open("request_history.log", "a", encoding="utf-8") as f:
-            import time
-            f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {request.method} {url_str}\n")
+    # Không ghi log ra file trong môi trường production để tránh nghẽn I/O đồng bộ
             
     # Ghi nhận hoạt động thiết bị truy cập
     try:

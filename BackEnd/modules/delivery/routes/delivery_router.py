@@ -309,6 +309,8 @@ async def create_delivery(
         db.add(new_notification_sx)
 
         db.commit()
+        if '_deliveries_swr_cache' in globals():
+            _deliveries_swr_cache.clear()
         
         # 7. Tác vụ nền (Firebase Push & WebSocket)
         if background_tasks:
@@ -551,7 +553,65 @@ def get_handover_history_by_po(order_code: str, db: Session = Depends(get_db)):
 
     return results
 
+import time
+import threading
+from functools import wraps
+
+class SWRCache:
+    def __init__(self, ttl=5.0):
+        self.ttl = ttl
+        self.cache = {}
+        self.lock = threading.Lock()
+
+    def __call__(self, func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            cache_args = []
+            for arg in args:
+                if not hasattr(arg, 'execute') and not hasattr(arg, 'commit'):
+                    cache_args.append(arg)
+            cache_kwargs = {}
+            for k, v in kwargs.items():
+                if k not in ('db', 'background_tasks') and not hasattr(v, 'execute') and not hasattr(v, 'commit'):
+                    cache_kwargs[k] = v
+            key = (func.__name__, tuple(cache_args), frozenset(cache_kwargs.items()))
+            
+            current_time = time.time()
+            if key in self.cache:
+                cached_time, cached_data, is_updating = self.cache[key]
+                if current_time - cached_time < self.ttl:
+                    return cached_data
+                if is_updating:
+                    return cached_data
+                with self.lock:
+                    cached_time, cached_data, is_updating = self.cache.get(key, (0, None, False))
+                    if is_updating:
+                        return cached_data
+                    self.cache[key] = (cached_time, cached_data, True)
+                try:
+                    fresh_data = func(*args, **kwargs)
+                    self.cache[key] = (time.time(), fresh_data, False)
+                    return fresh_data
+                except Exception as e:
+                    self.cache[key] = (cached_time, cached_data, False)
+                    return cached_data
+            else:
+                with self.lock:
+                    if key in self.cache:
+                        return self.cache[key][1]
+                    fresh_data = func(*args, **kwargs)
+                    self.cache[key] = (time.time(), fresh_data, False)
+                    return fresh_data
+        return wrapper
+
+    def clear(self):
+        with self.lock:
+            self.cache.clear()
+
+_deliveries_swr_cache = SWRCache(ttl=5.0)
+
 @router.get("/{plan_id}", response_model=List[DeliverySchema])
+@_deliveries_swr_cache
 def get_deliveries_by_plan(plan_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """
     [GET] Lấy danh sách các phiếu bàn giao thuộc một kế hoạch sản xuất.

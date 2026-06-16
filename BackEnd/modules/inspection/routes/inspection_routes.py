@@ -235,6 +235,8 @@ async def create_inspection(
         )
         db.add(new_inspection)
         db.commit()
+        if '_inspections_swr_cache' in globals():
+            _inspections_swr_cache.clear()
         db.refresh(new_inspection)
 
         # [Realtime WebSocket] Báo cho toàn bộ phận tại công đoạn này cập nhật kết quả KT mới nhất
@@ -324,7 +326,65 @@ def get_inbound_inspections_by_po(order_code: str, db: Session = Depends(get_db)
 
     return results
 
+import time
+import threading
+from functools import wraps
+
+class SWRCache:
+    def __init__(self, ttl=5.0):
+        self.ttl = ttl
+        self.cache = {}
+        self.lock = threading.Lock()
+
+    def __call__(self, func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            cache_args = []
+            for arg in args:
+                if not hasattr(arg, 'execute') and not hasattr(arg, 'commit'):
+                    cache_args.append(arg)
+            cache_kwargs = {}
+            for k, v in kwargs.items():
+                if k not in ('db', 'background_tasks') and not hasattr(v, 'execute') and not hasattr(v, 'commit'):
+                    cache_kwargs[k] = v
+            key = (func.__name__, tuple(cache_args), frozenset(cache_kwargs.items()))
+            
+            current_time = time.time()
+            if key in self.cache:
+                cached_time, cached_data, is_updating = self.cache[key]
+                if current_time - cached_time < self.ttl:
+                    return cached_data
+                if is_updating:
+                    return cached_data
+                with self.lock:
+                    cached_time, cached_data, is_updating = self.cache.get(key, (0, None, False))
+                    if is_updating:
+                        return cached_data
+                    self.cache[key] = (cached_time, cached_data, True)
+                try:
+                    fresh_data = func(*args, **kwargs)
+                    self.cache[key] = (time.time(), fresh_data, False)
+                    return fresh_data
+                except Exception as e:
+                    self.cache[key] = (cached_time, cached_data, False)
+                    return cached_data
+            else:
+                with self.lock:
+                    if key in self.cache:
+                        return self.cache[key][1]
+                    fresh_data = func(*args, **kwargs)
+                    self.cache[key] = (time.time(), fresh_data, False)
+                    return fresh_data
+        return wrapper
+
+    def clear(self):
+        with self.lock:
+            self.cache.clear()
+
+_inspections_swr_cache = SWRCache(ttl=5.0)
+
 @router.get("/plan/{plan_id}", response_model=List[InspectionSchema])
+@_inspections_swr_cache
 def get_inspections_by_plan(plan_id: int, stage: Optional[str] = None, db: Session = Depends(get_db)):
     """
     [GET] Lấy tất cả kết quả KT đầu vào theo KHSX. Có thể lọc theo công đoạn.
