@@ -1,4 +1,9 @@
 import os
+from dotenv import load_dotenv
+
+# Load variables from .env to os.environ for chatbot services
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 

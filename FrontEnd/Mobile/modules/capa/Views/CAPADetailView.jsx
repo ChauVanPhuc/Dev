@@ -315,7 +315,7 @@ const CAPADetail = () => {
         <div style={{ padding: '16px 16px 100px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
           
           {/* Dropdown Selector for Occurrences */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div id="capa-detail-selector" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <span style={{ fontSize: '14px', fontWeight: '800', color: '#4b301e', whiteSpace: 'nowrap' }}>Lần phát sinh:</span>
             <div style={{ position: 'relative', flex: 1 }}>
               <select
@@ -341,10 +341,10 @@ const CAPADetail = () => {
               <div style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#7c6d5e', fontSize: '10px' }}>▼</div>
             </div>
           </div>
-
+ 
           {/* Card 1: Thông tin ghi nhận */}
           {occurrenceData && (
-            <div style={{
+            <div id="capa-detail-occ-info" style={{
               backgroundColor: '#fff',
               borderRadius: '16px',
               padding: '20px',
@@ -367,7 +367,7 @@ const CAPADetail = () => {
                   {status}
                 </span>
               </div>
-
+ 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '13px' }}>
                 <div>Ngày: <strong style={{ color: '#4b301e' }}>{occurrenceData.occurrence_date}</strong></div>
                 <div>Mã Cont: <strong style={{ color: '#4b301e' }}>{occurrenceData.container_code}</strong></div>
@@ -375,16 +375,16 @@ const CAPADetail = () => {
                 <div>Số lượng: <strong style={{ color: '#4b301e' }}>{occurrenceData.quantity}</strong></div>
                 <div style={{ gridColumn: 'span 2' }}>Kiểm soát bởi: <strong style={{ color: '#4b301e' }}>{occurrenceData.inspector_name}</strong></div>
               </div>
-
+ 
               <div style={{ fontSize: '13px', color: '#4b301e', borderTop: '1px dashed #f0ede8', paddingTop: '10px' }}>
                 <strong>Vấn đề chi tiết:</strong>
                 <p style={{ margin: '4px 0 0', lineHeight: '1.4', color: '#7c6d5e' }}>{occurrenceData.issue_detail}</p>
               </div>
             </div>
           )}
-
+ 
           {/* Card 2: Thông tin điều tra */}
-          <div style={{
+          <div id="capa-detail-investigation" style={{
             backgroundColor: '#fff',
             borderRadius: '16px',
             padding: '20px',
@@ -397,7 +397,7 @@ const CAPADetail = () => {
             <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#4b301e', margin: 0, borderBottom: '1px solid #f0ede8', paddingBottom: '10px' }}>
               Thông tin điều tra
             </h3>
-
+ 
             <div>
               <label style={{ fontSize: '12px', fontWeight: '800', color: '#7c6d5e', marginBottom: '6px', display: 'block' }}>
                 Nguyên nhân chính
@@ -420,7 +420,7 @@ const CAPADetail = () => {
                 }}
               />
             </div>
-
+ 
             <div>
               <label style={{ fontSize: '12px', fontWeight: '800', color: '#7c6d5e', marginBottom: '6px', display: 'block' }}>
                 Hành động khắc phục phòng ngừa
@@ -443,7 +443,7 @@ const CAPADetail = () => {
                 }}
               />
             </div>
-
+ 
             <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
               <button
                 onClick={handleSaveInvestigation}
@@ -483,9 +483,9 @@ const CAPADetail = () => {
               )}
             </div>
           </div>
-
+ 
           {/* Card 3: Bảng theo dõi và đánh giá */}
-          <div style={{
+          <div id="capa-detail-tracking-table" style={{
             backgroundColor: '#fff',
             borderRadius: '16px',
             padding: '16px 8px',

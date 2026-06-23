@@ -23,6 +23,8 @@ from modules.capa.routes import capa_router
 
 from modules.system.routes import system_router, screen_router
 
+from modules.claim.routes.claim_routes import router as claim_router
+
 
 
 api_router = APIRouter()
@@ -74,6 +76,8 @@ api_router.include_router(staff_evaluation_router.router, prefix="/staff-evaluat
 api_router.include_router(screen_router.router, prefix="/screens", tags=["screens"])
 
 api_router.include_router(capa_router.router, prefix="/capas", tags=["capas"])
+
+api_router.include_router(claim_router, prefix="/claims", tags=["claim"])
 
 
 

@@ -1,4 +1,15 @@
-# Reload triggered: Change active device tracking window to 1 minute
+# Reload triggered: Change active device tracking window to 25 minutes
+
+import logging
+
+# Configure global logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# Set specific log levels for external libraries to reduce noise
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("google_genai").setLevel(logging.WARNING)
+logging.getLogger("groq._base_client").setLevel(logging.WARNING)
 
 from fastapi import FastAPI, HTTPException, Request
 
@@ -267,6 +278,91 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"Auto-index migration error: {e}")
 
+        # [AUTO-SYNC] Synchronize cabinet prices from temp JSON to DB
+        try:
+            print("Running auto-sync for cabinet prices from temp JSON to DB...")
+            from modules.claim.controllers.import_controller import load_temp_cabinet_prices
+            from modules.claim.models.claim_models import CabinetPrice
+            
+            prices = load_temp_cabinet_prices()
+            if prices:
+                print(f"Loaded {len(prices)} prices from temp JSON. Syncing to DB...")
+                # Get existing prices in DB
+                existing_prices = {p.cabinet_code: p for p in db.query(CabinetPrice).all()}
+                
+                new_count = 0
+                update_count = 0
+                
+                for p_data in prices:
+                    code = p_data.get("cabinet_code")
+                    if not code:
+                        continue
+                        
+                    name = p_data.get("cabinet_name") or code
+                    material = p_data.get("material") or ""
+                    dims = p_data.get("dimensions") or ""
+                    base = float(p_data.get("base_price") or 0.0)
+                    sale = float(p_data.get("sale_price") or 0.0)
+                    status = p_data.get("status") or "Active"
+                    
+                    if code in existing_prices:
+                        db_price = existing_prices[code]
+                        if db_price.sale_price != sale or db_price.cabinet_name != name or db_price.material != material:
+                            db_price.cabinet_name = name
+                            db_price.material = material
+                            db_price.dimensions = dims
+                            db_price.base_price = base
+                            db_price.sale_price = sale
+                            db_price.status = status
+                            update_count += 1
+                    else:
+                        db_price = CabinetPrice(
+                            cabinet_code=code,
+                            cabinet_name=name,
+                            material=material,
+                            dimensions=dims,
+                            base_price=base,
+                            sale_price=sale,
+                            status=status
+                        )
+                        db.add(db_price)
+                        new_count += 1
+                
+                db.commit()
+                print(f"Cabinet prices sync success: {new_count} new, {update_count} updated.")
+            else:
+                print("No temp cabinet prices found to sync.")
+        except Exception as sync_err:
+            db.rollback()
+            print(f"Auto-sync cabinet prices error: {sync_err}")
+
+        # [AUTO-MIGRATION] Chatbot histories sessions self-healing schema update
+        try:
+            print("Checking and upgrading chatbot_histories table schema...")
+            # Check and add session_id
+            db.execute(text("""
+                IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('chatbot_histories') AND name = 'session_id')
+                BEGIN
+                    ALTER TABLE chatbot_histories ADD session_id NVARCHAR(100) NULL;
+                END
+            """))
+            # Check and add session_title
+            db.execute(text("""
+                IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('chatbot_histories') AND name = 'session_title')
+                BEGIN
+                    ALTER TABLE chatbot_histories ADD session_title NVARCHAR(200) NULL;
+                END
+            """))
+            # Backfill NULL session_ids to 'default'
+            db.execute(text("""
+                UPDATE chatbot_histories SET session_id = 'default' WHERE session_id IS NULL;
+            """))
+            db.commit()
+            print("Successfully processed chatbot_histories schema updates.")
+        except Exception as schema_err:
+            db.rollback()
+            print(f"Chatbot histories schema updates migration error: {schema_err}")
+
 
 
 
@@ -317,9 +413,7 @@ app = FastAPI(
 # [HEALTH CHECK] Endpoint đơn giản để Cloudflare Tunnel và monitoring tools kiểm tra server
 
 @app.get("/health")
-
 async def health_check():
-
     return {"status": "ok"}
 
 
@@ -410,8 +504,7 @@ app.include_router(account_router.router, prefix="/accounts", tags=["test_accoun
 
 
 
-# Mount static files for uploads - Sử dụng đường dẫn tuyệt đối để đảm bảo hoạt động ổn định
-
+# Mount static files for uploads - Sử dụng BackEnd/static
 STATIC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static"))
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -523,4 +616,44 @@ async def serve_ui(request: Request, full_path: str):
         
 
     return {"message": "ERP_G7 API is running. UI builds not found."}
+
+@app.get("/test-direct")
+def test_direct_endpoint():
+    import os
+    try:
+        from modules.chatbot.services.ai_chatbot_service import ai_chatbot_service
+        available = ai_chatbot_service.is_available()
+        api_key_env = os.getenv("GEMINI_API_KEY")
+        
+        # Test Gemini client call directly
+        err_msg = None
+        response_text = None
+        try:
+            if ai_chatbot_service.client:
+                # Direct test call to Gemini API
+                direct_res = ai_chatbot_service.client.models.generate_content(
+                    model="gemini-1.0-pro",  # Use gemini-1.0-pro (available in v1beta)
+                    contents="Xin chào"
+                )
+                response_text = direct_res.text
+            else:
+                err_msg = "Gemini client is None"
+        except Exception as api_err:
+            err_msg = f"Gemini API call failed: {str(api_err)}"
+            
+        return {
+            "status": "ok",
+            "is_available": available,
+            "api_key_present": api_key_env is not None,
+            "api_key_preview": api_key_env[:10] + "..." if api_key_env else "None",
+            "direct_response": response_text,
+            "direct_error": err_msg
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
 

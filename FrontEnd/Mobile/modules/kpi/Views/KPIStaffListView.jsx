@@ -125,7 +125,7 @@ const KPIStaffList = () => {
       <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', flex: 1, backgroundColor: 'var(--bg-cream)' }}>
         
         {/* Statistics Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+        <div id="kpi-staff-stats" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           <div style={{
             backgroundColor: '#fff',
             borderRadius: '16px',
@@ -163,10 +163,11 @@ const KPIStaffList = () => {
             </div>
           </div>
         </div>
-
+ 
         {/* Search Bar */}
         <div style={{ position: 'relative', width: '100%' }}>
           <input
+            id="kpi-staff-search"
             type="text"
             placeholder="Tìm kiếm nhân sự, công đoạn..."
             value={searchTerm}
@@ -184,9 +185,9 @@ const KPIStaffList = () => {
           />
           <Search size={18} color="#8c7e6e" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)' }} />
         </div>
-
+ 
         {/* DataTable Container */}
-        <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '8px', border: '1px solid #e8e1d5', boxShadow: '0 4px 10px rgba(0,0,0,0.02)' }}>
+        <div id="kpi-staff-table-container" style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '8px', border: '1px solid #e8e1d5', boxShadow: '0 4px 10px rgba(0,0,0,0.02)' }}>
           {loading ? (
             <div style={{ padding: '30px', textAlign: 'center', color: '#8c7e6e', fontWeight: '500' }}>
               Đang tải danh sách nhân sự...

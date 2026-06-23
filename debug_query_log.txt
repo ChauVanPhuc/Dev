@@ -1,0 +1,10 @@
+
+--- OPENROUTER 2026-06-19T15:33:40.488755 ---
+Query: SELECT COUNT(*) AS so_luong FROM customer_claims WHERE period='02-2026'
+Result count: 2
+First row: {'id': 1, 'claim_code': 'Cabinet #12', 'product_name': 'T060D-BC-WOA', 'action': 'Full BC', 'period': '02-2026'}
+
+--- OPENROUTER 2026-06-19T15:42:49.298854 ---
+Query: SELECT COUNT(*) as so_luong_khieu_nai FROM customer_claims WHERE period = '02-2026'
+Result count: 2
+First row: {'id': 1, 'claim_code': 'Cabinet #12', 'product_name': 'T060D-BC-WOA', 'action': 'Full BC', 'period': '02-2026'}

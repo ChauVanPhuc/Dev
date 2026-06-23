@@ -8,6 +8,7 @@ from modules.production.models.product import Product
 from modules.production.models.bom_detail import BOMDetail
 from modules.master.models.master_bom_detail import MasterBOMDetail
 from modules.master.schemas.master_product import MasterProductCreate, MasterProductUpdate
+from shared.utils.string_cleaner import clean_and_standardize_name, clean_and_standardize_sku
 
 def to_master_product_dict(master: MasterProduct):
     if not master:
@@ -51,6 +52,11 @@ def get_master_product(db: Session, master_product_id: int):
 
 def create_master_product(db: Session, master_product: MasterProductCreate):
     data = master_product.model_dump(exclude={'master_bom_details'})
+    if 'sku' in data:
+        data['sku'] = clean_and_standardize_sku(data['sku'])
+    if 'name' in data:
+        data['name'] = clean_and_standardize_name(data['name'])
+        
     bom_data_list = getattr(master_product, 'master_bom_details', [])
     db_master = MasterProduct(**data)
     db.add(db_master)
@@ -58,6 +64,11 @@ def create_master_product(db: Session, master_product: MasterProductCreate):
 
     def insert_bom_detail(bom_node, parent_id=None):
         node_data = bom_node.model_dump(exclude={'children'})
+        if 'sku' in node_data:
+            node_data['sku'] = clean_and_standardize_sku(node_data['sku'])
+        if 'name' in node_data:
+            node_data['name'] = clean_and_standardize_name(node_data['name'])
+            
         db_node = MasterBOMDetail(
             **node_data,
             master_product_id=db_master.id,
@@ -78,6 +89,10 @@ def update_master_product(db: Session, master_product_id: int, master_product: M
     db_master = db.query(MasterProduct).filter(MasterProduct.id == master_product_id).first()
     if db_master:
         update_data = master_product.model_dump(exclude_unset=True)
+        if 'sku' in update_data:
+            update_data['sku'] = clean_and_standardize_sku(update_data['sku'])
+        if 'name' in update_data:
+            update_data['name'] = clean_and_standardize_name(update_data['name'])
         for key, value in update_data.items():
             setattr(db_master, key, value)
         db.commit()
@@ -247,13 +262,17 @@ def import_master_products_from_excel(db: Session, file_content: bytes):
         c_code = clean_val(row[col_names[idx_child_code]])
         if not c_code or not p_code: continue
         
-        all_child_codes.add(c_code)
-        if p_code not in adj_list: adj_list[p_code] = []
-        adj_list[p_code].append(row)
+        p_code_std = clean_and_standardize_sku(p_code)
+        c_code_std = clean_and_standardize_sku(c_code)
         
-        if p_code not in info_map:
-            info_map[p_code] = {
-                'name': clean_val(row[col_names[idx_parent_name]]),
+        all_child_codes.add(c_code_std)
+        if p_code_std not in adj_list: adj_list[p_code_std] = []
+        adj_list[p_code_std].append(row)
+        
+        if p_code_std not in info_map:
+            p_name = clean_val(row[col_names[idx_parent_name]])
+            info_map[p_code_std] = {
+                'name': clean_and_standardize_name(p_name),
                 'unit': clean_val(row[col_names[idx_unit]]),
                 'spec': clean_val(row[col_names[idx_spec]])
             }
@@ -264,7 +283,7 @@ def import_master_products_from_excel(db: Session, file_content: bytes):
     
     explicit_roots = df.iloc[:, idx_root_code].dropna().unique()
     if len(explicit_roots) > 0:
-        root_codes = list(set(root_codes) | set([str(r).strip() for r in explicit_roots]))
+        root_codes = list(set(root_codes) | set([clean_and_standardize_sku(r) for r in explicit_roots]))
 
     print(f"--- [DEBUG] Tìm thấy {len(root_codes)} sản phẩm gốc.")
     processed_count = 0
@@ -294,16 +313,17 @@ def import_master_products_from_excel(db: Session, file_content: bytes):
     for r_code in root_codes:
         r_info = info_map.get(r_code, {})
         r_name = r_info.get('name') or r_code
+        r_name_std = clean_and_standardize_name(r_name)
         r_spec = r_info.get('spec')
         if not r_spec:
-            match = re.search(r"(\d+(?:\.\d+)?\s*[*xX]\s*\d+(?:\.\d+)?(?:\s*[*xX]\s*\d+(?:\.\d+)?)?)", r_name)
+            match = re.search(r"(\d+(?:\.\d+)?\s*[*xX]\s*\d+(?:\.\d+)?(?:\s*[*xX]\s*\d+(?:\.\d+)?)?)", r_name_std)
             if match: r_spec = match.group(1)
             
         l, w, h = parse_dimensions(r_spec)
-        root_color = parse_color(r_code, r_name)
+        root_color = parse_color(r_code, r_name_std)
         
         db_root = MasterProduct(
-            sku=r_code, name=r_name, unit=r_info.get('unit') or "Bộ",
+            sku=r_code, name=r_name_std, unit=r_info.get('unit') or "Bộ",
             specification=r_spec, length=l, width=w, height=h,
             color=root_color,
             status="Active"
@@ -340,8 +360,10 @@ def import_master_products_from_excel(db: Session, file_content: bytes):
             unique_children = {}
             for row in children:
                 c_sku = clean_val(row[col_names[idx_child_code]])
-                if not c_sku or c_sku == p_sku: continue
-                if c_sku not in unique_children: unique_children[c_sku] = row
+                if not c_sku: continue
+                c_sku_std = clean_and_standardize_sku(c_sku)
+                if c_sku_std == p_sku: continue
+                if c_sku_std not in unique_children: unique_children[c_sku_std] = row
             
             # Tự động chèn bản ghi chuyển tiếp nếu có khoảng trống công đoạn (e.g. Lắp ráp -> Sơn)
             stage_bridge_parents = {}
@@ -427,14 +449,15 @@ def import_master_products_from_excel(db: Session, file_content: bytes):
             for c_sku, row in unique_children.items():
                 if c_sku in visited_skus: continue
                 c_name = clean_val(row[col_names[idx_child_name]]) or c_sku
+                c_name_std = clean_and_standardize_name(c_name)
                 c_spec = clean_val(row[col_names[idx_child_spec]])
                 if not c_spec:
-                    match = re.search(r"(\d+(?:\.\d+)?\s*[*xX]\s*\d+(?:\.\d+)?(?:\s*[*xX]\s*\d+(?:\.\d+)?)?)", c_name)
+                    match = re.search(r"(\d+(?:\.\d+)?\s*[*xX]\s*\d+(?:\.\d+)?(?:\s*[*xX]\s*\d+(?:\.\d+)?)?)", c_name_std)
                     if match: c_spec = match.group(1)
                 dl, dw, dh = parse_dimensions(c_spec)
                 
                 c_desc = clean_val(row[col_names[idx_desc]])
-                c_color = parse_color(c_sku, c_name, c_desc) or root_color
+                c_color = parse_color(c_sku, c_name_std, c_desc) or root_color
                 
                 c_in_stage = clean_val(row[col_names[idx_in_stage]])
                 c_out_stage = clean_val(row[col_names[idx_out_stage]])
@@ -442,7 +465,7 @@ def import_master_products_from_excel(db: Session, file_content: bytes):
 
                 obj = MasterBOMDetail(
                     master_product_id=db_root_id, parent_id=grandchild_parent_id,
-                    sku=c_sku, name=c_name, unit=clean_val(row[col_names[idx_child_unit]]),
+                    sku=c_sku, name=c_name_std, unit=clean_val(row[col_names[idx_child_unit]]),
                     specification=c_spec, length=dl, width=dw, height=dh,
                     color=c_color,
                     quantity=float(row[col_names[idx_qty]]) if not pd.isna(row[col_names[idx_qty]]) else 1.0,

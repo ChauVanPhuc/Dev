@@ -28,6 +28,11 @@ const api = axios.create({
 
 // Intercept requests and return mock data if in preview mode
 api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token && token !== 'null' && token !== 'undefined') {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+
   const isPreview = window.__IS_PREVIEW__ === true || window.location.search.includes('preview=true');
   if (isPreview) {
     const url = config.url || '';

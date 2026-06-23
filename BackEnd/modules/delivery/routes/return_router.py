@@ -13,6 +13,7 @@ from modules.notification.models.notifications import Notification as Notificati
 from modules.auth.models.accounts import Account as AccountModel
 from modules.production.models.stages import Stage as StageModel
 from shared.services.notification_service import notify_stage
+from shared.utils.string_cleaner import clean_and_standardize_name
 
 router = APIRouter()
 
@@ -63,6 +64,7 @@ async def create_return_slip(
     [POST] Tạo phiếu trả hàng QC kèm ảnh minh chứng.
     """
     try:
+        part_name = clean_and_standardize_name(part_name)
         # 1. Tạo bản ghi trả hàng
         new_return = DeliveryReturn(
             plan_id=plan_id,

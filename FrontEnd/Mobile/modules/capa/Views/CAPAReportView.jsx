@@ -115,7 +115,7 @@ const CAPAReport = () => {
         <div style={{ padding: '16px 16px 80px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
           
           {/* Images Section */}
-          <div style={{
+          <div id="capa-report-images" style={{
             backgroundColor: '#fff',
             borderRadius: '16px',
             padding: '16px',
@@ -152,9 +152,9 @@ const CAPAReport = () => {
               </div>
             )}
           </div>
-
+ 
           {/* Defect Information Card */}
-          <div style={{
+          <div id="capa-report-info" style={{
             backgroundColor: '#fff',
             borderRadius: '16px',
             padding: '20px',
@@ -164,7 +164,7 @@ const CAPAReport = () => {
             flexDirection: 'column',
             gap: '12px'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', justifycontent: 'space-between', alignitems: 'center' }}>
               <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#4b301e', margin: 0 }}>
                 {capaData.error_name}
               </h2>
@@ -180,19 +180,19 @@ const CAPAReport = () => {
                 {capaData.severity}
               </span>
             </div>
-
-            <div style={{ fontSize: '14px', color: '#4b301e', lineHeight: '1.5', whiteSpace: 'pre-line' }}>
+ 
+            <div style={{ fontSize: '14px', color: '#4b301e', lineheight: '1.5', whitespace: 'pre-line' }}>
               <strong>Mô tả:</strong> {capaData.description}
             </div>
-
-            <div style={{ borderTop: '1px solid #f0ede8', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#7c6d5e' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+ 
+            <div style={{ borderTop: '1px solid #f0ede8', paddingtop: '12px', display: 'flex', justifycontent: 'space-between', fontSize: '13px', color: '#7c6d5e' }}>
+              <div style={{ display: 'flex', alignitems: 'center', gap: '6px' }}>
                 <User size={16} />
                 <span>Người phụ trách: <strong>{capaData.assigned_person}</strong></span>
               </div>
             </div>
           </div>
-
+ 
           {/* Severity Option Buttons (Static display matching wireframe) */}
           <div style={{
             backgroundColor: '#fff',
@@ -227,9 +227,9 @@ const CAPAReport = () => {
               })}
             </div>
           </div>
-
+ 
           {/* Occurrence Versions List */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div id="capa-report-history" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#4b301e', margin: '4px 0 0' }}>Lịch sử các lần ghi nhận</h3>
             
             {capaData.occurrences.map((occ) => {

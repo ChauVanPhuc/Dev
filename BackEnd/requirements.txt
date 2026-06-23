@@ -12,3 +12,8 @@ rich
 colorama
 websockets
 firebase-admin
+pymupdf
+pytesseract
+openpyxl
+pillow
+groq

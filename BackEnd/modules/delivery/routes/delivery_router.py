@@ -17,6 +17,7 @@ from modules.delivery.models.deliveries import Delivery as DeliveryModel
 from modules.notification.models.notifications import Notification as NotificationModel
 from modules.auth.models.accounts import Account as AccountModel
 from config.settings import settings
+from shared.utils.string_cleaner import clean_and_standardize_name
 
 router = APIRouter()
 
@@ -49,8 +50,7 @@ if not os.path.exists(UPLOAD_DIR):
 
 def allocate_delivery_fifo(db: Session, delivery_id: int, plan_id: int, part_name: str, quantity: int, specification: Optional[str] = None, exclude_delivery_id: Optional[int] = None, allowed_order_ids: Optional[List[int]] = None):
     """
-    [HELPER] Tự động phân bổ số lượng bàn giao vào các đơn hàng trong kế hoạch (Rót hàng FIFO).
-    TỐI ƯU: Sử dụng Bulk Query để tránh N+1 Query.
+    [HELPER] Tự động phân bổ số lượng bàn giao vào các đơn hàng được chọn.
     """
     from modules.delivery.models.order import Order as OrderModel
     from modules.production.models.product import Product as ProductModel
@@ -60,25 +60,22 @@ def allocate_delivery_fifo(db: Session, delivery_id: int, plan_id: int, part_nam
     # 0. Xóa chi tiết cũ nếu có (dùng cho update)
     db.query(DeliveryDetailsModel).filter(DeliveryDetailsModel.delivery_id == delivery_id).delete()
     
+    # Nếu không chọn đơn hàng nào hoặc số lượng <= 0, không phân bổ
+    if not allowed_order_ids or quantity <= 0:
+        db.flush()
+        return
+    
     # 1. Lấy danh sách đơn hàng sắp xếp theo ưu tiên
-    orders_query = db.query(OrderModel).filter(OrderModel.plan_id == plan_id)
-    if allowed_order_ids is not None:
-        orders_query = orders_query.filter(OrderModel.id.in_(allowed_order_ids))
-    orders = orders_query.order_by(
+    orders = db.query(OrderModel).filter(
+        OrderModel.plan_id == plan_id,
+        OrderModel.id.in_(allowed_order_ids)
+    ).order_by(
         OrderModel.is_priority.desc(), 
         OrderModel.priority_score.desc(), 
         OrderModel.id.asc()
     ).all()
     
-    if not orders or quantity <= 0:
-        # Nếu không có đơn hàng, tạo 1 chi tiết chung
-        new_detail = DeliveryDetailsModel(
-            delivery_id=delivery_id,
-            part_name=part_name,
-            quantity=quantity,
-            order_id=None
-        )
-        db.add(new_detail)
+    if not orders:
         db.flush()
         return
 
@@ -215,6 +212,7 @@ async def create_delivery(
     4. Cập nhật đường dẫn ảnh vào database để hiển thị trên UI.
     """
     try:
+        part_name = clean_and_standardize_name(part_name)
         # 1. [CHUẨN HÓA & FETCH MỘT LẦN] Tìm mã công đoạn và thông tin người dùng
         from modules.production.models.stages import Stage as StageModel
         from sqlalchemy import or_
@@ -259,13 +257,20 @@ async def create_delivery(
         db.add(new_delivery)
         db.flush() 
 
-        # 3. Chia chi tiết theo đơn hàng chọn thủ công hoặc chạy Tự động FIFO
-        allowed_order_ids = None
+        # 3. Chia chi tiết theo đơn hàng chọn thủ công
+        allowed_order_ids = []
         if order_ids:
             try:
                 allowed_order_ids = [int(x.strip()) for x in order_ids.split(",") if x.strip()]
             except ValueError:
-                allowed_order_ids = None
+                allowed_order_ids = []
+                
+        # Cập nhật order_id chính của delivery nếu có duy nhất 1 đơn hàng được chọn
+        if allowed_order_ids and len(allowed_order_ids) == 1:
+            new_delivery.order_id = allowed_order_ids[0]
+        else:
+            new_delivery.order_id = None
+            
         allocate_delivery_fifo(db, new_delivery.id, plan_id, part_name, quantity, specification, allowed_order_ids=allowed_order_ids)
 
         # 4. Cập nhật thẻ QR dự phòng
@@ -1029,6 +1034,7 @@ class UpdateDeliveryRequest(BaseModel):
     specification: Optional[str] = None # Quy cách
     moisture_min: Optional[float] = None # Độ ẩm tối thiểu
     moisture_max: Optional[float] = None # Độ ẩm tối đa
+    order_ids: Optional[str] = None # [NEW] Danh sách ID đơn hàng dạng "1,2,3"
 
 def _do_update_delivery(delivery_id: int, request: UpdateDeliveryRequest, db: Session):
     """
@@ -1056,7 +1062,7 @@ def _do_update_delivery(delivery_id: int, request: UpdateDeliveryRequest, db: Se
 
     # 2. Cập nhật part_name và quy cách nếu có
     if request.part_name is not None:
-        delivery.part_name = request.part_name
+        delivery.part_name = clean_and_standardize_name(request.part_name)
     
     if request.specification is not None:
         delivery.specification = request.specification
@@ -1067,18 +1073,39 @@ def _do_update_delivery(delivery_id: int, request: UpdateDeliveryRequest, db: Se
     if request.moisture_max is not None:
         delivery.moisture_max = request.moisture_max
         
+    # Xác định danh sách allowed_order_ids để chạy phân bổ
+    if request.order_ids is not None:
+        try:
+            allowed_order_ids = [int(x.strip()) for x in request.order_ids.split(",") if x.strip()]
+        except ValueError:
+            allowed_order_ids = []
+    else:
+        # Nếu không truyền order_ids mới, lấy danh sách order_id hiện tại từ delivery_details
+        allowed_order_ids = [
+            r[0] for r in db.query(DeliveryDetailsModel.order_id)
+            .filter(DeliveryDetailsModel.delivery_id == delivery.id)
+            .all()
+            if r[0] is not None
+        ]
+        
+    # Cập nhật order_id chính của delivery nếu có duy nhất 1 đơn hàng được chọn
+    if allowed_order_ids and len(allowed_order_ids) == 1:
+        delivery.order_id = allowed_order_ids[0]
+    else:
+        delivery.order_id = None
+        
     db.flush()
-    # 3. Tái phân bổ lại chi tiết FIFO nếu số lượng hoặc tên/quy cách thay đổi
-    if request.quantity_total is not None or request.part_name is not None or request.specification is not None:
-        allocate_delivery_fifo(
-            db, 
-            delivery_id=delivery.id, 
-            plan_id=delivery.plan_id, 
-            part_name=delivery.part_name, 
-            quantity=delivery.quantity_total, 
-            specification=delivery.specification,
-            exclude_delivery_id=delivery.id # Loại trừ chính nó khi tính already_assigned
-        )
+    # 3. Tái phân bổ lại chi tiết FIFO nếu số lượng hoặc tên/quy cách hoặc đơn hàng thay đổi
+    allocate_delivery_fifo(
+        db, 
+        delivery_id=delivery.id, 
+        plan_id=delivery.plan_id, 
+        part_name=delivery.part_name, 
+        quantity=delivery.quantity_total, 
+        specification=delivery.specification,
+        exclude_delivery_id=delivery.id, # Loại trừ chính nó khi tính already_assigned
+        allowed_order_ids=allowed_order_ids
+    )
         
     db.commit()
     db.refresh(delivery)

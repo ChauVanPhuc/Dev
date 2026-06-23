@@ -23,6 +23,11 @@ import QualityRecords from '@modules/QualityRecords/Views/QualityRecordsListView
 import QualityRecordsDetail from '@modules/QualityRecords/Views/QualityRecordsDetailView';
 import SystemMonitor from '@modules/System/Views/SystemMonitorView';
 
+// Import Claim module
+import ClaimPortalLayout from '../../modules/Claim/views/PortalLayout';
+import ClaimList from '../../modules/Claim/views/ClaimListView';
+import PriceList from '../../modules/Claim/views/PriceListView';
+import ShipmentList from '../../modules/Claim/views/ShipmentListView';
 
 // Import Manufacture module
 import ManufactureDashboard from '@modules/Dashboard/Views/ManufactureDashboardView';
@@ -47,6 +52,7 @@ import { ScreenProvider } from '@shared/context/ScreenContext';
  * Controller chính điều phối Routing của ứng dụng
  */
 function App() {
+  console.log("SmartFlow App Loading...");
   const isAuthenticated = !!authService.getToken();
 
   return (
@@ -80,6 +86,29 @@ function App() {
             <Route path="monitor" element={<SystemMonitor />} />
           </Route>
 
+          {/* Route Claim (Root level but with PortalLayout) */}
+          <Route path="/admin/claims" element={<PortalLayout />}>
+            <Route element={<ClaimPortalLayout />}>
+              <Route index element={<ClaimList />} />
+            </Route>
+          </Route>
+
+          {/* Route ChatBot - redirects to claims with chat open */}
+          <Route path="/admin/chatbot" element={<Navigate to="/admin/claims?chat=true" />} />
+          {/* Route Prices */}
+          <Route path="/admin/prices" element={<PortalLayout />}>
+            <Route element={<ClaimPortalLayout />}>
+              <Route index element={<PriceList />} />
+            </Route>
+          </Route>
+
+          {/* Route Shipments */}
+          <Route path="/admin/shipments" element={<PortalLayout />}>
+            <Route element={<ClaimPortalLayout />}>
+              <Route index element={<ShipmentList />} />
+            </Route>
+          </Route>
+
           {/* Route Manufacture */}
           <Route path="/manufacture" element={<PortalLayout />}>
             <Route index element={<Navigate to="/manufacture/dashboard" />} />
@@ -98,8 +127,15 @@ function App() {
             <Route path="exception-deliveries" element={<ExceptionDeliveries />} />
           </Route>
 
+          {/* Legacy Redirects */}
+          <Route path="/claim/*" element={<Navigate to="/admin/claims" />} />
+          <Route path="/admin/claim/*" element={<Navigate to="/admin/claims" />} />
+
           {/* Chuyển hướng mặc định */}
           <Route path="/" element={<Navigate to={isAuthenticated ? "/admin/dashboard" : "/login"} />} />
+          
+          {/* Catch-all route to prevent white screen */}
+          <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </Router>
     </ScreenProvider>

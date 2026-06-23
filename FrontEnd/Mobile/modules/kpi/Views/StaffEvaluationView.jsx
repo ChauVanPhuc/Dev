@@ -148,7 +148,7 @@ const StaffEvaluation = () => {
         <div style={{ padding: '16px 16px 100px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
           {/* 1. Phần thông tin chung */}
-          <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 10px rgba(0,0,0,0.03)' }}>
+          <div id="kpi-eval-info" style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 10px rgba(0,0,0,0.03)' }}>
             <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
               <div style={{ flex: 1 }}>
                 <FormSelect label="Chọn nhân sự cần đánh giá" value={formData.staffName} options={[{label: 'Hồ Sỹ Khấn', value: 'Hồ Sỹ Khấn'}]} readOnly={true} />
@@ -166,14 +166,14 @@ const StaffEvaluation = () => {
               </div>
             </div>
           </div>
-
+ 
           {/* 2. Bảng chi tiết KPI */}
-          <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '10px', boxShadow: '0 4px 10px rgba(0,0,0,0.03)' }}>
+          <div id="kpi-eval-table-container" style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '10px', boxShadow: '0 4px 10px rgba(0,0,0,0.03)' }}>
             <DataTable columns={kpiColumns} data={kpiDetails} />
           </div>
-
+ 
           {/* 3. Xếp loại tháng */}
-          <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 10px rgba(0,0,0,0.03)' }}>
+          <div id="kpi-eval-rating" style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 10px rgba(0,0,0,0.03)' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#1e293b', marginBottom: '16px' }}>Xếp loại tháng</h3>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               {['A', 'B', 'C', 'D'].map(type => (
@@ -198,9 +198,9 @@ const StaffEvaluation = () => {
               ))}
             </div>
           </div>
-
+ 
           {/* 4. Nhận xét & Đề xuất */}
-          <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 10px rgba(0,0,0,0.03)' }}>
+          <div id="kpi-eval-note" style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 10px rgba(0,0,0,0.03)' }}>
             <div style={{ marginBottom: '16px' }}>
               <label style={{ fontSize: '0.85rem', fontWeight: '800', color: '#475569', marginBottom: '6px', display: 'block' }}>
                 Đánh giá từ quản lý

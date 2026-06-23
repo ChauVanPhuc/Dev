@@ -105,7 +105,7 @@ const EquipmentList = () => {
       <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto', flex: 1 }}>
         
         {/* Filters Section */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+        <div id="equipment-filters" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <span style={{ fontSize: '13px', fontWeight: '700', color: '#4b301e' }}>Loại thiết bị</span>
             <div style={{ position: 'relative' }}>
@@ -129,7 +129,7 @@ const EquipmentList = () => {
               <ChevronDown size={18} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: '#7c6d5e', pointerEvents: 'none' }} />
             </div>
           </div>
-
+ 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <span style={{ fontSize: '13px', fontWeight: '700', color: '#4b301e' }}>Trạng thái</span>
             <div style={{ position: 'relative' }}>
@@ -154,9 +154,9 @@ const EquipmentList = () => {
             </div>
           </div>
         </div>
-
+ 
         {/* Equipment Table */}
-        <div style={{ 
+        <div id="equipment-table-container" style={{ 
           backgroundColor: '#fff', 
           borderRadius: '16px', 
           overflow: 'hidden', 
@@ -227,9 +227,10 @@ const EquipmentList = () => {
             </tbody>
           </table>
         </div>
-
+ 
         {/* Sync Button */}
         <button 
+          id="equipment-refresh-btn"
           onClick={fetchEquipments}
           style={{
             marginTop: 'auto',

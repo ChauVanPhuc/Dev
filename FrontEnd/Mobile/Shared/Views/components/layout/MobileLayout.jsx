@@ -10,7 +10,7 @@ import NotificationListener from '@modules/notification/Views/components/Notific
 
 import useAuthStore from '@modules/auth/Models/authModel'
 
-// import UserGuideTour from './Onboarding/UserGuideTour' // TODO: File không tồn tại, cần kiểm tra
+import UserGuideTour from './Onboarding/UserGuideTour'
 
 import { Layers, LogOut, ArrowRight } from 'lucide-react'
 
@@ -79,7 +79,7 @@ const Layout = ({ children }) => {
     <div className="app-layout" style={{ height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', overflowX: 'clip', maxWidth: '100vw', width: '100%', margin: 0, padding: 0, boxSizing: 'border-box' }}>
 
       {/* Hướng dẫn người dùng mới */}
-      {/* <UserGuideTour /> */}
+      <UserGuideTour />
 
       {/* Trình lắng nghe thông báo ngầm */}
 

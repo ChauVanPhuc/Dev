@@ -1,0 +1,105 @@
+=== SMARTFLOW DB DIAGNOSTICS ===
+Excel path exists: True
+Excel size: 33324 bytes
+client_defects count: 87
+customer_claims count: 611
+All client defects:
+  - {'code': 'DVA_01', 'name': 'MỐC', 'g7_code': 'APP-13'}
+  - {'code': 'DVA_02', 'name': 'MỐI / MỌT', 'g7_code': 'MAT-04'}
+  - {'code': 'DVA_03', 'name': 'LỒI VÍT/ĐINH', 'g7_code': 'STR-13'}
+  - {'code': 'DVA_04', 'name': 'SƠN CHƯA KHÔ', 'g7_code': 'PAI-07'}
+  - {'code': 'DVA_05', 'name': 'NỨT', 'g7_code': 'APP-24'}
+  - {'code': 'DVA_06', 'name': 'BONG TRÓC SƠN', 'g7_code': 'PAI-05'}
+  - {'code': 'DVA_07', 'name': 'BONG TRÓC VENEER', 'g7_code': 'PAI-05'}
+  - {'code': 'DVA_08', 'name': 'MÀU SẮC KHÔNG ĐỒNG BỘ', 'g7_code': 'PAI-01'}
+  - {'code': 'DVA_09', 'name': 'ĐỘ CỨNG SƠN', 'g7_code': 'PAI-07'}
+  - {'code': 'DVA_10', 'name': 'ĐỘ BÁM DÍNH', 'g7_code': 'PAI-05'}
+  - {'code': 'DVA_11', 'name': 'NGUYÊN LIỆU KHÔNG ĐÚNG BOM', 'g7_code': 'MAT-21'}
+  - {'code': 'DVA_12', 'name': 'KÍCH THƯỚC KHÔNG ĐÚNG (ĐỘ DÀY +- 1MM)', 'g7_code': 'STR-01'}
+  - {'code': 'DVA_13', 'name': 'CHẢY SƠN', 'g7_code': 'PAI-02'}
+  - {'code': 'DVA_14', 'name': 'THÔNG SỐ MÀU VƯỢT MỨC CHO PHÉP', 'g7_code': 'PAI-01'}
+  - {'code': 'DVA_15', 'name': 'CONG VÊNH', 'g7_code': 'MAT-05'}
+  - {'code': 'DVA_16', 'name': 'ĐỘ BÓNG THẤP HOẶC SẢN PHẨM KHÔNG ĐỦ ĐỘ MƯỚT', 'g7_code': 'PAI-17'}
+  - {'code': 'DVA_17', 'name': 'KHE HỞ KHÔNG ĐỀU', 'g7_code': 'STR-11'}
+  - {'code': 'DVA_18', 'name': 'TRẦY', 'g7_code': 'PAI-25'}
+  - {'code': 'DVA_19', 'name': 'MÓP', 'g7_code': 'APP-02'}
+  - {'code': 'DVA_20', 'name': 'LẮP RÁP KHÔNG BẰNG PHẢNG', 'g7_code': 'STR-26'}
+  - {'code': 'DVA_21', 'name': 'RẢNH U KHÔNG THẲNG\n/ ĐẸP', 'g7_code': 'STR-27'}
+  - {'code': 'DVA_22', 'name': 'LỖI VỆ SINH', 'g7_code': 'APP-04'}
+  - {'code': 'DVA_23', 'name': 'MẺ', 'g7_code': 'APP-02'}
+  - {'code': 'DVA_25', 'name': 'SỚ GỖ', 'g7_code': 'MAT-22'}
+  - {'code': 'DVA_26', 'name': 'THIẾU SƠN', 'g7_code': 'PAI-13'}
+  - {'code': 'DVA_27', 'name': 'HỞ MỐI GHÉP', 'g7_code': 'STR-05'}
+  - {'code': 'DVA_28', 'name': 'BỤI', 'g7_code': 'PAI-03'}
+  - {'code': 'DVA_29', 'name': 'VẾT BẨN', 'g7_code': 'APP-04'}
+  - {'code': 'DVA_30', 'name': 'NGUYÊN LIỆU ĐẦU VÀO KHÔNG ĐẠT', 'g7_code': 'MAT-23'}
+  - {'code': 'DVB_01', 'name': 'MỐC', 'g7_code': 'APP-13'}
+  - {'code': 'DVB_02', 'name': 'MỐI / MỌT', 'g7_code': 'MAT-04'}
+  - {'code': 'DVB_03', 'name': 'LỒI ĐINH/VÍT', 'g7_code': 'STR-13'}
+  - {'code': 'DVB_04', 'name': 'SƠN CHƯA KHÔ', 'g7_code': 'PAI-07'}
+  - {'code': 'DVB_05', 'name': 'NỨT', 'g7_code': 'APP-24'}
+  - {'code': 'DVB_06', 'name': 'BONG TRÓC SƠN', 'g7_code': 'PAI-05'}
+  - {'code': 'DVB_07', 'name': 'BONG TRÓC VENEER', 'g7_code': 'PAI-05'}
+  - {'code': 'DVB_08', 'name': 'HỞ MỐI NỐI', 'g7_code': 'STR-05'}
+  - {'code': 'DVB_09', 'name': 'SAI VÂN HỘC KÉO', 'g7_code': 'MAT-14'}
+  - {'code': 'DVB_10', 'name': 'THIẾU VÍT', 'g7_code': 'STR-21'}
+  - {'code': 'DVB_11', 'name': 'SAI KÍCH THƯỚC', 'g7_code': 'STR-01'}
+  - {'code': 'DVB_12', 'name': 'MẮT CHẾT', 'g7_code': 'MAT-03'}
+  - {'code': 'DVB_13', 'name': 'MẮT SỐNG', 'g7_code': 'MAT-03'}
+  - {'code': 'DVB_14', 'name': 'THIẾU SƠN', 'g7_code': 'PAI-13'}
+  - {'code': 'DVB_15', 'name': 'CHẢY SƠN', 'g7_code': 'PAI-02'}
+  - {'code': 'DVB_16', 'name': 'TRẦY', 'g7_code': 'PAI-25'}
+  - {'code': 'DVB_17', 'name': 'MÓP', 'g7_code': 'APP-02'}
+  - {'code': 'DVB_18', 'name': 'MẺ', 'g7_code': 'APP-02'}
+  - {'code': 'DVB_19', 'name': 'SỚ GỖ', 'g7_code': 'MAT-22'}
+  - {'code': 'DVB_20', 'name': 'HỘC KÉO KHÔNG VUÔNG', 'g7_code': 'STR-08'}
+  - {'code': 'DVB_21', 'name': 'THIẾU BỌ LIÊN KẾT', 'g7_code': 'STR-21'}
+  - {'code': 'DVC_01', 'name': 'MỐC', 'g7_code': 'APP-13'}
+  - {'code': 'DVC_02', 'name': 'MỐI / MỌT', 'g7_code': 'MAT-04'}
+  - {'code': 'DVC_03', 'name': 'LỒI VÍT/ĐINH', 'g7_code': 'STR-13'}
+  - {'code': 'DVC_04', 'name': 'NỨT', 'g7_code': 'APP-24'}
+  - {'code': 'DVC_05', 'name': 'BONG TRÓC VENEER', 'g7_code': 'PAI-05'}
+  - {'code': 'DVC_06', 'name': 'THIẾU SƠN', 'g7_code': 'PAI-13'}
+  - {'code': 'DVC_07', 'name': 'THIẾU VÍT', 'g7_code': 'STR-21'}
+  - {'code': 'DVD_01', 'name': 'MỐC', 'g7_code': 'APP-13'}
+  - {'code': 'DVD_02', 'name': 'MỐI MỌT', 'g7_code': 'MAT-04'}
+  - {'code': 'DVD_03', 'name': 'LỒI ĐINH/VÍT', 'g7_code': 'STR-13'}
+  - {'code': 'DVD_04', 'name': 'NỨT', 'g7_code': 'APP-24'}
+  - {'code': 'DVD_05', 'name': 'BONG TRÓC VENEER', 'g7_code': 'PAI-05'}
+  - {'code': 'DVD_06', 'name': 'BONG TRÓC SƠN', 'g7_code': 'PAI-05'}
+  - {'code': 'DVD_07', 'name': 'THIẾU CHÂN PHỤ', 'g7_code': 'MAT-13'}
+  - {'code': 'DVD_08', 'name': 'THIẾU TĂNG ĐƯA/ KHÔNG THỂ ĐIỀU CHỈNH', 'g7_code': 'MAT-13'}
+  - {'code': 'DVD_09', 'name': 'THIẾU VÍT', 'g7_code': 'STR-21'}
+  - {'code': 'DVD_10', 'name': 'THIẾU BỌ LIÊN KẾT', 'g7_code': 'STR-21'}
+  - {'code': 'DVD_11', 'name': 'THIẾU SƠN', 'g7_code': 'PAI-13'}
+  - {'code': 'DVD_12', 'name': 'VỆ SINH', 'g7_code': 'APP-04'}
+  - {'code': 'DVF_01', 'name': 'CẤN BỒN', 'g7_code': 'STR-19'}
+  - {'code': 'DVF_02', 'name': 'RAY TRƯỢT KHÔNG HOẠT\nĐỘNG/KHÔNG MƯỚT', 'g7_code': 'MAT-12'}
+  - {'code': 'DVF_03', 'name': 'BẢN LỀ KHÔNG HOẠT ĐỘNG/KHÔNG\nMƯỚT', 'g7_code': 'MAT-12'}
+  - {'code': 'DVF_04', 'name': 'NGUYÊN LIỆU ĐẦU VÀO KHÔNG ĐẠT CHẤT LƯỢNG', 'g7_code': 'MAT-23'}
+  - {'code': 'DVL_01', 'name': 'SAI SỐ CONTAINER', 'g7_code': 'APP-28'}
+  - {'code': 'DVL_02', 'name': 'SẢN PHẨM SAI VỚI PACKING LIST', 'g7_code': 'APP-28'}
+  - {'code': 'DVL_03', 'name': 'QUÉT SAI SKU/BATCH', 'g7_code': 'APP-22'}
+  - {'code': 'DVL_04', 'name': 'CHỤP HÌNH LOAD CONT SAI QUY TRÌNH', 'g7_code': 'APP-29'}
+  - {'code': 'DVL_05', 'name': 'KHÔNG DÁN LPN', 'g7_code': 'APP-05'}
+  - {'code': 'DVL_06', 'name': 'LPN KHÔNG ĐỒNG NHẤT\nSẢN PHẨM', 'g7_code': 'APP-30'}
+  - {'code': 'DVP_01', 'name': 'SAI THÔNG TIN SẢN PHẨM', 'g7_code': 'APP-06'}
+  - {'code': 'DVP_02', 'name': 'KHÔNG ĐỒNG NHẤT SẢN PHẨM / MÀU TRÊN PALLET', 'g7_code': 'PAI-27'}
+  - {'code': 'DVP_03', 'name': 'SAI/THIẾU HARDWARE', 'g7_code': 'MAT-13'}
+  - {'code': 'DVP_04', 'name': 'THIẾU TEM NHÃN', 'g7_code': 'APP-05'}
+  - {'code': 'DVP_05', 'name': 'SAI/THIẾU PHỤ KIỆN ĐÓNG GÓI', 'g7_code': 'MAT-13'}
+  - {'code': 'DVP_06', 'name': 'NGUYÊN LIỆU ĐẦU VÀO KHÔNG ĐẠT CHẤT LƯỢNG', 'g7_code': 'MAT-23'}
+  - {'code': 'DVP_07', 'name': 'SẢN PHẨM KHÔNG PHÙ HỢP VỚI PALLET', 'g7_code': 'PAI-27'}
+  - {'code': 'DVP_08', 'name': 'MỐC', 'g7_code': 'APP-13'}
+Sample customer claims 02-2026:
+  - {'claim_code': '20260619_085905_483', 'order_code': 'DVA_05', 'period': '02-2026'}
+  - {'claim_code': '20260619_085905_484', 'order_code': 'DVA_23', 'period': '02-2026'}
+  - {'claim_code': '20260619_085905_485', 'order_code': 'DVA_15', 'period': '02-2026'}
+  - {'claim_code': '20260619_085905_486', 'order_code': 'DVA_15', 'period': '02-2026'}
+  - {'claim_code': '20260619_085905_487', 'order_code': 'DVA_08', 'period': '02-2026'}
+Standard join count for 'nứt tét' in 02-2026: 0
+Matches for 'nứt' in d.name:
+  - {'code': 'DVA_05', 'name': 'NỨT', 'cnt': 168}
+  - {'code': 'DVB_05', 'name': 'NỨT', 'cnt': 8}
+  - {'code': 'DVC_04', 'name': 'NỨT', 'cnt': 1}
+  - {'code': 'DVD_04', 'name': 'NỨT', 'cnt': 3}

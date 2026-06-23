@@ -721,7 +721,8 @@ def get_plan_detail(
                             SUM(
                                 CAST(COALESCE(d.quantity_received, d.quantity_total, 0) AS INT) - 
                                 CAST(COALESCE(d.quantity_returned, 0) AS INT)
-                            ) as total_delivered_qty
+                            ) as total_delivered_qty,
+                            SUM(COALESCE(d.residual, 0)) as total_residual_qty
                         FROM deliveries d
                         WHERE d.plan_id = :pid AND d.status IN (N'Đã nhận', N'Hoàn thành', N'Đã Nhận', N'Hoàn Thành', N'Hoàn thảnh', N'Đã nhận hàng', N'Trả Hàng', N'Trả hàng', N'Đã trả hàng', N'Trả một phần')
                           {order_ids_filter_deliv}
@@ -729,7 +730,8 @@ def get_plan_detail(
                     )
                     SELECT 
                         pd.name_clean, pd.input_stage, pd.output_stage, pd.total_plan_qty, pd.specification,
-                        COALESCE(ad.total_delivered_qty, 0) as total_delivered_qty
+                        COALESCE(ad.total_delivered_qty, 0) as total_delivered_qty,
+                        COALESCE(ad.total_residual_qty, 0) as total_residual_qty
                     FROM PlanDetails pd
                     LEFT JOIN ActualDeliveries ad 
                         ON pd.name_clean = ad.part_name 
@@ -783,6 +785,7 @@ def get_plan_detail(
                         "displayName": row.name_clean, 
                         "quantity": int(row.total_plan_qty or 0),
                         "delivered": int(row.total_delivered_qty or 0),
+                        "residual": int(row.total_residual_qty or 0),
                         "input_stage": row.input_stage,
                         "output_stage": row.output_stage,
                         "specification": row.specification or "",

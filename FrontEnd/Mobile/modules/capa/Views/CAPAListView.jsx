@@ -97,7 +97,7 @@ const CAPAList = () => {
       <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', flex: 1, backgroundColor: 'var(--bg-cream)' }}>
         
         {/* Dashboard Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+        <div id="capa-stats-summary" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           <div style={{
             backgroundColor: '#fff',
             borderRadius: '16px',
@@ -135,10 +135,11 @@ const CAPAList = () => {
             </div>
           </div>
         </div>
-
+ 
         {/* Search Input */}
         <div style={{ position: 'relative', width: '100%' }}>
           <input
+            id="capa-search-input"
             type="text"
             placeholder="Tìm kiếm nhóm lỗi, phụ trách..."
             value={searchTerm}
@@ -156,9 +157,9 @@ const CAPAList = () => {
           />
           <Search size={18} color="#8c7e6e" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)' }} />
         </div>
-
+ 
         {/* Table list */}
-        <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '8px', border: '1px solid #e8e1d5', boxShadow: '0 4px 10px rgba(0,0,0,0.02)' }}>
+        <div id="capa-list-table" style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '8px', border: '1px solid #e8e1d5', boxShadow: '0 4px 10px rgba(0,0,0,0.02)' }}>
           {loading ? (
             <div style={{ padding: '30px', textAlign: 'center', color: '#8c7e6e', fontWeight: '500' }}>
               Đang tải danh sách lỗi CAPA...

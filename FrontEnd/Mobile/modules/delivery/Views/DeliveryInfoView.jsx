@@ -7,12 +7,13 @@ import CustomSelect from '@mobile/Shared/Views/components/form/CustomSelect'
 import CollapsibleCard from '@mobile/Shared/Views/components/ui/CollapsibleCard'
 import DataTable from '@mobile/Shared/Views/components/ui/DataTable'
 import PalletCardModal from '@modules/delivery/Views/components/PalletCardModal'
-import { Plus, Truck, Package, Filter, ArrowDownWideNarrow, History, X, Check, ClipboardCheck, Search, ArrowLeftRight } from 'lucide-react'
+import { Plus, Truck, Package, Filter, ArrowDownWideNarrow, History, X, Check, ClipboardCheck, Search, ArrowLeftRight, FileSpreadsheet } from 'lucide-react'
 import useAuthStore from '@modules/auth/Models/authModel'
 import { usePlanController } from '@modules/production/Controllers/planController'
 import { useWebSocket } from '@shared/hooks/useWebSocket'
 import useUiStore from '@shared/store/uiStore'
 import { useDeliveryController } from '@modules/delivery/Controllers/deliveryController'
+import * as XLSX from 'xlsx'
 
 // Helper trích xuất số Cont từ mã PO (Ví dụ "APT-0060-09" -> "APT-0060")
 const getContName = (orderName) => {
@@ -48,7 +49,7 @@ const formatInspectedAt = (dateStr) => {
  */
 const DeliveryInfo = () => {
   const { plans, fetchPlans, fetchDeliveriesByPlan, fetchPlanDetail } = usePlanController()
-  const { fetchReturnsByPlan, fetchInspectionsByPlan, fetchPartProducts } = useDeliveryController()
+  const { fetchReturnsByPlan, fetchInspectionsByPlan, fetchPartProducts, fetchDeliveryDetail } = useDeliveryController()
   const navigate = useNavigate()
   const { user } = useAuthStore()
   const [activeTab, setActiveTab] = useState('plan')
@@ -355,19 +356,119 @@ const DeliveryInfo = () => {
       const matchedDelivery = deliveries.find(d => d.id === ticket.id)
       if (!matchedDelivery) return
 
+      setLoading(true)
+      const fullDetail = await fetchDeliveryDetail(ticket.id)
+
       const partProductsData = await fetchPartProducts(selectedPlanId, matchedDelivery.part_name || '', matchedDelivery.specification || '')
       setPalletPartProducts(partProductsData || [])
 
       const palletData = {
         ...matchedDelivery,
+        ...fullDetail,
         plan_name: currentPlan?.name || '',
         user_name: user?.name || user?.username || ''
       }
       setPalletModal({ isOpen: true, data: palletData })
     } catch (error) {
       console.error('Error loading pallet data:', error)
+    } finally {
+      setLoading(false)
     }
   }
+
+  const handleExportExcel = () => {
+    if (activeTab === 'plan') {
+      if (!filteredAndSortedParts || filteredAndSortedParts.length === 0) {
+        alert("Không có dữ liệu kế hoạch để xuất Excel.");
+        return;
+      }
+      const headers = [
+        "STT",
+        "Tên Chi Tiết",
+        "Số Lượng Kế Hoạch (BOM)",
+        "Số Lượng Thực Giao",
+        "Số Lượng Dư Thừa (+dư)",
+        "Trạng Thái",
+        "Ngày"
+      ];
+      const rows = filteredAndSortedParts.map((row, idx) => [
+        idx + 1,
+        row.displayName || row.name || "",
+        row.quantity || 0,
+        row.delivered - (row.residual || 0),
+        row.residual || 0,
+        row.status || "",
+        row.date || ""
+      ]);
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      ws['!cols'] = [
+        { wch: 8 },   // STT
+        { wch: 30 },  // Tên Chi Tiết
+        { wch: 25 },  // Số Lượng Kế Hoạch (BOM)
+        { wch: 20 },  // Số Lượng Thực Giao
+        { wch: 20 },  // Số Lượng Dư Thừa (+dư)
+        { wch: 18 },  // Trạng Thái
+        { wch: 15 }   // Ngày
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, "Tiến độ chi tiết linh kiện");
+      XLSX.writeFile(wb, `Tien_do_linh_kien_${new Date().toISOString().slice(0,10)}.xlsx`);
+    } else {
+      if (!filteredAndSortedDeliveries || filteredAndSortedDeliveries.length === 0) {
+        alert("Không có dữ liệu bàn giao để xuất Excel.");
+        return;
+      }
+      const headers = [
+        "STT",
+        "Mã Phiếu",
+        "Tên Chi Tiết",
+        "Quy Cách",
+        "Công Đoạn Giao",
+        "Công Đoạn Nhận",
+        "Số Lượng Giao",
+        "Số Lượng Nhận",
+        "Số Lượng Trả",
+        "Số Lượng Lỗi",
+        "Trạng Thái",
+        "Thời Gian Lập",
+        "Ghi Chú"
+      ];
+      const rows = filteredAndSortedDeliveries.map((row, idx) => [
+        idx + 1,
+        `DLV-${row.id}`,
+        row.part_name || "",
+        row.specification || "",
+        row.delivery_stage || "",
+        row.receiving_stage || "",
+        row.quantity_total || 0,
+        row.quantity_received || 0,
+        row.quantity_returned || 0,
+        row.quantity_error || 0,
+        row.status || "",
+        row.created_at ? new Date(row.created_at).toLocaleString('vi-VN') : "",
+        row.note || ""
+      ]);
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      ws['!cols'] = [
+        { wch: 8 },   // STT
+        { wch: 15 },  // Mã Phiếu
+        { wch: 25 },  // Tên Chi Tiết
+        { wch: 20 },  // Quy Cách
+        { wch: 20 },  // Công Đoạn Giao
+        { wch: 20 },  // Công Đoạn Nhận
+        { wch: 15 },  // Số Lượng Giao
+        { wch: 15 },  // Số Lượng Nhận
+        { wch: 15 },  // Số Lượng Trả
+        { wch: 15 },  // Số Lượng Lỗi
+        { wch: 18 },  // Trạng Thái
+        { wch: 22 },  // Thời Gian Lập
+        { wch: 30 }   // Ghi Chú
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, "Danh sách bàn giao");
+      XLSX.writeFile(wb, `Danh_sach_ban_giao_${new Date().toISOString().slice(0,10)}.xlsx`);
+    }
+  };
 
   const handleSocketMessage = useCallback((message) => {
     console.log('[WS Message Received]:', message);
@@ -449,6 +550,7 @@ const DeliveryInfo = () => {
             displayName: key,
             quantity: item.quantity || 0,
             delivered: item.delivered || 0,
+            residual: item.residual || 0,
             specifications: item.specification 
               ? [{ spec: item.specification, orderNames: item.order_names || [] }] 
               : [],
@@ -460,6 +562,7 @@ const DeliveryInfo = () => {
           // Cộng dồn số lượng Kế hoạch và Thực tế cho các chi tiết cùng tên
           partMap[key].quantity += (item.quantity || 0);
           partMap[key].delivered += (item.delivered || 0);
+          partMap[key].residual += (item.residual || 0);
           if (item.specification) {
             const existingSpecObj = partMap[key].specifications.find(s => s.spec === item.specification);
             if (existingSpecObj) {
@@ -481,9 +584,10 @@ const DeliveryInfo = () => {
     // Tính toán trạng thái chung cho tất cả các phần tử trong partMap
     Object.values(partMap).forEach(part => {
       let currentStatus = 'Chờ giao';
-      if (part.delivered >= part.quantity) {
+      const actualDelivered = part.delivered - (part.residual || 0);
+      if (actualDelivered >= part.quantity) {
         currentStatus = 'Hoàn thành';
-      } else if (part.delivered > 0) {
+      } else if (actualDelivered > 0) {
         currentStatus = 'Đang giao';
       }
       part.status = currentStatus;
@@ -693,16 +797,49 @@ const DeliveryInfo = () => {
     }
 
     // 4. Sắp xếp
+    const getStatusPriority = (status) => {
+      const s = (status || '').toLowerCase();
+      if (s.includes('chờ nhận') || s.includes('chờ kiểm') || s.includes('chờ xác')) {
+        return 1;
+      }
+      return 0;
+    };
+
     if (sortOrder === 'DATE_DESC') {
-      result.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      result.sort((a, b) => {
+        const pA = getStatusPriority(a.status);
+        const pB = getStatusPriority(b.status);
+        if (pA !== pB) return pB - pA;
+        return new Date(b.created_at) - new Date(a.created_at);
+      });
     } else if (sortOrder === 'DATE_ASC') {
-      result.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+      result.sort((a, b) => {
+        const pA = getStatusPriority(a.status);
+        const pB = getStatusPriority(b.status);
+        if (pA !== pB) return pB - pA;
+        return new Date(a.created_at) - new Date(b.created_at);
+      });
     } else if (sortOrder === 'QTY_DESC') {
-      result.sort((a, b) => (b.quantity_received || b.quantity_total || 0) - (a.quantity_received || a.quantity_total || 0))
+      result.sort((a, b) => {
+        const pA = getStatusPriority(a.status);
+        const pB = getStatusPriority(b.status);
+        if (pA !== pB) return pB - pA;
+        return (b.quantity_received || b.quantity_total || 0) - (a.quantity_received || a.quantity_total || 0);
+      });
     } else if (sortOrder === 'QTY_ASC') {
-      result.sort((a, b) => (a.quantity_received || a.quantity_total || 0) - (b.quantity_received || b.quantity_total || 0))
+      result.sort((a, b) => {
+        const pA = getStatusPriority(a.status);
+        const pB = getStatusPriority(b.status);
+        if (pA !== pB) return pB - pA;
+        return (a.quantity_received || a.quantity_total || 0) - (b.quantity_received || b.quantity_total || 0);
+      });
     } else {
-      result.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      result.sort((a, b) => {
+        const pA = getStatusPriority(a.status);
+        const pB = getStatusPriority(b.status);
+        if (pA !== pB) return pB - pA;
+        return new Date(b.created_at) - new Date(a.created_at);
+      });
     }
 
     return result
@@ -736,12 +873,20 @@ const DeliveryInfo = () => {
       header: 'Số lượng',
       key: 'plan_qty',
       nowrap: true,
-      render: (row) => (
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontWeight: '800', color: 'var(--accent-color)' }}>{row.delivered}</div>
-          <div style={{ fontSize: '0.7rem', color: '#94a3b8', borderTop: '1px solid #e2e8f0', marginTop: '2px' }}>KH: {row.quantity}</div>
-        </div>
-      )
+      render: (row) => {
+        const actualDelivered = row.delivered - (row.residual || 0);
+        return (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontWeight: '800', color: 'var(--accent-color)' }}>{actualDelivered}</div>
+            {row.residual > 0 && (
+              <div style={{ fontSize: '0.62rem', color: '#b45309', fontWeight: '800', marginTop: '-2px' }}>
+                +{row.residual} dư
+              </div>
+            )}
+            <div style={{ fontSize: '0.7rem', color: '#94a3b8', borderTop: '1px solid #e2e8f0', marginTop: '2px' }}>KH: {row.quantity}</div>
+          </div>
+        );
+      }
     },
     {
       header: 'KT',
@@ -948,23 +1093,27 @@ const DeliveryInfo = () => {
   ]
 
   const getProductDeliveredQty = useCallback((productName, orderId) => {
-    if (!Array.isArray(deliveries)) return 0;
-    let sum = 0;
+    if (!Array.isArray(deliveries)) return { actual: 0, residual: 0 };
+    let actualSum = 0;
+    let residualSum = 0;
     deliveries.forEach(d => {
       // 1. Kiểm tra trực tiếp trên delivery chính
       if (d.order_id === orderId && (d.part_name || '').toLowerCase() === productName.toLowerCase()) {
-        sum += (d.quantity_received || d.quantity_total || 0);
+        const total = (d.quantity_received || d.quantity_total || 0);
+        const res = (d.residual || 0);
+        actualSum += (total - res);
+        residualSum += res;
       }
       // 2. Kiểm tra trong chi tiết details
       if (Array.isArray(d.details)) {
         d.details.forEach(detail => {
           if (detail.order_id === orderId && (detail.part_name || '').toLowerCase() === productName.toLowerCase()) {
-            sum += (detail.quantity || 0);
+            actualSum += (detail.quantity || 0);
           }
         });
       }
     });
-    return sum;
+    return { actual: actualSum, residual: residualSum };
   }, [deliveries]);
 
   const getProductStatus = useCallback((delivered, quantity) => {
@@ -988,10 +1137,15 @@ const DeliveryInfo = () => {
       key: 'plan_qty',
       nowrap: true,
       render: (row) => {
-        const delivered = getProductDeliveredQty(row.name || row.sku || '', row.orderId);
+        const { actual, residual } = getProductDeliveredQty(row.name || row.sku || '', row.orderId);
         return (
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontWeight: '800', color: 'var(--accent-color)' }}>{delivered}</div>
+            <div style={{ fontWeight: '800', color: 'var(--accent-color)' }}>{actual}</div>
+            {residual > 0 && (
+              <div style={{ fontSize: '0.62rem', color: '#b45309', fontWeight: '800', marginTop: '-2px' }}>
+                +{residual} dư
+              </div>
+            )}
             <div style={{ fontSize: '0.7rem', color: '#94a3b8', borderTop: '1px solid #e2e8f0', marginTop: '2px' }}>KH: {row.quantity || 0}</div>
           </div>
         );
@@ -1171,8 +1325,8 @@ const DeliveryInfo = () => {
       header: 'Trạng thái',
       key: 'status',
       render: (row) => {
-        const delivered = getProductDeliveredQty(row.name || row.sku || '', row.orderId);
-        const status = getProductStatus(delivered, row.quantity || 0);
+        const { actual } = getProductDeliveredQty(row.name || row.sku || '', row.orderId);
+        const status = getProductStatus(actual, row.quantity || 0);
         const colors = getStatusColor(status === 'Hoàn thành' ? 'Hoàn thành' : (status === 'Đang giao' ? 'Chờ Kiểm Tra' : 'Default'));
         return (
           <span style={{
@@ -1272,6 +1426,7 @@ const DeliveryInfo = () => {
 
     return (
       <div
+        className="delivery-card-item"
         onClick={handleInteraction}
         style={{
           backgroundColor: hasReturns ? '#fffbeb' : '#fff',
@@ -1461,6 +1616,7 @@ const DeliveryInfo = () => {
             </div>
 
             <button 
+              id="delivery-filter-btn"
               onClick={() => setShowSearchAndFilter(!showSearchAndFilter)} 
               style={{ 
                 background: showSearchAndFilter ? 'rgba(124, 82, 59, 0.08)' : 'none', 
@@ -1480,10 +1636,20 @@ const DeliveryInfo = () => {
             </button>
 
             <button 
+              id="delivery-sort-btn"
               onClick={() => setSortModal(true)} 
               style={{ background: 'none', border: 'none', padding: '4px', display: 'flex', alignItems: 'center', cursor: 'pointer' }}
             >
               <ArrowDownWideNarrow size={26} color={(sortOrder !== 'DEFAULT' && sortOrder !== 'DATE_DESC') ? 'var(--primary-color)' : '#7c5438'} strokeWidth={1.5} />
+            </button>
+
+            <button 
+              id="delivery-excel-btn"
+              onClick={handleExportExcel} 
+              style={{ background: 'none', border: 'none', padding: '4px', display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+              title="Xuất Excel"
+            >
+              <FileSpreadsheet size={26} color="#15803d" strokeWidth={1.5} />
             </button>
           </div>
 
@@ -1758,7 +1924,7 @@ const DeliveryInfo = () => {
           </div>
         ) : (
           // TAB BÀN GIAO: Danh sách các thẻ phiếu biên nhận
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div id="delivery-tickets-list" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {/* Phiếu Bàn Giao Section */}
             {filteredAndSortedDeliveries.length > 0 ? (
               filteredAndSortedDeliveries.map(delivery => {

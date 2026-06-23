@@ -3,6 +3,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 Base = declarative_base()
 from config.settings import settings
 
+
 # Khởi tạo engine để kết nối với cơ sở dữ liệu SQL Server
 # Sử dụng chuỗi kết nối (connection string) được cấu hình trong file .env
 engine = create_engine(

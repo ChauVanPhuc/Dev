@@ -194,9 +194,9 @@ const QualityInspectionDetail = () => {
                 </div>
             ) : (
             <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '100px' }}>
-
+ 
                 {/* Hướng dẫn Header */}
-                <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9' }}>
+                <div id="quality-instruction-card" style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                         <div style={{ fontSize: '1rem', fontWeight: '800', color: '#64748b' }}>Yêu cầu kiểm tra</div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#bf9270', fontWeight: '700', fontSize: '0.9rem', borderBottom: '1px solid #bf9270' }}>
@@ -207,9 +207,9 @@ const QualityInspectionDetail = () => {
                         {getInstruction(category)}
                     </div>
                 </div>
-
+ 
                 {/* Kết quả Section */}
-                <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9' }}>
+                <div id="quality-result-card" style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9' }}>
                     <div style={{ fontSize: '1.1rem', fontWeight: '900', color: '#1e293b', marginBottom: '18px' }}>Kết quả kiểm tra</div>
                     <PassFailSelector
                         value={isPass}
@@ -217,7 +217,7 @@ const QualityInspectionDetail = () => {
                         disabled={false}
                         variant="button"
                     />
-
+ 
                     {/* Ảnh minh chứng */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '15px' }}>
                         <div style={{ fontSize: '1rem', fontWeight: '800', color: '#1e293b' }}>Ảnh minh chứng</div>
@@ -225,7 +225,7 @@ const QualityInspectionDetail = () => {
                             {images.length}/{MAX_IMAGES}
                         </div>
                     </div>
-
+ 
                     {/* Grid 5 cột */}
                     <div style={{
                         display: 'grid',
@@ -253,7 +253,7 @@ const QualityInspectionDetail = () => {
                                 </div>
                             </div>
                         ))}
-
+ 
                         {/* Nút thêm ảnh — chỉ hiện khi chưa đủ 40 */}
                         {images.length < MAX_IMAGES && (
                             <div
@@ -265,7 +265,7 @@ const QualityInspectionDetail = () => {
                             </div>
                         )}
                     </div>
-
+ 
                     {images.length >= MAX_IMAGES && (
                         <div style={{ marginTop: '10px', fontSize: '0.8rem', color: '#ef4444', fontWeight: '600', textAlign: 'center' }}>
                             Đã đạt tối đa {MAX_IMAGES} ảnh minh chứng.
@@ -274,9 +274,9 @@ const QualityInspectionDetail = () => {
                 </div>
             </div>
             )}
-
+ 
             {/* Bottom Bar */}
-            <div className="responsive-fixed-footer" style={{ backgroundColor: '#fff', padding: '16px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '12px' }}>
+            <div id="quality-action-buttons" className="responsive-fixed-footer" style={{ backgroundColor: '#fff', padding: '16px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '12px' }}>
                 <button 
                     onClick={handleSave}
                     disabled={isSubmitting || compressing}

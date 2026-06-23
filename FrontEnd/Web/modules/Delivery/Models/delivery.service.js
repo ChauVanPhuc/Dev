@@ -28,6 +28,12 @@ const deliveryService = {
 
   },
 
+  getInputInspectionResult: (planId, partName) => {
+
+    return api.get(`/inspections/plan/${planId}/part?part_name=${encodeURIComponent(partName)}`);
+
+  },
+
   getExceptionDeliveries: (skip = 0, limit = 100) => {
 
     return api.get(`/deliveries/exceptions?skip=${skip}&limit=${limit}`);

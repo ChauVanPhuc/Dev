@@ -4,6 +4,7 @@ from modules.delivery.models.order_item import OrderItem
 from modules.production.models.product import Product
 from modules.production.models.bom_detail import BOMDetail
 from modules.delivery.schemas.order import OrderCreate, OrderUpdate
+from shared.utils.string_cleaner import clean_and_standardize_name, clean_and_standardize_sku
 
 import datetime
 import random
@@ -44,9 +45,11 @@ def create_order(db: Session, order: OrderCreate):
         from modules.master.models.master_bom_detail import MasterBOMDetail
 
         for p_data in order.products_details:
+            p_name_std = clean_and_standardize_name(p_data.name)
+            p_sku_std = clean_and_standardize_sku(p_data.sku)
             db_product = Product(
-                name=p_data.name,
-                sku=p_data.sku,
+                name=p_name_std,
+                sku=p_sku_std,
                 quantity=p_data.quantity,
                 order_id=db_order.id,
                 status="Active",
@@ -56,17 +59,23 @@ def create_order(db: Session, order: OrderCreate):
             db.flush()
             
             def create_bom_detail_recursive(bom_data, parent_id=None):
+                b_name_std = clean_and_standardize_name(bom_data.name)
+                b_sku_std = clean_and_standardize_sku(bom_data.sku)
+                
                 i_stage = bom_data.input_stage
                 o_stage = bom_data.output_stage
                 if not i_stage or not o_stage:
-                    m_bom = db.query(MasterBOMDetail).filter(MasterBOMDetail.name == bom_data.name).first()
+                    m_bom = db.query(MasterBOMDetail).filter(
+                        (MasterBOMDetail.name == b_name_std) | 
+                        (MasterBOMDetail.name.ilike(b_name_std))
+                    ).first()
                     if m_bom:
                         i_stage = i_stage or m_bom.input_stage
                         o_stage = o_stage or m_bom.output_stage
 
                 db_bom = BOMDetail(
-                    name=bom_data.name,
-                    sku=bom_data.sku,
+                    name=b_name_std,
+                    sku=b_sku_std,
                     quantity=bom_data.quantity,
                     unit=bom_data.unit,
                     specification=bom_data.specification,
@@ -116,9 +125,11 @@ def update_order(db: Session, order_id: int, order: OrderUpdate):
             from modules.master.models.master_bom_detail import MasterBOMDetail
 
             for p_data in order.products_details:
+                p_name_std = clean_and_standardize_name(p_data.name)
+                p_sku_std = clean_and_standardize_sku(p_data.sku)
                 db_product = Product(
-                    name=p_data.name,
-                    sku=p_data.sku,
+                    name=p_name_std,
+                    sku=p_sku_std,
                     quantity=p_data.quantity,
                     order_id=db_order.id,
                     status="Active",
@@ -128,17 +139,23 @@ def update_order(db: Session, order_id: int, order: OrderUpdate):
                 db.flush()
                 
                 def create_bom_detail_recursive(bom_data, parent_id=None):
+                    b_name_std = clean_and_standardize_name(bom_data.name)
+                    b_sku_std = clean_and_standardize_sku(bom_data.sku)
+                    
                     i_stage = bom_data.input_stage
                     o_stage = bom_data.output_stage
                     if not i_stage or not o_stage:
-                        m_bom = db.query(MasterBOMDetail).filter(MasterBOMDetail.name == bom_data.name).first()
+                        m_bom = db.query(MasterBOMDetail).filter(
+                            (MasterBOMDetail.name == b_name_std) | 
+                            (MasterBOMDetail.name.ilike(b_name_std))
+                        ).first()
                         if m_bom:
                             i_stage = i_stage or m_bom.input_stage
                             o_stage = o_stage or m_bom.output_stage
 
                     db_bom = BOMDetail(
-                        name=bom_data.name,
-                        sku=bom_data.sku,
+                        name=b_name_std,
+                        sku=b_sku_std,
                         quantity=bom_data.quantity,
                         unit=bom_data.unit,
                         specification=bom_data.specification,

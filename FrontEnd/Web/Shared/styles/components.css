@@ -1144,7 +1144,7 @@ input:checked + .slider:before {
    13. DISPLAY HELPERS
    ------------------------------------------------------------------------- */
 .desktop-only { display: block; }
-.mobile-only { display: none; }
+.mobile-only { display: none !important; }
 
 /* -------------------------------------------------------------------------
    14. CARD HOVER LIFTS & ACCORDION TRANSITIONS

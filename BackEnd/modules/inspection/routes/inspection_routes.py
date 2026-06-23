@@ -24,6 +24,7 @@ from modules.inspection.models.daily_inspection import DailyInspectionRecord, Da
 from modules.inspection.models.stage_inspection import StageInspection
 from modules.inspection.schemas.stage_inspection import StageInspectionCreate, StageInspectionRead
 from modules.auth.models.accounts import Account
+from shared.utils.string_cleaner import clean_and_standardize_name
 
 router = APIRouter()
 
@@ -207,6 +208,7 @@ async def create_inspection(
     Nhận tối đa 3 ảnh minh chứng.
     """
     try:
+        part_name = clean_and_standardize_name(part_name)
         image_paths = []
         for file in files[:3]:  # Giới hạn tối đa 3 ảnh
             ext = os.path.splitext(file.filename)[1]

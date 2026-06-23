@@ -1,7 +1,8 @@
 import { useRef } from 'react'
-import { X, Printer } from 'lucide-react'
+import { X, Printer, FileSpreadsheet } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import logoImg from '@mobile/assets/logo.jpg'
+import * as XLSX from 'xlsx'
 
 /**
  * PalletCardModal - Thẻ Pallet cỡ A5 dạng bảng chuẩn in
@@ -85,6 +86,148 @@ const PalletCardModal = ({ isOpen, onClose, data, partProducts = [] }) => {
   // Tính tổng kế hoạch của chi tiết này trong toàn bộ KHSX
   const totalPlanQty = partProducts.reduce((sum, p) => sum + (p.part_qty_needed || 0), 0)
 
+  const handleExportExcel = () => {
+    if (!data) return;
+
+    let length = data.input_qc_detail?.measured_length;
+    let width = data.input_qc_detail?.measured_width;
+    let height = data.input_qc_detail?.measured_height;
+    if ((!length && !width && !height) && data.input_qc_detail?.specification) {
+      const parts = data.input_qc_detail.specification.split(/[*x]/).map(p => p.trim());
+      if (parts.length === 3) {
+        height = parts[0];
+        width = parts[1];
+        length = parts[2];
+      }
+    }
+
+    const exportData = [];
+    
+    exportData.push([`THÔNG TIN CHI TIẾT THẺ PALLET BG-${data.id}`]);
+    exportData.push([]);
+
+    exportData.push(["1. THÔNG TIN CHUNG"]);
+    exportData.push(["Mã phiếu", `BG-${data.id}`]);
+    exportData.push(["Linh kiện / Tên chi tiết", partName]);
+    exportData.push(["Quy cách kỹ thuật", spec || "Không có"]);
+    exportData.push(["Kế hoạch sản xuất", planName]);
+    exportData.push(["Công đoạn vận chuyển", `${deliveryStage || ""} -> ${receivingStage || ""}`]);
+    exportData.push(["Thời gian lập", createdAt]);
+    exportData.push(["Người thực hiện giao", userName]);
+    exportData.push(["Ghi chú bàn giao", note || "Không có"]);
+    exportData.push([]);
+
+    exportData.push(["2. SỐ LƯỢNG THỰC TẾ"]);
+    exportData.push(["SL Giao Tổng", qty]);
+    exportData.push(["SL Thực Nhận", data.quantity_received || 0]);
+    exportData.push(["SL Trả Lại (QC)", data.quantity_returned || 0]);
+    exportData.push(["SL Lỗi (QC)", data.quantity_error || 0]);
+    exportData.push(["SL Thực Kiểm (QC)", data.quantity_inspection || 0]);
+    exportData.push(["Phế Phẩm / Dư", residualVal]);
+    exportData.push([]);
+
+    exportData.push(["3. PHÂN BỔ ĐƠN HÀNG (PO CHI TIẾT)"]);
+    exportData.push(["STT", "Số PO đối tác", "Mã đơn hàng", "Lệnh sản xuất", "Khách hàng", "Sản phẩm đơn hàng", "Số lượng"]);
+    
+    if (data.details && data.details.length > 0) {
+      data.details.forEach((detail, idx) => {
+        exportData.push([
+          idx + 1,
+          detail.partner_po || "---",
+          detail.order_code || "---",
+          detail.production_code || "---",
+          detail.customer || "---",
+          detail.product_names || "---",
+          detail.quantity || 0
+        ]);
+      });
+    } else {
+      const activePOs = [];
+      let remainingGiao = qty;
+      partProducts.forEach((p, idx) => {
+        const alreadyDelivered = p.delivered || 0;
+        const remainingNeeded = Math.max(0, p.part_qty_needed - alreadyDelivered);
+        const allocated = Math.min(remainingGiao, remainingNeeded);
+        if (allocated > 0) {
+          activePOs.push([
+            activePOs.length + 1,
+            p.partner_po || "---",
+            p.order_code || "---",
+            p.production_code || "---",
+            p.customer || "---",
+            p.prod_sku || "---",
+            allocated
+          ]);
+        }
+        remainingGiao -= allocated;
+      });
+
+      if (activePOs.length > 0) {
+        exportData.push(...activePOs);
+      } else {
+        exportData.push(["---", "Không có thông tin phân bổ PO cụ thể", "---", "---", "---", "---", 0]);
+      }
+    }
+    exportData.push([]);
+
+    exportData.push(["4. KẾT QUẢ KIỂM TRA QC (ĐẦU CUỐI)"]);
+    const qcDetail = data.qc_detail;
+    if (qcDetail) {
+      exportData.push(["Kết luận", qcDetail.result || "---"]);
+      exportData.push(["Thời gian kiểm định", qcDetail.inspected_at ? new Date(qcDetail.inspected_at).toLocaleString('vi-VN') : "---"]);
+      exportData.push(["Độ ẩm lớn nhất", (qcDetail.moisture_max !== undefined && qcDetail.moisture_max !== null) ? `${qcDetail.moisture_max}%` : "---"]);
+      exportData.push(["Độ ẩm nhỏ nhất", (qcDetail.moisture_min !== undefined && qcDetail.moisture_min !== null) ? `${qcDetail.moisture_min}%` : "---"]);
+      exportData.push(["Ghi chú QC đầu cuối", qcDetail.note || ""]);
+      
+      exportData.push(["Danh sách lỗi phát hiện:"]);
+      exportData.push(["STT", "Hạng mục lỗi", "Mức độ", "Số lượng lỗi", "Ghi chú"]);
+      if (qcDetail.defect_logs && qcDetail.defect_logs.length > 0) {
+        qcDetail.defect_logs.forEach((log, idx) => {
+          exportData.push([
+            idx + 1,
+            log.defect_name || "Lỗi không xác định",
+            log.severity || "Nhẹ",
+            log.quantity || 0,
+            log.note || "---"
+          ]);
+        });
+      } else {
+        exportData.push(["---", "Không phát hiện lỗi chất lượng nào", "---", 0, "---"]);
+      }
+    } else {
+      exportData.push(["Kết luận", "Chưa có kết quả kiểm tra QC đầu cuối cho phiếu này"]);
+    }
+    exportData.push([]);
+
+    exportData.push(["5. KẾT QUẢ KIỂM TRA QC (ĐẦU VÀO)"]);
+    const inputQcDetail = data.input_qc_detail;
+    if (inputQcDetail) {
+      exportData.push(["Kết luận", inputQcDetail.result || "---"]);
+      exportData.push(["Thời gian kiểm định", inputQcDetail.inspected_at ? new Date(inputQcDetail.inspected_at).toLocaleString('vi-VN') : "---"]);
+      exportData.push(["Mã Container", inputQcDetail.cont_name || "---"]);
+      exportData.push(["Kích thước thực tế (D dày x R rộng x D dài)", `${height || "---"} x ${width || "---"} x ${length || "---"} mm`]);
+      exportData.push(["Ghi chú QC đầu vào", inputQcDetail.note || "Không có ghi chú."]);
+    } else {
+      exportData.push(["Kết luận", "Không có thông tin kiểm định chất lượng đầu vào của công đoạn tiếp theo"]);
+    }
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(exportData);
+    
+    ws['!cols'] = [
+      { wch: 25 },  // Cột thuộc tính
+      { wch: 25 },  // PO
+      { wch: 20 },  // Mã đơn
+      { wch: 20 },  // LSX
+      { wch: 20 },  // Khách hàng
+      { wch: 25 },  // Sản phẩm
+      { wch: 15 }   // Số lượng
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, "Chi tiết Pallet");
+    XLSX.writeFile(wb, `Chi_tiet_pallet_${data.id || 'preview'}.xlsx`);
+  };
+
   const cellStyle = { border: '1px solid #999', padding: '5px 7px', fontSize: '11px', verticalAlign: 'top' }
   const labelStyle = { ...cellStyle, color: '#333', fontWeight: 400 }
   const valueStyle = { ...cellStyle, color: '#c00', fontWeight: 700 }
@@ -96,16 +239,22 @@ const PalletCardModal = ({ isOpen, onClose, data, partProducts = [] }) => {
 
       <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', padding: '12px', overflowY: 'auto' }}>
         {/* Action bar */}
-        <div style={{ width: '100%', maxWidth: '440px', display: 'flex', gap: '10px', marginBottom: '10px', position: 'sticky', top: 0, zIndex: 1 }}>
+        <div style={{ width: '100%', maxWidth: '440px', display: 'flex', gap: '6px', marginBottom: '10px', position: 'sticky', top: 0, zIndex: 1 }}>
           <button
             onClick={handlePrint}
-            style={{ flex: 1, background: '#3d2b1f', color: '#fff', border: 'none', borderRadius: '10px', padding: '11px', fontSize: '0.9rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}
+            style={{ flex: 1.2, background: '#3d2b1f', color: '#fff', border: 'none', borderRadius: '10px', padding: '11px 8px', fontSize: '0.82rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', cursor: 'pointer' }}
           >
-            <Printer size={18} /> In thẻ Pallet (A5)
+            <Printer size={16} /> Xuất PDF (A5)
+          </button>
+          <button
+            onClick={handleExportExcel}
+            style={{ flex: 1, background: '#15803d', color: '#fff', border: 'none', borderRadius: '10px', padding: '11px 8px', fontSize: '0.82rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', cursor: 'pointer' }}
+          >
+            <FileSpreadsheet size={16} /> Xuất Excel
           </button>
           <button
             onClick={onClose}
-            style={{ background: '#fff', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '11px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, fontSize: '0.9rem' }}
+            style={{ background: '#fff', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '11px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, fontSize: '0.82rem' }}
           >
             <X size={16} /> Đóng
           </button>
