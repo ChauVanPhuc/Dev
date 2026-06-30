@@ -9,14 +9,20 @@ class RoleBase(BaseModel):
     """
     name: str                      # Tên vai trò (ví dụ: Admin, Manager, Worker, ...)
     description: Optional[str] = None # Mô tả chi tiết vai trò
+    is_active: bool = True         # Trạng thái hoạt động
+    default_permissions: Optional[str] = None # Quyền mặc định dạng JSON
 
 class RoleCreate(RoleBase):
     """Schema dùng để tạo mới một vai trò."""
-    pass
+    permission_ids: Optional[List[int]] = []
 
-class RoleUpdate(RoleBase):
+class RoleUpdate(BaseModel):
     """Schema dùng để cập nhật thông tin vai trò."""
     name: Optional[str] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+    permission_ids: Optional[List[int]] = None
+    default_permissions: Optional[str] = None # Quyền mặc định dạng JSON
 
 class Role(RoleBase):
     """Schema hiển thị thông tin vai trò đầy đủ (bao gồm ID)."""

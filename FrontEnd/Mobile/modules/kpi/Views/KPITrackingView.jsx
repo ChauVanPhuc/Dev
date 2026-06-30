@@ -243,7 +243,7 @@ const KPITracking = () => {
 
   return (
     <Layout>
-      <PageHeader title="G7 - Smart Flow" subTitle="Theo dõi KPI" />
+      <PageHeader title="G7 - Smart Flow" subTitle="MB8 | Theo dõi KPI" />
 
       <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto', flex: 1 }}>
         

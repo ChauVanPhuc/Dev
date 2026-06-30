@@ -92,7 +92,7 @@ const CAPAList = () => {
 
   return (
     <Layout>
-      <PageHeader title="G7 - Smart Flow" subTitle="Báo cáo CAPA" />
+      <PageHeader title="G7 - Smart Flow" subTitle="MB13 | Danh sách CAPA" />
       
       <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', flex: 1, backgroundColor: 'var(--bg-cream)' }}>
         

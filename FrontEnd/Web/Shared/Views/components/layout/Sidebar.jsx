@@ -5,295 +5,544 @@ import amandaPhoto from '@mobile/assets/logo-no-bg.png';
 
 /**
  * View: Component Sidebar tái sử dụng & linh hoạt trạng thái
- * Tự động chuyển đổi menu giữa Admin và Manufacture dựa trên URL
+ * Cập nhật cấu trúc menu đa phân hệ và đa cấp hoàn chỉnh theo sơ đồ thiết kế mới nhất.
  */
-const Sidebar = ({ active, onLogout, onClose, uploads = [] }) => {
+const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploads = [] }) => {
   const location = useLocation();
 
   const handleLinkClick = () => {
     if (onClose) onClose();
   };
 
-  const isAdmin = location.pathname.startsWith('/admin');
+  const user = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
+  const isAdmin = user.role_name === 'IT' || user.role_name === 'BGD' || user.username === 'admin';
 
-  // Khai báo menu items cho Admin
-  const adminMenuItems = [
+  let activePermissions = {};
+  try {
+    activePermissions = JSON.parse(localStorage.getItem('smartflow_active_permissions') || '{}');
+  } catch (e) {
+    console.error('Failed to parse screen permissions in Sidebar:', e);
+  }
+
+  // Debug sidebar permissions to help troubleshoot
+  console.log('--- SMARTFLOW SIDEBAR DEBUG ---');
+  console.log('User profile:', user);
+  console.log('Is Admin:', isAdmin);
+  console.log('Active Permissions count:', Object.keys(activePermissions).length);
+  console.log('Active Permissions keys:', Object.keys(activePermissions));
+  console.log('Active Permissions Object:', activePermissions);
+
+  const isBlocked = (key) => {
+    if (isAdmin) return false;
+    const perm = activePermissions[key];
+    if (perm === 'none') return true;
+    if (Array.isArray(perm)) {
+      return perm.length === 0 || perm.includes('none');
+    }
+    // Default to blocked if not defined in permissions map
+    return perm === undefined || perm === null;
+  };
+
+  // Cấu trúc Menu đa cấp chi tiết theo hình mẫu thiết kế
+  const menuStructure = [
     {
       id: 'dashboard',
+      type: 'link',
       path: '/admin/dashboard',
       icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-          <polyline points="9 22 9 12 15 12 15 22"></polyline>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="14" width="7" height="7" rx="1" />
+          <rect x="3" y="14" width="7" height="7" rx="1" />
         </svg>
       ),
       text: 'Trang chủ'
     },
     {
-      id: 'users',
-      path: '/admin/users',
+      id: 'system',
+      type: 'group',
+      text: 'Quản lý hệ thống',
       icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-          <polyline points="14 2 14 8 20 8"></polyline>
-          <line x1="16" y1="13" x2="8" y2="13"></line>
-          <line x1="16" y1="17" x2="8" y2="17"></line>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
         </svg>
       ),
-      text: 'Quản lý người dùng'
+      children: [
+        { 
+          id: 'users', 
+          path: '/admin/users', 
+          text: 'Quản lý tài khoản',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+          )
+        },
+        { 
+          id: 'quality-records', 
+          path: '/admin/quality-records', 
+          text: 'Quản lý hồ sơ',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <circle cx="9" cy="11" r="3" />
+              <path d="M17 17v-1a2 2 0 0 0-2-2h-3" />
+              <line x1="16" y1="8" x2="18" y2="8" />
+              <line x1="16" y1="11" x2="18" y2="11" />
+            </svg>
+          )
+        },
+        { 
+          id: 'screens', 
+          path: '/admin/screens', 
+          text: 'Quản lý màn hình',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+          )
+        },
+        { 
+          id: 'logs', 
+          path: '/admin/logs', 
+          text: 'Quản lý lỗi hệ thống',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+            </svg>
+          )
+        },
+        { 
+          id: 'feedback', 
+          path: '/admin/feedback?type=system', 
+          text: 'Quản lý góp ý',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+            </svg>
+          )
+        },
+        { 
+          id: 'data', 
+          path: '/admin/data', 
+          text: 'Backup data',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <ellipse cx="12" cy="5" rx="9" ry="3" />
+              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+              <path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3" />
+            </svg>
+          )
+        },
+        { 
+          id: 'bugs', 
+          path: '/admin/bugs', 
+          text: 'Quản lý Bug',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M12 2v9" />
+              <path d="M8 5h8" />
+              <path d="M5 11l4-4" />
+              <path d="M19 11l-4-4" />
+              <path d="M5 18H2" />
+              <path d="M19 18h3" />
+            </svg>
+          )
+        },
+        { 
+          id: 'monitor', 
+          path: '/admin/monitor', 
+          text: 'Giám sát hệ thống',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+            </svg>
+          )
+        }
+      ]
     },
     {
-      id: 'handovers',
-      path: '/admin/handovers',
+      id: 'manufacture',
+      type: 'group',
+      text: 'Module sản xuất',
       icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
         </svg>
       ),
-      text: 'Danh sách bàn giao'
+      children: [
+        { 
+          id: 'plan', 
+          path: '/admin/plan', 
+          text: 'Kế hoạch sản xuất',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+              <path d="M9 16l2 2 4-4" />
+            </svg>
+          )
+        },
+        { 
+          id: 'delivery-tracking', 
+          path: '/admin/delivery-tracking', 
+          text: 'Kế hoạch bàn giao',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="1" y="3" width="15" height="13" />
+              <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
+              <circle cx="5.5" cy="18.5" r="2.5" />
+              <circle cx="18.5" cy="18.5" r="2.5" />
+            </svg>
+          )
+        },
+        { 
+          id: 'exception-deliveries', 
+          path: '/admin/exception-deliveries', 
+          text: 'Phiếu ngoại lệ',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+          )
+        },
+        { 
+          id: 'home', 
+          path: '/admin/manufacture-dashboard', 
+          text: 'Trang chủ sản xuất',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <polyline points="9 22 9 12 15 12 15 22" />
+            </svg>
+          )
+        },
+        { 
+          id: 'backup-qrs', 
+          path: '/admin/backup-qrs', 
+          text: 'Quản lý mã QR',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="6" height="6" />
+              <rect x="15" y="3" width="6" height="6" />
+              <rect x="3" y="15" width="6" height="6" />
+              <rect x="15" y="15" width="6" height="6" />
+              <path d="M9 9h6v6H9z" />
+            </svg>
+          )
+        }
+      ]
     },
     {
-      id: 'logs',
-      path: '/admin/logs',
+      id: 'quality',
+      type: 'group',
+      text: 'Module chất lượng',
       icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-          <circle cx="9" cy="7" r="4"></circle>
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          <path d="M9 11l2 2 4-4" />
         </svg>
       ),
-      text: 'Lỗi ghi nhận'
-    },
-    {
-      id: 'defects',
-      path: '/admin/defects',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"></path>
-          <path d="M12 8v4"></path>
-          <path d="M12 16h.01"></path>
-        </svg>
-      ),
-      text: 'Quản lý danh mục lỗi'
-    },
-    {
-      id: 'reports',
-      path: '/admin/reports',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="10"></circle>
-          <polyline points="12 6 12 12 16 14"></polyline>
-        </svg>
-      ),
-      text: 'Báo cáo kiểm tra'
-    },
-    {
-      id: 'quality-records',
-      path: '/admin/quality-records',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-          <polyline points="14 2 14 8 20 8"></polyline>
-          <path d="M16 13H8"></path>
-          <path d="M16 17H8"></path>
-          <path d="M10 9H8"></path>
-        </svg>
-      ),
-      text: 'Hồ sơ chất lượng'
-    },
-    {
-      id: 'claim',
-      path: '/admin/claims',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-        </svg>
-      ),
-      text: 'Quản lý khiếu nại'
-    },
-    {
-      id: 'prices',
-      path: '/admin/prices',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="12" y1="1" x2="12" y2="23"></line>
-          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-        </svg>
-      ),
-      text: 'Danh sách giá tủ'
-    },
-    {
-      id: 'shipments',
-      path: '/admin/shipments',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="1" y="3" width="15" height="13"></rect>
-          <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
-          <circle cx="5.5" cy="18.5" r="2.5"></circle>
-          <circle cx="18.5" cy="18.5" r="2.5"></circle>
-        </svg>
-      ),
-      text: 'Danh sách lô hàng container'
-    },
-    {
-      id: 'chatbot',
-      path: '/admin/chatbot',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-          <path d="M8 10h.01"></path>
-          <path d="M12 10h.01"></path>
-          <path d="M16 10h.01"></path>
-        </svg>
-      ),
-      text: 'Chat Bot'
+      children: [
+        { 
+          id: 'defects', 
+          path: '/admin/defects', 
+          text: 'Danh sách lỗi',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="15" y1="9" x2="9" y2="15" />
+              <line x1="9" y1="9" x2="15" y2="15" />
+            </svg>
+          )
+        },
+        { 
+          id: 'claim', 
+          path: '/admin/claims', 
+          text: 'Claim khách hàng',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="14" x2="12.01" y2="14" />
+            </svg>
+          )
+        },
+        { 
+          id: 'feedback', 
+          path: '/admin/feedback?type=quality', 
+          text: 'Quản lý CAPA',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+              <polyline points="22 4 12 14.01 9 11.01" />
+            </svg>
+          )
+        },
+        { 
+          id: 'reports', 
+          path: '/admin/reports', 
+          text: 'Báo cáo kiểm tra',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+              <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+              <path d="M9 14l2 2 4-4" />
+            </svg>
+          )
+        },
+        { 
+          id: 'handovers', 
+          path: '/admin/handovers', 
+          text: 'Danh sách bàn giao',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+              <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+              <line x1="12" y1="11" x2="16" y2="11" />
+              <line x1="12" y1="16" x2="16" y2="16" />
+              <circle cx="8" cy="11" r="1" />
+              <circle cx="8" cy="16" r="1" />
+            </svg>
+          )
+        },
+        { 
+          id: 'hotspots', 
+          path: '/admin/hotspots', 
+          text: 'Điểm nóng cần chú ý',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z" />
+              <circle cx="12" cy="10" r="3" />
+            </svg>
+          )
+        },
+        { 
+          id: 'equipment', 
+          path: '/admin/equipment', 
+          text: 'Quản lý thiết bị',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+            </svg>
+          )
+        }
+      ]
     },
     {
       id: 'kpi',
+      type: 'link',
       path: '/admin/kpi',
       icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="9 11 12 14 22 4"></polyline>
-          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
       ),
-      text: 'Báo cáo KPI'
+      text: 'Quản lý KPI'
     },
     {
-      id: 'feedback',
-      path: '/admin/feedback',
+      id: 'technical',
+      type: 'group',
+      text: 'Module kỹ thuật',
       icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="16 18 22 12 16 6" />
+          <polyline points="8 6 2 12 8 18" />
         </svg>
       ),
-      text: 'Góp ý cải tiến'
+      children: [
+        { 
+          id: 'products', 
+          path: '/admin/products', 
+          text: 'Bom sản phẩm',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+              <line x1="12" y1="22.08" x2="12" y2="12" />
+            </svg>
+          )
+        }
+      ]
     },
     {
-      id: 'hotspots',
-      path: '/admin/hotspots',
+      id: 'business',
+      type: 'group',
+      text: 'Module kinh doanh',
       icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="8" x2="12" y2="12"></line>
-          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="16 18 22 12 16 6" />
+          <polyline points="8 6 2 12 8 18" />
         </svg>
       ),
-      text: 'Điểm nóng cần chú ý'
-    },
-    {
-      id: 'data',
-      path: '/admin/data',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
-          <circle cx="12" cy="12" r="3"></circle>
-        </svg>
-      ),
-      text: 'Đóng gói dữ liệu'
-    },
-    {
-      id: 'screens',
-      path: '/admin/screens',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-          <line x1="8" y1="21" x2="16" y2="21"></line>
-          <line x1="12" y1="17" x2="12" y2="21"></line>
-        </svg>
-      ),
-      text: 'Quản lý màn hình'
-    },
-    {
-      id: 'monitor',
-      path: '/admin/monitor',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="2" y="2" width="20" height="20" rx="2" ry="2"></rect>
-          <path d="M6 12h4l2-6 2 12 2-6h4"></path>
-        </svg>
-      ),
-      text: 'Giám sát hệ thống'
+      children: [
+        { 
+          id: 'shipments', 
+          path: '/admin/shipments', 
+          text: 'Thời gian xuất cont',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <line x1="2" y1="10" x2="22" y2="10" />
+              <line x1="6" y1="3" x2="6" y2="17" />
+              <line x1="12" y1="3" x2="12" y2="17" />
+              <line x1="18" y1="3" x2="18" y2="17" />
+            </svg>
+          )
+        },
+        { 
+          id: 'prices', 
+          path: '/admin/prices', 
+          text: 'Quản lý giá tủ',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+              <line x1="7" y1="7" x2="7.01" y2="7" />
+            </svg>
+          )
+        },
+        { 
+          id: 'purchase-requisitions', 
+          path: '/admin/purchase-requisitions', 
+          text: 'Đơn đặt mua',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+              <polyline points="10 9 9 9 8 9" />
+            </svg>
+          )
+        },
+        { 
+          id: 'purchase-order-items', 
+          path: '/admin/purchase-order-items', 
+          text: 'Đơn mua hàng',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="9" cy="21" r="1" />
+              <circle cx="20" cy="21" r="1" />
+              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+            </svg>
+          )
+        }
+      ]
     }
   ];
 
-  // Khai báo menu items cho Manufacture
-  const manufactureMenuItems = [
-    {
-      id: 'home',
-      path: '/manufacture/dashboard',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-          <polyline points="9 22 9 12 15 12 15 22"></polyline>
-        </svg>
-      ),
-      text: 'Trang chủ'
-    },
-    {
-      id: 'plan',
-      path: '/manufacture/plan',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-          <polyline points="14 2 14 8 20 8"></polyline>
-          <line x1="16" y1="13" x2="8" y2="13"></line>
-          <line x1="16" y1="17" x2="8" y2="17"></line>
-        </svg>
-      ),
-      text: 'Kế hoạch'
-    },
-    {
-      id: 'delivery-tracking',
-      path: '/manufacture/delivery-tracking',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-        </svg>
-      ),
-      text: 'Theo dõi bàn giao'
-    },
-    {
-      id: 'products',
-      path: '/manufacture/products',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-          <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-          <line x1="12" y1="22.08" x2="12" y2="12"></line>
-        </svg>
-      ),
-      text: 'Sản phẩm mẫu (BOM)'
-    },
-    {
-      id: 'backup-qrs',
-      path: '/manufacture/backup-qrs',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-          <rect x="7" y="7" width="3" height="3"></rect>
-          <rect x="14" y="7" width="3" height="3"></rect>
-          <rect x="7" y="14" width="3" height="3"></rect>
-          <path d="M14 14h3v3h-3z"></path>
-        </svg>
-      ),
-      text: 'Quản lý mã QR'
-    },
-    {
-      id: 'exception-deliveries',
-      path: '/manufacture/exception-deliveries',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-          <line x1="12" y1="9" x2="12" y2="13"></line>
-          <line x1="12" y1="17" x2="12.01" y2="17"></line>
-        </svg>
-      ),
-      text: 'Quản Lý Phiếu Ngoại Lệ'
-    }
-  ];
+  // Helper check xem group co child nao dang active ko
+  const hasActiveChild = (group) => {
+    if (!group.children) return false;
+    return group.children.some(child => {
+      const hasQuery = child.path.includes('?');
+      if (hasQuery) {
+        return (location.pathname + location.search) === child.path;
+      }
+      return location.pathname === child.path || 
+             (child.path !== '/admin/dashboard' && child.path !== '/admin/manufacture-dashboard' && location.pathname.startsWith(child.path));
+    });
+  };
 
-  const menuItems = isAdmin ? adminMenuItems : manufactureMenuItems;
+  // Khoi tao state expand cho cac group
+  const getInitialExpandedState = () => {
+    const initialState = {};
+    
+    // Mặc định expand theo bộ phận của tài khoản người dùng
+    const role = user.role_name;
+    if (role === 'IT' || user.username === 'admin') {
+      initialState['system'] = true;
+    } else if (role === 'Sx') {
+      initialState['manufacture'] = true;
+    } else if (role === 'QLCL') {
+      initialState['quality'] = true;
+    }
+
+    menuStructure.forEach(group => {
+      if (group.type === 'group') {
+        const hasActive = hasActiveChild(group);
+        if (hasActive) {
+          initialState[group.id] = true;
+        }
+      }
+    });
+    return initialState;
+  };
+
+  const [expandedGroups, setExpandedGroups] = React.useState(getInitialExpandedState);
+
+  // Auto expand group khi location thay doi
+  React.useEffect(() => {
+    menuStructure.forEach(group => {
+      if (group.type === 'group') {
+        const hasActive = hasActiveChild(group);
+        if (hasActive) {
+          setExpandedGroups(prev => ({ ...prev, [group.id]: true }));
+        }
+      }
+    });
+  }, [location.pathname, location.search]);
+
+  const toggleGroup = (groupId) => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [groupId]: !prev[groupId]
+    }));
+  };
+
+  const renderDirectLink = (item) => {
+    const hasQuery = item.path.includes('?');
+    const isActive = hasQuery
+      ? (location.pathname + location.search) === item.path
+      : (location.pathname === item.path || 
+        (item.path !== '/admin/dashboard' && item.path !== '/admin/manufacture-dashboard' && location.pathname.startsWith(item.path)));
+
+    return (
+      <div key={item.id} className="nav-item" style={{ marginBottom: '4px' }}>
+        <Link 
+          to={item.path}
+          onClick={handleLinkClick}
+          className={`nav-link-direct ${isActive ? 'active' : ''}`}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            padding: '12px 16px',
+            textDecoration: 'none',
+            color: isActive ? '#5D3B32' : '#4B5563',
+            backgroundColor: isActive ? '#FAF6F0' : 'transparent',
+            fontWeight: isActive ? '800' : '600',
+            transition: 'all 0.3s ease',
+            borderRadius: '12px',
+            outline: 'none',
+            marginBottom: '4px'
+          }}
+        >
+          <span className="nav-icon" style={{ marginRight: '12px', display: 'flex', alignItems: 'center', color: isActive ? '#5D3B32' : '#6B7280' }}>
+            {item.icon}
+          </span>
+          <span className="nav-text" style={{ fontSize: '0.9rem' }}>{item.text}</span>
+        </Link>
+      </div>
+    );
+  };
 
   return (
     <>
@@ -302,16 +551,22 @@ const Sidebar = ({ active, onLogout, onClose, uploads = [] }) => {
         onClick={onClose}
       ></div>
 
-      <aside className={`admin-sidebar ${active ? 'active' : ''}`} style={{ backgroundColor: '#FFFFFF', borderRight: '1px solid #E5E7EB' }}>
+      <aside className={`admin-sidebar ${active ? 'active' : ''} ${collapsed ? 'collapsed' : ''}`} style={{ backgroundColor: '#FFFFFF', borderRight: '1px solid #E5E7EB' }}>
         {/* User profile section */}
-        <div style={{ 
-          padding: '20px', 
-          display: 'flex', 
-          alignItems: 'center',
-          gap: '12px',
-          backgroundColor: '#7B5233',
-          borderBottom: '1px solid rgba(255,255,255,0.1)'
-        }}>
+        <div 
+          onClick={collapsed ? onToggleCollapse : undefined}
+          style={{ 
+            padding: '20px', 
+            display: 'flex', 
+            alignItems: 'center',
+            gap: '12px',
+            backgroundColor: '#7B5233',
+            borderBottom: '1px solid rgba(255,255,255,0.1)',
+            cursor: collapsed ? 'pointer' : 'default',
+            position: 'relative'
+          }}
+          title={collapsed ? 'Mở rộng menu' : undefined}
+        >
           {/* Circular avatar logo */}
           <div style={{ 
             width: '45px', 
@@ -329,73 +584,140 @@ const Sidebar = ({ active, onLogout, onClose, uploads = [] }) => {
           </div>
 
           {/* Account info */}
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-            <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {isAdmin ? 'Quản trị viên (Admin)' : 'Nhà máy sản xuất'}
-            </span>
-            <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              amanda@mail.com
-            </span>
-          </div>
-
-          {/* Logout button */}
-          <button onClick={onLogout} title="Đăng xuất" style={{ 
-            background: 'rgba(255,255,255,0.15)', 
-            border: 'none', 
-            borderRadius: '8px', 
-            padding: '6px',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            transition: 'background 0.2s'
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.25)'}
-          onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.15)'}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
-              <line x1="12" y1="2" x2="12" y2="12"></line>
-            </svg>
-          </button>
+          {!collapsed && (
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+              <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {user.full_name || user.username || 'Hệ thống SmartFlow'}
+              </span>
+              <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {user.email || 'smartflow@mail.com'}
+              </span>
+              <div style={{ marginTop: '4px', display: 'flex' }}>
+                <span style={{ 
+                  fontSize: '0.65rem', 
+                  color: '#FFFFFF', 
+                  fontWeight: '800', 
+                  backgroundColor: 'rgba(255, 255, 255, 0.2)', 
+                  padding: '2px 6px', 
+                  borderRadius: '4px'
+                }}>
+                  Vai trò: {user.role_name || 'N/A'}{isAdmin ? ' (Admin)' : ''}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Navigation items */}
-        <nav className="sidebar-nav" style={{ padding: '20px 0' }}>
-          <ul className="nav-list" style={{ listStyle: 'none', padding: 0 }}>
-            {menuItems.map((item) => {
-              const isActive = location.pathname === item.path || 
-                (item.path !== '/admin/dashboard' && item.path !== '/manufacture/dashboard' && location.pathname.startsWith(item.path));
 
+
+        {/* Navigation items - Collapsible Grouped layout */}
+        <nav className="sidebar-nav" style={{ padding: '15px 10px', overflowY: 'auto', flex: 1 }}>
+          {menuStructure.map(item => {
+            if (item.type === 'link') {
+              if (isBlocked(item.id)) return null;
+              return item;
+            } else if (item.type === 'group') {
+              const visibleChildren = item.children.filter(child => !isBlocked(child.id));
+              if (visibleChildren.length === 0) return null;
+              return { ...item, children: visibleChildren };
+            }
+            return null;
+          }).filter(Boolean).map(item => {
+            if (item.type === 'link') {
+              return renderDirectLink(item);
+            } else if (item.type === 'group') {
+              const isExpanded = !!expandedGroups[item.id];
+              const isGroupActive = hasActiveChild(item);
+              
               return (
-                <li key={item.id} className="nav-item">
-                  <Link to={item.path}
-                    onClick={handleLinkClick}
-                    className={`nav-link ${isActive ? 'active' : ''}`}
+                <div key={item.id} className="sidebar-group-container" style={{ marginBottom: '6px' }}>
+                  <button 
+                    onClick={() => toggleGroup(item.id)}
+                    className={`sidebar-group-header ${isGroupActive ? 'active' : ''}`}
                     style={{
+                      width: '100%',
                       display: 'flex',
                       alignItems: 'center',
-                      padding: '10px 20px',
-                      textDecoration: 'none',
-                      color: isActive ? '#A0301B' : '#6B7280',
-                      backgroundColor: isActive ? '#FFF5F5' : 'transparent',
-                      borderLeft: isActive ? '4px solid #A0301B' : '4px solid transparent',
-                      fontWeight: isActive ? '700' : '500',
-                      transition: 'all 0.3s ease'
+                      justifyContent: 'space-between',
+                      padding: '12px 16px',
+                      border: 'none',
+                      background: isGroupActive ? '#FAF6F0' : 'transparent',
+                      color: isGroupActive ? '#5D3B32' : '#4B5563',
+                      fontWeight: isGroupActive ? '800' : '600',
+                      borderRadius: '12px',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'all 0.3s ease',
+                      outline: 'none',
+                      marginBottom: '4px'
                     }}
                   >
-                    <span className="nav-icon" style={{ marginRight: '12px', color: isActive ? '#A0301B' : '#6B7280' }}>
-                      {item.icon}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <span className="nav-icon" style={{ display: 'flex', alignItems: 'center', color: isGroupActive ? '#5D3B32' : '#6B7280' }}>
+                        {item.icon}
+                      </span>
+                      <span className="nav-text" style={{ fontSize: '0.9rem' }}>{item.text}</span>
+                    </div>
+                    <span className="chevron-icon" style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', 
+                      transition: 'transform 0.2s ease',
+                      color: isGroupActive ? '#5D3B32' : '#A0A3A8'
+                    }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                      </svg>
                     </span>
-                    <span className="nav-text" style={{ fontSize: '0.9rem' }}>{item.text}</span>
-                  </Link>
-                </li>
+                  </button>
+                  {isExpanded && (
+                    <ul className="sidebar-group-children" style={{ listStyle: 'none', padding: '2px 0 6px 0', margin: 0 }}>
+                      {item.children.map(child => {
+                        const hasQuery = child.path.includes('?');
+                        const isChildActive = hasQuery
+                          ? (location.pathname + location.search) === child.path
+                          : (location.pathname === child.path || 
+                            (child.path !== '/admin/dashboard' && child.path !== '/admin/manufacture-dashboard' && location.pathname.startsWith(child.path)));
+
+                        return (
+                          <li key={child.id} className="nav-item" style={{ marginBottom: '2px' }}>
+                            <Link 
+                              to={child.path}
+                              onClick={handleLinkClick}
+                              className={`nav-link-child ${isChildActive ? 'active' : ''}`}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                padding: '10px 16px 10px 36px',
+                                textDecoration: 'none',
+                                color: isChildActive ? '#5D3B32' : '#6B7280',
+                                backgroundColor: isChildActive ? '#FAF6F0' : 'transparent',
+                                fontWeight: isChildActive ? '800' : '500',
+                                fontSize: '0.85rem',
+                                transition: 'all 0.2s ease',
+                                borderRadius: '8px',
+                                outline: 'none'
+                              }}
+                            >
+                              <span className="nav-icon" style={{ marginRight: '10px', display: 'flex', alignItems: 'center', color: isChildActive ? '#5D3B32' : '#9CA3AF' }}>
+                                {child.icon}
+                              </span>
+                              <span className="nav-text">{child.text}</span>
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
               );
-            })}
-          </ul>
+            }
+            return null;
+          })}
         </nav>
 
         {/* Manufacture progress bar for file uploads */}
-        {!isAdmin && uploads && uploads.length > 0 && (
+        {!collapsed && uploads && uploads.length > 0 && (
           <div style={{
             display: 'flex',
             flexDirection: 'column',
@@ -448,13 +770,63 @@ const Sidebar = ({ active, onLogout, onClose, uploads = [] }) => {
           </div>
         )}
 
+        {/* Logout button at the bottom */}
+        <div style={{ 
+          padding: collapsed ? '12px 10px 0 10px' : '12px 20px 0 20px', 
+          backgroundColor: '#FFFFFF',
+          display: 'flex',
+          justifyContent: 'center',
+          borderTop: '1px solid #E5E7EB',
+          marginTop: 'auto'
+        }}>
+          <button 
+            onClick={onLogout} 
+            style={{
+              width: collapsed ? '40px' : '100%',
+              height: collapsed ? '40px' : 'auto',
+              padding: collapsed ? '0' : '10px 16px',
+              backgroundColor: '#A0301B',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: '8px',
+              fontWeight: 'bold',
+              fontSize: '0.9rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: collapsed ? '0' : '8px',
+              transition: 'background-color 0.2s, transform 0.1s',
+              boxShadow: '0 2px 4px rgba(160, 48, 27, 0.1)',
+              flexShrink: 0
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#8B2917'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#A0301B'}
+            onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.98)'}
+            onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            title={collapsed ? "Đăng xuất" : undefined}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            {!collapsed && "Đăng xuất"}
+          </button>
+        </div>
+
         <div className="sidebar-footer" style={{
           padding: '0 25px 20px',
-          color: '#A0301B',
+          color: '#7B5233',
           fontSize: '0.7rem',
           fontWeight: '700',
           opacity: 0.6
         }}>
+          {!collapsed && (
+            <div style={{ marginBottom: '4px', fontSize: '0.65rem', color: '#A34A2E' }}>
+              Role: {user.role_name || 'NULL'} | Admin: {String(isAdmin)}
+            </div>
+          )}
           SmartFlow v1.1.5
         </div>
       </aside>

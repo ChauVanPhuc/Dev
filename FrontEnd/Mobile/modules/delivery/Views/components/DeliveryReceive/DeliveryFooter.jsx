@@ -20,14 +20,16 @@ const DeliveryFooter = ({
   isSubmitting,
   isPendingReceiving,
   isPendingInspection,
-  navigate
+  navigate,
+  hasReceiveActionPermission = true,
+  hasCreateActionPermission = true
 }) => {
   // Chỉ hiện nút QC nếu là QC/Admin VÀ có quyền xem tab QC
   const showQCFooter = (isQC || isAdmin) && canAccessQCTab;
 
   // Kiểm tra xem user là bên Giao (sender) và phiếu đang chờ nhận
   // → Hiện nút Chỉnh sửa + Xóa thay vì nút Xác nhận
-  const showSenderEditFooter = isSender && !isReceiver && isPendingReceiving && !showQCFooter;
+  const showSenderEditFooter = isSender && !isReceiver && isPendingReceiving && !showQCFooter && hasCreateActionPermission;
 
   return (
     <div className="responsive-fixed-footer" style={{ backgroundColor: 'var(--bg-cream)', padding: '16px', display: 'flex', gap: '12px', borderTop: '1px solid #e2e8f0', zIndex: 50 }}>
@@ -141,10 +143,10 @@ const DeliveryFooter = ({
         <>
           <button
             onClick={handleConfirm}
-            disabled={isSubmitting || !isPendingReceiving || isQC || (isSender && !isReceiver)}
+            disabled={isSubmitting || !isPendingReceiving || isQC || (isSender && !isReceiver) || !hasReceiveActionPermission}
             style={{
               flex: 1,
-              backgroundColor: (!isPendingReceiving || isQC || (isSender && !isReceiver)) ? '#94a3b8' : '#4e342e',
+              backgroundColor: (!isPendingReceiving || isQC || (isSender && !isReceiver) || !hasReceiveActionPermission) ? '#94a3b8' : '#4e342e',
               color: '#fff',
               border: 'none',
               borderRadius: '12px',
@@ -155,15 +157,15 @@ const DeliveryFooter = ({
               alignItems: 'center',
               justifyContent: 'center',
               gap: '8px',
-              opacity: (!isPendingReceiving || isQC || (isSender && !isReceiver)) ? 0.6 : 1,
-              cursor: (!isPendingReceiving || isQC || (isSender && !isReceiver)) ? 'not-allowed' : 'pointer',
-              boxShadow: (!isPendingReceiving || isQC || (isSender && !isReceiver)) ? 'none' : '0 4px 12px rgba(78, 52, 46, 0.2)'
+              opacity: (!isPendingReceiving || isQC || (isSender && !isReceiver) || !hasReceiveActionPermission) ? 0.6 : 1,
+              cursor: (!isPendingReceiving || isQC || (isSender && !isReceiver) || !hasReceiveActionPermission) ? 'not-allowed' : 'pointer',
+              boxShadow: (!isPendingReceiving || isQC || (isSender && !isReceiver) || !hasReceiveActionPermission) ? 'none' : '0 4px 12px rgba(78, 52, 46, 0.2)'
             }}
           >
             {isSubmitting ? 'Đang xử lý...' : (
               <>
                 <CheckCircle size={20} strokeWidth={3} />
-                {isQC ? 'Chỉ SX được nhận' : (isSender && !isReceiver) ? 'Chờ bên nhận xác nhận' : 'Xác nhận'}
+                {!hasReceiveActionPermission ? 'Không có quyền nhận' : (isQC ? 'Chỉ SX được nhận' : (isSender && !isReceiver) ? 'Chờ bên nhận xác nhận' : 'Xác nhận')}
               </>
             )}
           </button>

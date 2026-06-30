@@ -120,7 +120,7 @@ const KPIStaffList = () => {
 
   return (
     <Layout>
-      <PageHeader title="G7 - Smart Flow" subTitle="Đánh giá nhân sự" />
+      <PageHeader title="G7 - Smart Flow" subTitle="MB8.2 | Đánh giá nhân sự" />
       
       <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', flex: 1, backgroundColor: 'var(--bg-cream)' }}>
         

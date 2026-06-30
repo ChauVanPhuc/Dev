@@ -162,12 +162,16 @@ def login_for_access_token(db: Session = Depends(get_db), form_data: OAuth2Passw
     stage_name = " | ".join(stage_names) if stage_names else None
     stage_description = " | ".join(stage_descriptions) if stage_descriptions else None
 
+    import json
+    resolved_perms = account_controller.resolve_user_permissions(user, db)
+
     return {
         "access_token": access_token,
         "token_type": "bearer",
         "username": user.username,
         "full_name": getattr(user, 'full_name', None) or user.username,
         "email": getattr(user, 'email', '') or '',
+        "phone": getattr(user, 'phone', '') or '',
         "employee_id": getattr(user, 'employee_id', None) or '',
         "role_name": role_name or '',
         "role_description": role_description or role_name or '',
@@ -176,6 +180,8 @@ def login_for_access_token(db: Session = Depends(get_db), form_data: OAuth2Passw
         "stage_name": stage_name or '',
         "stage_description": stage_description or stage_name or '',
         "id": user.id,
+        "screen_permissions": json.dumps(resolved_perms),
+        "permission_level": getattr(user, 'permission_level', '') or ''
     }
 
 @router.get("/stages")
@@ -191,11 +197,17 @@ def register_user(account: AccountCreate, db: Session = Depends(get_db)):
     """
     [POST] Đăng ký một tài khoản người dùng mới.
     
-    Kiểm tra sự tồn tại của username trước khi tạo để tránh trùng lặp.
+    Kiểm tra sự tồn tại của username và phone trước khi tạo để tránh trùng lặp.
     """
     db_account = account_controller.get_account_by_username(db, username=account.username)
     if db_account:
         raise HTTPException(status_code=400, detail="Tên người dùng đã được đăng ký")
+    
+    if account.phone:
+        db_phone = account_controller.get_account_by_phone(db, phone=account.phone)
+        if db_phone:
+            raise HTTPException(status_code=400, detail="Số điện thoại đã được đăng ký")
+            
     return account_controller.create_account(db=db, account=account)
 
 @router.get("/{account_id}")
@@ -226,6 +238,7 @@ def get_user_detail(account_id: int, db: Session = Depends(get_db)):
         "id": db_account.id,
         "username": db_account.username,
         "email": db_account.email,
+        "phone": db_account.phone,
         "employee_id": db_account.employee_id,
         "full_name": db_account.full_name,
         "status": db_account.status,
@@ -233,7 +246,9 @@ def get_user_detail(account_id: int, db: Session = Depends(get_db)):
         "created_at": db_account.created_at,
         "role_id": role_id,
         "permission_id": permission_id,
-        "stage_ids": stage_ids
+        "stage_ids": stage_ids,
+        "screen_permissions": db_account.screen_permissions,
+        "permission_level": db_account.permission_level
     }
 
 @router.put("/{account_id}", response_model=Account)
@@ -241,6 +256,13 @@ def update_user(account_id: int, account: AccountUpdate, db: Session = Depends(g
     """
     [PUT] Cập nhật thông tin cơ bản của một tài khoản.
     """
+    if account.phone is not None:
+        if account.phone.strip() == "":
+            raise HTTPException(status_code=400, detail="Số điện thoại không được để trống")
+        existing_phone = account_controller.get_account_by_phone(db, phone=account.phone)
+        if existing_phone and existing_phone.id != account_id:
+            raise HTTPException(status_code=400, detail="Số điện thoại đã được đăng ký bởi tài khoản khác")
+
     db_account = account_controller.update_account(db=db, account_id=account_id, account=account)
     if not db_account:
         raise HTTPException(status_code=404, detail="Tài khoản không tồn tại")
@@ -295,3 +317,42 @@ def delete_user(account_id: int, db: Session = Depends(get_db)):
     db.delete(db_account)
     db.commit()
     return {"message": "Xóa tài khoản thành công"}
+
+@router.get("/{account_id}/permissions")
+def get_user_permissions(account_id: int, resolved: bool = False, db: Session = Depends(get_db)):
+    """
+    [GET] Lấy phân quyền trên từng màn hình của tài khoản.
+    
+    Hỗ trợ tham số resolved=True để phân giải quyền thực tế của User (kết hợp bộ phận, cấp bậc, ghi đè).
+    """
+    db_account = db.query(AccountModel).filter(AccountModel.id == account_id).first()
+    if not db_account:
+        raise HTTPException(status_code=404, detail="Tài khoản không tồn tại")
+    
+    if resolved:
+        permissions = account_controller.resolve_user_permissions(db_account, db)
+    else:
+        import json
+        permissions = {}
+        if db_account.screen_permissions:
+            try:
+                permissions = json.loads(db_account.screen_permissions)
+            except Exception:
+                permissions = {}
+            
+    return {"permissions": permissions}
+
+@router.put("/{account_id}/permissions")
+def update_user_permissions(account_id: int, payload: dict, db: Session = Depends(get_db)):
+    """
+    [PUT] Cập nhật phân quyền trên từng màn hình cho tài khoản.
+    """
+    db_account = db.query(AccountModel).filter(AccountModel.id == account_id).first()
+    if not db_account:
+        raise HTTPException(status_code=404, detail="Tài khoản không tồn tại")
+    
+    import json
+    permissions_dict = payload.get("permissions", {})
+    db_account.screen_permissions = json.dumps(permissions_dict)
+    db.commit()
+    return {"message": "Cập nhật phân quyền thành công", "screen_permissions": db_account.screen_permissions}

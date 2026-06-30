@@ -209,3 +209,103 @@
 @media (max-width: 768px) {
     /* Khi sidebar hiện ra trên mobile, overlay cũng phải hiện */
 }
+
+/* --- Collapsible Multi-level Sidebar Custom Styles --- */
+
+.sidebar-group-header {
+    background: transparent;
+    border: none;
+    width: 100%;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-sizing: border-box;
+}
+
+.sidebar-group-header:hover {
+    background-color: #FAF6F0 !important;
+    color: #5D3B32 !important;
+}
+
+.sidebar-group-header:hover .nav-icon {
+    color: #5D3B32 !important;
+}
+
+.sidebar-group-header.active {
+    background-color: #FAF6F0 !important;
+    color: #5D3B32 !important;
+}
+
+.sidebar-group-header.active .nav-icon {
+    color: #5D3B32 !important;
+}
+
+.nav-link-direct {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-sizing: border-box;
+}
+
+.nav-link-direct:hover {
+    background-color: #FAF6F0 !important;
+    color: #5D3B32 !important;
+}
+
+.nav-link-direct:hover .nav-icon {
+    color: #5D3B32 !important;
+}
+
+.nav-link-direct.active {
+    background-color: #FAF6F0 !important;
+    color: #5D3B32 !important;
+}
+
+.nav-link-direct.active .nav-icon {
+    color: #5D3B32 !important;
+}
+
+.nav-link-child {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-sizing: border-box;
+}
+
+.nav-link-child:hover {
+    background-color: #FAF6F0 !important;
+    color: #5D3B32 !important;
+}
+
+.nav-link-child:hover .nav-icon {
+    color: #5D3B32 !important;
+}
+
+.nav-link-child.active {
+    background-color: #FAF6F0 !important;
+    color: #5D3B32 !important;
+}
+
+.nav-link-child.active .nav-icon {
+    color: #5D3B32 !important;
+}
+
+/* Animations for expanding */
+.sidebar-group-children {
+    animation: slideDownFade 0.25s ease-out;
+}
+
+@keyframes slideDownFade {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

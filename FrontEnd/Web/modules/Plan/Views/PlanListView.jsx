@@ -217,7 +217,7 @@ const ManufacturePlan = () => {
                                 <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#2D1A12' }}>{v}</span>
                             </div>
                         ))}
-                        <button className="btn btn-primary" style={{ width: '100%', marginTop: 20, padding: '12px' }} onClick={() => navigate(`/manufacture/plan/${popupPlan.id}`)}>Xem chi tiết kế hoạch</button>
+                        <button className="btn btn-primary" style={{ width: '100%', marginTop: 20, padding: '12px' }} onClick={() => navigate(`/admin/plan/${popupPlan.id}`)}>Xem chi tiết kế hoạch</button>
                     </div>
                 </div>
             )}
@@ -387,7 +387,7 @@ const ManufacturePlan = () => {
 
                 <div className="toolbar-right">
                     <button 
-                        onClick={() => navigate('/manufacture/plan/create')}
+                        onClick={() => navigate('/admin/plan/create')}
                         className="btn btn-primary"
                         style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
                     >
@@ -445,7 +445,7 @@ const ManufacturePlan = () => {
                                 <tr 
                                     key={plan.id}
                                     className="plan-row-hover animate-card-entrance"
-                                    onClick={() => navigate(`/manufacture/plan/${plan.id}`)}
+                                    onClick={() => navigate(`/admin/plan/${plan.id}`)}
                                 >
                                     <td style={{ textAlign: 'center', color: '#94a3b8' }}>
                                         {index + 1}

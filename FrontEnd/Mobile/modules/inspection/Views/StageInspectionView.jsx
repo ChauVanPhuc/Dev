@@ -5,102 +5,148 @@ import FormInput from '@mobile/Shared/Views/components/form/FormInput';
 import FormSelect from '@mobile/Shared/Views/components/form/FormSelect';
 import CollapsibleCard from '@mobile/Shared/Views/components/ui/CollapsibleCard';
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout';
-import SearchableSelect from '@mobile/Shared/Views/components/form/SearchableSelect';
 import PassFailSelector from '@mobile/Shared/Views/components/ui/PassFailSelector';
 import InspectionDetailPopup, { formatDateTime, getTypeName } from './components/InspectionDetailPopup';
-import { Camera, X, Image as ImageIcon, Check, RotateCcw } from 'lucide-react';
+import SearchableSelect from '@mobile/Shared/Views/components/form/SearchableSelect';
+import { Camera, X, Image as ImageIcon, Check, RotateCcw, Search, Plus, Pencil, ChevronDown, ChevronUp, AlertCircle, Eye } from 'lucide-react';
 import apiClient from '@shared/services/api';
 import useAuthStore from '@modules/auth/Models/authModel';
 import ConfirmModal from '@mobile/Shared/Views/components/feedback/ConfirmModal';
 import MessageModal from '@mobile/Shared/Views/components/feedback/MessageModal';
 
 /**
- * StageInspection Screen
- * Chế độ đa năng: Cho phép chọn loại phiếu kiểm tra và hiển thị Form tương ứng.
+ * Custom Switch/Toggle Component matching mockup style
  */
+const MockupToggle = ({ value, onChange, disabled }) => {
+  const isPass = value === 'pass';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div
+        onClick={() => !disabled && onChange(isPass ? 'fail' : 'pass')}
+        style={{
+          width: '50px',
+          height: '26px',
+          borderRadius: '13px',
+          backgroundColor: isPass ? '#5d3b32' : '#e2e8f0',
+          position: 'relative',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          transition: 'background-color 0.2s',
+          display: 'inline-block',
+          border: '1px solid #cbd5e1'
+        }}
+      >
+        <div
+          style={{
+            width: '20px',
+            height: '20px',
+            borderRadius: '50%',
+            backgroundColor: '#fff',
+            position: 'absolute',
+            top: '2px',
+            left: isPass ? '26px' : '2px',
+            transition: 'left 0.2s',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+          }}
+        />
+      </div>
+      <span style={{ 
+        fontWeight: 'bold', 
+        fontSize: '13px', 
+        color: isPass ? '#10b981' : '#ef4444' 
+      }}>
+        {isPass ? 'PASS' : 'Fail'}
+      </span>
+    </div>
+  );
+};
+
+const initializeDefaultSamples = (qty) => {
+  return Array.from({ length: qty }, (_, i) => ({
+    stt: i + 1,
+    dimensions: { values: [], photo: null },
+    moisture: { values: [], photo: null },
+    function: 'pass',
+    visual: 'pass'
+  }));
+};
+
 const StageInspection = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { logId, type } = location.state || {};
+  const { logId } = location.state || {};
   const { user } = useAuthStore();
-  const [inspectionType, setInspectionType] = useState('dau-vao');
-  const [orders, setOrders] = useState([]); // Danh sách PO từ API
+  const inspectionType = 'dau-vao';
 
-  // State quản lý dữ liệu form
-  const [formData, setFormData] = useState({
-    batch_no: '', // Đây là mã PO
-    product_sku: '', // Mã sản phẩm
-    total_qty: '0',
-    unit: 'Cái',
-    supplier: '',
-    intended_use: '',
-    check_type: '',
-    check_qty: '0',
-    results: {
-      visual: 'pass',
-      size: 'pass',
-      function: 'pass',
-      conclusion: 'pass'
-    },
-    notes: '',
-    inspection_images: {}, // { sectionTitle: [path1, path2...] }
-    action: '' // 'luu-kho', 'cach-ly', 'tra-ve'
-  });
-
-  const [currentProducts, setCurrentProducts] = useState([]); // Danh sách sản phẩm của PO đang chọn
-  const [isProductLoading, setIsProductLoading] = useState(false); // Trạng thái tải sản phẩm
-  const [isSaving, setIsSaving] = useState(false); // Trạng thái đang lưu dữ liệu
-  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [isMessageOpen, setIsMessageOpen] = useState(false);
   const [messageConfig, setMessageConfig] = useState({ type: 'success', title: '', message: '' });
-
   const [historyList, setHistoryList] = useState([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
-  const [loadedAction, setLoadedAction] = useState(null); // Action loaded from history
-  const [selectedHistoryItem, setSelectedHistoryItem] = useState(null); // State for history detail popup
+  const [selectedHistoryItem, setSelectedHistoryItem] = useState(null);
+  const [monthlySearchTerm, setMonthlySearchTerm] = useState('');
+  const [orders, setOrders] = useState([]);
 
-  // Check if editing is allowed (only if action is 'cach-ly')
-  const canEdit = loadedAction === 'cach-ly';
+  // --- Redesigned Input Inspection (dau-vao) states ---
+  const [poSearchTerm, setPoSearchTerm] = useState('');
+  const [isPoSearching, setIsPoSearching] = useState(false);
+  const [poNotFound, setPoNotFound] = useState(false);
+  const [poHeader, setPoHeader] = useState(null); 
+  const [poItems, setPoItems] = useState([]);
+  const [poCardExpanded, setPoCardExpanded] = useState(true);
 
-  const fetchHistory = async () => {
+  // Map of inspected drafts in this session: item_code -> { sampleQty, samples, isWood, conclusion, notes, action }
+  const [inspectedDrafts, setInspectedDrafts] = useState({});
+  const [existingInspectionsMap, setExistingInspectionsMap] = useState({});
+
+  // Active item inspection state
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [sampleQty, setSampleQty] = useState(20);
+  const [samples, setSamples] = useState([]);
+  const [isWood, setIsWood] = useState(false);
+  const [itemNotes, setItemNotes] = useState('');
+  const [itemConclusion, setItemConclusion] = useState('pass');
+  const [itemAction, setItemAction] = useState('luu-kho');
+
+  // Photo modal states
+  const [activeSampleIndex, setActiveSampleIndex] = useState(null);
+  const [activeModalType, setActiveModalType] = useState(null); 
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+
+  // New Smart Popup states for single-photo workflow
+  const [activeSizeTab, setActiveSizeTab] = useState('day'); // 'day' | 'rong' | 'dai'
+  const [activeMoistureIndex, setActiveMoistureIndex] = useState('new'); // index or 'new'
+  const [tempValues, setTempValues] = useState([]); 
+  const [tempPhotos, setTempPhotos] = useState([]); 
+  const [singleValue, setSingleValue] = useState(''); 
+  const [singlePhoto, setSinglePhoto] = useState(''); 
+  const [isOcrProcessing, setIsOcrProcessing] = useState(false);
+  const [allowManualInput, setAllowManualInput] = useState(false);
+
+  const modalFileInputRef = useRef(null);
+
+  // Defect tracking states
+  const [defectTypes, setDefectTypes] = useState([]);
+  const [activeDefects, setActiveDefects] = useState([{ defectId: '', quantity: 1, isHeavy: true, images: [] }]);
+  const [activeDefectIndex, setActiveDefectIndex] = useState(null);
+  const [activeDefectPhotoIndex, setActiveDefectPhotoIndex] = useState(null);
+
+  // Fetch Monthly History
+  const fetchHistory = async (searchQuery = '') => {
     try {
       setIsHistoryLoading(true);
-      const res = await apiClient.get('inspections/stage?limit=50');
+      const now = new Date();
+      const month = now.getMonth() + 1;
+      const year = now.getFullYear();
+      let url = `inspections/stage?month=${month}&year=${year}&limit=200`;
+      if (searchQuery.trim()) {
+        url += `&search=${encodeURIComponent(searchQuery.trim())}`;
+      }
+      const res = await apiClient.get(url);
       if (Array.isArray(res.data)) {
         setHistoryList(res.data);
       }
     } catch (err) {
       console.error("Lỗi khi tải lịch sử kiểm tra:", err);
-      // Fallback/Mock history for offline/local testing
-      setHistoryList([
-        {
-          id: 1001,
-          inspection_type: 'dau-vao',
-          batch_no: 'PO-2026-001',
-          product_sku: 'SP-101',
-          inspector_name: 'Hồ Sỹ Khẩn',
-          conclusion: 'pass',
-          inspection_date: '2026-03-01T16:30:00'
-        },
-        {
-          id: 1002,
-          inspection_type: 'bam-dinh',
-          batch_no: 'PO-2026-002',
-          product_sku: 'SP-102',
-          inspector_name: 'Hồ Sỹ Khẩn',
-          conclusion: 'fail',
-          inspection_date: '2026-03-01T16:45:00'
-        },
-        {
-          id: 1003,
-          inspection_type: 'sau-dong-goi',
-          batch_no: 'PO-2026-003',
-          product_sku: 'SP-103',
-          inspector_name: 'Hồ Sỹ Khẩn',
-          conclusion: 'pass',
-          inspection_date: '2026-03-01T17:00:00'
-        }
-      ]);
     } finally {
       setIsHistoryLoading(false);
     }
@@ -108,997 +154,1258 @@ const StageInspection = () => {
 
   useEffect(() => {
     fetchHistory();
-  }, [inspectionType, logId]);
 
-  const filteredHistory = useMemo(() => {
-    return historyList
-      .filter(item => {
-        const mappedType = item.inspection_type === 'phu-kien' ? 'dau-vao' : item.inspection_type;
-        return mappedType === inspectionType;
-      })
-      .slice(0, 3); // Only show top 3
-  }, [historyList, inspectionType]);
-
-  const handleViewHistoryItem = (item) => {
-    setSelectedHistoryItem(item);
-  };
-
-  // 2. Chuyển đổi danh sách sản phẩm hiện tại sang format của dropdown
-  const productOptions = useMemo(() => {
-    if (isProductLoading) return [{ label: 'Đang tải...', value: '' }];
-    if (currentProducts.length === 0) return [{ label: 'Nhập mã PO trước', value: '' }];
-
-    return currentProducts.map(p => ({ label: p.sku, value: p.sku }));
-  }, [currentProducts, isProductLoading]);
-
-  // 3. Danh sách chi tiết (Elements) đi theo sản phẩm đang chọn
-  const detailOptions = useMemo(() => {
-    const selectedProd = currentProducts.find(p => p.sku === formData.product_sku);
-    
-    if (!formData.product_sku) {
-      return [{ label: 'Chọn sản phẩm trước', value: '' }];
-    }
-
-    if (!selectedProd || !selectedProd.elements || selectedProd.elements.length === 0) {
-      // Đối với phiếu đầu vào, không tự động lấy SKU làm chi tiết
-      if (inspectionType === 'dau-vao') {
-        return [{ label: 'Nhập tên chi tiết', value: '' }];
-      }
-      return [{ label: 'Không có chi tiết (Mặc định)', value: formData.product_sku }];
-    }
-    
-    return selectedProd.elements.map(e => ({ label: e.name || e.sku, value: e.name || e.sku }));
-  }, [formData.product_sku, currentProducts, inspectionType]);
-
-  // Tự động chọn chi tiết đầu tiên khi đổi sản phẩm
-  useEffect(() => {
-    // Không tự động chọn nếu là phiếu đầu vào (để người dùng tự nhập)
-    if (inspectionType === 'dau-vao') return;
-
-    if (detailOptions.length > 0 && detailOptions[0].value) {
-      // Kiểm tra xem giá trị hiện tại có nằm trong danh sách mới không
-      const isValid = detailOptions.some(opt => opt.value === formData.detail_bam_dinh);
-      if (!formData.detail_bam_dinh || !isValid) {
-        setFormData(prev => ({ ...prev, detail_bam_dinh: detailOptions[0].value }));
-      }
-    }
-  }, [formData.product_sku, detailOptions, inspectionType]);
-
-  const handleFieldChange = (field, value) => {
-    // Chỉ cho phép số dương cho các trường số lượng
-    if (field === 'total_qty' || field === 'check_qty') {
-      let numericValue = value.replace(/[^0-9]/g, '');
-
-      // Bỏ số 0 ở đầu (nếu có nhiều hơn 1 chữ số)
-      if (numericValue.length > 1 && numericValue.startsWith('0')) {
-        numericValue = numericValue.replace(/^0+/, '');
-      }
-
-      // Giới hạn tối đa 999,999
-      if (numericValue && parseInt(numericValue, 10) > 999999) {
-        numericValue = '999999';
-      }
-
-      setFormData(prev => ({ ...prev, [field]: numericValue || '0' }));
-    } else {
-      setFormData(prev => ({ ...prev, [field]: value }));
-    }
-  };
-
-  const handleResultChange = (key, value) => {
-    setFormData(prev => ({
-      ...prev,
-      results: { ...prev.results, [key]: value }
-    }));
-  };
-
-  useEffect(() => {
-    if (type) {
-      const lowerType = type.toLowerCase();
-      if (lowerType.includes('phụ kiện') || lowerType.includes('đầu vào')) setInspectionType('dau-vao');
-      else if (lowerType.includes('bám dính')) setInspectionType('bam-dinh');
-      else if (lowerType.includes('đóng gói')) setInspectionType('sau-dong-goi');
-    }
-  }, [type]);
-
-  // 1.2 Fetch dữ liệu cũ nếu đang ở chế độ chỉnh sửa, hoặc reset nếu không có logId
-  useEffect(() => {
-    if (!logId) {
-      setFormData({
-        batch_no: '',
-        product_sku: '',
-        total_qty: '0',
-        unit: 'Cái',
-        supplier: '',
-        intended_use: '',
-        check_type: '',
-        check_qty: '0',
-        detail_bam_dinh: '',
-        results: {
-          visual: 'pass',
-          size: 'pass',
-          function: 'pass',
-          conclusion: 'pass'
-        },
-        notes: '',
-        inspection_images: {},
-        action: ''
-      });
-      setLoadedAction(null);
-      return;
-    }
-
-    const fetchOldData = async () => {
+    const fetchPOs = async () => {
       try {
-        const res = await apiClient.get(`inspections/stage/${logId}`);
-        if (res.data) {
-          const item = res.data;
-
-          // Xử lý an toàn cho data_json và images_json (phòng trường hợp đã được parse bởi interceptor)
-          let extra = {};
-          try {
-            extra = typeof item.data_json === 'string' ? JSON.parse(item.data_json) : (item.data_json || {});
-          } catch (e) { extra = {}; }
-
-          let images = {};
-          try {
-            images = typeof item.images_json === 'string' ? JSON.parse(item.images_json) : (item.images_json || {});
-          } catch (e) { images = {}; }
-
-          setFormData({
-            batch_no: item.batch_no || '',
-            product_sku: item.product_sku || '',
-            total_qty: extra.total_qty || '0',
-            unit: extra.unit || 'Cái',
-            supplier: extra.supplier || '',
-            intended_use: extra.intended_use || '',
-            check_type: extra.check_type || '',
-            check_qty: extra.check_qty || '0',
-            detail_bam_dinh: extra.detail_bam_dinh || '',
-            results: {
-              visual: extra.visual || 'pass',
-              size: extra.size || 'pass',
-              function: extra.function || 'pass',
-              conclusion: item.conclusion || 'pass'
-            },
-            notes: item.notes || '',
-            inspection_images: images,
-            action: extra.action || '' // Load action from history to display
-          });
-          setLoadedAction(extra.action || null); // Store loaded action separately
-
-          if (item.inspection_type) {
-            // Map giá trị cũ 'phu-kien' sang 'dau-vao'
-            const mappedType = item.inspection_type === 'phu-kien' ? 'dau-vao' : item.inspection_type;
-            setInspectionType(mappedType);
-          }
+        const res = await apiClient.get('purchase-requisitions/?limit=200');
+        if (res.data && Array.isArray(res.data.items)) {
+          setOrders(res.data.items);
         }
       } catch (err) {
-        console.error("Lỗi khi tải dữ liệu cũ:", err);
+        console.error("Lỗi khi tải PO:", err);
       }
     };
-    fetchOldData();
-  }, [logId]);
+    fetchPOs();
 
-  const inspectionOptions = [
-    { label: 'Phiếu kiểm tra đầu vào', value: 'dau-vao' },
-    { label: 'Kiểm tra bám dính', value: 'bam-dinh' },
-    { label: 'Kiểm tra sau đóng gói', value: 'sau-dong-goi' },
-  ];
+    const fetchDefectTypes = async () => {
+      try {
+        const url = user?.id ? `/inspections/defect-types?user_id=${user.id}` : '/inspections/defect-types';
+        const res = await apiClient.get(url);
+        if (Array.isArray(res.data)) {
+          setDefectTypes(res.data);
+        }
+      } catch (err) {
+        console.error("Lỗi khi tải danh mục lỗi, sử dụng dữ liệu mặc định:", err);
+        setDefectTypes([
+          { id: 101, name: 'Bề mặt xước', category: 'visual', needs_tracking: true, is_active: true },
+          { id: 102, name: 'Lệch màu', category: 'visual', needs_tracking: true, is_active: true },
+          { id: 103, name: 'Bọt khí', category: 'visual', needs_tracking: false, is_active: true },
+          { id: 104, name: 'Rỗ bề mặt', category: 'visual', needs_tracking: false, is_active: true },
+          { id: 201, name: 'Sai kích thước bao', category: 'structure', needs_tracking: true, is_active: true },
+          { id: 202, name: 'Móp méo góc', category: 'structure', needs_tracking: false, is_active: true },
+          { id: 203, name: 'Độ dày không đều', category: 'structure', needs_tracking: false, is_active: true },
+          { id: 301, name: 'Lẫn tạp chất', category: 'material', needs_tracking: true, is_active: true },
+          { id: 302, name: 'Ẩm mốc', category: 'material', needs_tracking: false, is_active: true },
+          { id: 303, name: 'Nứt vân', category: 'material', needs_tracking: false, is_active: true },
+        ]);
+      }
+    };
+    fetchDefectTypes();
+  }, [user]);
 
+  const filteredHistory = useMemo(() => {
+    return historyList.filter(item => item.inspection_type === 'dau-vao').slice(0, 3);
+  }, [historyList]);
 
-  const fileInputRef = useRef(null);
-  const [activeSection, setActiveSection] = useState(null);
+  // Load PO directly on search
+  const handleSearchPO = async (codeOverride) => {
+    const searchCode = (codeOverride || poSearchTerm).trim();
+    if (!searchCode) return;
+    setIsPoSearching(true);
+    setPoNotFound(false);
+    try {
+      const itemsRes = await apiClient.get(`purchase-order-items/by-po/${searchCode}`);
+      const items = itemsRes.data;
 
-  const handleCapture = (sectionTitle) => {
-    setActiveSection(sectionTitle);
-    fileInputRef.current.click();
+      if (!items || items.length === 0) {
+        setPoNotFound(true);
+        setPoItems([]);
+        setPoHeader(null);
+        setIsPoSearching(false);
+        return;
+      }
+
+      let headerInfo = {
+        po_code: searchCode,
+        supplier_code: items[0].supplier_code || '',
+        supplier_name: items[0].supplier_name || '',
+        order_date: items[0].po_date || '',
+        delivery_date: items[0].requested_delivery_date || ''
+      };
+
+      try {
+        const reqRes = await apiClient.get(`purchase-requisitions/?search=${searchCode}`);
+        if (reqRes.data && reqRes.data.items && reqRes.data.items.length > 0) {
+          const matchedReq = reqRes.data.items.find(r => r.po_code === searchCode) || reqRes.data.items[0];
+          headerInfo.order_date = matchedReq.order_date;
+          headerInfo.delivery_date = matchedReq.delivery_date;
+          headerInfo.supplier_code = matchedReq.supplier_code;
+          headerInfo.supplier_name = matchedReq.supplier_name;
+        }
+      } catch (err) {}
+
+      // Fetch existing inspections for this PO
+      const insRes = await apiClient.get(`inspections/stage?batch_no=${searchCode}`);
+      const inspections = insRes.data;
+      const map = {};
+      if (Array.isArray(inspections)) {
+        inspections.forEach(ins => {
+          if (ins.product_sku) {
+            const key = ins.product_sku.toLowerCase();
+            // Giữ bản ghi mới nhất (API trả về DESC theo ngày)
+            if (!map[key]) {
+              map[key] = ins;
+            }
+          }
+        });
+      }
+
+      setExistingInspectionsMap(map);
+      setPoHeader(headerInfo);
+      setPoItems(items);
+      setInspectedDrafts({});
+    } catch (err) {
+      console.error("Lỗi khi tìm PO:", err);
+      setPoNotFound(true);
+    } finally {
+      setIsPoSearching(false);
+    }
   };
 
-  const onFileChange = async (e) => {
+  const handleSearchPOByCode = (code) => {
+    setPoSearchTerm(code);
+    handleSearchPO(code);
+  };
+
+  const isWoodProduct = (name) => {
+    if (!name) return false;
+    const lower = name.toLowerCase();
+    const woodKeywords = ["gỗ", "thanh", "oak", "sồi", "board", "ván", "wood", "venear", "tràm", "pine", "thông"];
+    return woodKeywords.some(keyword => lower.includes(keyword));
+  };
+
+  const ensureTrailingEmptySample = (samplesList) => {
+    if (samplesList.length === 0) {
+      return initializeDefaultSamples(3);
+    }
+    const last = samplesList[samplesList.length - 1];
+    const isLastMeasured = (last.dimensions?.values?.length > 0) || (last.moisture?.values?.length > 0) || (last.visual === 'fail') || (last.function === 'fail');
+    if (isLastMeasured) {
+      return [
+        ...samplesList,
+        {
+          stt: samplesList.length + 1,
+          dimensions: { values: [], photo: null },
+          moisture: { values: [], photo: null },
+          function: 'pass',
+          visual: 'pass'
+        }
+      ];
+    }
+    return samplesList;
+  };
+
+  const handleStartInspection = (item) => {
+    setSelectedItem(item);
+    const draft = item.item_code ? inspectedDrafts[item.item_code.toLowerCase()] : null;
+    const existing = item.item_code ? existingInspectionsMap[item.item_code.toLowerCase()] : null;
+
+    if (draft) {
+      const normalizedSamples = ensureTrailingEmptySample(draft.samples);
+      setSampleQty(normalizedSamples.length);
+      setSamples(normalizedSamples);
+      setIsWood(draft.isWood);
+      setItemNotes(draft.notes);
+      setItemConclusion(draft.conclusion);
+      setItemAction(draft.action || 'luu-kho');
+      setActiveDefects(draft.defects && draft.defects.length > 0 ? draft.defects : [{ defectId: '', quantity: 1, isHeavy: true, images: [] }]);
+    } else if (existing) {
+      let extra = {};
+      try {
+        extra = typeof existing.data_json === 'string' ? JSON.parse(existing.data_json) : (existing.data_json || {});
+      } catch (e) {}
+
+      const savedSamples = extra.samples || [];
+      const initialSamples = savedSamples.length > 0 ? savedSamples : initializeDefaultSamples(3);
+      const normalizedSamples = ensureTrailingEmptySample(initialSamples);
+
+      setSampleQty(normalizedSamples.length);
+      setSamples(normalizedSamples);
+      setIsWood(extra.is_wood !== undefined ? extra.is_wood : isWoodProduct(item.item_name));
+      setItemNotes(existing.notes || '');
+      setItemConclusion(existing.conclusion || 'pass');
+      setItemAction(extra.action || 'luu-kho');
+      setActiveDefects(extra.defects && extra.defects.length > 0 ? extra.defects : [{ defectId: '', quantity: 1, isHeavy: true, images: [] }]);
+    } else {
+      const defaultQty = 3;
+      setSampleQty(defaultQty);
+      setSamples(initializeDefaultSamples(defaultQty));
+      setIsWood(isWoodProduct(item.item_name));
+      setItemNotes('');
+      setItemConclusion('pass');
+      setItemAction('luu-kho');
+      setActiveDefects([{ defectId: '', quantity: 1, isHeavy: true, images: [] }]);
+    }
+  };
+
+  const handleAddDefect = () => {
+    setActiveDefects(prev => [...prev, { defectId: '', quantity: 1, isHeavy: true, images: [] }]);
+  };
+
+  const handleRemoveDefect = (index) => {
+    setActiveDefects(prev => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleUpdateDefect = (index, field, value) => {
+    setActiveDefects(prev => {
+      const next = [...prev];
+      if (field === 'defectId') {
+        const selectedDefect = defectTypes.find(t => String(t.id) === String(value));
+        const isHeavy = selectedDefect ? (selectedDefect.aql_class === 'Major' || selectedDefect.aql_class === 'Critical') : true;
+        next[index] = { ...next[index], defectId: value, isHeavy };
+      } else {
+        next[index] = { ...next[index], [field]: value };
+      }
+      return next;
+    });
+  };
+
+  const handleTriggerDefectCamera = (defectIdx, photoIdx) => {
+    setActiveDefectIndex(defectIdx);
+    setActiveDefectPhotoIndex(photoIdx);
+    setActiveModalType('defect');
+    if (modalFileInputRef.current) {
+      modalFileInputRef.current.click();
+    }
+  };
+
+  const handleRemoveDefectPhoto = (defectIdx, photoIdx) => {
+    setActiveDefects(prev => {
+      const next = [...prev];
+      const currentImages = [...(next[defectIdx].images || [])];
+      currentImages.splice(photoIdx, 1);
+      next[defectIdx] = { ...next[defectIdx], images: currentImages.filter(Boolean) };
+      return next;
+    });
+  };
+
+  const handleUpdateSampleQty = (newQty) => {
+    if (newQty < 1) return;
+    setSampleQty(newQty);
+    setSamples(prev => {
+      if (newQty > prev.length) {
+        const extra = Array.from({ length: newQty - prev.length }, (_, i) => ({
+          stt: prev.length + i + 1,
+          dimensions: { values: [], photos: [] },
+          moisture: { values: [], photos: [] },
+          function: 'pass',
+          visual: 'pass'
+        }));
+        return [...prev, ...extra];
+      } else {
+        return prev.slice(0, newQty);
+      }
+    });
+  };
+
+  const handleOpenPhotoModal = (idx, type) => {
+    setActiveSampleIndex(idx);
+    setActiveModalType(type);
+    setIsOcrProcessing(false);
+    
+    const sample = samples[idx];
+    if (type === 'size') {
+      const currentValues = sample.dimensions?.values || [];
+      
+      const initialValues = [currentValues[0] || '', currentValues[1] || '', currentValues[2] || ''];
+      setTempValues(initialValues);
+
+      let defaultTab = 'day';
+      if (!initialValues[0]) {
+        defaultTab = 'day';
+      } else if (!initialValues[1]) {
+        defaultTab = 'rong';
+      } else if (!initialValues[2]) {
+        defaultTab = 'dai';
+      }
+      setActiveSizeTab(defaultTab);
+
+      const tabIdx = defaultTab === 'day' ? 0 : defaultTab === 'rong' ? 1 : 2;
+      setSingleValue(String(initialValues[tabIdx] || ''));
+      setSinglePhoto('');
+      setAllowManualInput(!!initialValues[tabIdx]);
+    } else if (type === 'moisture') {
+      const currentValues = sample.moisture?.values || [];
+      
+      setTempValues([...currentValues]);
+      setActiveMoistureIndex('new');
+      setSingleValue('');
+      setSinglePhoto('');
+      setAllowManualInput(false);
+    }
+  };
+
+  const handleSwitchSizeTab = (tab) => {
+    const oldIdx = activeSizeTab === 'day' ? 0 : activeSizeTab === 'rong' ? 1 : 2;
+    const updatedValues = [...tempValues];
+    updatedValues[oldIdx] = singleValue;
+    setTempValues(updatedValues);
+
+    setActiveSizeTab(tab);
+    const newIdx = tab === 'day' ? 0 : tab === 'rong' ? 1 : 2;
+    setSingleValue(String(updatedValues[newIdx] || ''));
+    setSinglePhoto('');
+    setAllowManualInput(!!updatedValues[newIdx]);
+    setIsOcrProcessing(false);
+  };
+
+  const handleSwitchMoistureIndex = (tabIdx) => {
+    const updatedValues = [...tempValues];
+    if (activeMoistureIndex === 'new') {
+      if (singleValue.trim() !== '') {
+        updatedValues.push(parseFloat(singleValue));
+      }
+    } else {
+      if (singleValue.trim() !== '') {
+        updatedValues[activeMoistureIndex] = parseFloat(singleValue);
+      } else {
+        updatedValues.splice(activeMoistureIndex, 1);
+      }
+    }
+    setTempValues(updatedValues);
+
+    setActiveMoistureIndex(tabIdx);
+    if (tabIdx === 'new') {
+      setSingleValue('');
+      setSinglePhoto('');
+      setAllowManualInput(false);
+    } else {
+      setSingleValue(String(updatedValues[tabIdx] || ''));
+      setSinglePhoto('');
+      setAllowManualInput(true);
+    }
+    setIsOcrProcessing(false);
+  };
+
+  const onModalFileChange = async (e) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    setIsSaving(true);
-    try {
-      const uploadFormData = new FormData();
-      for (let i = 0; i < files.length; i++) {
-        uploadFormData.append('files', files[i]);
-      }
+    if (activeModalType === 'defect') {
+      setIsUploadingImage(true);
+      try {
+        const uploadFormData = new FormData();
+        uploadFormData.append('files', files[0]);
 
-      const res = await apiClient.post('inspections/upload', uploadFormData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        const res = await apiClient.post('inspections/upload', uploadFormData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+
+        if (res.data && res.data.paths && res.data.paths.length > 0) {
+          const newPath = res.data.paths[0];
+          setActiveDefects(prev => {
+            const next = [...prev];
+            const currentImages = [...(next[activeDefectIndex].images || [])];
+            currentImages[activeDefectPhotoIndex] = newPath;
+            next[activeDefectIndex] = { ...next[activeDefectIndex], images: currentImages };
+            return next;
+          });
+          setActiveModalType(null);
+        }
+      } catch (err) {
+        console.error("Lỗi tải ảnh lỗi:", err);
+      } finally {
+        setIsUploadingImage(false);
+        e.target.value = '';
+      }
+    } else {
+      const localUrl = URL.createObjectURL(files[0]);
+      setSinglePhoto(localUrl);
+      
+      setIsOcrProcessing(true);
+      setAllowManualInput(false);
+      
+      try {
+        const ocrFormData = new FormData();
+        ocrFormData.append('file', files[0]);
+
+        const res = await apiClient.post('inspections/upload-ocr', ocrFormData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+
+        if (res.data && res.data.value !== undefined) {
+          const detectedVal = res.data.value;
+          if (detectedVal !== null) {
+            setSingleValue(String(detectedVal));
+            setAllowManualInput(true);
+          } else {
+            alert("Không nhận diện được số đo từ ảnh. Vui lòng nhập thủ công!");
+            setAllowManualInput(true);
+          }
+        } else {
+          alert("Không nhận diện được số đo từ ảnh. Vui lòng nhập thủ công!");
+          setAllowManualInput(true);
+        }
+      } catch (err) {
+        console.error("Lỗi OCR:", err);
+        alert("Lỗi kết nối AI Vision. Vui lòng tự nhập trị số!");
+        setAllowManualInput(true);
+      } finally {
+        setIsOcrProcessing(false);
+        e.target.value = '';
+      }
+    }
+  };
+
+  const handleConfirmModalValues = () => {
+    let finalValues = [];
+
+    if (activeModalType === 'size') {
+      const tabIdx = activeSizeTab === 'day' ? 0 : activeSizeTab === 'rong' ? 1 : 2;
+      const updatedValues = [...tempValues];
+      updatedValues[tabIdx] = singleValue;
+
+      const parsedValues = [];
+      [0, 1, 2].forEach(i => {
+        const valStr = String(updatedValues[i] || '').trim();
+        if (valStr !== '') {
+          parsedValues.push(parseFloat(valStr));
+        }
       });
 
-      if (res.data && res.data.paths) {
-        const newPaths = res.data.paths;
-        setFormData(prev => {
-          const currentImages = prev.inspection_images[activeSection] || [];
-          return {
-            ...prev,
-            inspection_images: {
-              ...prev.inspection_images,
-              [activeSection]: [...currentImages, ...newPaths]
-            }
-          };
-        });
-      }
-    } catch (err) {
-      console.error("Lỗi khi tải ảnh:", err);
-      alert("Không thể tải ảnh lên máy chủ.");
-    } finally {
-      setIsSaving(false);
-      e.target.value = ''; // Reset input
-    }
-  };
-
-  const removeImage = (sectionTitle, pathToRemove) => {
-    setFormData(prev => ({
-      ...prev,
-      inspection_images: {
-        ...prev.inspection_images,
-        [sectionTitle]: (prev.inspection_images[sectionTitle] || []).filter(p => p !== pathToRemove)
-      }
-    }));
-  };
-
-  const removeVietnameseTones = (str) => {
-    if (!str) return '';
-    str = str.replace(/à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ/g, "a");
-    str = str.replace(/è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ/g, "e");
-    str = str.replace(/ì|í|ị|ỉ|ĩ/g, "i");
-    str = str.replace(/ò|ó|ọ|ỏ|õ|ô|ồ|ố|ộ|ổ|ỗ|ơ|ờ|ớ|ợ|ở|ỡ/g, "o");
-    str = str.replace(/ù|ú|ụ|ủ|ũ|ư|ừ|ứ|ự|ử|ữ/g, "u");
-    str = str.replace(/ỳ|ý|ỵ|ỷ|ỹ/g, "y");
-    str = str.replace(/đ/g, "d");
-    str = str.replace(/À|Á|Ạ|Ả|Ã|Â|Ầ|Ấ|Ậ|Ẩ|Ẫ|Ă|Ằ|Ắ|Ặ|Ẳ|Ẵ/g, "A");
-    str = str.replace(/È|É|Ẹ|Ẻ|Ẽ|Ê|Ề|Ế|Ệ|Ể|Ễ/g, "E");
-    str = str.replace(/Ì|Í|Ị|Ỉ|Ĩ/g, "I");
-    str = str.replace(/Ò|Ó|Ọ|Ỏ|Õ|Ô|Ồ|Ố|Ộ|Ổ|Ỗ|Ơ|Ờ|Ớ|Ợ|Ở|Ỡ/g, "O");
-    str = str.replace(/Ù|Ú|Ụ|Ủ|Ũ|Ư|Ừ|Ứ|Ự|Ử|Ữ/g, "U");
-    str = str.replace(/Ỳ|Ý|Ỵ|Ỷ|Ỹ/g, "Y");
-    str = str.replace(/Đ/g, "D");
-    return str.toLowerCase().trim();
-  };
-
-  const ImageSection = ({ title }) => {
-
-    const normalizedTitle = title.trim();
-
-    let images = [];
-
-
-
-    if (Array.isArray(formData.inspection_images)) {
-
-      images = formData.inspection_images;
-
-    } else if (formData.inspection_images && typeof formData.inspection_images === 'object') {
-
-      images = formData.inspection_images[normalizedTitle] || [];
-
-
-
-      // Fallback 1: Tìm key gần giống nhất bằng cách loại bỏ dấu tiếng Việt
-
-      if (images.length === 0) {
-
-        const searchKey = removeVietnameseTones(normalizedTitle);
-
-        const allKeys = Object.keys(formData.inspection_images);
-
-        const similarKey = allKeys.find(k => removeVietnameseTones(k) === searchKey || removeVietnameseTones(k).includes(searchKey));
-
-        if (similarKey) {
-
-          images = formData.inspection_images[similarKey] || [];
-
-        }
-
-      }
-
-
-
-      // Fallback 2: Nếu loại kiểm tra không phải sau-dong-goi (chỉ có 1 phần ảnh duy nhất)
-
-      if (images.length === 0 && inspectionType !== 'sau-dong-goi') {
-
-        const allValues = Object.values(formData.inspection_images);
-
-        images = allValues.flat().filter(Boolean);
-
-      }
-
-
-
-      // Fallback 3: Khớp dựa trên từ khóa (đối phó với lỗi mã hóa hiển thị dấu hỏi "?" từ SQL Server)
-
-      if (images.length === 0) {
-
-        const allKeys = Object.keys(formData.inspection_images);
-
-        let matchedKey = null;
-
-        const lowerTitle = normalizedTitle.toLowerCase();
-
-
-
-        if (lowerTitle.includes('quy trình') || lowerTitle.includes('quy trinh')) {
-
-          matchedKey = allKeys.find(k => k.toLowerCase().includes('quy tr') || k.toLowerCase().includes('dong goi') || k.toLowerCase().includes('dóng gói'));
-
-        } else if (lowerTitle.includes('tem') || lowerTitle.includes('nhãn') || lowerTitle.includes('nhan')) {
-
-          matchedKey = allKeys.find(k => k.toLowerCase().includes('tem') || k.toLowerCase().includes('nhan') || k.toLowerCase().includes('nhãn'));
-
-        } else if (lowerTitle.includes('khác') || lowerTitle.includes('khac')) {
-
-          matchedKey = allKeys.find(k => k.toLowerCase().includes('khac') || k.toLowerCase().includes('khác'));
-
-        } else if (lowerTitle.includes('kiểm tra') || lowerTitle.includes('kiem tra')) {
-
-          matchedKey = allKeys.find(k => k.toLowerCase().includes('kiem') || k.toLowerCase().includes('kiểm') || k.toLowerCase().includes('tra') || k.toLowerCase().includes('?nh'));
-
-        }
-
-
-
-        if (matchedKey) {
-
-          images = formData.inspection_images[matchedKey] || [];
-
-        }
-
-      }
-
-    }
-
-
-
-    if (logId && images.length === 0) return null; // Ẩn hoàn toàn nếu xem log mà không có ảnh
-
-    return (
-      <div style={{ marginTop: '16px', borderTop: '1px solid #f1f5f9', paddingTop: '12px' }}>
-        <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#334155', marginBottom: '12px' }}>{title}</h3>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-          {images.map((path, idx) => (
-            <div key={idx} style={{ position: 'relative', width: '100px', height: '100px' }}>
-              <img
-                src={`${apiClient.defaults.baseURL.split('/api/v1')[0]}${path}`}
-                alt="Captured"
-                style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '12px' }}
-              />
-              {!logId && (
-                <button
-                  onClick={() => removeImage(title, path)}
-                  style={{ position: 'absolute', top: '-8px', right: '-8px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-          ))}
-
-          {!logId && (
-            <div
-              onClick={() => handleCapture(title)}
-              style={{
-                width: '100px',
-                height: '100px',
-                backgroundColor: '#f8fafc',
-                borderRadius: '12px',
-                border: '2px dashed #cbd5e1',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer'
-              }}
-            >
-              <Camera size={28} color="#94a3b8" />
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  const renderFormContent = () => {
-    switch (inspectionType) {
-      case 'dau-vao':
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <div style={{ flex: 2 }}>
-                <FormInput
-                  label="PO"
-                  value={formData.batch_no}
-                  onChange={(e) => handleFieldChange('batch_no', e.target.value)}
-                  placeholder="Nhập mã PO"
-                  readOnly={!!logId && !canEdit}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <FormInput
-                  label="Số lượng"
-                  value={formData.total_qty}
-                  onChange={(e) => handleFieldChange('total_qty', e.target.value)}
-                  inputStyle={{ textAlign: 'center' }}
-                  readOnly={!!logId && !canEdit}
-                />
-              </div>
-              <div style={{ width: '100px' }}>
-                <FormSelect
-                  label="Đơn vị"
-                  value={formData.unit}
-                  options={[
-                    { label: 'Cái', value: 'Cái' },
-                    { label: 'bộ', value: 'bộ' },
-                    { label: 'pallet', value: 'pallet' }
-                  ]}
-                  onChange={(e) => handleFieldChange('unit', e.target.value)}
-                  readOnly={!!logId && !canEdit}
-                />
-              </div>
-            </div>
-            <FormInput
-              label="Nhà cung cấp"
-              value={formData.supplier}
-              onChange={(e) => handleFieldChange('supplier', e.target.value)}
-              placeholder="Nhập tên nhà cung cấp (VD: Long Thanh wood)"
-              readOnly={!!logId && !canEdit}
-            />
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <div style={{ flex: 1 }}>
-                <FormInput
-                  label="Sản phẩm"
-                  value={formData.product_sku}
-                  onChange={(e) => handleFieldChange('product_sku', e.target.value)}
-                  placeholder="Nhập mã SP"
-                  readOnly={!!logId && !canEdit}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <FormInput
-                  label="Chi tiết"
-                  value={formData.detail_bam_dinh}
-                  onChange={(e) => handleFieldChange('detail_bam_dinh', e.target.value)}
-                  placeholder="Tên chi tiết"
-                  readOnly={!!logId && !canEdit}
-                />
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <div style={{ flex: 1 }}>
-                <FormInput
-                  label="Loại kiểm"
-                  value={formData.check_type}
-                  onChange={(e) => handleFieldChange('check_type', e.target.value)}
-                  placeholder="VD: Định hình"
-                  readOnly={!!logId && !canEdit}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <FormInput
-                  label="SL kiểm"
-                  value={formData.check_qty}
-                  onChange={(e) => handleFieldChange('check_qty', e.target.value)}
-                  inputStyle={{ textAlign: 'center' }}
-                  readOnly={!!logId && !canEdit}
-                />
-              </div>
-            </div>
-            <hr style={{ border: 'none', borderTop: '1px solid #f1f5f9', margin: '4px 0' }} />
-            <div id="stage-results-group" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div>
-                <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#1e293b', marginBottom: '8px' }}>Ngoại quan:</div>
-                <PassFailSelector value={formData.results.visual} onChange={(val) => handleResultChange('visual', val)} disabled={!!logId && !canEdit} variant="button" />
-              </div>
-              <div>
-                <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#1e293b', marginBottom: '8px' }}>Kích thước:</div>
-                <PassFailSelector value={formData.results.size} onChange={(val) => handleResultChange('size', val)} disabled={!!logId && !canEdit} variant="button" />
-              </div>
-              <div>
-                <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#1e293b', marginBottom: '8px' }}>Chức năng:</div>
-                <PassFailSelector value={formData.results.function} onChange={(val) => handleResultChange('function', val)} disabled={!!logId && !canEdit} variant="button" />
-              </div>
-            </div>
-          </div>
-        );
-
-      case 'bam-dinh':
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <div style={{ flex: 1 }}>
-                <SearchableSelect
-                  label="PO"
-                  value={formData.batch_no}
-                  options={orders.map(o => ({ label: o.order_code, value: o.order_code }))}
-                  onChange={(e) => handleFieldChange('batch_no', e.target.value)}
-                  placeholder="Tìm mã PO..."
-                  readOnly={!!logId && !canEdit}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <FormInput label="Người nhập" value={user?.full_name || 'Người kiểm tra'} readOnly={true} />
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <div style={{ flex: 1 }}>
-                <FormSelect
-                  label="Sản phẩm"
-                  value={formData.product_sku}
-                  onChange={(e) => handleFieldChange('product_sku', e.target.value)}
-                  options={productOptions}
-                  readOnly={!!logId && !canEdit}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <FormSelect
-                  label="Chi tiết"
-                  value={formData.detail_bam_dinh}
-                  onChange={(e) => handleFieldChange('detail_bam_dinh', e.target.value)}
-                  options={detailOptions}
-                  readOnly={!!logId && !canEdit}
-                />
-              </div>
-            </div>
-          </div>
-        );
-
-      case 'sau-dong-goi':
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <div style={{ flex: 1 }}>
-                <SearchableSelect
-                  label="PO"
-                  value={formData.batch_no}
-                  options={orders.map(o => ({ label: o.order_code, value: o.order_code }))}
-                  onChange={(e) => handleFieldChange('batch_no', e.target.value)}
-                  placeholder="Tìm mã PO..."
-                  readOnly={!!logId && !canEdit}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <FormInput label="Người nhập" value={user?.full_name || 'Người kiểm tra'} readOnly={true} />
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <div style={{ flex: 1 }}>
-                <FormSelect
-                  label="Sản phẩm"
-                  value={formData.product_sku}
-                  onChange={(e) => handleFieldChange('product_sku', e.target.value)}
-                  options={productOptions}
-                  readOnly={!!logId && !canEdit}
-                />
-              </div>
-              <div style={{ flex: 1 }}></div>
-            </div>
-            <hr style={{ border: 'none', borderTop: '1px solid #f1f5f9', margin: '4px 0' }} />
-
-            <ImageSection title="Quy trình đóng gói" />
-            <ImageSection title="Tem nhãn sau đóng gói" />
-            <ImageSection title="Ảnh khác" />
-          </div>
-        );
-
-
-      default:
-        return null;
-    }
-  };
-
-  const handleAction = (action) => {
-    if (!formData.results.conclusion) {
-      setMessageConfig({ type: 'error', title: 'Thiếu thông tin', message: 'Vui lòng chọn kết quả kiểm tra trước!' });
-      setIsMessageOpen(true);
-      return;
-    }
-    
-    setFormData(prev => ({ ...prev, action }));
-  };
-
-  const handleValidateAndConfirm = () => {
-    if (!formData.batch_no.trim()) {
-      setMessageConfig({ type: 'error', title: 'Thiếu thông tin', message: 'Vui lòng nhập mã PO!' });
-      setIsMessageOpen(true);
-      return;
-    }
-    if (!formData.product_sku.trim()) {
-      setMessageConfig({ type: 'error', title: 'Thiếu thông tin', message: 'Vui lòng nhập mã Sản phẩm!' });
-      setIsMessageOpen(true);
-      return;
-    }
-    if ((inspectionType === 'dau-vao' || inspectionType === 'bam-dinh') && !formData.detail_bam_dinh.trim()) {
-      setMessageConfig({ type: 'error', title: 'Thiếu thông tin', message: 'Vui lòng chọn Chi tiết!' });
-      setIsMessageOpen(true);
-      return;
-    }
-    if (inspectionType === 'dau-vao') {
-      if (!formData.supplier.trim()) {
-        setMessageConfig({ type: 'error', title: 'Thiếu thông tin', message: 'Vui lòng nhập tên Nhà cung cấp!' });
-        setIsMessageOpen(true);
+      if (parsedValues.length === 0) {
+        alert("Vui lòng nhập ít nhất một trị số!");
         return;
       }
-      const totalQty = parseFloat(formData.total_qty) || 0;
-      const checkQty = parseFloat(formData.check_qty) || 0;
-      if (checkQty > totalQty) {
-        setMessageConfig({ type: 'error', title: 'Dữ liệu không hợp lệ', message: `Số lượng kiểm (${checkQty}) không được lớn hơn tổng số lượng (${totalQty})!` });
-        setIsMessageOpen(true);
+
+      finalValues = parsedValues;
+    } else if (activeModalType === 'moisture') {
+      const valStr = String(singleValue || '').trim();
+      const updatedValues = [...tempValues];
+
+      if (activeMoistureIndex === 'new') {
+        if (valStr !== '') {
+          updatedValues.push(parseFloat(valStr));
+        }
+      } else {
+        if (valStr !== '') {
+          updatedValues[activeMoistureIndex] = parseFloat(valStr);
+        } else {
+          updatedValues.splice(activeMoistureIndex, 1);
+        }
+      }
+
+      if (updatedValues.length === 0) {
+        alert("Vui lòng nhập ít nhất một trị số!");
         return;
       }
+
+      finalValues = updatedValues;
     }
 
-    if (inspectionType === 'dau-vao' && !formData.action) {
-      setMessageConfig({ type: 'error', title: 'Thiếu thông tin', message: 'Vui lòng chọn hành động!' });
-      setIsMessageOpen(true);
-      return;
-    }
-    setIsConfirmOpen(true);
-  };
-
-  const handleSave = async () => {
-    setIsConfirmOpen(false);
-    setIsSaving(true);
-    try {
-      // Chuẩn bị dữ liệu đặc thù theo loại phiếu
-      const extraData = { ...formData.results };
-      if (inspectionType === 'dau-vao') {
-        extraData.supplier = formData.supplier;
-        extraData.check_type = formData.check_type;
-        extraData.detail_bam_dinh = formData.detail_bam_dinh;
-        extraData.total_qty = formData.total_qty;
-        extraData.unit = formData.unit;
-        extraData.check_qty = formData.check_qty;
-      } else if (inspectionType === 'bam-dinh') {
-        extraData.detail_bam_dinh = formData.detail_bam_dinh;
-      }
-      extraData.action = formData.action;
-
-      const payload = {
-        inspection_type: inspectionType,
-        batch_no: formData.batch_no,
-        product_sku: formData.product_sku,
-        inspector_name: user?.full_name || "Người kiểm tra",
-        conclusion: formData.results.conclusion || 'pass',
-        notes: formData.notes,
-        data_json: JSON.stringify(extraData),
-        images_json: JSON.stringify(formData.inspection_images)
+    setSamples(prev => {
+      const next = [...prev];
+      const field = activeModalType === 'size' ? 'dimensions' : 'moisture';
+      next[activeSampleIndex] = {
+        ...next[activeSampleIndex],
+        [field]: {
+          values: finalValues,
+          photos: []
+        }
       };
 
-      console.log('Saving payload:', payload);
-      console.log('Action being saved:', formData.action);
-
-      if (logId) {
-        // Use POST for update as well to bypass potential PUT restrictions (405)
-        await apiClient.post(`inspections/stage/${logId}`, payload);
-      } else {
-        await apiClient.post('inspections/stage', payload);
+      if (activeSampleIndex === next.length - 1) {
+        next.push({
+          stt: next.length + 1,
+          dimensions: { values: [], photos: [] },
+          moisture: { values: [], photos: [] },
+          function: 'pass',
+          visual: 'pass'
+        });
+        setSampleQty(next.length);
       }
 
-      setMessageConfig({
-        type: 'success',
-        title: 'Thành công',
-        message: 'Lưu phiếu kiểm tra công đoạn thành công!'
+      return next;
+    });
+    setActiveModalType(null);
+  };
+
+  const handleToggleSampleValue = (idx, field, val) => {
+    setSamples(prev => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], [field]: val };
+
+      // Tự động sinh thêm mẫu tiếp theo nếu vừa toggle mẫu cuối cùng
+      if (idx === next.length - 1) {
+        next.push({
+          stt: next.length + 1,
+          dimensions: { values: [], photo: null },
+          moisture: { values: [], photo: null },
+          function: 'pass',
+          visual: 'pass'
+        });
+        setSampleQty(next.length);
+      }
+
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (selectedItem) {
+      let hasFail = false;
+      for (const sample of samples) {
+        if (sample.visual === 'fail') hasFail = true;
+        if (!isWood && sample.function === 'fail') hasFail = true;
+      }
+
+      // Check if there is any defect (must have a selected ID and quantity > 0)
+      const hasDefect = activeDefects.some(d => d.defectId && d.quantity > 0);
+      if (hasDefect) {
+        hasFail = true;
+      }
+
+      const computedConclusion = hasFail ? 'fail' : 'pass';
+      setItemConclusion(computedConclusion);
+      
+      if (computedConclusion === 'fail') {
+        if (itemAction === 'luu-kho') {
+          setItemAction('tra-ve');
+        }
+      } else {
+        if (itemAction === 'tra-ve' || itemAction === 'cach-ly') {
+          setItemAction('luu-kho');
+        }
+      }
+    }
+  }, [samples, isWood, selectedItem, activeDefects]);
+
+  const handleConfirmItemInspection = () => {
+    // Lọc bỏ mẫu cuối cùng nếu nó hoàn toàn chưa được đo
+    const cleanedSamples = samples.filter((s, idx) => {
+      const isMeasured = (s.dimensions?.values?.length > 0) || (s.moisture?.values?.length > 0) || (s.visual === 'fail') || (s.function === 'fail');
+      return idx < samples.length - 1 || isMeasured;
+    });
+
+    const defectsWithNames = activeDefects
+      .filter(d => d.defectId)
+      .map(d => {
+        const found = defectTypes.find(t => t.id.toString() === d.defectId.toString());
+        return {
+          ...d,
+          defect_name: found ? found.name : `Lỗi #${d.defectId}`
+        };
       });
+
+    setInspectedDrafts(prev => ({
+      ...prev,
+      [selectedItem.item_code.toLowerCase()]: {
+        sampleQty: cleanedSamples.length,
+        samples: cleanedSamples,
+        isWood,
+        conclusion: itemConclusion, // Save the actual selected/computed conclusion state directly
+        notes: itemNotes,
+        action: itemAction,
+        defects: defectsWithNames
+      }
+    }));
+    setSelectedItem(null);
+  };
+
+  const handleSaveAllNewInputInspections = async () => {
+    const draftKeys = Object.keys(inspectedDrafts);
+    if (draftKeys.length === 0) {
+      setMessageConfig({ type: 'error', title: 'Lỗi', message: 'Bạn chưa thực hiện kiểm tra sản phẩm nào!' });
+      setIsMessageOpen(true);
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      for (const itemCode of draftKeys) {
+        const draft = inspectedDrafts[itemCode];
+        const existing = existingInspectionsMap[itemCode];
+        const item = poItems.find(i => i.item_code && i.item_code.toLowerCase() === itemCode.toLowerCase());
+
+        const allImages = [];
+        draft.samples.forEach(s => {
+          if (s.dimensions?.photo) allImages.push(s.dimensions.photo);
+          if (s.moisture?.photo) allImages.push(s.moisture.photo);
+        });
+
+        if (draft.defects) {
+          draft.defects.forEach(def => {
+            if (def.images) {
+              def.images.forEach(img => {
+                if (img) allImages.push(img);
+              });
+            }
+          });
+        }
+
+        const payload = {
+          inspection_type: 'dau-vao',
+          batch_no: poHeader.po_code,
+          product_sku: item?.item_code || itemCode,
+          inspector_name: user?.full_name || "Người kiểm tra",
+          conclusion: draft.conclusion,
+          notes: draft.notes,
+          data_json: JSON.stringify({
+            po_code: poHeader.po_code,
+            product_sku: itemCode,
+            product_name: item?.item_name || '',
+            total_qty: item?.quantity || 0,
+            sample_qty: draft.sampleQty,
+            is_wood: draft.isWood,
+            action: draft.action,
+            samples: draft.samples,
+            defects: draft.defects
+          }),
+          images_json: JSON.stringify({ "Ảnh kiểm tra": allImages })
+        };
+
+        if (existing) {
+          await apiClient.post(`inspections/stage/${existing.id}`, payload);
+        } else {
+          await apiClient.post('inspections/stage', payload);
+        }
+      }
+
+      setMessageConfig({ type: 'success', title: 'Thành công', message: 'Đã lưu tất cả kết quả kiểm tra đầu vào!' });
       setIsMessageOpen(true);
     } catch (err) {
-      console.error("Lỗi khi lưu phiếu:", err);
-      setMessageConfig({
-        type: 'error',
-        title: 'Thất bại',
-        message: 'Có lỗi xảy ra khi lưu phiếu. Vui lòng thử lại!'
-      });
+      console.error("Lỗi khi lưu:", err);
+      setMessageConfig({ type: 'error', title: 'Lỗi', message: 'Có lỗi xảy ra khi lưu phiếu kiểm tra!' });
       setIsMessageOpen(true);
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const getInspectedStatus = (item) => {
+    if (!item || !item.item_code) return null;
+    const draft = inspectedDrafts[item.item_code.toLowerCase()];
+    if (draft) return draft.conclusion.toUpperCase();
+    const existing = existingInspectionsMap[item.item_code.toLowerCase()];
+    if (existing) return existing.conclusion.toUpperCase();
+    return null;
+  };
+
+  const formatDisplayDate = (dateStr) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+    } catch (e) { return dateStr; }
   };
 
   return (
     <Layout>
       <div style={{ backgroundColor: 'var(--bg-cream)', minHeight: '100vh', paddingBottom: '100px', display: 'flex', flexDirection: 'column' }}>
-        <PageHeader
-          title="G7 - Smart Flow"
-          subTitle={logId ? `MB6 | Cập nhật phiếu #${logId}` : "MB6 | Phiếu kiểm tra theo công đoạn"}
-        />
+        <PageHeader title="G7 - Smart Flow" subTitle="MB6 | Kiểm tra nhập kho" />
 
-        <div style={{ padding: '16px' }}>
-          {logId && (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
-              <button
-                onClick={() => navigate('/inspection-stage', { state: null })}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '8px',
-                  backgroundColor: '#fff',
-                  color: '#4b301e',
-                  border: '1px solid #4b301e',
-                  fontSize: '13px',
-                  fontWeight: '700',
-                  cursor: 'pointer'
-                }}
-              >
-                + Tạo phiếu mới
-              </button>
-            </div>
-          )}
-
-          <div id="stage-type-select" style={{ marginBottom: '20px' }}>
-            <FormSelect
-              label="Chọn phiếu kiểm tra"
-              value={inspectionType}
-              options={inspectionOptions}
-              onChange={e => setInspectionType(e.target.value)}
-              readOnly={!!logId}
-            />
-          </div>
-
-          <input
-            type="file"
-            ref={fileInputRef}
-            style={{ display: 'none' }}
-            accept="image/*"
-            capture="environment"
-            onChange={onFileChange}
-            multiple
-          />
-
-          <div id="stage-form-card">
-            <CollapsibleCard title={`Kiểm tra ngày ${new Date().toLocaleDateString('vi-VN')}`} defaultOpen={true}>
-              {renderFormContent()}
-
-              <div style={{ marginTop: '16px' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Ghi chú</label>
-                <textarea
-                  rows="2"
-                  value={formData.notes}
-                  onChange={(e) => handleFieldChange('notes', e.target.value)}
-                  placeholder="Nhập ghi chú"
-                  readOnly={!!logId && !canEdit}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #cbd5e1',
-                    fontSize: '0.9rem',
-                    color: (!!logId && !canEdit) ? '#94a3b8' : '#1e293b',
-                    backgroundColor: (!!logId && !canEdit) ? '#f8fafc' : '#fff',
-                    cursor: (!!logId && !canEdit) ? 'not-allowed' : 'text',
-                    resize: 'none',
-                    outline: 'none'
-                  }}
-                />
+        {selectedItem ? (
+          // Screen 2/3: Sample check form
+          <div style={{ padding: '16px', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            
+            {/* Khối 1: Thông tin sản phẩm */}
+            <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '16px', border: '1px solid #e8e1d5' }}>
+              <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Mã SP</label>
+                  <div style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', fontSize: '14px', fontWeight: 'bold' }}>{selectedItem.item_code}</div>
+                </div>
+                <div style={{ flex: 2 }}>
+                  <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Tên sản phẩm</label>
+                  <div style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedItem.item_name}</div>
+                </div>
               </div>
 
-              <div style={{ marginTop: '16px' }}>
-                <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#1e293b', marginBottom: '8px' }}>Kết quả:</div>
-                <PassFailSelector value={formData.results.conclusion} onChange={(val) => handleResultChange('conclusion', val)} disabled={!!logId && !canEdit} variant="button" />
-              </div>
-
-              {inspectionType === 'dau-vao' && (
-                <div style={{ marginTop: '16px' }}>
-                  <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#1e293b', marginBottom: '8px' }}>Hành động:</div>
-                  <div style={{ display: 'flex', backgroundColor: '#f1f5f9', padding: '3px', borderRadius: '10px', gap: '3px' }}>
-                    <div
-                      onClick={() => (!logId || canEdit) && handleAction('luu-kho')}
-                      style={{
-                        flex: 1,
-                        padding: '8px',
-                        textAlign: 'center',
-                        borderRadius: '8px',
-                        cursor: (!!logId && !canEdit) ? 'default' : 'pointer',
-                        transition: '0.3s',
-                        backgroundColor: formData.action === 'luu-kho' ? '#22c55e' : 'transparent',
-                        color: formData.action === 'luu-kho' ? '#fff' : '#64748b',
-                        fontWeight: '800',
-                        fontSize: '0.85rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px',
-                        opacity: (!!logId && !canEdit) ? 0.4 : 1
-                      }}
-                    >
-                      Lưu kho
-                    </div>
-                    <div
-                      onClick={() => (!logId || canEdit) && handleAction('cach-ly')}
-                      style={{
-                        flex: 1,
-                        padding: '8px',
-                        textAlign: 'center',
-                        borderRadius: '8px',
-                        cursor: (!!logId && !canEdit) ? 'default' : 'pointer',
-                        transition: '0.3s',
-                        backgroundColor: formData.action === 'cach-ly' ? '#f59e0b' : 'transparent',
-                        color: formData.action === 'cach-ly' ? '#fff' : '#64748b',
-                        fontWeight: '800',
-                        fontSize: '0.85rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px',
-                        opacity: (!!logId && !canEdit) ? 0.4 : 1
-                      }}
-                    >
-                      Cách ly
-                    </div>
-                    <div
-                      onClick={() => (!logId || canEdit) && handleAction('tra-ve')}
-                      style={{
-                        flex: 1,
-                        padding: '8px',
-                        textAlign: 'center',
-                        borderRadius: '8px',
-                        cursor: (!!logId && !canEdit) ? 'default' : 'pointer',
-                        transition: '0.3s',
-                        backgroundColor: formData.action === 'tra-ve' ? '#ef4444' : 'transparent',
-                        color: formData.action === 'tra-ve' ? '#fff' : '#64748b',
-                        fontWeight: '800',
-                        fontSize: '0.85rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px',
-                        opacity: (!!logId && !canEdit) ? 0.4 : 1
-                      }}
-                    >
-                      Trả về
-                    </div>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Số lượng cần kiểm tra</label>
+                  <div style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', fontSize: '14px', fontWeight: 'bold', textAlign: 'center' }}>{selectedItem.quantity} {selectedItem.unit}</div>
+                </div>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Số lượng mẫu KT</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <button onClick={() => handleUpdateSampleQty(sampleQty - 1)} style={{ width: '36px', height: '36px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', fontWeight: 'bold', fontSize: '18px', cursor: 'pointer' }}>-</button>
+                    <div style={{ flex: 1, padding: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', textAlign: 'center', fontWeight: '800', fontSize: '15px', backgroundColor: '#fff' }}>{sampleQty}</div>
+                    <button onClick={() => handleUpdateSampleQty(sampleQty + 1)} style={{ width: '36px', height: '36px', borderRadius: '8px', border: 'none', backgroundColor: '#5d3b32', color: '#fff', fontWeight: 'bold', fontSize: '18px', cursor: 'pointer' }}>+</button>
                   </div>
                 </div>
-              )}
+              </div>
 
-              {/* Ảnh kiểm tra đặt ở cuối cùng */}
-              {inspectionType !== 'sau-dong-goi' && <ImageSection title="Ảnh kiểm tra" />}
-            </CollapsibleCard>
-          </div>
+              <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed #cbd5e1', paddingTop: '12px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#4b301e' }}>Loại kiểm tra:</span>
+                <div style={{ display: 'flex', backgroundColor: '#f1f5f9', borderRadius: '8px', padding: '2px', border: '1px solid #cbd5e1' }}>
+                  <button onClick={() => setIsWood(true)} style={{ padding: '6px 12px', border: 'none', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: isWood ? '#5d3b32' : 'transparent', color: isWood ? '#fff' : '#64748b' }}>Gỗ (Độ ẩm)</button>
+                  <button onClick={() => setIsWood(false)} style={{ padding: '6px 12px', border: 'none', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: !isWood ? '#5d3b32' : 'transparent', color: !isWood ? '#fff' : '#64748b' }}>Phụ kiện</button>
+                </div>
+              </div>
+            </div>
 
-          {/* History Log Section */}
-          <div style={{ marginTop: '24px', backgroundColor: '#fff', borderRadius: '20px', padding: '20px', boxShadow: '0 4px 20px rgba(0,0,0,0.04)', border: '1px solid #e8e1d5', marginBottom: '20px' }}>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#4b301e', marginBottom: '16px' }}>Lịch sử kiểm tra gần đây</h3>
-            {isHistoryLoading ? (
-              <div style={{ color: '#94a3b8', fontSize: '13px', textAlign: 'center', padding: '10px' }}>Đang tải lịch sử...</div>
-            ) : filteredHistory.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {filteredHistory.map((item) => (
-                  <div 
-                    key={item.id}
-                    onClick={() => handleViewHistoryItem(item)}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '14px 16px',
-                      backgroundColor: '#fdfbf7',
-                      borderRadius: '12px',
-                      border: '1px solid #f0ede8',
-                      cursor: 'pointer',
-                      transition: 'background-color 0.2s',
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f7f4ee'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fdfbf7'}
-                  >
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ fontSize: '13px', fontWeight: '700', color: '#4b301e' }}>
-                        {getTypeName(item.inspection_type)} ({item.batch_no || 'N/A'})
-                      </span>
-                      <span style={{ fontSize: '11px', color: '#7c6d5e' }}>
-                        SP: {item.product_sku || 'N/A'} - Kết luận: <span style={{ fontWeight: '700', color: item.conclusion === 'pass' ? '#22c55e' : '#ef4444' }}>{item.conclusion.toUpperCase()}</span>
-                      </span>
+            {/* Khối 2: Bảng mẫu kiểm tra */}
+            <div style={{ backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #e8e1d5', overflow: 'hidden' }}>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f8f5f0', borderBottom: '2px solid #e8e1d5', color: '#7c6d5e', fontSize: '12px', fontWeight: 'bold' }}>
+                      <th style={{ padding: '12px 6px' }}>STT</th>
+                      <th style={{ padding: '12px 6px' }}>Kích thước</th>
+                      <th style={{ padding: '12px 6px' }}>{isWood ? 'Độ ẩm' : 'Chức năng'}</th>
+                      <th style={{ padding: '12px 6px' }}>Ngoại quan</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {samples.map((sample, idx) => (
+                      <tr key={sample.stt} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '10px 6px', fontSize: '13px', fontWeight: 'bold', color: '#4b301e' }}>{sample.stt}</td>
+                        <td style={{ padding: '10px 6px', fontSize: '12px' }}>
+                          {sample.dimensions && sample.dimensions.values && sample.dimensions.values.length > 0 ? (
+                            <div onClick={() => handleOpenPhotoModal(idx, 'size')} style={{ cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', color: '#2d1d12' }}>
+                              {sample.dimensions.values.join(' | ')}
+                            </div>
+                          ) : (
+                            <button 
+                              onClick={() => handleOpenPhotoModal(idx, 'size')} 
+                              style={{ 
+                                width: '32px', 
+                                height: '32px', 
+                                borderRadius: '50%', 
+                                border: '1.5px solid #2d1d12', 
+                                backgroundColor: 'transparent', 
+                                display: 'inline-flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center', 
+                                cursor: 'pointer' 
+                              }}
+                            >
+                              <Plus size={18} color="#2d1d12" strokeWidth={3} />
+                            </button>
+                          )}
+                        </td>
+                        <td style={{ padding: '10px 6px', fontSize: '12px' }}>
+                          {isWood ? (
+                            sample.moisture && sample.moisture.values && sample.moisture.values.length > 0 ? (
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                <div onClick={() => handleOpenPhotoModal(idx, 'moisture')} style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '13px', fontWeight: 'bold', color: '#2d1d12', cursor: 'pointer' }}>
+                                  {sample.moisture.values.map((v, i) => <span key={i}>{v}</span>)}
+                                </div>
+                                <button 
+                                  onClick={() => handleOpenPhotoModal(idx, 'moisture')} 
+                                  style={{ 
+                                    width: '20px', 
+                                    height: '20px', 
+                                    borderRadius: '50%', 
+                                    border: '1.2px solid #2d1d12', 
+                                    backgroundColor: 'transparent', 
+                                    display: 'inline-flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center', 
+                                    cursor: 'pointer' 
+                                  }}
+                                >
+                                  <Plus size={12} color="#2d1d12" strokeWidth={3} />
+                                </button>
+                              </div>
+                            ) : (
+                              <button 
+                                onClick={() => handleOpenPhotoModal(idx, 'moisture')} 
+                                style={{ 
+                                  width: '32px', 
+                                  height: '32px', 
+                                  borderRadius: '50%', 
+                                  border: '1.5px solid #2d1d12', 
+                                  backgroundColor: 'transparent', 
+                                  display: 'inline-flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'center', 
+                                  cursor: 'pointer' 
+                                }}
+                              >
+                                <Plus size={18} color="#2d1d12" strokeWidth={3} />
+                              </button>
+                            )
+                          ) : (
+                            <div style={{ display: 'flex', justifyContent: 'center' }}>
+                              <MockupToggle value={sample.function} onChange={(val) => handleToggleSampleValue(idx, 'function', val)} />
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ padding: '10px 6px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'center' }}><MockupToggle value={sample.visual} onChange={(val) => handleToggleSampleValue(idx, 'visual', val)} /></div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Khối 4: Kết quả kiểm tra, Hành động & Ghi chú */}
+            <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '16px', border: '1px solid #e8e1d5', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#4b301e', display: 'block', marginBottom: '6px' }}>Kết quả kiểm tra:</label>
+                <div style={{ display: 'flex', backgroundColor: '#f1f5f9', padding: '3px', borderRadius: '8px', gap: '3px' }}>
+                  {['pass', 'fail'].map((res) => {
+                    const label = res === 'pass' ? 'Đạt' : 'Không đạt';
+                    const active = itemConclusion === res;
+                    return (
+                      <div 
+                        key={res} 
+                        onClick={() => {
+                          setItemConclusion(res);
+                          setItemAction(res === 'pass' ? 'luu-kho' : 'tra-ve');
+                        }}
+                        style={{ 
+                          flex: 1, 
+                          padding: '8px', 
+                          textAlign: 'center', 
+                          borderRadius: '6px', 
+                          cursor: 'pointer', 
+                          backgroundColor: active ? '#5d3b32' : '#fff', 
+                          color: active ? '#fff' : '#4b301e', 
+                          fontWeight: 'bold', 
+                          fontSize: '12px',
+                          border: active ? '1px solid #5d3b32' : '1px solid #e2e8f0',
+                          boxShadow: active ? '0 2px 4px rgba(0,0,0,0.05)' : 'none',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        {label}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#4b301e', display: 'block', marginBottom: '6px' }}>Hành động:</label>
+                <div style={{ display: 'flex', backgroundColor: '#f1f5f9', padding: '3px', borderRadius: '8px', gap: '3px' }}>
+                  {['luu-kho', 'cach-ly', 'tra-ve'].map((act) => {
+                    const label = act === 'luu-kho' ? 'Nhập kho' : act === 'cach-ly' ? 'Cách ly' : 'Trả hàng';
+                    const active = itemAction === act;
+                    return (
+                      <div 
+                        key={act} 
+                        onClick={() => {
+                          setItemAction(act);
+                          if (act === 'tra-ve') {
+                            setItemConclusion('fail');
+                          } else if (act === 'luu-kho') {
+                            setItemConclusion('pass');
+                          }
+                        }} 
+                        style={{ 
+                          flex: 1, 
+                          padding: '8px', 
+                          textAlign: 'center', 
+                          borderRadius: '6px', 
+                          cursor: 'pointer', 
+                          backgroundColor: active ? '#5d3b32' : '#fff', 
+                          color: active ? '#fff' : '#4b301e', 
+                          fontWeight: 'bold', 
+                          fontSize: '12px',
+                          border: active ? '1px solid #5d3b32' : '1px solid #e2e8f0',
+                          boxShadow: active ? '0 2px 4px rgba(0,0,0,0.05)' : 'none',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        {label}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#4b301e', display: 'block', marginBottom: '4px' }}>Ghi chú sản phẩm</label>
+                <textarea rows="2" value={itemNotes} onChange={(e) => setItemNotes(e.target.value)} placeholder="Nhập ghi chú..." style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none', resize: 'none' }} />
+              </div>
+            </div>
+
+            {/* Khối 3: Phân hệ Ghi nhận lỗi phát hiện */}
+            {itemConclusion === 'fail' && (
+              <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '16px', border: '1px solid #e8e1d5', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#4b301e', borderBottom: '1px dashed #e8e1d5', paddingBottom: '8px', margin: 0 }}>Lỗi phát hiện</h3>
+                
+                {activeDefects.map((defect, defectIdx) => (
+                  <div key={defectIdx} style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderBottom: defectIdx < activeDefects.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: defectIdx < activeDefects.length - 1 ? '14px' : '0' }}>
+                    
+                    {/* Dòng 1: Dropdown chọn lỗi và Nút xóa */}
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Tên lỗi phát hiện</label>
+                        <select 
+                          value={defect.defectId} 
+                          onChange={(e) => handleUpdateDefect(defectIdx, 'defectId', e.target.value)}
+                          style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none', backgroundColor: '#fff' }}
+                        >
+                          <option value="">-- Chọn loại lỗi --</option>
+                          {defectTypes.map(t => (
+                            <option key={t.id} value={t.id}>{t.name} ({t.code || 'N/A'})</option>
+                          ))}
+                        </select>
+                      </div>
+                      {activeDefects.length > 1 && (
+                        <button 
+                          onClick={() => handleRemoveDefect(defectIdx)} 
+                          style={{ width: '36px', height: '36px', borderRadius: '8px', border: '1px solid #fecaca', backgroundColor: '#fef2f2', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', marginTop: '20px' }}
+                        >
+                          <X size={16} />
+                        </button>
+                      )}
                     </div>
-                    <span style={{ fontSize: '12px', color: '#a3978b', fontWeight: '500' }}>
-                      {formatDateTime(item.inspection_date)}
-                    </span>
+
+                    {/* Dòng 2: Số lượng lỗi, Toggle lỗi nặng/lỗi nhẹ */}
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Số lượng</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <button 
+                            onClick={() => handleUpdateDefect(defectIdx, 'quantity', Math.max(1, (defect.quantity || 1) - 1))} 
+                            style={{ width: '32px', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}
+                          >
+                            -
+                          </button>
+                          <div style={{ flex: 1, padding: '6px', border: '1px solid #cbd5e1', borderRadius: '6px', textAlign: 'center', fontWeight: '800', fontSize: '14px', backgroundColor: '#fff' }}>
+                            {defect.quantity || 1}
+                          </div>
+                          <button 
+                            onClick={() => handleUpdateDefect(defectIdx, 'quantity', (defect.quantity || 1) + 1)} 
+                            style={{ width: '32px', height: '32px', borderRadius: '6px', border: 'none', backgroundColor: '#5d3b32', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Mức độ lỗi</label>
+                        {!defect.defectId ? (
+                          <div style={{ 
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', height: '32px', 
+                            borderRadius: '8px', fontSize: '12px', fontWeight: '800', 
+                            backgroundColor: '#f1f5f9', color: '#94a3b8', border: '1px solid #cbd5e1', textAlign: 'center' 
+                          }}>
+                            Chọn lỗi...
+                          </div>
+                        ) : (
+                          <div style={{ 
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', height: '32px', 
+                            borderRadius: '8px', fontSize: '12px', fontWeight: '800', 
+                            backgroundColor: defect.isHeavy ? '#fee2e2' : '#f0fdf4', 
+                            color: defect.isHeavy ? '#ef4444' : '#166534', 
+                            border: `1px solid ${defect.isHeavy ? '#fecaca' : '#bbf7d0'}`,
+                            textAlign: 'center' 
+                          }}>
+                            {defect.isHeavy ? 'Lỗi nặng' : 'Lỗi nhẹ'}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Dòng 3: Camera đính kèm ảnh (tối đa 3 ảnh lỗi) */}
+                    <div>
+                      <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '6px' }}>Ảnh lỗi (tối đa 3 ảnh)</label>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {[0, 1, 2].map((imgIdx) => {
+                          const imgPath = defect.images ? defect.images[imgIdx] : null;
+                          const fullUrl = imgPath ? `${apiClient.defaults.baseURL.split('/api/v1')[0]}${imgPath}` : null;
+                          return (
+                            <div 
+                              key={imgIdx} 
+                              style={{ width: '60px', height: '60px', borderRadius: '8px', border: '1px dashed #cbd5e1', backgroundColor: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden', cursor: 'pointer' }}
+                              onClick={() => !imgPath && handleTriggerDefectCamera(defectIdx, imgIdx)}
+                            >
+                              {fullUrl ? (
+                                <>
+                                  <img src={fullUrl} alt="defect" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRemoveDefectPhoto(defectIdx, imgIdx);
+                                    }}
+                                    style={{ position: 'absolute', top: '2px', right: '2px', width: '16px', height: '16px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.6)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '10px' }}
+                                  >
+                                    <X size={10} />
+                                  </button>
+                                </>
+                              ) : (
+                                <Camera size={18} color="#94a3b8" />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
                   </div>
                 ))}
+
+                <button 
+                  onClick={handleAddDefect}
+                  style={{ width: '100%', border: '1px dashed #5d3b32', borderRadius: '8px', padding: '10px', backgroundColor: '#faf6f0', color: '#5d3b32', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer', marginTop: '4px' }}
+                >
+                  <Plus size={16} /> + Thêm lỗi khác
+                </button>
               </div>
-            ) : (
-              <div style={{ color: '#94a3b8', fontSize: '13px', textAlign: 'center', padding: '10px', fontStyle: 'italic' }}>
-                Không có lịch sử kiểm tra cho công đoạn này.
+            )}
+
+            <input type="file" ref={modalFileInputRef} style={{ display: 'none' }} accept="image/*" capture="environment" onChange={onModalFileChange} />
+
+            {/* Khối 5: Nút Xác nhận và Hủy (nằm trong flow cuộn) */}
+            <div style={{ padding: '8px 0 24px', display: 'flex', gap: '12px', zIndex: 100 }}>
+              <button onClick={handleConfirmItemInspection} style={{ flex: 1, backgroundColor: '#4b301e', color: '#fff', border: 'none', borderRadius: '10px', padding: '14px', fontSize: '15px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', boxShadow: '0 4px 10px rgba(75, 48, 30, 0.2)' }}><Check size={18} /> Xác nhận</button>
+              <button onClick={() => setSelectedItem(null)} style={{ flex: 1, backgroundColor: '#fff', color: '#94a3b8', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '14px', fontSize: '15px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}><RotateCcw size={18} /> Hủy</button>
+            </div>
+            
+            {activeModalType && activeModalType !== 'defect' && (
+              <div style={{ position: 'fixed', inset: 0, zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+                <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)' }} onClick={() => setActiveModalType(null)} />
+                <div style={{ position: 'relative', backgroundColor: '#fff', borderRadius: '24px', width: '100%', maxWidth: '380px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  
+                  {/* Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#4b301e' }}>
+                      {activeModalType === 'size' ? 'Thêm kích thước đo' : 'Thêm độ ẩm đo'}
+                    </h3>
+                    <button onClick={() => setActiveModalType(null)} style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer' }}><X size={18} color="#94a3b8" /></button>
+                  </div>
+                  
+                  <span style={{ fontSize: '12px', color: '#7c6d5e', textAlign: 'center', marginTop: '-4px' }}>Vui lòng xác nhận thông số sau khi chụp ảnh!</span>
+                  
+                  {/* Khu vực Camera chụp ảnh ở giữa: 1 ô duy nhất */}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', padding: '10px 0' }}>
+                    <div style={{ width: '100px', height: '100px', borderRadius: '16px', border: '2px dashed #cbd5e1', backgroundColor: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
+                      {singlePhoto ? (
+                        <img src={singlePhoto.startsWith('blob:') ? singlePhoto : `${apiClient.defaults.baseURL.split('/api/v1')[0]}${singlePhoto}`} alt="sample-pic" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <Camera size={36} color="#94a3b8" />
+                      )}
+                    </div>
+                    <button 
+                      onClick={() => modalFileInputRef.current.click()} 
+                      disabled={isUploadingImage || isOcrProcessing}
+                      style={{ padding: '6px 14px', border: '1px solid #4b301e', backgroundColor: '#fff', color: '#4b301e', borderRadius: '8px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}
+                    >
+                      {isOcrProcessing ? 'Đang nhận diện...' : isUploadingImage ? 'Đang tải...' : singlePhoto ? 'Chụp lại' : 'Chụp ảnh'}
+                    </button>
+                    <span style={{ fontSize: '10px', color: '#b45309', textAlign: 'center', maxWidth: '280px', lineHeight: '1.4', fontWeight: '500', marginTop: '2px' }}>
+                      Mẹo: Chụp cận cảnh, vuông góc với màn hình LCD để AI đọc số chính xác nhất!
+                    </span>
+                  </div>
+
+                  {/* Khu vực Nhập giá trị và chuyển tab */}
+                  {activeModalType === 'size' ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {/* Tabs chọn nhanh Dày, Rộng, Dài */}
+                      <div style={{ display: 'flex', gap: '6px', backgroundColor: '#f1f5f9', padding: '3px', borderRadius: '8px' }}>
+                        {['day', 'rong', 'dai'].map((tab) => {
+                          const label = tab === 'day' ? 'Dày' : tab === 'rong' ? 'Rộng' : 'Dài';
+                          const active = activeSizeTab === tab;
+                          return (
+                            <button
+                              key={tab}
+                              type="button"
+                              onClick={() => handleSwitchSizeTab(tab)}
+                              style={{ flex: 1, padding: '6px', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: active ? '#5d3b32' : 'transparent', color: active ? '#fff' : '#64748b', transition: 'all 0.2s' }}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Input trị số đang đo */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '6px 0' }}>
+                        <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#ef4444', textTransform: 'capitalize' }}>
+                          {activeSizeTab === 'day' ? 'dày' : activeSizeTab === 'rong' ? 'rộng' : 'dài'}:
+                        </span>
+                        <input
+                          type="number"
+                          value={singleValue}
+                          onChange={(e) => setSingleValue(e.target.value)}
+                          disabled={isOcrProcessing || !allowManualInput}
+                          placeholder={isOcrProcessing ? "Đang đọc..." : (allowManualInput ? "Nhập..." : "Chụp ảnh để đo")}
+                          style={{ width: '100px', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '16px', textAlign: 'center', fontWeight: 'bold', color: '#ef4444', backgroundColor: (isOcrProcessing || !allowManualInput) ? '#f1f5f9' : '#fff' }}
+                        />
+                        <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#7c6d5e' }}>mm</span>
+                      </div>
+
+                      {/* Danh sách các chiều đã đo (Thông số hiện tại) */}
+                      <div style={{ backgroundColor: '#fdfbf7', border: '1px solid #e8e1d5', borderRadius: '10px', padding: '8px 12px', fontSize: '11px', color: '#7c6d5e', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <span style={{ fontWeight: 'bold', color: '#4b301e', marginBottom: '2px' }}>Thông số đã đo:</span>
+                        {['day', 'rong', 'dai'].map((tab) => {
+                          const label = tab === 'day' ? 'Dày' : tab === 'rong' ? 'Rộng' : 'Dài';
+                          const idx = tab === 'day' ? 0 : tab === 'rong' ? 1 : 2;
+                          const valStr = tab === activeSizeTab ? singleValue : tempValues[idx];
+                          const isActive = tab === activeSizeTab;
+                          return (
+                            <div key={tab} style={{ display: 'flex', justifyContent: 'space-between', padding: isActive ? '2px 4px' : '0', backgroundColor: isActive ? '#f1f5f9' : 'transparent', borderRadius: '4px' }}>
+                              <span style={{ fontWeight: isActive ? 'bold' : 'normal', color: isActive ? '#4b301e' : '#7c6d5e' }}>{label}:</span>
+                              <span style={{ fontWeight: 'bold', color: isActive ? '#ef4444' : '#2d1d12' }}>{valStr ? `${valStr} mm` : 'Chưa đo'}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {/* Input trị số đang đo Độ ẩm */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '6px 0' }}>
+                        <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#10b981' }}>Độ độ ẩm (MC):</span>
+                        <input
+                          type="number"
+                          value={singleValue}
+                          onChange={(e) => setSingleValue(e.target.value)}
+                          disabled={isOcrProcessing || !allowManualInput}
+                          placeholder={isOcrProcessing ? "Đang đọc..." : (allowManualInput ? "Nhập..." : "Chụp ảnh để đo")}
+                          style={{ width: '90px', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '16px', textAlign: 'center', fontWeight: 'bold', color: '#10b981', backgroundColor: (isOcrProcessing || !allowManualInput) ? '#f1f5f9' : '#fff' }}
+                        />
+                        <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#10b981' }}>%</span>
+                      </div>
+
+                      {/* Thông số hiện tại ở dưới */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e' }}>Thông số hiện tại (MC %):</span>
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                          {tempValues.map((val, idx) => {
+                            const active = activeMoistureIndex === idx;
+                            return (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => handleSwitchMoistureIndex(idx)}
+                                style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '11px', cursor: 'pointer', backgroundColor: active ? '#10b981' : '#fff', color: active ? '#fff' : '#64748b', fontWeight: 'bold' }}
+                              >
+                                {val}%
+                              </button>
+                            );
+                          })}
+                          <button
+                            type="button"
+                            onClick={() => handleSwitchMoistureIndex('new')}
+                            style={{ padding: '4px 8px', borderRadius: '6px', border: '1px dashed #5d3b32', fontSize: '11px', cursor: 'pointer', backgroundColor: activeMoistureIndex === 'new' ? '#5d3b32' : '#faf6f0', color: activeMoistureIndex === 'new' ? '#fff' : '#5d3b32', fontWeight: 'bold' }}
+                          >
+                            + Đo thêm
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <button onClick={handleConfirmModalValues} style={{ width: '100%', padding: '12px', border: 'none', backgroundColor: '#4b301e', color: '#fff', borderRadius: '10px', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer', marginTop: '4px' }}>Xác nhận</button>
+                </div>
               </div>
             )}
           </div>
-        </div>
-
-        <div className="responsive-fixed-footer" style={{ backgroundColor: '#f8f4f0', padding: '16px', display: 'flex', gap: '12px', borderTop: '1px solid #e2e8f0', zIndex: 100 }}>
-          {logId ? (
-            canEdit ? (
-              <>
-                <button
-                  disabled={isSaving}
-                  onClick={handleValidateAndConfirm}
-                  style={{
-                    flex: 1,
-                    backgroundColor: isSaving ? '#94a3b8' : '#4b301e',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '10px',
-                    padding: '14px',
-                    fontSize: '1rem',
-                    fontWeight: '700',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                    opacity: isSaving ? 0.7 : 1
-                  }}
-                >
-                  {isSaving ? 'Đang lưu...' : <><Check size={20} /> Xác nhận</>}
-                </button>
-                <button
-                  onClick={() => navigate(-1)}
-                  style={{ flex: 1, backgroundColor: '#fff', color: '#94a3b8', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '14px', fontSize: '1rem', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-                >
-                  <RotateCcw size={20} /> Hủy
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={() => navigate(-1)}
-                style={{
-                  flex: 1,
-                  backgroundColor: '#4b301e',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '10px',
-                  padding: '14px',
-                  fontSize: '1rem',
-                  fontWeight: '700',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px'
+        ) : (
+          // Screen 1: PO search & Items list
+          <div style={{ padding: '16px', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '16px', border: '1px solid #e8e1d5' }}>
+              <SearchableSelect
+                label="PO"
+                value={poSearchTerm}
+                placeholder="Gõ để tìm kiếm..."
+                options={orders.map(o => ({ label: o.po_code, value: o.po_code }))}
+                onChange={(e) => {
+                  const code = e.target.value;
+                  setPoSearchTerm(code);
+                  if (code) {
+                    handleSearchPO(code);
+                  }
                 }}
-              >
-                <RotateCcw size={20} /> Quay lại
-              </button>
-            )
-          ) : (
-            <>
-              <button
-                id="stage-submit-btn"
-                disabled={isSaving}
-                onClick={handleValidateAndConfirm}
-                style={{
-                  flex: 1,
-                  backgroundColor: isSaving ? '#94a3b8' : '#4b301e',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '10px',
-                  padding: '14px',
-                  fontSize: '1rem',
-                  fontWeight: '700',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  opacity: isSaving ? 0.7 : 1
-                }}
-              >
-                {isSaving ? 'Đang lưu...' : <><Check size={20} /> Xác nhận</>}
-              </button>
-              <button
-                onClick={() => navigate(-1)}
-                style={{ flex: 1, backgroundColor: '#fff', color: '#94a3b8', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '14px', fontSize: '1rem', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-              >
-                <RotateCcw size={20} /> Hủy
-              </button>
-            </>
-          )}
-        </div>
+              />
+              {poNotFound && <div style={{ color: '#ef4444', fontSize: '12px', fontWeight: 'bold', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}><AlertCircle size={14} /> Không tìm thấy mã PO</div>}
+            </div>
 
-        {/* Custom Modals */}
-        <ConfirmModal
-          isOpen={isConfirmOpen}
-          title="Xác nhận lưu"
-          message="Bạn có chắc chắn muốn lưu phiếu kiểm tra này không?"
-          onConfirm={handleSave}
-          onCancel={() => setIsConfirmOpen(false)}
-        />
+
+
+            {poHeader && (
+              <div style={{ backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #e8e1d5', overflow: 'hidden' }}>
+                <div onClick={() => setPoCardExpanded(!poCardExpanded)} style={{ padding: '12px 16px', backgroundColor: '#fcfcfc', borderBottom: '1px solid #e8e1d5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+                  <span style={{ fontSize: '14px', fontWeight: '800', color: '#4b301e' }}>Thông tin đơn hàng</span>
+                  {poCardExpanded ? <ChevronUp size={18} color="#4b301e" /> : <ChevronDown size={18} color="#4b301e" />}
+                </div>
+                {poCardExpanded && (
+                  <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Mã NCC</label>
+                        <div style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc', fontSize: '13px' }}>{poHeader.supplier_code}</div>
+                      </div>
+                      <div style={{ flex: 2 }}>
+                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Nhà cung cấp</label>
+                        <div style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc', fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{poHeader.supplier_name}</div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Ngày đặt hàng</label>
+                        <div style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc', fontSize: '13px' }}>{formatDisplayDate(poHeader.order_date)}</div>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Ngày nhận hàng</label>
+                        <div style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc', fontSize: '13px' }}>{formatDisplayDate(poHeader.delivery_date)}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {poItems.length > 0 && (
+              <div style={{ backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #e8e1d5', overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f8f5f0', borderBottom: '2px solid #e8e1d5', color: '#7c6d5e', fontSize: '12px', fontWeight: 'bold' }}>
+                      <th style={{ padding: '12px 16px' }}>Tên</th>
+                      <th style={{ padding: '12px 8px', textAlign: 'center' }}>Số lượng</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'center' }}>Kiểm tra</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {poItems.map((item) => {
+                      const status = getInspectedStatus(item);
+                      const existing = item.item_code ? existingInspectionsMap[item.item_code.toLowerCase()] : null;
+                      let extra = {};
+                      if (existing) {
+                        try {
+                          extra = typeof existing.data_json === 'string' ? JSON.parse(existing.data_json) : (existing.data_json || {});
+                        } catch (e) {}
+                      }
+                      // Chỉ cho sửa nếu là phiếu kiểm tra mới (chưa có trong DB) hoặc nháp chưa duyệt hoặc có action là cách ly
+                      const isEditable = !existing || (extra.action === 'cach-ly');
+
+                      return (
+                        <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 'bold', color: '#4b301e' }}>{item.item_name}</td>
+                          <td style={{ padding: '12px 8px', fontSize: '12px', color: '#7c6d5e', textAlign: 'center' }}>{item.quantity} {item.unit}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                            {status ? (
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                {existing ? (
+                                  <button onClick={() => setSelectedHistoryItem(existing)} style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', padding: '2px 6px', borderRadius: '6px' }}>
+                                    <span style={{ fontWeight: '950', fontSize: '13px', color: status === 'PASS' ? '#10b981' : '#ef4444' }}>{status}</span>
+                                    <Eye size={13} color="#94a3b8" />
+                                  </button>
+                                ) : (
+                                  <span style={{ fontWeight: '950', fontSize: '13px', color: status === 'PASS' ? '#10b981' : '#ef4444' }}>{status}</span>
+                                )}
+                                {isEditable && (
+                                  <button onClick={() => handleStartInspection(item)} style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer' }}><Pencil size={12} color="#7c6d5e" /></button>
+                                )}
+                              </div>
+                            ) : (
+                              isEditable && (
+                                <button onClick={() => handleStartInspection(item)} style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', padding: '4px' }}><Pencil size={16} color="#7c6d5e" /></button>
+                              )
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="responsive-fixed-footer" style={{ backgroundColor: '#FAF6F0', padding: '16px', display: 'flex', gap: '12px', borderTop: '1px solid #e8e1d5', zIndex: 100 }}>
+              <button onClick={handleSaveAllNewInputInspections} disabled={isSaving || Object.keys(inspectedDrafts).length === 0} style={{ flex: 1, backgroundColor: (isSaving || Object.keys(inspectedDrafts).length === 0) ? '#94a3b8' : '#4b301e', color: '#fff', border: 'none', borderRadius: '10px', padding: '14px', fontSize: '15px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: (isSaving || Object.keys(inspectedDrafts).length === 0) ? 'not-allowed' : 'pointer' }}><Check size={18} /> Xác nhận</button>
+              <button onClick={() => { setPoHeader(null); setPoItems([]); setPoSearchTerm(''); }} style={{ flex: 1, backgroundColor: '#fff', color: '#94a3b8', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '14px', fontSize: '15px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}><RotateCcw size={18} /> Hủy</button>
+            </div>
+          </div>
+        )}
 
         <MessageModal
           isOpen={isMessageOpen}
@@ -1108,7 +1415,9 @@ const StageInspection = () => {
           onConfirm={() => {
             setIsMessageOpen(false);
             if (messageConfig.type === 'success') {
-              navigate('/plan'); // Quay về trang MHC (Plan Tracking)
+              setPoHeader(null);
+              setPoItems([]);
+              setPoSearchTerm('');
             }
           }}
         />

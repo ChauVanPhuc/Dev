@@ -1749,7 +1749,7 @@ const PlanDetail = () => {
 
                                                         <span
 
-                                                            onClick={() => navigate(`/manufacture/progress/${product.id}`)}
+                                                            onClick={() => navigate(`/admin/progress/${product.id}`)}
 
                                                             style={{ color: '#5D4037', cursor: 'pointer', textDecoration: 'underline' }}
 
@@ -1811,7 +1811,7 @@ const PlanDetail = () => {
 
                                                 <span
 
-                                                    onClick={() => navigate(`/manufacture/progress/${product.id}`)}
+                                                    onClick={() => navigate(`/admin/progress/${product.id}`)}
 
                                                     className="detail-link"
 

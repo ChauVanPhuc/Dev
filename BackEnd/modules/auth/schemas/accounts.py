@@ -8,6 +8,7 @@ class AccountBase(BaseModel):
     Chứa các thông tin định danh và trạng thái hoạt động.
     """
     username: str                  # Tên đăng nhập
+    phone: Optional[str] = None    # Số điện thoại
     email: Optional[EmailStr] = None # Địa chỉ Email (phải đúng định dạng)
     is_active: bool = True         # Trạng thái tài khoản (Đang hoạt động hay không)
 
@@ -17,6 +18,7 @@ class AccountCreate(AccountBase):
     Yêu cầu mật khẩu và các thông tin liên kết nhân sự/phòng ban.
     """
     password: str                  # Mật khẩu
+    phone: str                     # Số điện thoại (bắt buộc khi tạo)
     employee_id: Optional[str] = None # Mã nhân viên (từ HRM)
     employee_code: Optional[str] = None # Mã nhân viên (phương án 2)
     full_name: Optional[str] = None # Họ và tên
@@ -25,6 +27,7 @@ class AccountCreate(AccountBase):
     permission_id: Optional[int] = None # ID quyền hạn (Permission)
     stage_id: Optional[int] = None  # ID công đoạn (Stage) phụ trách
     stage_ids: Optional[List[int]] = None # [NEW] Danh sách ID các công đoạn phụ trách
+    permission_level: Optional[str] = None # Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
 
 
 class AccountUpdate(BaseModel):
@@ -33,6 +36,7 @@ class AccountUpdate(BaseModel):
     Tất cả các trường đều là tùy chọn.
     """
     email: Optional[EmailStr] = None
+    phone: Optional[str] = None
     password: Optional[str] = None
     is_active: Optional[bool] = None
     full_name: Optional[str] = None
@@ -40,6 +44,7 @@ class AccountUpdate(BaseModel):
     employee_id: Optional[str] = None
     employee_code: Optional[str] = None
     status: Optional[str] = None
+    permission_level: Optional[str] = None # Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
 
 class Account(AccountBase):
     """
@@ -65,7 +70,9 @@ class AccountInfo(AccountBase):
     
     # Thông tin mở rộng từ các phép Join (Role, Stage)
     role_name: Optional[str] = None # Tên vai trò
+    permission_name: Optional[str] = None # Tên chức vụ
     stage_name: Optional[str] = None # Tên công đoạn phụ trách
+    permission_level: Optional[str] = None # Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
 
     class Config:
         from_attributes = True
@@ -90,6 +97,7 @@ class Token(BaseModel):
     username: Optional[str] = None
     full_name: Optional[str] = None
     email: Optional[str] = None
+    phone: Optional[str] = None
     employee_id: Optional[str] = None
     role_name: Optional[str] = None
     role_description: Optional[str] = None
@@ -98,6 +106,8 @@ class Token(BaseModel):
     stage_name: Optional[str] = None
     stage_description: Optional[str] = None
     id: Optional[int] = None
+    screen_permissions: Optional[str] = None
+    permission_level: Optional[str] = None # Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
 
 class TokenData(BaseModel):
     """

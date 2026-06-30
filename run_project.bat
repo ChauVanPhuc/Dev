@@ -248,7 +248,7 @@ echo [!] Make sure you have run Option 5 (Build) before this.
 echo.
 cd /d %~dp0BackEnd
 :: Start Backend without reload, serving static dist folders
-start "ERP G7 PRODUCTION SERVER" cmd /k "cd /d %~dp0 && call start_server.bat"
+start "ERP G7 PRODUCTION SERVER" cmd /k "uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
 echo.
 echo ======================================================

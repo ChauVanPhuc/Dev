@@ -12,6 +12,7 @@ from modules.delivery.models.order_item import OrderItem
 from modules.auth.models.permissions import Permission
 from modules.production.models.product import Product
 from modules.production.models.product_plan import ProductPlan
+from modules.production.models.mobile_daily_plan import MobileDailyPlan
 from modules.auth.models.role import Role
 from modules.production.models.stages import Stage
 from modules.notification.models.notifications import Notification
@@ -31,16 +32,20 @@ from modules.capa.models.capa_occurrence import CAPAOccurrence
 from modules.capa.models.capa_evaluation import CAPAEvaluation
 from modules.system.models.system_screen import SystemScreen
 from modules.system.models.system_component import SystemComponent
+from modules.system.models.screen_bug import ScreenBug, ScreenBugUpdate, ScreenBugImage
 from modules.inspection.models.defect_type import DefectType, ClientDefect, DefectGlossary
 from modules.chatbot.models.chatbot_history import ChatbotHistory
+from modules.purchasing.models.purchase_requisition import PurchaseRequisition
+from modules.purchasing.models.purchase_order_item import PurchaseOrderItem
 
 __all__ = [
     "Base", "Account", "Category", "Delivery", "DeliveryDetails", "DeliveryImage",
     "Department", "BOMDetail", "Order", "OrderItem", "Permission", "Product",
-    "ProductPlan", "Role", "Stage", "Notification", "MasterCategory", "MasterProduct",
+    "ProductPlan", "MobileDailyPlan", "Role", "Stage", "Notification", "MasterCategory", "MasterProduct",
     "MasterBOMDetail", "DeliveryQC", "DeliveryReturn", "permission_stage", "role_permission",
     "BackupQRCode", "PalletCard", "KPI", "AwardDiscipline", "StaffEvaluation", "CAPA",
-    "CAPAOccurrence", "CAPAEvaluation", "SystemScreen", "SystemComponent", "DefectType",
-    "ClientDefect", "DefectGlossary", "ChatbotHistory"
+    "CAPAOccurrence", "CAPAEvaluation", "SystemScreen", "SystemComponent", "ScreenBug",
+    "ScreenBugUpdate", "ScreenBugImage", "DefectType", "ClientDefect", "DefectGlossary", "ChatbotHistory",
+    "PurchaseRequisition", "PurchaseOrderItem"
 ]
 

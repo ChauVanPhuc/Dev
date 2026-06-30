@@ -130,3 +130,27 @@ button {
 .sidebar-light .nav-link:hover:not(.active) {
   background: #f8fafc !important;
 }
+
+/* ── RESPONSIVE BASELINE IMPROVEMENTS ── */
+@media (max-width: 1200px) {
+  .mgmt-toolbar {
+    flex-wrap: wrap !important;
+    gap: 10px !important;
+  }
+  .toolbar-left, .toolbar-right {
+    width: 100% !important;
+    justify-content: flex-start !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .header-layout-toggle-btn {
+    padding: 8px !important;
+  }
+  .layout-mode-text {
+    display: none !important; /* Hide text on mobile to save space, show only icon */
+  }
+}
+

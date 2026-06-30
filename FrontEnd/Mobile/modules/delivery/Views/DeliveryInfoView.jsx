@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout'
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader'
 import Tabs from '@mobile/Shared/Views/components/ui/Tabs'
@@ -51,7 +51,8 @@ const DeliveryInfo = () => {
   const { plans, fetchPlans, fetchDeliveriesByPlan, fetchPlanDetail } = usePlanController()
   const { fetchReturnsByPlan, fetchInspectionsByPlan, fetchPartProducts, fetchDeliveryDetail } = useDeliveryController()
   const navigate = useNavigate()
-  const { user } = useAuthStore()
+  const location = useLocation()
+  const { user, permissions } = useAuthStore()
   const [activeTab, setActiveTab] = useState('plan')
   const [selectedPlanId, setSelectedPlanId] = useState('')
   const [selectedCont, setSelectedCont] = useState('ALL')
@@ -78,20 +79,20 @@ const DeliveryInfo = () => {
   const [inspectionMap, setInspectionMap] = useState({})
   const [visibleCount, setVisibleCount] = useState(30)
   const [visibleOrderCount, setVisibleOrderCount] = useState(10) // Pagination cho Orders
-
+ 
   // Bộ lọc nâng cao cho danh sách phiếu bàn giao
   const [typeFilter, setTypeFilter] = useState('ALL') // 'ALL' | 'HANDOVER' | 'RECEIVE'
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearchAndFilter, setShowSearchAndFilter] = useState(false)
-
+ 
   // State cho Thẻ Pallet Modal
   const [palletModal, setPalletModal] = useState({ isOpen: false, data: null })
   const [inspectionsModal, setInspectionsModal] = useState({ isOpen: false, partName: '', insps: [], navState: {} })
   const [palletPartProducts, setPalletPartProducts] = useState([])
-
+ 
   // [DEBUG] Theo dõi trạng thái kết nối WS
   const [wsStatus, setWsStatus] = useState('connecting')
-
+ 
   // Xác định quyền QC để đổi logic "Tạo nhanh" - Đồng bộ với DeliveryReceive
   const userRoleStr = [
     user?.permission_description,
@@ -101,10 +102,13 @@ const DeliveryInfo = () => {
     user?.full_name,
     user?.username
   ].filter(Boolean).join(' ').toLowerCase().normalize('NFC');
-
+ 
   const isQC = userRoleStr.includes('qc') || userRoleStr.includes('kiểm tra');
-  const isAdmin = userRoleStr.includes('admin');
+  const isAdmin = userRoleStr.includes('admin') || userRoleStr.includes('it') || userRoleStr.includes('bgd');
   const isProduction = userRoleStr.includes('sản xuất') || userRoleStr.includes('sx');
+  
+  const userPerm = permissions?.['mobile_delivery-create'];
+  const hasCreatePermission = isAdmin || (userPerm && userPerm !== 'none' && userPerm.split(',').map(p => p.trim()).includes('create'));
 
   const userStageName = (isAdmin 
     ? (user?.activeStageName || '') 
@@ -1562,7 +1566,7 @@ const DeliveryInfo = () => {
             <h2 style={{ fontSize: '1.3rem', fontWeight: '800', color: 'var(--text-main)', margin: 0 }}>
               Kế hoạch bàn giao
             </h2>
-            {!isQC && (
+            {hasCreatePermission && (
               <button
                 id="delivery-create-btn"
                 onClick={() => {
@@ -1643,6 +1647,7 @@ const DeliveryInfo = () => {
               <ArrowDownWideNarrow size={26} color={(sortOrder !== 'DEFAULT' && sortOrder !== 'DATE_DESC') ? 'var(--primary-color)' : '#7c5438'} strokeWidth={1.5} />
             </button>
 
+            {/* Ẩn nút Xuất Excel theo yêu cầu của user
             <button 
               id="delivery-excel-btn"
               onClick={handleExportExcel} 
@@ -1651,6 +1656,7 @@ const DeliveryInfo = () => {
             >
               <FileSpreadsheet size={26} color="#15803d" strokeWidth={1.5} />
             </button>
+            */}
           </div>
 
           {/* Expandable Advanced Filters and Search Panel */}

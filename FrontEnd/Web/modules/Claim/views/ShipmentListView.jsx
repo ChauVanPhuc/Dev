@@ -16,6 +16,19 @@ const ShipmentListView = () => {
   const { setCustomTitle, setCustomSubtitle, showModal: contextShowModal } = useOutletContext();
   const [localNotification, setLocalNotification] = useState(null);
 
+  const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
+  const loggedInUserIsAdmin = loggedInUser.role_name === 'IT' || loggedInUser.role_name === 'BGD' || loggedInUser.username === 'admin';
+
+  let activePermissions = {};
+  try {
+    activePermissions = JSON.parse(localStorage.getItem('smartflow_active_permissions') || '{}');
+  } catch (e) {
+    console.error('Failed to parse screen permissions in ShipmentListView:', e);
+  }
+
+  const hasWritePermission = loggedInUserIsAdmin || activePermissions['shipments'] !== 'read';
+
+
   const showModal = (title, message, type = 'info') => {
     setLocalNotification({ title, message, type });
     if (type === 'success' && typeof message === 'string') {
@@ -370,9 +383,8 @@ const ShipmentListView = () => {
     }
   };
 
-  // Setup headers for Table component
   const tableHeaders = [
-    {
+    ...(hasWritePermission ? [{
       isCheckbox: true,
       label: (
         <input 
@@ -382,14 +394,14 @@ const ShipmentListView = () => {
           onChange={handleToggleSelectAll}
         />
       )
-    },
+    }] : []),
     { label: 'STT', style: { width: '60px' } },
     { label: 'Container Number', className: 'text-left' },
     { label: 'Status' },
     { label: 'Thời gian' },
     { label: 'Thời gian lưu kho' },
     { label: 'Thời gian xuất bến' },
-    { label: 'Thao tác', style: { textAlign: 'center' } }
+    ...(hasWritePermission ? [{ label: 'Thao tác', style: { textAlign: 'center' } }] : [])
   ];
 
   return (
@@ -506,26 +518,28 @@ const ShipmentListView = () => {
           </div>
 
           <div className="action-buttons-group" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            <button 
-              className="btn-add-new" 
-              onClick={handleOpenAddModal}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                height: '37px',
-                padding: '0 20px',
-                borderRadius: '8px',
-                fontWeight: 'bold',
-                cursor: 'pointer'
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19"></line>
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-              </svg>
-              Thêm mới
-            </button>
+            {hasWritePermission && (
+              <button 
+                className="btn-add-new" 
+                onClick={handleOpenAddModal}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  height: '37px',
+                  padding: '0 20px',
+                  borderRadius: '8px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer'
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                Thêm mới
+              </button>
+            )}
 
             <button 
               className="btn-border-action" 
@@ -550,29 +564,31 @@ const ShipmentListView = () => {
               Export
             </button>
 
-            <button
-              className="btn-border-action"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                height: '37px',
-                borderColor: selectedShipmentIds.length === 0 ? '#CBD5E1' : '#A0301B',
-                color: selectedShipmentIds.length === 0 ? '#94A3B8' : '#A0301B',
-                cursor: selectedShipmentIds.length === 0 ? 'not-allowed' : 'pointer',
-                fontWeight: 'bold',
-                borderRadius: '8px',
-                padding: '0 16px'
-              }}
-              disabled={selectedShipmentIds.length === 0}
-              onClick={handleDeleteSelected}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-              </svg>
-              Xóa đã chọn
-            </button>
+            {hasWritePermission && (
+              <button
+                className="btn-border-action"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  height: '37px',
+                  borderColor: selectedShipmentIds.length === 0 ? '#CBD5E1' : '#A0301B',
+                  color: selectedShipmentIds.length === 0 ? '#94A3B8' : '#A0301B',
+                  cursor: selectedShipmentIds.length === 0 ? 'not-allowed' : 'pointer',
+                  fontWeight: 'bold',
+                  borderRadius: '8px',
+                  padding: '0 16px'
+                }}
+                disabled={selectedShipmentIds.length === 0}
+                onClick={handleDeleteSelected}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+                Xóa đã chọn
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -787,14 +803,16 @@ const ShipmentListView = () => {
 
           return (
             <tr key={item.id}>
-              <td className="checkbox-col">
-                <input 
-                  type="checkbox" 
-                  className="checkbox-custom" 
-                  checked={selectedShipmentIds.includes(item.id)}
-                  onChange={() => handleToggleSelectRow(item.id)}
-                />
-              </td>
+              {hasWritePermission && (
+                <td className="checkbox-col">
+                  <input 
+                    type="checkbox" 
+                    className="checkbox-custom" 
+                    checked={selectedShipmentIds.includes(item.id)}
+                    onChange={() => handleToggleSelectRow(item.id)}
+                  />
+                </td>
+              )}
               <td style={{ fontWeight: '600', color: 'var(--text-gray)' }}>{startIndex + idx + 1}</td>
               <td className="text-left" style={{ fontWeight: 'bold', color: '#2D1A12' }}>{item.container_number}</td>
               <td>
@@ -805,17 +823,19 @@ const ShipmentListView = () => {
               <td>{item.created_at ? new Date(item.created_at).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN')}</td>
               <td style={{ fontWeight: '500', color: '#5D4037' }}>{getStorageDuration(item)}</td>
               <td style={{ fontWeight: '500', color: '#2D1A12' }}>{item.etd ? new Date(item.etd).toLocaleDateString('vi-VN') : 'N/A'}</td>
-              <td style={{ textAlign: 'center' }}>
-                <button 
-                  className="btn-action-edit"
-                  title="Chỉnh sửa"
-                  onClick={() => handleOpenEditModal(item)}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
-                  </svg>
-                </button>
-              </td>
+              {hasWritePermission && (
+                <td style={{ textAlign: 'center' }}>
+                  <button 
+                    className="btn-action-edit"
+                    title="Chỉnh sửa"
+                    onClick={() => handleOpenEditModal(item)}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+                    </svg>
+                  </button>
+                </td>
+              )}
             </tr>
           );
         })}

@@ -70,10 +70,13 @@ def enrich_technical_details(comp):
             database_tables.append(table)
             
     # 4. Generate dynamic code snippet
+    fallback_data_api = called_apis[0] if called_apis else "/api/v1/data"
+    fallback_submit_api = called_apis[0] if called_apis else "/api/v1/submit"
+    
     if handler_name == "fetchData":
-        code_snippet = f"const fetchData = async (params) => {{\n  try {{\n    const response = await api.get('{called_apis[0] if called_apis else \"/api/v1/data\"}', {{ params }});\n    setRows(response.data);\n  }} catch (err) {{\n    console.error('Error fetching data:', err);\n  }}\n}};"
+        code_snippet = f"const fetchData = async (params) => {{\n  try {{\n    const response = await api.get('{fallback_data_api}', {{ params }});\n    setRows(response.data);\n  }} catch (err) {{\n    console.error('Error fetching data:', err);\n  }}\n}};"
     elif handler_name == "handleSubmit":
-        code_snippet = f"const handleSubmit = async (e) => {{\n  e.preventDefault();\n  const isValid = validateForm();\n  if (isValid) {{\n    await api.post('{called_apis[0] if called_apis else \"/api/v1/submit\"}', formData);\n    navigate('/success');\n  }}\n}};"
+        code_snippet = f"const handleSubmit = async (e) => {{\n  e.preventDefault();\n  const isValid = validateForm();\n  if (isValid) {{\n    await api.post('{fallback_submit_api}', formData);\n    navigate('/success');\n  }}\n}};"
     elif handler_name == "handleFilterChange":
         code_snippet = f"const handleFilterChange = (value) => {{\n  setFilters(prev => ({{ ...prev, value }}));\n  debounceFetch();\n}};"
     else:
@@ -612,6 +615,68 @@ COMPONENT_SEEDS = {
             "description": "Giao tiếp với API lấy danh sách ngoại lệ và lưu cấu hình bảng tính thẻ pallet.",
             "technical_details": "GET /api/v1/deliveries/exceptions, POST /api/v1/pallets/save.",
             "file_path": "/FrontEnd/src/services/pallet.service.js"
+        }
+    ],
+
+    # AD12: Quản lý danh mục lỗi (Web)
+    "AD12": [
+        {
+            "name": "DefectAnalytics",
+            "type": "UI Component",
+            "description": "Biểu đồ phân tích xu hướng lỗi (Pareto, Phân bổ nhóm lỗi, Biến động tỷ lệ lỗi).",
+            "technical_details": "Sử dụng Recharts để vẽ các biểu đồ trực quan.",
+            "file_path": "/FrontEnd/src/pages/Admin/DefectManagement.jsx"
+        },
+        {
+            "name": "DefectTable",
+            "type": "UI Component",
+            "description": "Bảng hiển thị danh mục lỗi kiểm tra chất lượng.",
+            "technical_details": "Hiển thị tên lỗi, nhóm lỗi, công đoạn áp dụng và mức độ nghiêm trọng.",
+            "file_path": "/FrontEnd/src/pages/Admin/DefectManagement.jsx"
+        }
+    ],
+
+    # AD13: Hồ sơ chất lượng (Web)
+    "AD13": [
+        {
+            "name": "QualityRecordsTable",
+            "type": "UI Component",
+            "description": "Bảng danh sách nhật ký và hồ sơ kiểm soát chất lượng.",
+            "technical_details": "Hiển thị lịch sử kiểm định đầu vào, công đoạn và kết quả QC.",
+            "file_path": "/FrontEnd/src/pages/Admin/QualityRecords.jsx"
+        }
+    ],
+
+    # AD14: Quản lý Màn hình (Web)
+    "AD14": [
+        {
+            "name": "ScreenManagementTable",
+            "type": "UI Component",
+            "description": "Bảng hiển thị danh sách các màn hình trong hệ thống.",
+            "technical_details": "Hiển thị mã màn hình, tiêu đề, mô tả và trạng thái hoạt động.",
+            "file_path": "/FrontEnd/src/pages/Admin/ScreenManagement.jsx"
+        }
+    ],
+
+    # AD15: Giám sát hệ thống & CSDL (Web)
+    "AD15": [
+        {
+            "name": "SystemMonitorDashboard",
+            "type": "UI Component",
+            "description": "Dashboard theo dõi thời gian thực CPU, RAM, ổ đĩa và kết nối SQL Server.",
+            "technical_details": "Hiển thị biểu đồ tài nguyên hệ thống và trạng thái kết nối cơ sở dữ liệu.",
+            "file_path": "/FrontEnd/src/pages/Admin/SystemMonitor.jsx"
+        }
+    ],
+
+    # CL1: Khiếu nại khách hàng (Web)
+    "CL1": [
+        {
+            "name": "ClaimPortalLayout",
+            "type": "UI Component",
+            "description": "Giao diện quản lý khiếu nại khách hàng (Claim).",
+            "technical_details": "Quản lý và giải quyết các khiếu nại chất lượng sản phẩm.",
+            "file_path": "/FrontEnd/src/pages/Admin/ClaimPortalLayout.jsx"
         }
     ],
 

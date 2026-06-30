@@ -18,9 +18,19 @@ export const useAuth = () => {
 
     try {
       const response = await authService.login(username, password);
+      
+      // Chặn tài khoản công nhân đăng nhập vào Web
+      if (response.permission_name === 'NV SX' || response.permission_name === 'NV QC') {
+        setError('Tài khoản của bạn (Công nhân) không có quyền truy cập ứng dụng Web. Vui lòng đăng nhập trên thiết bị di động.');
+        setLoading(false);
+        return;
+      }
+
       // Giả lập token hoặc lấy từ response
       const token = response.access_token || response.token || 'demo-token';
       authService.setToken(token);
+      localStorage.setItem('smartflow_user', JSON.stringify(response));
+      localStorage.setItem('smartflow_active_permissions', response.screen_permissions || '{}');
       
       // Chuyển hướng sang trang Admin
       window.location.href = '/admin'; // Hoặc dùng navigate nếu được bao bọc bởi Router

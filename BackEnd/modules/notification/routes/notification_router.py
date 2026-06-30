@@ -1,10 +1,11 @@
 from typing import List, Optional
 import datetime
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from config.database import get_db
 from modules.notification.models.notifications import Notification as NotificationModel
 from modules.notification.schemas.notifications import Notification as NotificationSchema, NotificationCreate, NotificationMarkRead
+from modules.notification.services.zalo_service import trigger_zalo_notifications_for_group
 
 router = APIRouter()
 @router.post("/clear-all")
@@ -24,6 +25,7 @@ def clear_all_notifications(db: Session = Depends(get_db)):
 @router.post("/", response_model=NotificationSchema)
 def create_notification(
     request: NotificationCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """
@@ -39,6 +41,15 @@ def create_notification(
         db.add(new_notification)
         db.commit()
         db.refresh(new_notification)
+        
+        # Gửi thông báo qua Zalo bất đồng bộ để tránh block client
+        if new_notification.content:
+            background_tasks.add_task(
+                trigger_zalo_notifications_for_group,
+                new_notification.target_group,
+                f"🔔 [SmartFlow] Thông báo mới ({new_notification.target_group or 'Mọi người'}):\n{new_notification.content}"
+            )
+            
         return new_notification
     except Exception as e:
         db.rollback()

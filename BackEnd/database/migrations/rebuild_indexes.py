@@ -24,7 +24,10 @@ def rebuild_indexes():
             'input_inspections',
             'orders',
             'products',
-            'delivery_details'
+            'delivery_details',
+            'equipments',
+            'equipment_inspections',
+            'equipment_trainings'
         ]
         
         for table in tables:

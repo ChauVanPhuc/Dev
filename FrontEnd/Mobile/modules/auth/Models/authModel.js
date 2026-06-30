@@ -19,31 +19,57 @@ const getInitialUser = () => {
   }
 }
 
+const getInitialPermissions = () => {
+  try {
+    const saved = localStorage.getItem('smartflow_active_permissions')
+    return saved ? JSON.parse(saved) : {}
+  } catch (e) {
+    console.error('Error parsing permissions from localStorage', e)
+    return {}
+  }
+}
+
 const useAuthStore = create((set) => ({
   // Khởi tạo từ localStorage nếu có
   user: getInitialUser(),
   token: localStorage.getItem('token') || null,
   isAuthenticated: !!localStorage.getItem('token'),
+  permissions: getInitialPermissions(),
 
   /**
    * Cập nhật thông tin người dùng và token
    * @param {Object|null} user - Thông tin người dùng hoặc null để logout
    * @param {string|null} token - JWT Token
+   * @param {string|Object|null} permissions - Quyền màn hình (JSON String hoặc Object)
    */
-  setUser: (user, token = null) => {
+  setUser: (user, token = null, permissions = null) => {
     if (user) {
       localStorage.setItem('smartflow_user', JSON.stringify(user))
       if (token) {
         localStorage.setItem('token', token)
-        set({ user, token, isAuthenticated: true })
-      } else {
-        set({ user })
       }
+      
+      let nextPermissions = {}
+      if (permissions) {
+        const permsStr = typeof permissions === 'string' ? permissions : JSON.stringify(permissions)
+        localStorage.setItem('smartflow_active_permissions', permsStr)
+        nextPermissions = typeof permissions === 'string' ? JSON.parse(permissions) : permissions
+      } else {
+        nextPermissions = getInitialPermissions()
+      }
+
+      set((state) => ({ 
+        user, 
+        token: token || state.token, 
+        isAuthenticated: !!(token || state.token),
+        permissions: nextPermissions
+      }))
     } else {
       // Logout
       localStorage.removeItem('smartflow_user')
       localStorage.removeItem('token')
-      set({ user: null, token: null, isAuthenticated: false })
+      localStorage.removeItem('smartflow_active_permissions')
+      set({ user: null, token: null, isAuthenticated: false, permissions: {} })
     }
   },
 
@@ -72,7 +98,8 @@ const useAuthStore = create((set) => ({
   logout: () => {
     localStorage.removeItem('smartflow_user')
     localStorage.removeItem('token')
-    set({ user: null, token: null, isAuthenticated: false })
+    localStorage.removeItem('smartflow_active_permissions')
+    set({ user: null, token: null, isAuthenticated: false, permissions: {} })
   }
 }))
 

@@ -321,7 +321,7 @@ const DefectManagement = () => {
   // ─── Lọc & Bộ lọc ──────────────────────────────────────────
   const [activeTab, setActiveTab] = useState('all'); // all, visual, paint, structure, material, tracking
   const [showInactive, setShowInactive] = useState(true); // hiển thị cả lỗi ngừng dùng
-  const [selectedAql, setSelectedAql] = useState('all'); // all, Critical, Major, Minor
+  const [selectedAql, setSelectedAql] = useState('all'); // all, Major, Minor
 
   // ─── Phân trang ─────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState(1);
@@ -967,9 +967,8 @@ const DefectManagement = () => {
                   }}
                 >
                   <option value="all">Mức AQL</option>
-                  <option value="Critical">Critical</option>
-                  <option value="Major">Major</option>
-                  <option value="Minor">Minor</option>
+                  <option value="Major">Nặng (Major)</option>
+                  <option value="Minor">Nhẹ (Minor)</option>
                 </select>
               </div>
 
@@ -1072,18 +1071,16 @@ const DefectManagement = () => {
                                   {defect.aql_class ? (
                                     <span className="status-badge" style={{
                                       backgroundColor: 
-                                        defect.aql_class === 'Critical' ? '#fee2e2' : 
-                                        defect.aql_class === 'Major' ? '#ffedd5' : '#f0fdf4',
+                                        defect.aql_class === 'Major' ? '#fee2e2' : '#f0fdf4',
                                       color: 
-                                        defect.aql_class === 'Critical' ? '#991b1b' : 
-                                        defect.aql_class === 'Major' ? '#9a3412' : '#166534',
+                                        defect.aql_class === 'Major' ? '#991b1b' : '#166534',
                                       border: '1px solid currentColor',
                                       fontWeight: '700',
                                       fontSize: '0.7rem',
                                       padding: '2px 8px',
                                       borderRadius: '4px'
                                     }}>
-                                      {defect.aql_class}
+                                      {defect.aql_class === 'Major' ? 'Nặng' : 'Nhẹ'}
                                     </span>
                                   ) : (
                                     <span style={{ color: '#999' }}>---</span>
@@ -1245,10 +1242,10 @@ const DefectManagement = () => {
                                       fontWeight: 'bold',
                                       padding: '1px 6px',
                                       borderRadius: '4px',
-                                      backgroundColor: defect.aql_class === 'Critical' ? '#fee2e2' : defect.aql_class === 'Major' ? '#ffedd5' : '#f0fdf4',
-                                      color: defect.aql_class === 'Critical' ? '#991b1b' : defect.aql_class === 'Major' ? '#9a3412' : '#166534',
+                                      backgroundColor: defect.aql_class === 'Major' ? '#fee2e2' : '#f0fdf4',
+                                      color: defect.aql_class === 'Major' ? '#991b1b' : '#166534',
                                     }}>
-                                      {defect.aql_class}
+                                      {defect.aql_class === 'Major' ? 'Nặng' : 'Nhẹ'}
                                     </span>
                                   )}
                                 </h4>
@@ -1509,7 +1506,6 @@ const DefectManagement = () => {
                     <select name="aql_class" value={formData.aql_class || 'Minor'} onChange={handleInputChange}>
                       <option value="Minor">Nhẹ (Minor)</option>
                       <option value="Major">Nặng (Major)</option>
-                      <option value="Critical">Nghiêm trọng (Critical)</option>
                     </select>
                   </div>
                 </div>

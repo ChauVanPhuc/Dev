@@ -11,7 +11,7 @@ def test_create_delivery_with_images_and_notifications(client, db_session):
     """
     
     # Giả lập User và Token (Lấy từ test_auth)
-    client.post("/accounts/", json={"username": "shipper", "password": "123", "full_name": "Shipper"})
+    client.post("/accounts/", json={"username": "shipper", "password": "123", "full_name": "Shipper", "phone": "0987654301"})
     res = client.post("/accounts/login", data={"username": "shipper", "password": "123"}).json()
     token = res["access_token"]
     user_id = res["id"]

@@ -42,7 +42,7 @@ const DeliveryReceive = () => {
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
-  const { user } = useAuthStore()
+  const { user, permissions } = useAuthStore()
   const { plans, fetchPlans, fetchDeliveriesByPlan } = usePlanController()
   const {
     fetchDeliveryDetail,
@@ -476,12 +476,24 @@ const DeliveryReceive = () => {
   // QC được kiểm sau khi SX đã nhận (Chờ Kiểm Tra hoặc Đã Nhận)
   const isPendingInspection = delivery?.status === 'Chờ Kiểm Tra' || delivery?.status === 'Đã Nhận';
 
-  const canEdit = isSender && (delivery?.status === 'Chờ Nhận Hàng');
-  const canConfirm = isReceiver && isProduction && isPendingReceiving;
+  const userReceivePerm = permissions?.['mobile_delivery-receive'];
+  const hasReceiveActionPermission = isAdmin || (
+    userReceivePerm && userReceivePerm !== 'none' && 
+    userReceivePerm.split(',').map(p => p.trim()).some(p => ['create', 'edit', 'approve'].includes(p))
+  );
+
+  const userCreatePerm = permissions?.['mobile_delivery-create'];
+  const hasCreateActionPermission = isAdmin || (
+    userCreatePerm && userCreatePerm !== 'none' && 
+    userCreatePerm.split(',').map(p => p.trim()).includes('edit')
+  );
+
+  const canEdit = isSender && (delivery?.status === 'Chờ Nhận Hàng') && hasCreateActionPermission;
+  const canConfirm = isReceiver && isProduction && isPendingReceiving && hasReceiveActionPermission;
 
   // QC được vào tab để xem hoặc chuẩn bị, nhưng chỉ được lưu khi status là Chờ Kiểm Tra / Đã Nhận
   const canAccessQCTab = (isQC || isAdmin) && isReceiver;
-  const canSaveQC = (isQC || isAdmin) && (isPendingInspection || delivery?.status === 'Hoàn thành');
+  const canSaveQC = (isQC || isAdmin) && (isPendingInspection || delivery?.status === 'Hoàn thành') && hasReceiveActionPermission;
 
   // 1. Lấy chi tiết phiếu
   useEffect(() => {
@@ -1025,6 +1037,8 @@ const DeliveryReceive = () => {
             isPendingReceiving={isPendingReceiving}
             isPendingInspection={isPendingInspection}
             navigate={navigate}
+            hasReceiveActionPermission={hasReceiveActionPermission}
+            hasCreateActionPermission={hasCreateActionPermission}
           />
         </div>
 

@@ -17,6 +17,15 @@ SQLALCHEMY_DATABASE_URL = "sqlite:///./test_db.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+from sqlalchemy import event
+import re
+
+@event.listens_for(engine, "before_cursor_execute", retval=True)
+def clean_sqlite_unicode_literals(conn, cursor, statement, parameters, context, executemany):
+    if conn.dialect.name == "sqlite":
+        statement = re.sub(r"\bN'", "'", statement)
+    return statement, parameters
+
 @pytest.fixture(scope="session", autouse=True)
 def setup_database():
     Base.metadata.create_all(bind=engine)

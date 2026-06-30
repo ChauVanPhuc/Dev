@@ -175,12 +175,36 @@ def do_update_stage(id: int, data: StageInspectionCreate, db: Session):
 def get_stage_inspections(
     skip: int = 0,
     limit: int = 100,
+    batch_no: Optional[str] = None,
+    product_sku: Optional[str] = None,
+    month: Optional[int] = None,
+    year: Optional[int] = None,
+    search: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """
     [GET] Lấy danh sách phiếu kiểm tra công đoạn.
+    Hỗ trợ filter theo batch_no, product_sku, month/year, và tìm kiếm text.
     """
-    return db.query(StageInspection).order_by(StageInspection.inspection_date.desc()).offset(skip).limit(limit).all()
+    query = db.query(StageInspection)
+    if batch_no:
+        query = query.filter(StageInspection.batch_no == batch_no)
+    if product_sku:
+        query = query.filter(StageInspection.product_sku == product_sku)
+    if month and year:
+        from sqlalchemy import extract
+        query = query.filter(
+            extract('month', StageInspection.inspection_date) == month,
+            extract('year', StageInspection.inspection_date) == year
+        )
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            (StageInspection.batch_no.ilike(search_term)) |
+            (StageInspection.product_sku.ilike(search_term)) |
+            (StageInspection.inspector_name.ilike(search_term))
+        )
+    return query.order_by(StageInspection.inspection_date.desc()).offset(skip).limit(limit).all()
 
 UPLOAD_DIR = "static/uploads/inspections"
 if not os.path.exists(UPLOAD_DIR):
@@ -283,6 +307,231 @@ async def upload_inspection_images(
         return {"paths": image_paths}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi khi tải ảnh lên: {str(e)}")
+
+
+@router.post("/upload-ocr")
+async def upload_ocr_image(
+    file: UploadFile = File(...)
+):
+    """
+    [POST] Nhận file ảnh thước kẹp/máy đo độ ẩm, thực hiện AI OCR nhận diện số LCD (in-memory) và trả về kết quả số.
+    """
+    import base64
+    import requests
+    import re
+    from groq import Groq
+
+    def is_valid_ocr_response(text: str) -> bool:
+        if not text:
+            return False
+        # Lọc bỏ các text chứa các từ khóa báo lỗi hoặc từ chối của AI
+        bad_keywords = ["cannot see", "can't see", "don't have eyes", "text-based", "unable to parse", "error", "status", "sorry", "assist", "impossible"]
+        for kw in bad_keywords:
+            if kw in text.lower():
+                return False
+        # Kiểm tra xem có chứa số nào hay không
+        match = re.search(r"[-+]?\d*\.\d+|\d+", text)
+        if not match:
+            return False
+        val = float(match.group())
+        # Nếu kết quả trùng khớp hoàn toàn với 200 mà nội dung có vẻ dài (như "Status: 200")
+        if val == 200.0 and len(text.strip()) > 6:
+            return False
+        return True
+
+    # Prompt nâng cao cung cấp Context Hints
+    smart_prompt = (
+        "You are a high-precision OCR AI. Read the display on this industrial measurement tool (caliper or moisture meter). "
+        "Focus ONLY on the primary large digits showing the measurement result. Ignore auxiliary digits like temperature (e.g., '32 C', '20 C'), target/set points (e.g., '12.0'), and hands/fingers. "
+        "If the screen shows '>11.0 %MC' or '11.0 %MC', ignore the '>' and extract only the float number '11.0' (or '10.0' if it shows 10.0). "
+        "Carefully inspect if the digits are 10.0, 11.0, or other floats. Return ONLY the clean extracted float number, nothing else."
+    )
+
+    try:
+        contents = await file.read()
+        base64_image = base64.b64encode(contents).decode('utf-8')
+        
+        extracted_value = None
+        
+        # 1. Thử gọi Local AI trước (nếu có cấu hình)
+        local_ai_url = os.getenv("LOCAL_GEMINI_URL")
+        local_ai_model = os.getenv("LOCAL_GEMINI_MODEL", "gemini-3.5-flash-thinking")
+        local_ai_key = os.getenv("LOCAL_GEMINI_API_KEY", "")
+        
+        if local_ai_url:
+            try:
+                headers = {"Content-Type": "application/json"}
+                if local_ai_key:
+                    headers["Authorization"] = f"Bearer {local_ai_key}"
+                
+                payload = {
+                    "model": local_ai_model,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": smart_prompt
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:image/jpeg;base64,{base64_image}"
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    "temperature": 0.0,
+                    "max_tokens": 15
+                }
+                
+                res = requests.post(local_ai_url, json=payload, headers=headers, timeout=10)
+                if res.status_code == 200:
+                    data = res.json()
+                    ai_text = data["choices"][0]["message"]["content"].strip()
+                    print(f"[OCR DEBUG] Local AI text: {ai_text}")
+                    if is_valid_ocr_response(ai_text):
+                        match = re.search(r"[-+]?\d*\.\d+|\d+", ai_text)
+                        if match:
+                            extracted_value = float(match.group())
+                            print(f"[OCR DEBUG] Local AI extracted: {extracted_value}")
+            except Exception as local_err:
+                print(f"Lỗi gọi Local AI OCR: {local_err}")
+                
+        # 2. Thử gọi OpenRouter với google/gemini-2.5-flash
+        openrouter_key = os.getenv("OPENROUTER_API_KEY")
+        if extracted_value is None and openrouter_key:
+            try:
+                url = "https://openrouter.ai/api/v1/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {openrouter_key}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": "google/gemini-2.5-flash",
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": smart_prompt
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:image/jpeg;base64,{base64_image}"
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    "max_tokens": 15,
+                    "temperature": 0.0
+                }
+                res = requests.post(url, json=payload, headers=headers, timeout=12)
+                if res.status_code == 200:
+                    data = res.json()
+                    if "choices" in data and len(data["choices"]) > 0:
+                        ai_text = data["choices"][0]["message"]["content"].strip()
+                        print(f"[OCR DEBUG] OpenRouter Gemini text: {ai_text}")
+                        if is_valid_ocr_response(ai_text):
+                            match = re.search(r"[-+]?\d*\.\d+|\d+", ai_text)
+                            if match:
+                                extracted_value = float(match.group())
+                                print(f"[OCR DEBUG] OpenRouter Gemini extracted: {extracted_value}")
+            except Exception as or_err:
+                print(f"Lỗi gọi OpenRouter OCR: {or_err}")
+
+        # 3. Fallback sang OpenRouter meta-llama/llama-3.2-11b-vision-instruct
+        if extracted_value is None and openrouter_key:
+            try:
+                url = "https://openrouter.ai/api/v1/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {openrouter_key}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": "meta-llama/llama-3.2-11b-vision-instruct",
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": smart_prompt
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:image/jpeg;base64,{base64_image}"
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    "max_tokens": 15,
+                    "temperature": 0.0
+                }
+                res = requests.post(url, json=payload, headers=headers, timeout=12)
+                if res.status_code == 200:
+                    data = res.json()
+                    if "choices" in data and len(data["choices"]) > 0:
+                        ai_text = data["choices"][0]["message"]["content"].strip()
+                        print(f"[OCR DEBUG] OpenRouter Llama text: {ai_text}")
+                        if is_valid_ocr_response(ai_text):
+                            match = re.search(r"[-+]?\d*\.\d+|\d+", ai_text)
+                            if match:
+                                extracted_value = float(match.group())
+                                print(f"[OCR DEBUG] OpenRouter Llama extracted: {extracted_value}")
+            except Exception as or_llama_err:
+                print(f"Lỗi gọi OpenRouter Llama Vision OCR: {or_llama_err}")
+
+        # 4. Fallback sang Groq Cloud (nếu vẫn lỗi và có key)
+        if extracted_value is None:
+            groq_key = os.getenv("GROQ_API_KEY")
+            if groq_key:
+                try:
+                    client = Groq(api_key=groq_key)
+                    chat_completion = client.chat.completions.create(
+                        messages=[
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "text", 
+                                        "text": smart_prompt
+                                    },
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": f"data:image/jpeg;base64,{base64_image}"
+                                        }
+                                    }
+                                ]
+                            }
+                        ],
+                        model="llama-3.2-11b-vision-preview",
+                        temperature=0.0,
+                        max_tokens=10
+                    )
+                    ai_text = chat_completion.choices[0].message.content.strip()
+                    print(f"[OCR DEBUG] Groq text: {ai_text}")
+                    if is_valid_ocr_response(ai_text):
+                        match = re.search(r"[-+]?\d*\.\d+|\d+", ai_text)
+                        if match:
+                            extracted_value = float(match.group())
+                            print(f"[OCR DEBUG] Groq extracted: {extracted_value}")
+                except Exception as groq_err:
+                    print(f"Lỗi gọi Groq AI OCR: {groq_err}")
+
+        print(f"[OCR DEBUG] Final Extracted Value: {extracted_value}")
+        return {"value": extracted_value}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi xử lý OCR: {str(e)}")
 
 
 @router.get("/inbound/po/{order_code}")

@@ -405,7 +405,7 @@
 
 .mock-main-content {
   display: grid;
-  grid-template-columns: 1fr 180px;
+  grid-template-columns: 1fr;
   gap: 12px;
 }
 

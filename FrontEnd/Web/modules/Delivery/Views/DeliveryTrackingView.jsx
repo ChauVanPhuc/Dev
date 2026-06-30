@@ -25,6 +25,51 @@ const DeliveryTracking = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(15);
 
+    // Year and Month selection states (default to current year and month)
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth() + 1;
+    const [selectedYear, setSelectedYear] = useState(currentYear);
+    const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+    const [availableDates, setAvailableDates] = useState({
+        [currentYear]: [currentMonth]
+    });
+
+    const years = React.useMemo(() => {
+        return Object.keys(availableDates).map(Number).sort((a, b) => b - a);
+    }, [availableDates]);
+
+    const months = React.useMemo(() => {
+        return availableDates[selectedYear] || [];
+    }, [availableDates, selectedYear]);
+
+    useEffect(() => {
+        const loadAvailableDates = async () => {
+            try {
+                const datesMapping = await deliveryService.getAvailableDates();
+                if (datesMapping && Object.keys(datesMapping).length > 0) {
+                    setAvailableDates(datesMapping);
+                    
+                    const yearsList = Object.keys(datesMapping).map(Number).sort((a, b) => b - a);
+                    const latestYear = yearsList[0];
+                    setSelectedYear(latestYear);
+                    
+                    const monthsList = datesMapping[latestYear] || [];
+                    if (monthsList.length > 0) {
+                        const currentM = new Date().getMonth() + 1;
+                        if (monthsList.includes(currentM) && latestYear === new Date().getFullYear()) {
+                            setSelectedMonth(currentM);
+                        } else {
+                            setSelectedMonth(monthsList[monthsList.length - 1]);
+                        }
+                    }
+                }
+            } catch (error) {
+                // Thầm lặng bỏ qua lỗi tải danh sách thời gian có sẵn
+            }
+        };
+        loadAvailableDates();
+    }, []);
+
     // Search and filter states
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
@@ -1856,13 +1901,13 @@ const DeliveryTracking = () => {
     };
 
     useEffect(() => {
-        fetchData();
-    }, []);
+        fetchData(selectedYear, selectedMonth);
+    }, [selectedYear, selectedMonth]);
 
-    const fetchData = async () => {
+    const fetchData = async (year = selectedYear, month = selectedMonth) => {
         try {
             setLoading(true);
-            const data = await deliveryService.getAllDeliveries();
+            const data = await deliveryService.getAllDeliveries(0, 0, year, month);
             setDeliveries(data);
 
             // Tính toán thống kê từ dữ liệu thực
@@ -1901,39 +1946,46 @@ const DeliveryTracking = () => {
         return '#FFFFFF';
     };
 
-    const deliveryStages = ['all', ...new Set(deliveries.map(d => d.delivery_stage).filter(Boolean))];
-    const receivingStages = ['all', ...new Set(deliveries.map(d => d.receiving_stage).filter(Boolean))];
+    const deliveryStages = React.useMemo(() => {
+        return ['all', ...new Set(deliveries.map(d => d.delivery_stage).filter(Boolean))];
+    }, [deliveries]);
 
-    const filteredDeliveries = deliveries.filter(row => {
-        // 1. Status Filter
-        if (filterStatus !== 'all') {
-            const statusInfo = getStatusStyle(row.status);
-            if (filterStatus === 'completed' && statusInfo.label !== 'HOÀN THÀNH') return false;
-            if (filterStatus === 'pending' && statusInfo.label !== 'CHỜ NHẬN') return false;
-            if (filterStatus === 'error' && statusInfo.label !== 'LỖI/TRẢ') return false;
-        }
+    const receivingStages = React.useMemo(() => {
+        return ['all', ...new Set(deliveries.map(d => d.receiving_stage).filter(Boolean))];
+    }, [deliveries]);
 
-        // 2. Delivery Stage Filter
-        if (selectedDeliveryStage !== 'all' && row.delivery_stage !== selectedDeliveryStage) return false;
+    const filteredDeliveries = React.useMemo(() => {
+        return deliveries.filter(row => {
+            // 1. Status Filter
+            if (filterStatus !== 'all') {
+                const statusInfo = getStatusStyle(row.status);
+                if (filterStatus === 'completed' && statusInfo.label !== 'HOÀN THÀNH') return false;
+                if (filterStatus === 'pending' && statusInfo.label !== 'CHỜ NHẬN') return false;
+                if (filterStatus === 'error' && statusInfo.label !== 'LỖI/TRẢ') return false;
+            }
 
-        // 3. Receiving Stage Filter
-        if (selectedReceivingStage !== 'all' && row.receiving_stage !== selectedReceivingStage) return false;
+            // 2. Delivery Stage Filter
+            if (selectedDeliveryStage !== 'all' && row.delivery_stage !== selectedDeliveryStage) return false;
 
-        // 4. Search Term Filter
-        if (searchTerm.trim() !== '') {
-            const term = searchTerm.toLowerCase();
-            const matchId = `bg-${row.id}`.toLowerCase().includes(term);
-            const matchPartName = (row.part_name || '').toLowerCase().includes(term);
-            const matchStageIn = (row.delivery_stage || '').toLowerCase().includes(term);
-            const matchStageOut = (row.receiving_stage || '').toLowerCase().includes(term);
-            const matchSender = (row.sx_delivery_name || '').toLowerCase().includes(term);
-            const matchReceiver = (row.sx_receipt_name || '').toLowerCase().includes(term);
-            
-            return matchId || matchPartName || matchStageIn || matchStageOut || matchSender || matchReceiver;
-        }
+            // 3. Receiving Stage Filter
+            if (selectedReceivingStage !== 'all' && row.receiving_stage !== selectedReceivingStage) return false;
 
-        return true;
-    });
+            // 4. Search Term Filter
+            if (searchTerm.trim() !== '') {
+                const term = searchTerm.toLowerCase();
+                const matchId = `bg-${row.id}`.toLowerCase().includes(term);
+                const matchPartName = (row.part_name || '').toLowerCase().includes(term);
+                const matchStageIn = (row.delivery_stage || '').toLowerCase().includes(term);
+                const matchStageOut = (row.receiving_stage || '').toLowerCase().includes(term);
+                const matchSender = (row.sx_delivery_name || '').toLowerCase().includes(term);
+                const matchReceiver = (row.sx_receipt_name || '').toLowerCase().includes(term);
+                
+                return matchId || matchPartName || matchStageIn || matchStageOut || matchSender || matchReceiver;
+            }
+
+            return true;
+        });
+    }, [deliveries, filterStatus, selectedDeliveryStage, selectedReceivingStage, searchTerm]);
 
 
     return (
@@ -1943,7 +1995,7 @@ const DeliveryTracking = () => {
             <div className="sticky-top-zone">
                 {/* Desktop/Mobile Toolbar filters */}
                 <div className="mgmt-toolbar card" style={{ width: '100%', marginBottom: 0 }}>
-                    <div className="toolbar-left" style={{ flex: 1 }}>
+                    <div className="toolbar-left" style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
                         <div className="search-wrapper">
                             <Search size={16} className="search-icon" />
                             <input 
@@ -1953,6 +2005,62 @@ const DeliveryTracking = () => {
                                 onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                                 style={{ width: '100%', padding: '10px 14px 10px 42px', borderRadius: '8px', border: '1px solid #EFEBE9', fontSize: '13px', outline: 'none' }}
                             />
+                        </div>
+
+                        {/* Bộ lọc Tháng & Năm theo phong cách Coffee Luxury */}
+                        <div className="month-year-filter" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <select
+                                value={selectedMonth}
+                                onChange={(e) => { setSelectedMonth(parseInt(e.target.value)); setCurrentPage(1); }}
+                                className="page-size-select"
+                                style={{
+                                    padding: '8px 12px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #EADCC9',
+                                    backgroundColor: '#FAF6F0',
+                                    color: '#5D4037',
+                                    fontWeight: '700',
+                                    fontSize: '13px',
+                                    outline: 'none',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                    minWidth: '105px'
+                                }}
+                            >
+                                {months.map(m => (
+                                    <option key={m} value={m}>Tháng {m}</option>
+                                ))}
+                            </select>
+                             <select
+                                value={selectedYear}
+                                onChange={(e) => {
+                                    const nextYear = parseInt(e.target.value);
+                                    setSelectedYear(nextYear);
+                                    const nextMonths = availableDates[nextYear] || [];
+                                    if (nextMonths.length > 0 && !nextMonths.includes(selectedMonth)) {
+                                        setSelectedMonth(nextMonths[0]);
+                                    }
+                                    setCurrentPage(1);
+                                }}
+                                className="page-size-select"
+                                style={{
+                                    padding: '8px 12px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #EADCC9',
+                                    backgroundColor: '#FAF6F0',
+                                    color: '#5D4037',
+                                    fontWeight: '700',
+                                    fontSize: '13px',
+                                    outline: 'none',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                    minWidth: '95px'
+                                }}
+                            >
+                                {years.map(y => (
+                                    <option key={y} value={y}>Năm {y}</option>
+                                ))}
+                            </select>
                         </div>
 
                         <select 

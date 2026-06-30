@@ -1,4 +1,0 @@
-﻿BackEnd/shared/utils/banner.py
-BackEnd/shared/utils/device_tracker.py
-BackEnd/shared/utils/string_cleaner.py
-BackEnd/shared/utils/timezone.py

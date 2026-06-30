@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader';
 import FormInput from '@mobile/Shared/Views/components/form/FormInput';
 import FormSelect from '@mobile/Shared/Views/components/form/FormSelect';
@@ -52,11 +52,14 @@ const CustomStepper = ({ value, onChange }) => {
 
 const DailyInspection = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuthStore();
   const [showConfirm, setShowConfirm] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [activeTab, setActiveTab] = useState('tracking_tab'); // Default tab
-  const defaultStage = user?.activeStageDescription || user?.activeStageName || user?.stage_description || user?.stage_name || 'NM1 - Định hình 1';
+  
+  const { stage: stateStage } = location.state || {};
+  const defaultStage = stateStage || user?.activeStageDescription || user?.activeStageName || user?.stage_description || user?.stage_name || 'NM1 - Định hình 1';
   const [department, setDepartment] = useState(defaultStage);
   const [totalProducts, setTotalProducts] = useState(0);
   const [defectTypes, setDefectTypes] = useState([]);
@@ -77,12 +80,6 @@ const DailyInspection = () => {
     { id: 'other', label: 'Khác' },
   ];
 
-  // Đồng bộ công đoạn hoạt động mặc định khi thông tin người dùng được tải
-  useEffect(() => {
-    const currentDefault = user?.activeStageDescription || user?.activeStageName || user?.stage_description || user?.stage_name || 'NM1 - Định hình 1';
-    setDepartment(currentDefault);
-  }, [user]);
-
   // Tạo danh sách tùy chọn các công đoạn cho phép kiểm tra
   const stageOptions = useMemo(() => {
     if (user?.stageDescriptions && user.stageDescriptions.length > 0) {
@@ -94,6 +91,26 @@ const DailyInspection = () => {
     const defaultVal = user?.stage_description || user?.stage_name || 'NM1 - Định hình 1';
     return [{ label: defaultVal, value: defaultVal }];
   }, [user]);
+
+  // Đồng bộ công đoạn hoạt động mặc định khi thông tin người dùng được tải
+  useEffect(() => {
+    if (!stateStage) {
+      const currentDefault = user?.activeStageDescription || user?.activeStageName || user?.stage_description || user?.stage_name || 'NM1 - Định hình 1';
+      setDepartment(currentDefault);
+    }
+  }, [user, stateStage]);
+
+  // Đồng bộ công đoạn khi có stateStage truyền từ ngoài vào (như từ Sidebar)
+  useEffect(() => {
+    if (stateStage && stageOptions && stageOptions.length > 0) {
+      const matched = stageOptions.find(opt => 
+        opt.value.toLowerCase().includes(stateStage.toLowerCase())
+      );
+      if (matched) {
+        setDepartment(matched.value);
+      }
+    }
+  }, [stateStage, stageOptions]);
 
   // 1. Lấy tổng số lượng bàn giao trong ngày
   useEffect(() => {
@@ -386,7 +403,7 @@ const DailyInspection = () => {
         setShowSuccess(true);
         setTimeout(() => {
           setShowSuccess(false);
-          navigate(-1);
+          navigate('/inspection-daily');
         }, 2000);
       }
     } catch (err) {
@@ -739,7 +756,7 @@ const DailyInspection = () => {
               <CheckCircle2 size={20} /> Xác nhận
             </button>
             <button 
-              onClick={() => navigate(-1)}
+              onClick={() => navigate('/inspection-daily')}
               style={{
                 flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
                 backgroundColor: '#fff', color: '#64748b', border: '1px solid #cbd5e1', borderRadius: '12px',

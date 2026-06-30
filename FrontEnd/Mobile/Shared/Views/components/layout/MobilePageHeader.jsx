@@ -84,11 +84,18 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
 
   const setActiveStage = useAuthStore((state) => state.setActiveStage)
 
-
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   // [Realtime] Cập nhật số lượng thông báo chưa đọc ngay khi có tin mới từ WebSocket
 
   const handleSocketMessage = useCallback((message) => {
+
+    if (message.type === 'SCREEN_UPDATED') {
+      screensCache = null;
+      activeFetchPromise = null;
+      setRefreshTrigger(prev => prev + 1);
+      return;
+    }
 
     // Nếu tin nhắn báo có phiếu mới hoặc QC xong
 
@@ -217,7 +224,7 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
 
     loadScreens();
 
-  }, [location.pathname]);
+  }, [location.pathname, refreshTrigger]);
 
   
 
@@ -240,8 +247,6 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
   ].filter(Boolean).join(' ').toLowerCase().normalize('NFC');
 
   const isAdmin = userRoleStr.includes('admin');
-
-  const isProdStaff = (user?.permission_description || '').includes('Nhân Viên Sản Xuất') && !isAdmin;
 
 
 
@@ -483,7 +488,7 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
 
         flexShrink: 0,
 
-        height: '56px'
+        height: showStageSelect ? '92px' : '56px'
 
       }}
 
@@ -497,7 +502,7 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
 
           id="header-menu-btn"
 
-          onClick={showBack ? () => navigate(-1) : (isProdStaff ? () => setShowProfile(true) : toggleSidebar)}
+          onClick={showBack ? () => navigate(-1) : toggleSidebar}
 
           style={{
 
@@ -529,7 +534,7 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
 
         >
 
-          {showBack ? <ChevronLeft size={22} /> : (isProdStaff ? <UserCircle size={22} /> : <Menu size={22} />)}
+          {showBack ? <ChevronLeft size={22} /> : <Menu size={22} />}
 
         </button>
 

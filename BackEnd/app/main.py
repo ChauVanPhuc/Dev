@@ -84,21 +84,82 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
 
     try:
-
-        print("Checking for missing columns in deliveries table...")
-
-        # Sử dụng lệnh ALTER TABLE trực tiếp (SQL Server syntax)
+        print("Checking for missing columns in accounts table...")
+        try:
+            db.execute(text("ALTER TABLE accounts ADD screen_permissions NVARCHAR(MAX) NULL"))
+            db.commit()
+            print("Successfully added screen_permissions column to accounts table.")
+        except Exception:
+            db.rollback()
 
         try:
-
-            db.execute(text("ALTER TABLE deliveries ADD moisture_min FLOAT NULL"))
-
+            db.execute(text("ALTER TABLE accounts ADD permission_level NVARCHAR(50) NULL"))
             db.commit()
-
-            print("Successfully added moisture_min column.")
-
+            print("Successfully added permission_level column to accounts table.")
         except Exception:
+            db.rollback()
 
+        print("Checking for missing columns in roles table...")
+        try:
+            db.execute(text("""
+                IF NOT EXISTS (
+                    SELECT * FROM sys.columns 
+                    WHERE object_id = OBJECT_ID('roles') AND name = 'is_active'
+                )
+                ALTER TABLE roles ADD is_active BIT NOT NULL DEFAULT 1
+            """))
+            db.commit()
+            print("Successfully checked/added is_active to roles table.")
+        except Exception:
+            db.rollback()
+
+        try:
+            db.execute(text("""
+                IF NOT EXISTS (
+                    SELECT * FROM sys.columns 
+                    WHERE object_id = OBJECT_ID('roles') AND name = 'default_permissions'
+                )
+                ALTER TABLE roles ADD default_permissions NVARCHAR(MAX) NULL
+            """))
+            db.commit()
+            print("Successfully checked/added default_permissions to roles table.")
+        except Exception:
+            db.rollback()
+
+        print("Checking for missing columns in permissions table...")
+        try:
+            db.execute(text("""
+                IF NOT EXISTS (
+                    SELECT * FROM sys.columns 
+                    WHERE object_id = OBJECT_ID('permissions') AND name = 'is_active'
+                )
+                ALTER TABLE permissions ADD is_active BIT NOT NULL DEFAULT 1
+            """))
+            db.commit()
+            print("Successfully checked/added is_active to permissions table.")
+        except Exception:
+            db.rollback()
+
+        try:
+            db.execute(text("""
+                IF NOT EXISTS (
+                    SELECT * FROM sys.columns 
+                    WHERE object_id = OBJECT_ID('permissions') AND name = 'default_permissions'
+                )
+                ALTER TABLE permissions ADD default_permissions NVARCHAR(MAX) NULL
+            """))
+            db.commit()
+            print("Successfully checked/added default_permissions to permissions table.")
+        except Exception:
+            db.rollback()
+
+        print("Checking for missing columns in deliveries table...")
+        # Sử dụng lệnh ALTER TABLE trực tiếp (SQL Server syntax)
+        try:
+            db.execute(text("ALTER TABLE deliveries ADD moisture_min FLOAT NULL"))
+            db.commit()
+            print("Successfully added moisture_min column.")
+        except Exception:
             db.rollback() # Cột có thể đã tồn tại
 
 
@@ -257,7 +318,9 @@ async def lifespan(app: FastAPI):
                 ("products", "order_id", "ix_products_order_id"),
                 ("bom_details", "product_id", "ix_bom_details_product_id"),
                 ("bom_details", "parent_id", "ix_bom_details_parent_id"),
-                ("orders", "plan_id", "ix_orders_plan_id")
+                ("orders", "plan_id", "ix_orders_plan_id"),
+                ("equipment_inspections", "equipment_id", "ix_equipment_inspections_eq_id"),
+                ("equipment_trainings", "equipment_id", "ix_equipment_trainings_eq_id")
             ]
             for table, col, index_name in indexes_to_create:
                 try:
@@ -479,6 +542,151 @@ async def log_requests(request: Request, call_next):
 
     response = await call_next(request)
     return response
+
+# [NEW] Authorization checking middleware for write operations
+@app.middleware("http")
+async def check_write_permissions(request: Request, call_next):
+    if request.method in ("POST", "PUT", "DELETE", "PATCH"):
+        path = request.url.path
+        
+        # Bypass public/auth endpoints, healthcheck, and socket connections
+        bypass_prefixes = (
+            "/accounts/login",
+            "/api/v1/accounts/login",
+            "/api/v1/claims/chat",
+            "/health",
+            "/ws",
+        )
+        if not any(path.startswith(prefix) for prefix in bypass_prefixes):
+            auth_header = request.headers.get("Authorization")
+            if auth_header and auth_header.startswith("Bearer "):
+                token = auth_header.split(" ")[1]
+                try:
+                    from jose import jwt
+                    from config.settings import settings
+                    from config.database import SessionLocal
+                    from modules.auth.models.accounts import Account as AccountModel
+                    from modules.auth.controllers.account_controller import resolve_user_permissions
+                    import json
+
+                    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+                    username = payload.get("sub")
+                    
+                    if username:
+                        db = SessionLocal()
+                        try:
+                            user = db.query(AccountModel).filter(AccountModel.username == username).first()
+                            if user:
+                                # Determine the screen key based on path
+                                screen_key = None
+                                PATH_TO_SCREEN_KEY = [
+                                    ("/api/v1/deliveries/backup-qrs", "backup-qrs"),
+                                    ("/api/v1/claims/cabinet-prices", "prices"),
+                                    ("/api/v1/claims/shipments", "shipments"),
+                                    ("/api/v1/claims/claims", "claim"),
+                                    ("/api/v1/inspections", "reports"),
+                                    ("/api/v1/products", "products"),
+                                    ("/api/v1/equipments", "equipment"),
+                                    ("/api/v1/kpis", "kpi"),
+                                    ("/api/v1/awards-discipline", "kpi"),
+                                    ("/api/v1/staff-evaluations", "kpi"),
+                                    ("/api/v1/accounts", "users"),
+                                    ("/accounts", "users"),
+                                    ("/api/v1/roles", "users"),
+                                    ("/api/v1/permissions", "users"),
+                                    ("/api/v1/screens", "screens"),
+                                    ("/api/v1/screen-bugs", "bugs"),
+                                    ("/api/v1/capas", "feedback"),
+                                    ("/api/v1/pallet-cards", "exception-deliveries"),
+                                    ("/api/v1/plans", "plan"),
+                                    ("/api/v1/production-plans", "plan"),
+                                    ("/api/v1/deliveries", "delivery-tracking"),
+                                    ("/api/v1/qc", "defects"),
+                                    ("/api/v1/system/incidents", "logs"),
+                                    ("/api/v1/system/logs", "logs"),
+                                    ("/api/v1/system/data-packages", "data"),
+                                    ("/api/v1/system/backup", "data"),
+                                    ("/api/v1/system/monitor", "monitor"),
+                                    ("/api/v1/purchase-requisitions", "purchase-requisitions"),
+                                    ("/api/v1/purchase-order-items", "purchase-order-items"),
+                                ]
+                                for prefix, key in PATH_TO_SCREEN_KEY:
+                                    if path.startswith(prefix):
+                                        screen_key = key
+                                        break
+                                
+                                if screen_key:
+                                    # Phân giải quyền thực tế của User cho screen này
+                                    resolved_perms = resolve_user_permissions(user, db)
+                                    user_perm = resolved_perms.get(screen_key, "none")
+                                    
+                                    # Phân tích danh sách các hành động được cho phép
+                                    allowed_actions_list = []
+                                    if user_perm:
+                                        if "," in user_perm:
+                                            allowed_actions_list = [p.strip() for p in user_perm.split(",") if p.strip()]
+                                        else:
+                                            legacy_rank_map = {
+                                                "none": [],
+                                                "read": ["read"],
+                                                "create": ["read", "create"],
+                                                "edit": ["read", "create", "edit"],
+                                                "delete": ["read", "create", "edit", "delete"],
+                                                "approve": ["read", "create", "edit", "delete", "approve"],
+                                                "export_import": ["read", "create", "edit", "delete", "approve", "export_import"],
+                                                "write": ["read", "create", "edit", "delete", "approve", "export_import"],
+                                            }
+                                            allowed_actions_list = legacy_rank_map.get(user_perm, [])
+
+                                    # Xác định hành động được yêu cầu
+                                    path_lower = path.lower()
+                                    if any(kw in path_lower for kw in ("export", "import", "upload", "download")):
+                                        required_action = "export_import"
+                                    elif any(kw in path_lower for kw in ("approve", "confirm", "accept", "reject", "verify")):
+                                        required_action = "approve"
+                                    elif request.method == "POST":
+                                        required_action = "create"
+                                    elif request.method in ("PUT", "PATCH"):
+                                        required_action = "edit"
+                                    elif request.method == "DELETE":
+                                        required_action = "delete"
+                                    else:
+                                        required_action = "view"
+
+                                    # Kiểm tra quyền hạn
+                                    if required_action not in allowed_actions_list:
+                                        from fastapi.responses import JSONResponse
+                                        # Dịch tên quyền sang tiếng Việt để hiển thị thông báo
+                                        action_names_vi = {
+                                            "create": "Thêm mới",
+                                            "edit": "Chỉnh sửa",
+                                            "delete": "Xóa",
+                                            "approve": "Phê duyệt",
+                                            "export_import": "Xuất nhập file",
+                                            "view": "Xem"
+                                        }
+                                        act_vi = action_names_vi.get(required_action, required_action)
+                                        response = JSONResponse(
+                                            status_code=403,
+                                            content={"detail": f"Bạn không có quyền thực hiện hành động này ({act_vi}) trên phân hệ này."}
+                                        )
+                                        origin = request.headers.get("origin")
+                                        if origin:
+                                            response.headers["Access-Control-Allow-Origin"] = origin
+                                            response.headers["Access-Control-Allow-Credentials"] = "true"
+                                        else:
+                                            response.headers["Access-Control-Allow-Origin"] = "*"
+                                        response.headers["Access-Control-Allow-Methods"] = "*"
+                                        response.headers["Access-Control-Allow-Headers"] = "*"
+                                        return response
+                        finally:
+                            db.close()
+                except Exception:
+                    pass
+                    
+    response = await call_next(request)
+    return response
+
 
 
 

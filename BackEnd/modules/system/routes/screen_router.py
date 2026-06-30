@@ -57,7 +57,7 @@ def get_screen_detail(screen_id: int, db: Session = Depends(get_db)):
     return db_screen
 
 @router.put("/{screen_id}", response_model=SystemScreenSchema)
-def update_screen(
+async def update_screen(
     screen_id: int, 
     screen_in: SystemScreenUpdate, 
     db: Session = Depends(get_db)
@@ -78,10 +78,26 @@ def update_screen(
         
     db.commit()
     db.refresh(db_screen)
+
+    # Realtime WebSocket broadcast to all clients
+    try:
+        from shared.services.websocket_service import socket_manager
+        await socket_manager.broadcast_all({
+            "type": "SCREEN_UPDATED",
+            "screen_id": screen_id,
+            "platform": db_screen.platform,
+            "route_path": db_screen.route_path,
+            "current_code": db_screen.current_code,
+            "title": db_screen.title,
+            "subtitle": db_screen.subtitle
+        })
+    except Exception as e:
+        print(f"Error broadcasting screen update: {e}")
+
     return db_screen
 
 @router.post("/{screen_id}/reset", response_model=SystemScreenSchema)
-def reset_screen_code(screen_id: int, db: Session = Depends(get_db)):
+async def reset_screen_code(screen_id: int, db: Session = Depends(get_db)):
     """
     Reset ma man hinh hien tai (current_code) ve ma mac dinh ban dau (default_code).
     """
@@ -95,5 +111,21 @@ def reset_screen_code(screen_id: int, db: Session = Depends(get_db)):
     db_screen.current_code = db_screen.default_code
     db.commit()
     db.refresh(db_screen)
+
+    # Realtime WebSocket broadcast to all clients
+    try:
+        from shared.services.websocket_service import socket_manager
+        await socket_manager.broadcast_all({
+            "type": "SCREEN_UPDATED",
+            "screen_id": screen_id,
+            "platform": db_screen.platform,
+            "route_path": db_screen.route_path,
+            "current_code": db_screen.current_code,
+            "title": db_screen.title,
+            "subtitle": db_screen.subtitle
+        })
+    except Exception as e:
+        print(f"Error broadcasting screen reset: {e}")
+
     return db_screen
 

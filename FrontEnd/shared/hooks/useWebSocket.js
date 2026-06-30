@@ -1,20 +1,18 @@
 import { useEffect, useRef, useCallback } from 'react';
 
-import useAuthStore from '@modules/auth/Models/authModel';
 
-
-
-/**
-
- * Custom Hook quản lý kết nối WebSocket Realtime.
-
- * @param {Function} onMessage Callback khi nhận được tin nhắn từ server.
-
- */
-
+// Custom Hook quản lý kết nối WebSocket Realtime.
+// @param {Function} onMessage Callback khi nhận được tin nhắn từ server.
 export const useWebSocket = (onMessage) => {
-
-  const { user } = useAuthStore();
+  const getUser = () => {
+    try {
+      const saved = localStorage.getItem('smartflow_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  };
+  const user = getUser();
 
   const socketRef = useRef(null); // Lưu trữ instance của WebSocket
 

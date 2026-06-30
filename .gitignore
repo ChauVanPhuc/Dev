@@ -55,4 +55,22 @@ yarn-error.log*
 
 # Database and Uploads
 BackEnd/app.db
+BackEnd/test_db.db
+*.db
 BackEnd/static/uploads/
+BackEnd/modules/claim_imports/
+
+# Sample Data & Excel Imports
+data/
+*.xlsx
+*.xls
+*.csv
+~$*.xlsx
+
+# Python Test Cache
+.pytest_cache/
+.pytest/
+htmlcov/
+.coverage
+.coverage.*
+.cache/

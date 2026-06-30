@@ -8,8 +8,8 @@ from modules.auth.models.accounts import Account
 
 def test_returns_and_confirmation_flow(client, db_session):
     # 1. Create a sender account and a receiver account
-    client.post("/accounts/", json={"username": "qc_user", "password": "123", "full_name": "QC Controller"})
-    client.post("/accounts/", json={"username": "sx_user", "password": "123", "full_name": "SX Worker"})
+    client.post("/accounts/", json={"username": "qc_user", "password": "123", "full_name": "QC Controller", "phone": "0987654302"})
+    client.post("/accounts/", json={"username": "sx_user", "password": "123", "full_name": "SX Worker", "phone": "0987654303"})
     
     qc_res = client.post("/accounts/login", data={"username": "qc_user", "password": "123"}).json()
     sx_res = client.post("/accounts/login", data={"username": "sx_user", "password": "123"}).json()

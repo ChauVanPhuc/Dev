@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Menu, ArrowLeft, Bell, Sparkles, Plus, Trash2, MessageSquare, Send, X, History, RotateCcw } from 'lucide-react';
+import { Menu, ArrowLeft, Bell, Sparkles, Plus, Trash2, MessageSquare, Send, X, History, RotateCcw, Monitor } from 'lucide-react';
 import { 
   ResponsiveContainer, ComposedChart, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, 
   XAxis, YAxis, CartesianGrid, Tooltip, Legend 
@@ -380,6 +380,65 @@ const PortalLayout = () => {
   const [modalConfig, setModalConfig] = useState({ visible: false, title: '', message: '', type: 'info' });
   const [uploads, setUploads] = useState([]);
   const notificationRef = useRef(null);
+
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    return localStorage.getItem('smartflow_sidebar_collapsed') === 'true';
+  });
+
+  const [layoutMode, setLayoutMode] = useState(() => {
+    return localStorage.getItem('smartflow_layout_mode') || 'responsive';
+  });
+  const [scaleFactor, setScaleFactor] = useState(1);
+
+  const toggleLayoutMode = () => {
+    setLayoutMode(prev => {
+      const next = prev === 'responsive' ? 'fit-to-screen' : 'responsive';
+      localStorage.setItem('smartflow_layout_mode', next);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (layoutMode !== 'fit-to-screen') {
+      setScaleFactor(1);
+      return;
+    }
+    const handleResize = () => {
+      const standardWidth = 1920;
+      const currentWidth = window.innerWidth;
+      // Tránh scale trên các màn hình quá nhỏ như di động
+      if (currentWidth < 993) {
+        setScaleFactor(1);
+        return;
+      }
+      setScaleFactor(currentWidth / standardWidth);
+    };
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    return () => window.removeEventListener('resize', handleResize);
+  }, [layoutMode]);
+
+  useEffect(() => {
+    if (layoutMode === 'fit-to-screen') {
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.documentElement.style.overflow = '';
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.documentElement.style.overflow = '';
+      document.body.style.overflow = '';
+    };
+  }, [layoutMode]);
+
+  const toggleSidebarCollapse = () => {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('smartflow_sidebar_collapsed', String(next));
+      return next;
+    });
+  };
 
   // --- CHATBOT SYSTEM STATES ---
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -1019,7 +1078,18 @@ const PortalLayout = () => {
   const showBackButton = pathSegments.length >= 3;
 
   return (
-    <div className="admin-layout">
+    <div 
+      className={`admin-layout ${layoutMode === 'fit-to-screen' && scaleFactor !== 1 ? 'fit-to-screen-active' : ''}`}
+      style={layoutMode === 'fit-to-screen' && scaleFactor !== 1 ? {
+        transform: `scale(${scaleFactor})`,
+        transformOrigin: 'top left',
+        width: `${100 / scaleFactor}%`,
+        maxWidth: 'none',
+        height: `${100 / scaleFactor}vh`,
+        minHeight: `${100 / scaleFactor}vh`,
+        '--scale-factor': scaleFactor
+      } : {}}
+    >
       {/* Backdrop for Mobile Sidebar */}
       {sidebarActive && (
         <div 
@@ -1031,20 +1101,28 @@ const PortalLayout = () => {
       {/* Unified State-Aware Sidebar */}
       <Sidebar 
         active={sidebarActive} 
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={toggleSidebarCollapse}
         onLogout={handleLogout} 
         onClose={() => setSidebarActive(false)}
         uploads={uploads}
       />
 
       {/* Main Content Pane */}
-      <div className="admin-main">
+      <div className={`admin-main ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
         {/* Header Section */}
         <header className="admin-header">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
             <div className="header-left">
               <button 
                 className="toggle-sidebar-btn"
-                onClick={() => setSidebarActive(!sidebarActive)}
+                onClick={() => {
+                  if (window.innerWidth >= 993) {
+                    toggleSidebarCollapse();
+                  } else {
+                    setSidebarActive(!sidebarActive);
+                  }
+                }}
               >
                 <Menu size={20} />
               </button>
@@ -1091,6 +1169,40 @@ const PortalLayout = () => {
                   <ArrowLeft size={16} /> Quay lại
                 </button>
               )}
+
+              {/* Layout Mode Settings Toggle Button */}
+              <button 
+                className="header-layout-toggle-btn"
+                onClick={toggleLayoutMode}
+                title={layoutMode === 'responsive' ? "Chuyển sang chế độ Vừa màn hình (Fit to Screen)" : "Chuyển sang chế độ Co giãn (Responsive)"}
+                style={{
+                  background: '#FAF6F0',
+                  border: '1.5px solid #EADCC9',
+                  color: '#7B5233',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '0.85rem',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 2px 4px rgba(123, 82, 51, 0.05)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = '#7B5233';
+                  e.currentTarget.style.backgroundColor = '#FAF6F0';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = '#EADCC9';
+                }}
+              >
+                <Monitor size={16} />
+                <span className="layout-mode-text" style={{ display: 'inline' }}>
+                  {layoutMode === 'responsive' ? 'Tự co giãn' : 'Vừa màn hình'}
+                </span>
+              </button>
 
               {/* Notification dropdown (Only for Admin dashboard/pages) */}
               {isAdmin && (
@@ -1382,6 +1494,23 @@ const PortalLayout = () => {
           position: relative;
           max-width: 100vw;
         }
+        .admin-layout.fit-to-screen-active .admin-sidebar {
+          height: 100% !important;
+          min-height: 100% !important;
+        }
+        .admin-layout.fit-to-screen-active .admin-main {
+          height: 100% !important;
+          min-height: 100% !important;
+          overflow: hidden !important;
+        }
+        .admin-layout.fit-to-screen-active .dashboard-content {
+          height: calc(100% - 60px) !important;
+          overflow-y: auto !important;
+          background-color: #F8FAFC !important;
+        }
+        .admin-layout.fit-to-screen-active .admin-list-layout {
+          height: calc((100vh / var(--scale-factor, 1)) - 250px) !important;
+        }
         .sidebar-backdrop {
           position: fixed;
           top: 0;
@@ -1406,8 +1535,30 @@ const PortalLayout = () => {
             margin-left: 260px;
             width: calc(100% - 260px);
           }
-          .toggle-sidebar-btn {
+          .admin-main.sidebar-collapsed {
+            margin-left: 80px !important;
+            width: calc(100% - 80px) !important;
+          }
+          .admin-sidebar.collapsed {
+            width: 80px !important;
+          }
+          .admin-sidebar.collapsed .sidebar-user-section {
+            padding: 20px 10px !important;
+            justify-content: center !important;
+          }
+          .admin-sidebar.collapsed .nav-text,
+          .admin-sidebar.collapsed .chevron-icon,
+          .admin-sidebar.collapsed .sidebar-footer,
+          .admin-sidebar.collapsed .sidebar-group-children {
             display: none !important;
+          }
+          .admin-sidebar.collapsed .nav-link-direct,
+          .admin-sidebar.collapsed .sidebar-group-header {
+            justify-content: center !important;
+            padding: 12px 0 !important;
+          }
+          .admin-sidebar.collapsed .nav-icon {
+            margin-right: 0 !important;
           }
         }
         .admin-header {

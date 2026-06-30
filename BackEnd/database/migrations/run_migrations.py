@@ -7,6 +7,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 from sqlalchemy import text
 from config.database import get_db
+from database.migrations.update_account_email_phone import run_migration as run_account_migration
+from database.migrations.add_reporter_to_screen_bugs import run_migration as run_screen_bug_reporter_migration
 
 def run_allocation_method_migration():
     """Add allocation_method column to delivery_returns table"""
@@ -115,6 +117,8 @@ if __name__ == "__main__":
         run_sx_confirmation_migration()
         run_input_inspection_specification_migration()
         run_input_inspection_cont_name_migration()
+        run_account_migration()
+        run_screen_bug_reporter_migration()
         print("-" * 50)
         print("[SUCCESS] All migrations completed successfully!")
     except Exception as e:

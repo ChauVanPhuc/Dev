@@ -326,7 +326,7 @@ const AddProductionPlan = () => {
                 });
             }
             alert('Đã lưu Kế hoạch Sản xuất thành công!');
-            navigate('/manufacture/plan');
+            navigate('/admin/plan');
         } catch (error) {
             console.error(error);
             alert(`Có lỗi xảy ra khi lưu dữ liệu.`);

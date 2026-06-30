@@ -159,6 +159,130 @@ def allocate_delivery_fifo(db: Session, delivery_id: int, plan_id: int, part_nam
     
     db.flush()
 
+@router.get("/history")
+def get_delivery_history(
+    plan_id: Optional[int] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    status: Optional[str] = None,
+    stage: Optional[str] = None,
+    ticket_type: Optional[str] = None,
+    sort_order: str = "desc",
+    skip: int = 0,
+    limit: int = 20,
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy lịch sử bàn giao với bộ lọc server-side và phân trang.
+    Dành cho trang Mobile 'Lịch sử bàn giao'.
+    """
+    from sqlalchemy.orm import aliased
+
+    Sender = aliased(AccountModel)
+    Receiver = aliased(AccountModel)
+
+    base_query = db.query(
+        DeliveryModel.id,
+        DeliveryModel.delivery_stage,
+        DeliveryModel.receiving_stage,
+        DeliveryModel.part_name,
+        DeliveryModel.specification,
+        DeliveryModel.quantity_total,
+        DeliveryModel.quantity_received,
+        DeliveryModel.quantity_returned,
+        DeliveryModel.status,
+        DeliveryModel.created_at,
+        DeliveryModel.note,
+        DeliveryModel.residual,
+        DeliveryModel.plan_id,
+        Sender.full_name.label("sx_delivery_name"),
+        Receiver.full_name.label("sx_receipt_name")
+    ).outerjoin(
+        Sender, DeliveryModel.sx_delivery == Sender.id
+    ).outerjoin(
+        Receiver, DeliveryModel.sx_receipt == Receiver.id
+    )
+
+    # Áp dụng các bộ lọc
+    if plan_id is not None:
+        base_query = base_query.filter(DeliveryModel.plan_id == plan_id)
+
+    if date_from:
+        try:
+            dt_from = datetime.datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+            base_query = base_query.filter(DeliveryModel.created_at >= dt_from)
+        except ValueError:
+            pass
+
+    if date_to:
+        try:
+            dt_to = datetime.datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+            # Cộng thêm 1 ngày để bao gồm cả ngày kết thúc
+            dt_to = dt_to + datetime.timedelta(days=1)
+            base_query = base_query.filter(DeliveryModel.created_at < dt_to)
+        except ValueError:
+            pass
+
+    if status and status != "Tất cả":
+        base_query = base_query.filter(DeliveryModel.status == status)
+
+    if stage and stage != "Tất cả":
+        base_query = base_query.filter(
+            or_(
+                DeliveryModel.delivery_stage == stage,
+                DeliveryModel.receiving_stage == stage
+            )
+        )
+
+    if ticket_type == "delivery":
+        # Chỉ lấy phiếu mà user đang giao (delivery_stage)
+        base_query = base_query.filter(DeliveryModel.delivery_stage.isnot(None))
+    elif ticket_type == "receive":
+        # Chỉ lấy phiếu mà user đang nhận (receiving_stage)
+        base_query = base_query.filter(DeliveryModel.receiving_stage.isnot(None))
+
+    # Đếm tổng số bản ghi khớp bộ lọc (trước khi phân trang)
+    total_count = base_query.count()
+
+    # Sắp xếp
+    if sort_order == "asc":
+        base_query = base_query.order_by(DeliveryModel.created_at.asc())
+    else:
+        base_query = base_query.order_by(DeliveryModel.created_at.desc())
+
+    # Phân trang
+    items = base_query.offset(skip).limit(limit).all()
+
+    has_more = (skip + limit) < total_count
+
+    # Chuyển kết quả thành dict
+    result_items = []
+    for row in items:
+        result_items.append({
+            "id": row.id,
+            "delivery_stage": row.delivery_stage,
+            "receiving_stage": row.receiving_stage,
+            "part_name": row.part_name,
+            "specification": row.specification,
+            "quantity_total": row.quantity_total,
+            "quantity_received": row.quantity_received,
+            "quantity_returned": row.quantity_returned,
+            "status": row.status,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "note": row.note,
+            "residual": row.residual or 0,
+            "plan_id": row.plan_id,
+            "sx_delivery_name": row.sx_delivery_name,
+            "sx_receipt_name": row.sx_receipt_name,
+            "images": []
+        })
+
+    return {
+        "items": result_items,
+        "total_count": total_count,
+        "has_more": has_more
+    }
+
 @router.get("/next-id")
 def get_next_delivery_id(db: Session = Depends(get_db)):
     """Lấy ID dự kiến cho phiếu tiếp theo"""
@@ -353,10 +477,50 @@ async def create_delivery(
             f.write(f"CRITICAL ERROR: {str(e)}\n")
         raise HTTPException(status_code=500, detail=f"Lỗi khi lưu phiếu bàn giao: {str(e)}")
 
+@router.get("/available-dates")
+def get_available_dates(db: Session = Depends(get_db)):
+    """
+    [GET] Lấy danh sách các năm và tháng có dữ liệu bàn giao thực tế trong database.
+    """
+    from sqlalchemy import extract
+    
+    # Lấy các năm và tháng duy nhất từ DeliveryModel.created_at
+    dates_query = db.query(
+        extract('year', DeliveryModel.created_at).label('year'),
+        extract('month', DeliveryModel.created_at).label('month')
+    ).distinct().all()
+    
+    mapping = {}
+    for r in dates_query:
+        y, m = r[0], r[1]
+        if y is not None and m is not None:
+            y_int = int(y)
+            m_int = int(m)
+            if y_int not in mapping:
+                mapping[y_int] = []
+            if m_int not in mapping[y_int]:
+                mapping[y_int].append(m_int)
+                
+    # Sắp xếp các tháng tăng dần cho mỗi năm
+    for y in mapping:
+        mapping[y].sort()
+        
+    # Sắp xếp các năm giảm dần
+    sorted_mapping = {str(k): mapping[k] for k in sorted(mapping.keys(), reverse=True)}
+    
+    # Trường hợp không có dữ liệu nào
+    if not sorted_mapping:
+        now = datetime.datetime.now()
+        sorted_mapping = {str(now.year): [now.month]}
+        
+    return sorted_mapping
+
 @router.get("/", response_model=List[DeliveryDashboardResponse])
 def get_all_deliveries(
     skip: int = 0,
-    limit: int = 100,
+    limit: Optional[int] = 100,
+    year: Optional[int] = None,
+    month: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     """
@@ -386,16 +550,37 @@ def get_all_deliveries(
         Sender, DeliveryModel.sx_delivery == Sender.id
     ).outerjoin(
         Receiver, DeliveryModel.sx_receipt == Receiver.id
-    ).order_by(DeliveryModel.id.desc())
+    )
 
-    results = query.offset(skip).limit(limit).all()
+    if year is not None and month is not None:
+        start_date = datetime.datetime(year, month, 1, 0, 0, 0)
+        if month == 12:
+            end_date = datetime.datetime(year + 1, 1, 1, 0, 0, 0)
+        else:
+            end_date = datetime.datetime(year, month + 1, 1, 0, 0, 0)
+        query = query.filter(DeliveryModel.created_at >= start_date, DeliveryModel.created_at < end_date)
+    elif year is not None:
+        start_date = datetime.datetime(year, 1, 1, 0, 0, 0)
+        end_date = datetime.datetime(year + 1, 1, 1, 0, 0, 0)
+        query = query.filter(DeliveryModel.created_at >= start_date, DeliveryModel.created_at < end_date)
+
+    query = query.order_by(DeliveryModel.id.desc())
+
+    if skip > 0:
+        query = query.offset(skip)
+    if limit is not None and limit > 0:
+        query = query.limit(limit)
+
+    results = query.all()
     return results
 
 
 @router.get("/exceptions", response_model=List[DeliveryDashboardResponse])
 def get_exception_deliveries(
     skip: int = 0, 
-    limit: int = 100, 
+    limit: Optional[int] = 100, 
+    year: Optional[int] = None,
+    month: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     """
@@ -451,9 +636,28 @@ def get_exception_deliveries(
             # Hàng lỗi
             DeliveryModel.quantity_error > 0
         )
-    ).order_by(DeliveryModel.id.desc())
+    )
 
-    results = query.offset(skip).limit(limit).all()
+    if year is not None and month is not None:
+        start_date = datetime.datetime(year, month, 1, 0, 0, 0)
+        if month == 12:
+            end_date = datetime.datetime(year + 1, 1, 1, 0, 0, 0)
+        else:
+            end_date = datetime.datetime(year, month + 1, 1, 0, 0, 0)
+        query = query.filter(DeliveryModel.created_at >= start_date, DeliveryModel.created_at < end_date)
+    elif year is not None:
+        start_date = datetime.datetime(year, 1, 1, 0, 0, 0)
+        end_date = datetime.datetime(year + 1, 1, 1, 0, 0, 0)
+        query = query.filter(DeliveryModel.created_at >= start_date, DeliveryModel.created_at < end_date)
+
+    query = query.order_by(DeliveryModel.id.desc())
+
+    if skip > 0:
+        query = query.offset(skip)
+    if limit is not None and limit > 0:
+        query = query.limit(limit)
+
+    results = query.all()
     return results
 
 

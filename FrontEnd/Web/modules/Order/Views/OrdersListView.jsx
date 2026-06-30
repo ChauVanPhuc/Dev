@@ -203,7 +203,7 @@ const Orders = () => {
                     
                     <div className="toolbar-right">
                         <button 
-                            onClick={() => navigate('/manufacture/orders/create')} 
+                            onClick={() => navigate('/admin/orders/create')} 
                             className="btn btn-primary"
                             style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                         >
@@ -253,7 +253,7 @@ const Orders = () => {
                                             {status.text}
                                         </span>
                                         <div className="order-actions">
-                                            <button className="btn-icon" onClick={() => navigate(`/manufacture/orders/${order.id}`)} title="Xem chi tiết">
+                                            <button className="btn-icon" onClick={() => navigate(`/admin/orders/${order.id}`)} title="Xem chi tiết">
                                                 <Eye size={16} />
                                             </button>
                                             <button className="btn-icon" title="Chỉnh sửa">
@@ -368,7 +368,7 @@ const Orders = () => {
                         else if (status.text === 'Quá hạn') cardStatusClass = 'overdue';
 
                         return (
-                            <div key={order.id} className={`plan-mobile-card status-${cardStatusClass} card-shadow animate-card-entrance`} onClick={() => navigate(`/manufacture/orders/${order.id}`)}>
+                            <div key={order.id} className={`plan-mobile-card status-${cardStatusClass} card-shadow animate-card-entrance`} onClick={() => navigate(`/admin/orders/${order.id}`)}>
                                 <div className="card-header">
                                     <span className="card-khsx">{order.order_code}</span>
                                     <span className="status-badge" style={{ backgroundColor: status.bg, color: status.color }}>

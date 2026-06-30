@@ -303,7 +303,7 @@ const OrderCreate = () => {
             };
             const result = await orderService.create(payload);
             setSaveMsg({ type: 'success', text: `Đã tạo Đơn hàng ${result.order_code} thành công!` });
-            setTimeout(() => navigate('/manufacture/orders'), 1500);
+            setTimeout(() => navigate('/admin/orders'), 1500);
         } catch (error) {
             setSaveMsg({ type: 'error', text: 'Lỗi khi lưu dữ liệu. Thử lại sau.' });
         } finally {

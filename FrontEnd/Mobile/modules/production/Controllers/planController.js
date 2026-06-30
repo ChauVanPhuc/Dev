@@ -74,6 +74,8 @@ export const usePlanController = () => {
       }
       if (simple) {
         url += `&simple=true`
+      } else {
+        url += `&simple=false`
       }
       if (orderIds && orderIds !== 'ALL') {
         url += `&order_ids=${orderIds}`

@@ -37,6 +37,11 @@ class ConnectionManager:
                     # Bỏ qua các kết nối đã chết nhưng chưa kịp xóa
                     pass
 
+    async def broadcast_all(self, message: dict):
+        """Gửi tin nhắn Realtime cho tất cả các thiết bị/tab đang kết nối của tất cả người dùng"""
+        for user_id in list(self.active_connections.keys()):
+            await self.send_personal_message(user_id, message)
+
     async def broadcast_to_stage(self, db, stage_name: str, message: dict, role_filter: str = None):
         """
         Gửi tin nhắn Realtime cho TOÀN BỘ nhân viên thuộc một Công đoạn cụ thể.

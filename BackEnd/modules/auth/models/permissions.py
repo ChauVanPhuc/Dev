@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer
+from sqlalchemy import Column, Integer, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.mssql import NVARCHAR
 from config.database import Base
@@ -14,6 +14,8 @@ class Permission(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(NVARCHAR(100), nullable=False) # Tên quyền
     description = Column(NVARCHAR(255))         # Mô tả quyền hạn
+    is_active = Column(Boolean, default=True)   # Trạng thái hoạt động
+    default_permissions = Column(NVARCHAR(None), nullable=True) # Quyền mặc định của chức vụ dạng JSON string
 
     # Quan hệ Many-to-Many tới Role (Vai trò)
     roles = relationship("Role", secondary=role_permission, back_populates="permissions")

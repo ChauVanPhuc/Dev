@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from modules.auth.models.accounts import Account
 from modules.auth.models.departments import Department
 from modules.auth.models.role import Role
+from modules.auth.models.permissions import Permission
 from modules.production.models.stages import Stage
 from modules.auth.schemas.accounts import AccountCreate, AccountUpdate
 from config.security import get_password_hash
@@ -50,6 +51,7 @@ def get_accounts(db: Session, skip: int = 0, limit: int = 10, search: str = None
         "id": Account.id,
         "full_name": Account.full_name,
         "employee_id": Account.employee_id,
+        "phone": Account.phone,
         "created_at": Account.created_at,
         "status": Account.status,
     }
@@ -74,17 +76,23 @@ def get_accounts(db: Session, skip: int = 0, limit: int = 10, search: str = None
         
         role_names = []
         stage_names = []
+        permission_names = []
         for dept in depts:
             if dept.role_id:
                 role = db.query(Role).filter(Role.id == dept.role_id).first()
                 if role and role.name not in role_names:
                     role_names.append(role.name)
+            if dept.permission_id:
+                perm = db.query(Permission).filter(Permission.id == dept.permission_id).first()
+                if perm and perm.name not in permission_names:
+                    permission_names.append(perm.name)
             if dept.stage_id:
                 stage_obj = db.query(Stage).filter(Stage.id == dept.stage_id).first()
                 if stage_obj and stage_obj.name not in stage_names:
                     stage_names.append(stage_obj.name)
                     
         acc_dict["role_name"] = ", ".join(role_names) if role_names else None
+        acc_dict["permission_name"] = ", ".join(permission_names) if permission_names else None
         acc_dict["stage_name"] = ", ".join(stage_names) if stage_names else None
         items.append(acc_dict)
 
@@ -97,6 +105,14 @@ def get_account_by_username(db: Session, username: str):
     Thường dùng trong quy trình xác thực (Login) và kiểm tra tính duy nhất khi tạo mới.
     """
     return db.query(Account).filter(Account.username == username).first()
+
+def get_account_by_phone(db: Session, phone: str):
+    """
+    Truy vấn thông tin tài khoản dựa trên số điện thoại duy nhất.
+    """
+    if not phone:
+        return None
+    return db.query(Account).filter(Account.phone == phone).first()
 
 def create_account(db: Session, account: AccountCreate):
     """
@@ -120,11 +136,13 @@ def create_account(db: Session, account: AccountCreate):
     db_account = Account(
         username=account.username,
         email=account.email,
+        phone=account.phone,
         hashed_password=hashed_password,
         is_active=account.is_active,
         employee_id=account.employee_id or account.employee_code,
         full_name=account.full_name or account.name,
-        status=getattr(account, 'status', None) or "Đang sử dụng"
+        status=getattr(account, 'status', None) or "Đang sử dụng",
+        permission_level=account.permission_level
     )
     db.add(db_account)
     db.flush() # Lưu tạm để lấy auto-increment ID cho bước tiếp theo
@@ -183,3 +201,207 @@ def update_account(db: Session, account_id: int, account: AccountUpdate):
         db.commit()
         db.refresh(db_account)
     return db_account
+
+def resolve_user_permissions(user, db: Session) -> dict:
+    """
+    Phân giải quyền thực tế của User cho từng màn hình:
+    - IT/BGD: Toàn bộ màn hình hệ thống.
+    - Sx: Chỉ các màn hình thuộc Module sản xuất và KPI. Các màn hình khác là 'none'.
+    - QLCL: Chỉ các màn hình thuộc Module chất lượng và KPI. Các màn hình khác là 'none'.
+    - Khối Công nhân trực tiếp (NV SX, NV QC): Kế thừa trực tiếp từ Chức Vụ (permissions.default_permissions) mà không lọc qua permission_level.
+    - Lọc qua Cấp bậc quyền hạn (permission_level) đối với văn phòng/quản lý:
+      + Không được phép -> 'none' cho tất cả.
+      + Chỉ xem -> 'read' cho tất cả màn hình được phép.
+      + Thêm / Sửa / Xóa / Duyệt / Xuất nhập file -> Giới hạn cấp bậc (min) đối với mặc định bộ phận.
+    - Ghi đè cá nhân (ACL Overrides) ở accounts.screen_permissions có độ ưu tiên cao nhất,
+      chứa các quyền hạn chi tiết trên từng trang.
+    """
+    import json
+    
+    ALL_SCREENS = [
+        "users", "quality-records", "screens", "logs", "feedback", "data", "bugs", "monitor",
+        "plan", "delivery-tracking", "exception-deliveries", "home", "backup-qrs",
+        "defects", "claim", "reports", "handovers", "hotspots",
+        "products", "equipment", "shipments", "prices", "kpi",
+        "purchase-requisitions", "purchase-order-items",
+        # Mobile screens
+        "mobile_delivery-info", "mobile_delivery-create", "mobile_delivery-receive", "mobile_thermal-print",
+        "mobile_plan", "mobile_inspection-daily", "mobile_inspection-stage", "mobile_quality-detail",
+        "mobile_input-inspection", "mobile_logs", "mobile_capa-list", "mobile_capa-report",
+        "mobile_capa-detail", "mobile_feedback", "mobile_awards", "mobile_kpi", "mobile_kpi-staff",
+        "mobile_staff-evaluation", "mobile_equipment-list"
+    ]
+    
+    # 2. Quyền mặc định hệ thống ban đầu (Default deny)
+    resolved_perms = {screen: "none" for screen in ALL_SCREENS}
+    
+    # Root admin luôn có toàn bộ quyền cao nhất
+    if user.username == "admin":
+        return {screen: "export_import" for screen in ALL_SCREENS}
+    
+    # 3. Lấy thông tin Department (Bộ phận & Chức vụ) của User
+    dept = db.query(Department).filter(Department.account_id == user.id).first()
+    
+    if dept:
+        role_name = None
+        role_default_perms = {}
+        permission_name = None
+        permission_default_perms = {}
+        
+        # Lấy tên và quyền mặc định của Chức vụ (Permission)
+        if dept.permission_id:
+            perm = db.query(Permission).filter(Permission.id == dept.permission_id).first()
+            if perm:
+                permission_name = perm.name
+                if perm.default_permissions:
+                    try:
+                        permission_default_perms = json.loads(perm.default_permissions)
+                    except Exception:
+                        permission_default_perms = {}
+                        
+        # Lấy tên và quyền mặc định của Bộ phận (Role)
+        if dept.role_id:
+            role = db.query(Role).filter(Role.id == dept.role_id).first()
+            if role:
+                role_name = role.name
+                if role.default_permissions:
+                    try:
+                        role_default_perms = json.loads(role.default_permissions)
+                    except Exception:
+                        role_default_perms = {}
+        
+        # Kiểm tra nếu là Khối Công nhân trực tiếp (NV SX, NV QC)
+        if permission_name in ("NV SX", "NV QC"):
+            # Kế thừa trực tiếp từ Chức vụ (permissions.default_permissions)
+            for screen in ALL_SCREENS:
+                val = permission_default_perms.get(screen, "none")
+                # Chuẩn hóa giá trị
+                if val == "write":
+                    resolved_perms[screen] = "export_import"
+                else:
+                    resolved_perms[screen] = val
+        else:
+            # Khối Văn phòng / Quản lý
+            # Xác định danh sách màn hình thuộc thẩm quyền bộ phận (Lớp 1)
+            allowed_screens = []
+            if role_name in ("IT", "BGD"):
+                allowed_screens = ALL_SCREENS
+            elif role_name == "Sx":
+                allowed_screens = [
+                    "plan", "delivery-tracking", "exception-deliveries", "home", "backup-qrs", "kpi",
+                    "mobile_plan", "mobile_delivery-info", "mobile_delivery-create", "mobile_delivery-receive", "mobile_thermal-print",
+                    "mobile_kpi"
+                ]
+            elif role_name == "QLCL":
+                allowed_screens = [
+                    "defects", "claim", "reports", "handovers", "hotspots", "kpi",
+                    "mobile_inspection-daily", "mobile_inspection-stage", "mobile_quality-detail",
+                    "mobile_input-inspection", "mobile_logs", "mobile_capa-list", "mobile_capa-report",
+                    "mobile_capa-detail", "mobile_feedback", "mobile_kpi", "mobile_kpi-staff",
+                    "mobile_staff-evaluation"
+                ]
+                
+            # Xác định permission_level (Lớp 2)
+            level = user.permission_level
+            if not level:
+                if role_name in ("IT", "BGD"):
+                    level = "Xuất nhập file"
+                else:
+                    level = "Không được phép"
+            
+            # Phân cấp thứ tự các quyền
+            levels_hierarchy = ["none", "read", "create", "edit", "delete", "approve", "export_import"]
+            
+            base_map = {
+                "none": "none",
+                "read": "read",
+                "write": "export_import",
+                "export_import": "export_import",
+            }
+            
+            cap_map = {
+                "Không được phép": "none",
+                "Chỉ xem": "read",
+                "Thêm": "create",
+                "Sửa": "edit",
+                "Xóa": "delete",
+                "Duyệt": "approve",
+                "Xuất nhập file": "export_import"
+            }
+            
+            norm_cap = cap_map.get(level, "none")
+            try:
+                idx_cap = levels_hierarchy.index(norm_cap)
+            except ValueError:
+                idx_cap = 0
+            
+            # Áp dụng quyền mặc định của bộ phận và lọc giới hạn qua permission_level
+            for screen in allowed_screens:
+                base_val = role_default_perms.get(screen, "write")
+                norm_base = base_map.get(base_val, "none")
+                try:
+                    idx_base = levels_hierarchy.index(norm_base)
+                except ValueError:
+                    idx_base = 0
+                
+                # Quyền thực tế sau khi áp dụng cấp bậc giới hạn (min)
+                resolved_idx = min(idx_base, idx_cap)
+                resolved_perms[screen] = levels_hierarchy[resolved_idx]
+
+    legacy_rank_map = {
+        "none": [],
+        "read": ["read"],
+        "create": ["read", "create"],
+        "edit": ["read", "create", "edit"],
+        "delete": ["read", "create", "edit", "delete"],
+        "approve": ["read", "create", "edit", "delete", "approve"],
+        "export_import": ["read", "create", "edit", "delete", "approve", "export_import"],
+        "write": ["read", "create", "edit", "delete", "approve", "export_import"],
+    }
+
+    # Chuyển đổi các quyền mặc định thành danh sách hành động
+    resolved_actions = {}
+    for screen, val in resolved_perms.items():
+        resolved_actions[screen] = legacy_rank_map.get(val, [])
+
+    # 4. Ghi đè cá nhân (ACL Overrides) - có độ ưu tiên cao nhất
+    if user.screen_permissions:
+        try:
+            overrides = json.loads(user.screen_permissions)
+            for screen, val in overrides.items():
+                if screen in resolved_actions:
+                    # Phân tích giá trị ghi đè
+                    actions = []
+                    if isinstance(val, list):
+                        actions = val
+                    elif isinstance(val, str):
+                        if "," in val:
+                            actions = [a.strip() for a in val.split(",") if a.strip()]
+                        else:
+                            actions = legacy_rank_map.get(val, [])
+                    
+                    # Chuẩn hóa 'write' thành 'export_import' và lọc hành động hợp lệ
+                    valid_actions = ["read", "create", "edit", "delete", "approve", "export_import"]
+                    normalized_actions = []
+                    for act in actions:
+                        norm = "export_import" if act == "write" else act
+                        if norm in valid_actions:
+                            normalized_actions.append(norm)
+                            
+                    # Nếu ghi đè trống hoặc là ['none'], coi như chặn hoàn toàn
+                    if not normalized_actions or "none" in actions:
+                        resolved_actions[screen] = []
+                    else:
+                        resolved_actions[screen] = normalized_actions
+        except Exception:
+            pass
+            
+    # Chuyển đổi ngược lại thành chuỗi phân tách bằng dấu phẩy
+    final_resolved = {}
+    for screen, actions in resolved_actions.items():
+        if not actions:
+            final_resolved[screen] = "none"
+        else:
+            final_resolved[screen] = ",".join(actions)
+            
+    return final_resolved

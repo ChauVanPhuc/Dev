@@ -10,6 +10,15 @@ from config.database import get_db
 from datetime import datetime
 
 INITIAL_SCREENS = [
+    # SHARED COMMON COMPONENT
+    {
+        "platform": "Shared",
+        "route_path": "/common/toolbar",
+        "default_code": "COMMON",
+        "current_code": "COMMON",
+        "title": "Toolbar / Thanh công cụ",
+        "subtitle": "Thành phần dùng chung hệ thống"
+    },
     # WEB ADMIN SCREENS
     {
         "platform": "Web",
@@ -114,6 +123,86 @@ INITIAL_SCREENS = [
         "current_code": "AD11",
         "title": "Quản lý QR dự phòng",
         "subtitle": "Cấu hình và cấp phát thẻ QR"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/defects",
+        "default_code": "AD12",
+        "current_code": "AD12",
+        "title": "Quản lý danh mục lỗi",
+        "subtitle": "Cấu hình danh sách các lỗi kiểm tra chất lượng"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/quality-records",
+        "default_code": "AD13",
+        "current_code": "AD13",
+        "title": "Hồ sơ chất lượng",
+        "subtitle": "Nhật ký và hồ sơ kiểm soát chất lượng"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/quality-records/:id",
+        "default_code": "AD13.1",
+        "current_code": "AD13.1",
+        "title": "Chi tiết hồ sơ chất lượng",
+        "subtitle": "Thông tin chi tiết kết quả đánh giá chất lượng"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/screens",
+        "default_code": "AD14",
+        "current_code": "AD14",
+        "title": "Quản lý Màn hình",
+        "subtitle": "Cấu hình và thiết kế giao diện"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/screens/:id",
+        "default_code": "AD14.1",
+        "current_code": "AD14.1",
+        "title": "Chi tiết thiết kế màn hình",
+        "subtitle": "Thông tin chi tiết cấu hình màn hình"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/monitor",
+        "default_code": "AD15",
+        "current_code": "AD15",
+        "title": "Giám sát hệ thống & CSDL",
+        "subtitle": "Theo dõi thời gian thực tài nguyên CPU, RAM, ổ đĩa và giới hạn kết nối của SQL Server"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/bugs",
+        "default_code": "AD16",
+        "current_code": "AD16",
+        "title": "Quản lý Bug",
+        "subtitle": "Quản lý và cập nhật tiến độ lỗi giao diện màn hình"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/claims",
+        "default_code": "CL1",
+        "current_code": "CL1",
+        "title": "Khiếu nại khách hàng (Claim)",
+        "subtitle": "Quản lý và giải quyết các khiếu nại chất lượng sản phẩm"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/prices",
+        "default_code": "CL2",
+        "current_code": "CL2",
+        "title": "Quản lý đơn giá",
+        "subtitle": "Quản lý đơn giá sản phẩm và cấu hình chi phí"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/shipments",
+        "default_code": "CL3",
+        "current_code": "CL3",
+        "title": "Thông tin giao hàng (Claim)",
+        "subtitle": "Theo dõi thông tin xuất xưởng hàng hóa khiếu nại"
     },
     
     # WEB MANUFACTURE SCREENS
@@ -276,7 +365,7 @@ INITIAL_SCREENS = [
         "route_path": "/inspection-stage",
         "default_code": "MB6",
         "current_code": "MB6",
-        "title": "Kiểm tra công đoạn",
+        "title": "Kiểm tra nhập kho",
         "subtitle": "Kiểm tra bán thành phẩm"
     },
     {
@@ -369,6 +458,194 @@ INITIAL_SCREENS = [
     }
 ]
 
+def extract_routes_from_file(file_path: str):
+    import re
+    if not os.path.exists(file_path):
+        print(f"[AUTO-REGISTER] File not found: {file_path}")
+        return []
+    with open(file_path, "r", encoding="utf-8") as f:
+        content = f.read()
+    
+    # Remove comments
+    content = re.sub(r'//.*', '', content)
+    content = re.sub(r'/\*.*?\*/', '', content, flags=re.DOTALL)
+    
+    routes = []
+    lines = content.split('\n')
+    current_parents = [] # Stack of (indent_level, path)
+    
+    for line in lines:
+        path_match = re.search(r'path=["\']([^"\']+)["\']', line)
+        is_index = "index" in line
+        
+        if path_match:
+            path = path_match.group(1)
+            indent = len(line) - len(line.lstrip())
+            
+            while current_parents and current_parents[-1][0] >= indent:
+                current_parents.pop()
+                
+            if current_parents:
+                parent_path = current_parents[-1][1]
+                if parent_path.endswith('/') or path.startswith('/'):
+                    full_path = f"{parent_path.rstrip('/')}/{path.lstrip('/')}"
+                else:
+                    full_path = f"{parent_path}/{path}"
+            else:
+                full_path = path
+                
+            if not full_path.endswith('*'):
+                routes.append(full_path)
+                
+            if '/>' not in line:
+                current_parents.append((indent, full_path))
+                
+        elif is_index and current_parents:
+            routes.append(current_parents[-1][1])
+            
+    unique_routes = []
+    for r in routes:
+        r = r.strip()
+        if not r.startswith('/'):
+            r = '/' + r
+        r = r.rstrip('/')
+        if not r:
+            r = '/'
+        if r not in unique_routes:
+            unique_routes.append(r)
+            
+    return unique_routes
+
+def generate_default_title(path: str):
+    segments = [s for s in path.split('/') if s and not s.startswith(':')]
+    if not segments:
+        return "Trang chủ"
+    
+    last = segments[-1]
+    title = last.replace('-', ' ').replace('_', ' ').title()
+    if ':id' in path or 'detail' in path.lower():
+        title += " Detail"
+        
+    if path.startswith('/admin'):
+        title = f"Admin {title}"
+    elif path.startswith('/manufacture'):
+        title = f"Manufacture {title}"
+    return title
+
+def get_next_screen_code(db, platform: str, route_path: str) -> str:
+    if platform == "Mobile":
+        prefix = "MB"
+    else:
+        if any(keyword in route_path for keyword in ["/claims", "/prices", "/shipments", "/chatbot"]):
+            prefix = "CL"
+        elif "/manufacture" in route_path:
+            prefix = "MA"
+        else:
+            prefix = "AD"
+            
+    query = text("SELECT default_code FROM system_screens WHERE default_code LIKE :prefix")
+    result = db.execute(query, {"prefix": f"{prefix}%"}).fetchall()
+    
+    import re
+    max_num = 0
+    for row in result:
+        code = row[0]
+        match = re.match(rf"{prefix}(\d+)", code)
+        if match:
+            num = int(match.group(1))
+            if num > max_num:
+                max_num = num
+                
+    has_params = ":" in route_path
+    if has_params:
+        base_path = route_path.split("/:")[0]
+        base_query = text("SELECT default_code FROM system_screens WHERE route_path = :base_path AND platform = :platform")
+        base_result = db.execute(base_query, {"base_path": base_path, "platform": platform}).fetchone()
+        if base_result:
+            base_code = base_result[0]
+            sub_query = text("SELECT default_code FROM system_screens WHERE default_code LIKE :base_code_dot AND platform = :platform")
+            sub_result = db.execute(sub_query, {"base_code_dot": f"{base_code}.%", "platform": platform}).fetchall()
+            max_sub = 0
+            for sub_row in sub_result:
+                sub_code = sub_row[0]
+                try:
+                    sub_num = int(sub_code.split(".")[-1])
+                    if sub_num > max_sub:
+                        max_sub = sub_num
+                except ValueError:
+                    pass
+            return f"{base_code}.{max_sub + 1}"
+            
+    return f"{prefix}{max_num + 1}"
+
+def auto_register_missing_screens(db):
+    print("[AUTO-REGISTER] Scanning for missing frontend routes...")
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    
+    web_app_file = os.path.join(base_dir, "FrontEnd", "Web", "Shared", "app", "App.jsx")
+    mobile_app_file = os.path.join(base_dir, "FrontEnd", "Mobile", "app", "App.jsx")
+    
+    web_routes = extract_routes_from_file(web_app_file)
+    mobile_routes = extract_routes_from_file(mobile_app_file)
+    
+    print(f"[AUTO-REGISTER] Found {len(web_routes)} Web routes and {len(mobile_routes)} Mobile routes.")
+    
+    # Process Web routes
+    for route in web_routes:
+        if route in ["/login", "/"]:
+            continue
+        
+        # Check if already registered
+        check_query = text("SELECT COUNT(*) FROM system_screens WHERE route_path = :route_path AND platform = 'Web'")
+        exists = db.execute(check_query, {"route_path": route}).fetchone()[0]
+        
+        if exists == 0:
+            next_code = get_next_screen_code(db, "Web", route)
+            title = generate_default_title(route)
+            subtitle = f"Tự động đăng ký cho {route}"
+            
+            insert_sql = text("""
+                INSERT INTO system_screens (platform, route_path, default_code, current_code, title, subtitle, is_active, updated_at)
+                VALUES ('Web', :route_path, :code, :code, :title, :subtitle, 1, :updated_at)
+            """)
+            db.execute(insert_sql, {
+                "route_path": route,
+                "code": next_code,
+                "title": title,
+                "subtitle": subtitle,
+                "updated_at": datetime.now()
+            })
+            db.commit()
+            print(f"[AUTO-REGISTER] Registered NEW Web route: {route} -> Code: {next_code}, Title: {title}")
+            
+    # Process Mobile routes
+    for route in mobile_routes:
+        if route in ["/login", "/"]:
+            continue
+            
+        # Check if already registered
+        check_query = text("SELECT COUNT(*) FROM system_screens WHERE route_path = :route_path AND platform = 'Mobile'")
+        exists = db.execute(check_query, {"route_path": route}).fetchone()[0]
+        
+        if exists == 0:
+            next_code = get_next_screen_code(db, "Mobile", route)
+            title = generate_default_title(route)
+            subtitle = f"Tự động đăng ký cho {route}"
+            
+            insert_sql = text("""
+                INSERT INTO system_screens (platform, route_path, default_code, current_code, title, subtitle, is_active, updated_at)
+                VALUES ('Mobile', :route_path, :code, :code, :title, :subtitle, 1, :updated_at)
+            """)
+            db.execute(insert_sql, {
+                "route_path": route,
+                "code": next_code,
+                "title": title,
+                "subtitle": subtitle,
+                "updated_at": datetime.now()
+            })
+            db.commit()
+            print(f"[AUTO-REGISTER] Registered NEW Mobile route: {route} -> Code: {next_code}, Title: {title}")
+
 def upgrade():
     """Create system_screens table and seed it"""
     db = next(get_db())
@@ -440,6 +717,13 @@ def upgrade():
                 
         db.commit()
         print("[SUCCESS] Seeding completed!")
+        
+        # Run auto-registration of missing screens
+        try:
+            auto_register_missing_screens(db)
+        except Exception as e:
+            err_msg = str(e).encode('ascii', errors='ignore').decode('ascii')
+            print(f"[AUTO-REGISTER] Failed: {err_msg}")
         
     except Exception as e:
         db.rollback()

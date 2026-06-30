@@ -4,10 +4,18 @@ import api from '@webShared/Services/api.service';
 
 const deliveryService = {
 
-  getAllDeliveries: (skip = 0, limit = 100) => {
+  getAllDeliveries: (skip = 0, limit = 100, year = null, month = null) => {
+    let url = `/deliveries/?skip=${skip}`;
+    if (limit !== null && limit !== undefined && limit > 0) {
+      url += `&limit=${limit}`;
+    }
+    if (year) url += `&year=${year}`;
+    if (month) url += `&month=${month}`;
+    return api.get(url);
+  },
 
-    return api.get(`/deliveries/?skip=${skip}&limit=${limit}`);
-
+  getAvailableDates: () => {
+    return api.get('/deliveries/available-dates');
   },
 
   getDeliveryByPlan: (planId) => {
@@ -34,10 +42,14 @@ const deliveryService = {
 
   },
 
-  getExceptionDeliveries: (skip = 0, limit = 100) => {
-
-    return api.get(`/deliveries/exceptions?skip=${skip}&limit=${limit}`);
-
+  getExceptionDeliveries: (skip = 0, limit = 100, year = null, month = null) => {
+    let url = `/deliveries/exceptions?skip=${skip}`;
+    if (limit !== null && limit !== undefined && limit > 0) {
+      url += `&limit=${limit}`;
+    }
+    if (year) url += `&year=${year}`;
+    if (month) url += `&month=${month}`;
+    return api.get(url);
   },
 
   confirmDelivery: (deliveryId, data) => {

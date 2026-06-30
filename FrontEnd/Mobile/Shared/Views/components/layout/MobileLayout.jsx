@@ -30,29 +30,11 @@ const Layout = ({ children }) => {
 
   
 
-  // [NEW] Kiểm tra quyền hạn để ẩn Sidebar (Chỉ ẩn cho Nhân Viên Sản Xuất)
-
-  const userRoleStr = [
-
-    user?.permission_description,
-
-    user?.permission_name,
-
-    user?.role_description,
-
-    user?.role_name,
-
-    user?.full_name,
-
-    user?.username
-
-  ].filter(Boolean).join(' ').toLowerCase().normalize('NFC');
-
-  const isAdmin = userRoleStr.includes('admin');
-
-  const isProdStaff = (user?.permission_description || '').includes('Nhân Viên Sản Xuất') && !isAdmin;
-
-
+  const userRoleStr = (user?.role_name || user?.role_description || '').toLowerCase();
+  const userPermStr = (user?.permission_name || user?.permission_description || '').toLowerCase();
+  const userNameStr = (user?.full_name || user?.username || '').toLowerCase();
+  const combinedAuthStr = `${userRoleStr} | ${userPermStr} | ${userNameStr}`;
+  const isAdmin = combinedAuthStr.includes('admin') || combinedAuthStr.includes('it') || combinedAuthStr.includes('bgd');
 
   // [NEW] Kiểm tra nếu tài khoản có nhiều công đoạn nhưng chưa chọn công đoạn hoạt động (không chặn Admin)
 
@@ -93,9 +75,9 @@ const Layout = ({ children }) => {
 
 
 
-      {/* Menu Sidebar (Trái) - Chỉ hiện nếu không phải NV Sản Xuất và không trong trạng thái chọn công đoạn */}
+      {/* Menu Sidebar (Trái) - Chỉ hiện nếu không trong trạng thái chọn công đoạn */}
 
-      {!isStageSelectionRequired && !isProdStaff && <Sidebar />}
+      {!isStageSelectionRequired && <Sidebar />}
 
 
 

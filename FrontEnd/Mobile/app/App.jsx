@@ -5,6 +5,8 @@ import Login from '@modules/auth/Views/LoginView'
 import DeliveryInfo from '@modules/delivery/Views/DeliveryInfoView'
 import DeliveryCreate from '@modules/delivery/Views/DeliveryCreateView'
 import DeliveryReceive from '@modules/delivery/Views/DeliveryReceiveView'
+import DeliveryHistory from '@modules/delivery/Views/DeliveryHistoryView'
+import DeliveryDetail from '@modules/delivery/Views/DeliveryDetailView'
 import PlanTracking from '@modules/production/Views/PlanTrackingView'
 import DailyInspection from '@modules/inspection/Views/DailyInspectionView'
 import StageInspection from '@modules/inspection/Views/StageInspectionView'
@@ -22,6 +24,16 @@ import KPIStaffList from '@modules/kpi/Views/KPIStaffListView'
 import CAPAList from '@modules/capa/Views/CAPAListView'
 import CAPAReport from '@modules/capa/Views/CAPAReportView'
 import CAPADetail from '@modules/capa/Views/CAPADetailView'
+import DashboardView from '@modules/production/Views/DashboardView'
+import FeedbackView from '@modules/inspection/Views/FeedbackView'
+import CtqSosView from '@modules/inspection/Views/CtqSosView'
+import WarningsView from '@modules/inspection/Views/WarningsView'
+import StageAdhesionView from '@modules/inspection/Views/StageAdhesionView'
+import StagePackagingView from '@modules/inspection/Views/StagePackagingView'
+import ShapingInspectionView from '@modules/inspection/Views/ShapingInspectionView'
+import AssemblyInspectionView from '@modules/inspection/Views/AssemblyInspectionView'
+import PaintingInspectionView from '@modules/inspection/Views/PaintingInspectionView'
+import PackagingInspectionView from '@modules/inspection/Views/PackagingInspectionView'
 
 /**
  * Component xử lý nút Back vật lý của Android
@@ -65,7 +77,11 @@ function App() {
             <Route path="/delivery-info" element={<DeliveryInfo />} />
             <Route path="/delivery-create" element={<DeliveryCreate />} />
             <Route path="/delivery-receive/:id" element={<DeliveryReceive />} />
-            <Route path="/plan" element={<PlanTracking />} />
+            <Route path="/delivery-history" element={<DeliveryHistory />} />
+            <Route path="/delivery-detail/:id" element={<DeliveryDetail />} />
+            <Route path="/plan" element={<PlanTracking defaultTab="progress" />} />
+            <Route path="/plan-calendar" element={<PlanTracking defaultTab="calendar" />} />
+            <Route path="/plan-create" element={<PlanTracking defaultTab="create" />} />
             <Route path="/inspection-daily" element={<DailyInspection />} />
             <Route path="/inspection-stage" element={<StageInspection />} />
             <Route path="/logs" element={<InspectionLogs />} />
@@ -80,6 +96,16 @@ function App() {
             <Route path="/capa-list" element={<CAPAList />} />
             <Route path="/capa-report/:id" element={<CAPAReport />} />
             <Route path="/capa-detail/:capaId/:occurrenceId" element={<CAPADetail />} />
+            <Route path="/dashboard" element={<DashboardView />} />
+            <Route path="/feedback" element={<FeedbackView />} />
+            <Route path="/ctq-sos" element={<CtqSosView />} />
+            <Route path="/warnings" element={<WarningsView />} />
+            <Route path="/inspection-stage-adhesion" element={<StageAdhesionView />} />
+            <Route path="/inspection-stage-packaging" element={<StagePackagingView />} />
+            <Route path="/inspection-daily-shaping" element={<ShapingInspectionView />} />
+            <Route path="/inspection-daily-assembly" element={<AssemblyInspectionView />} />
+            <Route path="/inspection-daily-painting" element={<PaintingInspectionView />} />
+            <Route path="/inspection-daily-packaging" element={<PackagingInspectionView />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/login" replace />} />

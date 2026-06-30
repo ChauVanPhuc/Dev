@@ -38,63 +38,73 @@ const BackupQRManagement = () => {
     }, []);
 
 
-    const printQRsA5 = (items) => {
+    const printQRsA4 = (items) => {
         if (items.length === 0) return alert('Không có mã nào để in.');
         
+        // Chia các mã QR thành nhóm tối đa 4 mã trên 1 trang A4
+        const chunks = [];
+        for (let i = 0; i < items.length; i += 4) {
+            chunks.push(items.slice(i, i + 4));
+        }
+        
         const printWindow = window.open('', '_blank');
-        const content = items.map((qr) => `
-            <div class="page-a5">
+        const content = chunks.map((chunk) => {
+            const cardsHtml = chunk.map((qr) => `
                 <div class="card">
                     <div class="system-label">HỆ THỐNG SMARTFLOW</div>
                     <div class="header">THẺ LUÂN CHUYỂN</div>
                     <div class="qr-container">
-                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${qr.code}" />
+                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${qr.code}" />
                     </div>
                     <div class="code-label">${qr.code}</div>
                     <div class="footer">Quét mã để tạo phiếu bàn giao</div>
                 </div>
-            </div>
-        `).join('');
+            `).join('');
+            return `<div class="page-a4">${cardsHtml}</div>`;
+        }).join('');
 
         printWindow.document.write(`
             <html>
                 <head>
-                    <title>In Thẻ QR (A7 giữa giấy A5)</title>
+                    <title>In Thẻ QR (4 thẻ trên trang A4)</title>
                     <style>
-                        @page { size: A5 portrait; margin: 0; }
+                        @page { size: A4 portrait; margin: 0; }
                         body { margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; background: #fff; }
-                        .page-a5 { 
-                            width: 148mm; 
-                            height: 210mm; 
-                            display: flex; 
-                            align-items: center; 
-                            justify-content: center; 
+                        .page-a4 { 
+                            width: 210mm; 
+                            height: 297mm; 
+                            display: grid; 
+                            grid-template-columns: repeat(2, 1fr); 
+                            grid-template-rows: repeat(2, 1fr); 
+                            padding: 12mm; 
+                            gap: 12mm; 
                             box-sizing: border-box; 
-                            overflow: hidden; 
+                            page-break-after: always; 
                         }
-                        .page-a5:not(:last-child) { page-break-after: always; }
+                        .page-a4:last-child { page-break-after: avoid; }
                         .card { 
-                            width: 74mm; /* Kích thước A7 */
-                            height: 105mm; 
-                            border: 2px dashed #94a3b8; 
-                            border-radius: 8px; 
+                            border: 2px dashed #cbd5e1; 
+                            border-radius: 12px; 
                             display: flex; 
                             flex-direction: column; 
                             align-items: center; 
                             justify-content: space-between; 
-                            padding: 6mm; 
+                            padding: 8mm; 
                             box-sizing: border-box; 
                             text-align: center;
+                            height: 100%;
+                            background: #fff;
                         }
-                        .system-label { font-size: 10px; font-weight: 700; color: #333; margin-top: 2mm; }
-                        .header { font-size: 16px; font-weight: 900; color: #000; letter-spacing: 0.5px; margin-top: 2mm; }
-                        .qr-container { flex: 1; display: flex; align-items: center; justify-content: center; margin: 4px 0; }
-                        .qr-container img { width: 45mm; height: 45mm; object-fit: contain; }
-                        .code-label { font-size: 26px; font-weight: 900; color: #000; margin-bottom: 2mm; }
-                        .footer { font-size: 9px; color: #555; margin-bottom: 2mm; }
+                        .system-label { font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; margin-top: 2mm; }
+                        .header { font-size: 18px; font-weight: 900; color: #1e293b; letter-spacing: 1px; margin-top: 2mm; }
+                        .qr-container { flex: 1; display: flex; align-items: center; justify-content: center; margin: 6mm 0; }
+                        .qr-container img { width: 55mm; height: 55mm; object-fit: contain; }
+                        .code-label { font-size: 32px; font-weight: 900; color: #000; margin-bottom: 2mm; font-family: monospace; }
+                        .footer { font-size: 11px; color: #64748b; font-weight: 600; margin-bottom: 2mm; }
                         @media print {
                             body { -webkit-print-color-adjust: exact; }
-                            .page-a5 { page-break-after: always; }
+                            .page-a4 { page-break-after: always; }
+                            .page-a4:last-child { page-break-after: avoid; }
                         }
                     </style>
                 </head>
@@ -119,14 +129,14 @@ const BackupQRManagement = () => {
         setHeaderExtra(
             <div style={{ display: 'flex', gap: '10px' }}>
                 <button 
-                    onClick={() => printQRsA5(qrCodes)}
+                    onClick={() => printQRsA4(qrCodes)}
                     style={{ 
                         display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', 
                         backgroundColor: '#1e293b', color: '#fff', border: 'none', borderRadius: '8px',
                         cursor: 'pointer', fontWeight: '700', fontSize: '13px'
                     }}
                 >
-                    <Files size={18} /> In toàn bộ A5 (Thẻ A7)
+                    <Files size={18} /> In toàn bộ A4 (4 thẻ/tờ)
                 </button>
                 <button 
                     onClick={() => setShowAddModal(true)}
@@ -222,7 +232,7 @@ const BackupQRManagement = () => {
 
                         {selectedIds.length > 0 && (
                             <button 
-                                onClick={() => printQRsA5(qrCodes.filter(qr => selectedIds.includes(qr.id)))}
+                                onClick={() => printQRsA4(qrCodes.filter(qr => selectedIds.includes(qr.id)))}
                                 style={{ 
                                     display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', 
                                     backgroundColor: '#1e293b', color: '#fff', border: 'none', borderRadius: '10px',
@@ -311,7 +321,7 @@ const BackupQRManagement = () => {
                                 <td style={{ padding: '12px 24px', textAlign: 'right' }}>
                                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                                         <button 
-                                            onClick={() => printQRsA5([qr])} 
+                                            onClick={() => printQRsA4([qr])} 
                                             style={{ padding: '6px 12px', background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}
                                         >
                                             <Printer size={15} />

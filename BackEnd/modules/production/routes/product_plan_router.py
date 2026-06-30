@@ -7,7 +7,8 @@ from modules.delivery.models.deliveries import Delivery
 from modules.delivery.models.delivery_details import DeliveryDetails
 from modules.production.models.product import Product
 from modules.production.models.bom_detail import BOMDetail
-from modules.production.schemas.product_plan import ProductPlanCreate, ProductPlan as PlanResponse
+from modules.production.schemas.product_plan import ProductPlanCreate, ProductPlan as PlanResponse, MobileDailyPlanCreate, MobileDailyPlanResponse
+from modules.production.models.mobile_daily_plan import MobileDailyPlan
 from typing import List, Optional
 from sqlalchemy import text
 import re
@@ -135,6 +136,32 @@ _plan_detail_swr_cache = SWRCache(ttl=5.0)
 def clear_plans_cache():
     _plans_swr_cache.clear()
     _plan_detail_swr_cache.clear()
+
+@router.get("/daily")
+def get_daily_plans(
+    plan_date: Optional[str] = None,
+    plan_date_from: Optional[str] = None,
+    plan_date_to: Optional[str] = None,
+    stage: Optional[str] = None,
+    factory: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Lấy danh sách kế hoạch ngày theo bộ lọc — Đặt TRƯỚC /{id} để tránh route conflict"""
+    try:
+        query = db.query(MobileDailyPlan)
+        if plan_date:
+            query = query.filter(MobileDailyPlan.plan_date == plan_date)
+        if plan_date_from:
+            query = query.filter(MobileDailyPlan.plan_date >= plan_date_from)
+        if plan_date_to:
+            query = query.filter(MobileDailyPlan.plan_date <= plan_date_to)
+        if stage:
+            query = query.filter(MobileDailyPlan.stage == stage)
+        if factory:
+            query = query.filter(MobileDailyPlan.factory == factory)
+        return query.order_by(MobileDailyPlan.plan_date.asc()).all()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/")
 @_plans_swr_cache
@@ -534,13 +561,16 @@ def get_plan_detail(
     sort_order: Optional[str] = 'ID_DESC',
     exact_order: Optional[str] = 'ALL',
     user_stage: Optional[str] = None,
-    simple: bool = False,
+    simple: Optional[bool] = None,
     order_ids: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     # Tự động kích hoạt simple=True nếu limit == 0 và stage is None (luồng xem nhanh từ di động)
-    if limit == 0 and not stage:
-        simple = True
+    if simple is None:
+        if limit == 0 and not stage:
+            simple = True
+        else:
+            simple = False
 
     # 1. Lấy thông tin kế hoạch
     print(f"[DEBUG API] get_plan_detail called: id={id}, stage={stage}, order_ids={order_ids}")
@@ -1215,3 +1245,41 @@ def create_plan(plan_data: ProductPlanCreate, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/daily", response_model=List[MobileDailyPlanResponse])
+def create_daily_plans(plans: List[MobileDailyPlanCreate], db: Session = Depends(get_db)):
+    """Lưu danh sách kế hoạch ngày di động vào database"""
+    try:
+        inserted = []
+        for p in plans:
+            existing = db.query(MobileDailyPlan).filter(
+                MobileDailyPlan.plan_date == p.plan_date,
+                MobileDailyPlan.stage == p.stage,
+                MobileDailyPlan.factory == p.factory,
+                MobileDailyPlan.order_code == p.order_code,
+                MobileDailyPlan.part_name == p.part_name
+            ).first()
+            if existing:
+                existing.planned_qty = p.planned_qty
+                existing.remaining_qty = p.remaining_qty
+                inserted.append(existing)
+            else:
+                db_plan = MobileDailyPlan(
+                    plan_date=p.plan_date,
+                    stage=p.stage,
+                    factory=p.factory,
+                    order_code=p.order_code,
+                    part_name=p.part_name,
+                    planned_qty=p.planned_qty,
+                    remaining_qty=p.remaining_qty
+                )
+                db.add(db_plan)
+                inserted.append(db_plan)
+        db.commit()
+        for i in inserted:
+            db.refresh(i)
+        return inserted
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+

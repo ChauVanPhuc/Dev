@@ -145,7 +145,7 @@ const ManufactureProducts = () => {
           <div className="toolbar-right">
             <input type="file" id="excel-upload" style={{ display: 'none' }} accept=".xlsx, .xls" onChange={handleImportExcel} />
             <button 
-              onClick={() => navigate('/manufacture/products/create')}
+              onClick={() => navigate('/admin/products/create')}
               className="btn"
               style={{ padding: '8px 16px', backgroundColor: '#7B5233', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}
             >
@@ -231,7 +231,7 @@ const ManufactureProducts = () => {
                           </td>
                           <td data-label="Thao Tác" style={{ textAlign: 'right' }}>
                             <button 
-                              onClick={() => navigate(`/manufacture/products/${product.id}`)}
+                              onClick={() => navigate(`/admin/products/${product.id}`)}
                               style={{ marginRight: '8px', color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer' }}
                             >
                               Chi tiết
@@ -319,7 +319,7 @@ const ManufactureProducts = () => {
           <div className="mobile-only manufacture-cards-scroll">
             <div className="manufacture-cards-container">
               {products.map((product, idx) => (
-                <div key={product.id} className="plan-mobile-card status-completed card-shadow animate-card-entrance" onClick={() => navigate(`/manufacture/products/${product.id}`)}>
+                <div key={product.id} className="plan-mobile-card status-completed card-shadow animate-card-entrance" onClick={() => navigate(`/admin/products/${product.id}`)}>
                   <div className="card-header">
                     <span className="card-khsx">{product.name}</span>
                     <span className="status-badge" style={{ backgroundColor: '#ecfdf5', color: '#10b981', border: '1px solid #a7f3d0' }}>

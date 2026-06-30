@@ -188,35 +188,7 @@ export const AD3_UserManagementMock = ({
           </div>
         </InteractiveBlock>
 
-        {/* ActivityFeed Aside Column */}
-        <InteractiveBlock
-          name="ActivityFeed"
-          type={getCompType('ActivityFeed')}
-          description={getCompDesc('ActivityFeed')}
-          activeComponent={activeComponent}
-          hoveredComponent={hoveredComponent}
-          onHover={onHover}
-          onClick={onClick}
-        >
-          <div className="mock-aside-feed">
-            <div className="mock-feed-title">Hoạt động gần đây</div>
-            <div className="mock-feed-item">
-              <span className="mock-feed-user">qc17 (QLCL)</span>
-              <span className="mock-feed-action">Đã quét xác nhận nhận hàng PO-2026-004</span>
-              <span className="mock-feed-time">1 phút trước</span>
-            </div>
-            <div className="mock-feed-item">
-              <span className="mock-feed-user">admin</span>
-              <span className="mock-feed-action">Cập nhật quyền tài khoản nhân viên sx17</span>
-              <span className="mock-feed-time">12 phút trước</span>
-            </div>
-            <div className="mock-feed-item" style={{ border: 'none' }}>
-              <span className="mock-feed-user">sx15 (Sản xuất)</span>
-              <span className="mock-feed-action">Đã đăng ký thiết bị máy nén khí lỗi QC</span>
-              <span className="mock-feed-time">30 phút trước</span>
-            </div>
-          </div>
-        </InteractiveBlock>
+
         
       </div>
     </div>

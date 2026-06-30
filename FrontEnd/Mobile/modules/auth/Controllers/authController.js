@@ -58,7 +58,7 @@ export const useAuthController = () => {
           activeStageDescription: stageDescriptions.length === 1 ? stageDescriptions[0] : '',
           role: 'user' 
         }
-        setUser(userData, response.data.access_token)
+        setUser(userData, response.data.access_token, response.data.screen_permissions)
         
         // --- TÍCH HỢP THÔNG BÁO ĐẨY ---
         // Sau khi đăng nhập thành công, chúng ta lấy ID người dùng (account_id)

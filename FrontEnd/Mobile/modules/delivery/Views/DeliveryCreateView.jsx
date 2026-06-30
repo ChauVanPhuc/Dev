@@ -105,7 +105,7 @@ const MoistureStepper = ({ label, value, onChange, placeholder }) => {
 const DeliveryCreate = () => {
   const location = useLocation()
   const navigate = useNavigate()
-  const { user } = useAuthStore()
+  const { user, permissions } = useAuthStore()
 
   // Lấy ID kế hoạch được truyền sang từ màn hình trước
   const initialPlanId = location.state?.planId || ''
@@ -113,6 +113,23 @@ const DeliveryCreate = () => {
   const editDeliveryId = location.state?.editDeliveryId || null // [NEW] ID phiếu đang chỉnh sửa
   const editData = location.state?.editData || null // [NEW] Dữ liệu phiếu đang chỉnh sửa
   const isEditMode = !!editDeliveryId
+
+  const userRoleStr = [
+    user?.permission_description,
+    user?.permission_name,
+    user?.role_description,
+    user?.role_name,
+    user?.full_name,
+    user?.username
+  ].filter(Boolean).join(' ').toLowerCase().normalize('NFC');
+  const isAdmin = userRoleStr.includes('admin') || userRoleStr.includes('it') || userRoleStr.includes('bgd');
+
+  const userPerm = permissions?.['mobile_delivery-create'];
+  const hasActionPermission = isAdmin || (
+    userPerm && userPerm !== 'none' && 
+    userPerm.split(',').map(p => p.trim()).includes(isEditMode ? 'edit' : 'create')
+  );
+
   const { plans, fetchPlans, fetchDeliveriesByPlan, fetchPlanDetail } = usePlanController()
   const { createOrUpdateDelivery, fetchPartProducts, fetchInspectionsByPlan, fetchNextDeliveryId, isSubmitting } = useDeliveryController()
   const [deliveries, setDeliveries] = useState([])
@@ -896,17 +913,19 @@ const DeliveryCreate = () => {
         <div className="responsive-fixed-footer" style={{ backgroundColor: 'var(--bg-cream)',
           padding: '16px', display: 'flex', gap: '12px', borderTop: '1px solid #e2e8f0', zIndex: 30
         }}>
-          <button
-            id="delivery-submit-btn"
-            onClick={handleConfirm}
-            disabled={isSubmitting}
-            style={{
-              flex: 1, backgroundColor: isSubmitting ? '#94a3b8' : 'var(--primary-color)', color: '#fff', border: 'none', borderRadius: '12px',
-              padding: '14px', fontSize: '1rem', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
-            }}
-          >
-            {isSubmitting ? 'Đang lưu...' : <><Check size={20} /> Xác nhận</>}
-          </button>
+          {hasActionPermission && (
+            <button
+              id="delivery-submit-btn"
+              onClick={handleConfirm}
+              disabled={isSubmitting}
+              style={{
+                flex: 1, backgroundColor: isSubmitting ? '#94a3b8' : 'var(--primary-color)', color: '#fff', border: 'none', borderRadius: '12px',
+                padding: '14px', fontSize: '1rem', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+              }}
+            >
+              {isSubmitting ? 'Đang lưu...' : <><Check size={20} /> Xác nhận</>}
+            </button>
+          )}
 
           <button
             onClick={() => navigate(-1)}

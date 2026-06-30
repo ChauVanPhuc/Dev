@@ -5,8 +5,8 @@ from modules.delivery.models.deliveries import Delivery
 def test_create_delivery_with_invalid_quantity(client, invalid_qty):
     """CHẶN: Không cho phép giao số lượng <= 0"""
     # Đảm bảo User tồn tại trước khi login
-    client.post("/accounts/", json={"username": "sx_user", "password": "123", "full_name": "SX Test"})
-    res = client.post("/accounts/login", data={"username": "sx_user", "password": "123"}).json()
+    client.post("/accounts/", json={"username": "sx_user_qty", "password": "123", "full_name": "SX Test", "phone": "0987654304"})
+    res = client.post("/accounts/login", data={"username": "sx_user_qty", "password": "123"}).json()
     token = res["access_token"]
     
     delivery_data = {
@@ -30,8 +30,8 @@ def test_create_delivery_with_invalid_quantity(client, invalid_qty):
 def test_confirm_more_than_delivered(client, db_session):
     """CHẶN: Không cho phép nhận nhiều hơn số lượng đã giao"""
     # 1. Tạo 1 phiếu giao 10 cái
-    client.post("/accounts/", json={"username": "sx_user", "password": "123", "full_name": "SX Test"})
-    res = client.post("/accounts/login", data={"username": "sx_user", "password": "123"}).json()
+    client.post("/accounts/", json={"username": "sx_user_confirm", "password": "123", "full_name": "SX Test", "phone": "0987654305"})
+    res = client.post("/accounts/login", data={"username": "sx_user_confirm", "password": "123"}).json()
     token = res["access_token"]
     
     response = client.post(
@@ -60,15 +60,15 @@ def test_confirm_more_than_delivered(client, db_session):
 
 def test_login_wrong_password(client):
     """KIỂM TRA: Đăng nhập sai mật khẩu"""
-    client.post("/accounts/", json={"username": "sx_user", "password": "123", "full_name": "SX Test"})
-    response = client.post("/accounts/login", data={"username": "sx_user", "password": "wrong_password"})
+    client.post("/accounts/", json={"username": "sx_user_wrong", "password": "123", "full_name": "SX Test", "phone": "0987654306"})
+    response = client.post("/accounts/login", data={"username": "sx_user_wrong", "password": "wrong_password"})
     assert response.status_code != 200
     assert "detail" in response.json()
 
 def test_upload_non_image_file(client):
     """BẢO MẬT: Chặn upload file nguy hiểm (ví dụ .txt giả danh)"""
-    client.post("/accounts/", json={"username": "sx_user", "password": "123", "full_name": "SX Test"})
-    res = client.post("/accounts/login", data={"username": "sx_user", "password": "123"}).json()
+    client.post("/accounts/", json={"username": "sx_user_upload", "password": "123", "full_name": "SX Test", "phone": "0987654307"})
+    res = client.post("/accounts/login", data={"username": "sx_user_upload", "password": "123"}).json()
     token = res["access_token"]
     
     files = [("files", ("virus.txt", b"harmful content", "text/plain"))]

@@ -185,7 +185,7 @@ const ProductCreate = () => {
 
       await api.post('/master-products/', payload);
       alert('Tạo sản phẩm mẫu thành công!');
-      navigate('/manufacture/products');
+      navigate('/admin/products');
     } catch (err) {
       console.error(err);
       alert('Có lỗi xảy ra khi lưu dữ liệu. Vui lòng kiểm tra lại.');
@@ -199,7 +199,7 @@ const ProductCreate = () => {
       {/* Top Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <button onClick={() => navigate('/manufacture/products')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#6B7280' }}>
+          <button onClick={() => navigate('/admin/products')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#6B7280' }}>
             <ArrowLeft size={24} />
           </button>
           <div>

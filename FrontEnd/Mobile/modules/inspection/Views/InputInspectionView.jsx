@@ -555,7 +555,7 @@ const InputInspection = () => {
         {/* Nút hành động */}
         {effectiveViewOnly ? (
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => navigate('/input-inspection')}
             style={{
               width: '100%', padding: '14px', borderRadius: '14px',
               border: '1.5px solid #e2e8f0', background: '#fff',
@@ -585,7 +585,7 @@ const InputInspection = () => {
               {loading ? 'Đang lưu...' : 'Xác nhận'}
             </button>
             <button
-              onClick={() => navigate(-1)}
+              onClick={() => navigate('/input-inspection')}
               style={{
                 flex: 1, padding: '14px', borderRadius: '14px',
                 border: '1.5px solid #e2e8f0', background: '#fff',
@@ -617,7 +617,7 @@ const InputInspection = () => {
         onConfirm={() => {
           setMessageModal(prev => ({ ...prev, isOpen: false }))
           if (messageModal.type === 'success') {
-            navigate(-1)
+            navigate('/input-inspection')
           }
         }}
       />

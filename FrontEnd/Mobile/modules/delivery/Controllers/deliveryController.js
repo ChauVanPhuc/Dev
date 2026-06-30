@@ -297,6 +297,28 @@ export const useDeliveryController = () => {
     }
   }, [])
 
+  // 14. Lấy lịch sử bàn giao với bộ lọc server-side + phân trang
+  const fetchDeliveryHistory = useCallback(async (filters = {}) => {
+    try {
+      const params = new URLSearchParams()
+      if (filters.plan_id) params.append('plan_id', filters.plan_id)
+      if (filters.date_from) params.append('date_from', filters.date_from)
+      if (filters.date_to) params.append('date_to', filters.date_to)
+      if (filters.status) params.append('status', filters.status)
+      if (filters.stage) params.append('stage', filters.stage)
+      if (filters.ticket_type) params.append('ticket_type', filters.ticket_type)
+      params.append('sort_order', filters.sort_order || 'desc')
+      params.append('skip', String(filters.skip || 0))
+      params.append('limit', String(filters.limit || 20))
+
+      const res = await apiClient.get(`/deliveries/history?${params.toString()}`)
+      return res.data // { items: [], total_count: N, has_more: bool }
+    } catch (err) {
+      console.error('Error fetching delivery history:', err)
+      return { items: [], total_count: 0, has_more: false }
+    }
+  }, [])
+
   return {
     loading,
     isSubmitting,
@@ -313,6 +335,7 @@ export const useDeliveryController = () => {
     confirmReturnSlip,
     fetchReturnsByPlan,
     fetchReturnsByDelivery,
-    fetchQCDetail
+    fetchQCDetail,
+    fetchDeliveryHistory
   }
 }

@@ -52,7 +52,6 @@ const doc = {
     "UserCreateButton": ["Màn hình AD3.1 (Tạo người dùng mới)"],
     "ExportUserButton": ["Xuất file Excel/CSV"],
     "ActionMenu": ["API PATCH/DELETE /accounts/{id}"],
-    "ActivityFeed": ["API GET /accounts/activities"],
     "Pagination": ["UserTable"]
   },
   codeDetails: {

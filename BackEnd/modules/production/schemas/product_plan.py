@@ -79,3 +79,22 @@ class ProductPlan(ProductPlanBase):
 
 class ProductPlanDetailOut(ProductPlan):
     orders: List[OrderOut] = []
+
+class MobileDailyPlanBase(BaseModel):
+    plan_date: str
+    stage: str
+    factory: str
+    order_code: str
+    part_name: str
+    planned_qty: float
+    remaining_qty: float
+
+class MobileDailyPlanCreate(MobileDailyPlanBase):
+    pass
+
+class MobileDailyPlanResponse(MobileDailyPlanBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

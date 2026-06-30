@@ -19,6 +19,19 @@ const ClaimListView = () => {
   const { setCustomTitle, setCustomSubtitle, setHeaderExtra, showModal: contextShowModal } = useOutletContext();
   const [localNotification, setLocalNotification] = useState(null);
 
+  const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
+  const loggedInUserIsAdmin = loggedInUser.role_name === 'IT' || loggedInUser.role_name === 'BGD' || loggedInUser.username === 'admin';
+
+  let activePermissions = {};
+  try {
+    activePermissions = JSON.parse(localStorage.getItem('smartflow_active_permissions') || '{}');
+  } catch (e) {
+    console.error('Failed to parse screen permissions in ClaimListView:', e);
+  }
+
+  const hasWritePermission = loggedInUserIsAdmin || activePermissions['claim'] !== 'read';
+
+
   const showModal = (title, message, type = 'info') => {
     setLocalNotification({ title, message, type });
     if (type === 'success' && typeof message === 'string') {
@@ -1623,7 +1636,7 @@ const ClaimListView = () => {
 
   // Setup headers for Table component
   const tableHeaders = [
-    {
+    ...(hasWritePermission ? [{
       isCheckbox: true,
       label: (
         <input
@@ -1633,7 +1646,7 @@ const ClaimListView = () => {
           onChange={handleToggleSelectAll}
         />
       )
-    },
+    }] : []),
     { label: 'STT', style: { width: '60px' } },
     { label: 'Tên sản phẩm', className: 'text-left' },
     { label: 'Mã tham chiếu', className: 'text-left' },
@@ -1644,7 +1657,7 @@ const ClaimListView = () => {
     { label: 'Container' },
     { label: 'Thời gian' },
     { label: 'Trạng thái' },
-    { label: 'Thao tác' }
+    ...(hasWritePermission ? [{ label: 'Thao tác' }] : [])
   ];
 
   // Helper inside Delete Confirmation modal to list out deletion results inside nested collapsible list
@@ -2007,107 +2020,117 @@ const ClaimListView = () => {
         </div>
 
         <div className="action-buttons-group" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <button
-            className="btn-overview-orange"
-            onClick={handleProcessSelectedClaim}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              height: '37px',
-              padding: '0 16px',
-              borderRadius: '8px',
-              fontWeight: 'bold',
-              cursor: 'pointer'
-            }}
-          >
-            Xử lý khiếu nại
-          </button>
-
-          <button
-            className="btn-add-new"
-            onClick={handleOpenAddNewClaim}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              height: '37px',
-              padding: '0 20px',
-              borderRadius: '8px',
-              fontWeight: 'bold',
-              cursor: 'pointer'
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-            Thêm mới
-          </button>
-
-          <div className="import-dropdown-container">
+          {hasWritePermission && (
             <button
-              className="btn-border-action"
-              onClick={() => setIsImportDropdownOpen(!isImportDropdownOpen)}
+              className="btn-overview-orange"
+              onClick={handleProcessSelectedClaim}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px',
                 height: '37px',
-                borderColor: '#2D1A12',
-                fontWeight: 'bold',
-                borderRadius: '8px',
                 padding: '0 16px',
+                borderRadius: '8px',
+                fontWeight: 'bold',
                 cursor: 'pointer'
               }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="7 10 12 15 17 10"></polyline>
-                <line x1="12" y1="15" x2="12" y2="3"></line>
-              </svg>
-              Import
-              <svg style={{ marginLeft: '6px', transform: isImportDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
+              Xử lý khiếu nại
             </button>
-            {isImportDropdownOpen && (
-              <div className="import-dropdown-menu" style={{ minWidth: '160px' }}>
-                <button className="import-dropdown-item" onClick={() => { setIsImportDropdownOpen(false); triggerPdfUpload(); }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                    <line x1="16" y1="13" x2="8" y2="13"></line>
-                    <line x1="16" y1="17" x2="8" y2="17"></line>
-                  </svg>
-                  File PDF
-                </button>
-                <button className="import-dropdown-item" onClick={() => { setIsImportDropdownOpen(false); triggerFolderUpload(); }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                  </svg>
-                  Thư mục PDF
-                </button>
-              </div>
-            )}
-          </div>
+          )}
 
-          <input
-            type="file"
-            ref={pdfInputRef}
-            style={{ display: 'none' }}
-            accept=".pdf"
-            multiple
-            onChange={handlePdfFileChange}
-          />
-          <input
-            type="file"
-            ref={folderInputRef}
-            style={{ display: 'none' }}
-            webkitdirectory=""
-            directory=""
-            multiple
-            onChange={handleFolderFileChange}
-          />
+          {hasWritePermission && (
+            <button
+              className="btn-add-new"
+              onClick={handleOpenAddNewClaim}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                height: '37px',
+                padding: '0 20px',
+                borderRadius: '8px',
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              Thêm mới
+            </button>
+          )}
+
+          {hasWritePermission && (
+            <div className="import-dropdown-container">
+              <button
+                className="btn-border-action"
+                onClick={() => setIsImportDropdownOpen(!isImportDropdownOpen)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  height: '37px',
+                  borderColor: '#2D1A12',
+                  fontWeight: 'bold',
+                  borderRadius: '8px',
+                  padding: '0 16px',
+                  cursor: 'pointer'
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                Import
+                <svg style={{ marginLeft: '6px', transform: isImportDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+              {isImportDropdownOpen && (
+                <div className="import-dropdown-menu" style={{ minWidth: '160px' }}>
+                  <button className="import-dropdown-item" onClick={() => { setIsImportDropdownOpen(false); triggerPdfUpload(); }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                      <polyline points="14 2 14 8 20 8"></polyline>
+                      <line x1="16" y1="13" x2="8" y2="13"></line>
+                      <line x1="16" y1="17" x2="8" y2="17"></line>
+                    </svg>
+                    File PDF
+                  </button>
+                  <button className="import-dropdown-item" onClick={() => { setIsImportDropdownOpen(false); triggerFolderUpload(); }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    Thư mục PDF
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {hasWritePermission && (
+            <input
+              type="file"
+              ref={pdfInputRef}
+              style={{ display: 'none' }}
+              accept=".pdf"
+              multiple
+              onChange={handlePdfFileChange}
+            />
+          )}
+          {hasWritePermission && (
+            <input
+              type="file"
+              ref={folderInputRef}
+              style={{ display: 'none' }}
+              webkitdirectory=""
+              directory=""
+              multiple
+              onChange={handleFolderFileChange}
+            />
+          )}
 
           <button
             className="btn-border-action"
@@ -2132,89 +2155,91 @@ const ClaimListView = () => {
             Export
           </button>
 
-          <button
-            className="btn-border-action"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              height: '37px',
-              borderColor: selectedClaimIds.length === 0 ? '#CBD5E1' : '#A0301B',
-              color: selectedClaimIds.length === 0 ? '#94A3B8' : '#A0301B',
-              cursor: selectedClaimIds.length === 0 ? 'not-allowed' : 'pointer',
-              fontWeight: 'bold',
-              borderRadius: '8px',
-              padding: '0 16px'
-            }}
-            disabled={selectedClaimIds.length === 0}
-            onClick={() => {
-              const selectedClaims = claims.filter(c => selectedClaimIds.includes(c.id));
-              setExpandedDeleteItems({});
-              setDeleteConfirmation({
-                items: selectedClaims,
-                onConfirm: async () => {
-                  setLoading(true);
-                  const results = [];
-                  for (const claim of selectedClaims) {
-                    try {
-                      await claimService.deleteClaim(claim.id);
-                      results.push({ claim, success: true });
-                    } catch (error) {
-                      console.error(`Error deleting claim ${claim.id}:`, error);
-                      const errMsg = error.response?.data?.detail || error.message || 'Lỗi không xác định';
-                      results.push({ claim, success: false, error: errMsg });
+          {hasWritePermission && (
+            <button
+              className="btn-border-action"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                height: '37px',
+                borderColor: selectedClaimIds.length === 0 ? '#CBD5E1' : '#A0301B',
+                color: selectedClaimIds.length === 0 ? '#94A3B8' : '#A0301B',
+                cursor: selectedClaimIds.length === 0 ? 'not-allowed' : 'pointer',
+                fontWeight: 'bold',
+                borderRadius: '8px',
+                padding: '0 16px'
+              }}
+              disabled={selectedClaimIds.length === 0}
+              onClick={() => {
+                const selectedClaims = claims.filter(c => selectedClaimIds.includes(c.id));
+                setExpandedDeleteItems({});
+                setDeleteConfirmation({
+                  items: selectedClaims,
+                  onConfirm: async () => {
+                    setLoading(true);
+                    const results = [];
+                    for (const claim of selectedClaims) {
+                      try {
+                        await claimService.deleteClaim(claim.id);
+                        results.push({ claim, success: true });
+                      } catch (error) {
+                        console.error(`Error deleting claim ${claim.id}:`, error);
+                        const errMsg = error.response?.data?.detail || error.message || 'Lỗi không xác định';
+                        results.push({ claim, success: false, error: errMsg });
+                      }
                     }
+                    setLoading(false);
+                    
+                    const succeeded = results.filter(r => r.success);
+                    const failed = results.filter(r => !r.success);
+                    
+                    const remainingClaims = claims.filter(c => !succeeded.map(s => s.claim.id).includes(c.id));
+                    setClaims(remainingClaims);
+                    setSelectedClaimIds(prev => prev.filter(id => failed.map(f => f.claim.id).includes(id)));
+                    
+                    if (remainingClaims.length === 0) {
+                      setLatestImport(null);
+                    }
+                    
+                    const isAllSuccess = failed.length === 0;
+                    const msgTitle = isAllSuccess ? 'Xóa thành công' : 'Kết quả xóa';
+                    const msgType = isAllSuccess ? 'success' : failed.length === selectedClaims.length ? 'error' : 'info';
+                    
+                    const notificationContent = (
+                      <div style={{ width: '100%', maxHeight: '400px', overflowY: 'auto', overflowX: 'hidden', paddingRight: '4px' }}>
+                        {succeeded.length > 0 && (
+                          <div style={{ marginBottom: failed.length > 0 ? '16px' : '0' }}>
+                            <p style={{ fontWeight: '600', color: '#059669', marginBottom: '8px' }}>
+                              Đã xóa thành công {succeeded.length} khiếu nại:
+                            </p>
+                            <DeleteResultList items={succeeded} type="success" />
+                          </div>
+                        )}
+                        
+                        {failed.length > 0 && (
+                          <div>
+                            <p style={{ fontWeight: '600', color: '#DC2626', marginBottom: '8px' }}>
+                              Xóa thất bại {failed.length} khiếu nại:
+                            </p>
+                            <DeleteResultList items={failed} type="error" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                    
+                    showModal(msgTitle, notificationContent, msgType);
                   }
-                  setLoading(false);
-                  
-                  const succeeded = results.filter(r => r.success);
-                  const failed = results.filter(r => !r.success);
-                  
-                  const remainingClaims = claims.filter(c => !succeeded.map(s => s.claim.id).includes(c.id));
-                  setClaims(remainingClaims);
-                  setSelectedClaimIds(prev => prev.filter(id => failed.map(f => f.claim.id).includes(id)));
-                  
-                  if (remainingClaims.length === 0) {
-                    setLatestImport(null);
-                  }
-                  
-                  const isAllSuccess = failed.length === 0;
-                  const msgTitle = isAllSuccess ? 'Xóa thành công' : 'Kết quả xóa';
-                  const msgType = isAllSuccess ? 'success' : failed.length === selectedClaims.length ? 'error' : 'info';
-                  
-                  const notificationContent = (
-                    <div style={{ width: '100%', maxHeight: '400px', overflowY: 'auto', overflowX: 'hidden', paddingRight: '4px' }}>
-                      {succeeded.length > 0 && (
-                        <div style={{ marginBottom: failed.length > 0 ? '16px' : '0' }}>
-                          <p style={{ fontWeight: '600', color: '#059669', marginBottom: '8px' }}>
-                            Đã xóa thành công {succeeded.length} khiếu nại:
-                          </p>
-                          <DeleteResultList items={succeeded} type="success" />
-                        </div>
-                      )}
-                      
-                      {failed.length > 0 && (
-                        <div>
-                          <p style={{ fontWeight: '600', color: '#DC2626', marginBottom: '8px' }}>
-                            Xóa thất bại {failed.length} khiếu nại:
-                          </p>
-                          <DeleteResultList items={failed} type="error" />
-                        </div>
-                      )}
-                    </div>
-                  );
-                  
-                  showModal(msgTitle, notificationContent, msgType);
-                }
-              });
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="3 6 5 6 21 6"></polyline>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-            </svg>
-            Xóa đã chọn
-          </button>
+                });
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+              Xóa đã chọn
+            </button>
+          )}
         </div>
       </div>
 
@@ -2666,14 +2691,16 @@ const ClaimListView = () => {
       >
         {paginatedClaims.map((claim, idx) => (
           <tr key={claim.id} className={claim.batch_id && claim.batch_id === highlightBatchId ? 'claim-row-highlight' : ''}>
-            <td className="checkbox-col">
-              <input
-                type="checkbox"
-                className="checkbox-custom"
-                checked={selectedClaimIds.includes(claim.id)}
-                onChange={() => handleToggleSelectRow(claim.id)}
-              />
-            </td>
+            {hasWritePermission && (
+              <td className="checkbox-col">
+                <input
+                  type="checkbox"
+                  className="checkbox-custom"
+                  checked={selectedClaimIds.includes(claim.id)}
+                  onChange={() => handleToggleSelectRow(claim.id)}
+                />
+              </td>
+            )}
             <td style={{ fontWeight: '600', color: 'var(--text-gray)' }}>{startIndex + idx + 1}</td>
             <td className="text-left" style={{ fontWeight: '500', color: '#2D1A12' }}>{claim.product_name}</td>
             <td className="code-ref text-left">{claim.claim_code}</td>
@@ -2688,17 +2715,19 @@ const ClaimListView = () => {
                 {claim.status}
               </span>
             </td>
-            <td>
-              <button
-                className="btn-action-edit"
-                title="Chỉnh sửa"
-                onClick={() => setActiveDetailClaim(claim)}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
-                </svg>
-              </button>
-            </td>
+            {hasWritePermission && (
+              <td>
+                <button
+                  className="btn-action-edit"
+                  title="Chỉnh sửa"
+                  onClick={() => setActiveDetailClaim(claim)}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+                  </svg>
+                </button>
+              </td>
+            )}
           </tr>
         ))}
       </Table>
