@@ -44,6 +44,7 @@ from config.database import engine, SessionLocal
 from config.database import Base
 
 from app import models  # Đảm bảo tất cả Model được import để tránh lỗi Mapper
+from modules.kpi.models.kpi_management import KPIChecklist, KPIEmployeeItem, KPIViolation, KPIFeedback, KPIPointRule, KPIChecklistPool, KPIItemPool
 
 
 
@@ -320,7 +321,11 @@ async def lifespan(app: FastAPI):
                 ("bom_details", "parent_id", "ix_bom_details_parent_id"),
                 ("orders", "plan_id", "ix_orders_plan_id"),
                 ("equipment_inspections", "equipment_id", "ix_equipment_inspections_eq_id"),
-                ("equipment_trainings", "equipment_id", "ix_equipment_trainings_eq_id")
+                ("equipment_trainings", "equipment_id", "ix_equipment_trainings_eq_id"),
+                ("kpi_checklists", "employee_id", "ix_kpi_checklists_employee_id"),
+                ("kpi_employee_items", "employee_id", "ix_kpi_employee_items_employee_id"),
+                ("kpi_violations", "employee_id", "ix_kpi_violations_employee_id"),
+                ("kpi_feedbacks", "employee_id", "ix_kpi_feedbacks_employee_id")
             ]
             for table, col, index_name in indexes_to_create:
                 try:

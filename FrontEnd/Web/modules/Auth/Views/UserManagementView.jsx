@@ -56,9 +56,12 @@ const SCREEN_GROUPS = [
     ]
   },
   {
-    title: 'Khác',
+    title: 'Quản lý KPI',
     screens: [
-      { key: 'kpi', name: 'Quản lý KPI' }
+      { key: 'kpi-checklist', name: 'Checklist công việc' },
+      { key: 'kpi-list', name: 'Danh sách KPI' },
+      { key: 'kpi-rules', name: 'Quy tắc cộng trừ điểm' },
+      { key: 'kpi-feedback', name: 'Phản hồi và nhận xét' }
     ]
   }
 ];

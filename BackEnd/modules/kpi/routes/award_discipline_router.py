@@ -13,7 +13,7 @@ def get_award_disciplines(db: Session = Depends(get_db)):
     [GET] Lấy danh sách khen thưởng, kỷ luật.
     Nếu trống, tự động seed 1 dòng mẫu.
     """
-    records = db.query(AwardDiscipline).all()
+    records = db.query(AwardDiscipline).order_by(AwardDiscipline.id.desc()).all()
     if not records:
         initial_record = AwardDiscipline(
             staff_name="Hồ Sỹ Khấn",

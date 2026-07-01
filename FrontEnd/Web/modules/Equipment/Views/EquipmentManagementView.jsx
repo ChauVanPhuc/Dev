@@ -96,7 +96,7 @@ const EquipmentManagementView = () => {
           { header: 'Mã Thiết Bị', key: 'code', width: 15 },
           { header: 'Tên Thiết Bị', key: 'name', width: 25 },
           { header: 'Loại Thiết Bị', key: 'type', width: 15 },
-          { header: 'Phòng Ban', key: 'department', width: 20 },
+          { header: 'Bộ phận', key: 'department', width: 20 },
           { header: 'Người Sở Hữu', key: 'owner_name', width: 20 },
           { header: 'Ngày Bàn Giao', key: 'handover_date', width: 15 },
           { header: 'Ngày Kiểm Tra', key: 'check_date', width: 15 },
@@ -321,7 +321,7 @@ const EquipmentManagementView = () => {
                       <th>Mã TB</th>
                       <th>Tên Thiết Bị</th>
                       <th>Loại TB</th>
-                      <th>Phòng Ban</th>
+                      <th>Bộ phận</th>
                       <th>Người sở hữu</th>
                       <th>Ngày bàn giao</th>
                       <th>Ngày kiểm tra</th>

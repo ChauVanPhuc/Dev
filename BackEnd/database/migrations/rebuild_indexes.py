@@ -27,7 +27,11 @@ def rebuild_indexes():
             'delivery_details',
             'equipments',
             'equipment_inspections',
-            'equipment_trainings'
+            'equipment_trainings',
+            'kpi_checklists',
+            'kpi_employee_items',
+            'kpi_violations',
+            'kpi_feedbacks'
         ]
         
         for table in tables:

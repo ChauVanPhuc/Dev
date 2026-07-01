@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from datetime import datetime
 from modules.auth.models.accounts import Account
 from modules.auth.models.departments import Department
 from modules.auth.models.role import Role
@@ -80,12 +81,16 @@ def get_accounts(db: Session, skip: int = 0, limit: int = 10, search: str = None
         for dept in depts:
             if dept.role_id:
                 role = db.query(Role).filter(Role.id == dept.role_id).first()
-                if role and role.name not in role_names:
-                    role_names.append(role.name)
+                if role:
+                    val = role.description or role.name
+                    if val not in role_names:
+                        role_names.append(val)
             if dept.permission_id:
                 perm = db.query(Permission).filter(Permission.id == dept.permission_id).first()
-                if perm and perm.name not in permission_names:
-                    permission_names.append(perm.name)
+                if perm:
+                    val = perm.description or perm.name
+                    if val not in permission_names:
+                        permission_names.append(val)
             if dept.stage_id:
                 stage_obj = db.query(Stage).filter(Stage.id == dept.stage_id).first()
                 if stage_obj and stage_obj.name not in stage_names:
@@ -142,7 +147,8 @@ def create_account(db: Session, account: AccountCreate):
         employee_id=account.employee_id or account.employee_code,
         full_name=account.full_name or account.name,
         status=getattr(account, 'status', None) or "Đang sử dụng",
-        permission_level=account.permission_level
+        permission_level=account.permission_level,
+        created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     )
     db.add(db_account)
     db.flush() # Lưu tạm để lấy auto-increment ID cho bước tiếp theo

@@ -63,7 +63,7 @@ def get_equipments(db: Session = Depends(get_db)):
     [GET] Lấy danh sách tất cả thiết bị từ database.
     Tự động chèn dữ liệu mẫu nâng cấp nếu bảng đang trống.
     """
-    equipments = db.query(Equipment).all()
+    equipments = db.query(Equipment).order_by(Equipment.id.desc()).all()
     
     # [AUTO-SEED] Nếu bảng trống, tự động thêm 5 thiết bị mẫu đầy đủ thông tin
     if not equipments:
@@ -160,7 +160,7 @@ def get_equipments(db: Session = Depends(get_db)):
             )
             db.add(train1)
         db.commit()
-        equipments = db.query(Equipment).all()
+        equipments = db.query(Equipment).order_by(Equipment.id.desc()).all()
 
     return [
         {

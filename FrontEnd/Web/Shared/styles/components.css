@@ -2655,6 +2655,8 @@ tbody tr:nth-child(10) { animation-delay: 0.3s !important; }
         min-height: 0;
         min-width: 0;
         width: 100%;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
     }
     .admin-table-scroll table {
         margin-bottom: 0 !important;

@@ -55,10 +55,10 @@ def get_staff_evaluations(db: Session = Depends(get_db)):
     [GET] Lấy danh sách nhân sự đánh giá.
     Nếu rỗng, tự động seed dữ liệu.
     """
-    records = db.query(StaffEvaluation).all()
+    records = db.query(StaffEvaluation).order_by(StaffEvaluation.id.desc()).all()
     if not records:
         seed_staff_evaluations(db)
-        records = db.query(StaffEvaluation).all()
+        records = db.query(StaffEvaluation).order_by(StaffEvaluation.id.desc()).all()
         
     return [
         {

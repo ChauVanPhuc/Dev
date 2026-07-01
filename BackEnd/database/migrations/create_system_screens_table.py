@@ -94,6 +94,38 @@ INITIAL_SCREENS = [
     },
     {
         "platform": "Web",
+        "route_path": "/admin/kpi/checklist",
+        "default_code": "AD7.1",
+        "current_code": "AD7.1",
+        "title": "Checklist công việc",
+        "subtitle": "Quản lý công việc trọng tâm nhân sự"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/kpi/list",
+        "default_code": "AD7.2",
+        "current_code": "AD7.2",
+        "title": "Danh sách KPI",
+        "subtitle": "Thiết lập và theo dõi chỉ số KPI"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/kpi/rules",
+        "default_code": "AD7.3",
+        "current_code": "AD7.3",
+        "title": "Quy tắc cộng trừ điểm",
+        "subtitle": "Cấu hình điểm số và hành vi vi phạm"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/kpi/feedback",
+        "default_code": "AD7.4",
+        "current_code": "AD7.4",
+        "title": "Phản hồi và nhận xét",
+        "subtitle": "Đánh giá và phản hồi kết quả nhân sự"
+    },
+    {
+        "platform": "Web",
         "route_path": "/admin/feedback",
         "default_code": "AD8",
         "current_code": "AD8",

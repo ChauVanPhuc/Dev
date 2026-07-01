@@ -17,7 +17,7 @@ def get_kpis(
     [GET] Lấy danh sách KPI từ database theo bộ lọc.
     Nếu bảng đang trống, tự động sinh 160 dòng dữ liệu mẫu để test.
     """
-    query = db.query(KPI)
+    query = db.query(KPI).order_by(KPI.id.desc())
     if period_type:
         query = query.filter(KPI.period_type == period_type)
     if period_name:
@@ -112,7 +112,7 @@ def get_kpis(
             
         db.commit()
         # Query lại sau khi seed thành công
-        query = db.query(KPI)
+        query = db.query(KPI).order_by(KPI.id.desc())
         if period_type:
             query = query.filter(KPI.period_type == period_type)
         if period_name:

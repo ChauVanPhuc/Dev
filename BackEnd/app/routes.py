@@ -17,7 +17,7 @@ from modules.inspection.routes.inspection_routes import router as inspection_rou
 
 from modules.equipment.routes import equipment_router
 
-from modules.kpi.routes import kpi_router, award_discipline_router, staff_evaluation_router
+from modules.kpi.routes import kpi_router, award_discipline_router, staff_evaluation_router, kpi_management_router
 
 from modules.capa.routes import capa_router
 
@@ -74,6 +74,7 @@ api_router.include_router(kpi_router.router, prefix="/kpis", tags=["kpis"])
 api_router.include_router(award_discipline_router.router, prefix="/awards-discipline", tags=["awards-discipline"])
 
 api_router.include_router(staff_evaluation_router.router, prefix="/staff-evaluations", tags=["staff-evaluations"])
+api_router.include_router(kpi_management_router.router, prefix="/kpi-management", tags=["kpi-management"])
 
 api_router.include_router(screen_router.router, prefix="/screens", tags=["screens"])
 

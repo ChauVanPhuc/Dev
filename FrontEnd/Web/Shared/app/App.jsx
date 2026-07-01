@@ -15,6 +15,10 @@ import HandoverList from '@modules/Delivery/Views/HandoverListView';
 import IncidentLogs from '@modules/System/Views/IncidentLogsView';
 import InspectionReports from '@modules/Inspection/Views/InspectionReportsView';
 import KPIReports from '@modules/KPI/Views/KPIReportsView';
+import KPIChecklist from '@modules/KPI/Views/KPIChecklistView';
+import KPIItems from '@modules/KPI/Views/KPIItemsView';
+import KPIRules from '@modules/KPI/Views/KPIRulesView';
+import KPIFeedback from '@modules/KPI/Views/KPIFeedbackView';
 import Improvements from '@modules/CAPA/Views/ImprovementsView';
 import Hotspots from '@modules/System/Views/HotspotsView';
 import DataPackaging from '@modules/System/Views/DataPackagingView';
@@ -510,6 +514,10 @@ function App() {
             <Route path="quality-records" element={<ProtectedRoute permissionKey="quality-records"><QualityRecords /></ProtectedRoute>} />
             <Route path="quality-records/:id" element={<ProtectedRoute permissionKey="quality-records"><QualityRecordsDetail /></ProtectedRoute>} />
             <Route path="kpi" element={<ProtectedRoute permissionKey="kpi"><KPIReports /></ProtectedRoute>} />
+            <Route path="kpi/checklist" element={<ProtectedRoute permissionKey="kpi-checklist"><KPIChecklist /></ProtectedRoute>} />
+            <Route path="kpi/list" element={<ProtectedRoute permissionKey="kpi-list"><KPIItems /></ProtectedRoute>} />
+            <Route path="kpi/rules" element={<ProtectedRoute permissionKey="kpi-rules"><KPIRules /></ProtectedRoute>} />
+            <Route path="kpi/feedback" element={<ProtectedRoute permissionKey="kpi-feedback"><KPIFeedback /></ProtectedRoute>} />
             <Route path="feedback" element={<ProtectedRoute permissionKey="feedback"><Improvements /></ProtectedRoute>} />
             <Route path="hotspots" element={<ProtectedRoute permissionKey="hotspots"><Hotspots /></ProtectedRoute>} />
             <Route path="data" element={<ProtectedRoute permissionKey="data"><DataPackaging /></ProtectedRoute>} />

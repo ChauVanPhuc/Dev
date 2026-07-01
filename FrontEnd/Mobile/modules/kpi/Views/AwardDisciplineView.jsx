@@ -39,7 +39,22 @@ const AwardDiscipline = () => {
     { label: 'Trần Thị Anh', value: 'Trần Thị Anh' }
   ])
 
-  // Load staff list from API
+  // Rules list from backend
+  const [rulesList, setRulesList] = useState([])
+  const [issueOptions, setIssueOptions] = useState([
+    { label: 'Thiếu tem mẫu', value: 'Thiếu tem mẫu' },
+    { label: 'Sai kích thước', value: 'Sai kích thước' },
+    { label: 'Bề mặt trầy xước', value: 'Bề mặt trầy xước' },
+    { label: 'Đi muộn', value: 'Đi muộn' }
+  ])
+
+  const impactOptions = [
+    { label: 'Cao', value: 'Cao' },
+    { label: 'Trung bình', value: 'Trung bình' },
+    { label: 'Thấp', value: 'Thấp' }
+  ]
+
+  // Load staff list and rules from API
   useEffect(() => {
     const fetchStaff = async () => {
       try {
@@ -56,25 +71,53 @@ const AwardDiscipline = () => {
         console.error('Lỗi khi tải danh sách nhân viên, sử dụng mock:', err)
       }
     }
+
+    const fetchRules = async () => {
+      try {
+        const resp = await apiClient.get('/kpi-management/point-rules')
+        if (resp.data && resp.data.length > 0) {
+          setRulesList(resp.data)
+          const options = resp.data.map(item => ({
+            label: item.content,
+            value: item.content
+          }))
+          setIssueOptions(options)
+          
+          // Auto-fill form with the first rule details
+          const firstRule = resp.data[0]
+          setFormData(prev => ({
+            ...prev,
+            issue: firstRule.content,
+            points: String(Math.abs(firstRule.points)),
+            impact: firstRule.impact
+          }))
+        }
+      } catch (err) {
+        console.error('Lỗi khi tải danh sách điều luật, sử dụng mock:', err)
+      }
+    }
+
     fetchStaff()
+    fetchRules()
   }, [])
-
-  const issueOptions = [
-    { label: 'Thiếu tem mẫu', value: 'Thiếu tem mẫu' },
-    { label: 'Sai kích thước', value: 'Sai kích thước' },
-    { label: 'Bề mặt trầy xước', value: 'Bề mặt trầy xước' },
-    { label: 'Đi muộn', value: 'Đi muộn' }
-  ]
-
-  const impactOptions = [
-    { label: 'Cao', value: 'Cao' },
-    { label: 'Trung bình', value: 'Trung bình' },
-    { label: 'Thấp', value: 'Thấp' }
-  ]
 
   const handleChange = (e) => {
     const { name, value } = e.target
-    setFormData(prev => ({ ...prev, [name]: value }))
+    if (name === 'issue') {
+      const selectedRule = rulesList.find(r => r.content === value)
+      if (selectedRule) {
+        setFormData(prev => ({
+          ...prev,
+          issue: value,
+          points: String(Math.abs(selectedRule.points)),
+          impact: selectedRule.impact
+        }))
+      } else {
+        setFormData(prev => ({ ...prev, [name]: value }))
+      }
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }))
+    }
   }
 
   // Xử lý Ảnh bằng chứng
@@ -214,6 +257,7 @@ const AwardDiscipline = () => {
                   value={formData.impact} 
                   options={impactOptions} 
                   onChange={handleChange}
+                  disabled={true}
                 />
               </div>
               <div style={{ flex: 1 }}>
@@ -223,6 +267,7 @@ const AwardDiscipline = () => {
                   type="number"
                   value={formData.points} 
                   onChange={handleChange}
+                  readOnly={true}
                 />
               </div>
             </div>
