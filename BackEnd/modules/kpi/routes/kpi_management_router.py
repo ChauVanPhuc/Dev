@@ -25,7 +25,6 @@ class KPIChecklistBase(BaseModel):
     perform_count: int
     last_performed: Optional[str] = None
     result: Optional[str] = None
-    points: int
 
 class KPIChecklistCreate(KPIChecklistBase):
     employee_id: str
@@ -75,7 +74,6 @@ class KPIChecklistPoolBase(BaseModel):
     task_code: str
     content: str
     frequency: str
-    points: int
 
 class KPIItemPoolBase(BaseModel):
     kpi_code: str
@@ -97,32 +95,32 @@ def seed_employee_defaults(db: Session, employee_id: str):
     existing_checklist = db.query(KPIChecklist).filter(KPIChecklist.employee_id == employee_id).first()
     if not existing_checklist:
         checklist_pool = [
-            ("Duyệt báo cáo", "Hàng ngày", 10),
-            ("Họp giao việc đầu ca", "Hàng ngày", 5),
-            ("Báo cáo các hình hình chất lượng", "Hằng tháng", 20),
-            ("Kiểm tra ngẫu nhiên (Spot-check)", "Hàng ngày", 15),
-            ("Gửi cảnh báo lỗi", "Hàng tuần", 10),
-            ("Phân tích Pareto & Đóng CAPA", "Hàng tuần", 30),
-            ("Kiểm tra nhật ký ghi chép", "Hàng tuần", 10),
-            ("Báo cáo xu hướng lỗi hằng tháng", "Hàng tuần", 20),
-            ("Báo phép, công, tăng ca", "Hàng ngày", 5),
-            ("Theo dõi hồ sơ chất lượng", "Hàng tháng", 15),
-            ("Đi tuần xưởng", "Hàng ngày", 10),
-            ("Kiểm tra thiết bị", "Hàng ngày", 10),
-            ("Họp giao ca đứng (Toolbox)", "Hàng ngày", 5),
-            ("Kiểm tra chéo ngẫu nhiên & Test lỗi", "Hàng ngày", 15),
-            ("Đóng CAPA", "Khi phát sinh", 50),
-            ("Đánh giá nhân sự", "Hằng tháng", 40),
-            ("Báo cáo tình hình", "Hằng tuần", 15),
-            ("Ký duyệt đầu mẫu (FAI)", "Hàng ngày", 25),
-            ("Thực thi & Theo dõi CAPA tại chỗ", "Liên tục trong ca", 30),
-            ("Cập nhật sự thay đổi bản vẽ", "Hằng tháng", 25),
+            ("Duyệt báo cáo", "Hàng ngày"),
+            ("Họp giao việc đầu ca", "Hàng ngày"),
+            ("Báo cáo các hình hình chất lượng", "Hằng tháng"),
+            ("Kiểm tra ngẫu nhiên (Spot-check)", "Hàng ngày"),
+            ("Gửi cảnh báo lỗi", "Hàng tuần"),
+            ("Phân tích Pareto & Đóng CAPA", "Hàng tuần"),
+            ("Kiểm tra nhật ký ghi chép", "Hàng tuần"),
+            ("Báo cáo xu hướng lỗi hằng tháng", "Hàng tuần"),
+            ("Báo phép, công, tăng ca", "Hàng ngày"),
+            ("Theo dõi hồ sơ chất lượng", "Hàng tháng"),
+            ("Đi tuần xưởng", "Hàng ngày"),
+            ("Kiểm tra thiết bị", "Hàng ngày"),
+            ("Họp giao ca đứng (Toolbox)", "Hàng ngày"),
+            ("Kiểm tra chéo ngẫu nhiên & Test lỗi", "Hàng ngày"),
+            ("Đóng CAPA", "Khi phát sinh"),
+            ("Đánh giá nhân sự", "Hằng tháng"),
+            ("Báo cáo tình hình", "Hằng tuần"),
+            ("Ký duyệt đầu mẫu (FAI)", "Hàng ngày"),
+            ("Thực thi & Theo dõi CAPA tại chỗ", "Liên tục trong ca"),
+            ("Cập nhật sự thay đổi bản vẽ", "Hằng tháng"),
         ]
         # Xáo trộn và lấy một số lượng ngẫu nhiên từ 7 đến 12 công việc cho nhân sự này
         num_tasks = rng.randint(7, 12)
         selected_tasks = rng.sample(checklist_pool, num_tasks)
         
-        for idx, (content, freq, pts) in enumerate(selected_tasks):
+        for idx, (content, freq) in enumerate(selected_tasks):
             code = f"CV{idx+1:02d}"
             status_today = rng.choice(["Đã hoàn thành", "Chưa hoàn thành"])
             perform_count = rng.randint(1, 3) if status_today == "Đã hoàn thành" else 0
@@ -137,8 +135,7 @@ def seed_employee_defaults(db: Session, employee_id: str):
                 status_today=status_today,
                 perform_count=perform_count,
                 last_performed=last_performed,
-                result=result,
-                points=pts
+                result=result
             ))
 
     # 2. KPI mẫu tiếng Việt (trích từ ảnh 1)
@@ -288,8 +285,7 @@ def get_checklists(employee_id: str, db: Session = Depends(get_db)):
             "status_today": idx.status_today,
             "perform_count": idx.perform_count,
             "last_performed": idx.last_performed,
-            "result": idx.result,
-            "points": idx.points
+            "result": idx.result
         }
         for idx in items
     ]
@@ -562,22 +558,21 @@ def get_checklist_pool(db: Session = Depends(get_db)):
     items = db.query(KPIChecklistPool).order_by(KPIChecklistPool.id.desc()).all()
     if not items:
         default_items = [
-            ("CV01", "Báo cáo OQA", "Hàng ngày", 10),
-            ("CV02", "Vệ sinh 5S", "Hàng ngày", 10),
-            ("CV03", "Báo cáo năng suất thiết bị OEE", "Hàng tuần", 20),
-            ("CV04", "Họp giao ban", "Hàng ngày", 10),
-            ("CV05", "Kiểm tra chéo công việc", "Hàng tuần", 30),
-            ("CV06", "Thử nghiệm phá hủy mẫu", "Hằng tháng", 50),
-            ("CV07", "Báo cáo hiệu suất máy", "Khi phát sinh", 20),
-            ("CV08", "Họp team tuần", "Hàng tuần", 30),
-            ("CV09", "Cập nhật CAPA", "Hằng tháng", 40)
+            ("CV01", "Báo cáo OQA", "Hàng ngày"),
+            ("CV02", "Vệ sinh 5S", "Hàng ngày"),
+            ("CV03", "Báo cáo năng suất thiết bị OEE", "Hàng tuần"),
+            ("CV04", "Họp giao ban", "Hàng ngày"),
+            ("CV05", "Kiểm tra chéo công việc", "Hàng tuần"),
+            ("CV06", "Thử nghiệm phá hủy mẫu", "Hằng tháng"),
+            ("CV07", "Báo cáo hiệu suất máy", "Khi phát sinh"),
+            ("CV08", "Họp team tuần", "Hàng tuần"),
+            ("CV09", "Cập nhật CAPA", "Hằng tháng")
         ]
-        for code, content, freq, pts in default_items:
+        for code, content, freq in default_items:
             db.add(KPIChecklistPool(
                 task_code=code,
                 content=content,
-                frequency=freq,
-                points=pts
+                frequency=freq
             ))
         db.commit()
         items = db.query(KPIChecklistPool).order_by(KPIChecklistPool.id.desc()).all()
@@ -587,8 +582,7 @@ def get_checklist_pool(db: Session = Depends(get_db)):
             "id": r.id,
             "task_code": r.task_code,
             "content": r.content,
-            "frequency": r.frequency,
-            "points": r.points
+            "frequency": r.frequency
         }
         for r in items
     ]
@@ -790,9 +784,8 @@ def get_export_data(db: Session = Depends(get_db)):
             "frequency": c.frequency,
             "status_today": c.status_today,
             "perform_count": c.perform_count,
-            "result": c.result or "-",
             "last_performed": c.last_performed or "-",
-            "points": c.points
+            "result": c.result or "-"
         })
 
     kpi_list = []

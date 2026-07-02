@@ -944,26 +944,7 @@ const UserCreate = () => {
                       </div>
                     );
                   } else {
-                    return (
-                      <div className="form-group">
-                        <label>Phạm vi phụ trách (Quyền hạn hệ thống)</label>
-                        <select 
-                          name="permission_level" 
-                          value={formData.permission_level || ''} 
-                          onChange={handleChange}
-                          required
-                        >
-                          <option value="">-- Chọn quyền hạn --</option>
-                          <option value="Chỉ xem">Chỉ xem</option>
-                          <option value="Thêm">Thêm</option>
-                          <option value="Sửa">Sửa</option>
-                          <option value="Xóa">Xóa</option>
-                          <option value="Duyệt">Duyệt</option>
-                          <option value="Xuất nhập file">Xuất nhập file</option>
-                          <option value="Không được phép">Không được phép</option>
-                        </select>
-                      </div>
-                    );
+                    return null;
                   }
                 })()
               )}

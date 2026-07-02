@@ -2629,7 +2629,7 @@ tbody tr:nth-child(10) { animation-delay: 0.3s !important; }
 /* ── Tái sử dụng Layout Bảng & Phân trang chuẩn cho các module (User, Screen, Defect) ── */
 @media (min-width: 769px) {
     .admin-list-layout {
-        height: calc(100vh - 250px);
+        height: calc(100vh - 180px);
         display: flex;
         flex-direction: column;
         min-width: 0;

@@ -33,32 +33,42 @@ def get_claims(db: Session, skip: int = 0, limit: int = 10000, search: str = Non
     
     # Post-process items to convert JSON strings back to lists
     for item in items:
-        if item.image_paths and isinstance(item.image_paths, str):
+        if isinstance(item.image_paths, str) and item.image_paths.strip() and item.image_paths.strip() != "[]":
             try:
                 item.image_paths = json.loads(item.image_paths)
             except:
                 item.image_paths = []
-        if item.image_captions and isinstance(item.image_captions, str):
+        elif not isinstance(item.image_paths, list):
+            item.image_paths = []
+            
+        if isinstance(item.image_captions, str) and item.image_captions.strip() and item.image_captions.strip() != "[]":
             try:
                 item.image_captions = json.loads(item.image_captions)
             except:
                 item.image_captions = []
+        elif not isinstance(item.image_captions, list):
+            item.image_captions = []
                 
     return items, total
 
 def get_claim_by_id(db: Session, claim_id: int):
     item = db.query(CustomerClaim).filter(CustomerClaim.id == claim_id).first()
     if item:
-        if item.image_paths and isinstance(item.image_paths, str):
+        if isinstance(item.image_paths, str) and item.image_paths.strip() and item.image_paths.strip() != "[]":
             try:
                 item.image_paths = json.loads(item.image_paths)
             except:
                 item.image_paths = []
-        if item.image_captions and isinstance(item.image_captions, str):
+        elif not isinstance(item.image_paths, list):
+            item.image_paths = []
+            
+        if isinstance(item.image_captions, str) and item.image_captions.strip() and item.image_captions.strip() != "[]":
             try:
                 item.image_captions = json.loads(item.image_captions)
             except:
                 item.image_captions = []
+        elif not isinstance(item.image_captions, list):
+            item.image_captions = []
     return item
 
 def create_claim(db: Session, claim: CustomerClaimCreate):
@@ -68,8 +78,25 @@ def create_claim(db: Session, claim: CustomerClaimCreate):
             CustomerClaim.claim_code == claim.claim_code
         ).first()
         if existing:
-            logger.info(f"Claim code {claim.claim_code} already exists in DB - skipping insert")
-            return existing  # Silently return existing record
+            # Self-healing: if the existing record doesn't have image paths, but the new claim does, update it
+            has_existing_images = existing.image_paths and existing.image_paths not in ("[]", "")
+            if not has_existing_images and claim.image_paths:
+                img_paths = claim.image_paths
+                if isinstance(img_paths, list):
+                    img_paths = json.dumps(img_paths)
+                img_caps = claim.image_captions
+                if isinstance(img_caps, list):
+                    img_caps = json.dumps(img_caps)
+                
+                existing.image_paths = img_paths
+                existing.image_captions = img_caps
+                db.commit()
+                db.refresh(existing)
+                logger.info(f"Updated existing claim {claim.claim_code} with new image paths")
+            else:
+                logger.info(f"Claim code {claim.claim_code} already exists in DB - skipping insert")
+            return existing  # Return updated/existing record
+
 
     # Prepare image fields as JSON strings
     img_paths = claim.image_paths

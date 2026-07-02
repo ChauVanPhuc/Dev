@@ -355,15 +355,36 @@ const BackupQRManagement = () => {
                         >
                             &lt; Trước
                         </button>
-                        {[...Array(Math.ceil(filteredQRs.length / pageSize))].map((_, i) => (
-                            <button
-                                key={i}
-                                className={`page-btn ${page === i + 1 ? 'active' : ''}`}
-                                onClick={() => setPage(i + 1)}
-                            >
-                                {i + 1}
-                            </button>
-                        ))}
+                        {(() => {
+                            const totalPages = Math.ceil(filteredQRs.length / pageSize);
+                            const pages = [];
+                            const delta = 2;
+                            for (let i = 1; i <= totalPages; i++) {
+                              if (i === 1 || i === totalPages || (i >= page - delta && i <= page + delta)) {
+                                pages.push(i);
+                              } else if (pages[pages.length - 1] !== '...') {
+                                pages.push('...');
+                              }
+                            }
+                            return pages.map((p, idx) => {
+                              if (p === '...') {
+                                return (
+                                  <span key={`ell-${idx}`} style={{ padding: '0 8px', color: '#7B5233', fontWeight: '700' }}>
+                                    ...
+                                  </span>
+                                );
+                              }
+                              return (
+                                <button
+                                  key={p}
+                                  className={`page-btn ${page === p ? 'active' : ''}`}
+                                  onClick={() => setPage(p)}
+                                >
+                                  {p}
+                                </button>
+                              );
+                            });
+                          })()}
                         <button 
                             disabled={page >= Math.ceil(filteredQRs.length / pageSize)} 
                             onClick={() => setPage(prev => Math.min(prev + 1, Math.ceil(filteredQRs.length / pageSize)))} 

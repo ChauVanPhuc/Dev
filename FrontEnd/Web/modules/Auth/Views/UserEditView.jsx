@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useOutletContext } from 'react-router-dom';
 import api from '@webShared/Services/api.service';
+import { authService } from '@modules/Auth/Models/auth.service';
 
 // Icons mapping for screens
 const SCREEN_ICONS = {
@@ -508,8 +509,11 @@ const permissionLevels = [
 /**
  * View: Trang Thông tin và phân quyền tài khoản (Merged View)
  */
-const UserEdit = () => {
-  const { id } = useParams();
+const UserEdit = ({ isProfile = false }) => {
+  const { id: paramId } = useParams();
+  const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
+  const id = isProfile ? loggedInUser.id : paramId;
+
   const navigate = useNavigate();
   const outletContext = useOutletContext();
   const setCustomTitle = outletContext?.setCustomTitle;
@@ -518,10 +522,10 @@ const UserEdit = () => {
 
   // Cập nhật tiêu đề trang lên Layout Header
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle('Thông tin tài khoản');
-    if (setCustomSubtitle) setCustomSubtitle('Quản lý thông tin cá nhân và thiết lập chi tiết phân quyền hệ thống');
-    if (setCustomScreenCode) setCustomScreenCode('AD3.2');
-  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+    if (setCustomTitle) setCustomTitle(isProfile ? 'Thông tin cá nhân' : 'Thông tin tài khoản');
+    if (setCustomSubtitle) setCustomSubtitle(isProfile ? 'Quản lý thông tin cá nhân của bạn' : 'Quản lý thông tin cá nhân và thiết lập chi tiết phân quyền hệ thống');
+    if (setCustomScreenCode) setCustomScreenCode(isProfile ? 'AD3.2-P' : 'AD3.2');
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, isProfile]);
   
   // Dữ liệu danh mục từ API
   const [roles, setRoles] = useState([]);
@@ -557,6 +561,13 @@ const UserEdit = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showPasswordInput, setShowPasswordInput] = useState(false);
   const [syncing, setSyncing] = useState(false);
+
+  // Trạng thái modal đổi mật khẩu
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordData, setPasswordData] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
+  const [pwdError, setPwdError] = useState(null);
+  const [pwdSuccess, setPwdSuccess] = useState(false);
+  const [pwdLoading, setPwdLoading] = useState(false);
 
   // 1. Tải danh mục Roles khi mount
   useEffect(() => {
@@ -863,38 +874,52 @@ const UserEdit = () => {
 
       await api.put(`/accounts/${id}`, baseUpdateData);
 
-      // 2. Đồng bộ bộ phận / chức vụ / công đoạn (sync-departments)
-      const syncPayload = {
-        role_id: formData.role_id ? parseInt(formData.role_id, 10) : null,
-        permission_id: formData.permission_id ? parseInt(formData.permission_id, 10) : null,
-        stage_ids: isProductionOrQC && formData.stage_ids && formData.stage_ids.length > 0 
-          ? formData.stage_ids.map(sid => parseInt(sid, 10)) 
-          : null
-      };
+      if (isProfile) {
+        // Cập nhật thông tin user trong localStorage
+        const updatedUser = {
+          ...loggedInUser,
+          full_name: formData.full_name,
+          email: formData.email,
+          phone: formData.phone
+        };
+        localStorage.setItem('smartflow_user', JSON.stringify(updatedUser));
 
-      await api.post(`/accounts/${id}/sync-departments/`, syncPayload);
+        setSuccess(true);
+        alert('Cập nhật thông tin cá nhân thành công!');
+        navigate('/admin/dashboard');
+      } else {
+        // 2. Đồng bộ bộ phận / chức vụ / công đoạn (sync-departments)
+        const syncPayload = {
+          role_id: formData.role_id ? parseInt(formData.role_id, 10) : null,
+          permission_id: formData.permission_id ? parseInt(formData.permission_id, 10) : null,
+          stage_ids: isProductionOrQC && formData.stage_ids && formData.stage_ids.length > 0 
+            ? formData.stage_ids.map(sid => parseInt(sid, 10)) 
+            : null
+        };
 
-      // Convert arrays of actions to comma-separated strings for DB storage
-      const permissionsToSave = {};
-      Object.keys(screenPermissions).forEach(key => {
-        const perms = screenPermissions[key] || [];
-        permissionsToSave[key] = perms.includes('none') || perms.length === 0 ? 'none' : perms.join(',');
-      });
+        await api.post(`/accounts/${id}/sync-departments/`, syncPayload);
 
-      // 3. Đồng bộ phân quyền màn hình chi tiết (PUT)
-      await api.put(`/accounts/${id}/permissions`, {
-        permissions: permissionsToSave
-      });
+        // Convert arrays of actions to comma-separated strings for DB storage
+        const permissionsToSave = {};
+        Object.keys(screenPermissions).forEach(key => {
+          const perms = screenPermissions[key] || [];
+          permissionsToSave[key] = perms.includes('none') || perms.length === 0 ? 'none' : perms.join(',');
+        });
 
-      // Nếu chỉnh sửa cho chính mình, lưu cấu hình vào localStorage của trình duyệt
-      const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
-      if (Number(loggedInUser.id) === Number(id)) {
-        localStorage.setItem('smartflow_active_permissions', JSON.stringify(permissionsToSave));
+        // 3. Đồng bộ phân quyền màn hình chi tiết (PUT)
+        await api.put(`/accounts/${id}/permissions`, {
+          permissions: permissionsToSave
+        });
+
+        // Nếu chỉnh sửa cho chính mình, lưu cấu hình vào localStorage của trình duyệt
+        if (Number(loggedInUser.id) === Number(id)) {
+          localStorage.setItem('smartflow_active_permissions', JSON.stringify(permissionsToSave));
+        }
+
+        setSuccess(true);
+        alert('Đã cập nhật toàn bộ thông tin tài khoản và cấu hình phân quyền thành công!');
+        navigate('/admin/users');
       }
-
-      setSuccess(true);
-      alert('Đã cập nhật toàn bộ thông tin tài khoản và cấu hình phân quyền thành công!');
-      navigate('/admin/users');
     } catch (err) {
       console.error('Lỗi khi cập nhật tài khoản toàn diện:', err);
       setError(err.response?.data?.detail || 'Có lỗi xảy ra khi lưu thông tin. Vui lòng kiểm tra lại.');
@@ -902,6 +927,46 @@ const UserEdit = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePasswordChangeSubmit = async () => {
+    if (!passwordData.oldPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
+      setPwdError('Vui lòng nhập đầy đủ các trường thông tin.');
+      return;
+    }
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setPwdError('Xác nhận mật khẩu mới không khớp.');
+      return;
+    }
+    if (passwordData.newPassword.length < 3) {
+      setPwdError('Mật khẩu mới phải có ít nhất 3 ký tự.');
+      return;
+    }
+    
+    setPwdLoading(true);
+    setPwdError(null);
+    try {
+      await api.post(`/accounts/${id}/change-password`, {
+        old_password: passwordData.oldPassword,
+        new_password: passwordData.newPassword
+      });
+      setPwdSuccess(true);
+      setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
+      setTimeout(() => {
+        setShowPasswordModal(false);
+        setPwdSuccess(false);
+      }, 1500);
+    } catch (err) {
+      console.error('Lỗi khi đổi mật khẩu:', err);
+      setPwdError(err.response?.data?.detail || 'Mật khẩu cũ không chính xác hoặc có lỗi xảy ra.');
+    } finally {
+      setPwdLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    authService.logout();
+    navigate('/login');
   };
 
   if (fetching) {
@@ -926,14 +991,16 @@ const UserEdit = () => {
           <div className="account-info-card card">
             <div className="card-header-row">
               <h3 className="section-title">Thông tin người dùng</h3>
-              <button 
-                type="button" 
-                className="btn-link-sync" 
-                onClick={handleAutoSync} 
-                disabled={syncing}
-              >
-                {syncing ? 'Đang đồng bộ...' : 'Lấy thông tin tự động...'}
-              </button>
+              {!isProfile && (
+                <button 
+                  type="button" 
+                  className="btn-link-sync" 
+                  onClick={handleAutoSync} 
+                  disabled={syncing}
+                >
+                  {syncing ? 'Đang đồng bộ...' : 'Lấy thông tin tự động...'}
+                </button>
+              )}
             </div>
             
             <div className="account-info-grid">
@@ -949,27 +1016,64 @@ const UserEdit = () => {
                 <div className="avatar-buttons">
                   <button 
                     type="button" 
-                    className={`btn-action-custom btn-password ${showPasswordInput ? 'active' : ''}`}
-                    onClick={() => setShowPasswordInput(!showPasswordInput)}
+                    className={`btn-action-custom btn-password ${(isProfile ? showPasswordModal : showPasswordInput) ? 'active' : ''}`}
+                    onClick={() => {
+                      if (isProfile) {
+                        setShowPasswordModal(true);
+                      } else {
+                        setShowPasswordInput(!showPasswordInput);
+                      }
+                    }}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '8px'}}>
                       <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                     </svg>
-                    {showPasswordInput ? 'Ẩn ô mật khẩu' : 'Đổi mật khẩu'}
+                    {isProfile ? 'Đổi mật khẩu' : (showPasswordInput ? 'Ẩn ô mật khẩu' : 'Đổi mật khẩu')}
                   </button>
                   
                   <button 
                     type="button" 
                     className={`btn-action-custom btn-status ${formData.status === 'Đang sử dụng' ? 'active' : 'suspended'}`}
-                    onClick={toggleStatus}
+                    onClick={isProfile ? undefined : toggleStatus}
+                    disabled={isProfile}
+                    style={isProfile ? { cursor: 'default', opacity: 0.8 } : {}}
                   >
                     <span className="status-indicator-dot"></span>
                     {formData.status === 'Đang sử dụng' ? 'Kích hoạt' : 'Tạm dừng hoạt động'}
                   </button>
+
+                  {isProfile && (
+                    <button 
+                      type="button" 
+                      className="btn-action-custom btn-logout"
+                      onClick={handleLogout}
+                      style={{ 
+                        backgroundColor: '#A0301B', 
+                        color: '#FFFFFF', 
+                        borderColor: '#A0301B',
+                        marginTop: '8px'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#8B2917';
+                        e.currentTarget.style.borderColor = '#8B2917';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#A0301B';
+                        e.currentTarget.style.borderColor = '#A0301B';
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '8px'}}>
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                        <polyline points="16 17 21 12 16 7"></polyline>
+                        <line x1="21" y1="12" x2="9" y2="12"></line>
+                      </svg>
+                      Đăng xuất
+                    </button>
+                  )}
                 </div>
 
-                {showPasswordInput && (
+                {!isProfile && showPasswordInput && (
                   <div className="password-input-container animate-slide-down">
                     <label>Mật khẩu mới</label>
                     <input 
@@ -996,20 +1100,24 @@ const UserEdit = () => {
                         value={formData.employee_id}
                         onChange={handleChange}
                         required
+                        disabled={isProfile}
+                        className={isProfile ? "input-disabled" : ""}
                       />
-                      <button 
-                        type="button" 
-                        className="btn-sync-input" 
-                        onClick={handleAutoSync} 
-                        title="Đồng bộ thông tin tự động"
-                        disabled={syncing}
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="23 4 23 10 17 10" />
-                          <polyline points="1 20 1 14 7 14" />
-                          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                        </svg>
-                      </button>
+                      {!isProfile && (
+                        <button 
+                          type="button" 
+                          className="btn-sync-input" 
+                          onClick={handleAutoSync} 
+                          title="Đồng bộ thông tin tự động"
+                          disabled={syncing}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="23 4 23 10 17 10" />
+                            <polyline points="1 20 1 14 7 14" />
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -1061,7 +1169,13 @@ const UserEdit = () => {
 
                   <div className="form-group">
                     <label>Bộ phận/phòng ban</label>
-                    <select name="role_id" value={formData.role_id} onChange={handleChange}>
+                    <select 
+                      name="role_id" 
+                      value={formData.role_id} 
+                      onChange={handleChange} 
+                      disabled={isProfile}
+                      className={isProfile ? "select-disabled" : ""}
+                    >
                       <option value="">-- Chọn bộ phận --</option>
                       {roles.map(r => (
                         <option key={r.id} value={r.id}>{r.name}</option>
@@ -1069,13 +1183,14 @@ const UserEdit = () => {
                     </select>
                   </div>
 
-                  <div className={`form-group ${!formData.role_id ? 'disabled' : ''}`}>
+                  <div className={`form-group ${(!formData.role_id || isProfile) ? 'disabled' : ''}`}>
                     <label>Vị trí, chức vụ</label>
                     <select 
                       name="permission_id" 
                       value={formData.permission_id} 
                       onChange={handleChange} 
-                      disabled={!formData.role_id}
+                      disabled={isProfile || !formData.role_id}
+                      className={(isProfile || !formData.role_id) ? "select-disabled" : ""}
                     >
                       <option value="">-- Chọn chức vụ --</option>
                       {permissions.map(p => (
@@ -1092,18 +1207,20 @@ const UserEdit = () => {
 
                       if (isProductionOrQC) {
                         return (
-                          <div className={`form-group full-width-span ${stages.length === 0 ? 'disabled' : ''}`}>
+                          <div className={`form-group full-width-span ${(stages.length === 0 || isProfile) ? 'disabled' : ''}`}>
                             <label>Phạm vi phụ trách (Công đoạn sản xuất)</label>
                             {stages.length === 0 ? (
                               <div className="empty-stages-hint">Quyền này không yêu cầu công đoạn sản xuất</div>
                             ) : (
-                              <div className="stages-checkbox-grid">
+                              <div className="stages-checkbox-grid" style={isProfile ? { opacity: 0.8, backgroundColor: '#FAF8F5' } : {}}>
                                 {stages.map(s => (
-                                  <label key={s.id} className="stage-checkbox-item">
+                                  <label key={s.id} className="stage-checkbox-item" style={isProfile ? { cursor: 'default' } : {}}>
                                     <input 
                                       type="checkbox"
                                       checked={formData.stage_ids.includes(s.id)}
                                       onChange={(e) => handleStageCheckboxChange(s.id, e.target.checked)}
+                                      disabled={isProfile}
+                                      style={isProfile ? { cursor: 'default' } : {}}
                                     />
                                     <span>{s.name}</span>
                                   </label>
@@ -1113,26 +1230,7 @@ const UserEdit = () => {
                           </div>
                         );
                       } else {
-                        return (
-                          <div className="form-group">
-                            <label>Phạm vi phụ trách (Quyền hạn hệ thống)</label>
-                            <select 
-                              name="permission_level" 
-                              value={formData.permission_level || ''} 
-                              onChange={handleChange}
-                              required
-                            >
-                              <option value="">-- Chọn quyền hạn --</option>
-                              <option value="Chỉ xem">Chỉ xem</option>
-                              <option value="Thêm">Thêm</option>
-                              <option value="Sửa">Sửa</option>
-                              <option value="Xóa">Xóa</option>
-                              <option value="Duyệt">Duyệt</option>
-                              <option value="Xuất nhập file">Xuất nhập file</option>
-                              <option value="Không được phép">Không được phép</option>
-                            </select>
-                          </div>
-                        );
+                        return null;
                       }
                     })()
                   )}
@@ -1142,7 +1240,7 @@ const UserEdit = () => {
           </div>
 
           {/* PHẦN 2: PHÂN QUYỀN CHI TIẾT */}
-          <div className="permissions-card card">
+          {!isProfile && <div className="permissions-card card">
             <div className="card-header-row">
               <h3 className="section-title">Phân quyền chi tiết</h3>
               
@@ -1397,18 +1495,100 @@ const UserEdit = () => {
                 });
               })()}
             </div>
-          </div>
+          </div>}
 
 
           {/* HÀNG NÚT BẤM DƯỚI CÙNG */}
           <div className="form-actions-row">
-            <button type="button" className="btn btn-outline" onClick={() => navigate('/admin/users')}>Hủy bỏ</button>
+            <button type="button" className="btn btn-outline" onClick={() => navigate(isProfile ? '/admin/dashboard' : '/admin/users')}>Hủy bỏ</button>
             <button type="submit" className="btn btn-primary" disabled={loading}>
               {loading ? 'Đang lưu...' : 'Lưu thay đổi'}
             </button>
           </div>
         </form>
       </div>
+
+      {showPasswordModal && (
+        <div className="modal-backdrop-custom">
+          <div className="modal-content-custom animate-slide-down">
+            <div className="modal-header-custom">
+              <h4>Đổi mật khẩu</h4>
+              <button 
+                type="button" 
+                className="btn-close-modal" 
+                onClick={() => {
+                  setShowPasswordModal(false);
+                  setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
+                  setPwdError(null);
+                  setPwdSuccess(false);
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="modal-body-custom">
+              {pwdError && <div className="error-message">{pwdError}</div>}
+              {pwdSuccess && <div className="success-message">Đổi mật khẩu thành công!</div>}
+              
+              <div className="form-group-custom">
+                <label>Mật khẩu cũ</label>
+                <input 
+                  type="password"
+                  value={passwordData.oldPassword}
+                  placeholder="Nhập mật khẩu cũ"
+                  onChange={(e) => setPasswordData({ ...passwordData, oldPassword: e.target.value })}
+                  disabled={pwdLoading || pwdSuccess}
+                />
+              </div>
+              <div className="form-group-custom">
+                <label>Mật khẩu mới</label>
+                <input 
+                  type="password"
+                  value={passwordData.newPassword}
+                  placeholder="Nhập mật khẩu mới"
+                  onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                  disabled={pwdLoading || pwdSuccess}
+                />
+              </div>
+              <div className="form-group-custom">
+                <label>Xác nhận mật khẩu mới</label>
+                <input 
+                  type="password"
+                  value={passwordData.confirmPassword}
+                  placeholder="Xác nhận mật khẩu mới"
+                  onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                  disabled={pwdLoading || pwdSuccess}
+                />
+              </div>
+            </div>
+            <div className="modal-footer-custom">
+              <button 
+                type="button" 
+                className="btn btn-outline" 
+                onClick={() => {
+                  setShowPasswordModal(false);
+                  setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
+                  setPwdError(null);
+                  setPwdSuccess(false);
+                }}
+                disabled={pwdLoading}
+              >
+                Đóng
+              </button>
+              {!pwdSuccess && (
+                <button 
+                  type="button" 
+                  className="btn btn-primary" 
+                  onClick={handlePasswordChangeSubmit}
+                  disabled={pwdLoading}
+                >
+                  {pwdLoading ? 'Đang cập nhật...' : 'Cập nhật'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <style dangerouslySetInnerHTML={{ __html: `
         .user-create-container { width: 100%; padding-bottom: 30px; }
@@ -1464,7 +1644,7 @@ const UserEdit = () => {
         .input-with-button input { width: 100%; padding-right: 32px; }
         .btn-sync-input { position: absolute; right: 8px; background: none; border: none; color: #7B5233; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; flex-shrink: 0; outline: none; padding: 0; }
         .btn-sync-input:hover { color: #5D3E26; }
-        .input-disabled { background-color: #FAF8F5; cursor: not-allowed; opacity: 0.85; }
+        .input-disabled, .select-disabled { background-color: #FAF8F5 !important; cursor: not-allowed !important; opacity: 0.85 !important; }
         
         .empty-stages-hint { padding: 10px; border: 1.5px dashed #EADCC9; border-radius: 8px; background-color: #FAF8F5; color: #8C7B72; font-size: 0.82rem; text-align: center; font-weight: 500; }
         .stages-checkbox-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 12px; border: 1.5px solid #EADCC9; border-radius: 8px; background-color: #FAF8F5; }
@@ -1590,6 +1770,102 @@ const UserEdit = () => {
           .accordion-header { flex-direction: column; align-items: stretch; gap: 10px; }
           .group-allow-toggle { justify-content: space-between; }
           .checkboxes-allowed-group { flex-wrap: wrap; }
+        }
+
+        /* CSS Modal Đổi Mật Khẩu */
+        .modal-backdrop-custom {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100vw;
+          height: 100vh;
+          background: rgba(0, 0, 0, 0.4);
+          backdrop-filter: blur(4px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 9999;
+        }
+        .modal-content-custom {
+          background: #FFFFFF;
+          border-radius: 12px;
+          border: 1px solid #EADCC9;
+          width: 100%;
+          max-width: 420px;
+          box-shadow: 0 10px 30px rgba(123, 82, 51, 0.15);
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        .modal-header-custom {
+          padding: 16px 20px;
+          border-bottom: 1.5px solid #F5EDE4;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          background-color: #FAF8F5;
+        }
+        .modal-header-custom h4 {
+          margin: 0;
+          color: #7B5233;
+          font-size: 1.1rem;
+          font-weight: 800;
+        }
+        .btn-close-modal {
+          background: none;
+          border: none;
+          color: #8C7B72;
+          font-size: 1.1rem;
+          cursor: pointer;
+          transition: color 0.2s;
+          outline: none;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 24px;
+          height: 24px;
+        }
+        .btn-close-modal:hover {
+          color: #7B5233;
+        }
+        .modal-body-custom {
+          padding: 20px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .form-group-custom {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .form-group-custom label {
+          font-size: 0.78rem;
+          font-weight: 700;
+          color: #5D4037;
+        }
+        .form-group-custom input {
+          padding: 10px 12px;
+          border-radius: 8px;
+          border: 1.5px solid #EADCC9;
+          font-size: 0.85rem;
+          outline: none;
+          transition: all 0.2s;
+          font-weight: 500;
+          color: #2D1A12;
+          background-color: #FFFFFF;
+        }
+        .form-group-custom input:focus {
+          border-color: #7B5233;
+          box-shadow: 0 0 0 3px rgba(123, 82, 51, 0.1);
+        }
+        .modal-footer-custom {
+          padding: 14px 20px;
+          border-top: 1.5px solid #F5EDE4;
+          display: flex;
+          justify-content: flex-end;
+          gap: 10px;
+          background-color: #FAF8F5;
         }
       `}} />
     </div>

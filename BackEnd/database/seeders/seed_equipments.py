@@ -13,16 +13,16 @@ def seed_data():
     try:
         # Danh sách 10 thiết bị mẫu
         sample_equipments = [
-            {"name": "Thước đo điện tử", "code": "EQP-001", "type": "Đo lường", "status": "Bình thường"},
-            {"name": "Máy đo độ ẩm gỗ", "code": "EQP-002", "type": "Đo lường", "status": "Cần thay mới"},
-            {"name": "Máy cắt 2 đầu", "code": "EQP-003", "type": "Sản xuất", "status": "Bình thường"},
-            {"name": "Máy chà nhám", "code": "EQP-004", "type": "Sản xuất", "status": "Bảo trì"},
-            {"name": "Thước đo độ cong", "code": "EQP-005", "type": "Đo lường", "status": "Chưa kiểm tra"},
-            {"name": "Máy nén khí", "code": "EQP-006", "type": "Phụ trợ", "status": "Bình thường"},
-            {"name": "Súng phun sơn", "code": "EQP-007", "type": "Sản xuất", "status": "Bình thường"},
-            {"name": "Giá phơi sản phẩm 48s", "code": "EQP-008", "type": "Giá kệ", "status": "Bình thường"},
-            {"name": "Thước kẹp 300mm", "code": "EQP-009", "type": "Đo lường", "status": "Bình thường"},
-            {"name": "Máy bào 4 mặt", "code": "EQP-010", "type": "Sản xuất", "status": "Cần thay mới"},
+            {"name": "Thước đo điện tử", "code": "EQP-001", "type": "Điện tử", "status": "Bình thường"},
+            {"name": "Máy đo độ ẩm gỗ", "code": "EQP-002", "type": "Điện tử", "status": "Cần thay mới"},
+            {"name": "Máy cắt 2 đầu", "code": "EQP-003", "type": "Vật lý", "status": "Bình thường"},
+            {"name": "Máy chà nhám", "code": "EQP-004", "type": "Vật lý", "status": "Bảo trì"},
+            {"name": "Thước đo độ cong", "code": "EQP-005", "type": "Điện tử", "status": "Chưa kiểm tra"},
+            {"name": "Máy nén khí", "code": "EQP-006", "type": "Vật lý", "status": "Bình thường"},
+            {"name": "Súng phun sơn", "code": "EQP-007", "type": "Vật lý", "status": "Bình thường"},
+            {"name": "Giá phơi sản phẩm 48s", "code": "EQP-008", "type": "Vật lý", "status": "Bình thường"},
+            {"name": "Thước kẹp 300mm", "code": "EQP-009", "type": "Điện tử", "status": "Bình thường"},
+            {"name": "Máy bào 4 mặt", "code": "EQP-010", "type": "Vật lý", "status": "Cần thay mới"},
         ]
 
         for eq in sample_equipments:

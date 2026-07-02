@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Search, Plus, Trash2, Edit2, AlertTriangle, HelpCircle, Lock, Upload, Download, FileDown, ChevronDown, ChevronUp, Check, X, ImageIcon } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import ExcelJS from 'exceljs';
 import '@styles/components.css';
 
-
-
 const KPIReportsView = () => {
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
   const navigate = useNavigate();
   const [employees, setEmployees] = useState([]);
   const [expandedEmpId, setExpandedEmpId] = useState(null);
@@ -78,6 +77,9 @@ const KPIReportsView = () => {
   const [previewImage, setPreviewImage] = useState(null);
 
   useEffect(() => {
+    setCustomScreenCode('AD7');
+    setCustomTitle('Báo cáo KPI');
+    setCustomSubtitle('Hệ thống tổng hợp đánh giá và theo dõi hiệu suất năng suất lao động.');
     fetchEmployees();
     fetchPools();
   }, []);
@@ -497,13 +499,7 @@ const KPIReportsView = () => {
         </div>
       )}
         
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-        <div>
-          <h3 style={{ margin: 0, color: '#7B5233', fontWeight: '800', fontSize: '20px' }}>Quản lý KPI</h3>
-          <span style={{ fontSize: '12px', color: '#94a3b8' }}>Mã màn hình - mô tả chức năng màn hình</span>
-        </div>
-      </div>
+
 
       {/* Toolbar filter */}
       <div className="card" style={{ background: '#fff', padding: '12px 16px', borderRadius: '12px', border: '1px solid #EADCC9', marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>

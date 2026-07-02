@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import api from '@webShared/Services/api.service';
 import { useOutletContext, useNavigate } from 'react-router-dom';
-import { ChevronDown, Plus, Trash2, Edit, Search, Filter, Layers, FileUp, FileDown, X, Save, AlertTriangle, HelpCircle, CheckCircle } from 'lucide-react';
+import { ChevronDown, ChevronUp, Plus, Trash2, Edit, Search, Filter, Layers, FileUp, FileDown, X, Save, AlertTriangle, HelpCircle, CheckCircle, Upload } from 'lucide-react';
 import '@styles/components.css';
 
 const EquipmentCategoriesView = () => {
@@ -18,8 +18,34 @@ const EquipmentCategoriesView = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingEquipment, setEditingEquipment] = useState(null);
   const [message, setMessage] = useState({ type: '', text: '' });
+  
+  const [infoCollapsed, setInfoCollapsed] = useState(false);
+  const [listCollapsed, setListCollapsed] = useState(false);
+  const [manualCollapsed, setManualCollapsed] = useState(false);
   const [activeImageSlot, setActiveImageSlot] = useState(0);
   const imageInputRef = useRef(null);
+
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [batchFormData, setBatchFormData] = useState({ name: '', type: 'Vật lý' });
+  const [batchLoading, setBatchLoading] = useState(false);
+
+  const [systemUsers, setSystemUsers] = useState([]);
+  const [systemRoles, setSystemRoles] = useState([]);
+
+  const fetchSystemUsersAndRoles = async () => {
+    try {
+      const usersRes = await api.get('/accounts/?page=1&size=1000');
+      if (usersRes && Array.isArray(usersRes.items)) {
+        setSystemUsers(usersRes.items);
+      }
+      const rolesRes = await api.get('/roles/');
+      if (Array.isArray(rolesRes)) {
+        setSystemRoles(rolesRes);
+      }
+    } catch (error) {
+      console.error('Lỗi khi tải danh sách người dùng và vai trò:', error);
+    }
+  };
 
   // Custom confirmation popup state
   const [confirmModal, setConfirmModal] = useState({
@@ -31,7 +57,7 @@ const EquipmentCategoriesView = () => {
   });
 
   const defaultForm = {
-    name: '', code: '', type: 'Đo lường', status: 'Bình thường',
+    name: '', code: '', type: 'Vật lý', status: 'Bình thường',
     purchase_date: new Date().toISOString().split('T')[0],
     maintenance_cycle: 30, department: 'Quản lý chất lượng',
     owner_name: '', calibration_date: '', handover_date: new Date().toISOString().split('T')[0],
@@ -76,12 +102,31 @@ const EquipmentCategoriesView = () => {
     setCustomTitle('Danh sách thiết bị');
     setCustomSubtitle('Phân loại thiết bị theo nhóm và quản lý hướng dẫn vận hành SOP.');
     fetchEquipments();
+    fetchSystemUsersAndRoles();
   }, []);
 
   // Computed categories tree
   const computedCategoryTree = useMemo(() => {
     const treeMap = {};
-    equipments.forEach(eq => {
+    const term = searchTerm.toLowerCase().trim();
+
+    let filteredList = equipments;
+    if (term) {
+      const matchingUserNames = systemUsers
+        .filter(u => u.employee_id && u.employee_id.toLowerCase().includes(term))
+        .map(u => u.full_name);
+
+      filteredList = equipments.filter(eq => 
+        (eq.code && eq.code.toLowerCase().includes(term)) ||
+        (eq.name && eq.name.toLowerCase().includes(term)) ||
+        (eq.owner_name && (
+          eq.owner_name.toLowerCase().includes(term) ||
+          matchingUserNames.includes(eq.owner_name)
+        ))
+      );
+    }
+
+    filteredList.forEach(eq => {
       const type = eq.type || 'Khác';
       const name = eq.name || 'Không tên';
       if (!treeMap[type]) treeMap[type] = new Set();
@@ -90,11 +135,29 @@ const EquipmentCategoriesView = () => {
     const tree = Object.keys(treeMap).map((type, index) => ({
       id: `cat-${index}`, name: type, children: Array.from(treeMap[type])
     }));
-    return tree.length > 0 ? tree : [
-      { id: 'mech', name: 'Thiết bị cơ', children: ['Thước cặp', 'Thước đo'] },
-      { id: 'elec', name: 'Thiết bị điện tử', children: ['Thước cặp số', 'Máy đo độ ẩm'] }
-    ];
-  }, [equipments]);
+    return tree;
+  }, [equipments, searchTerm, systemUsers]);
+
+  const filteredUsers = useMemo(() => {
+    if (!formData.department) return systemUsers;
+    const deptLower = formData.department.toLowerCase();
+    return systemUsers.filter(user => {
+      const roleLower = (user.role_name || '').toLowerCase();
+      const nameLower = (user.full_name || '').toLowerCase();
+      
+      const matchRole = roleLower.includes(deptLower) || 
+                        (deptLower === 'sx' && roleLower.includes('sản xuất')) ||
+                        (deptLower === 'sản xuất' && roleLower.includes('sx')) ||
+                        (deptLower === 'qc' && roleLower.includes('quản lý chất lượng')) ||
+                        (deptLower === 'quản lý chất lượng' && roleLower.includes('qc'));
+                        
+      const matchPrefix = nameLower.startsWith(deptLower + ' -') || 
+                          (deptLower === 'sản xuất' && nameLower.startsWith('sx -')) ||
+                          (deptLower === 'quản lý chất lượng' && nameLower.startsWith('qc -'));
+      
+      return matchRole || matchPrefix;
+    });
+  }, [systemUsers, formData.department]);
 
   // Auto-select first category
   useEffect(() => {
@@ -103,6 +166,8 @@ const EquipmentCategoriesView = () => {
       if (!selectedCategoryNode || !allChildren.includes(selectedCategoryNode)) {
         setSelectedCategoryNode(allChildren[0] || null);
       }
+    } else {
+      setSelectedCategoryNode(null);
     }
   }, [computedCategoryTree]);
 
@@ -232,6 +297,118 @@ const EquipmentCategoriesView = () => {
     });
   };
 
+  const generateNextCode = (currentEquipments) => {
+    let maxNum = 0;
+    currentEquipments.forEach(eq => {
+      if (eq.code && eq.code.startsWith('EQP-')) {
+        const num = parseInt(eq.code.split('-')[1]);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    });
+    return `EQP-${String(maxNum + 1).padStart(3, '0')}`;
+  };
+
+  const openBatchEditModal = () => {
+    if (!selectedCategoryNode) return;
+    const firstEq = matchedEquipments[0] || {};
+    setBatchFormData({
+      name: selectedCategoryNode,
+      type: firstEq.type || 'Vật lý',
+      totalQuantity: matchedEquipments.length,
+      status: firstEq.status || 'Bình thường'
+    });
+    setShowBatchModal(true);
+  };
+
+  const handleSaveBatch = async () => {
+    if (!batchFormData.name.trim()) {
+      setMessage({ type: 'error', text: 'Vui lòng nhập tên thiết bị.' });
+      return;
+    }
+
+    const currentQty = matchedEquipments.length;
+    const targetQty = batchFormData.totalQuantity;
+
+    setConfirmModal({
+      show: true,
+      title: 'Xác nhận chỉnh sửa thông tin nhóm',
+      message: `Bạn có chắc muốn cập nhật nhóm thiết bị "${selectedCategoryNode}" thành tên "${batchFormData.name}"? Số lượng sẽ thay đổi từ ${currentQty} thành ${targetQty}.`,
+      type: 'edit',
+      onConfirm: async () => {
+        setBatchLoading(true);
+        try {
+          const numToUpdate = Math.min(currentQty, targetQty);
+          
+          for (let i = 0; i < numToUpdate; i++) {
+            const eq = matchedEquipments[i];
+            const payload = { 
+              ...eq, 
+              name: batchFormData.name.trim(), 
+              type: batchFormData.type,
+              status: batchFormData.status
+            };
+            ['purchase_date', 'calibration_date', 'handover_date', 'check_date'].forEach(key => {
+              if (!payload[key] || payload[key] === '') payload[key] = null;
+            });
+            if (payload.maintenance_cycle !== null && payload.maintenance_cycle !== undefined) {
+              payload.maintenance_cycle = parseInt(payload.maintenance_cycle) || 30;
+            }
+            await api.put(`/equipments/${eq.id}`, payload);
+          }
+
+          if (targetQty > currentQty) {
+            const addCount = targetQty - currentQty;
+            let tempEquipments = [...equipments];
+            
+            for (let i = 0; i < addCount; i++) {
+              const nextCode = generateNextCode(tempEquipments);
+              const newEq = {
+                name: batchFormData.name.trim(),
+                code: nextCode,
+                type: batchFormData.type,
+                status: batchFormData.status,
+                purchase_date: null,
+                maintenance_cycle: 30,
+                department: matchedEquipments[0]?.department || null,
+                owner_name: null,
+                calibration_date: null,
+                handover_date: null,
+                check_date: null,
+                attachment_pdf: null,
+                images: null,
+                user_manual_steps: matchedEquipments[0]?.user_manual_steps || '[]'
+              };
+              const res = await api.post('/equipments/', newEq);
+              if (res && res.id) {
+                tempEquipments.push(res);
+              }
+            }
+          }
+
+          if (targetQty < currentQty) {
+            const deleteCount = currentQty - targetQty;
+            for (let i = 0; i < deleteCount; i++) {
+              const eqToDelete = matchedEquipments[currentQty - 1 - i];
+              await api.delete(`/equipments/${eqToDelete.id}`);
+            }
+          }
+          
+          setMessage({ type: 'success', text: 'Cập nhật thông tin nhóm thiết bị thành công.' });
+          setSelectedCategoryNode(batchFormData.name.trim());
+          setShowBatchModal(false);
+          fetchEquipments();
+        } catch (error) {
+          console.error("Lỗi cập nhật thông tin nhóm:", error);
+          setMessage({ type: 'error', text: 'Có lỗi xảy ra khi cập nhật thông tin nhóm thiết bị.' });
+        } finally {
+          setBatchLoading(false);
+        }
+      }
+    });
+  };
+
   const handleDeleteImage = (index) => {
     const currentImages = parseImages(formData.images);
     while (currentImages.length <= index) currentImages.push('');
@@ -239,7 +416,26 @@ const EquipmentCategoriesView = () => {
     setFormData({ ...formData, images: serializeImages(currentImages) });
   };
 
-  const matchedEquipments = equipments.filter(eq => eq.name === selectedCategoryNode);
+  const matchedEquipments = useMemo(() => {
+    let list = equipments.filter(eq => eq.name === selectedCategoryNode);
+
+    const term = searchTerm.toLowerCase().trim();
+    if (term) {
+      const matchingUserNames = systemUsers
+        .filter(u => u.employee_id && u.employee_id.toLowerCase().includes(term))
+        .map(u => u.full_name);
+
+      list = list.filter(eq => 
+        (eq.code && eq.code.toLowerCase().includes(term)) ||
+        (eq.name && eq.name.toLowerCase().includes(term)) ||
+        (eq.owner_name && (
+          eq.owner_name.toLowerCase().includes(term) ||
+          matchingUserNames.includes(eq.owner_name)
+        ))
+      );
+    }
+    return list;
+  }, [equipments, selectedCategoryNode, searchTerm, systemUsers]);
 
   // Styles
   const btnStyle = { display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', backgroundColor: '#7B5233', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '700', fontSize: '13px' };
@@ -302,7 +498,6 @@ const EquipmentCategoriesView = () => {
                 </div>
                 <div style={{ paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   {cat.children.map(child => {
-                    const firstMatchingEq = equipments.find(e => e.name === child);
                     return (
                       <div key={child} onClick={() => setSelectedCategoryNode(child)}
                         style={{ padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', transition: 'all 0.15s',
@@ -312,12 +507,6 @@ const EquipmentCategoriesView = () => {
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px'
                         }}>
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{child}</span>
-                        {firstMatchingEq && (
-                          <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-                            <Edit size={13} onClick={(e) => { e.stopPropagation(); openEditModal(firstMatchingEq); }} style={{ cursor: 'pointer', color: '#7B5233' }} />
-                            <Trash2 size={13} onClick={(e) => { e.stopPropagation(); handleDelete(firstMatchingEq); }} style={{ cursor: 'pointer', color: '#ef4444' }} />
-                          </div>
-                        )}
                       </div>
                     );
                   })}
@@ -329,12 +518,31 @@ const EquipmentCategoriesView = () => {
 
         {/* Right panel */}
         <div className="card" style={{ flex: 1, padding: '24px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px' }}>
-          <h3 style={{ margin: '0 0 20px 0', fontSize: '16px', fontWeight: '900', color: '#1e293b', borderBottom: '2px solid #f1f5f9', paddingBottom: '10px' }}>
-            Thông tin thiết bị: {selectedCategoryNode || '—'}
-          </h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #f1f5f9', paddingBottom: '10px' }}>
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '900', color: '#1e293b' }}>
+              Thông tin thiết bị: {selectedCategoryNode || '—'}
+            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+              {selectedCategoryNode && matchedEquipments.length > 0 && (
+                <button 
+                  onClick={openBatchEditModal}
+                  style={{ ...btnStyle, padding: '4px 10px', fontSize: '12px', gap: '4px' }}
+                >
+                  <Edit size={12} /> Chỉnh sửa thông tin nhóm
+                </button>
+              )}
+              <div 
+                onClick={() => setInfoCollapsed(!infoCollapsed)}
+                style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '6px', transition: 'background-color 0.2s' }}
+                title={infoCollapsed ? "Mở rộng" : "Thu gọn"}
+              >
+                {infoCollapsed ? <ChevronDown size={22} color="#7B5233" strokeWidth={2.5} /> : <ChevronUp size={22} color="#7B5233" strokeWidth={2.5} />}
+              </div>
+            </div>
+          </div>
 
           {/* Equipment info */}
-          {selectedEquipment && (
+          {selectedEquipment && !infoCollapsed && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '25px' }}>
               <div className="form-group"><label>Tên thiết bị</label><input type="text" className="form-control disabled-input" value={selectedCategoryNode} disabled /></div>
               <div className="form-group"><label>Loại thiết bị</label><input type="text" className="form-control disabled-input" value={selectedEquipment?.type || 'Khác'} disabled /></div>
@@ -345,65 +553,98 @@ const EquipmentCategoriesView = () => {
 
           {/* Equipment table */}
           <div style={{ marginBottom: '25px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-              <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#334155' }}>Danh sách chi tiết thiết bị</h4>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px' }}>
+              <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#334155' }}>
+                Danh sách chi tiết thiết bị
+              </h4>
+              <div 
+                onClick={() => setListCollapsed(!listCollapsed)}
+                style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '6px', transition: 'background-color 0.2s' }}
+                title={listCollapsed ? "Mở rộng" : "Thu gọn"}
+              >
+                {listCollapsed ? <ChevronDown size={22} color="#7B5233" strokeWidth={2.5} /> : <ChevronUp size={22} color="#7B5233" strokeWidth={2.5} />}
+              </div>
             </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
-                  <th style={thStyle}>Mã</th>
-                  <th style={thStyle}>Tên</th>
-                  <th style={thStyle}>Trạng thái</th>
-                  <th style={thStyle}>Người sở hữu</th>
-                  <th style={thStyle}>Ảnh</th>
-                </tr>
-              </thead>
-              <tbody>
-                {matchedEquipments.map((eq) => {
-                  const imgs = parseImages(eq.images).filter(i => isImageValid(i));
-                  return (
-                    <tr key={eq.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '8px 12px', fontSize: '13px', fontWeight: '700', color: '#7B5233' }}>{eq.code}</td>
-                      <td style={{ padding: '8px 12px', fontSize: '13px', fontWeight: '600' }}>{eq.name}</td>
-                      <td style={{ padding: '8px 12px', fontSize: '12px' }}>
-                        <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: eq.status === 'Bình thường' ? '#dcfce7' : '#fee2e2', color: eq.status === 'Bình thường' ? '#15803d' : '#b91c1c', fontWeight: '700', fontSize: '10px' }}>{eq.status}</span>
-                      </td>
-                      <td style={{ padding: '8px 12px', fontSize: '13px' }}>{eq.owner_name || '—'}</td>
-                      <td style={{ padding: '8px 12px' }}>
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                          {imgs.length > 0 ? imgs.slice(0, 3).map((img, idx) => (
-                            <div key={idx} style={{ width: '28px', height: '28px', borderRadius: '4px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-                              <img src={img} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
-                            </div>
-                          )) : <span style={{ fontSize: '11px', color: '#94a3b8' }}>Chưa có</span>}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {matchedEquipments.length === 0 && (
-                  <tr><td colSpan="5" style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>Không có thiết bị chi tiết nào thuộc nhóm này.</td></tr>
-                )}
-              </tbody>
-            </table>
+            {!listCollapsed && (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
+                    <th style={thStyle}>Mã</th>
+                    <th style={thStyle}>Tên</th>
+                    <th style={thStyle}>Trạng thái</th>
+                    <th style={thStyle}>Người sở hữu</th>
+                    <th style={thStyle}>Ảnh</th>
+                    <th style={{ ...thStyle, width: '100px', textAlign: 'center' }}>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {matchedEquipments.map((eq) => {
+                    const imgs = parseImages(eq.images).filter(i => isImageValid(i));
+                    return (
+                      <tr key={eq.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '8px 12px', fontSize: '13px', fontWeight: '700', color: '#7B5233' }}>{eq.code}</td>
+                        <td style={{ padding: '8px 12px', fontSize: '13px', fontWeight: '600' }}>{eq.name}</td>
+                        <td style={{ padding: '8px 12px', fontSize: '12px' }}>
+                          <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: eq.status === 'Bình thường' ? '#dcfce7' : '#fee2e2', color: eq.status === 'Bình thường' ? '#15803d' : '#b91c1c', fontWeight: '700', fontSize: '10px' }}>{eq.status}</span>
+                        </td>
+                        <td style={{ padding: '8px 12px', fontSize: '13px' }}>{eq.owner_name || '—'}</td>
+                        <td style={{ padding: '8px 12px' }}>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            {imgs.length > 0 ? imgs.slice(0, 3).map((img, idx) => (
+                              <div key={idx} style={{ width: '28px', height: '28px', borderRadius: '4px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+                                <img src={img} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                              </div>
+                            )) : <span style={{ fontSize: '11px', color: '#94a3b8' }}>Chưa có</span>}
+                          </div>
+                        </td>
+                        <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', alignItems: 'center' }}>
+                            <Edit size={14} onClick={() => openEditModal(eq)} style={{ cursor: 'pointer', color: '#7B5233' }} />
+                            <Trash2 size={14} onClick={() => handleDelete(eq)} style={{ cursor: 'pointer', color: '#ef4444' }} />
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {matchedEquipments.length === 0 && (
+                    <tr><td colSpan="6" style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>Không có thiết bị chi tiết nào thuộc nhóm này.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            )}
           </div>
 
           {/* Manual steps builder */}
           <div>
-            <h4 style={{ margin: '0 0 15px 0', fontSize: '14px', fontWeight: '800', color: '#334155' }}>Hướng dẫn sử dụng</h4>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '15px' }}>
-              {manualSteps.map((step, idx) => (
-                <div key={idx} style={{ display: 'flex', gap: '15px', alignItems: 'center', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 15px', backgroundColor: '#f8fafc' }}>
-                  <span style={{ fontSize: '12px', fontWeight: '800', backgroundColor: '#7B5233', color: '#fff', width: '24px', height: '24px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{step.step}</span>
-                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#334155', flex: 1 }}>{step.title}</span>
-                  <button type="button" onClick={() => handleRemoveManualStep(idx)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#ef4444' }}><Trash2 size={16} /></button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px' }}>
+              <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#334155' }}>
+                Hướng dẫn sử dụng
+              </h4>
+              <div 
+                onClick={() => setManualCollapsed(!manualCollapsed)}
+                style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '6px', transition: 'background-color 0.2s' }}
+                title={manualCollapsed ? "Mở rộng" : "Thu gọn"}
+              >
+                {manualCollapsed ? <ChevronDown size={22} color="#7B5233" strokeWidth={2.5} /> : <ChevronUp size={22} color="#7B5233" strokeWidth={2.5} />}
+              </div>
+            </div>
+            {!manualCollapsed && (
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '15px' }}>
+                  {manualSteps.map((step, idx) => (
+                    <div key={idx} style={{ display: 'flex', gap: '15px', alignItems: 'center', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 15px', backgroundColor: '#f8fafc' }}>
+                      <span style={{ fontSize: '12px', fontWeight: '800', backgroundColor: '#7B5233', color: '#fff', width: '24px', height: '24px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{step.step}</span>
+                      <span style={{ fontSize: '13px', fontWeight: '600', color: '#334155', flex: 1 }}>{step.title}</span>
+                      <button type="button" onClick={() => handleRemoveManualStep(idx)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#ef4444' }}><Trash2 size={16} /></button>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <input type="text" placeholder="Nhập nội dung bước vận hành tiếp theo..." value={newStepText} onChange={(e) => setNewStepText(e.target.value)} className="form-control" style={{ flex: 1 }} />
-              <button type="button" onClick={handleAddManualStep} style={{ ...btnStyle, padding: '10px 20px' }}><Plus size={16} /> Thêm bước</button>
-            </div>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <input type="text" placeholder="Nhập nội dung bước vận hành tiếp theo..." value={newStepText} onChange={(e) => setNewStepText(e.target.value)} className="form-control" style={{ flex: 1 }} />
+                  <button type="button" onClick={handleAddManualStep} style={{ ...btnStyle, padding: '10px 20px' }}><Plus size={16} /> Thêm bước</button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -428,16 +669,42 @@ const EquipmentCategoriesView = () => {
                 <input type="text" className="form-control" value={formData.code} onChange={(e) => setFormData({...formData, code: e.target.value})} /></div>
               <div className="form-group"><label>Loại thiết bị</label>
                 <select className="form-control" value={formData.type} onChange={(e) => setFormData({...formData, type: e.target.value})}>
-                  <option value="Đo lường">Đo lường</option><option value="Sản xuất">Sản xuất</option><option value="Khác">Khác</option>
+                  <option value="Vật lý">Vật lý</option><option value="Điện tử">Điện tử</option>
                 </select></div>
               <div className="form-group"><label>Trạng thái</label>
                 <select className="form-control" value={formData.status} onChange={(e) => setFormData({...formData, status: e.target.value})}>
                   <option value="Bình thường">Bình thường</option><option value="Cần thay mới">Cần thay mới</option><option value="Bảo trì">Bảo trì</option><option value="Chưa kiểm tra">Chưa kiểm tra</option>
                 </select></div>
-              <div className="form-group"><label>Phòng ban</label>
-                <input type="text" className="form-control" value={formData.department} onChange={(e) => setFormData({...formData, department: e.target.value})} /></div>
+              <div className="form-group"><label>Bộ phận</label>
+                <select className="form-control" value={formData.department} onChange={(e) => setFormData({...formData, department: e.target.value, owner_name: ''})}>
+                  <option value="">-- Chọn bộ phận --</option>
+                  {systemRoles.map((role) => (
+                    <option key={role.id} value={role.name}>{role.name}</option>
+                  ))}
+                  {systemRoles.length === 0 && (
+                    <>
+                      <option value="Quản lý chất lượng">Quản lý chất lượng</option>
+                      <option value="Tổ đóng gói">Tổ đóng gói</option>
+                      <option value="Tổ chà nhám">Tổ chà nhám</option>
+                      <option value="Sản xuất">Sản xuất</option>
+                    </>
+                  )}
+                </select></div>
               <div className="form-group"><label>Người sở hữu</label>
-                <input type="text" className="form-control" value={formData.owner_name} onChange={(e) => setFormData({...formData, owner_name: e.target.value})} /></div>
+                <select className="form-control" value={formData.owner_name} onChange={(e) => setFormData({...formData, owner_name: e.target.value})}>
+                  <option value="">-- Chọn nhân viên --</option>
+                  {filteredUsers.map((user) => (
+                    <option key={user.id} value={user.full_name}>{user.full_name} ({user.employee_id})</option>
+                  ))}
+                  {systemUsers.length === 0 && (
+                    <>
+                      <option value="Nguyễn Văn A">Nguyễn Văn A</option>
+                      <option value="Nguyễn Văn B">Nguyễn Văn B</option>
+                      <option value="Nguyễn Văn C">Nguyễn Văn C</option>
+                      <option value="Nguyễn Văn D">Nguyễn Văn D</option>
+                    </>
+                  )}
+                </select></div>
               <div className="form-group"><label>Ngày bàn giao</label>
                 <input type="date" className="form-control" value={formData.handover_date} onChange={(e) => setFormData({...formData, handover_date: e.target.value})} /></div>
               <div className="form-group"><label>Ngày kiểm tra</label>
@@ -491,6 +758,86 @@ const EquipmentCategoriesView = () => {
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
               <button onClick={() => setShowModal(false)} style={{ padding: '10px 24px', border: '1px solid #e2e8f0', borderRadius: '10px', background: '#fff', cursor: 'pointer', fontWeight: '700', fontSize: '13px', color: '#64748b' }}>Hủy bỏ</button>
               <button onClick={handleSave} style={{ ...btnStyle, padding: '10px 24px', borderRadius: '10px' }}><Save size={16} /> {editingEquipment ? 'Cập nhật' : 'Thêm mới'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Edit Modal */}
+      {showBatchModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setShowBatchModal(false)}>
+          <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '30px', width: '600px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}
+            onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '900', color: '#1e293b' }}>
+                Chỉnh sửa thông tin nhóm thiết bị
+              </h3>
+              <X size={22} onClick={() => setShowBatchModal(false)} style={{ cursor: 'pointer', color: '#94a3b8' }} />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label>Tên thiết bị *</label>
+                <input 
+                  type="text" 
+                  className="form-control" 
+                  value={batchFormData.name} 
+                  onChange={(e) => setBatchFormData({...batchFormData, name: e.target.value})} 
+                />
+              </div>
+              <div className="form-group">
+                <label>Loại thiết bị</label>
+                <select 
+                  className="form-control" 
+                  value={batchFormData.type} 
+                  onChange={(e) => setBatchFormData({...batchFormData, type: e.target.value})}
+                >
+                  <option value="Vật lý">Vật lý</option>
+                  <option value="Điện tử">Điện tử</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Số lượng tổng</label>
+                <input 
+                  type="number" 
+                  min="1" 
+                  className="form-control" 
+                  value={batchFormData.totalQuantity} 
+                  onChange={(e) => setBatchFormData({...batchFormData, totalQuantity: Math.max(1, parseInt(e.target.value) || 1)})} 
+                />
+              </div>
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label>Trạng thái</label>
+                <select 
+                  className="form-control" 
+                  value={batchFormData.status} 
+                  onChange={(e) => setBatchFormData({...batchFormData, status: e.target.value})}
+                >
+                  <option value="Bình thường">Bình thường</option>
+                  <option value="Cần thay mới">Cần thay mới</option>
+                  <option value="Bảo trì">Bảo trì</option>
+                  <option value="Chưa kiểm tra">Chưa kiểm tra</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button 
+                onClick={() => setShowBatchModal(false)} 
+                disabled={batchLoading}
+                style={{ padding: '10px 24px', border: '1px solid #e2e8f0', borderRadius: '10px', background: '#fff', cursor: 'pointer', fontWeight: '700', fontSize: '13px', color: '#64748b' }}
+              >
+                Hủy bỏ
+              </button>
+              <button 
+                onClick={handleSaveBatch} 
+                disabled={batchLoading}
+                style={{ ...btnStyle, padding: '10px 24px', borderRadius: '10px' }}
+              >
+                <Save size={16} /> {batchLoading ? 'Đang lưu...' : 'Lưu thay đổi'}
+              </button>
             </div>
           </div>
         </div>

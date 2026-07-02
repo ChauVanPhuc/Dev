@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Search, Plus, Trash2, Edit2, AlertTriangle, HelpCircle } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import '@styles/components.css';
 
 const KPIRulesView = () => {
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
   const navigate = useNavigate();
   const [rules, setRules] = useState([]);
   
@@ -36,6 +37,9 @@ const KPIRulesView = () => {
   });
 
   useEffect(() => {
+    setCustomScreenCode('AD7.4');
+    setCustomTitle('Quy tắc cộng trừ điểm KPI');
+    setCustomSubtitle('Thiết lập luật chung cho QC báo cáo lỗi hoặc đề xuất khen thưởng.');
     fetchRules();
   }, []);
 
@@ -149,13 +153,7 @@ const KPIRulesView = () => {
         </div>
       )}
         
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-        <div>
-          <h3 style={{ margin: 0, color: '#7B5233', fontWeight: '800', fontSize: '20px' }}>Cấu hình Quy tắc cộng trừ điểm</h3>
-          <span style={{ fontSize: '12px', color: '#94a3b8' }}>Mã màn hình - Thiết lập luật chung cho QC báo cáo lỗi/thưởng từ Mobile</span>
-        </div>
-      </div>
+
 
       {/* Selector & Actions Toolbar */}
       <div className="card" style={{ background: '#fff', padding: '12px 16px', borderRadius: '12px', border: '1px solid #EADCC9', marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>

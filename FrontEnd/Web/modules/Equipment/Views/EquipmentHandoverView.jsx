@@ -1,13 +1,24 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import api from '@webShared/Services/api.service';
 import { useOutletContext, useNavigate, useParams } from 'react-router-dom';
 import { X, Upload, Plus } from 'lucide-react';
 import '@styles/components.css';
 
-const EquipmentHandoverView = () => {
-  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
+const EquipmentHandoverView = ({ id: propId, onClose, onSaved }) => {
+  let setCustomTitle, setCustomSubtitle, setCustomScreenCode;
+  try {
+    const context = useOutletContext();
+    if (context) {
+      setCustomTitle = context.setCustomTitle;
+      setCustomSubtitle = context.setCustomSubtitle;
+      setCustomScreenCode = context.setCustomScreenCode;
+    }
+  } catch (e) {}
+
   const navigate = useNavigate();
-  const { id } = useParams();
+  const { id: routeId } = useParams();
+  const id = propId !== undefined ? propId : routeId;
+  const isModal = onClose !== undefined;
 
   const imageInputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -55,12 +66,13 @@ const EquipmentHandoverView = () => {
   
   const [systemUsers, setSystemUsers] = useState([]);
   const [systemRoles, setSystemRoles] = useState([]);
+  const [allEquipments, setAllEquipments] = useState([]);
   
   const [formData, setFormData] = useState({
     id: null,
     name: '',
     code: '',
-    type: 'Đo lường',
+    type: 'Vật lý',
     status: 'Bình thường',
     purchase_date: '',
     maintenance_cycle: 30,
@@ -92,9 +104,11 @@ const EquipmentHandoverView = () => {
   };
 
   useEffect(() => {
-    setCustomScreenCode('AD37.4');
-    setCustomTitle(id ? 'Biên bản Bàn giao & Cập nhật thiết bị' : 'Khai báo & Bàn giao thiết bị mới');
-    setCustomSubtitle('Khai báo thông tin thiết bị, đính kèm biên bản PDF và hình ảnh thực tế bàn giao.');
+    if (!isModal && setCustomScreenCode) {
+      setCustomScreenCode('AD37.4');
+      setCustomTitle(id ? 'Biên bản Bàn giao & Cập nhật thiết bị' : 'Khai báo & Bàn giao thiết bị mới');
+      setCustomSubtitle('Khai báo thông tin thiết bị, đính kèm biên bản PDF và hình ảnh thực tế bàn giao.');
+    }
     
     fetchSystemUsersAndRoles();
 
@@ -103,6 +117,7 @@ const EquipmentHandoverView = () => {
       try {
         const data = await api.get('/equipments/');
         const list = Array.isArray(data) ? data : [];
+        setAllEquipments(list);
         if (id) {
           const eq = list.find(item => item.id === parseInt(id));
           if (eq) {
@@ -110,7 +125,7 @@ const EquipmentHandoverView = () => {
               id: eq.id,
               name: eq.name || '',
               code: eq.code || '',
-              type: eq.type || 'Đo lường',
+              type: eq.type || 'Vật lý',
               status: eq.status || 'Bình thường',
               purchase_date: eq.purchase_date || '',
               maintenance_cycle: eq.maintenance_cycle || 30,
@@ -143,6 +158,27 @@ const EquipmentHandoverView = () => {
     loadEquipmentData();
   }, [id]);
 
+  const filteredUsers = useMemo(() => {
+    if (!formData.department) return systemUsers;
+    const deptLower = formData.department.toLowerCase();
+    return systemUsers.filter(user => {
+      const roleLower = (user.role_name || '').toLowerCase();
+      const nameLower = (user.full_name || '').toLowerCase();
+      
+      const matchRole = roleLower.includes(deptLower) || 
+                        (deptLower === 'sx' && roleLower.includes('sản xuất')) ||
+                        (deptLower === 'sản xuất' && roleLower.includes('sx')) ||
+                        (deptLower === 'qc' && roleLower.includes('quản lý chất lượng')) ||
+                        (deptLower === 'quản lý chất lượng' && roleLower.includes('qc'));
+                        
+      const matchPrefix = nameLower.startsWith(deptLower + ' -') || 
+                          (deptLower === 'sản xuất' && nameLower.startsWith('sx -')) ||
+                          (deptLower === 'quản lý chất lượng' && nameLower.startsWith('qc -'));
+      
+      return matchRole || matchPrefix;
+    });
+  }, [systemUsers, formData.department]);
+
   const handleSaveHandover = async (e) => {
     e.preventDefault();
     const payload = { ...formData };
@@ -163,7 +199,12 @@ const EquipmentHandoverView = () => {
       } else {
         await api.post('/equipments/', payload);
       }
-      navigate('/admin/equipment');
+      if (isModal) {
+        if (onSaved) onSaved();
+        if (onClose) onClose();
+      } else {
+        navigate('/admin/equipment');
+      }
     } catch (error) {
       const detail = error.response?.data?.detail;
       const errMsg = typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail.map(d => d.msg || JSON.stringify(d)).join(', ') : 'Không thể lưu thông tin thiết bị.');
@@ -171,21 +212,8 @@ const EquipmentHandoverView = () => {
     }
   };
 
-  if (loading) {
-    return <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>Đang tải thông tin thiết bị...</div>;
-  }
-
-  return (
-    <div style={{ padding: '20px' }}>
-      <div className="card" style={{ padding: '24px', borderRadius: '20px', backgroundColor: '#fff', border: '1px solid #e2e8f0' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}>
-          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '900', color: '#1e293b' }}>
-            {formData.id ? 'Biên bản Bàn giao & Cập nhật thiết bị' : 'Khai báo & Bàn giao thiết bị mới'}
-          </h3>
-          <button onClick={() => navigate('/admin/equipment')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
-            <X size={24} />
-          </button>
-        </div>
+  const formContent = (
+    <>
 
         {message.text && (
           <div style={{
@@ -362,9 +390,47 @@ const EquipmentHandoverView = () => {
                   type="text" 
                   required 
                   value={formData.name} 
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })} 
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const match = allEquipments.find(eq => eq.name?.toLowerCase() === val.toLowerCase());
+                    if (match) {
+                      setFormData({
+                        ...formData,
+                        id: match.id,
+                        name: match.name,
+                        code: match.code || formData.code,
+                        type: match.type || formData.type,
+                        status: match.status || formData.status,
+                        purchase_date: match.purchase_date || formData.purchase_date,
+                        maintenance_cycle: match.maintenance_cycle || formData.maintenance_cycle,
+                        department: match.department || formData.department,
+                        owner_name: match.owner_name || formData.owner_name,
+                        calibration_date: match.calibration_date || formData.calibration_date,
+                        handover_date: match.handover_date || formData.handover_date,
+                        check_date: match.check_date || formData.check_date,
+                        attachment_pdf: match.attachment_pdf || formData.attachment_pdf,
+                        images: match.images || formData.images,
+                        user_manual_steps: match.user_manual_steps || formData.user_manual_steps
+                      });
+                    } else {
+                      setFormData({ 
+                        ...formData, 
+                        name: val,
+                        id: id ? parseInt(id) : null 
+                      });
+                    }
+                  }} 
                   className="form-control"
+                  list="existing-equipments"
+                  placeholder="Nhập tên hoặc chọn thiết bị..."
                 />
+                <datalist id="existing-equipments">
+                  {allEquipments.map(eq => (
+                    <option key={eq.id} value={eq.name}>
+                      Mã: {eq.code} - {eq.type || 'Thiết bị'}
+                    </option>
+                  ))}
+                </datalist>
               </div>
               <div className="form-group">
                 <label>Trạng thái thiết bị</label>
@@ -383,7 +449,7 @@ const EquipmentHandoverView = () => {
                 <label>Bộ phận phụ trách</label>
                 <select 
                   value={formData.department} 
-                  onChange={(e) => setFormData({ ...formData, department: e.target.value })} 
+                  onChange={(e) => setFormData({ ...formData, department: e.target.value, owner_name: '' })} 
                   className="form-control"
                 >
                   <option value="">-- Chọn bộ phận --</option>
@@ -408,7 +474,7 @@ const EquipmentHandoverView = () => {
                   className="form-control"
                 >
                   <option value="">-- Chọn nhân viên --</option>
-                  {systemUsers.map((user) => (
+                  {filteredUsers.map((user) => (
                     <option key={user.id} value={user.full_name}>{user.full_name} ({user.employee_id})</option>
                   ))}
                   {systemUsers.length === 0 && (
@@ -498,7 +564,7 @@ const EquipmentHandoverView = () => {
             <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end', marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
               <button 
                 type="button" 
-                onClick={() => navigate('/admin/equipment')} 
+                onClick={() => isModal ? onClose() : navigate('/admin/equipment')} 
                 style={{
                   padding: '12px 24px', backgroundColor: '#f1f5f9', color: '#475569',
                   border: 'none', borderRadius: '10px', fontWeight: '700', cursor: 'pointer'
@@ -518,6 +584,49 @@ const EquipmentHandoverView = () => {
             </div>
           </div>
         </form>
+    </>
+  );
+
+  if (isModal) {
+    return (
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        onClick={onClose}>
+        <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '30px', width: '800px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', position: 'relative' }}
+          onClick={(e) => e.stopPropagation()}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}>
+            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '900', color: '#1e293b' }}>
+              {id ? 'Biên bản Bàn giao & Cập nhật thiết bị' : 'Khai báo & Bàn giao thiết bị mới'}
+            </h3>
+            <X size={22} onClick={onClose} style={{ cursor: 'pointer', color: '#94a3b8' }} />
+          </div>
+          {loading ? (
+            <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: '14px', fontWeight: '600' }}>
+              <div className="animate-spin" style={{ width: '24px', height: '24px', border: '3px solid #f3f3f3', borderTop: '3px solid #7B5233', borderRadius: '50%', marginRight: '10px' }}></div>
+              Đang tải thông tin thiết bị...
+            </div>
+          ) : formContent}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: '20px' }}>
+      <div className="card" style={{ padding: '24px', borderRadius: '20px', backgroundColor: '#fff', border: '1px solid #e2e8f0', minHeight: '400px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}>
+          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '900', color: '#1e293b' }}>
+            {id ? 'Biên bản Bàn giao & Cập nhật thiết bị' : 'Khai báo & Bàn giao thiết bị mới'}
+          </h3>
+          <button onClick={() => navigate('/admin/equipment')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
+            <X size={24} />
+          </button>
+        </div>
+        {loading ? (
+          <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: '14px', fontWeight: '600' }}>
+            <div className="animate-spin" style={{ width: '24px', height: '24px', border: '3px solid #f3f3f3', borderTop: '3px solid #7B5233', borderRadius: '50%', marginRight: '10px' }}></div>
+            Đang tải thông tin thiết bị...
+          </div>
+        ) : formContent}
       </div>
     </div>
   );

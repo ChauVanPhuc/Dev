@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Search, Plus, Trash2, Edit2, AlertTriangle, HelpCircle } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import '@styles/components.css';
 
 const KPIItemsView = () => {
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
   const navigate = useNavigate();
   const [kpiPool, setKpiPool] = useState([]);
   
@@ -35,6 +36,9 @@ const KPIItemsView = () => {
   });
 
   useEffect(() => {
+    setCustomScreenCode('AD7.3');
+    setCustomTitle('Danh mục chỉ số KPI mẫu');
+    setCustomSubtitle('Cấu hình danh mục KPI mẫu chung phục vụ đánh giá hiệu suất.');
     fetchKpiPool();
   }, []);
 
@@ -146,13 +150,7 @@ const KPIItemsView = () => {
         </div>
       )}
         
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-        <div>
-          <h3 style={{ margin: 0, color: '#7B5233', fontWeight: '800', fontSize: '20px' }}>Danh mục chỉ số KPI mẫu</h3>
-          <span style={{ fontSize: '12px', color: '#94a3b8' }}>Mã màn hình - Cấu hình danh mục KPI mẫu chung phục vụ đánh giá hiệu suất</span>
-        </div>
-      </div>
+
 
       {/* Selector & Actions Toolbar */}
       <div className="card" style={{ background: '#fff', padding: '12px 16px', borderRadius: '12px', border: '1px solid #EADCC9', marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>

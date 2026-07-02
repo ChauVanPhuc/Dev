@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '@webShared/Services/api.service';
-import { useOutletContext, useNavigate } from 'react-router-dom';
+import { useOutletContext, useNavigate, useLocation } from 'react-router-dom';
 import ExcelJS from 'exceljs';
+import axios from 'axios';
 import { 
   Search, Filter, Plus, Edit, Layers, FileUp, FileDown, Eye, X, ArrowUpRight 
 } from 'lucide-react';
 import '@styles/components.css';
+import EquipmentHandover from './EquipmentHandoverView';
 
 const EquipmentManagementView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = useOutletContext();
@@ -18,15 +20,29 @@ const EquipmentManagementView = () => {
   const [actionMenuId, setActionMenuId] = useState(null);
   const [message, setMessage] = useState({ type: '', text: '' });
   
+  const location = useLocation();
+  const [showHandoverModal, setShowHandoverModal] = useState(false);
+  const [handoverEquipmentId, setHandoverEquipmentId] = useState(null);
+
+  useEffect(() => {
+    if (location.state?.openHandover) {
+      const hId = location.state.handoverId;
+      setHandoverEquipmentId(hId ? parseInt(hId) : null);
+      setShowHandoverModal(true);
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
+  
   // Pagination & Popups
   const [page, setPage] = useState(1);
   const pageSize = 15;
   const [showOtherMenu, setShowOtherMenu] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportOptions, setExportOptions] = useState({
-    equipments: true,
-    inspections: false,
-    trainings: false
+    listSelected: true,
+    listAll: false,
+    docsSelected: false,
+    docsAll: false
   });
 
   // Fetch all equipments
@@ -85,12 +101,12 @@ const EquipmentManagementView = () => {
     }
   };
 
-  // Export Excel function
+  // Export Excel / PDF ZIP function
   const handleConfirmExport = async () => {
-    const workbook = new ExcelJS.Workbook();
-    
     try {
-      if (exportOptions.equipments) {
+      // 1. Xuất danh sách Excel
+      if (exportOptions.listSelected) {
+        const workbook = new ExcelJS.Workbook();
         const sheet1 = workbook.addWorksheet('Danh sách thiết bị');
         sheet1.columns = [
           { header: 'Mã Thiết Bị', key: 'code', width: 15 },
@@ -102,7 +118,11 @@ const EquipmentManagementView = () => {
           { header: 'Ngày Kiểm Tra', key: 'check_date', width: 15 },
           { header: 'Trạng Thái', key: 'status', width: 15 }
         ];
-        equipments.forEach(eq => {
+
+        // Lựa chọn danh sách toàn bộ hoặc lọc theo bộ lọc hiện tại
+        const targetList = exportOptions.listAll ? equipments : filteredEquipments;
+        
+        targetList.forEach(eq => {
           sheet1.addRow({
             code: eq.code,
             name: eq.name,
@@ -114,80 +134,60 @@ const EquipmentManagementView = () => {
             status: eq.status || 'Bình thường'
           });
         });
-      }
 
-      if (exportOptions.inspections) {
-        const sheet2 = workbook.addWorksheet('Nhật ký kiểm định');
-        const inspectionsData = await api.get('/equipments/inspections');
-        sheet2.columns = [
-          { header: 'Mã TB', key: 'equipment_code', width: 15 },
-          { header: 'Tên Thiết Bị', key: 'equipment_name', width: 25 },
-          { header: 'Người Kiểm Tra', key: 'performed_by', width: 20 },
-          { header: 'Người Phê Duyệt', key: 'verified_by', width: 20 },
-          { header: 'Ngày Kiểm Tra', key: 'check_date', width: 15 },
-          { header: 'Ngày Hiệu Chuẩn', key: 'calibration_date', width: 15 },
-          { header: 'Trạng Thái', key: 'status', width: 15 },
-          { header: 'Ghi Chú', key: 'notes', width: 30 }
-        ];
-        if (Array.isArray(inspectionsData)) {
-          inspectionsData.forEach(ins => {
-            sheet2.addRow({
-              equipment_code: ins.equipment_code,
-              equipment_name: ins.equipment_name,
-              performed_by: ins.performed_by || '',
-              verified_by: ins.verified_by || '',
-              check_date: ins.check_date || '',
-              calibration_date: ins.calibration_date || '',
-              status: ins.status || '',
-              notes: ins.notes || ''
-            });
-          });
-        }
-      }
-
-      if (exportOptions.trainings) {
-        const sheet3 = workbook.addWorksheet('Nhật ký đào tạo');
-        const trainingsData = await api.get('/equipments/trainings');
-        sheet3.columns = [
-          { header: 'Mã TB', key: 'equipment_code', width: 15 },
-          { header: 'Tên Thiết Bị', key: 'equipment_name', width: 25 },
-          { header: 'Người Đào Tạo', key: 'trainer', width: 20 },
-          { header: 'Nội Dung Đào Tạo', key: 'summary', width: 35 },
-          { header: 'Ngày Đào Tạo', key: 'training_date', width: 15 },
-          { header: 'Ngày Đánh Giá', key: 'evaluation_date', width: 15 }
-        ];
-        if (Array.isArray(trainingsData)) {
-          trainingsData.forEach(trn => {
-            sheet3.addRow({
-              equipment_code: trn.equipment_code,
-              equipment_name: trn.equipment_name,
-              trainer: trn.trainer || '',
-              summary: trn.summary || '',
-              training_date: trn.training_date || '',
-              evaluation_date: trn.evaluation_date || ''
-            });
-          });
-        }
-      }
-
-      const buffer = await workbook.xlsx.writeBuffer();
-      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const url = window.URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `Bao_Cao_Thiet_Bi_${new Date().toISOString().split('T')[0]}.xlsx`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      setTimeout(() => {
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `Danh_Sach_Thiet_Bi_${new Date().toISOString().split('T')[0]}.xlsx`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
         window.URL.revokeObjectURL(url);
-      }, 100);
-      
-      setMessage({ type: 'success', text: 'Xuất dữ liệu Excel thành công.' });
+      }
+
+      // 2. Xuất tài liệu chi tiết (ZIP chứa các tệp PDF)
+      if (exportOptions.docsSelected) {
+        const token = localStorage.getItem('token');
+        const getBaseURL = () => {
+          const { hostname, port } = window.location;
+          if (port === '5173' || port === '3000') {
+            return `http://${hostname}:8000`;
+          }
+          return window.location.origin;
+        };
+
+        const payload = {
+          equipment_ids: exportOptions.docsAll ? null : filteredEquipments.map(eq => eq.id),
+          export_all: exportOptions.docsAll
+        };
+
+        const response = await axios.post(
+          `${getBaseURL()}/api/v1/equipments/export-zip`,
+          payload,
+          {
+            responseType: 'blob',
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          }
+        );
+
+        const blob = new Blob([response.data], { type: 'application/x-zip-compressed' });
+        const url = window.URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `Tai_Lieu_Thiet_Bi_${new Date().toISOString().split('T')[0]}.zip`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        window.URL.revokeObjectURL(url);
+      }
+
+      setMessage({ type: 'success', text: 'Xuất dữ liệu thành công.' });
       setShowExportModal(false);
     } catch (err) {
-      console.error("Lỗi khi xuất excel:", err);
-      setMessage({ type: 'error', text: 'Có lỗi xảy ra khi tạo tệp Excel.' });
+      console.error("Lỗi khi xuất dữ liệu:", err);
+      setMessage({ type: 'error', text: 'Có lỗi xảy ra khi xuất dữ liệu.' });
     }
   };
 
@@ -286,7 +286,7 @@ const EquipmentManagementView = () => {
             <FileDown size={14} /> Xuất dữ liệu
           </button>
 
-          <button onClick={() => navigate('/admin/equipment/handover')} style={btnStyle}>
+          <button onClick={() => { setHandoverEquipmentId(null); setShowHandoverModal(true); }} style={btnStyle}>
             <Plus size={14} /> Bàn giao
           </button>
         </div>
@@ -378,7 +378,7 @@ const EquipmentManagementView = () => {
                             {actionMenuId === eq.id && (
                               <div className="action-menu" style={{ right: '10px', top: '100%', zIndex: 1100 }}>
                                 <button className="action-menu-item" onClick={() => { setActionMenuId(null); navigate(`/admin/equipment/detail/${eq.id}`); }}>👁️ Xem chi tiết</button>
-                                <button className="action-menu-item" onClick={() => { setActionMenuId(null); navigate(`/admin/equipment/handover/${eq.id}`); }}>✏️ Chỉnh sửa</button>
+                                <button className="action-menu-item" onClick={() => { setActionMenuId(null); setHandoverEquipmentId(eq.id); setShowHandoverModal(true); }}>✏️ Chỉnh sửa</button>
                                 <button className="action-menu-item danger" onClick={() => { setActionMenuId(null); handleDelete(eq); }}>🗑 Xóa</button>
                               </div>
                             )}
@@ -417,7 +417,7 @@ const EquipmentManagementView = () => {
                         {actionMenuId === eq.id && (
                           <div className="action-menu" style={{ right: 0, top: '100%', zIndex: 1100 }}>
                             <button className="action-menu-item" onClick={() => { setActionMenuId(null); navigate(`/admin/equipment/detail/${eq.id}`); }}>👁️ Xem chi tiết</button>
-                            <button className="action-menu-item" onClick={() => { setActionMenuId(null); navigate(`/admin/equipment/handover/${eq.id}`); }}>✏️ Chỉnh sửa</button>
+                            <button className="action-menu-item" onClick={() => { setActionMenuId(null); setHandoverEquipmentId(eq.id); setShowHandoverModal(true); }}>✏️ Chỉnh sửa</button>
                             <button className="action-menu-item danger" onClick={() => { setActionMenuId(null); handleDelete(eq); }}>🗑 Xóa</button>
                           </div>
                         )}
@@ -482,61 +482,104 @@ const EquipmentManagementView = () => {
       {showExportModal && (
         <div style={{
           position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex',
+          backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 9999, display: 'flex',
           alignItems: 'center', justifyContent: 'center', padding: '20px'
         }}>
           <div style={{
-            backgroundColor: '#fff', borderRadius: '16px', width: '450px', padding: '24px',
-            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)'
+            backgroundColor: '#fff', borderRadius: '12px', width: '420px', padding: '24px',
+            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', border: '1px solid #EADCC9'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '900', color: '#7B5233' }}>Tùy chọn xuất dữ liệu</h3>
-              <X size={20} onClick={() => setShowExportModal(false)} style={{ cursor: 'pointer', color: '#64748b' }} />
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
-                <input 
-                  type="checkbox" 
-                  checked={exportOptions.equipments} 
-                  onChange={(e) => setExportOptions({ ...exportOptions, equipments: e.target.checked })} 
-                />
-                Danh sách thiết bị máy móc (.xlsx)
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
-                <input 
-                  type="checkbox" 
-                  checked={exportOptions.inspections} 
-                  onChange={(e) => setExportOptions({ ...exportOptions, inspections: e.target.checked })} 
-                />
-                Nhật ký kiểm tra & hiệu chuẩn (.xlsx)
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
-                <input 
-                  type="checkbox" 
-                  checked={exportOptions.trainings} 
-                  onChange={(e) => setExportOptions({ ...exportOptions, trainings: e.target.checked })} 
-                />
-                Nhật ký đào tạo vận hành (.xlsx)
-              </label>
-            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #E5E7EB' }}>
+                  <th style={{ padding: '12px 8px', textAlign: 'left', fontSize: '14px', fontWeight: '700', color: '#7B5233' }}>Nội dung cần xuất</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '14px', fontWeight: '700', color: '#7B5233', width: '120px' }}>Xuất toàn bộ</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style={{ borderBottom: '1px solid #F3F4F6' }}>
+                  <td style={{ padding: '14px 8px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', fontWeight: '600', color: '#475569', cursor: 'pointer' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={exportOptions.listSelected} 
+                        onChange={(e) => setExportOptions({ ...exportOptions, listSelected: e.target.checked })} 
+                        style={{ accentColor: '#7B5233', width: '15px', height: '15px' }}
+                      />
+                      Xuất danh sách
+                    </label>
+                  </td>
+                  <td style={{ padding: '14px 8px', textAlign: 'center' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={exportOptions.listAll} 
+                      disabled={!exportOptions.listSelected}
+                      onChange={(e) => setExportOptions({ ...exportOptions, listAll: e.target.checked })} 
+                      style={{ accentColor: '#7B5233', width: '15px', height: '15px', cursor: exportOptions.listSelected ? 'pointer' : 'default' }}
+                    />
+                  </td>
+                </tr>
+                <tr style={{ borderBottom: '1px solid #F3F4F6' }}>
+                  <td style={{ padding: '14px 8px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', fontWeight: '600', color: '#475569', cursor: 'pointer' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={exportOptions.docsSelected} 
+                        onChange={(e) => setExportOptions({ ...exportOptions, docsSelected: e.target.checked })} 
+                        style={{ accentColor: '#7B5233', width: '15px', height: '15px' }}
+                      />
+                      Xuất tài liệu
+                    </label>
+                  </td>
+                  <td style={{ padding: '14px 8px', textAlign: 'center' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={exportOptions.docsAll} 
+                      disabled={!exportOptions.docsSelected}
+                      onChange={(e) => setExportOptions({ ...exportOptions, docsAll: e.target.checked })} 
+                      style={{ accentColor: '#7B5233', width: '15px', height: '15px', cursor: exportOptions.docsSelected ? 'pointer' : 'default' }}
+                    />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
 
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button 
-                onClick={() => setShowExportModal(false)}
-                style={{ padding: '10px 20px', backgroundColor: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '700' }}
-              >
-                Hủy bỏ
-              </button>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
               <button 
                 onClick={handleConfirmExport}
-                style={{ padding: '10px 24px', backgroundColor: '#7B5233', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '800' }}
+                disabled={!exportOptions.listSelected && !exportOptions.docsSelected}
+                style={{ 
+                  display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 20px', 
+                  backgroundColor: (!exportOptions.listSelected && !exportOptions.docsSelected) ? '#cbd5e1' : '#5D3B32', 
+                  color: '#fff', border: 'none', borderRadius: '8px', cursor: (!exportOptions.listSelected && !exportOptions.docsSelected) ? 'default' : 'pointer', 
+                  fontWeight: '700', fontSize: '13px'
+                }}
               >
-                Xuất Báo Cáo
+                <FileDown size={16} />
+                Xuất dữ liệu
+              </button>
+              <button 
+                onClick={() => setShowExportModal(false)}
+                style={{ 
+                  display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 20px', 
+                  backgroundColor: '#5D3B32', color: '#fff', border: 'none', borderRadius: '8px', 
+                  cursor: 'pointer', fontWeight: '700', fontSize: '13px' 
+                }}
+              >
+                <X size={16} />
+                Hủy
               </button>
             </div>
           </div>
         </div>
+      )}
+      {/* Handover Modal */}
+      {showHandoverModal && (
+        <EquipmentHandover 
+          id={handoverEquipmentId} 
+          onClose={() => { setShowHandoverModal(false); setHandoverEquipmentId(null); }} 
+          onSaved={() => { fetchEquipments(); }} 
+        />
       )}
     </div>
   );

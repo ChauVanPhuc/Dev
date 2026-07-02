@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from datetime import timedelta
 from config.database import get_db
 from config.security import verify_password, create_access_token
-from modules.auth.schemas.accounts import Account, AccountBase, AccountCreate, AccountUpdate, Token, PaginatedAccountResponse, FCMTokenUpdate
+from modules.auth.schemas.accounts import Account, AccountBase, AccountCreate, AccountUpdate, Token, PaginatedAccountResponse, FCMTokenUpdate, PasswordChange
 from modules.auth.controllers import account_controller
 from config.settings import settings
 from modules.auth.models.departments import Department
@@ -356,3 +356,25 @@ def update_user_permissions(account_id: int, payload: dict, db: Session = Depend
     db_account.screen_permissions = json.dumps(permissions_dict)
     db.commit()
     return {"message": "Cập nhật phân quyền thành công", "screen_permissions": db_account.screen_permissions}
+
+@router.post("/{account_id}/change-password")
+def change_password(account_id: int, payload: PasswordChange, db: Session = Depends(get_db)):
+    """
+    [POST] Đổi mật khẩu tài khoản người dùng có kiểm tra mật khẩu cũ.
+    """
+    db_account = db.query(AccountModel).filter(AccountModel.id == account_id).first()
+    if not db_account:
+        raise HTTPException(status_code=404, detail="Tài khoản không tồn tại")
+    
+    # Xác thực mật khẩu cũ
+    if not verify_password(payload.old_password, db_account.hashed_password):
+        raise HTTPException(
+            status_code=400,
+            detail="Mật khẩu cũ không chính xác"
+        )
+    
+    # Cập nhật mật khẩu mới
+    from config.security import get_password_hash
+    db_account.hashed_password = get_password_hash(payload.new_password)
+    db.commit()
+    return {"message": "Đổi mật khẩu thành công"}

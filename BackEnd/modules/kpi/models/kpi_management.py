@@ -17,7 +17,6 @@ class KPIChecklist(Base):
     perform_count  = Column(Integer, nullable=False, default=0)
     last_performed = Column(NVARCHAR(50), nullable=True) # e.g. "2026-07-01"
     result         = Column(NVARCHAR(255), nullable=True) # e.g. "Đầy đủ biên bản"
-    points         = Column(Integer, nullable=False, default=0) # Điểm số cơ sở của công việc
 
 class KPIEmployeeItem(Base):
     """
@@ -88,7 +87,6 @@ class KPIChecklistPool(Base):
     task_code = Column(NVARCHAR(50), nullable=False) # e.g. "CV01"
     content   = Column(NVARCHAR(255), nullable=False) # e.g. "Báo cáo OQA"
     frequency = Column(NVARCHAR(50), nullable=False) # e.g. "Hàng ngày"
-    points    = Column(Integer, nullable=False, default=10) # Điểm cộng cơ sở
 
 class KPIItemPool(Base):
     """

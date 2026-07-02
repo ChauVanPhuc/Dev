@@ -12,6 +12,15 @@ from config.database import Base
 import app.models  # ensure models are registered
 from datetime import datetime
 
+def safe_print(text_msg):
+    try:
+        print(text_msg)
+    except UnicodeEncodeError:
+        try:
+            print(text_msg.encode('ascii', errors='backslashreplace').decode('ascii'))
+        except:
+            pass
+
 def enrich_technical_details(comp):
     tech = comp.get("technical_details", "")
     if not tech:
@@ -1463,17 +1472,17 @@ COMPONENT_SEEDS = {
 }
 
 def seed_components():
-    print("Ensuring database tables exist...")
+    safe_print("Ensuring database tables exist...")
     Base.metadata.create_all(bind=engine)
     db = next(get_db())
     try:
-        print("Starting seed system components...")
-        print("-" * 50)
+        safe_print("Starting seed system components...")
+        safe_print("-" * 50)
         
         # Check if system_screens has data
         check_screens = db.execute(text("SELECT COUNT(*) FROM system_screens")).fetchone()[0]
         if check_screens == 0:
-            print("[ERROR] No screens found in system_screens table. Please run screen migration first!")
+            safe_print("[ERROR] No screens found in system_screens table. Please run screen migration first!")
             return
             
         added_count = 0
@@ -1485,7 +1494,7 @@ def seed_components():
             screen = db.execute(screen_query, {"default_code": default_code}).fetchone()
             
             if not screen:
-                print(f"[SKIP] Screen with code {default_code} not found in database.")
+                safe_print(f"[SKIP] Screen with code {default_code} not found in database.")
                 skipped_count += len(components)
                 continue
                 
@@ -1513,7 +1522,7 @@ def seed_components():
                         "file_path": comp["file_path"],
                         "updated_at": datetime.now()
                     })
-                    print(f"[OK] Added component '{comp['name']}' to screen '{screen_title}' ({default_code})")
+                    safe_print(f"[OK] Added component '{comp['name']}' to screen '{screen_title}' ({default_code})")
                     added_count += 1
                 else:
                     # Update details
@@ -1531,16 +1540,16 @@ def seed_components():
                         "file_path": comp["file_path"],
                         "updated_at": datetime.now()
                     })
-                    print(f"[SKIP/UPDATE] Component '{comp['name']}' on screen '{screen_title}' already exists, updated details.")
+                    safe_print(f"[SKIP/UPDATE] Component '{comp['name']}' on screen '{screen_title}' already exists, updated details.")
                     skipped_count += 1
                     
         db.commit()
-        print("-" * 50)
-        print(f"[SUCCESS] Seeding completed: Added {added_count}, Skipped/Updated {skipped_count}")
+        safe_print("-" * 50)
+        safe_print(f"[SUCCESS] Seeding completed: Added {added_count}, Skipped/Updated {skipped_count}")
         
     except Exception as e:
         db.rollback()
-        print(f"[ERROR] Seeding failed: {str(e)}")
+        safe_print(f"[ERROR] Seeding failed: {str(e)}")
         sys.exit(1)
 
 if __name__ == "__main__":

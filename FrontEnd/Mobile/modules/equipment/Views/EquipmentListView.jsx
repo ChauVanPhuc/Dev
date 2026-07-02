@@ -69,11 +69,31 @@ const EquipmentList = () => {
     if (!selectedEq) return;
     try {
       setIsUpdating(true);
+      
+      let fullName = 'Mobile User';
+      try {
+        const userObj = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
+        fullName = userObj.full_name || userObj.username || 'Mobile User';
+      } catch (e) {}
+
+      // Cập nhật trạng thái thiết bị chính
       await apiClient.patch(`/equipments/${selectedEq.id}/status?status=${encodeURIComponent(newStatus)}`);
+
+      // Tạo bản ghi lịch sử kiểm tra mới
+      await apiClient.post(`/equipments/${selectedEq.id}/inspections`, {
+        performed_by: fullName,
+        verified_by: null,
+        check_date: new Date().toISOString().split('T')[0],
+        calibration_date: null,
+        status: newStatus,
+        notes: note || 'Kiểm tra cập nhật từ thiết bị di động'
+      });
+
       setShowModal(false);
       fetchEquipments(); // Tải lại danh sách
     } catch (err) {
-      alert("Không thể cập nhật trạng thái thiết bị");
+      console.error("Lỗi cập nhật thiết bị di động:", err);
+      alert("Không thể cập nhật trạng thái và ghi lịch sử thiết bị");
     } finally {
       setIsUpdating(false);
     }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import "@assets/sidebar.css";
 import amandaPhoto from '@mobile/assets/logo-no-bg.png';
 
@@ -9,6 +9,7 @@ import amandaPhoto from '@mobile/assets/logo-no-bg.png';
  */
 const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploads = [] }) => {
   const location = useLocation();
+  const navigate = useNavigate();
 
   const handleLinkClick = () => {
     if (onClose) onClose();
@@ -491,21 +492,33 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
 
   // Auto expand group khi location thay doi
   React.useEffect(() => {
+    let activeGroupId = null;
     menuStructure.forEach(group => {
       if (group.type === 'group') {
         const hasActive = hasActiveChild(group);
         if (hasActive) {
-          setExpandedGroups(prev => ({ ...prev, [group.id]: true }));
+          activeGroupId = group.id;
         }
       }
     });
+
+    const nextState = {};
+    if (activeGroupId) {
+      nextState[activeGroupId] = true;
+    }
+    setExpandedGroups(nextState);
   }, [location.pathname, location.search]);
 
   const toggleGroup = (groupId) => {
-    setExpandedGroups(prev => ({
-      ...prev,
-      [groupId]: !prev[groupId]
-    }));
+    setExpandedGroups(prev => {
+      const isAlreadyExpanded = !!prev[groupId];
+      // Accordion style: chỉ mở tối đa 1 nhóm menu tại một thời điểm
+      const nextState = {};
+      if (!isAlreadyExpanded) {
+        nextState[groupId] = true;
+      }
+      return nextState;
+    });
   };
 
   const renderDirectLink = (item) => {
@@ -568,24 +581,41 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
           title={collapsed ? 'Mở rộng menu' : undefined}
         >
           {/* Circular avatar logo */}
-          <div style={{ 
-            width: '45px', 
-            height: '45px', 
-            backgroundColor: '#FFFFFF', 
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            overflow: 'hidden',
-            border: '2px solid rgba(255,255,255,0.2)',
-            flexShrink: 0
-          }}>
+          <div 
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate('/admin/profile');
+              if (onClose) onClose();
+            }}
+            style={{ 
+              width: '45px', 
+              height: '45px', 
+              backgroundColor: '#FFFFFF', 
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden',
+              border: '2px solid rgba(255,255,255,0.2)',
+              flexShrink: 0,
+              cursor: 'pointer'
+            }}
+            title="Trang cá nhân"
+          >
             <img src={amandaPhoto} alt="Avatar" style={{ width: '80%', height: 'auto' }} />
           </div>
 
           {/* Account info */}
           {!collapsed && (
-            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+            <div 
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate('/admin/profile');
+                if (onClose) onClose();
+              }}
+              style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', cursor: 'pointer' }}
+              title="Trang cá nhân"
+            >
               <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {user.full_name || user.username || 'Hệ thống SmartFlow'}
               </span>
@@ -770,65 +800,6 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
           </div>
         )}
 
-        {/* Logout button at the bottom */}
-        <div style={{ 
-          padding: collapsed ? '12px 10px 0 10px' : '12px 20px 0 20px', 
-          backgroundColor: '#FFFFFF',
-          display: 'flex',
-          justifyContent: 'center',
-          borderTop: '1px solid #E5E7EB',
-          marginTop: 'auto'
-        }}>
-          <button 
-            onClick={onLogout} 
-            style={{
-              width: collapsed ? '40px' : '100%',
-              height: collapsed ? '40px' : 'auto',
-              padding: collapsed ? '0' : '10px 16px',
-              backgroundColor: '#A0301B',
-              color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '8px',
-              fontWeight: 'bold',
-              fontSize: '0.9rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: collapsed ? '0' : '8px',
-              transition: 'background-color 0.2s, transform 0.1s',
-              boxShadow: '0 2px 4px rgba(160, 48, 27, 0.1)',
-              flexShrink: 0
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#8B2917'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#A0301B'}
-            onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.98)'}
-            onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
-            title={collapsed ? "Đăng xuất" : undefined}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-              <polyline points="16 17 21 12 16 7"></polyline>
-              <line x1="21" y1="12" x2="9" y2="12"></line>
-            </svg>
-            {!collapsed && "Đăng xuất"}
-          </button>
-        </div>
-
-        <div className="sidebar-footer" style={{
-          padding: '0 25px 20px',
-          color: '#7B5233',
-          fontSize: '0.7rem',
-          fontWeight: '700',
-          opacity: 0.6
-        }}>
-          {!collapsed && (
-            <div style={{ marginBottom: '4px', fontSize: '0.65rem', color: '#A34A2E' }}>
-              Role: {user.role_name || 'NULL'} | Admin: {String(isAdmin)}
-            </div>
-          )}
-          SmartFlow v1.1.5
-        </div>
       </aside>
     </>
   );

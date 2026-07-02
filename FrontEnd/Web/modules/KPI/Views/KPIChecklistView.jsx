@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Search, Plus, Trash2, Edit2, AlertTriangle, HelpCircle } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import '@styles/components.css';
 
 const KPIChecklistView = () => {
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
   const navigate = useNavigate();
   const [checklistPool, setChecklistPool] = useState([]);
   
@@ -22,8 +23,7 @@ const KPIChecklistView = () => {
   const [formData, setFormData] = useState({
     task_code: '',
     content: '',
-    frequency: 'Hàng ngày',
-    points: 10
+    frequency: 'Hàng ngày'
   });
 
   const [confirmModal, setConfirmModal] = useState({
@@ -35,6 +35,9 @@ const KPIChecklistView = () => {
   });
 
   useEffect(() => {
+    setCustomScreenCode('AD7.2');
+    setCustomTitle('Danh mục Checklist mẫu');
+    setCustomSubtitle('Cấu hình danh mục các đầu việc mẫu để gán cho nhân viên.');
     fetchChecklistPool();
   }, []);
 
@@ -57,8 +60,7 @@ const KPIChecklistView = () => {
       setFormData({
         task_code: item.task_code,
         content: item.content,
-        frequency: item.frequency,
-        points: item.points
+        frequency: item.frequency
       });
     } else {
       setEditingItem(null);
@@ -67,8 +69,7 @@ const KPIChecklistView = () => {
       setFormData({
         task_code: nextCode,
         content: '',
-        frequency: 'Hàng ngày',
-        points: 10
+        frequency: 'Hàng ngày'
       });
     }
     setShowAddEditModal(true);
@@ -146,13 +147,7 @@ const KPIChecklistView = () => {
         </div>
       )}
         
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-        <div>
-          <h3 style={{ margin: 0, color: '#7B5233', fontWeight: '800', fontSize: '20px' }}>Danh mục Checklist công việc mẫu</h3>
-          <span style={{ fontSize: '12px', color: '#94a3b8' }}>Mã màn hình - Cấu hình danh mục các đầu việc mẫu để gán cho nhân viên</span>
-        </div>
-      </div>
+
 
       {/* Selector & Actions Toolbar */}
       <div className="card" style={{ background: '#fff', padding: '12px 16px', borderRadius: '12px', border: '1px solid #EADCC9', marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
@@ -214,7 +209,6 @@ const KPIChecklistView = () => {
                     <th style={{ width: '100px' }}>Mã CV</th>
                     <th>Nội dung công việc</th>
                     <th style={{ width: '150px', textAlign: 'center' }}>Tần suất</th>
-                    <th style={{ width: '150px', textAlign: 'center' }}>Điểm cộng cơ sở</th>
                     <th style={{ width: '120px', textAlign: 'center' }}>Thao tác</th>
                   </tr>
                 </thead>
@@ -227,9 +221,6 @@ const KPIChecklistView = () => {
                         <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', backgroundColor: '#FAF6F0', color: '#7B5233' }}>
                           {item.frequency}
                         </span>
-                      </td>
-                      <td style={{ textAlign: 'center', fontWeight: '800', color: '#16a34a' }}>
-                        +{item.points}đ
                       </td>
                       <td>
                         <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
@@ -263,21 +254,15 @@ const KPIChecklistView = () => {
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#475569', marginBottom: '2px' }}>Nội dung công việc mẫu</label>
                 <input type="text" value={formData.content} onChange={(e) => setFormData({ ...formData, content: e.target.value })} style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px', outline: 'none', boxSizing: 'border-box' }} />
               </div>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#475569', marginBottom: '2px' }}>Tần suất thực hiện</label>
-                  <select value={formData.frequency} onChange={(e) => setFormData({ ...formData, frequency: e.target.value })} style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px', outline: 'none', boxSizing: 'border-box' }}>
-                    <option value="Hàng ngày">Hàng ngày</option>
-                    <option value="Hàng tuần">Hàng tuần</option>
-                    <option value="Hằng tháng">Hằng tháng</option>
-                    <option value="Khi phát sinh">Khi phát sinh</option>
-                    <option value="Liên tục trong ca">Liên tục trong ca</option>
-                  </select>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#475569', marginBottom: '2px' }}>Điểm cộng</label>
-                  <input type="number" value={formData.points} onChange={(e) => setFormData({ ...formData, points: parseInt(e.target.value) || 0 })} style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px', outline: 'none', boxSizing: 'border-box' }} />
-                </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#475569', marginBottom: '2px' }}>Tần suất thực hiện</label>
+                <select value={formData.frequency} onChange={(e) => setFormData({ ...formData, frequency: e.target.value })} style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px', outline: 'none', boxSizing: 'border-box' }}>
+                  <option value="Hàng ngày">Hàng ngày</option>
+                  <option value="Hàng tuần">Hàng tuần</option>
+                  <option value="Hằng tháng">Hằng tháng</option>
+                  <option value="Khi phát sinh">Khi phát sinh</option>
+                  <option value="Liên tục trong ca">Liên tục trong ca</option>
+                </select>
               </div>
             </div>
 

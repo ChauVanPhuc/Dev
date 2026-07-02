@@ -3,6 +3,7 @@ import api from '@webShared/Services/api.service';
 import { useOutletContext, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Edit, FileText, X } from 'lucide-react';
 import '@styles/components.css';
+import EquipmentHandover from './EquipmentHandoverView';
 
 const EquipmentDetailView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
@@ -12,6 +13,7 @@ const EquipmentDetailView = () => {
   const [equipment, setEquipment] = useState(null);
   const [inspections, setInspections] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   // PDF Preview States
   const [showPdfReader, setShowPdfReader] = useState(false);
@@ -19,29 +21,28 @@ const EquipmentDetailView = () => {
   const [pdfBase64Data, setPdfBase64Data] = useState('');
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const eqData = await api.get('/equipments/');
+      if (Array.isArray(eqData)) {
+        const found = eqData.find(item => item.id === parseInt(id));
+        setEquipment(found || null);
+      }
+
+      const inspData = await api.get('/equipments/inspections');
+      setInspections(Array.isArray(inspData) ? inspData : []);
+    } catch (error) {
+      console.error('Lỗi khi tải thông tin chi tiết thiết bị:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     setCustomScreenCode('AD37.5');
     setCustomTitle('Chi tiết thiết bị máy móc');
     setCustomSubtitle('Thông tin bàn giao, lịch sử hiệu chuẩn định kỳ và hướng dẫn vận hành SOP.');
-
-    const loadData = async () => {
-      setLoading(true);
-      try {
-        const eqData = await api.get('/equipments/');
-        if (Array.isArray(eqData)) {
-          const found = eqData.find(item => item.id === parseInt(id));
-          setEquipment(found || null);
-        }
-
-        const inspData = await api.get('/equipments/inspections');
-        setInspections(Array.isArray(inspData) ? inspData : []);
-      } catch (error) {
-        console.error('Lỗi khi tải thông tin chi tiết thiết bị:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadData();
   }, [id]);
 
@@ -97,7 +98,7 @@ const EquipmentDetailView = () => {
           <ArrowLeft size={16} /> Quay lại danh sách
         </button>
         <button
-          onClick={() => navigate(`/admin/equipment/handover/${equipment.id}`)}
+          onClick={() => setShowEditModal(true)}
           style={{
             display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px',
             backgroundColor: '#7B5233', color: '#fff', border: 'none', borderRadius: '8px',
@@ -343,6 +344,17 @@ const EquipmentDetailView = () => {
             </div>
           </div>
         </div>
+      )}
+      {/* Edit/Handover Modal */}
+      {showEditModal && (
+        <EquipmentHandover 
+          id={equipment.id} 
+          onClose={() => setShowEditModal(false)} 
+          onSaved={() => { 
+            setShowEditModal(false); 
+            loadData(); 
+          }} 
+        />
       )}
     </div>
   );

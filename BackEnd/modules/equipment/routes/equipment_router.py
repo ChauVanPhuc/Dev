@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from config.database import get_db
 from modules.equipment.models.equipment import Equipment, EquipmentInspection, EquipmentTraining
@@ -6,6 +7,10 @@ from typing import List, Optional
 from pydantic import BaseModel
 import datetime
 import json
+import io
+import zipfile
+import fitz
+import os
 
 router = APIRouter()
 
@@ -57,6 +62,10 @@ class TrainingCreate(BaseModel):
     evaluation_result: Optional[str] = None
     file_content_preview: Optional[str] = None
 
+class ExportZipRequest(BaseModel):
+    equipment_ids: Optional[List[int]] = None
+    export_all: Optional[bool] = False
+
 @router.get("/", response_model=List[dict])
 def get_equipments(db: Session = Depends(get_db)):
     """
@@ -69,7 +78,7 @@ def get_equipments(db: Session = Depends(get_db)):
     if not equipments:
         sample_data = [
             {
-                "name": "Thước đo điện tử", "code": "EQP-001", "type": "Đo lường", "status": "Bình thường",
+                "name": "Thước đo điện tử", "code": "EQP-001", "type": "Điện tử", "status": "Bình thường",
                 "department": "Quản lý chất lượng", "owner_name": "Nguyễn Văn A",
                 "calibration_date": datetime.date(2026, 6, 20), "handover_date": datetime.date(2026, 6, 20),
                 "check_date": datetime.date(2026, 6, 22), "attachment_pdf": "bien_ban_ban_giao_001.pdf",
@@ -81,7 +90,7 @@ def get_equipments(db: Session = Depends(get_db)):
                 ])
             },
             {
-                "name": "Máy đo độ ẩm gỗ", "code": "EQP-002", "type": "Đo lường", "status": "Cần thay mới",
+                "name": "Máy đo độ ẩm gỗ", "code": "EQP-002", "type": "Điện tử", "status": "Cần thay mới",
                 "department": "Quản lý chất lượng", "owner_name": "Nguyễn Văn A",
                 "calibration_date": datetime.date(2026, 5, 10), "handover_date": datetime.date(2026, 5, 10),
                 "check_date": datetime.date(2026, 5, 12), "attachment_pdf": "bien_ban_ban_giao_002.pdf",
@@ -92,21 +101,21 @@ def get_equipments(db: Session = Depends(get_db)):
                 ])
             },
             {
-                "name": "Máy cắt 2 đầu", "code": "EQP-003", "type": "Sản xuất", "status": "Bình thường",
+                "name": "Máy cắt 2 đầu", "code": "EQP-003", "type": "Vật lý", "status": "Bình thường",
                 "department": "Tổ đóng gói", "owner_name": "Nguyễn Văn B",
                 "calibration_date": datetime.date(2026, 3, 1), "handover_date": datetime.date(2026, 3, 2),
                 "check_date": datetime.date(2026, 6, 25), "attachment_pdf": "bien_ban_ban_giao_003.pdf",
                 "images": "", "user_manual_steps": "[]"
             },
             {
-                "name": "Máy chà nhám", "code": "EQP-004", "type": "Sản xuất", "status": "Bảo trì",
+                "name": "Máy chà nhám", "code": "EQP-004", "type": "Vật lý", "status": "Bảo trì",
                 "department": "Tổ chà nhám", "owner_name": "Nguyễn Văn C",
                 "calibration_date": datetime.date(2026, 4, 15), "handover_date": datetime.date(2026, 4, 15),
                 "check_date": datetime.date(2026, 6, 18), "attachment_pdf": "bien_ban_ban_giao_004.pdf",
                 "images": "", "user_manual_steps": "[]"
             },
             {
-                "name": "Thước đo độ cong", "code": "EQP-005", "type": "Đo lường", "status": "Chưa kiểm tra",
+                "name": "Thước đo độ cong", "code": "EQP-005", "type": "Điện tử", "status": "Chưa kiểm tra",
                 "department": "Quản lý chất lượng", "owner_name": "Nguyễn Văn D",
                 "calibration_date": datetime.date(2026, 2, 20), "handover_date": datetime.date(2026, 2, 20),
                 "check_date": datetime.date(2026, 6, 20), "attachment_pdf": "",
@@ -437,4 +446,257 @@ def delete_equipment(equipment_id: int, db: Session = Depends(get_db)):
     db.delete(equipment)
     db.commit()
     return {"status": "success", "message": "Đã xóa thiết bị thành công"}
+
+@router.post("/export-zip")
+def export_equipment_zip(req: ExportZipRequest, db: Session = Depends(get_db)):
+    """
+    [POST] Xuất tài liệu chi tiết của các thiết bị được chọn thành các file PDF,
+    sau đó nén tất cả thành 1 file ZIP và trả về cho client.
+    """
+    # 1. Lọc danh sách thiết bị cần xuất
+    if req.export_all or not req.equipment_ids:
+        equipments = db.query(Equipment).order_by(Equipment.id.desc()).all()
+    else:
+        equipments = db.query(Equipment).filter(Equipment.id.in_(req.equipment_ids)).order_by(Equipment.id.desc()).all()
+        
+    if not equipments:
+        raise HTTPException(status_code=400, detail="Không có thiết bị nào để xuất tài liệu")
+        
+    # 2. Cấu hình tệp font Arial phục vụ hiển thị tiếng Việt UTF-8
+    font_reg = "C:/Windows/Fonts/arial.ttf"
+    font_bold = "C:/Windows/Fonts/arialbd.ttf"
+    if not os.path.exists(font_reg):
+        font_reg = None
+    if not os.path.exists(font_bold):
+        font_bold = None
+
+    # 3. Khởi tạo tệp ZIP lưu trong bộ nhớ tạm
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
+        for eq in equipments:
+            # Tạo 1 tệp PDF trong bộ nhớ cho thiết bị này
+            doc = fitz.open()
+            
+            # --- TRANG 1: THÔNG TIN CHUNG & HƯỚNG DẪN VẬN HÀNH ---
+            page = doc.new_page()
+            
+            # Header Tiêu đề
+            page.insert_textbox(
+                fitz.Rect(50, 40, 550, 70),
+                "HỆ THỐNG QUẢN LÝ THÔNG TIN SMARTFLOW",
+                fontname="viet-bold",
+                fontfile=font_bold,
+                fontsize=11,
+                align=1, # Căn giữa
+                color=(0.48, 0.32, 0.2) # Màu nâu ấm (#7B5233)
+            )
+            page.draw_line((50, 75), (550, 75), color=(0.48, 0.32, 0.2), width=1.5)
+            
+            page.insert_textbox(
+                fitz.Rect(50, 90, 550, 120),
+                "HỒ SƠ CHI TIẾT THIẾT BỊ MÁY MÓC",
+                fontname="viet-bold",
+                fontfile=font_bold,
+                fontsize=16,
+                align=1, # Căn giữa
+                color=(0.48, 0.32, 0.2)
+            )
+            
+            # Phân tách thông tin chính
+            page.insert_text(
+                (50, 135),
+                f"Mã thiết bị: {eq.code}  |  Tên thiết bị: {eq.name}",
+                fontname="viet-bold",
+                fontfile=font_bold,
+                fontsize=11,
+                color=(0.1, 0.1, 0.1)
+            )
+            page.draw_line((50, 142), (550, 142), color=(0.8, 0.8, 0.8), width=1)
+            
+            # Phần I: Thông tin chung
+            page.insert_textbox(
+                fitz.Rect(50, 160, 550, 180),
+                "I. THÔNG TIN CHUNG",
+                fontname="viet-bold",
+                fontfile=font_bold,
+                fontsize=12,
+                color=(0.48, 0.32, 0.2)
+            )
+            
+            # Bảng thông tin dạng lưới
+            y = 190
+            details = [
+                ("Mã thiết bị:", eq.code),
+                ("Tên thiết bị:", eq.name),
+                ("Phân loại:", eq.type or "—"),
+                ("Trạng thái hoạt động:", eq.status or "—"),
+                ("Bộ phận phụ trách:", eq.department or "—"),
+                ("Người chịu trách nhiệm:", eq.owner_name or "—"),
+                ("Ngày mua máy:", str(eq.purchase_date) if eq.purchase_date else "—"),
+                ("Ngày bàn giao máy:", str(eq.handover_date) if eq.handover_date else "—"),
+                ("Chu kỳ kiểm tra/bảo dưỡng:", f"{eq.maintenance_cycle} ngày" if eq.maintenance_cycle else "—"),
+                ("Ngày kiểm tra gần nhất:", str(eq.check_date) if eq.check_date else "—"),
+                ("Ngày hiệu chuẩn tiếp theo:", str(eq.calibration_date) if eq.calibration_date else "—")
+            ]
+            
+            for key, val in details:
+                page.insert_text((55, y), key, fontname="viet-bold", fontfile=font_bold, fontsize=10)
+                page.insert_text((220, y), val, fontname="viet", fontfile=font_reg, fontsize=10)
+                y += 20
+                
+            y += 10
+            # Phần II: Hướng dẫn vận hành thiết bị
+            page.insert_textbox(
+                fitz.Rect(50, y, 550, y + 20),
+                "II. HƯỚNG DẪN VẬN HÀNH THIẾT BỊ (USER MANUAL)",
+                fontname="viet-bold",
+                fontfile=font_bold,
+                fontsize=12,
+                color=(0.48, 0.32, 0.2)
+            )
+            y += 25
+            
+            # Parse các bước vận hành từ JSON
+            manual_steps = []
+            if eq.user_manual_steps:
+                try:
+                    manual_steps = json.loads(eq.user_manual_steps)
+                except:
+                    pass
+                    
+            if not manual_steps:
+                page.insert_text((55, y), "Chưa có quy trình hướng dẫn vận hành nào được cập nhật.", fontname="viet", fontfile=font_reg, fontsize=10)
+                y += 25
+            else:
+                for step in manual_steps:
+                    step_num = step.get("step", 0)
+                    step_title = step.get("title", "")
+                    step_text = f"Bước {step_num}: {step_title}"
+                    
+                    # Chèn nội dung text bọc khung tự động
+                    rect_step = fitz.Rect(55, y, 545, y + 40)
+                    page.insert_textbox(
+                        rect_step,
+                        step_text,
+                        fontname="viet",
+                        fontfile=font_reg,
+                        fontsize=10
+                    )
+                    y += 45
+                    
+                    # Nếu vượt quá chiều cao trang thì ngắt trang mới
+                    if y > 750:
+                        page = doc.new_page()
+                        y = 50
+            
+            # Truy vấn lịch sử kiểm định và đào tạo
+            inspections = db.query(EquipmentInspection).filter(EquipmentInspection.equipment_id == eq.id).order_by(EquipmentInspection.check_date.desc()).all()
+            trainings = db.query(EquipmentTraining).filter(EquipmentTraining.equipment_id == eq.id).order_by(EquipmentTraining.training_date.desc()).all()
+            
+            # --- TRANG 2: LỊCH SỬ KIỂM ĐỊNH & ĐÀO TẠO ---
+            if y > 550 or inspections or trainings:
+                page = doc.new_page()
+                y = 50
+                
+            # Phần III: Lịch sử kiểm định
+            page.insert_textbox(
+                fitz.Rect(50, y, 550, y + 20),
+                "III. LỊCH SỬ KIỂM ĐỊNH & HIỆU CHUẨN MÁY MÓC",
+                fontname="viet-bold",
+                fontfile=font_bold,
+                fontsize=12,
+                color=(0.48, 0.32, 0.2)
+            )
+            y += 25
+            
+            if not inspections:
+                page.insert_text((55, y), "Chưa có dữ liệu lịch sử kiểm định thiết bị này.", fontname="viet", fontfile=font_reg, fontsize=10)
+                y += 25
+            else:
+                # Vẽ tiêu đề cột bảng
+                page.draw_line((50, y), (550, y), color=(0.48, 0.32, 0.2), width=1)
+                page.insert_text((55, y + 5), "Ngày kiểm tra", fontname="viet-bold", fontfile=font_bold, fontsize=9)
+                page.insert_text((155, y + 5), "Người thực hiện", fontname="viet-bold", fontfile=font_bold, fontsize=9)
+                page.insert_text((275, y + 5), "Người kiểm tra", fontname="viet-bold", fontfile=font_bold, fontsize=9)
+                page.insert_text((395, y + 5), "Kết quả", fontname="viet-bold", fontfile=font_bold, fontsize=9)
+                page.insert_text((475, y + 5), "Ghi chú", fontname="viet-bold", fontfile=font_bold, fontsize=9)
+                y += 20
+                page.draw_line((50, y), (550, y), color=(0.48, 0.32, 0.2), width=1)
+                y += 5
+                
+                for ins in inspections:
+                    page.insert_text((55, y), str(ins.check_date) if ins.check_date else "—", fontname="viet", fontfile=font_reg, fontsize=9)
+                    page.insert_text((155, y), ins.performed_by or "—", fontname="viet", fontfile=font_reg, fontsize=9)
+                    page.insert_text((275, y), ins.verified_by or "—", fontname="viet", fontfile=font_reg, fontsize=9)
+                    page.insert_text((395, y), ins.status or "—", fontname="viet", fontfile=font_reg, fontsize=9)
+                    # Ghi chú dài tự động xuống dòng
+                    page.insert_textbox(fitz.Rect(475, y - 5, 545, y + 15), ins.notes or "—", fontname="viet", fontfile=font_reg, fontsize=9)
+                    y += 20
+                    if y > 750:
+                        page = doc.new_page()
+                        y = 50
+                
+            y += 15
+            # Phần IV: Nhật ký đào tạo
+            if y > 700:
+                page = doc.new_page()
+                y = 50
+                
+            page.insert_textbox(
+                fitz.Rect(50, y, 550, y + 20),
+                "IV. NHẬT KÝ ĐÀO TẠO VẬN HÀNH THIẾT BỊ",
+                fontname="viet-bold",
+                fontfile=font_bold,
+                fontsize=12,
+                color=(0.48, 0.32, 0.2)
+            )
+            y += 25
+            
+            if not trainings:
+                page.insert_text((55, y), "Chưa có dữ liệu nhật ký đào tạo vận hành cho thiết bị này.", fontname="viet", fontfile=font_reg, fontsize=10)
+                y += 25
+            else:
+                # Vẽ tiêu đề cột bảng đào tạo
+                page.draw_line((50, y), (550, y), color=(0.48, 0.32, 0.2), width=1)
+                page.insert_text((55, y + 5), "Ngày đào tạo", fontname="viet-bold", fontfile=font_bold, fontsize=9)
+                page.insert_text((155, y + 5), "Người đào tạo", fontname="viet-bold", fontfile=font_bold, fontsize=9)
+                page.insert_text((275, y + 5), "Nội dung đào tạo", fontname="viet-bold", fontfile=font_bold, fontsize=9)
+                page.insert_text((475, y + 5), "Kết quả đánh giá", fontname="viet-bold", fontfile=font_bold, fontsize=9)
+                y += 20
+                page.draw_line((50, y), (550, y), color=(0.48, 0.32, 0.2), width=1)
+                y += 5
+                
+                for trn in trainings:
+                    page.insert_text((55, y), str(trn.training_date) if trn.training_date else "—", fontname="viet", fontfile=font_reg, fontsize=9)
+                    page.insert_text((155, y), trn.trainer or "—", fontname="viet", fontfile=font_reg, fontsize=9)
+                    # Nội dung đào tạo dài tự bọc khung xuống dòng
+                    page.insert_textbox(fitz.Rect(275, y - 5, 465, y + 15), trn.summary or "—", fontname="viet", fontfile=font_reg, fontsize=9)
+                    page.insert_textbox(fitz.Rect(475, y - 5, 545, y + 15), trn.evaluation_result or "—", fontname="viet", fontfile=font_reg, fontsize=9)
+                    y += 20
+                    if y > 750:
+                        page = doc.new_page()
+                        y = 50
+            
+            # Xuất tệp PDF dạng byte
+            pdf_bytes = doc.write()
+            doc.close()
+            
+            # Làm sạch tên file tiếng Việt
+            safe_name = "".join(c for c in eq.name if c.isalnum() or c in (" ", "_", "-")).strip().replace(" ", "_")
+            pdf_filename = f"{eq.code}_{safe_name}.pdf"
+            
+            # Đẩy trực tiếp tệp PDF vào ZIP
+            zip_file.writestr(pdf_filename, pdf_bytes)
+            
+    zip_buffer.seek(0)
+    
+    headers = {
+        "Content-Disposition": f"attachment; filename=Tai_Lieu_Thiet_Bi_{datetime.date.today().isoformat()}.zip"
+    }
+    
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/x-zip-compressed",
+        headers=headers
+    )
 

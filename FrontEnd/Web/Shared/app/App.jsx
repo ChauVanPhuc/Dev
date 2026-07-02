@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import LoginPage from '@modules/Auth/Views/LoginView';
 import PortalLayout from '@webShared/Views/components/layout/PortalLayout';
 
@@ -88,7 +88,7 @@ const AccessDenied = () => (
     <p style={{ color: '#9CA3AF', fontWeight: 500, fontSize: '0.95rem', maxWidth: '400px', margin: '0 auto 20px auto' }}>
       Tài khoản của bạn không được cấp quyền truy cập vào màn hình này. Vui lòng liên hệ với Quản trị viên để được hỗ trợ.
     </p>
-    <button 
+    <button
       onClick={() => window.history.back()}
       style={{
         padding: '10px 20px',
@@ -149,25 +149,25 @@ const PermissionEnforcer = ({ permission, children }) => {
         if (path.includes('/create') || path.includes('/add') || path.includes('/new') || path.endsWith('/create') || path.endsWith('/add')) {
           return true;
         }
-        
+
         // 2. Traverse up and check parent container's header/title
         let parent = element.parentElement;
         while (parent) {
-          const isContainer = 
-            parent.classList.contains('modal') || 
-            parent.classList.contains('card') || 
+          const isContainer =
+            parent.classList.contains('modal') ||
+            parent.classList.contains('card') ||
             parent.tagName === 'FORM' ||
             parent.style.position === 'fixed';
-            
+
           if (isContainer || parent.tagName === 'BODY') {
             const headings = parent.querySelectorAll('h1, h2, h3, h4, h5, h6, .modal-title, .card-title, .section-title, [class*="title"], [class*="header"]');
             for (let h of headings) {
               const hText = (h.textContent || '').toLowerCase();
               if (
-                (hText.includes('tạo') && !hText.includes('trạng thái') && !hText.includes('chỉnh sửa')) || 
-                hText.includes('thêm') || 
-                hText.includes('new') || 
-                hText.includes('create') || 
+                (hText.includes('tạo') && !hText.includes('trạng thái') && !hText.includes('chỉnh sửa')) ||
+                hText.includes('thêm') ||
+                hText.includes('new') ||
+                hText.includes('create') ||
                 hText.includes('add')
               ) {
                 return true;
@@ -191,12 +191,12 @@ const PermissionEnforcer = ({ permission, children }) => {
         while (parent) {
           const className = (parent.className || '').toString().toLowerCase();
           const id = (parent.id || '').toString().toLowerCase();
-          
+
           if (
-            className.includes('filter') || 
-            className.includes('search') || 
+            className.includes('filter') ||
+            className.includes('search') ||
             className.includes('pagination') ||
-            id.includes('filter') || 
+            id.includes('filter') ||
             id.includes('search')
           ) {
             isFilterOrSearch = true;
@@ -208,13 +208,13 @@ const PermissionEnforcer = ({ permission, children }) => {
         const placeholder = (input.placeholder || '').toLowerCase();
         const name = (input.name || '').toLowerCase();
         const type = (input.type || '').toLowerCase();
-        
+
         if (
-          placeholder.includes('tìm') || 
-          placeholder.includes('lọc') || 
-          placeholder.includes('search') || 
+          placeholder.includes('tìm') ||
+          placeholder.includes('lọc') ||
+          placeholder.includes('search') ||
           placeholder.includes('filter') ||
-          name.includes('search') || 
+          name.includes('search') ||
           name.includes('filter') ||
           type === 'search'
         ) {
@@ -241,19 +241,19 @@ const PermissionEnforcer = ({ permission, children }) => {
         const className = (btn.className || '').toString().toLowerCase();
         const title = (btn.getAttribute('title') || '').toLowerCase();
         const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
-        
+
         // Skip navigation and read-only actions
-        const isBypass = 
-          text.includes('hủy') || 
-          text.includes('đóng') || 
-          text.includes('quay lại') || 
-          text.includes('trở lại') || 
-          text === 'khác' || 
-          text.includes('export') || 
-          text.includes('xuất') || 
-          text.includes('download') || 
-          text.includes('tải về') || 
-          text.includes('close') || 
+        const isBypass =
+          text.includes('hủy') ||
+          text.includes('đóng') ||
+          text.includes('quay lại') ||
+          text.includes('trở lại') ||
+          text === 'khác' ||
+          text.includes('export') ||
+          text.includes('xuất') ||
+          text.includes('download') ||
+          text.includes('tải về') ||
+          text.includes('close') ||
           text.includes('cancel') ||
           text.includes('xem') ||
           text.includes('chi tiết') ||
@@ -269,16 +269,16 @@ const PermissionEnforcer = ({ permission, children }) => {
           btn.closest('.main-tabs') ||
           btn.closest('.defect-mgmt-tabs') ||
           btn.closest('.tab-buttons');
-          
+
         if (isBypass) {
           return;
         }
 
         // Match mutating action words
-        const isAdd = 
-          text.includes('thêm') || 
-          text.includes('tạo') || 
-          text.includes('add') || 
+        const isAdd =
+          text.includes('thêm') ||
+          text.includes('tạo') ||
+          text.includes('add') ||
           text.includes('create') ||
           title.includes('thêm') ||
           title.includes('tạo') ||
@@ -288,14 +288,14 @@ const PermissionEnforcer = ({ permission, children }) => {
           className.includes('btn-create') ||
           className.includes('add-btn');
 
-        const isEdit = 
-          text.includes('sửa') || 
-          text.includes('lưu') || 
-          text.includes('cập nhật') || 
-          text.includes('chỉnh sửa') || 
-          text.includes('xử lý') || 
-          text.includes('edit') || 
-          text.includes('save') || 
+        const isEdit =
+          text.includes('sửa') ||
+          text.includes('lưu') ||
+          text.includes('cập nhật') ||
+          text.includes('chỉnh sửa') ||
+          text.includes('xử lý') ||
+          text.includes('edit') ||
+          text.includes('save') ||
           text.includes('update') ||
           title.includes('sửa') ||
           title.includes('lưu') ||
@@ -311,9 +311,9 @@ const PermissionEnforcer = ({ permission, children }) => {
           className.includes('edit-btn') ||
           className.includes('save-btn');
 
-        const isDelete = 
-          text.includes('xóa') || 
-          text.includes('delete') || 
+        const isDelete =
+          text.includes('xóa') ||
+          text.includes('delete') ||
           title.includes('xóa') ||
           title.includes('delete') ||
           ariaLabel.includes('xóa') ||
@@ -321,9 +321,9 @@ const PermissionEnforcer = ({ permission, children }) => {
           className.includes('btn-delete') ||
           className.includes('delete-btn');
 
-        const isApprove = 
-          text.includes('duyệt') || 
-          text.includes('phê duyệt') || 
+        const isApprove =
+          text.includes('duyệt') ||
+          text.includes('phê duyệt') ||
           text.includes('approve') ||
           title.includes('duyệt') ||
           title.includes('phê duyệt') ||
@@ -332,16 +332,16 @@ const PermissionEnforcer = ({ permission, children }) => {
           ariaLabel.includes('phê duyệt') ||
           ariaLabel.includes('approve');
 
-        const isExportImport = 
-          text.includes('nhập') || 
-          text.includes('import') || 
-          text.includes('upload') || 
+        const isExportImport =
+          text.includes('nhập') ||
+          text.includes('import') ||
+          text.includes('upload') ||
           text.includes('tải lên') ||
           className.includes('btn-import');
 
         const isCreationMode = isInCreationContext(btn);
         const hasMutatePerm = isCreationMode ? allowedActions.has('create') : allowedActions.has('edit');
-        
+
         let shouldHide = false;
         if (!hasMutatePerm) {
           shouldHide = true;
@@ -374,13 +374,13 @@ const PermissionEnforcer = ({ permission, children }) => {
         headers.forEach((th, index) => {
           const text = (th.textContent || '').trim().toLowerCase();
           if (
-            text.includes('thao tác') || 
-            text.includes('hành động') || 
-            text.includes('actions') || 
+            text.includes('thao tác') ||
+            text.includes('hành động') ||
+            text.includes('actions') ||
             text.includes('chức năng')
           ) {
             th.style.setProperty('display', 'none', 'important');
-            
+
             const table = th.closest('table');
             if (table) {
               const rows = table.querySelectorAll('tbody tr');
@@ -421,14 +421,14 @@ const PermissionEnforcer = ({ permission, children }) => {
 
 const ProtectedRoute = ({ permissionKey, children }) => {
   const user = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
-  
+
   // Chặn hoàn toàn tài khoản công nhân truy cập bất kỳ route Web nào
   if (user.permission_name === 'NV SX' || user.permission_name === 'NV QC') {
     return <AccessDenied />;
   }
 
   const isAdmin = user.role_name === 'IT' || user.role_name === 'BGD' || user.username === 'admin';
-  
+
   let permission = 'write';
   let hasExplicitPermission = false;
   try {
@@ -484,6 +484,12 @@ const RootRoute = () => {
   return authService.getToken() ? <Navigate to="/admin/dashboard" replace /> : <Navigate to="/login" replace />;
 };
 
+// Redirect handover requests to equipment view with state payload
+const EquipmentHandoverRedirect = () => {
+  const { id } = useParams();
+  return <Navigate to="/admin/equipment" state={{ openHandover: true, handoverId: id }} replace />;
+};
+
 /**
  * Controller chính điều phối Routing của ứng dụng
  */
@@ -501,6 +507,7 @@ function App() {
           <Route path="/admin" element={<PortalLayout />}>
             <Route index element={<Navigate to="/admin/dashboard" />} />
             <Route path="dashboard" element={<Dashboard />} />
+            <Route path="profile" element={<UserEdit isProfile={true} />} />
             <Route path="users" element={<ProtectedRoute permissionKey="users"><UserManagement /></ProtectedRoute>} />
             <Route path="users/create" element={<ProtectedRoute permissionKey="users"><UserCreate /></ProtectedRoute>} />
             <Route path="users/edit/:id" element={<ProtectedRoute permissionKey="users"><UserEdit /></ProtectedRoute>} />
@@ -529,8 +536,8 @@ function App() {
             <Route path="equipment/categories" element={<ProtectedRoute permissionKey="equipment"><EquipmentCategories /></ProtectedRoute>} />
             <Route path="equipment/history" element={<ProtectedRoute permissionKey="equipment"><EquipmentHistory /></ProtectedRoute>} />
             <Route path="equipment/training" element={<ProtectedRoute permissionKey="equipment"><EquipmentTraining /></ProtectedRoute>} />
-            <Route path="equipment/handover" element={<ProtectedRoute permissionKey="equipment"><EquipmentHandover /></ProtectedRoute>} />
-            <Route path="equipment/handover/:id" element={<ProtectedRoute permissionKey="equipment"><EquipmentHandover /></ProtectedRoute>} />
+            <Route path="equipment/handover" element={<ProtectedRoute permissionKey="equipment"><EquipmentHandoverRedirect /></ProtectedRoute>} />
+            <Route path="equipment/handover/:id" element={<ProtectedRoute permissionKey="equipment"><EquipmentHandoverRedirect /></ProtectedRoute>} />
             <Route path="equipment/detail/:id" element={<ProtectedRoute permissionKey="equipment"><EquipmentDetail /></ProtectedRoute>} />
             <Route path="equipment/training/detail/:id" element={<ProtectedRoute permissionKey="equipment"><EquipmentTrainingDetail /></ProtectedRoute>} />
 
@@ -582,7 +589,7 @@ function App() {
 
           {/* Chuyển hướng mặc định */}
           <Route path="/" element={<RootRoute />} />
-          
+
           {/* Catch-all route to prevent white screen */}
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>

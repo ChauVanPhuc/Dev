@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Search, Plus, Trash2, Edit2, AlertTriangle, HelpCircle, Lock, Upload, Download } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import '@styles/components.css';
 
 const KPIFeedbackView = () => {
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
   const navigate = useNavigate();
   const [employees, setEmployees] = useState([]);
   const [selectedEmpId, setSelectedEmpId] = useState('');
@@ -39,6 +40,9 @@ const KPIFeedbackView = () => {
   });
 
   useEffect(() => {
+    setCustomScreenCode('AD7.5');
+    setCustomTitle('Ý kiến đóng góp & Nhận xét KPI');
+    setCustomSubtitle('Nhật ký và cấu trúc ý kiến đóng góp của từng nhân viên.');
     fetchEmployees();
   }, []);
 
@@ -182,13 +186,7 @@ const KPIFeedbackView = () => {
         </div>
       )}
         
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-        <div>
-          <h3 style={{ margin: 0, color: '#7B5233', fontWeight: '800', fontSize: '20px' }}>Quản lý Phản hồi và nhận xét</h3>
-          <span style={{ fontSize: '12px', color: '#94a3b8' }}>Mã màn hình - Nhật ký và cấu trúc ý kiến đóng góp của từng nhân viên</span>
-        </div>
-      </div>
+
 
       {/* Selector & Actions Toolbar */}
       <div className="card" style={{ background: '#fff', padding: '12px 16px', borderRadius: '12px', border: '1px solid #EADCC9', marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>

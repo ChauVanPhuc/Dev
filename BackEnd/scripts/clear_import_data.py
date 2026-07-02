@@ -20,11 +20,13 @@ from modules.claim.models.claim_models import CustomerClaim
 
 # Paths
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CLAIM_IMPORTS_DIR = os.path.join(BACKEND_DIR, "modules", "claim_imports")
+CLAIM_IMPORTS_DIR = os.path.join(BACKEND_DIR, "claim_imports")
 JSON_DIR = os.path.join(CLAIM_IMPORTS_DIR, "json")
 EXCEL_DIR = os.path.join(CLAIM_IMPORTS_DIR, "excel")
-IMAGES_DIR = os.path.join(CLAIM_IMPORTS_DIR, "images")
 UPLOADS_DIR = os.path.join(CLAIM_IMPORTS_DIR, "uploads")
+
+BACKEND_STATIC_DIR = os.path.join(BACKEND_DIR, "static")
+IMAGES_DIR = os.path.join(BACKEND_STATIC_DIR, "uploads", "claim_imports", "images")
 
 def clear_db_claims(db_session):
     """Clear all claims from customer_claims table."""

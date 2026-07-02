@@ -121,3 +121,7 @@ class FCMTokenUpdate(BaseModel):
     """
     user_id: int
     fcm_token: str
+
+class PasswordChange(BaseModel):
+    old_password: str
+    new_password: str

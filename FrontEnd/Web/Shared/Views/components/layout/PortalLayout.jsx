@@ -1536,11 +1536,13 @@ const PortalLayout = () => {
             width: calc(100% - 260px);
           }
           .admin-main.sidebar-collapsed {
-            margin-left: 80px !important;
-            width: calc(100% - 80px) !important;
+            margin-left: 0 !important;
+            width: 100% !important;
           }
           .admin-sidebar.collapsed {
-            width: 80px !important;
+            width: 0 !important;
+            border-right: none !important;
+            transform: translateX(-100%) !important;
           }
           .admin-sidebar.collapsed .sidebar-user-section {
             padding: 20px 10px !important;
@@ -1594,7 +1596,7 @@ const PortalLayout = () => {
           font-weight: 500;
         }
         .dashboard-content {
-          padding: 8px 24px;
+          padding: 8px 24px 0 24px;
           flex: 1;
           background-color: #F8FAFC;
           min-height: auto;

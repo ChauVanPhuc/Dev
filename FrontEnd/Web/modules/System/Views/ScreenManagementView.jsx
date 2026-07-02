@@ -104,7 +104,7 @@ const ScreenManagement = () => {
 
   return (
     <>
-      <div className="mgmt-container screen-management-container" style={{ paddingBottom: '80px' }}>
+      <div className="mgmt-container screen-management-container">
       <div className="mgmt-main">
         {/* Toast Notification */}
         {toast && (
@@ -413,15 +413,35 @@ const ScreenManagement = () => {
                           >
                             &lt; Trước
                           </button>
-                          {[...Array(totalPages)].map((_, i) => (
-                            <button
-                              key={i}
-                              className={`page-btn ${currentPage === i + 1 ? 'active' : ''}`}
-                              onClick={() => setCurrentPage(i + 1)}
-                            >
-                              {i + 1}
-                            </button>
-                          ))}
+                          {(() => {
+                            const pages = [];
+                            const delta = 2;
+                            for (let i = 1; i <= totalPages; i++) {
+                              if (i === 1 || i === totalPages || (i >= currentPage - delta && i <= currentPage + delta)) {
+                                pages.push(i);
+                              } else if (pages[pages.length - 1] !== '...') {
+                                pages.push('...');
+                              }
+                            }
+                            return pages.map((p, idx) => {
+                              if (p === '...') {
+                                return (
+                                  <span key={`ell-${idx}`} style={{ padding: '0 8px', color: '#7B5233', fontWeight: '700' }}>
+                                    ...
+                                  </span>
+                                );
+                              }
+                              return (
+                                <button
+                                  key={p}
+                                  className={`page-btn ${currentPage === p ? 'active' : ''}`}
+                                  onClick={() => setCurrentPage(p)}
+                                >
+                                  {p}
+                                </button>
+                              );
+                            });
+                          })()}
                           <button 
                             disabled={currentPage >= totalPages} 
                             onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
