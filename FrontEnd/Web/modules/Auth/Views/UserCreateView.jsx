@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import api from '@webShared/Services/api.service';
 
@@ -548,6 +548,40 @@ const UserCreate = () => {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [toastMessage, setToastMessage] = useState(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  // Selected factory state for Phạm vi phụ trách
+  const [selectedFactory, setSelectedFactory] = useState('');
+
+  const getFactoryCode = (stageName) => {
+    if (!stageName) return 'Khác';
+    const match = stageName.match(/^(NM\d+)/i);
+    return match ? match[1].toUpperCase() : 'Khác';
+  };
+
+  const uniqueFactories = useMemo(() => {
+    const list = new Set();
+    stages.forEach(s => {
+      list.add(getFactoryCode(s.name));
+    });
+    return Array.from(list).sort();
+  }, [stages]);
+
+  useEffect(() => {
+    if (uniqueFactories.length > 0) {
+      if (!selectedFactory || !uniqueFactories.includes(selectedFactory)) {
+        setSelectedFactory(uniqueFactories[0]);
+      }
+    } else {
+      setSelectedFactory('');
+    }
+  }, [uniqueFactories, selectedFactory]);
+
+  const filteredStages = useMemo(() => {
+    if (!selectedFactory) return stages;
+    return stages.filter(s => getFactoryCode(s.name) === selectedFactory);
+  }, [stages, selectedFactory]);
 
   // 1. Lấy danh sách Roles khi mount
   useEffect(() => {
@@ -648,6 +682,16 @@ const UserCreate = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    // Validate phone: only allow digits, + sign
+    if (name === 'phone') {
+      const cleaned = value.replace(/[^0-9+]/g, '');
+      // Only allow + at the beginning
+      const sanitized = cleaned.charAt(0) === '+' 
+        ? '+' + cleaned.slice(1).replace(/\+/g, '') 
+        : cleaned.replace(/\+/g, '');
+      setFormData(prev => ({ ...prev, phone: sanitized }));
+      return;
+    }
     setFormData(prev => ({
       ...prev,
       [name]: value
@@ -724,8 +768,167 @@ const UserCreate = () => {
     });
   };
 
-  const handleSubmit = async (e) => {
+  const isRowAllChecked = (screenKey) => {
+    const current = screenPermissions[screenKey] || [];
+    const lvlKeys = ['read', 'create', 'edit', 'delete', 'approve', 'export_import'];
+    return lvlKeys.every(lvl => current.includes(lvl));
+  };
+
+  const handleRowAllClick = (screenKey) => {
+    setScreenPermissions(prev => {
+      const isAll = isRowAllChecked(screenKey);
+      return {
+        ...prev,
+        [screenKey]: isAll ? ['none'] : ['read', 'create', 'edit', 'delete', 'approve', 'export_import']
+      };
+    });
+  };
+
+  const isHeaderChecked = (screensInGroup, levelKey) => {
+    if (screensInGroup.length === 0) return false;
+    if (levelKey === 'all') {
+      const actions = ['read', 'create', 'edit', 'delete', 'approve', 'export_import'];
+      return screensInGroup.every(scr => {
+        const cur = screenPermissions[scr.key] || [];
+        return actions.every(act => cur.includes(act));
+      });
+    }
+    return screensInGroup.every(scr => {
+      const cur = screenPermissions[scr.key] || [];
+      return cur.includes(levelKey);
+    });
+  };
+
+  const handleHeaderToggle = (screensInGroup, levelKey) => {
+    setScreenPermissions(prev => {
+      const next = { ...prev };
+      
+      if (levelKey === 'all') {
+        const actions = ['read', 'create', 'edit', 'delete', 'approve', 'export_import'];
+        let allSelected = true;
+        screensInGroup.forEach(scr => {
+          const cur = prev[scr.key] || [];
+          actions.forEach(act => {
+            if (!cur.includes(act)) allSelected = false;
+          });
+        });
+        
+        screensInGroup.forEach(scr => {
+          next[scr.key] = allSelected ? ['none'] : [...actions];
+        });
+      } else {
+        let allSelected = true;
+        screensInGroup.forEach(scr => {
+          const cur = prev[scr.key] || [];
+          if (!cur.includes(levelKey)) allSelected = false;
+        });
+        
+        screensInGroup.forEach(scr => {
+          const cur = prev[scr.key] || [];
+          const filtered = cur.filter(p => p !== 'none');
+          let nextPerms = [];
+          if (allSelected) {
+            nextPerms = filtered.filter(p => p !== levelKey);
+          } else {
+            if (!filtered.includes(levelKey)) {
+              nextPerms = [...filtered, levelKey];
+            } else {
+              nextPerms = filtered;
+            }
+          }
+          next[scr.key] = nextPerms.length === 0 ? ['none'] : nextPerms;
+        });
+      }
+      
+      return next;
+    });
+  };
+
+  const renderPermissionButton = ({ label, isChecked, onClick, isDisabled = false }) => {
+    if (isDisabled) {
+      return (
+        <div 
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            height: '32px',
+            borderRadius: '6px',
+            border: '1.5px solid #E2E8F0',
+            backgroundColor: '#F8FAFC',
+            color: '#94A3B8',
+            fontSize: '0.78rem',
+            fontWeight: '700',
+            cursor: 'not-allowed',
+            userSelect: 'none',
+            width: '95px',
+            boxSizing: 'border-box'
+          }}
+        >
+          <span>🚫</span> {label}
+        </div>
+      );
+    }
+
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '6px',
+          height: '32px',
+          borderRadius: '6px',
+          border: isChecked ? '1.5px solid #10B981' : '1.5px solid #EADCC9',
+          backgroundColor: isChecked ? '#EBFDF5' : '#FFFFFF',
+          color: isChecked ? '#047857' : '#2D1A12',
+          fontSize: '0.78rem',
+          fontWeight: '700',
+          cursor: 'pointer',
+          transition: 'all 0.15s ease',
+          userSelect: 'none',
+          width: '95px',
+          boxSizing: 'border-box',
+          outline: 'none'
+        }}
+      >
+        <span style={{
+          width: '12px',
+          height: '12px',
+          borderRadius: '3px',
+          border: isChecked ? '1.5px solid #10B981' : '1.5px solid #EADCC9',
+          backgroundColor: isChecked ? '#10B981' : 'transparent',
+          position: 'relative',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0
+        }}>
+          {isChecked && (
+            <span style={{
+              width: '3px',
+              height: '6px',
+              border: 'solid white',
+              borderWidth: '0 1.5px 1.5px 0',
+              transform: 'rotate(45deg)',
+              marginBottom: '1px'
+            }} />
+          )}
+        </span>
+        {label}
+      </button>
+    );
+  };
+
+  const handleSubmit = (e) => {
     e.preventDefault();
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmCreate = async () => {
     setLoading(true);
     setError(null);
     
@@ -787,8 +990,11 @@ const UserCreate = () => {
         permissions: permissionsToSave
       });
 
-      alert('Tạo tài khoản và phân quyền thành công!');
-      navigate('/admin/users');
+      setToastMessage('Tạo tài khoản và phân quyền thành công!');
+      setTimeout(() => {
+        setToastMessage(null);
+        navigate('/admin/users');
+      }, 2000);
     } catch (err) {
       console.error('Lỗi khi tạo tài khoản:', err);
       setError(err.response?.data?.detail || 'Có lỗi xảy ra khi tạo tài khoản. Hãy kiểm tra lại dữ liệu.');
@@ -805,13 +1011,33 @@ const UserCreate = () => {
         
         <form onSubmit={handleSubmit} className="create-form-vertical-layout">
           
-          {/* PHẦN 1: THÔNG TIN CƠ BẢN & TÀI KHOẢN */}
-          <div className="account-info-card card">
-            <div className="card-header-row">
-              <h3 className="section-title">Thông tin cơ bản & Tài khoản</h3>
+          {/* CARD 1: THÔNG TIN CƠ BẢN & TÀI KHOẢN */}
+          <div className="account-info-card card" style={{ width: '100%', boxSizing: 'border-box' }}>
+            <div className="card-header-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '16px', borderBottom: '1.5px solid #F5EDE4', paddingBottom: '12px', marginBottom: '20px' }}>
+              <div style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '50%',
+                backgroundColor: '#FAF6F0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#7B5233',
+                border: '1.5px solid #EADCC9',
+                flexShrink: 0
+              }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#7B5233' }}>
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <h3 className="section-title" style={{ fontSize: '1.05rem', margin: 0, fontWeight: 800 }}>Thông tin cơ bản & Tài khoản</h3>
+                <span style={{ fontSize: '0.78rem', color: '#8C7B72', fontWeight: 500 }}>Nhập thông tin người dùng và tài khoản đăng nhập hệ thống.</span>
+              </div>
             </div>
             
-            <div className="form-inputs-grid">
+            <div className="form-inputs-grid form-grid-3col">
               <div className="form-group">
                 <label>Mã nhân viên</label>
                 <input 
@@ -858,12 +1084,13 @@ const UserCreate = () => {
               <div className="form-group">
                 <label>Số điện thoại</label>
                 <input 
-                  type="text" 
+                  type="tel" 
                   name="phone" 
-                  placeholder="VD: 0987654321" 
+                  placeholder="VD: 0987654321 hoặc +84987654321" 
                   value={formData.phone}
                   onChange={handleChange}
                   required
+                  inputMode="tel"
                 />
               </div>
               <div className="form-group">
@@ -880,14 +1107,33 @@ const UserCreate = () => {
             </div>
           </div>
 
-          {/* PHẦN 2: PHÂN QUYỀN PHÂN CẤP */}
-          <div className="account-info-card card" style={{ marginTop: '6px' }}>
-            <div className="card-header-row">
-              <h3 className="section-title">Phân quyền phân cấp</h3>
+          {/* CARD 2: PHÂN QUYỀN PHÂN CẤP */}
+          <div className="account-info-card card" style={{ width: '100%', boxSizing: 'border-box' }}>
+            <div className="card-header-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '16px', borderBottom: '1.5px solid #F5EDE4', paddingBottom: '12px', marginBottom: '20px' }}>
+              <div style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '50%',
+                backgroundColor: '#FAF6F0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#7B5233',
+                border: '1.5px solid #EADCC9',
+                flexShrink: 0
+              }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#7B5233' }}>
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <h3 className="section-title" style={{ fontSize: '1.05rem', margin: 0, fontWeight: 800 }}>Phân quyền phân cấp</h3>
+                <span style={{ fontSize: '0.78rem', color: '#8C7B72', fontWeight: 500 }}>Chọn bộ phận/phòng ban, vị trí và phạm vi phụ trách.</span>
+              </div>
             </div>
             
-            <div className="form-inputs-grid">
-              {/* 1. Chọn Role */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px 18px', marginBottom: '20px' }}>
+              {/* Bộ phận/phòng ban */}
               <div className="form-group">
                 <label>Bộ phận/phòng ban</label>
                 <select name="role_id" value={formData.role_id} onChange={handleChange}>
@@ -898,7 +1144,7 @@ const UserCreate = () => {
                 </select>
               </div>
 
-              {/* 2. Chọn Permission */}
+              {/* Vị trí, chức vụ */}
               <div className={`form-group ${!formData.role_id ? 'disabled' : ''}`}>
                 <label>Vị trí, chức vụ</label>
                 <select 
@@ -914,42 +1160,101 @@ const UserCreate = () => {
                 </select>
                 {!formData.role_id && <small className="hint">Hãy chọn Bộ phận trước</small>}
               </div>
-
-              {/* 3. Phân quyền chi tiết: Công đoạn hoặc Quyền hạn */}
-              {formData.permission_id && (
-                (() => {
-                  const selectedPerm = permissions.find(p => p.id === parseInt(formData.permission_id));
-                  const isProductionOrQC = selectedPerm && (selectedPerm.name === 'NV SX' || selectedPerm.name === 'NV QC');
-
-                  if (isProductionOrQC) {
-                    return (
-                      <div className={`form-group full-width-span ${stages.length === 0 ? 'disabled' : ''}`}>
-                        <label>Phạm vi phụ trách (Công đoạn sản xuất)</label>
-                        {stages.length === 0 ? (
-                          <div className="empty-stages-hint">Quyền này không yêu cầu công đoạn sản xuất</div>
-                        ) : (
-                          <div className="stages-checkbox-grid">
-                            {stages.map(s => (
-                              <label key={s.id} className="stage-checkbox-item">
-                                <input 
-                                  type="checkbox"
-                                  checked={formData.stage_ids.includes(s.id)}
-                                  onChange={(e) => handleStageCheckboxChange(s.id, e.target.checked)}
-                                />
-                                <span>{s.name}</span>
-                              </label>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  } else {
-                    return null;
-                  }
-                })()
-              )}
             </div>
+
+            {/* PHÂN QUYỀN CHI TIẾT: CÔNG ĐOẠN PHỤ TRÁCH (NẰM TRONG CARD 2) */}
+            {formData.permission_id && (
+              (() => {
+                const selectedPerm = permissions.find(p => p.id === parseInt(formData.permission_id));
+                const isProductionOrQC = selectedPerm && (selectedPerm.name === 'NV SX' || selectedPerm.name === 'NV QC');
+
+                if (isProductionOrQC && stages.length > 0) {
+                  return (
+                    <div style={{ borderTop: '1.5px solid #F5EDE4', paddingTop: '20px', marginTop: '10px' }}>
+                      <div style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center', 
+                          width: '100%', 
+                          marginBottom: '12px',
+                          flexWrap: 'wrap',
+                          gap: '12px'
+                      }}>
+                          <div>
+                              <label style={{ fontWeight: '700', fontSize: '0.85rem', color: '#5D4037', margin: 0 }}>
+                                  Phạm vi phụ trách (Công đoạn sản xuất)
+                              </label>
+                              <div style={{ fontSize: '0.75rem', color: '#8C7A6B', marginTop: '2px' }}>
+                                  Chọn công đoạn tùy theo nhà máy để chọn phạm vi phụ trách.
+                              </div>
+                          </div>
+                          
+                          {/* Factory Selector */}
+                          {uniqueFactories.length > 0 && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#7B5233' }}>Chọn nhà máy</span>
+                                  <div style={{ display: 'inline-flex', border: '1px solid #EADCC9', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#FAF6F0' }}>
+                                      {uniqueFactories.map(fac => {
+                                          const isActive = selectedFactory === fac;
+                                          return (
+                                              <button
+                                                  type="button"
+                                                  key={fac}
+                                                  onClick={() => setSelectedFactory(fac)}
+                                                  style={{
+                                                      padding: '6px 16px',
+                                                      border: 'none',
+                                                      backgroundColor: isActive ? '#7B5233' : 'transparent',
+                                                      color: isActive ? '#FFFFFF' : '#7B5233',
+                                                      fontWeight: 'bold',
+                                                      fontSize: '0.8rem',
+                                                      cursor: 'pointer',
+                                                      display: 'flex',
+                                                      alignItems: 'center',
+                                                      gap: '6px',
+                                                      transition: 'all 0.2s',
+                                                      borderLeft: fac !== uniqueFactories[0] ? '1px solid #EADCC9' : 'none'
+                                                  }}
+                                              >
+                                                  <span style={{
+                                                      width: '8px',
+                                                      height: '8px',
+                                                      borderRadius: '50%',
+                                                      border: `1.5px solid ${isActive ? '#FFFFFF' : '#7B5233'}`,
+                                                      backgroundColor: isActive ? '#FFFFFF' : 'transparent',
+                                                      display: 'inline-block'
+                                                  }} />
+                                                  {fac}
+                                              </button>
+                                          );
+                                      })}
+                                  </div>
+                              </div>
+                          )}
+                      </div>
+
+                      <div className="stages-checkbox-grid">
+                        {filteredStages.map(s => (
+                          <label key={s.id} className="stage-checkbox-item" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+                            <input 
+                              type="checkbox"
+                              checked={formData.stage_ids.includes(s.id)}
+                              onChange={(e) => handleStageCheckboxChange(s.id, e.target.checked)}
+                              style={{ margin: 0, width: '15px', height: '15px', accentColor: '#7B5233', cursor: 'pointer' }}
+                            />
+                            <span>{s.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()
+            )}
           </div>
+
+
 
           {/* PHẦN 3: PHÂN QUYỀN CHI TIẾT TRÊN TỪNG MÀN HÌNH */}
           <div className="permissions-card card">
@@ -1125,10 +1430,11 @@ const UserCreate = () => {
                         <div className="accordion-body">
                           {isAllowed ? (
                             <div className="accordion-body-list">
+
                               {screensInGroup.map((screen, sIdx) => {
-                                const currentVal = screenPermissions[screen.key] || 'none';
+                                const isRowAll = isRowAllChecked(screen.key);
                                 return (
-                                  <div key={sIdx} className="permission-screen-row">
+                                  <div key={sIdx} className="permission-screen-row" style={{ padding: '12px 16px', borderBottom: '1px solid #FAF6F0' }}>
                                     <div className="screen-info-left">
                                       <div className="screen-icon-box">
                                         {SCREEN_ICONS[screen.key] || (
@@ -1146,43 +1452,24 @@ const UserCreate = () => {
                                       </div>
                                     </div>
                                     
-                                    <div className="screen-checkboxes-container">
-                                      {/* Cột các checkbox được phép */}
-                                      <div className="checkboxes-allowed-group">
-                                        {permissionLevels.map((lvl) => {
-                                          const isChecked = isCheckboxChecked(screen.key, lvl.key);
-                                          return (
-                                            <label 
-                                              key={lvl.key} 
-                                              className={`perm-checkbox-label ${isChecked ? 'checked' : ''}`}
-                                              style={{ '--theme-color': lvl.color }}
-                                            >
-                                              <input 
-                                                type="checkbox"
-                                                checked={isChecked}
-                                                onChange={() => handleCheckboxClick(screen.key, lvl.key)}
-                                              />
-                                              <span className="checkbox-custom"></span>
-                                              {lvl.label}
-                                            </label>
-                                          );
-                                        })}
-                                      </div>
-
-                                      {/* Cột checkbox chặn */}
-                                      <div className="checkboxes-blocked-group">
-                                        <label 
-                                          className={`perm-checkbox-label is-blocked-type ${currentVal.includes('none') ? 'checked-blocked' : ''}`}
-                                        >
-                                          <input 
-                                            type="checkbox"
-                                            checked={currentVal.includes('none')}
-                                            onChange={() => handleCheckboxClick(screen.key, 'none')}
-                                          />
-                                          <span className="checkbox-custom red-border"></span>
-                                          Chặn
-                                        </label>
-                                      </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 95px)', gap: '8px' }}>
+                                      {renderPermissionButton({
+                                        label: 'Tất cả',
+                                        isChecked: isRowAll,
+                                        onClick: () => handleRowAllClick(screen.key)
+                                      })}
+                                      {permissionLevels.map((lvl) => {
+                                        const isChecked = isCheckboxChecked(screen.key, lvl.key);
+                                        return (
+                                          <React.Fragment key={lvl.key}>
+                                            {renderPermissionButton({
+                                              label: lvl.label,
+                                              isChecked: isChecked,
+                                              onClick: () => handleCheckboxClick(screen.key, lvl.key)
+                                            })}
+                                          </React.Fragment>
+                                        );
+                                      })}
                                     </div>
                                   </div>
                                 );
@@ -1212,10 +1499,104 @@ const UserCreate = () => {
         </form>
       </div>
 
+      {/* Toast thông báo popup đẹp */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          top: '24px',
+          right: '24px',
+          backgroundColor: '#047857',
+          color: '#FFFFFF',
+          padding: '14px 24px',
+          borderRadius: '10px',
+          boxShadow: '0 10px 25px rgba(4, 120, 87, 0.2)',
+          fontWeight: '800',
+          fontSize: '0.85rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          zIndex: 99999,
+          animation: 'slideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1)'
+        }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          {toastMessage}
+        </div>
+      )}
+
+      {showConfirmModal && (
+        <div className="modal-backdrop-custom">
+          <div className="modal-content-custom animate-slide-down" style={{ maxWidth: '450px' }}>
+            <div className="modal-header-custom">
+              <h4>Xác nhận tạo tài khoản</h4>
+              <button 
+                type="button" 
+                className="btn-close-modal" 
+                onClick={() => setShowConfirmModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="modal-body-custom" style={{ padding: '24px 20px', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  backgroundColor: '#FEF3C7',
+                  color: '#D97706',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                </div>
+                <div style={{ fontSize: '0.88rem', color: '#5D4037', fontWeight: '600', lineHeight: '1.4' }}>
+                  Bạn có chắc chắn muốn tiến hành tạo tài khoản người dùng mới này cùng cấu hình phân quyền chi tiết không?
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer-custom">
+              <button 
+                type="button" 
+                className="btn btn-outline" 
+                onClick={() => setShowConfirmModal(false)}
+                disabled={loading}
+              >
+                Hủy bỏ
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-primary" 
+                onClick={handleConfirmCreate}
+                disabled={loading}
+              >
+                {loading ? 'Đang lưu...' : 'Xác nhận tạo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style dangerouslySetInnerHTML={{ __html: `
         .user-create-container { width: 100%; padding-bottom: 30px; }
+        @keyframes slideIn {
+          from { transform: translateX(120%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideDown {
+          from { transform: translateY(-30px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        .animate-slide-down { animation: slideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
         .create-content-wrapper { width: 100%; }
-        .create-form-vertical-layout { display: flex; flex-direction: column; gap: 14px; width: 100%; }
+        .create-form-vertical-layout { display: flex; flex-direction: column; gap: 8px; width: 100%; }
         .card { background: white; border-radius: 12px; border: 1px solid #EADCC9; box-shadow: 0 6px 20px rgba(123, 82, 51, 0.03); }
         .section-title { font-size: 1.05rem; color: #7B5233; margin: 0; font-weight: 800; }
         
@@ -1223,9 +1604,83 @@ const UserCreate = () => {
         .account-info-card { padding: 16px 24px; }
         .card-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; border-bottom: 1.5px solid #F5EDE4; padding-bottom: 8px; }
         
-        .form-inputs-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 18px; }
-        .form-inputs-grid .full-width-span { grid-column: span 3; }
+        .form-top-row { display: flex; gap: 16px; align-items: flex-start; width: 100%; }
+        .form-inputs-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 18px; }
+        .form-inputs-grid .full-width-span { grid-column: span 4; }
         .form-inputs-grid .span-two-columns { grid-column: span 2; }
+        .form-grid-3col { grid-template-columns: repeat(3, 1fr) !important; }
+        .form-grid-1col { grid-template-columns: 1fr !important; }
+
+        /* Modal popup CSS */
+        .modal-backdrop-custom {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100vw;
+          height: 100vh;
+          background: rgba(0, 0, 0, 0.4);
+          backdrop-filter: blur(4px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 9999;
+        }
+        .modal-content-custom {
+          background: #FFFFFF;
+          border-radius: 12px;
+          border: 1px solid #EADCC9;
+          width: 100%;
+          max-width: 420px;
+          box-shadow: 0 10px 30px rgba(123, 82, 51, 0.15);
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        .modal-header-custom {
+          padding: 16px 20px;
+          border-bottom: 1.5px solid #F5EDE4;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          background-color: #FAF8F5;
+        }
+        .modal-header-custom h4 {
+          margin: 0;
+          color: #7B5233;
+          font-size: 1.1rem;
+          font-weight: 800;
+        }
+        .btn-close-modal {
+          background: none;
+          border: none;
+          color: #8C7B72;
+          font-size: 1.1rem;
+          cursor: pointer;
+          transition: color 0.2s;
+          outline: none;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 24px;
+          height: 24px;
+        }
+        .btn-close-modal:hover {
+          color: #7B5233;
+        }
+        .modal-body-custom {
+          padding: 20px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .modal-footer-custom {
+          padding: 14px 20px;
+          border-top: 1.5px solid #F5EDE4;
+          display: flex;
+          justify-content: flex-end;
+          gap: 10px;
+          background-color: #FAF8F5;
+        }
         
         .form-group { display: flex; flex-direction: column; gap: 4px; position: relative; }
         .form-group.disabled { opacity: 0.6; }
@@ -1235,12 +1690,12 @@ const UserCreate = () => {
         
         .hint { font-size: 0.78rem; color: #8C7B72; margin-top: 2px; font-weight: 500; }
         .empty-stages-hint { padding: 10px; border: 1.5px dashed #EADCC9; border-radius: 8px; background-color: #FAF8F5; color: #8C7B72; font-size: 0.82rem; text-align: center; font-weight: 500; }
-        .stages-checkbox-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 12px; border: 1.5px solid #EADCC9; border-radius: 8px; background-color: #FAF8F5; }
+        .stages-checkbox-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; padding: 12px; border: 1.5px solid #EADCC9; border-radius: 8px; background-color: #FAF8F5; }
         .stage-checkbox-item { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.82rem; font-weight: 600; color: #2D1A12; }
         .stage-checkbox-item input[type="checkbox"] { width: 14px; height: 14px; accent-color: #7B5233; cursor: pointer; margin: 0; }
         
         /* PHẦN 2: PHÂN QUYỀN CARD */
-        .permissions-card { padding: 16px 24px; margin-top: 6px; }
+        .permissions-card { padding: 16px 24px; margin-top: 0px; }
         .permissions-header-actions { display: flex; align-items: center; gap: 12px; }
         
         .search-box-wrapper { position: relative; display: flex; align-items: center; width: 220px; }
@@ -1329,6 +1784,8 @@ const UserCreate = () => {
         
         /* Responsive */
         @media (max-width: 1280px) {
+          .form-inputs-grid { grid-template-columns: repeat(2, 1fr); }
+          .form-inputs-grid .full-width-span { grid-column: span 2; }
           .permission-screen-row { flex-direction: column; align-items: stretch; gap: 12px; }
           .screen-checkboxes-container { width: 100%; max-width: 100%; }
         }

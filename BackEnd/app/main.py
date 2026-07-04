@@ -585,6 +585,14 @@ async def check_write_permissions(request: Request, call_next):
                                 # Determine the screen key based on path
                                 screen_key = None
                                 PATH_TO_SCREEN_KEY = [
+                                    # --- Mobile-specific routes (must be BEFORE generic /api/v1/inspections) ---
+                                    ("/api/v1/inspections/stage", "mobile_inspection-stage"),
+                                    ("/api/v1/inspections/upload-ocr", "mobile_inspection-stage"),
+                                    ("/api/v1/inspections/defect-types", "mobile_inspection-stage"),
+                                    ("/api/v1/inspections/daily", "mobile_inspection-daily"),
+                                    ("/api/v1/inspections/by-plan", "mobile_inspection-stage"),
+                                    ("/api/v1/inspections/upload", "mobile_inspection-stage"),
+                                    # --- Web routes ---
                                     ("/api/v1/deliveries/backup-qrs", "backup-qrs"),
                                     ("/api/v1/claims/cabinet-prices", "prices"),
                                     ("/api/v1/claims/shipments", "shipments"),

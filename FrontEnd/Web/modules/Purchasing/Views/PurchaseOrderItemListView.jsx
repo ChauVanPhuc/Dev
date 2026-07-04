@@ -368,61 +368,102 @@ const PurchaseOrderItemList = () => {
             </div>
           </div>
         ) : (
-          <div className="qr-toolbar" style={{
-            display: 'flex', alignItems: 'center', gap: '8px',
-            padding: '8px 12px', background: '#fff', borderRadius: '10px',
-            border: '1px solid #E2E8F0', marginBottom: '4px',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.01)', width: '100%', boxSizing: 'border-box',
-            flexWrap: 'wrap'
-          }}>
-            <div style={{ flex: 1, minWidth: '200px', position: 'relative' }}>
-              <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8', display: 'flex', alignItems: 'center' }}>
-                <Search size={14} />
-              </span>
-              <input
-                type="text" placeholder="Tìm mã PO, mã MH, tên MH, NCC..."
-                value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+          <div className="mgmt-toolbar card" style={{ marginBottom: '4px' }}>
+            <div className="toolbar-left" style={{ flex: 1 }}>
+              <div className="search-wrapper">
+                <Search size={18} className="search-icon" />
+                <input
+                  type="text" 
+                  placeholder="Tìm mã PO, mã MH, tên MH, NCC..."
+                  value={searchTerm} 
+                  onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                />
+              </div>
+
+              <select 
+                value={filterStatus} 
+                onChange={e => { setFilterStatus(e.target.value); setCurrentPage(1); }}
+                className="select-minimal"
                 style={{
-                  paddingLeft: '32px', height: '32px', borderRadius: '8px',
-                  border: '1px solid #E2E8F0', outline: 'none', fontSize: '0.78rem',
-                  width: '100%', boxSizing: 'border-box', transition: 'all 0.2s'
+                  height: '36px',
+                  borderRadius: '8px',
+                  border: '1px solid #EADCC9',
+                  backgroundColor: '#FAF6F0',
+                  color: '#7B5233',
+                  padding: '0 8px',
+                  fontWeight: '700',
+                  fontSize: '0.8rem',
+                  cursor: 'pointer'
                 }}
-                onFocus={e => e.currentTarget.style.borderColor = '#6366F1'}
-                onBlur={e => e.currentTarget.style.borderColor = '#E2E8F0'}
-              />
+              >
+                <option value="all">Tất cả trạng thái</option>
+                <option value="Đã duyệt">Đã duyệt</option>
+                <option value="Đã kiểm tra">Đã kiểm tra</option>
+                <option value="Chưa duyệt">Chưa duyệt</option>
+              </select>
+
+              <select 
+                value={itemsPerPage} 
+                onChange={e => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
+                className="select-minimal"
+                style={{
+                  height: '36px',
+                  borderRadius: '8px',
+                  border: '1px solid #EADCC9',
+                  backgroundColor: '#FAF6F0',
+                  color: '#7B5233',
+                  padding: '0 8px',
+                  fontWeight: '700',
+                  fontSize: '0.8rem',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value={30}>30 dòng</option>
+                <option value={50}>50 dòng</option>
+                <option value={100}>100 dòng</option>
+                <option value={200}>200 dòng</option>
+              </select>
             </div>
 
-            <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setCurrentPage(1); }}
-              style={{ height: '32px', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '0.78rem', padding: '0 8px', cursor: 'pointer', color: '#334155' }}>
-              <option value="all">Tất cả trạng thái</option>
-              <option value="Đã duyệt">Đã duyệt</option>
-              <option value="Đã kiểm tra">Đã kiểm tra</option>
-              <option value="Chưa duyệt">Chưa duyệt</option>
-            </select>
-
-            <select value={itemsPerPage} onChange={e => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
-              style={{ height: '32px', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '0.78rem', padding: '0 8px', cursor: 'pointer', color: '#334155' }}>
-              <option value={30}>30 dòng</option>
-              <option value={50}>50 dòng</option>
-              <option value={100}>100 dòng</option>
-              <option value={200}>200 dòng</option>
-            </select>
-
-            <div style={{ display: 'flex', gap: '6px', marginLeft: 'auto' }}>
-              <button onClick={() => fileInputRef.current?.click()} disabled={importLoading} style={{
-                height: '32px', padding: '0 12px', borderRadius: '8px',
-                border: '1px solid #E2E8F0', background: '#fff', cursor: 'pointer',
-                fontSize: '0.75rem', fontWeight: '600', color: '#334155',
-                display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.2s'
-              }}>
+            <div className="toolbar-right">
+              <button 
+                className="btn btn-outline" 
+                onClick={() => fileInputRef.current?.click()} 
+                disabled={importLoading}
+                style={{
+                  height: '36px',
+                  padding: '0 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #EADCC9',
+                  backgroundColor: '#fff',
+                  color: '#7B5233',
+                  fontWeight: '700',
+                  fontSize: '0.8rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
                 <FileUp size={14} /> {importLoading ? 'Đang nhập...' : 'Nhập Excel'}
               </button>
-              <button onClick={handleExport} style={{
-                height: '32px', padding: '0 12px', borderRadius: '8px',
-                border: '1px solid #E2E8F0', background: '#fff', cursor: 'pointer',
-                fontSize: '0.75rem', fontWeight: '600', color: '#334155',
-                display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.2s'
-              }}>
+
+              <button 
+                className="btn btn-outline" 
+                onClick={handleExport}
+                style={{
+                  height: '36px',
+                  padding: '0 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #EADCC9',
+                  backgroundColor: '#fff',
+                  color: '#7B5233',
+                  fontWeight: '700',
+                  fontSize: '0.8rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
                 <FileDown size={14} /> Xuất Excel
               </button>
             </div>

@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
   LineChart, Line, PieChart, Pie, Cell, ComposedChart 
 } from 'recharts';
-import { Calendar, Filter, ChevronDown, ChevronUp, BarChart3, PieChart as PieChartIcon, TrendingUp, RefreshCw, ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { Calendar, Filter, ChevronDown, ChevronUp, BarChart3, PieChart as PieChartIcon, TrendingUp, RefreshCw, ChevronLeft, ChevronRight, Search, Edit, Trash2 } from 'lucide-react';
 import '@styles/components.css';
 
 const COLORS = ['#7B5233', '#A67C52', '#D9B99B', '#F2E2CE', '#4b301e', '#8c6a51'];
@@ -310,6 +310,15 @@ const DefectAnalytics = ({ stage }) => {
 const DefectManagement = () => {
   const [viewTab, setViewTab] = useState('analytics'); // 'analytics', 'list', 'field', 'complaint', 'capa'
   const [selectedStage, setSelectedStage] = useState('');
+  const [actionMenuId, setActionMenuId] = useState(null);
+
+  useEffect(() => {
+    const handleOutsideClick = () => {
+      setActionMenuId(null);
+    };
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, []);
   // ─── Dữ liệu danh sách ──────────────────────────────────────
   const [defects, setDefects] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -1050,7 +1059,13 @@ const DefectManagement = () => {
                         {paginatedDefects.length > 0 ? (
                           paginatedDefects.map((defect) => (
                             <React.Fragment key={defect.id}>
-                              <tr className={`${!defect.is_active ? 'inactive-row' : ''} animate-card-entrance`}>
+                              <tr 
+                                className={`${!defect.is_active ? 'inactive-row' : ''} animate-card-entrance`}
+                                style={{
+                                  position: 'relative',
+                                  zIndex: actionMenuId === defect.id ? 30 : 1
+                                }}
+                              >
                                 <td style={{ textAlign: 'center', color: '#4b301e', fontWeight: 'bold', fontFamily: 'monospace', fontSize: '0.85rem' }}>
                                   {defect.code ? defect.code : `#${defect.id}`}
                                 </td>
@@ -1151,25 +1166,38 @@ const DefectManagement = () => {
                                     <span className="status-badge inactive">Ngừng sử dụng</span>
                                   )}
                                 </td>
-                                <td style={{ textAlign: 'center' }}>
-                                  <div className="action-buttons-cell">
-                                    <button
-                                      className="action-icon-btn edit"
-                                      onClick={() => handleOpenEdit(defect)}
-                                      title="Chỉnh sửa thông tin"
-                                    >
-                                      ✏️
-                                    </button>
-                                    {defect.is_active && (
+                                <td style={{ position: 'relative', textAlign: 'center', zIndex: actionMenuId === defect.id ? 40 : 1 }}>
+                                  <button
+                                    className="action-btn"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActionMenuId(actionMenuId === defect.id ? null : defect.id);
+                                    }}
+                                  ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
+                                  {actionMenuId === defect.id && (
+                                    <div className="action-menu" style={{ right: '50%', transform: 'translateX(50%)', top: '80%' }}>
                                       <button
-                                        className="action-icon-btn delete"
-                                        onClick={() => handleDeleteRequest(defect)}
-                                        title="Ngưng kích hoạt"
+                                        className="action-menu-item"
+                                        onClick={() => {
+                                          setActionMenuId(null);
+                                          handleOpenEdit(defect);
+                                        }}
                                       >
-                                        🗑️
+                                        Chỉnh sửa
                                       </button>
-                                    )}
-                                  </div>
+                                      {defect.is_active && (
+                                        <button
+                                          className="action-menu-item danger"
+                                          onClick={() => {
+                                            setActionMenuId(null);
+                                            handleDeleteRequest(defect);
+                                          }}
+                                        >
+                                          Ngưng dùng
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
                                 </td>
                               </tr>
                               {expandedRows[defect.id] && defect.client_defects && defect.client_defects.length > 0 && (
@@ -1326,13 +1354,13 @@ const DefectManagement = () => {
                                 onClick={() => handleOpenEdit(defect)}
                                 title="Sửa"
                                 style={{ border: '1px solid #EADCC9' }}
-                              >✏️</button>
+                              ><Edit size={14} /></button>
                               {defect.is_active && (
                                 <button 
                                   className="action-icon-btn delete"
                                   onClick={() => handleDeleteRequest(defect)}
                                   title="Ngưng kích hoạt"
-                                >🗑️</button>
+                                ><Trash2 size={14} /></button>
                               )}
                             </div>
                           </div>

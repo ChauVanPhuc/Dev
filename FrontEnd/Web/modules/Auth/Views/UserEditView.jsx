@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useOutletContext } from 'react-router-dom';
 import api from '@webShared/Services/api.service';
 import { authService } from '@modules/Auth/Models/auth.service';
@@ -554,6 +554,56 @@ const UserEdit = ({ isProfile = false }) => {
   const [fetching, setFetching] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [toastMessage, setToastMessage] = useState(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  // Selected factory state for Phạm vi phụ trách
+  const [selectedFactory, setSelectedFactory] = useState('');
+  const hasAutoSelectedFactory = React.useRef(false);
+
+  const getFactoryCode = (stageName) => {
+    if (!stageName) return 'Khác';
+    const match = stageName.match(/^(NM\d+)/i);
+    return match ? match[1].toUpperCase() : 'Khác';
+  };
+
+  const uniqueFactories = useMemo(() => {
+    const list = new Set();
+    stages.forEach(s => {
+      list.add(getFactoryCode(s.name));
+    });
+    return Array.from(list).sort();
+  }, [stages]);
+
+  useEffect(() => {
+    if (uniqueFactories.length > 0) {
+      // 1. Tự động nhận diện và chuyển sang nhà máy có công đoạn đã active (chỉ chạy 1 lần)
+      if (!hasAutoSelectedFactory.current && stages.length > 0 && formData.stage_ids && formData.stage_ids.length > 0) {
+        const activeStage = stages.find(s => formData.stage_ids.map(Number).includes(Number(s.id)));
+        if (activeStage) {
+          const factoryOfActiveStage = getFactoryCode(activeStage.name);
+          if (factoryOfActiveStage && uniqueFactories.includes(factoryOfActiveStage)) {
+            setSelectedFactory(factoryOfActiveStage);
+            hasAutoSelectedFactory.current = true;
+            return;
+          }
+        }
+      }
+
+      // 2. Mặc định chọn nhà máy đầu tiên nếu chưa chọn hoặc nhà máy hiện tại không còn tồn tại
+      if (!selectedFactory || !uniqueFactories.includes(selectedFactory)) {
+        setSelectedFactory(uniqueFactories[0]);
+      }
+    } else {
+      setSelectedFactory('');
+    }
+  }, [uniqueFactories, stages, formData.stage_ids, selectedFactory]);
+
+  const filteredStages = useMemo(() => {
+    if (!selectedFactory) return stages;
+    return stages.filter(s => getFactoryCode(s.name) === selectedFactory);
+  }, [stages, selectedFactory]);
 
   // Mở rộng nhóm accordion và tìm kiếm
   const [activeTab, setActiveTab] = useState('web');
@@ -584,6 +634,7 @@ const UserEdit = ({ isProfile = false }) => {
 
   // 2. Tải thông tin người dùng & phân quyền khi mount/id thay đổi
   useEffect(() => {
+    hasAutoSelectedFactory.current = false;
     const fetchUserDetailAndPermissions = async () => {
       setFetching(true);
       setError(null);
@@ -700,6 +751,7 @@ const UserEdit = ({ isProfile = false }) => {
       ...prev,
       [name]: value
     }));
+    setIsDirty(true);
   };
 
   const handleStageCheckboxChange = (stageId, checked) => {
@@ -711,6 +763,7 @@ const UserEdit = ({ isProfile = false }) => {
         return { ...prev, stage_ids: currentIds.filter(id => id !== stageId) };
       }
     });
+    setIsDirty(true);
   };
 
   const toggleStatus = () => {
@@ -718,6 +771,7 @@ const UserEdit = ({ isProfile = false }) => {
       ...prev,
       status: prev.status === 'Đang sử dụng' ? 'Dừng hoạt động' : 'Đang sử dụng'
     }));
+    setIsDirty(true);
   };
 
   // Hàm đồng bộ giả lập thông tin từ máy chấm công
@@ -732,6 +786,7 @@ const UserEdit = ({ isProfile = false }) => {
         phone: prev.phone || '0988776655',
         email: prev.email || 'hungnv@smartflow.vn'
       }));
+      setIsDirty(true);
       alert('Đồng bộ dữ liệu nhân sự thành công!');
     }, 850);
   };
@@ -774,6 +829,7 @@ const UserEdit = ({ isProfile = false }) => {
         [screenKey]: newPerms
       };
     });
+    setIsDirty(true);
   };
 
   // Logic radio toggle Cho phép / Không cho phép ở header nhóm cha
@@ -798,6 +854,7 @@ const UserEdit = ({ isProfile = false }) => {
       });
       return next;
     });
+    setIsDirty(true);
   };
 
   // Hàm khôi phục phân quyền mặc định của bộ phận
@@ -837,6 +894,7 @@ const UserEdit = ({ isProfile = false }) => {
         localStorage.setItem('smartflow_active_permissions', JSON.stringify(activePermsToStore));
       }
       
+      setIsDirty(true);
       alert('Khôi phục phân quyền mặc định thành công!');
     } catch (err) {
       console.error('Lỗi khi khôi phục quyền mặc định:', err);
@@ -846,9 +904,171 @@ const UserEdit = ({ isProfile = false }) => {
     }
   };
 
-  // Submit lưu cả thông tin tài khoản và bảng phân quyền
-  const handleSubmit = async (e) => {
+  const isRowAllChecked = (screenKey) => {
+    const current = screenPermissions[screenKey] || [];
+    const lvlKeys = ['read', 'create', 'edit', 'delete', 'approve', 'export_import'];
+    return lvlKeys.every(lvl => current.includes(lvl));
+  };
+
+  const handleRowAllClick = (screenKey) => {
+    setScreenPermissions(prev => {
+      const isAll = isRowAllChecked(screenKey);
+      return {
+        ...prev,
+        [screenKey]: isAll ? ['none'] : ['read', 'create', 'edit', 'delete', 'approve', 'export_import']
+      };
+    });
+    setIsDirty(true);
+  };
+
+  const isHeaderChecked = (screensInGroup, levelKey) => {
+    if (screensInGroup.length === 0) return false;
+    if (levelKey === 'all') {
+      const actions = ['read', 'create', 'edit', 'delete', 'approve', 'export_import'];
+      return screensInGroup.every(scr => {
+        const cur = screenPermissions[scr.key] || [];
+        return actions.every(act => cur.includes(act));
+      });
+    }
+    return screensInGroup.every(scr => {
+      const cur = screenPermissions[scr.key] || [];
+      return cur.includes(levelKey);
+    });
+  };
+
+  const handleHeaderToggle = (screensInGroup, levelKey) => {
+    setScreenPermissions(prev => {
+      const next = { ...prev };
+      
+      if (levelKey === 'all') {
+        const actions = ['read', 'create', 'edit', 'delete', 'approve', 'export_import'];
+        let allSelected = true;
+        screensInGroup.forEach(scr => {
+          const cur = prev[scr.key] || [];
+          actions.forEach(act => {
+            if (!cur.includes(act)) allSelected = false;
+          });
+        });
+        
+        screensInGroup.forEach(scr => {
+          next[scr.key] = allSelected ? ['none'] : [...actions];
+        });
+      } else {
+        let allSelected = true;
+        screensInGroup.forEach(scr => {
+          const cur = prev[scr.key] || [];
+          if (!cur.includes(levelKey)) allSelected = false;
+        });
+        
+        screensInGroup.forEach(scr => {
+          const cur = prev[scr.key] || [];
+          const filtered = cur.filter(p => p !== 'none');
+          let nextPerms = [];
+          if (allSelected) {
+            nextPerms = filtered.filter(p => p !== levelKey);
+          } else {
+            if (!filtered.includes(levelKey)) {
+              nextPerms = [...filtered, levelKey];
+            } else {
+              nextPerms = filtered;
+            }
+          }
+          next[scr.key] = nextPerms.length === 0 ? ['none'] : nextPerms;
+        });
+      }
+      
+      return next;
+    });
+  };
+
+  const renderPermissionButton = ({ label, isChecked, onClick, isDisabled = false }) => {
+    if (isDisabled) {
+      return (
+        <div 
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            height: '32px',
+            borderRadius: '6px',
+            border: '1.5px solid #E2E8F0',
+            backgroundColor: '#F8FAFC',
+            color: '#94A3B8',
+            fontSize: '0.78rem',
+            fontWeight: '700',
+            cursor: 'not-allowed',
+            userSelect: 'none',
+            width: '95px',
+            boxSizing: 'border-box'
+          }}
+        >
+          <span>🚫</span> {label}
+        </div>
+      );
+    }
+
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={isProfile}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '6px',
+          height: '32px',
+          borderRadius: '6px',
+          border: isChecked ? '1.5px solid #10B981' : '1.5px solid #EADCC9',
+          backgroundColor: isChecked ? '#EBFDF5' : '#FFFFFF',
+          color: isChecked ? '#047857' : '#2D1A12',
+          fontSize: '0.78rem',
+          fontWeight: '700',
+          cursor: isProfile ? 'default' : 'pointer',
+          transition: 'all 0.15s ease',
+          userSelect: 'none',
+          width: '95px',
+          boxSizing: 'border-box',
+          outline: 'none',
+          opacity: isProfile ? 0.8 : 1
+        }}
+      >
+        <span style={{
+          width: '12px',
+          height: '12px',
+          borderRadius: '3px',
+          border: isChecked ? '1.5px solid #10B981' : '1.5px solid #EADCC9',
+          backgroundColor: isChecked ? '#10B981' : 'transparent',
+          position: 'relative',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0
+        }}>
+          {isChecked && (
+            <span style={{
+              width: '3px',
+              height: '6px',
+              border: 'solid white',
+              borderWidth: '0 1.5px 1.5px 0',
+              transform: 'rotate(45deg)',
+              marginBottom: '1px'
+            }} />
+          )}
+        </span>
+        {label}
+      </button>
+    );
+  };
+
+  const handleSubmit = (e) => {
     e.preventDefault();
+    setShowConfirmModal(true);
+  };
+
+  // Submit thực tế khi được xác nhận từ Popup Modal
+  const handleConfirmSave = async () => {
     setLoading(true);
     setError(null);
     setSuccess(false);
@@ -885,8 +1105,12 @@ const UserEdit = ({ isProfile = false }) => {
         localStorage.setItem('smartflow_user', JSON.stringify(updatedUser));
 
         setSuccess(true);
-        alert('Cập nhật thông tin cá nhân thành công!');
-        navigate('/admin/dashboard');
+        setIsDirty(false);
+        setToastMessage('Cập nhật thông tin cá nhân thành công!');
+        setTimeout(() => {
+          setToastMessage(null);
+          navigate('/admin/dashboard');
+        }, 2000);
       } else {
         // 2. Đồng bộ bộ phận / chức vụ / công đoạn (sync-departments)
         const syncPayload = {
@@ -917,8 +1141,12 @@ const UserEdit = ({ isProfile = false }) => {
         }
 
         setSuccess(true);
-        alert('Đã cập nhật toàn bộ thông tin tài khoản và cấu hình phân quyền thành công!');
-        navigate('/admin/users');
+        setIsDirty(false);
+        setToastMessage('Cập nhật thông tin tài khoản và cấu hình phân quyền thành công!');
+        setTimeout(() => {
+          setToastMessage(null);
+          navigate('/admin/users');
+        }, 2000);
       }
     } catch (err) {
       console.error('Lỗi khi cập nhật tài khoản toàn diện:', err);
@@ -989,18 +1217,40 @@ const UserEdit = ({ isProfile = false }) => {
           
           {/* PHẦN 1: THÔNG TIN NGƯỜI DÙNG */}
           <div className="account-info-card card">
-            <div className="card-header-row">
-              <h3 className="section-title">Thông tin người dùng</h3>
-              {!isProfile && (
-                <button 
-                  type="button" 
-                  className="btn-link-sync" 
-                  onClick={handleAutoSync} 
-                  disabled={syncing}
-                >
-                  {syncing ? 'Đang đồng bộ...' : 'Lấy thông tin tự động...'}
-                </button>
-              )}
+            <div className="card-header-row" style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1.5px solid #F5EDE4', paddingBottom: '12px', marginBottom: '20px' }}>
+              <div style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '50%',
+                backgroundColor: '#FAF6F0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#7B5233',
+                border: '1.5px solid #EADCC9',
+                flexShrink: 0
+              }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#7B5233' }}>
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '10px' }}>
+                  <h3 className="section-title" style={{ fontSize: '1.05rem', margin: 0, fontWeight: 800 }}>Thông tin người dùng</h3>
+                  {!isProfile && (
+                    <button 
+                      type="button" 
+                      className="btn-link-sync" 
+                      onClick={handleAutoSync} 
+                      disabled={syncing}
+                    >
+                      {syncing ? 'Đang đồng bộ...' : 'Lấy thông tin tự động...'}
+                    </button>
+                  )}
+                </div>
+                <span style={{ fontSize: '0.78rem', color: '#8C7B72', fontWeight: 500 }}>Nhập thông tin người dùng và tài khoản đăng nhập hệ thống.</span>
+              </div>
             </div>
             
             <div className="account-info-grid">
@@ -1016,20 +1266,16 @@ const UserEdit = ({ isProfile = false }) => {
                 <div className="avatar-buttons">
                   <button 
                     type="button" 
-                    className={`btn-action-custom btn-password ${(isProfile ? showPasswordModal : showPasswordInput) ? 'active' : ''}`}
+                    className={`btn-action-custom btn-password ${showPasswordModal ? 'active' : ''}`}
                     onClick={() => {
-                      if (isProfile) {
-                        setShowPasswordModal(true);
-                      } else {
-                        setShowPasswordInput(!showPasswordInput);
-                      }
+                      setShowPasswordModal(true);
                     }}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '8px'}}>
                       <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                     </svg>
-                    {isProfile ? 'Đổi mật khẩu' : (showPasswordInput ? 'Ẩn ô mật khẩu' : 'Đổi mật khẩu')}
+                    Đổi mật khẩu
                   </button>
                   
                   <button 
@@ -1072,19 +1318,6 @@ const UserEdit = ({ isProfile = false }) => {
                     </button>
                   )}
                 </div>
-
-                {!isProfile && showPasswordInput && (
-                  <div className="password-input-container animate-slide-down">
-                    <label>Mật khẩu mới</label>
-                    <input 
-                      type="password" 
-                      name="password" 
-                      placeholder="Nhập mật khẩu mới" 
-                      value={formData.password}
-                      onChange={handleChange}
-                    />
-                  </div>
-                )}
               </div>
 
               {/* Cột phải: Các trường nhập liệu */}
@@ -1166,40 +1399,74 @@ const UserEdit = ({ isProfile = false }) => {
                       onChange={handleChange}
                     />
                   </div>
+                </div>
 
-                  <div className="form-group">
-                    <label>Bộ phận/phòng ban</label>
-                    <select 
-                      name="role_id" 
-                      value={formData.role_id} 
-                      onChange={handleChange} 
-                      disabled={isProfile}
-                      className={isProfile ? "select-disabled" : ""}
-                    >
-                      <option value="">-- Chọn bộ phận --</option>
-                      {roles.map(r => (
-                        <option key={r.id} value={r.id}>{r.name}</option>
-                      ))}
-                    </select>
+                {/* Đường phân cách ngang mỏng */}
+                <div style={{ borderTop: '1.5px solid #F5EDE4', margin: '20px 0' }}></div>
+
+                {/* PHÂN QUYỀN PHÂN CẤP (GOM CHUNG TRONG CARD 1) */}
+                <div style={{ width: '100%', boxSizing: 'border-box' }}>
+                  <div className="card-header-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '16px', borderBottom: '1.5px solid #F5EDE4', paddingBottom: '12px', marginBottom: '20px' }}>
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '50%',
+                      backgroundColor: '#FAF6F0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#7B5233',
+                      border: '1.5px solid #EADCC9',
+                      flexShrink: 0
+                    }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#7B5233' }}>
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                      </svg>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      <h3 className="section-title" style={{ fontSize: '1.05rem', margin: 0, fontWeight: 800 }}>Phân quyền phân cấp</h3>
+                      <span style={{ fontSize: '0.78rem', color: '#8C7B72', fontWeight: 500 }}>Chọn bộ phận/phòng ban, vị trí và phạm vi phụ trách.</span>
+                    </div>
+                  </div>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px 18px', marginBottom: '20px' }}>
+                    {/* Bộ phận/phòng ban */}
+                    <div className="form-group">
+                      <label>Bộ phận/phòng ban</label>
+                      <select 
+                        name="role_id" 
+                        value={formData.role_id} 
+                        onChange={handleChange} 
+                        disabled={isProfile}
+                        className={isProfile ? "select-disabled" : ""}
+                      >
+                        <option value="">-- Chọn bộ phận --</option>
+                        {roles.map(r => (
+                          <option key={r.id} value={r.id}>{r.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Vị trí, chức vụ */}
+                    <div className={`form-group ${(!formData.role_id || isProfile) ? 'disabled' : ''}`}>
+                      <label>Vị trí, chức vụ</label>
+                      <select 
+                        name="permission_id" 
+                        value={formData.permission_id} 
+                        onChange={handleChange} 
+                        disabled={isProfile || !formData.role_id}
+                        className={(isProfile || !formData.role_id) ? "select-disabled" : ""}
+                      >
+                        <option value="">-- Chọn chức vụ --</option>
+                        {permissions.map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                      {!formData.role_id && <small className="hint">Hãy chọn Bộ phận trước</small>}
+                    </div>
                   </div>
 
-                  <div className={`form-group ${(!formData.role_id || isProfile) ? 'disabled' : ''}`}>
-                    <label>Vị trí, chức vụ</label>
-                    <select 
-                      name="permission_id" 
-                      value={formData.permission_id} 
-                      onChange={handleChange} 
-                      disabled={isProfile || !formData.role_id}
-                      className={(isProfile || !formData.role_id) ? "select-disabled" : ""}
-                    >
-                      <option value="">-- Chọn chức vụ --</option>
-                      {permissions.map(p => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Quyền hạn hoặc Công đoạn phụ trách */}
+                  {/* PHÂN QUYỀN CHI TIẾT: CÔNG ĐOẠN PHỤ TRÁCH */}
                   {formData.permission_id && (
                     (() => {
                       const selectedPerm = permissions.find(p => p.id === parseInt(formData.permission_id));
@@ -1207,31 +1474,99 @@ const UserEdit = ({ isProfile = false }) => {
 
                       if (isProductionOrQC) {
                         return (
-                          <div className={`form-group full-width-span ${(stages.length === 0 || isProfile) ? 'disabled' : ''}`}>
-                            <label>Phạm vi phụ trách (Công đoạn sản xuất)</label>
-                            {stages.length === 0 ? (
-                              <div className="empty-stages-hint">Quyền này không yêu cầu công đoạn sản xuất</div>
-                            ) : (
-                              <div className="stages-checkbox-grid" style={isProfile ? { opacity: 0.8, backgroundColor: '#FAF8F5' } : {}}>
-                                {stages.map(s => (
-                                  <label key={s.id} className="stage-checkbox-item" style={isProfile ? { cursor: 'default' } : {}}>
-                                    <input 
-                                      type="checkbox"
-                                      checked={formData.stage_ids.includes(s.id)}
-                                      onChange={(e) => handleStageCheckboxChange(s.id, e.target.checked)}
-                                      disabled={isProfile}
-                                      style={isProfile ? { cursor: 'default' } : {}}
-                                    />
-                                    <span>{s.name}</span>
-                                  </label>
-                                ))}
-                              </div>
-                            )}
+                          <div style={{ borderTop: '1.5px solid #F5EDE4', paddingTop: '20px', marginTop: '10px' }}>
+                            <div className={`form-group full-width-span ${(stages.length === 0 || isProfile) ? 'disabled' : ''}`}>
+                              {stages.length === 0 ? (
+                                <>
+                                  <label>Phạm vi phụ trách (Công đoạn sản xuất)</label>
+                                  <div className="empty-stages-hint">Quyền này không yêu cầu công đoạn sản xuất</div>
+                                </>
+                              ) : (
+                                <>
+                                  <div style={{ 
+                                      display: 'flex', 
+                                      justifyContent: 'space-between', 
+                                      alignItems: 'center', 
+                                      width: '100%', 
+                                      marginBottom: '12px',
+                                      flexWrap: 'wrap',
+                                      gap: '12px'
+                                  }}>
+                                      <div>
+                                          <label style={{ fontWeight: '700', fontSize: '0.85rem', color: '#5D4037', margin: 0 }}>
+                                              Phạm vi phụ trách (Công đoạn sản xuất)
+                                          </label>
+                                          <div style={{ fontSize: '0.75rem', color: '#8C7A6B', marginTop: '2px' }}>
+                                              Chọn công đoạn tùy theo nhà máy để chọn phạm vi phụ trách.
+                                          </div>
+                                      </div>
+                                      
+                                      {/* Factory Selector */}
+                                      {uniqueFactories.length > 0 && (
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                              <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#7B5233' }}>Chọn nhà máy</span>
+                                              <div style={{ display: 'inline-flex', border: '1px solid #EADCC9', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#FAF6F0', opacity: isProfile ? 0.7 : 1 }}>
+                                                  {uniqueFactories.map(fac => {
+                                                      const isActive = selectedFactory === fac;
+                                                      return (
+                                                          <button
+                                                              type="button"
+                                                              key={fac}
+                                                              disabled={isProfile}
+                                                              onClick={() => setSelectedFactory(fac)}
+                                                              style={{
+                                                                  padding: '6px 16px',
+                                                                  border: 'none',
+                                                                  backgroundColor: isActive ? '#7B5233' : 'transparent',
+                                                                  color: isActive ? '#FFFFFF' : '#7B5233',
+                                                                  fontWeight: 'bold',
+                                                                  fontSize: '0.8rem',
+                                                                  cursor: isProfile ? 'default' : 'pointer',
+                                                                  display: 'flex',
+                                                                  alignItems: 'center',
+                                                                  gap: '6px',
+                                                                  transition: 'all 0.2s',
+                                                                  borderLeft: fac !== uniqueFactories[0] ? '1px solid #EADCC9' : 'none'
+                                                              }}
+                                                          >
+                                                              <span style={{
+                                                                  width: '8px',
+                                                                  height: '8px',
+                                                                  borderRadius: '50%',
+                                                                  border: `1.5px solid ${isActive ? '#FFFFFF' : '#7B5233'}`,
+                                                                  backgroundColor: isActive ? '#FFFFFF' : 'transparent',
+                                                                  display: 'inline-block'
+                                                              }} />
+                                                              {fac}
+                                                          </button>
+                                                      );
+                                                  })}
+                                              </div>
+                                          </div>
+                                      )}
+                                  </div>
+
+                                  <div className="stages-checkbox-grid" style={isProfile ? { opacity: 0.8, backgroundColor: '#FAF8F5' } : {}}>
+                                    {filteredStages.map(s => (
+                                      <label key={s.id} className="stage-checkbox-item" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: isProfile ? 'default' : 'pointer', userSelect: 'none' }}>
+                                        <input 
+                                          type="checkbox"
+                                          checked={formData.stage_ids.includes(s.id)}
+                                          onChange={(e) => handleStageCheckboxChange(s.id, e.target.checked)}
+                                          disabled={isProfile}
+                                          style={{ margin: 0, width: '15px', height: '15px', accentColor: '#7B5233', cursor: isProfile ? 'default' : 'pointer' }}
+                                        />
+                                        <span>{s.name}</span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           </div>
                         );
-                      } else {
-                        return null;
                       }
+                      return null;
                     })()
                   )}
                 </div>
@@ -1420,10 +1755,11 @@ const UserEdit = ({ isProfile = false }) => {
                         <div className="accordion-body">
                           {isAllowed ? (
                             <div className="accordion-body-list">
+
                               {screensInGroup.map((screen, sIdx) => {
-                                const currentVal = screenPermissions[screen.key] || 'none';
+                                const isRowAll = isRowAllChecked(screen.key);
                                 return (
-                                  <div key={sIdx} className="permission-screen-row">
+                                  <div key={sIdx} className="permission-screen-row" style={{ padding: '12px 16px', borderBottom: '1px solid #FAF6F0' }}>
                                     <div className="screen-info-left">
                                       <div className="screen-icon-box">
                                         {SCREEN_ICONS[screen.key] || (
@@ -1441,43 +1777,24 @@ const UserEdit = ({ isProfile = false }) => {
                                       </div>
                                     </div>
                                     
-                                    <div className="screen-checkboxes-container">
-                                      {/* Cột các checkbox được phép */}
-                                      <div className="checkboxes-allowed-group">
-                                        {permissionLevels.map((lvl) => {
-                                          const isChecked = isCheckboxChecked(screen.key, lvl.key);
-                                          return (
-                                            <label 
-                                              key={lvl.key} 
-                                              className={`perm-checkbox-label ${isChecked ? 'checked' : ''}`}
-                                              style={{ '--theme-color': lvl.color }}
-                                            >
-                                              <input 
-                                                type="checkbox"
-                                                checked={isChecked}
-                                                onChange={() => handleCheckboxClick(screen.key, lvl.key)}
-                                              />
-                                              <span className="checkbox-custom"></span>
-                                              {lvl.label}
-                                            </label>
-                                          );
-                                        })}
-                                      </div>
-
-                                      {/* Cột checkbox chặn */}
-                                      <div className="checkboxes-blocked-group">
-                                        <label 
-                                          className={`perm-checkbox-label is-blocked-type ${currentVal === 'none' ? 'checked-blocked' : ''}`}
-                                        >
-                                          <input 
-                                            type="checkbox"
-                                            checked={currentVal === 'none'}
-                                            onChange={() => handleCheckboxClick(screen.key, 'none')}
-                                          />
-                                          <span className="checkbox-custom red-border"></span>
-                                          Chặn
-                                        </label>
-                                      </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 95px)', gap: '8px' }}>
+                                      {renderPermissionButton({
+                                        label: 'Tất cả',
+                                        isChecked: isRowAll,
+                                        onClick: () => handleRowAllClick(screen.key)
+                                      })}
+                                      {permissionLevels.map((lvl) => {
+                                        const isChecked = isCheckboxChecked(screen.key, lvl.key);
+                                        return (
+                                          <React.Fragment key={lvl.key}>
+                                            {renderPermissionButton({
+                                              label: lvl.label,
+                                              isChecked: isChecked,
+                                              onClick: () => handleCheckboxClick(screen.key, lvl.key)
+                                            })}
+                                          </React.Fragment>
+                                        );
+                                      })}
                                     </div>
                                   </div>
                                 );
@@ -1498,15 +1815,124 @@ const UserEdit = ({ isProfile = false }) => {
           </div>}
 
 
-          {/* HÀNG NÚT BẤM DƯỚI CÙNG */}
-          <div className="form-actions-row">
-            <button type="button" className="btn btn-outline" onClick={() => navigate(isProfile ? '/admin/dashboard' : '/admin/users')}>Hủy bỏ</button>
-            <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? 'Đang lưu...' : 'Lưu thay đổi'}
-            </button>
-          </div>
+          {/* HÀNG NÚT BẤM DƯỚI CÙNG (Chỉ hiển thị khi có thay đổi) */}
+          {isDirty && (
+            <div className="form-actions-row animate-slide-up" style={{
+              position: 'fixed',
+              bottom: '0',
+              left: '260px',
+              right: '0',
+              backgroundColor: '#FFFFFF',
+              borderTop: '2px solid #EADCC9',
+              padding: '16px 24px',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '12px',
+              zIndex: 999,
+              boxShadow: '0 -4px 20px rgba(123, 82, 51, 0.08)'
+            }}>
+              <button 
+                type="button" 
+                className="btn btn-outline" 
+                onClick={() => {
+                  setIsDirty(false);
+                  navigate(isProfile ? '/admin/dashboard' : '/admin/users');
+                }}
+              >
+                Hủy bỏ
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={loading}>
+                {loading ? 'Đang lưu...' : 'Lưu thay đổi'}
+              </button>
+            </div>
+          )}
         </form>
       </div>
+
+      {/* Toast thông báo popup đẹp */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          top: '24px',
+          right: '24px',
+          backgroundColor: '#047857',
+          color: '#FFFFFF',
+          padding: '14px 24px',
+          borderRadius: '10px',
+          boxShadow: '0 10px 25px rgba(4, 120, 87, 0.2)',
+          fontWeight: '800',
+          fontSize: '0.85rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          zIndex: 99999,
+          animation: 'slideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1)'
+        }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          {toastMessage}
+        </div>
+      )}
+
+      {showConfirmModal && (
+        <div className="modal-backdrop-custom">
+          <div className="modal-content-custom animate-slide-down" style={{ maxWidth: '450px' }}>
+            <div className="modal-header-custom">
+              <h4>Xác nhận lưu thay đổi</h4>
+              <button 
+                type="button" 
+                className="btn-close-modal" 
+                onClick={() => setShowConfirmModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="modal-body-custom" style={{ padding: '24px 20px', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  backgroundColor: '#FEF3C7',
+                  color: '#D97706',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                </div>
+                <div style={{ fontSize: '0.88rem', color: '#5D4037', fontWeight: '600', lineHeight: '1.4' }}>
+                  Bạn có chắc chắn muốn lưu toàn bộ các thay đổi về thông tin tài khoản và cấu hình phân quyền này không?
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer-custom">
+              <button 
+                type="button" 
+                className="btn btn-outline" 
+                onClick={() => setShowConfirmModal(false)}
+                disabled={loading}
+              >
+                Hủy bỏ
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-primary" 
+                onClick={handleConfirmSave}
+                disabled={loading}
+              >
+                {loading ? 'Đang lưu...' : 'Xác nhận'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showPasswordModal && (
         <div className="modal-backdrop-custom">
@@ -1591,9 +2017,20 @@ const UserEdit = ({ isProfile = false }) => {
       )}
 
       <style dangerouslySetInnerHTML={{ __html: `
-        .user-create-container { width: 100%; padding-bottom: 30px; }
+        .user-create-container { width: 100%; padding-bottom: 90px; }
+        @keyframes slideIn {
+          from { transform: translateX(120%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideUp {
+          from { transform: translateY(100%); }
+          to { transform: translateY(0); }
+        }
+        .animate-slide-up {
+          animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
         .create-content-wrapper { width: 100%; }
-        .create-form-vertical-layout { display: flex; flex-direction: column; gap: 14px; width: 100%; }
+        .create-form-vertical-layout { display: flex; flex-direction: column; gap: 8px; width: 100%; }
         .card { background: white; border-radius: 12px; border: 1px solid #EADCC9; box-shadow: 0 6px 20px rgba(123, 82, 51, 0.03); }
         .section-title { font-size: 1.05rem; color: #7B5233; margin: 0; font-weight: 800; }
         
@@ -1647,12 +2084,12 @@ const UserEdit = ({ isProfile = false }) => {
         .input-disabled, .select-disabled { background-color: #FAF8F5 !important; cursor: not-allowed !important; opacity: 0.85 !important; }
         
         .empty-stages-hint { padding: 10px; border: 1.5px dashed #EADCC9; border-radius: 8px; background-color: #FAF8F5; color: #8C7B72; font-size: 0.82rem; text-align: center; font-weight: 500; }
-        .stages-checkbox-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 12px; border: 1.5px solid #EADCC9; border-radius: 8px; background-color: #FAF8F5; }
+        .stages-checkbox-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; padding: 12px; border: 1.5px solid #EADCC9; border-radius: 8px; background-color: #FAF8F5; }
         .stage-checkbox-item { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.82rem; font-weight: 600; color: #2D1A12; }
         .stage-checkbox-item input[type="checkbox"] { width: 14px; height: 14px; accent-color: #7B5233; cursor: pointer; margin: 0; }
         
         /* PHẦN 2: PHÂN QUYỀN CARD */
-        .permissions-card { padding: 16px 24px; margin-top: 6px; }
+        .permissions-card { padding: 16px 24px; margin-top: 0px; }
         .permissions-header-actions { display: flex; align-items: center; gap: 12px; }
         
         .search-box-wrapper { position: relative; display: flex; align-items: center; width: 220px; }

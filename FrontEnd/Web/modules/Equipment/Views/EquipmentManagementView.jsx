@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import api from '@webShared/Services/api.service';
 import { useOutletContext, useNavigate, useLocation } from 'react-router-dom';
 import ExcelJS from 'exceljs';
@@ -374,7 +374,7 @@ const EquipmentManagementView = () => {
                             <button
                               className="action-btn"
                               onClick={() => setActionMenuId(actionMenuId === eq.id ? null : eq.id)}
-                            >•••</button>
+                            ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
                             {actionMenuId === eq.id && (
                               <div className="action-menu" style={{ right: '10px', top: '100%', zIndex: 1100 }}>
                                 <button className="action-menu-item" onClick={() => { setActionMenuId(null); navigate(`/admin/equipment/detail/${eq.id}`); }}>👁️ Xem chi tiết</button>
@@ -413,7 +413,7 @@ const EquipmentManagementView = () => {
                         <button
                           className="action-btn"
                           onClick={() => setActionMenuId(actionMenuId === eq.id ? null : eq.id)}
-                        >•••</button>
+                        ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
                         {actionMenuId === eq.id && (
                           <div className="action-menu" style={{ right: 0, top: '100%', zIndex: 1100 }}>
                             <button className="action-menu-item" onClick={() => { setActionMenuId(null); navigate(`/admin/equipment/detail/${eq.id}`); }}>👁️ Xem chi tiết</button>

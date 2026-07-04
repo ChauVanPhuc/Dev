@@ -765,7 +765,9 @@ const StageInspection = () => {
       setIsMessageOpen(true);
     } catch (err) {
       console.error("Lỗi khi lưu:", err);
-      setMessageConfig({ type: 'error', title: 'Lỗi', message: 'Có lỗi xảy ra khi lưu phiếu kiểm tra!' });
+      const serverMsg = err.response?.data?.detail;
+      const errMsg = serverMsg ? (typeof serverMsg === 'string' ? serverMsg : JSON.stringify(serverMsg)) : (err.message || 'Có lỗi xảy ra khi lưu phiếu kiểm tra!');
+      setMessageConfig({ type: 'error', title: 'Lỗi', message: errMsg });
       setIsMessageOpen(true);
     } finally {
       setIsSaving(false);

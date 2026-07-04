@@ -1,6 +1,14 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 const ManufactureHandover = () => {
+  const [actionMenuId, setActionMenuId] = useState(null);
+
+  useEffect(() => {
+    const handleOutsideClick = () => setActionMenuId(null);
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, []);
+
   const stats = [
     { title: 'CHỜ BÀN GIAO', value: '45 Lệnh', color: '#FFF3E0' },
     { title: 'ĐÃ BÀN GIAO', value: '180 Lệnh', color: '#E8F5E9' },
@@ -44,7 +52,13 @@ const ManufactureHandover = () => {
           </thead>
           <tbody>
             {handoverData.map((row) => (
-              <tr key={row.id}>
+               <tr 
+                 key={row.id}
+                 style={{
+                   position: 'relative',
+                   zIndex: actionMenuId === row.id ? 30 : 1
+                 }}
+               >
                 <td className="text-bold">{row.code}</td>
                 <td>{row.product}</td>
                 <td>{row.qty}</td>
@@ -54,8 +68,21 @@ const ManufactureHandover = () => {
                     {row.status}
                   </span>
                 </td>
-                <td>
-                   <button className="btn" style={{ padding: '4px 8px' }}>Xem</button>
+                <td style={{ position: 'relative', textAlign: 'center', zIndex: actionMenuId === row.id ? 40 : 1 }}>
+                  <button
+                    className="action-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActionMenuId(actionMenuId === row.id ? null : row.id);
+                    }}
+                  ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
+                  {actionMenuId === row.id && (
+                    <div className="action-menu" style={{ right: '50%', transform: 'translateX(50%)', top: '80%' }}>
+                      <button className="action-menu-item" onClick={() => setActionMenuId(null)}>
+                        Xem chi tiết
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}

@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
+import { Search, Filter, Plus } from 'lucide-react';
 import { claimService } from '../services/claim.service';
 import { normalizePenaltyValue, parseDate } from '../utils/claimHelpers';
 import { API_ROOT } from '@webShared/Services/api.service';
 import '../styles/claim.css';
+import '@styles/components.css';
 
 // Import shared components
 import { Table } from '../components/Table';
@@ -198,6 +200,7 @@ const ClaimListView = () => {
   // Filter bar visibility
   const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState(null); // 'time', 'claim', 'transport', or null
+  const [actionMenuId, setActionMenuId] = useState(null);
 
   // Dropdown click outside hook
   useEffect(() => {
@@ -205,6 +208,7 @@ const ClaimListView = () => {
       if (activeDropdown && !e.target.closest('.filter-dropdown-wrapper')) {
         setActiveDropdown(null);
       }
+      setActionMenuId(null);
     };
     document.addEventListener('click', handleOutsideClick);
     return () => document.removeEventListener('click', handleOutsideClick);
@@ -1913,51 +1917,38 @@ const ClaimListView = () => {
       </div>
 
       {/* SECTION 3: DETAILED REPORT HEADER */}
-      <div className="detailed-report-header" style={{ borderBottom: '1px solid #F0E6D8', paddingBottom: '10px', marginBottom: '10px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1 }}>
-          <div style={{ position: 'relative', flex: 1, maxWidth: '280px' }}>
-            <input
-              type="text"
-              placeholder="Search nhanh SKU, Cont, LPN..."
+      <div className="mgmt-toolbar card" style={{ marginBottom: '20px' }}>
+        <div className="toolbar-left" style={{ flex: 1 }}>
+          <div className="search-wrapper">
+            <Search size={18} className="search-icon" />
+            <input 
+              type="text" 
+              placeholder="Search nhanh SKU, Cont, LPN..." 
               value={quickSearch}
               onChange={(e) => setQuickSearch(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px 12px 8px 36px',
-                fontSize: '0.85rem',
-                border: '1.5px solid #E2E8F0',
-                borderRadius: '8px',
-                outline: 'none',
-                backgroundColor: '#FFFDFB'
-              }}
             />
-            <svg style={{ position: 'absolute', left: '10px', top: '11px', color: '#94A3B8' }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
           </div>
 
           <button
             type="button"
-            className="btn-border-action"
+            className={`icon-btn-minimal ${isFilterBarOpen ? 'active' : ''}`}
             onClick={() => setIsFilterBarOpen(!isFilterBarOpen)}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              height: '37px',
-              padding: '0 16px',
-              borderColor: '#2D1A12',
-              backgroundColor: isFilterBarOpen ? '#7B5233' : '#FFFFFF',
-              color: isFilterBarOpen ? '#FFFFFF' : '#2D1A12',
+              height: '36px',
+              border: '1px solid #EADCC9',
+              backgroundColor: isFilterBarOpen ? '#7B5233' : '#FAF6F0',
+              color: isFilterBarOpen ? '#FFFFFF' : '#7B5233',
               fontWeight: 'bold',
               borderRadius: '8px',
-              cursor: 'pointer'
+              padding: '0 16px',
+              cursor: 'pointer',
+              fontSize: '0.8rem'
             }}
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
+            <Filter size={14} />
             Bộ lọc
             {activeFiltersCount > 0 && (
               <span style={{
@@ -1978,24 +1969,23 @@ const ClaimListView = () => {
             )}
           </button>
 
+          {/* SORT DROPDOWN */}
           <div style={{ position: 'relative', display: 'inline-block' }}>
             <select
               value={sortOption}
               onChange={(e) => setSortOption(e.target.value)}
-              className="btn-border-action"
+              className="select-minimal"
               style={{
-                height: '37px',
-                borderColor: '#2D1A12',
-                color: '#2D1A12',
+                height: '36px',
+                borderColor: '#EADCC9',
+                color: '#7B5233',
                 fontWeight: 'bold',
                 borderRadius: '8px',
-                padding: '0 28px 0 34px',
+                padding: '0 12px 0 28px',
                 cursor: 'pointer',
-                backgroundColor: '#FFFFFF',
+                backgroundColor: '#FAF6F0',
                 outline: 'none',
-                appearance: 'none',
-                WebkitAppearance: 'none',
-                fontSize: '0.85rem'
+                fontSize: '0.8rem'
               }}
             >
               <option value="">Sắp xếp</option>
@@ -2004,34 +1994,30 @@ const ClaimListView = () => {
               <option value="time-asc">Thời gian: Sớm nhất</option>
               <option value="time-desc">Thời gian: Trễ nhất</option>
             </select>
-            <svg
-              style={{ position: 'absolute', left: '12px', top: '11px', pointerEvents: 'none', color: '#2D1A12' }}
-              width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+            <svg 
+              style={{ position: 'absolute', left: '8px', top: '11px', pointerEvents: 'none', color: '#7B5233' }} 
+              width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
             >
               <path d="M15 18H3M21 14H3M17 10H3M21 6H3"></path>
-            </svg>
-            <svg
-              style={{ position: 'absolute', right: '10px', top: '14px', pointerEvents: 'none', color: '#2D1A12' }}
-              width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
-            >
-              <polyline points="6 9 12 15 18 9"></polyline>
             </svg>
           </div>
         </div>
 
-        <div className="action-buttons-group" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <div className="toolbar-right">
           {hasWritePermission && (
             <button
-              className="btn-overview-orange"
+              className="btn btn-primary"
               onClick={handleProcessSelectedClaim}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                height: '37px',
+                height: '36px',
                 padding: '0 16px',
                 borderRadius: '8px',
                 fontWeight: 'bold',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                backgroundColor: '#e65100',
+                color: '#fff'
               }}
             >
               Xử lý khiếu nại
@@ -2039,43 +2025,44 @@ const ClaimListView = () => {
           )}
 
           {hasWritePermission && (
-            <button
-              className="btn-add-new"
+            <button 
+              className="btn btn-primary" 
               onClick={handleOpenAddNewClaim}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '8px',
-                height: '37px',
+                height: '36px',
                 padding: '0 20px',
                 borderRadius: '8px',
                 fontWeight: 'bold',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                backgroundColor: '#7B5233',
+                color: '#fff'
               }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19"></line>
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-              </svg>
+              <Plus size={16} />
               Thêm mới
             </button>
           )}
 
           {hasWritePermission && (
-            <div className="import-dropdown-container">
+            <div className="import-dropdown-container" style={{ position: 'relative' }}>
               <button
-                className="btn-border-action"
+                className="btn btn-outline"
                 onClick={() => setIsImportDropdownOpen(!isImportDropdownOpen)}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
-                  height: '37px',
-                  borderColor: '#2D1A12',
+                  height: '36px',
+                  borderColor: '#EADCC9',
+                  color: '#7B5233',
                   fontWeight: 'bold',
                   borderRadius: '8px',
                   padding: '0 16px',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  backgroundColor: '#fff'
                 }}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -2089,7 +2076,7 @@ const ClaimListView = () => {
                 </svg>
               </button>
               {isImportDropdownOpen && (
-                <div className="import-dropdown-menu" style={{ minWidth: '160px' }}>
+                <div className="import-dropdown-menu" style={{ minWidth: '160px', position: 'absolute', top: '100%', right: 0, zIndex: 1000 }}>
                   <button className="import-dropdown-item" onClick={() => { setIsImportDropdownOpen(false); triggerPdfUpload(); }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
@@ -2133,18 +2120,20 @@ const ClaimListView = () => {
           )}
 
           <button
-            className="btn-border-action"
+            className="btn btn-outline"
             onClick={handleExportExcel}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              height: '37px',
-              borderColor: '#2D1A12',
-              fontWeight: 'bold',
-              borderRadius: '8px',
+              height: '36px',
               padding: '0 16px',
-              cursor: 'pointer'
+              borderRadius: '8px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              border: '1px solid #EADCC9',
+              backgroundColor: '#fff',
+              color: '#7B5233'
             }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -2157,18 +2146,19 @@ const ClaimListView = () => {
 
           {hasWritePermission && (
             <button
-              className="btn-border-action"
+              className="btn btn-outline"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
-                height: '37px',
+                height: '36px',
                 borderColor: selectedClaimIds.length === 0 ? '#CBD5E1' : '#A0301B',
                 color: selectedClaimIds.length === 0 ? '#94A3B8' : '#A0301B',
                 cursor: selectedClaimIds.length === 0 ? 'not-allowed' : 'pointer',
                 fontWeight: 'bold',
                 borderRadius: '8px',
-                padding: '0 16px'
+                padding: '0 16px',
+                backgroundColor: '#fff'
               }}
               disabled={selectedClaimIds.length === 0}
               onClick={() => {
@@ -2683,66 +2673,88 @@ const ClaimListView = () => {
       )}
 
       {/* SECTION 4: MAIN DETAILED TABLE */}
-      <Table
-        loading={loading}
-        isEmpty={claims.length === 0}
-        emptyMessage="Chưa có dữ liệu khiếu nại nào được nhập."
-        headers={tableHeaders}
-      >
-        {paginatedClaims.map((claim, idx) => (
-          <tr key={claim.id} className={claim.batch_id && claim.batch_id === highlightBatchId ? 'claim-row-highlight' : ''}>
-            {hasWritePermission && (
-              <td className="checkbox-col">
-                <input
-                  type="checkbox"
-                  className="checkbox-custom"
-                  checked={selectedClaimIds.includes(claim.id)}
-                  onChange={() => handleToggleSelectRow(claim.id)}
-                />
-              </td>
-            )}
-            <td style={{ fontWeight: '600', color: 'var(--text-gray)' }}>{startIndex + idx + 1}</td>
-            <td className="text-left" style={{ fontWeight: '500', color: '#2D1A12' }}>{claim.product_name}</td>
-            <td className="code-ref text-left">{claim.claim_code}</td>
-            <td className="code-error">{claim.order_code}</td>
-            <td className="code-error">{claim.company_error_code || ''}</td>
-            <td className="value-penalty">{claim.penalty}</td>
-            <td className="code-lpn">{claim.lpn}</td>
-            <td className="code-cont">{claim.cont}</td>
-            <td>{claim.date}</td>
-            <td>
-              <span className={`status-badge badge-${claim.status === 'Mới' ? 'new' : claim.status === 'Đang xử lý' ? 'pending' : 'accepted'}`}>
-                {claim.status}
-              </span>
-            </td>
-            {hasWritePermission && (
-              <td>
-                <button
-                  className="btn-action-edit"
-                  title="Chỉnh sửa"
-                  onClick={() => setActiveDetailClaim(claim)}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
-                  </svg>
-                </button>
-              </td>
-            )}
-          </tr>
-        ))}
-      </Table>
+      <div className="admin-list-layout" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0 }}>
+          <Table
+            loading={loading}
+            isEmpty={claims.length === 0}
+            emptyMessage="Chưa có dữ liệu khiếu nại nào được nhập."
+            headers={tableHeaders}
+          >
+            {paginatedClaims.map((claim, idx) => (
+              <tr 
+                key={claim.id} 
+                className={claim.batch_id && claim.batch_id === highlightBatchId ? 'claim-row-highlight' : ''}
+                style={{
+                  position: 'relative',
+                  zIndex: actionMenuId === claim.id ? 30 : 1
+                }}
+              >
+                {hasWritePermission && (
+                  <td className="checkbox-col">
+                    <input
+                      type="checkbox"
+                      className="checkbox-custom"
+                      checked={selectedClaimIds.includes(claim.id)}
+                      onChange={() => handleToggleSelectRow(claim.id)}
+                    />
+                  </td>
+                )}
+                <td style={{ fontWeight: '600', color: 'var(--text-gray)' }}>{startIndex + idx + 1}</td>
+                <td className="text-left" style={{ fontWeight: '500', color: '#2D1A12' }}>{claim.product_name}</td>
+                <td className="code-ref text-left">{claim.claim_code}</td>
+                <td className="code-error">{claim.order_code}</td>
+                <td className="code-error">{claim.company_error_code || ''}</td>
+                <td className="value-penalty">{claim.penalty}</td>
+                <td className="code-lpn">{claim.lpn}</td>
+                <td className="code-cont">{claim.cont}</td>
+                <td>{claim.date}</td>
+                <td>
+                  <span className={`status-badge badge-${claim.status === 'Mới' ? 'new' : claim.status === 'Đang xử lý' ? 'pending' : 'accepted'}`}>
+                    {claim.status}
+                  </span>
+                </td>
+                {hasWritePermission && (
+                  <td style={{ position: 'relative', textAlign: 'center', zIndex: actionMenuId === claim.id ? 40 : 1 }}>
+                    <button
+                      className="action-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActionMenuId(actionMenuId === claim.id ? null : claim.id);
+                      }}
+                    ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
+                    {actionMenuId === claim.id && (
+                      <div className="action-menu" style={{ right: '50%', transform: 'translateX(50%)', top: '80%' }}>
+                        <button 
+                          className="action-menu-item" 
+                          onClick={() => {
+                            setActionMenuId(null);
+                            setActiveDetailClaim(claim);
+                          }}
+                        >
+                          Chỉnh sửa
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                )}
+              </tr>
+            ))}
+          </Table>
 
-      {/* SECTION 5: PAGINATION FOOTER */}
-      {!loading && claims.length > 0 && paginatedClaims.length > 0 && (
-        <Pagination
-          currentPage={safeCurrentPage}
-          totalPages={totalPages}
-          startIndex={startIndex}
-          endIndex={endIndex}
-          totalItems={totalFilteredItems}
-          onPageChange={(page) => setCurrentPage(page)}
-        />
-      )}
+          {/* SECTION 5: PAGINATION FOOTER */}
+          {!loading && claims.length > 0 && paginatedClaims.length > 0 && (
+            <Pagination
+              currentPage={safeCurrentPage}
+              totalPages={totalPages}
+              startIndex={startIndex}
+              endIndex={endIndex}
+              totalItems={totalFilteredItems}
+              onPageChange={(page) => setCurrentPage(page)}
+            />
+          )}
+        </div>
+      </div>
 
 
 

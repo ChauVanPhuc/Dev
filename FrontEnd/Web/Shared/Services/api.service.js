@@ -2,10 +2,10 @@ import axios from 'axios';
 
 // Cấu hình cơ sở cho API - Tự động nhận diện IP máy chủ để tránh lỗi CORS
 export const getBaseURL = () => {
-  // Nếu đang chạy ở môi trường Dev (Vite thường dùng cổng 5173 hoặc 3000)
+  // Nếu đang chạy ở môi trường Dev (Vite thường dùng cổng 5173, 5174 hoặc 3000)
   // chúng ta cần trỏ cứng về cổng 8000 của BackEnd
   const { hostname, port } = window.location;
-  if (port === '5173' || port === '3000') {
+  if (port === '5173' || port === '5174' || port === '5175' || port === '3000') {
     return `http://${hostname}:8000`;
   }
   

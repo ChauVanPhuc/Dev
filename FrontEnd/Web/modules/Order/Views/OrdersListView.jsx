@@ -15,7 +15,10 @@ import {
   Trash2,
   Package,
   ShoppingBag,
-  Calendar
+  Calendar,
+  Layers,
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react';
 import { orderService } from '@modules/Order/Models/order.service';
 
@@ -74,10 +77,10 @@ const Orders = () => {
         const overdue = orders.filter(o => getStatusDisplay(o).text === 'Quá hạn').length;
 
         return [
-            { id: 'all', label: 'TỔNG ĐƠN HÀNG', value: `${total} Đơn`, bg: '#F5F5F5', color: '#424242' },
-            { id: 'production', label: 'ĐANG SẢN XUẤT', value: `${production} Đơn`, bg: '#eff6ff', color: '#3b82f6' },
-            { id: 'completed', label: 'ĐÃ HOÀN THÀNH', value: `${completed} Đơn`, bg: '#ecfdf5', color: '#10b981' },
-            { id: 'overdue', label: 'QUÁ HẠN', value: `${overdue} Đơn`, bg: '#fef2f2', color: '#ef4444' },
+            { id: 'all', label: 'TỔNG ĐƠN HÀNG', value: total, bg: '#F5F5F5', color: '#424242', iconBg: '#FAF6F0', iconColor: '#7B5233', Icon: Layers, themeColor: '#7B5233', activeBg: '#FAF6F0' },
+            { id: 'production', label: 'ĐANG SẢN XUẤT', value: production, bg: '#eff6ff', color: '#3b82f6', iconBg: '#FFFBEB', iconColor: '#F59E0B', Icon: Clock, themeColor: '#F59E0B', activeBg: '#FFFBEB' },
+            { id: 'completed', label: 'ĐÃ HOÀN THÀNH', value: completed, bg: '#ecfdf5', color: '#10b981', iconBg: '#ECFDF4', iconColor: '#10B981', Icon: CheckCircle, themeColor: '#10B981', activeBg: '#ECFDF4' },
+            { id: 'overdue', label: 'QUÁ HẠN', value: overdue, bg: '#fef2f2', color: '#ef4444', iconBg: '#FEF2F2', iconColor: '#EF4444', Icon: AlertCircle, themeColor: '#EF4444', activeBg: '#FEF2F2' },
         ];
     }, [orders]);
 
@@ -116,23 +119,41 @@ const Orders = () => {
                 {/* Desktop stats grid */}
                 <div className="stats-grid animate-card-entrance desktop-only" style={{ padding: '16px 16px 0' }}>
                     {stats.map((stat, idx) => {
-                        const isActive = filterStatus === stat.id;
                         return (
                             <div 
                                 key={idx} 
-                                className="stat-card" 
+                                className="kpi-card" 
                                 style={{ 
-                                    backgroundColor: isActive ? stat.color : stat.bg, 
-                                    color: isActive ? '#fff' : '#1e293b',
-                                    border: isActive ? `1px solid ${stat.color}` : '1px solid rgba(226, 232, 240, 0.8)', 
-                                    boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
-                                    cursor: 'pointer',
+                                    background: '#fff', 
+                                    border: '1px solid #E2E8F0',
+                                    padding: '8px 12px', 
+                                    borderRadius: '10px', 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: '8px',
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.01)',
                                     transition: 'all 0.2s'
                                 }}
-                                onClick={() => { setFilterStatus(stat.id); setCurrentPage(1); }}
                             >
-                                <p className="stat-title" style={{ color: isActive ? 'rgba(255,255,255,0.85)' : '#64748b', transition: 'all 0.2s' }}>{stat.label}</p>
-                                <h3 className="stat-value" style={{ color: isActive ? '#fff' : stat.color, transition: 'all 0.2s' }}>{stat.value}</h3>
+                                <div style={{
+                                    width: '32px', 
+                                    height: '32px', 
+                                    borderRadius: '8px',
+                                    backgroundColor: stat.iconBg,
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center',
+                                    color: stat.iconColor, 
+                                    flexShrink: 0
+                                }}>
+                                    <stat.Icon size={18} />
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: '700', letterSpacing: '0.05em' }}>{stat.label}</div>
+                                    <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0F172A', lineHeight: '1.2' }}>
+                                        {new Intl.NumberFormat('vi-VN').format(stat.value)}
+                                    </div>
+                                </div>
                             </div>
                         );
                     })}
@@ -140,21 +161,19 @@ const Orders = () => {
                 {/* Mobile compact stats strip */}
                 <div className="stats-strip">
                     {stats.map((stat, idx) => {
-                        const isActive = filterStatus === stat.id;
                         return (
                             <div 
                                 key={idx} 
-                                className={`stats-strip-item ${isActive ? 'active' : ''}`}
+                                className="stats-strip-item"
                                 style={{ 
-                                    backgroundColor: isActive ? stat.color : '#fff',
-                                    cursor: 'pointer'
+                                    backgroundColor: '#fff',
+                                    border: '1px solid #E2E8F0'
                                 }}
-                                onClick={() => { setFilterStatus(stat.id); setCurrentPage(1); }}
                             >
-                                <span className="strip-value" style={{ color: isActive ? '#fff' : stat.color }}>
-                                    {stat.value.replace(' Đơn', '')}
+                                <span className="strip-value" style={{ color: stat.iconColor }}>
+                                    {new Intl.NumberFormat('vi-VN').format(stat.value)}
                                 </span>
-                                <span className="strip-label" style={{ color: isActive ? 'rgba(255,255,255,0.9)' : '#8D6E63' }}>
+                                <span className="strip-label" style={{ color: '#64748B' }}>
                                     {stat.label.replace('TỔNG ĐƠN HÀNG', 'TỔNG ĐƠN').replace('ĐANG ', '').replace('ĐÃ ', '')}
                                 </span>
                             </div>
@@ -171,54 +190,111 @@ const Orders = () => {
                         </div>
                         
                         <select 
+                            value={filterStatus} 
+                            onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}
+                            className="select-minimal"
+                            style={{
+                              height: '36px',
+                              borderRadius: '8px',
+                              border: '1px solid #EADCC9',
+                              backgroundColor: '#FAF6F0',
+                              color: '#7B5233',
+                              padding: '0 8px',
+                              fontWeight: '700',
+                              fontSize: '0.8rem',
+                              cursor: 'pointer'
+                            }}
+                        >
+                            <option value="all">Tất cả trạng thái</option>
+                            <option value="production">Đang sản xuất</option>
+                            <option value="completed">Đã hoàn thành</option>
+                            <option value="overdue">Quá hạn</option>
+                        </select>
+
+                        <select 
                             value={itemsPerPage} 
                             onChange={(e) => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
-                            className="page-size-select"
+                            className="select-minimal"
+                            style={{
+                              height: '36px',
+                              borderRadius: '8px',
+                              border: '1px solid #EADCC9',
+                              backgroundColor: '#FAF6F0',
+                              color: '#7B5233',
+                              padding: '0 8px',
+                              fontWeight: '700',
+                              fontSize: '0.8rem',
+                              cursor: 'pointer'
+                            }}
                         >
                             <option value={15}>15 dòng</option>
                             <option value={30}>30 dòng</option>
                             <option value={50}>50 dòng</option>
                             <option value={100}>100 dòng</option>
                         </select>
-
-                        <div style={{ position: 'relative' }}>
-                            <button 
-                                className="btn" 
-                                style={{ 
-                                    padding: '0.5rem', 
-                                    background: filterStatus !== 'all' ? '#FDF2F2' : 'white', 
-                                    borderColor: filterStatus !== 'all' ? '#5d3b32' : '#E5E7EB',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '4px'
-                                }}
-                                onClick={() => { setFilterStatus(filterStatus === 'all' ? 'production' : 'all'); setCurrentPage(1); }}
-                            >
-                                <Filter size={18} color={filterStatus !== 'all' ? '#5d3b32' : '#64748b'} />
-                                {filterStatus !== 'all' && <span style={{ fontSize: '0.65rem', fontWeight: '800', color: '#5d3b32' }}>ON</span>}
-                            </button>
-                        </div>
-                        <button className="btn desktop-only"><ArrowUpDown size={18} /></button>
                     </div>
                     
                     <div className="toolbar-right">
                         <button 
                             onClick={() => navigate('/admin/orders/create')} 
                             className="btn btn-primary"
-                            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                            style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '8px',
+                                height: '36px',
+                                padding: '0 20px',
+                                borderRadius: '8px',
+                                fontWeight: 'bold',
+                                cursor: 'pointer',
+                                backgroundColor: '#7B5233',
+                                color: '#fff'
+                            }}
                         >
-                            <Plus size={18} />
+                            <Plus size={16} />
                             <span className="btn-text-desktop">Thêm Đơn hàng</span>
                             <span className="btn-text-mobile">Thêm</span>
                         </button>
-                        <div className="desktop-only" style={{ width: '1px', height: '24px', backgroundColor: '#e2e8f0' }}></div>
-                        <button className="btn" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                            <FileUp size={16} /> 
+                        <div className="desktop-only" style={{ width: '1px', height: '24px', backgroundColor: '#EADCC9' }}></div>
+                        <button 
+                            className="btn btn-outline" 
+                            style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '6px',
+                                height: '36px',
+                                padding: '0 12px',
+                                borderRadius: '8px',
+                                border: '1px solid #EADCC9',
+                                backgroundColor: '#fff',
+                                color: '#7B5233',
+                                fontWeight: '700',
+                                fontSize: '0.8rem',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            <FileUp size={14} /> 
                             <span className="btn-text-desktop">Nhập Excel</span>
                             <span className="btn-text-mobile">Nhập</span>
                         </button>
-                        <button className="btn" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                            <FileDown size={16} /> 
+                        <button 
+                            className="btn btn-outline" 
+                            style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '6px',
+                                height: '36px',
+                                padding: '0 12px',
+                                borderRadius: '8px',
+                                border: '1px solid #EADCC9',
+                                backgroundColor: '#fff',
+                                color: '#7B5233',
+                                fontWeight: '700',
+                                fontSize: '0.8rem',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            <FileDown size={14} /> 
                             <span className="btn-text-desktop">Xuất Excel</span>
                             <span className="btn-text-mobile">Xuất</span>
                         </button>

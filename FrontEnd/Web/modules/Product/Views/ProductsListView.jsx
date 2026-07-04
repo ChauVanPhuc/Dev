@@ -10,11 +10,19 @@ const ManufactureProducts = () => {
   const [loading, setLoading] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState(0);
   
-  // Pagination & Search
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [limit, setLimit] = useState(15);
+  const [actionMenuId, setActionMenuId] = useState(null);
+
+  useEffect(() => {
+    const handleOutsideClick = () => {
+      setActionMenuId(null);
+    };
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, []);
 
   useEffect(() => {
     fetchProducts();
@@ -210,7 +218,7 @@ const ManufactureProducts = () => {
                       <th>Mã SKU</th>
                       <th>Tên Sản Phẩm</th>
                       <th>Kích Thước (L-W-H)</th>
-                      <th style={{ textAlign: 'right' }}>Thao Tác</th>
+                      <th style={{ textAlign: 'center', width: '120px' }}>Thao Tác</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -222,27 +230,51 @@ const ManufactureProducts = () => {
                       </tr>
                     ) : (
                       products.map((product, index) => (
-                        <tr key={product.id} className="animate-card-entrance">
+                        <tr 
+                          key={product.id} 
+                          className="animate-card-entrance"
+                          style={{
+                            position: 'relative',
+                            zIndex: actionMenuId === product.id ? 30 : 1
+                          }}
+                        >
                           <td data-label="STT">{index + 1}</td>
                           <td data-label="Mã SKU" style={{ fontWeight: '500' }}>{product.sku || 'N/A'}</td>
                           <td data-label="Tên Sản Phẩm">{product.name}</td>
                           <td data-label="Kích Thước (L-W-H)">
                             {product.length}x{product.width}x{product.height}
                           </td>
-                          <td data-label="Thao Tác" style={{ textAlign: 'right' }}>
-                            <button 
-                              onClick={() => navigate(`/admin/products/${product.id}`)}
-                              style={{ marginRight: '8px', color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer' }}
-                            >
-                              Chi tiết
-                            </button>
-                            <button 
-                              onClick={() => handleDelete(product.id)}
-                              style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}
-                            >
-                              Xóa
-                            </button>
-                          </td>
+                          <td data-label="Thao Tác" style={{ position: 'relative', textAlign: 'center', zIndex: actionMenuId === product.id ? 40 : 1 }}>
+                             <button
+                               className="action-btn"
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 setActionMenuId(actionMenuId === product.id ? null : product.id);
+                               }}
+                             ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
+                             {actionMenuId === product.id && (
+                               <div className="action-menu" style={{ right: '50%', transform: 'translateX(50%)', top: '80%' }}>
+                                 <button 
+                                   className="action-menu-item" 
+                                   onClick={() => {
+                                     setActionMenuId(null);
+                                     navigate(`/admin/products/${product.id}`);
+                                   }}
+                                 >
+                                   Chi tiết
+                                 </button>
+                                 <button 
+                                   className="action-menu-item danger" 
+                                   onClick={() => {
+                                     setActionMenuId(null);
+                                     handleDelete(product.id);
+                                   }}
+                                 >
+                                   Xóa
+                                 </button>
+                               </div>
+                             )}
+                           </td>
                         </tr>
                       ))
                     )}

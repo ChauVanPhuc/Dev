@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Filter, FileDown, Search, Plus, FolderTree, Briefcase } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Filter, FileDown, Search, Plus, FolderTree, Briefcase, Settings, Layers } from 'lucide-react';
 import api from '@webShared/Services/api.service';
+import ExcelJS from 'exceljs';
 
 import '@styles/components.css';
 
@@ -62,6 +63,53 @@ const SCREEN_GROUPS = [
       { key: 'kpi-list', name: 'Danh sách KPI' },
       { key: 'kpi-rules', name: 'Quy tắc cộng trừ điểm' },
       { key: 'kpi-feedback', name: 'Phản hồi và nhận xét' }
+    ]
+  }
+];
+
+const MOBILE_SCREEN_GROUPS = [
+  {
+    title: 'Bàn giao & In ấn',
+    screens: [
+      { key: 'mobile_delivery-info', name: 'Thông tin bàn giao' },
+      { key: 'mobile_delivery-create', name: 'Tạo phiếu bàn giao' },
+      { key: 'mobile_delivery-receive', name: 'Nhận bàn giao công đoạn' },
+      { key: 'mobile_thermal-print', name: 'In phiếu/tem nhiệt' }
+    ]
+  },
+  {
+    title: 'Kế hoạch & Sản xuất',
+    screens: [
+      { key: 'mobile_plan', name: 'Theo dõi kế hoạch & Tiến độ' }
+    ]
+  },
+  {
+    title: 'QC & Chất lượng',
+    screens: [
+      { key: 'mobile_inspection-daily', name: 'Kiểm tra hàng ngày' },
+      { key: 'mobile_inspection-stage', name: 'Kiểm tra sản phẩm' },
+      { key: 'mobile_quality-detail', name: 'Chi tiết kiểm QC' },
+      { key: 'mobile_input-inspection', name: 'Kiểm tra IQC' },
+      { key: 'mobile_logs', name: 'Nhật ký kiểm QC' },
+      { key: 'mobile_capa-list', name: 'Danh sách CAPA' },
+      { key: 'mobile_capa-report', name: 'Báo cáo sự cố' },
+      { key: 'mobile_capa-detail', name: 'Chi tiết CAPA' },
+      { key: 'mobile_feedback', name: 'Góp ý di động' }
+    ]
+  },
+  {
+    title: 'Đánh giá & KPI',
+    screens: [
+      { key: 'mobile_awards', name: 'Khen thưởng & Kỷ luật' },
+      { key: 'mobile_kpi', name: 'Theo dõi KPI' },
+      { key: 'mobile_kpi-staff', name: 'Nhân sự đánh giá' },
+      { key: 'mobile_staff-evaluation', name: 'Đánh giá nhân sự' }
+    ]
+  },
+  {
+    title: 'Thiết bị',
+    screens: [
+      { key: 'mobile_equipment-list', name: 'Danh sách thiết bị' }
     ]
   }
 ];
@@ -155,9 +203,11 @@ const UserManagement = () => {
 
   // ─── State menu thao tác ─────────────────────────────────────────────────────
   const [actionMenuId, setActionMenuId] = useState(null); // ID user đang mở menu
+  const [showExtraMenu, setShowExtraMenu] = useState(false); // Dropdown "Khác"
 
   // ─── State chế độ xem & phân quyền ──────────────────────────────────────────
-  const [viewMode, setViewMode] = useState('account_info'); // 'account_info' | 'permissions'
+  const [viewMode, setViewMode] = useState('account_info'); // 'account_info' | 'permissions_web' | 'permissions_mobile'
+  const currentGroups = viewMode === 'permissions_mobile' ? MOBILE_SCREEN_GROUPS : SCREEN_GROUPS;
   const [showViewModePanel, setShowViewModePanel] = useState(false);
   const [userPermissions, setUserPermissions] = useState({});
   const [permsLoading, setPermsLoading] = useState(false);
@@ -165,6 +215,7 @@ const UserManagement = () => {
   const filterRef = useRef(null);
   const sortRef = useRef(null);
   const viewModeRef = useRef(null);
+  const extraMenuRef = useRef(null);
 
   // Đóng dropdown khi click ra ngoài
   useEffect(() => {
@@ -172,6 +223,7 @@ const UserManagement = () => {
       if (filterRef.current && !filterRef.current.contains(e.target)) setShowFilterPanel(false);
       if (sortRef.current && !sortRef.current.contains(e.target)) setShowSortPanel(false);
       if (viewModeRef.current && !viewModeRef.current.contains(e.target)) setShowViewModePanel(false);
+      if (extraMenuRef.current && !extraMenuRef.current.contains(e.target)) setShowExtraMenu(false);
 
       // Chỉ đóng action menu khi click thực sự ra ngoài menu và ngoài nút bấm "..."
       if (!e.target.closest('.action-menu') && !e.target.closest('.action-btn')) {
@@ -213,7 +265,7 @@ const UserManagement = () => {
   // Tải chi tiết phân quyền của toàn bộ user trên trang hiện tại khi ở chế độ Phân quyền
   useEffect(() => {
     const fetchAllPermissions = async () => {
-      if (viewMode !== 'permissions' || users.length === 0) return;
+      if (!viewMode.startsWith('permissions') || users.length === 0) return;
       setPermsLoading(true);
       try {
         const promises = users.map(async (user) => {
@@ -234,6 +286,11 @@ const UserManagement = () => {
               userPerms[scr.key] = item.permissions[scr.key] || 'write';
             });
           });
+          MOBILE_SCREEN_GROUPS.forEach(group => {
+            group.screens.forEach(scr => {
+              userPerms[scr.key] = item.permissions[scr.key] || 'write';
+            });
+          });
           permMap[item.userId] = userPerms;
         });
         setUserPermissions(permMap);
@@ -247,11 +304,18 @@ const UserManagement = () => {
     fetchAllPermissions();
   }, [users, viewMode]);
 
+  const normalizePermission = (val) => {
+    if (!val || val === 'none') return 'none';
+    if (val.includes('write')) return 'write';
+    if (val.includes('read')) return 'read';
+    return 'none';
+  };
+
   // Hàm tính toán quyền cho nhóm cha dựa trên con
   const getGroupPermissionStateForUser = (userId, group) => {
     const userPerms = userPermissions[userId];
     if (!userPerms) return 'write';
-    const childVals = group.screens.map(s => userPerms[s.key] || 'write');
+    const childVals = group.screens.map(s => normalizePermission(userPerms[s.key] || 'write'));
     const uniqueVals = Array.from(new Set(childVals));
     if (uniqueVals.length >= 2) {
       return 'write'; // Trạng thái hỗn hợp mặc định về Điều chỉnh (write)
@@ -262,7 +326,7 @@ const UserManagement = () => {
   // Hàm thay đổi nhanh quyền cả nhóm
   const handleGroupPermissionChangeForUser = async (user, groupIdx, value) => {
     const currentPerms = { ...(userPermissions[user.id] || {}) };
-    const group = SCREEN_GROUPS[groupIdx];
+    const group = currentGroups[groupIdx];
 
     // Gán đồng loạt quyền cho các con
     group.screens.forEach(s => {
@@ -306,6 +370,330 @@ const UserManagement = () => {
       setSortDir('asc');
     }
     setPage(1);
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      setLoading(true);
+      // Fetch all matching users without pagination limit (e.g. size = 10000)
+      const params = new URLSearchParams({ page: 1, size: 10000, sort_by: sortBy, sort_dir: sortDir });
+      if (debouncedSearch) params.append('search', debouncedSearch);
+      if (statusFilter) params.append('status', statusFilter);
+      const res = await api.get(`/accounts/?${params.toString()}`);
+      const allUsers = res.items || [];
+
+      // Fetch permissions for all these users
+      const permsPromises = allUsers.map(async (user) => {
+        try {
+          const permRes = await api.get(`/accounts/${user.id}/permissions?resolved=true`);
+          return { userId: user.id, permissions: permRes.permissions || {} };
+        } catch (e) {
+          return { userId: user.id, permissions: {} };
+        }
+      });
+      const permsResults = await Promise.all(permsPromises);
+      const permMap = {};
+      permsResults.forEach(item => {
+        permMap[item.userId] = item.permissions;
+      });
+
+      const workbook = new ExcelJS.Workbook();
+      
+      // --- SHEET 1: DANH SÁCH TÀI KHOẢN ---
+      const ws1 = workbook.addWorksheet("Danh sách tài khoản");
+      ws1.views = [{ showGridLines: true }];
+
+      // Title
+      ws1.mergeCells('A1:J1');
+      const titleCell = ws1.getCell('A1');
+      titleCell.value = "DANH SÁCH TÀI KHOẢN NGƯỜI DÙNG";
+      titleCell.font = { name: 'Segoe UI', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+      titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF7B5233' } };
+      titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      ws1.getRow(1).height = 40;
+
+      // Headers
+      const headers1 = [
+        "STT", "Mã NV", "Họ và tên", "Username", "Số điện thoại", 
+        "Phân loại", "Bộ phận", "Chức vụ", "Quyền hạn / Công đoạn", "Trạng thái"
+      ];
+      ws1.addRow([]);
+      ws1.getRow(2).height = 10;
+      const headerRow1 = ws1.addRow(headers1);
+      headerRow1.height = 30;
+      headerRow1.eachCell((cell) => {
+        cell.font = { name: 'Segoe UI', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF7B5233' } };
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFBFBFBF' } },
+          left: { style: 'thin', color: { argb: 'FFBFBFBF' } },
+          bottom: { style: 'medium', color: { argb: 'FF7B5233' } },
+          right: { style: 'thin', color: { argb: 'FFBFBFBF' } }
+        };
+      });
+
+      // Data Rows
+      allUsers.forEach((user, idx) => {
+        const isEven = idx % 2 === 1;
+        const rowData = [
+          idx + 1,
+          user.employee_id || "",
+          user.full_name || "",
+          user.username || "",
+          user.phone || "-",
+          user.role_name === 'IT' || user.role_name === 'BGD' ? 'Hành chính' : 'Sản xuất',
+          user.role_name || "-",
+          user.permission_name || "-",
+          user.permission_level ? user.permission_level : (user.stage_name || "-"),
+          user.status || ""
+        ];
+        const addedRow = ws1.addRow(rowData);
+        addedRow.height = 24;
+        addedRow.eachCell((cell, colNum) => {
+          cell.font = { name: 'Segoe UI', size: 10 };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            right: { style: 'thin', color: { argb: 'FFE0E0E0' } }
+          };
+          if (isEven) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFDFBF7' } };
+          }
+          if (colNum === 1 || colNum === 2 || colNum === 5 || colNum === 6 || colNum === 10) {
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          } else {
+            cell.alignment = { horizontal: 'left', vertical: 'middle' };
+          }
+          if (colNum === 10) {
+            const status = user.status;
+            cell.font = { name: 'Segoe UI', size: 10, bold: true };
+            if (status === 'Đang sử dụng') {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE6F4EA' } };
+              cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF137333' } };
+            } else if (status === 'Dừng hoạt động') {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE8E6' } };
+              cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFC5221F' } };
+            } else {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FEF7E0' } };
+              cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'B06000' } };
+            }
+          }
+        });
+      });
+
+      ws1.columns = [
+        { width: 8 },   // STT
+        { width: 15 },  // Mã NV
+        { width: 25 },  // Họ tên
+        { width: 18 },  // Username
+        { width: 16 },  // Số ĐT
+        { width: 15 },  // Phân loại
+        { width: 20 },  // Bộ phận
+        { width: 20 },  // Chức vụ
+        { width: 30 },  // Quyền hạn / công đoạn
+        { width: 18 }   // Trạng thái
+      ];
+
+      // --- SHEET 2: PHÂN QUYỀN CHI TIẾT (WEB) ---
+      const ws2 = workbook.addWorksheet("Phân quyền Web");
+      ws2.views = [{ showGridLines: true }];
+
+      // Title
+      ws2.mergeCells('A1:Z1');
+      const titleCell2 = ws2.getCell('A1');
+      titleCell2.value = "MA TRẬN PHÂN QUYỀN CHI TIẾT PHIÊN BẢN WEB";
+      titleCell2.font = { name: 'Segoe UI', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+      titleCell2.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF7B5233' } };
+      titleCell2.alignment = { horizontal: 'center', vertical: 'middle' };
+      ws2.getRow(1).height = 36;
+
+      // Extract all screen headers
+      const webScreens = [];
+      SCREEN_GROUPS.forEach(g => {
+        g.screens.forEach(s => {
+          webScreens.push(s);
+        });
+      });
+
+      const headers2 = ["STT", "Mã NV", "Họ và tên", ...webScreens.map(s => s.name)];
+      ws2.addRow([]);
+      ws2.getRow(2).height = 10;
+      const headerRow2 = ws2.addRow(headers2);
+      headerRow2.height = 32;
+      headerRow2.eachCell((cell) => {
+        cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF7B5233' } };
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFBFBFBF' } },
+          left: { style: 'thin', color: { argb: 'FFBFBFBF' } },
+          bottom: { style: 'medium', color: { argb: 'FF7B5233' } },
+          right: { style: 'thin', color: { argb: 'FFBFBFBF' } }
+        };
+      });
+
+      allUsers.forEach((user, idx) => {
+        const isEven = idx % 2 === 1;
+        const uPerms = permMap[user.id] || {};
+        const rowData = [
+          idx + 1,
+          user.employee_id || "",
+          user.full_name || "",
+          ...webScreens.map(s => {
+            const val = normalizePermission(uPerms[s.key] || 'write');
+            return val === 'write' ? 'Điều chỉnh' : val === 'read' ? 'Truy cập' : 'Không được phép';
+          })
+        ];
+        const addedRow = ws2.addRow(rowData);
+        addedRow.height = 24;
+        addedRow.eachCell((cell, colNum) => {
+          cell.font = { name: 'Segoe UI', size: 9.5 };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            right: { style: 'thin', color: { argb: 'FFE0E0E0' } }
+          };
+          if (isEven) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFDFBF7' } };
+          }
+          if (colNum === 1 || colNum === 2) {
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          } else if (colNum === 3) {
+            cell.alignment = { horizontal: 'left', vertical: 'middle' };
+          } else {
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            const val = cell.value;
+            if (val === 'Điều chỉnh') {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE6F4EA' } };
+              cell.font = { name: 'Segoe UI', size: 9.5, bold: true, color: { argb: 'FF137333' } };
+            } else if (val === 'Truy cập') {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F0FE' } };
+              cell.font = { name: 'Segoe UI', size: 9.5, bold: true, color: { argb: 'FF1A73E8' } };
+            } else {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE8E6' } };
+              cell.font = { name: 'Segoe UI', size: 9.5, bold: true, color: { argb: 'FFC5221F' } };
+            }
+          }
+        });
+      });
+
+      // Widths for ws2
+      const ws2Widths = [{ width: 6 }, { width: 12 }, { width: 22 }];
+      webScreens.forEach(() => ws2Widths.push({ width: 18 }));
+      ws2.columns = ws2Widths;
+
+      // --- SHEET 3: PHÂN QUYỀN CHI TIẾT (MOBILE) ---
+      const ws3 = workbook.addWorksheet("Phân quyền Mobile");
+      ws3.views = [{ showGridLines: true }];
+
+      // Title
+      ws3.mergeCells('A1:Z1');
+      const titleCell3 = ws3.getCell('A1');
+      titleCell3.value = "MA TRẬN PHÂN QUYỀN CHI TIẾT PHIÊN BẢN MOBILE";
+      titleCell3.font = { name: 'Segoe UI', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+      titleCell3.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF7B5233' } };
+      titleCell3.alignment = { horizontal: 'center', vertical: 'middle' };
+      ws3.getRow(1).height = 36;
+
+      // Extract all screen headers
+      const mobileScreens = [];
+      MOBILE_SCREEN_GROUPS.forEach(g => {
+        g.screens.forEach(s => {
+          mobileScreens.push(s);
+        });
+      });
+
+      const headers3 = ["STT", "Mã NV", "Họ và tên", ...mobileScreens.map(s => s.name)];
+      ws3.addRow([]);
+      ws3.getRow(2).height = 10;
+      const headerRow3 = ws3.addRow(headers3);
+      headerRow3.height = 32;
+      headerRow3.eachCell((cell) => {
+        cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF7B5233' } };
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFBFBFBF' } },
+          left: { style: 'thin', color: { argb: 'FFBFBFBF' } },
+          bottom: { style: 'medium', color: { argb: 'FF7B5233' } },
+          right: { style: 'thin', color: { argb: 'FFBFBFBF' } }
+        };
+      });
+
+      allUsers.forEach((user, idx) => {
+        const isEven = idx % 2 === 1;
+        const uPerms = permMap[user.id] || {};
+        const rowData = [
+          idx + 1,
+          user.employee_id || "",
+          user.full_name || "",
+          ...mobileScreens.map(s => {
+            const val = normalizePermission(uPerms[s.key] || 'write');
+            return val === 'write' ? 'Điều chỉnh' : val === 'read' ? 'Truy cập' : 'Không được phép';
+          })
+        ];
+        const addedRow = ws3.addRow(rowData);
+        addedRow.height = 24;
+        addedRow.eachCell((cell, colNum) => {
+          cell.font = { name: 'Segoe UI', size: 9.5 };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            right: { style: 'thin', color: { argb: 'FFE0E0E0' } }
+          };
+          if (isEven) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFDFBF7' } };
+          }
+          if (colNum === 1 || colNum === 2) {
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          } else if (colNum === 3) {
+            cell.alignment = { horizontal: 'left', vertical: 'middle' };
+          } else {
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            const val = cell.value;
+            if (val === 'Điều chỉnh') {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE6F4EA' } };
+              cell.font = { name: 'Segoe UI', size: 9.5, bold: true, color: { argb: 'FF137333' } };
+            } else if (val === 'Truy cập') {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F0FE' } };
+              cell.font = { name: 'Segoe UI', size: 9.5, bold: true, color: { argb: 'FF1A73E8' } };
+            } else {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE8E6' } };
+              cell.font = { name: 'Segoe UI', size: 9.5, bold: true, color: { argb: 'FFC5221F' } };
+            }
+          }
+        });
+      });
+
+      // Widths for ws3
+      const ws3Widths = [{ width: 6 }, { width: 12 }, { width: 22 }];
+      mobileScreens.forEach(() => ws3Widths.push({ width: 18 }));
+      ws3.columns = ws3Widths;
+
+      // Save workbook to file
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `Danh_sach_tai_khoan_va_phan_quyen_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 100);
+
+    } catch (e) {
+      console.error('Lỗi khi xuất dữ liệu excel:', e);
+      alert('Đã xảy ra lỗi khi xuất file Excel.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Icon mũi tên sắp xếp
@@ -492,7 +880,7 @@ const UserManagement = () => {
                   }}
                   onClick={() => { setShowViewModePanel(p => !p); setShowFilterPanel(false); setShowSortPanel(false); }}
                 >
-                  {viewMode === 'account_info' ? 'Thông tin tài khoản' : 'Phân quyền'}
+                  {viewMode === 'account_info' ? 'Thông tin tài khoản' : viewMode === 'permissions_web' ? 'Phân quyền Web' : 'Phân quyền Mobile'}
                   <span style={{
                     position: 'absolute',
                     right: '10px',
@@ -513,10 +901,16 @@ const UserManagement = () => {
                     Thông tin tài khoản
                   </button>
                   <button
-                    className={`dropdown-item ${viewMode === 'permissions' ? 'selected' : ''}`}
-                    onClick={() => { setViewMode('permissions'); setShowViewModePanel(false); }}
+                    className={`dropdown-item ${viewMode === 'permissions_web' ? 'selected' : ''}`}
+                    onClick={() => { setViewMode('permissions_web'); setShowViewModePanel(false); }}
                   >
-                    Phân quyền
+                    Phân quyền Web
+                  </button>
+                  <button
+                    className={`dropdown-item ${viewMode === 'permissions_mobile' ? 'selected' : ''}`}
+                    onClick={() => { setViewMode('permissions_mobile'); setShowViewModePanel(false); }}
+                  >
+                    Phân quyền Mobile
                   </button>
                 </div>
               )}
@@ -528,50 +922,69 @@ const UserManagement = () => {
             {/* Nút Tạo mới */}
             {hasWritePermission && (
               <>
-                <button
-                  className="btn btn-outline"
-                  onClick={() => navigate('/admin/users/departments')}
-                  style={{
-                    height: '36px',
-                    padding: '0 15px',
-                    whiteSpace: 'nowrap',
-                    borderRadius: '8px',
-                    fontWeight: '700',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    border: '1px solid #EADCC9',
-                    backgroundColor: '#fff',
-                    color: '#7B5233',
-                    fontSize: '0.85rem'
-                  }}
-                >
-                  <FolderTree size={16} />
-                  <span className="btn-text-desktop">Bộ phận</span>
-                  <span className="btn-text-mobile">Bộ phận</span>
-                </button>
-                <button
-                  className="btn btn-outline"
-                  onClick={() => navigate('/admin/users/positions')}
-                  style={{
-                    height: '36px',
-                    padding: '0 15px',
-                    whiteSpace: 'nowrap',
-                    borderRadius: '8px',
-                    fontWeight: '700',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    border: '1px solid #EADCC9',
-                    backgroundColor: '#fff',
-                    color: '#7B5233',
-                    fontSize: '0.85rem'
-                  }}
-                >
-                  <Briefcase size={16} />
-                  <span className="btn-text-desktop">Chức vụ</span>
-                  <span className="btn-text-mobile">Chức vụ</span>
-                </button>
+                <div style={{ position: 'relative' }} ref={extraMenuRef}>
+                  <button
+                    onClick={() => {
+                      setShowExtraMenu(p => !p);
+                      setShowViewModePanel(false);
+                      setShowFilterPanel(false);
+                      setShowSortPanel(false);
+                    }}
+                    style={{
+                      height: '36px',
+                      padding: '0 16px',
+                      whiteSpace: 'nowrap',
+                      borderRadius: '8px',
+                      fontWeight: '700',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      border: 'none',
+                      backgroundColor: '#7B5233',
+                      color: '#fff',
+                      fontSize: '0.85rem',
+                      cursor: 'pointer',
+                      outline: 'none',
+                      boxShadow: '0 2px 5px rgba(123, 82, 51, 0.15)'
+                    }}
+                  >
+                    <Layers size={14} />
+                    <span className="btn-text-desktop">Khác</span>
+                    <span className="btn-text-mobile">Khác</span>
+                  </button>
+                  {showExtraMenu && (
+                    <div className="dropdown-panel" style={{
+                      position: 'absolute',
+                      top: '100%',
+                      right: 0,
+                      zIndex: 1000,
+                      width: '180px',
+                      marginTop: '6px'
+                    }}>
+                      <p className="dropdown-title">Quản lý nâng cao</p>
+                      <button
+                        className="dropdown-item selected"
+                        onClick={() => { navigate('/admin/users'); setShowExtraMenu(false); }}
+                        style={{ fontWeight: '800' }}
+                      >
+                        Tài khoản
+                      </button>
+                      <button
+                        className="dropdown-item"
+                        onClick={() => { navigate('/admin/users/departments'); setShowExtraMenu(false); }}
+                      >
+                        Bộ phận
+                      </button>
+                      <button
+                        className="dropdown-item"
+                        onClick={() => { navigate('/admin/users/positions'); setShowExtraMenu(false); }}
+                      >
+                        Chức vụ
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 <button
                   className="btn btn-primary"
                   onClick={() => navigate('/admin/users/create')}
@@ -596,6 +1009,7 @@ const UserManagement = () => {
             {/* Nút Xuất dữ liệu */}
             <button
               className="btn btn-outline"
+              onClick={handleExportExcel}
               style={{
                 height: '36px',
                 display: 'flex',
@@ -652,7 +1066,7 @@ const UserManagement = () => {
                           </>
                         ) : (
                           <>
-                            {SCREEN_GROUPS.map((group) => (
+                            {currentGroups.map((group) => (
                               <th key={group.title} style={{ width: '225px', minWidth: '200px' }}>
                                 {group.title}
                               </th>
@@ -682,19 +1096,34 @@ const UserManagement = () => {
                               <td>{user.permission_level ? <span style={{ fontWeight: '500', color: '#7B5233' }}>{user.permission_level}</span> : renderStages(user.stage_name)}</td>
                               <td>{user.username}</td>
                               <td>{user.phone || '-'}</td>
-                              <td style={getStatusStyle(user.status)}>{user.status}</td>
+                              <td>
+                                <span 
+                                  style={{
+                                    display: 'inline-block',
+                                    padding: '3px 10px',
+                                    borderRadius: '12px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: '700',
+                                    backgroundColor: user.status === 'Đang sử dụng' ? '#ECFDF5' : user.status === 'Dừng hoạt động' ? '#FEF2F2' : '#FFFBEB',
+                                    color: user.status === 'Đang sử dụng' ? '#10B981' : user.status === 'Dừng hoạt động' ? '#EF4444' : '#D97706',
+                                    border: `1px solid ${user.status === 'Đang sử dụng' ? '#A7F3D0' : user.status === 'Dừng hoạt động' ? '#FCA5A5' : '#FDE68A'}`,
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  {user.status}
+                                </span>
+                              </td>
                               {hasWritePermission && (
                                 <td style={{ position: 'relative', zIndex: actionMenuId === user.id ? 40 : 1 }}>
                                   <button
                                     className="action-btn"
                                     onClick={() => setActionMenuId(actionMenuId === user.id ? null : user.id)}
-                                  >•••</button>
+                                  ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
                                   {actionMenuId === user.id && (
                                     <div className="action-menu">
-                                      <button className="action-menu-item" onClick={() => handleAction('edit', user)}>✏️ Chỉnh sửa</button>
-                                      <button className="action-menu-item" onClick={() => handleAction('permissions', user)}>🔑 Phân quyền</button>
-                                      <button className="action-menu-item warn" onClick={() => handleAction('suspend', user)}>⏸ Đình chỉ</button>
-                                      <button className="action-menu-item danger" onClick={() => handleAction('delete', user)}>🗑 Xóa</button>
+                                      <button className="action-menu-item" onClick={() => handleAction('edit', user)}>Chỉnh sửa</button>
+                                      <button className="action-menu-item warn" onClick={() => handleAction('suspend', user)}>Đình chỉ</button>
+                                      <button className="action-menu-item danger" onClick={() => handleAction('delete', user)}>Xóa</button>
                                     </div>
                                   )}
                                 </td>
@@ -702,7 +1131,7 @@ const UserManagement = () => {
                             </>
                           ) : (
                             <>
-                              {SCREEN_GROUPS.map((group, groupIdx) => {
+                              {currentGroups.map((group, groupIdx) => {
                                 const userPerms = userPermissions[user.id];
                                 if (!userPerms || permsLoading) {
                                   return (
@@ -735,13 +1164,12 @@ const UserManagement = () => {
                                   <button
                                     className="action-btn"
                                     onClick={() => setActionMenuId(actionMenuId === user.id ? null : user.id)}
-                                  >•••</button>
+                                  ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
                                   {actionMenuId === user.id && (
                                     <div className="action-menu">
-                                      <button className="action-menu-item" onClick={() => handleAction('edit', user)}>✏️ Chỉnh sửa</button>
-                                      <button className="action-menu-item" onClick={() => handleAction('permissions', user)}>🔑 Phân quyền</button>
-                                      <button className="action-menu-item warn" onClick={() => handleAction('suspend', user)}>⏸ Đình chỉ</button>
-                                      <button className="action-menu-item danger" onClick={() => handleAction('delete', user)}>🗑 Xóa</button>
+                                      <button className="action-menu-item" onClick={() => handleAction('edit', user)}>Chỉnh sửa</button>
+                                      <button className="action-menu-item warn" onClick={() => handleAction('suspend', user)}>Đình chỉ</button>
+                                      <button className="action-menu-item danger" onClick={() => handleAction('delete', user)}>Xóa</button>
                                     </div>
                                   )}
                                 </td>
@@ -752,7 +1180,7 @@ const UserManagement = () => {
                       ))}
                       {users.length === 0 && !loading && (
                         <tr>
-                          <td colSpan={viewMode === 'account_info' ? (hasWritePermission ? 9 : 8) : (hasWritePermission ? 3 + SCREEN_GROUPS.length + 1 : 3 + SCREEN_GROUPS.length)} style={{ textAlign: 'center', color: '#94a3b8', padding: '3rem' }}>
+                          <td colSpan={viewMode === 'account_info' ? (hasWritePermission ? 9 : 8) : (hasWritePermission ? 3 + currentGroups.length + 1 : 3 + currentGroups.length)} style={{ textAlign: 'center', color: '#94a3b8', padding: '3rem' }}>
                             Không tìm thấy dữ liệu
                           </td>
                         </tr>
@@ -795,13 +1223,12 @@ const UserManagement = () => {
                                 <button
                                   className="action-btn"
                                   onClick={() => setActionMenuId(actionMenuId === user.id ? null : user.id)}
-                                >•••</button>
+                                ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
                                 {actionMenuId === user.id && (
                                   <div className="action-menu">
-                                    <button className="action-menu-item" onClick={() => handleAction('edit', user)}>✏️ Chỉnh sửa</button>
-                                    <button className="action-menu-item" onClick={() => handleAction('permissions', user)}>🔑 Phân quyền</button>
-                                    <button className="action-menu-item warn" onClick={() => handleAction('suspend', user)}>⏸ Đình chỉ</button>
-                                    <button className="action-menu-item danger" onClick={() => handleAction('delete', user)}>🗑 Xóa</button>
+                                    <button className="action-menu-item" onClick={() => handleAction('edit', user)}>Chỉnh sửa</button>
+                                    <button className="action-menu-item warn" onClick={() => handleAction('suspend', user)}>Đình chỉ</button>
+                                    <button className="action-menu-item danger" onClick={() => handleAction('delete', user)}>Xóa</button>
                                   </div>
                                 )}
                               </div>
@@ -827,20 +1254,19 @@ const UserManagement = () => {
                                 <button
                                   className="action-btn"
                                   onClick={() => setActionMenuId(actionMenuId === user.id ? null : user.id)}
-                                >•••</button>
+                                ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
                                 {actionMenuId === user.id && (
                                   <div className="action-menu" style={{ right: 0, top: '100%' }}>
-                                    <button className="action-menu-item" onClick={() => handleAction('edit', user)}>✏️ Chỉnh sửa</button>
-                                    <button className="action-menu-item" onClick={() => handleAction('permissions', user)}>🔑 Phân quyền</button>
-                                    <button className="action-menu-item warn" onClick={() => handleAction('suspend', user)}>⏸ Đình chỉ</button>
-                                    <button className="action-menu-item danger" onClick={() => handleAction('delete', user)}>🗑 Xóa</button>
+                                    <button className="action-menu-item" onClick={() => handleAction('edit', user)}>Chỉnh sửa</button>
+                                    <button className="action-menu-item warn" onClick={() => handleAction('suspend', user)}>Đình chỉ</button>
+                                    <button className="action-menu-item danger" onClick={() => handleAction('delete', user)}>Xóa</button>
                                   </div>
                                 )}
                               </div>
                             )}
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            {SCREEN_GROUPS.map((group, groupIdx) => {
+                            {currentGroups.map((group, groupIdx) => {
                               const userPerms = userPermissions[user.id];
                               if (!userPerms || permsLoading) {
                                 return (

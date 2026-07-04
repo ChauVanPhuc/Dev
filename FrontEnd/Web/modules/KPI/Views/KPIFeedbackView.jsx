@@ -13,6 +13,10 @@ const KPIFeedbackView = () => {
   
   // Search
   const [fbSearch, setFbSearch] = useState('');
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   
   // Loaders & Alerts
   const [loadingEmp, setLoadingEmp] = useState(false);
@@ -169,6 +173,9 @@ const KPIFeedbackView = () => {
     fb.feedback_code.toLowerCase().includes(fbSearch.toLowerCase())
   );
 
+  const totalPages = Math.ceil(filteredFeedbacks.length / itemsPerPage) || 1;
+  const paginatedFeedbacks = filteredFeedbacks.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   return (
     <div style={{ padding: '15px 20px', fontFamily: 'Inter, sans-serif', display: 'flex', flexDirection: 'column' }}>
       
@@ -199,7 +206,7 @@ const KPIFeedbackView = () => {
           ) : (
             <select 
               value={selectedEmpId}
-              onChange={(e) => setSelectedEmpId(e.target.value)}
+              onChange={(e) => { setSelectedEmpId(e.target.value); setCurrentPage(1); }}
               style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #EADCC9', fontSize: '12px', fontWeight: '600', color: '#1e293b', outline: 'none', backgroundColor: '#fff', minWidth: '220px' }}
             >
               {employees.map(emp => (
@@ -218,7 +225,7 @@ const KPIFeedbackView = () => {
               type="text" 
               placeholder="Tìm kiếm nhận xét..." 
               value={fbSearch}
-              onChange={(e) => setFbSearch(e.target.value)}
+              onChange={(e) => { setFbSearch(e.target.value); setCurrentPage(1); }}
               style={{ width: '100%', padding: '8px 12px 8px 32px', borderRadius: '8px', border: '1px solid #EADCC9', fontSize: '12px', outline: 'none', boxSizing: 'border-box' }}
             />
             <Search size={14} style={{ position: 'absolute', left: '10px', top: '10px', color: '#7B5233' }} />
@@ -263,7 +270,8 @@ const KPIFeedbackView = () => {
           ) : filteredFeedbacks.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Không có nhận xét nào được ghi nhận cho nhân viên này.</div>
           ) : (
-            <div className="table-responsive desktop-only admin-table-scroll">
+            <>
+              <div className="table-responsive desktop-only admin-table-scroll">
               <table className="data-table">
                 <thead>
                   <tr>
@@ -276,7 +284,7 @@ const KPIFeedbackView = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredFeedbacks.map((fb) => (
+                  {paginatedFeedbacks.map((fb) => (
                     <tr key={fb.id}>
                       <td style={{ fontWeight: '700', color: '#7B5233' }}>{fb.feedback_code}</td>
                       <td>
@@ -302,7 +310,48 @@ const KPIFeedbackView = () => {
                 </tbody>
               </table>
             </div>
-          )}
+
+            {/* Pagination */}
+            <div className="admin-pagination-desktop" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px' }}>
+              <div style={{ fontSize: '0.85rem', color: '#7B5233', fontWeight: '600' }}>
+                Hiển thị <b>{filteredFeedbacks.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}</b> - <b>{Math.min(currentPage * itemsPerPage, filteredFeedbacks.length)}</b> trên <b>{filteredFeedbacks.length}</b> kết quả
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button 
+                  className="page-btn"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #EADCC9', backgroundColor: '#fff', color: '#7B5233', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', opacity: currentPage === 1 ? 0.5 : 1, fontWeight: '700' }}
+                >
+                  &lt; Trước
+                </button>
+                {[...Array(totalPages)].map((_, idx) => (
+                  <button 
+                    key={idx} 
+                    className={`page-btn ${currentPage === idx + 1 ? 'active' : ''}`}
+                    onClick={() => setCurrentPage(idx + 1)}
+                    style={{ 
+                      padding: '6px 12px', borderRadius: '6px', border: '1px solid #EADCC9', 
+                      backgroundColor: currentPage === idx + 1 ? '#7B5233' : '#fff', 
+                      color: currentPage === idx + 1 ? '#fff' : '#7B5233',
+                      fontWeight: '700', cursor: 'pointer'
+                    }}
+                  >
+                    {idx + 1}
+                  </button>
+                ))}
+                <button 
+                  className="page-btn"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #EADCC9', backgroundColor: '#fff', color: '#7B5233', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', opacity: currentPage === totalPages ? 0.5 : 1, fontWeight: '700' }}
+                >
+                  Sau &gt;
+                </button>
+              </div>
+            </div>
+          </>
+        )}
         </div>
       </div>
 

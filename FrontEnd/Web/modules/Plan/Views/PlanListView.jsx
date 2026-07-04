@@ -12,7 +12,10 @@ import {
   FileText,
   Package,
   ShoppingBag,
-  Calendar
+  Calendar,
+  Layers,
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { planService } from '@modules/Plan/Models/plan.service';
@@ -157,10 +160,10 @@ const ManufacturePlan = () => {
     };
 
     const stats = [
-        { id: 'all', label: 'TỔNG SỐ KẾ HOẠCH', value: `${plans.length} KH`, bg: '#F5F5F5', color: '#424242' },
-        { id: 'production', label: 'ĐANG SẢN XUẤT', value: `${plans.filter(p => getDetailedStatus(p) === 'production').length} KH`, bg: '#FFF3E0', color: '#E65100' },
-        { id: 'completed', label: 'ĐÃ HOÀN THÀNH', value: `${plans.filter(p => getDetailedStatus(p) === 'completed').length} KH`, bg: '#E8F5E9', color: '#2E7D32' },
-        { id: 'overdue', label: 'QUÁ HẠN', value: `${plans.filter(p => getDetailedStatus(p) === 'overdue').length} KH`, bg: '#FFEBEE', color: '#C62828' },
+        { id: 'all', label: 'TỔNG SỐ KẾ HOẠCH', value: plans.length, bg: '#F5F5F5', color: '#424242', iconBg: '#FAF6F0', iconColor: '#7B5233', Icon: Layers, themeColor: '#7B5233', activeBg: '#FAF6F0' },
+        { id: 'production', label: 'ĐANG SẢN XUẤT', value: plans.filter(p => getDetailedStatus(p) === 'production').length, bg: '#FFF3E0', color: '#E65100', iconBg: '#FFFBEB', iconColor: '#F59E0B', Icon: Clock, themeColor: '#F59E0B', activeBg: '#FFFBEB' },
+        { id: 'completed', label: 'ĐÃ HOÀN THÀNH', value: plans.filter(p => getDetailedStatus(p) === 'completed').length, bg: '#E8F5E9', color: '#2E7D32', iconBg: '#ECFDF4', iconColor: '#10B981', Icon: CheckCircle, themeColor: '#10B981', activeBg: '#ECFDF4' },
+        { id: 'overdue', label: 'QUÁ HẠN', value: plans.filter(p => getDetailedStatus(p) === 'overdue').length, bg: '#FFEBEE', color: '#C62828', iconBg: '#FEF2F2', iconColor: '#EF4444', Icon: AlertCircle, themeColor: '#EF4444', activeBg: '#FEF2F2' },
     ];
 
     const [sortDirection, setSortDirection] = useState('desc'); // 'desc' là mặc định (Mới nhất lên đầu)
@@ -227,23 +230,41 @@ const ManufacturePlan = () => {
                 {/* Desktop stats grid */}
                 <div className="stats-grid animate-card-entrance desktop-only" style={{ padding: '16px 16px 0' }}>
                     {stats.map((stat, idx) => {
-                        const isActive = filterStatus === stat.id;
                         return (
                             <div 
                                 key={idx} 
-                                className="stat-card" 
+                                className="kpi-card" 
                                 style={{ 
-                                    backgroundColor: isActive ? stat.color : stat.bg, 
-                                    color: isActive ? '#fff' : '#1e293b',
-                                    border: isActive ? `1px solid ${stat.color}` : '1px solid rgba(226, 232, 240, 0.8)', 
-                                    boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
-                                    cursor: 'pointer',
+                                    background: '#fff', 
+                                    border: '1px solid #E2E8F0',
+                                    padding: '8px 12px', 
+                                    borderRadius: '10px', 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: '8px',
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.01)',
                                     transition: 'all 0.2s'
                                 }}
-                                onClick={() => { setFilterStatus(stat.id); setCurrentPage(1); }}
                             >
-                                <p className="stat-title" style={{ color: isActive ? 'rgba(255,255,255,0.85)' : '#64748b', transition: 'all 0.2s' }}>{stat.label}</p>
-                                <h3 className="stat-value" style={{ color: isActive ? '#fff' : stat.color, transition: 'all 0.2s' }}>{stat.value}</h3>
+                                <div style={{
+                                    width: '32px', 
+                                    height: '32px', 
+                                    borderRadius: '8px',
+                                    backgroundColor: stat.iconBg,
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center',
+                                    color: stat.iconColor, 
+                                    flexShrink: 0
+                                }}>
+                                    <stat.Icon size={18} />
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: '700', letterSpacing: '0.05em' }}>{stat.label}</div>
+                                    <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0F172A', lineHeight: '1.2' }}>
+                                        {new Intl.NumberFormat('vi-VN').format(stat.value)}
+                                    </div>
+                                </div>
                             </div>
                         );
                     })}
@@ -251,21 +272,19 @@ const ManufacturePlan = () => {
                 {/* Mobile compact stats strip */}
                 <div className="stats-strip">
                     {stats.map((stat, idx) => {
-                        const isActive = filterStatus === stat.id;
                         return (
                             <div 
                                 key={idx} 
-                                className={`stats-strip-item ${isActive ? 'active' : ''}`}
+                                className="stats-strip-item"
                                 style={{ 
-                                    backgroundColor: isActive ? stat.color : '#fff',
-                                    cursor: 'pointer'
+                                    backgroundColor: '#fff',
+                                    border: '1px solid #E2E8F0'
                                 }}
-                                onClick={() => { setFilterStatus(stat.id); setCurrentPage(1); }}
                             >
-                                <span className="strip-value" style={{ color: isActive ? '#fff' : stat.color }}>
-                                    {stat.value.replace(' KH', '')}
+                                <span className="strip-value" style={{ color: stat.iconColor }}>
+                                    {new Intl.NumberFormat('vi-VN').format(stat.value)}
                                 </span>
-                                <span className="strip-label" style={{ color: isActive ? 'rgba(255,255,255,0.9)' : '#8D6E63' }}>
+                                <span className="strip-label" style={{ color: '#64748B' }}>
                                     {stat.label.replace('TỔNG SỐ ', '').replace('ĐANG ', '').replace('ĐÃ ', '')}
                                 </span>
                             </div>
@@ -288,100 +307,68 @@ const ManufacturePlan = () => {
                     </div>
 
                     <select 
+                        value={filterStatus} 
+                        onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}
+                        className="select-minimal"
+                        style={{
+                          height: '36px',
+                          borderRadius: '8px',
+                          border: '1px solid #EADCC9',
+                          backgroundColor: '#FAF6F0',
+                          color: '#7B5233',
+                          padding: '0 8px',
+                          fontWeight: '700',
+                          fontSize: '0.8rem',
+                          cursor: 'pointer'
+                        }}
+                    >
+                        <option value="all">Tất cả trạng thái</option>
+                        <option value="production">Đang sản xuất</option>
+                        <option value="completed">Đã hoàn thành</option>
+                        <option value="overdue">Quá hạn</option>
+                    </select>
+
+                    <select 
                         value={itemsPerPage} 
                         onChange={(e) => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
-                        className="page-size-select"
+                        className="select-minimal"
+                        style={{
+                          height: '36px',
+                          borderRadius: '8px',
+                          border: '1px solid #EADCC9',
+                          backgroundColor: '#FAF6F0',
+                          color: '#7B5233',
+                          padding: '0 8px',
+                          fontWeight: '700',
+                          fontSize: '0.8rem',
+                          cursor: 'pointer'
+                        }}
                     >
                         <option value={15}>15 dòng</option>
                         <option value={30}>30 dòng</option>
                         <option value={50}>50 dòng</option>
                         <option value={100}>100 dòng</option>
                     </select>
-
-                    <div style={{ position: 'relative' }}>
-                        <button 
-                            className="btn" 
-                            title="Lọc nhanh"
-                            style={{ 
-                                padding: '0.5rem', 
-                                background: filterStatus !== 'all' ? '#FDF2F2' : 'white', 
-                                borderColor: filterStatus !== 'all' ? '#5d3b32' : '#E5E7EB',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '4px'
-                            }}
-                            onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                        >
-                            <Filter size={18} color={filterStatus !== 'all' ? '#5d3b32' : '#64748b'} />
-                            {filterStatus !== 'all' && <span style={{ fontSize: '0.65rem', fontWeight: '800', color: '#5d3b32' }}>ON</span>}
-                        </button>
-
-                        {showFilterDropdown && (
-                            <>
-                                <div 
-                                    style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }} 
-                                    onClick={() => setShowFilterDropdown(false)} 
-                                />
-                                <div className="card-shadow" style={{ 
-                                    position: 'absolute', 
-                                    top: 'calc(100% + 8px)', 
-                                    right: 0, 
-                                    width: '200px', 
-                                    backgroundColor: 'white', 
-                                    borderRadius: '12px', 
-                                    padding: '8px', 
-                                    zIndex: 999,
-                                    border: '1px solid #e2e8f0'
-                                }}>
-                                    {[
-                                        { id: 'all', label: 'Tất cả kế hoạch', color: '#64748b' },
-                                        { id: 'production', label: 'Đang sản xuất', color: '#3b82f6' },
-                                        { id: 'completed', label: 'Đã hoàn thành', color: '#10b981' },
-                                        { id: 'overdue', label: 'Quá hạn', color: '#ef4444' }
-                                    ].map(item => (
-                                        <div 
-                                            key={item.id}
-                                            onClick={() => {
-                                                setFilterStatus(item.id);
-                                                setShowFilterDropdown(false);
-                                            }}
-                                            style={{ 
-                                                padding: '10px 12px', 
-                                                borderRadius: '8px', 
-                                                cursor: 'pointer',
-                                                fontSize: '0.85rem',
-                                                fontWeight: '600',
-                                                color: filterStatus === item.id ? '#5d3b32' : '#475569',
-                                                backgroundColor: filterStatus === item.id ? '#FDF2F2' : 'transparent',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '10px',
-                                                transition: 'all 0.2s'
-                                            }}
-                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = filterStatus === item.id ? '#FDF2F2' : '#f8fafc'}
-                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = filterStatus === item.id ? '#FDF2F2' : 'transparent'}
-                                        >
-                                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: item.color }} />
-                                            {item.label}
-                                        </div>
-                                    ))}
-                                </div>
-                            </>
-                        )}
-                    </div>
                     
                     <button 
-                        className={`btn-icon ${sortDirection === 'asc' ? 'active' : ''}`}
+                        className="btn-border-action"
                         title="Đổi chiều sắp xếp"
                         style={{ 
-                            background: sortDirection === 'asc' ? '#FDF2F2' : 'white', 
-                            borderColor: sortDirection === 'asc' ? '#5d3b32' : '#e2e8f0',
-                            borderWidth: '1px',
-                            borderStyle: 'solid'
+                            height: '36px',
+                            width: '36px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            border: '1px solid #EADCC9',
+                            backgroundColor: '#FAF6F0',
+                            color: '#7B5233',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            padding: 0
                         }}
                         onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
                     >
-                        <ArrowUpDown size={18} color={sortDirection === 'asc' ? '#5d3b32' : '#64748b'} />
+                        <ArrowUpDown size={16} />
                     </button>
                 </div>
 
@@ -389,13 +376,24 @@ const ManufacturePlan = () => {
                     <button 
                         onClick={() => navigate('/admin/plan/create')}
                         className="btn btn-primary"
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                        style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '8px',
+                            height: '36px',
+                            padding: '0 20px',
+                            borderRadius: '8px',
+                            fontWeight: 'bold',
+                            cursor: 'pointer',
+                            backgroundColor: '#7B5233',
+                            color: '#fff'
+                        }}
                     >
-                        <Plus size={18} />
+                        <Plus size={16} />
                         <span className="btn-text-desktop">Thêm Kế hoạch</span>
                         <span className="btn-text-mobile">Thêm</span>
                     </button>
-                    <div className="desktop-only" style={{ width: '1px', height: '24px', backgroundColor: '#e2e8f0' }}></div>
+                    <div className="desktop-only" style={{ width: '1px', height: '24px', backgroundColor: '#EADCC9' }}></div>
                     <input 
                         type="file" 
                         ref={fileInputRef} 
@@ -404,20 +402,46 @@ const ManufacturePlan = () => {
                         onChange={handleImportExcel}
                     />
                     <button 
-                        className="btn" 
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                        className="btn btn-outline" 
+                        style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '6px',
+                            height: '36px',
+                            padding: '0 12px',
+                            borderRadius: '8px',
+                            border: '1px solid #EADCC9',
+                            backgroundColor: '#fff',
+                            color: '#7B5233',
+                            fontWeight: '700',
+                            fontSize: '0.8rem',
+                            cursor: 'pointer'
+                        }}
                         onClick={() => fileInputRef.current?.click()}
                     >
-                        <FileUp size={18} /> 
+                        <FileUp size={14} /> 
                         <span className="btn-text-desktop">Nhập Excel</span>
                         <span className="btn-text-mobile">Nhập</span>
                     </button>
                     <button 
                         onClick={handleExportExcel}
-                        className="btn" 
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                        className="btn btn-outline" 
+                        style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '6px',
+                            height: '36px',
+                            padding: '0 12px',
+                            borderRadius: '8px',
+                            border: '1px solid #EADCC9',
+                            backgroundColor: '#fff',
+                            color: '#7B5233',
+                            fontWeight: '700',
+                            fontSize: '0.8rem',
+                            cursor: 'pointer'
+                        }}
                     >
-                        <FileDown size={18} />
+                        <FileDown size={14} />
                         <span className="btn-text-desktop">Xuất Excel</span>
                         <span className="btn-text-mobile">Xuất</span>
                     </button>

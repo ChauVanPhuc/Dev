@@ -23,7 +23,7 @@ import { API_ROOT } from '@webShared/Services/api.service';
 const QualityRecordsDetailView = () => {
     const { id } = useParams(); // poCode
     const navigate = useNavigate();
-    const { setCustomTitle, setCustomSubtitle } = useOutletContext();
+    const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
     const [activeTab, setActiveTab] = useState('handover');
     const [loading, setLoading] = useState(true);
     const [orderInfo, setOrderInfo] = useState(null);
@@ -79,7 +79,8 @@ const QualityRecordsDetailView = () => {
 
         setCustomTitle(titleJSX);
         setCustomSubtitle("Xem lịch sử bàn giao, kiểm tra đầu vào và kết quả QC chi tiết.");
-    }, [id, setCustomTitle, setCustomSubtitle, navigate]);
+        if (setCustomScreenCode) setCustomScreenCode('AD13.1');
+    }, [id, setCustomTitle, setCustomSubtitle, setCustomScreenCode, navigate]);
 
     // 2. Logic Fetch Data
     useEffect(() => {

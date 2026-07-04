@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
+import { Search, Filter, Plus } from 'lucide-react';
 import { claimService } from '../services/claim.service';
 import * as XLSX from 'xlsx';
 import '../styles/claim.css';
+import '@styles/components.css';
 
 // Import shared components
 import { Table } from '../components/Table';
@@ -52,6 +54,7 @@ const ShipmentListView = () => {
   const [sortOption, setSortOption] = useState('');
   const [selectedShipmentIds, setSelectedShipmentIds] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
+  const [actionMenuId, setActionMenuId] = useState(null);
   
   // Advanced Filter states
   const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
@@ -90,6 +93,7 @@ const ShipmentListView = () => {
       if (activeDropdown && !e.target.closest('.filter-dropdown-wrapper')) {
         setActiveDropdown(null);
       }
+      setActionMenuId(null);
     };
     document.addEventListener('click', handleOutsideClick);
     return () => document.removeEventListener('click', handleOutsideClick);
@@ -407,189 +411,168 @@ const ShipmentListView = () => {
   return (
     <div className="claim-container">
       {/* FILTER & ACTIONS BAR */}
-      <div className="detailed-report-header" style={{ borderBottom: '1px solid #F0E6D8', paddingBottom: '10px', marginBottom: '15px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
-            <div style={{ position: 'relative', flex: 1, maxWidth: '320px' }}>
-              <input 
-                type="text" 
-                placeholder="Tìm Cont, Seal, Cảng..." 
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px 8px 36px',
-                  fontSize: '0.85rem',
-                  border: '1.5px solid #E2E8F0',
-                  borderRadius: '8px',
-                  outline: 'none',
-                  backgroundColor: '#FFFDFB'
-                }}
-              />
-              <svg style={{ position: 'absolute', left: '10px', top: '11px', color: '#94A3B8' }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg>
-            </div>
-            
-            <button
-              type="button"
-              className="btn-border-action"
-              onClick={() => setIsFilterBarOpen(!isFilterBarOpen)}
-              style={{
-                display: 'flex',
+      <div className="mgmt-toolbar card" style={{ marginBottom: '20px' }}>
+        <div className="toolbar-left" style={{ flex: 1 }}>
+          <div className="search-wrapper">
+            <Search size={18} className="search-icon" />
+            <input 
+              type="text" 
+              placeholder="Tìm Cont, Seal, Cảng..." 
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          
+          <button
+            type="button"
+            className={`icon-btn-minimal ${isFilterBarOpen ? 'active' : ''}`}
+            onClick={() => setIsFilterBarOpen(!isFilterBarOpen)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              height: '36px',
+              border: '1px solid #EADCC9',
+              backgroundColor: isFilterBarOpen ? '#7B5233' : '#FAF6F0',
+              color: isFilterBarOpen ? '#FFFFFF' : '#7B5233',
+              fontWeight: 'bold',
+              borderRadius: '8px',
+              padding: '0 16px',
+              cursor: 'pointer',
+              fontSize: '0.8rem'
+            }}
+          >
+            <Filter size={14} />
+            Bộ lọc
+            {Object.keys(appliedFilters).length > 0 && (
+              <span style={{
+                backgroundColor: isFilterBarOpen ? '#FFFFFF' : '#7B5233',
+                color: isFilterBarOpen ? '#7B5233' : '#FFFFFF',
+                borderRadius: '50%',
+                width: '18px',
+                height: '18px',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px',
-                height: '37px',
-                borderColor: '#2D1A12',
-                backgroundColor: isFilterBarOpen ? '#7B5233' : '#FFFFFF',
-                color: isFilterBarOpen ? '#FFFFFF' : '#2D1A12',
+                justifyContent: 'center',
+                fontSize: '0.7rem',
+                fontWeight: 'bold',
+                marginLeft: '4px'
+              }}>
+                {Object.keys(appliedFilters).length}
+              </span>
+            )}
+          </button>
+
+          {/* SORT DROPDOWN */}
+          <div style={{ position: 'relative', display: 'inline-block' }}>
+            <select
+              value={sortOption}
+              onChange={(e) => setSortOption(e.target.value)}
+              className="select-minimal"
+              style={{
+                height: '36px',
+                borderColor: '#EADCC9',
+                color: '#7B5233',
                 fontWeight: 'bold',
                 borderRadius: '8px',
-                padding: '0 16px',
-                cursor: 'pointer'
+                padding: '0 12px 0 28px',
+                cursor: 'pointer',
+                backgroundColor: '#FAF6F0',
+                outline: 'none',
+                fontSize: '0.8rem'
               }}
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-              </svg>
-              Bộ lọc
-              {Object.keys(appliedFilters).length > 0 && (
-                <span style={{
-                  backgroundColor: isFilterBarOpen ? '#FFFFFF' : '#7B5233',
-                  color: isFilterBarOpen ? '#7B5233' : '#FFFFFF',
-                  borderRadius: '50%',
-                  width: '18px',
-                  height: '18px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '0.7rem',
-                  fontWeight: 'bold',
-                  marginLeft: '4px'
-                }}>
-                  {Object.keys(appliedFilters).length}
-                </span>
-              )}
-            </button>
-
-            {/* SORT DROPDOWN */}
-            <div style={{ position: 'relative', display: 'inline-block' }}>
-              <select
-                value={sortOption}
-                onChange={(e) => setSortOption(e.target.value)}
-                className="btn-border-action"
-                style={{
-                  height: '37px',
-                  borderColor: '#2D1A12',
-                  color: '#2D1A12',
-                  fontWeight: 'bold',
-                  borderRadius: '8px',
-                  padding: '0 28px 0 34px',
-                  cursor: 'pointer',
-                  backgroundColor: '#FFFFFF',
-                  outline: 'none',
-                  appearance: 'none',
-                  WebkitAppearance: 'none',
-                  fontSize: '0.85rem'
-                }}
-              >
-                <option value="">Sắp xếp</option>
-                <option value="code-asc">Mã lô: A-Z</option>
-                <option value="code-desc">Mã lô: Z-A</option>
-                <option value="value-asc">Trị giá: Thấp-Cao</option>
-                <option value="value-desc">Trị giá: Cao-Thấp</option>
-                <option value="etd-asc">ETD: Sớm nhất</option>
-                <option value="etd-desc">ETD: Trễ nhất</option>
-              </select>
-              <svg 
-                style={{ position: 'absolute', left: '12px', top: '11px', pointerEvents: 'none', color: '#2D1A12' }} 
-                width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-              >
-                <path d="M15 18H3M21 14H3M17 10H3M21 6H3"></path>
-              </svg>
-              <svg 
-                style={{ position: 'absolute', right: '10px', top: '14px', pointerEvents: 'none', color: '#2D1A12' }} 
-                width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
-              >
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </div>
+              <option value="">Sắp xếp</option>
+              <option value="code-asc">Mã lô: A-Z</option>
+              <option value="code-desc">Mã lô: Z-A</option>
+              <option value="value-asc">Trị giá: Thấp-Cao</option>
+              <option value="value-desc">Trị giá: Cao-Thấp</option>
+              <option value="etd-asc">ETD: Sớm nhất</option>
+              <option value="etd-desc">ETD: Trễ nhất</option>
+            </select>
+            <svg 
+              style={{ position: 'absolute', left: '8px', top: '11px', pointerEvents: 'none', color: '#7B5233' }} 
+              width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+            >
+              <path d="M15 18H3M21 14H3M17 10H3M21 6H3"></path>
+            </svg>
           </div>
+        </div>
 
-          <div className="action-buttons-group" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            {hasWritePermission && (
-              <button 
-                className="btn-add-new" 
-                onClick={handleOpenAddModal}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  height: '37px',
-                  padding: '0 20px',
-                  borderRadius: '8px',
-                  fontWeight: 'bold',
-                  cursor: 'pointer'
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
-                Thêm mới
-              </button>
-            )}
-
+        <div className="toolbar-right">
+          {hasWritePermission && (
             <button 
-              className="btn-border-action" 
-              onClick={handleExportExcel}
+              className="btn btn-primary" 
+              onClick={handleOpenAddModal}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                height: '36px',
+                padding: '0 20px',
+                borderRadius: '8px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                backgroundColor: '#7B5233',
+                color: '#fff'
+              }}
+            >
+              <Plus size={16} />
+              Thêm mới
+            </button>
+          )}
+
+          <button 
+            className="btn btn-outline" 
+            onClick={handleExportExcel}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              height: '36px',
+              padding: '0 16px',
+              borderRadius: '8px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              border: '1px solid #EADCC9',
+              backgroundColor: '#fff',
+              color: '#7B5233'
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            Export
+          </button>
+
+          {hasWritePermission && (
+            <button
+              className="btn btn-outline"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
-                height: '37px',
-                borderColor: '#2D1A12',
+                height: '36px',
+                borderColor: selectedShipmentIds.length === 0 ? '#CBD5E1' : '#A0301B',
+                color: selectedShipmentIds.length === 0 ? '#94A3B8' : '#A0301B',
+                cursor: selectedShipmentIds.length === 0 ? 'not-allowed' : 'pointer',
                 fontWeight: 'bold',
                 borderRadius: '8px',
                 padding: '0 16px',
-                cursor: 'pointer'
+                backgroundColor: '#fff'
               }}
+              disabled={selectedShipmentIds.length === 0}
+              onClick={handleDeleteSelected}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="17 8 12 3 7 8"></polyline>
-                <line x1="12" y1="3" x2="12" y2="15"></line>
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
               </svg>
-              Export
+              Xóa đã chọn
             </button>
-
-            {hasWritePermission && (
-              <button
-                className="btn-border-action"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  height: '37px',
-                  borderColor: selectedShipmentIds.length === 0 ? '#CBD5E1' : '#A0301B',
-                  color: selectedShipmentIds.length === 0 ? '#94A3B8' : '#A0301B',
-                  cursor: selectedShipmentIds.length === 0 ? 'not-allowed' : 'pointer',
-                  fontWeight: 'bold',
-                  borderRadius: '8px',
-                  padding: '0 16px'
-                }}
-                disabled={selectedShipmentIds.length === 0}
-                onClick={handleDeleteSelected}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6"></polyline>
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                </svg>
-                Xóa đã chọn
-              </button>
-            )}
-          </div>
+          )}
         </div>
       </div>
 
@@ -785,73 +768,94 @@ const ShipmentListView = () => {
       )}
 
       {/* TABLE VIEW */}
-      <Table
-        loading={loading}
-        isEmpty={paginatedShipments.length === 0}
-        emptyMessage="Không tìm thấy thông tin xuất cont nào."
-        headers={tableHeaders}
-      >
-        {paginatedShipments.map((item, idx) => {
-          const getStorageDuration = (s) => {
-            if (!s.etd) return '5 ngày';
-            const start = new Date(s.created_at || Date.now());
-            const end = new Date(s.etd);
-            const diffTime = Math.abs(end - start);
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            return `${diffDays || 5} ngày`;
-          };
+      <div className="admin-list-layout" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0 }}>
+          <Table
+            loading={loading}
+            isEmpty={paginatedShipments.length === 0}
+            emptyMessage="Không tìm thấy thông tin xuất cont nào."
+            headers={tableHeaders}
+          >
+            {paginatedShipments.map((item, idx) => {
+              const getStorageDuration = (s) => {
+                if (!s.etd) return '5 ngày';
+                const start = new Date(s.created_at || Date.now());
+                const end = new Date(s.etd);
+                const diffTime = Math.abs(end - start);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                return `${diffDays || 5} ngày`;
+              };
 
-          return (
-            <tr key={item.id}>
-              {hasWritePermission && (
-                <td className="checkbox-col">
-                  <input 
-                    type="checkbox" 
-                    className="checkbox-custom" 
-                    checked={selectedShipmentIds.includes(item.id)}
-                    onChange={() => handleToggleSelectRow(item.id)}
-                  />
-                </td>
-              )}
-              <td style={{ fontWeight: '600', color: 'var(--text-gray)' }}>{startIndex + idx + 1}</td>
-              <td className="text-left" style={{ fontWeight: 'bold', color: '#2D1A12' }}>{item.container_number}</td>
-              <td>
-                <span className={`status-badge badge-${getStatusBadgeClass(item.status)}`}>
-                  {getStatusBadgeLabel(item.status)}
-                </span>
-              </td>
-              <td>{item.created_at ? new Date(item.created_at).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN')}</td>
-              <td style={{ fontWeight: '500', color: '#5D4037' }}>{getStorageDuration(item)}</td>
-              <td style={{ fontWeight: '500', color: '#2D1A12' }}>{item.etd ? new Date(item.etd).toLocaleDateString('vi-VN') : 'N/A'}</td>
-              {hasWritePermission && (
-                <td style={{ textAlign: 'center' }}>
-                  <button 
-                    className="btn-action-edit"
-                    title="Chỉnh sửa"
-                    onClick={() => handleOpenEditModal(item)}
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
-                    </svg>
-                  </button>
-                </td>
-              )}
-            </tr>
-          );
-        })}
-      </Table>
+              return (
+                <tr 
+                  key={item.id}
+                  style={{
+                    position: 'relative',
+                    zIndex: actionMenuId === item.id ? 30 : 1
+                  }}
+                >
+                  {hasWritePermission && (
+                    <td className="checkbox-col">
+                      <input 
+                        type="checkbox" 
+                        className="checkbox-custom" 
+                        checked={selectedShipmentIds.includes(item.id)}
+                        onChange={() => handleToggleSelectRow(item.id)}
+                      />
+                    </td>
+                  )}
+                  <td style={{ fontWeight: '600', color: 'var(--text-gray)' }}>{startIndex + idx + 1}</td>
+                  <td className="text-left" style={{ fontWeight: 'bold', color: '#2D1A12' }}>{item.container_number}</td>
+                  <td>
+                    <span className={`status-badge badge-${getStatusBadgeClass(item.status)}`}>
+                      {getStatusBadgeLabel(item.status)}
+                    </span>
+                  </td>
+                  <td>{item.created_at ? new Date(item.created_at).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN')}</td>
+                  <td style={{ fontWeight: '500', color: '#5D4037' }}>{getStorageDuration(item)}</td>
+                  <td style={{ fontWeight: '500', color: '#2D1A12' }}>{item.etd ? new Date(item.etd).toLocaleDateString('vi-VN') : 'N/A'}</td>
+                  {hasWritePermission && (
+                    <td style={{ position: 'relative', textAlign: 'center', zIndex: actionMenuId === item.id ? 40 : 1 }}>
+                      <button
+                        className="action-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActionMenuId(actionMenuId === item.id ? null : item.id);
+                        }}
+                      ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
+                      {actionMenuId === item.id && (
+                        <div className="action-menu" style={{ right: '50%', transform: 'translateX(50%)', top: '80%' }}>
+                          <button 
+                            className="action-menu-item" 
+                            onClick={() => {
+                              setActionMenuId(null);
+                              handleOpenEditModal(item);
+                            }}
+                          >
+                            Chỉnh sửa
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </Table>
 
-      {/* PAGINATION FOOTER */}
-      {!loading && paginatedShipments.length > 0 && (
-        <Pagination
-          currentPage={safeCurrentPage}
-          totalPages={totalPages}
-          startIndex={startIndex}
-          endIndex={endIndex}
-          totalItems={totalFilteredItems}
-          onPageChange={(page) => setCurrentPage(page)}
-        />
-      )}
+          {/* PAGINATION FOOTER */}
+          {!loading && paginatedShipments.length > 0 && (
+            <Pagination
+              currentPage={safeCurrentPage}
+              totalPages={totalPages}
+              startIndex={startIndex}
+              endIndex={endIndex}
+              totalItems={totalFilteredItems}
+              onPageChange={(page) => setCurrentPage(page)}
+            />
+          )}
+        </div>
+      </div>
 
       {/* ADD NEW / EDIT SHIPMENT MODAL */}
       <FormModal

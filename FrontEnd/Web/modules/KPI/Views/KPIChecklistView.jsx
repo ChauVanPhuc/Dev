@@ -11,6 +11,10 @@ const KPIChecklistView = () => {
   
   // Search
   const [taskSearch, setTaskSearch] = useState('');
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   
   // Loaders & Alerts
   const [loadingPool, setLoadingPool] = useState(false);
@@ -130,6 +134,9 @@ const KPIChecklistView = () => {
     item.task_code.toLowerCase().includes(taskSearch.toLowerCase())
   );
 
+  const totalPages = Math.ceil(filteredPool.length / itemsPerPage) || 1;
+  const paginatedPool = filteredPool.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   return (
     <div style={{ padding: '15px 20px', fontFamily: 'Inter, sans-serif', display: 'flex', flexDirection: 'column' }}>
       
@@ -165,7 +172,7 @@ const KPIChecklistView = () => {
               type="text" 
               placeholder="Tìm kiếm công việc mẫu..." 
               value={taskSearch}
-              onChange={(e) => setTaskSearch(e.target.value)}
+              onChange={(e) => { setTaskSearch(e.target.value); setCurrentPage(1); }}
               style={{ width: '100%', padding: '8px 12px 8px 32px', borderRadius: '8px', border: '1px solid #EADCC9', fontSize: '12px', outline: 'none', boxSizing: 'border-box' }}
             />
             <Search size={14} style={{ position: 'absolute', left: '10px', top: '10px', color: '#7B5233' }} />
@@ -202,7 +209,8 @@ const KPIChecklistView = () => {
           ) : filteredPool.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Không có mẫu công việc nào trong hệ thống.</div>
           ) : (
-            <div className="table-responsive desktop-only admin-table-scroll">
+            <>
+              <div className="table-responsive desktop-only admin-table-scroll">
               <table className="data-table">
                 <thead>
                   <tr>
@@ -213,7 +221,7 @@ const KPIChecklistView = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredPool.map((item) => (
+                  {paginatedPool.map((item) => (
                     <tr key={item.id}>
                       <td style={{ fontWeight: '700', color: '#7B5233' }}>{item.task_code}</td>
                       <td style={{ fontWeight: '600' }}>{item.content}</td>
@@ -233,7 +241,48 @@ const KPIChecklistView = () => {
                 </tbody>
               </table>
             </div>
-          )}
+
+            {/* Pagination */}
+            <div className="admin-pagination-desktop" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px' }}>
+              <div style={{ fontSize: '0.85rem', color: '#7B5233', fontWeight: '600' }}>
+                Hiển thị <b>{filteredPool.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}</b> - <b>{Math.min(currentPage * itemsPerPage, filteredPool.length)}</b> trên <b>{filteredPool.length}</b> kết quả
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button 
+                  className="page-btn"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #EADCC9', backgroundColor: '#fff', color: '#7B5233', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', opacity: currentPage === 1 ? 0.5 : 1, fontWeight: '700' }}
+                >
+                  &lt; Trước
+                </button>
+                {[...Array(totalPages)].map((_, idx) => (
+                  <button 
+                    key={idx} 
+                    className={`page-btn ${currentPage === idx + 1 ? 'active' : ''}`}
+                    onClick={() => setCurrentPage(idx + 1)}
+                    style={{ 
+                      padding: '6px 12px', borderRadius: '6px', border: '1px solid #EADCC9', 
+                      backgroundColor: currentPage === idx + 1 ? '#7B5233' : '#fff', 
+                      color: currentPage === idx + 1 ? '#fff' : '#7B5233',
+                      fontWeight: '700', cursor: 'pointer'
+                    }}
+                  >
+                    {idx + 1}
+                  </button>
+                ))}
+                <button 
+                  className="page-btn"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #EADCC9', backgroundColor: '#fff', color: '#7B5233', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', opacity: currentPage === totalPages ? 0.5 : 1, fontWeight: '700' }}
+                >
+                  Sau &gt;
+                </button>
+              </div>
+            </div>
+          </>
+        )}
         </div>
       </div>
 

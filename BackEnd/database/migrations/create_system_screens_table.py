@@ -19,6 +19,14 @@ INITIAL_SCREENS = [
         "title": "Toolbar / Thanh công cụ",
         "subtitle": "Thành phần dùng chung hệ thống"
     },
+    {
+        "platform": "Shared",
+        "route_path": "/common/other",
+        "default_code": "OTHER",
+        "current_code": "OTHER",
+        "title": "Khác",
+        "subtitle": "Các lỗi/yêu cầu khác ngoài màn hình có sẵn"
+    },
     # WEB ADMIN SCREENS
     {
         "platform": "Web",
@@ -59,6 +67,38 @@ INITIAL_SCREENS = [
         "current_code": "AD3.2",
         "title": "Chỉnh sửa người dùng",
         "subtitle": "Biểu mẫu sửa thông tin nhân sự"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/profile",
+        "default_code": "AD3.2-P",
+        "current_code": "AD3.2-P",
+        "title": "Thông tin cá nhân",
+        "subtitle": "Quản lý thông tin cá nhân của bạn"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/users/permissions/:id",
+        "default_code": "AD3.3",
+        "current_code": "AD3.3",
+        "title": "Chi tiết phân quyền người dùng",
+        "subtitle": "Cấu hình quyền hạn cụ thể cho từng tài khoản"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/users/departments",
+        "default_code": "AD3.4",
+        "current_code": "AD3.4",
+        "title": "Quản lý bộ phận",
+        "subtitle": "Danh sách bộ phận trong hệ thống"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/users/positions",
+        "default_code": "AD3.5",
+        "current_code": "AD3.5",
+        "title": "Quản lý chức vụ",
+        "subtitle": "Danh sách chức vụ và phân quyền mặc định"
     },
     {
         "platform": "Web",
@@ -529,7 +569,8 @@ def extract_routes_from_file(file_path: str):
             if not full_path.endswith('*'):
                 routes.append(full_path)
                 
-            if '/>' not in line:
+            is_self_closing = line.strip().endswith('/>')
+            if not is_self_closing:
                 current_parents.append((indent, full_path))
                 
         elif is_index and current_parents:
@@ -708,6 +749,20 @@ def upgrade():
         else:
             print("[INFO] system_screens table already exists, skipping creation.")
             
+        # Clean up corrupted auto-registered routes from Web platform
+        cleanup_sql = text("""
+            DELETE FROM system_screens 
+            WHERE platform = 'Web' 
+              AND route_path NOT LIKE '/admin%' 
+              AND route_path NOT LIKE '/manufacture%' 
+              AND route_path NOT LIKE '/login' 
+              AND route_path NOT LIKE '/common%' 
+              AND route_path <> '/'
+        """)
+        db.execute(cleanup_sql)
+        db.commit()
+        print("[OK] Cleaned up incorrect auto-registered routes from system_screens")
+        
         # Seed initial data
         print("Seeding initial screen configurations...")
         for screen in INITIAL_SCREENS:

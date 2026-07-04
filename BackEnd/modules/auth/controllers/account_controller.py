@@ -341,9 +341,9 @@ def resolve_user_permissions(user, db: Session) -> dict:
             except ValueError:
                 idx_cap = 0
             
-            # Áp dụng quyền mặc định của bộ phận và lọc giới hạn qua permission_level
+            # Áp dụng quyền mặc định của chức vụ và lọc giới hạn qua permission_level
             for screen in allowed_screens:
-                base_val = role_default_perms.get(screen, "write")
+                base_val = permission_default_perms.get(screen, "write")
                 norm_base = base_map.get(base_val, "none")
                 try:
                     idx_base = levels_hierarchy.index(norm_base)

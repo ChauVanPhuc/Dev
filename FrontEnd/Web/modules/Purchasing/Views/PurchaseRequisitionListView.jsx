@@ -103,6 +103,22 @@ const PurchaseRequisitionList = () => {
 
   const totalPages = Math.ceil(total / itemsPerPage) || 1;
 
+  const getPaginationRange = () => {
+    const range = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) range.push(i);
+    } else {
+      range.push(1);
+      if (currentPage > 3) range.push('...');
+      const start = Math.max(2, currentPage - 1);
+      const end = Math.min(totalPages - 1, currentPage + 1);
+      for (let i = start; i <= end; i++) range.push(i);
+      if (currentPage < totalPages - 2) range.push('...');
+      range.push(totalPages);
+    }
+    return range;
+  };
+
   const statCards = useMemo(() => {
     if (!stats) return [];
     const byStatus = stats.by_status || {};
@@ -255,7 +271,7 @@ const PurchaseRequisitionList = () => {
 
         {/* Compact Toolbar */}
         {isMobile ? (
-          <div className="qr-toolbar" style={{
+          <div className="qr-toolbar filter-pagination-toolbar" style={{
             display: 'flex', flexDirection: 'column', gap: '8px',
             padding: '8px 12px', background: '#fff', borderRadius: '10px',
             border: '1px solid #E2E8F0', marginBottom: '4px',
@@ -321,69 +337,124 @@ const PurchaseRequisitionList = () => {
             </div>
           </div>
         ) : (
-          <div className="qr-toolbar" style={{
-            display: 'flex', alignItems: 'center', gap: '8px',
-            padding: '8px 12px', background: '#fff', borderRadius: '10px',
-            border: '1px solid #E2E8F0', marginBottom: '4px',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.01)', width: '100%', boxSizing: 'border-box',
-            flexWrap: 'wrap'
-          }}>
-            <div style={{ flex: 1, minWidth: '200px', position: 'relative' }}>
-              <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8', display: 'flex', alignItems: 'center' }}>
-                <Search size={14} />
-              </span>
-              <input
-                type="text" placeholder="Tìm mã đơn, NCC, người tạo..."
-                value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+          <div className="mgmt-toolbar card filter-pagination-toolbar" style={{ marginBottom: '4px' }}>
+            <div className="toolbar-left" style={{ flex: 1 }}>
+              <div className="search-wrapper">
+                <Search size={18} className="search-icon" />
+                <input
+                  type="text" 
+                  placeholder="Tìm mã đơn, NCC, người tạo..."
+                  value={searchTerm} 
+                  onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                />
+              </div>
+
+              <select 
+                value={filterStatus} 
+                onChange={e => { setFilterStatus(e.target.value); setCurrentPage(1); }}
+                className="select-minimal"
                 style={{
-                  paddingLeft: '32px', height: '32px', borderRadius: '8px',
-                  border: '1px solid #E2E8F0', outline: 'none', fontSize: '0.78rem',
-                  width: '100%', boxSizing: 'border-box', transition: 'all 0.2s'
+                  height: '36px',
+                  borderRadius: '8px',
+                  border: '1px solid #EADCC9',
+                  backgroundColor: '#FAF6F0',
+                  color: '#7B5233',
+                  padding: '0 8px',
+                  fontWeight: '700',
+                  fontSize: '0.8rem',
+                  cursor: 'pointer'
                 }}
-                onFocus={e => e.currentTarget.style.borderColor = '#6366F1'}
-                onBlur={e => e.currentTarget.style.borderColor = '#E2E8F0'}
-              />
+              >
+                <option value="all">Tất cả trạng thái</option>
+                <option value="Duyệt thành công">Đã duyệt</option>
+                <option value="K.tra thành công">Đã kiểm tra</option>
+                <option value="Nháp">Nháp</option>
+              </select>
+
+              <select 
+                value={filterWarehouse} 
+                onChange={e => { setFilterWarehouse(e.target.value); setCurrentPage(1); }}
+                className="select-minimal"
+                style={{
+                  height: '36px',
+                  borderRadius: '8px',
+                  border: '1px solid #EADCC9',
+                  backgroundColor: '#FAF6F0',
+                  color: '#7B5233',
+                  padding: '0 8px',
+                  fontWeight: '700',
+                  fontSize: '0.8rem',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="">Tất cả kho</option>
+                <option value="Đã nhập kho">Đã nhập kho</option>
+                <option value="Nhập chưa hết">Nhập chưa hết</option>
+                <option value="Chưa nhập kho">Chưa nhập kho</option>
+              </select>
+
+              <select 
+                value={itemsPerPage} 
+                onChange={e => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
+                className="select-minimal"
+                style={{
+                  height: '36px',
+                  borderRadius: '8px',
+                  border: '1px solid #EADCC9',
+                  backgroundColor: '#FAF6F0',
+                  color: '#7B5233',
+                  padding: '0 8px',
+                  fontWeight: '700',
+                  fontSize: '0.8rem',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value={15}>15 dòng</option>
+                <option value={30}>30 dòng</option>
+                <option value={50}>50 dòng</option>
+                <option value={100}>100 dòng</option>
+              </select>
             </div>
 
-            <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setCurrentPage(1); }}
-              style={{ height: '32px', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '0.78rem', padding: '0 8px', cursor: 'pointer', color: '#334155' }}>
-              <option value="all">Tất cả trạng thái</option>
-              <option value="Duyệt thành công">Đã duyệt</option>
-              <option value="K.tra thành công">Đã kiểm tra</option>
-              <option value="Nháp">Nháp</option>
-            </select>
-
-            <select value={filterWarehouse} onChange={e => { setFilterWarehouse(e.target.value); setCurrentPage(1); }}
-              style={{ height: '32px', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '0.78rem', padding: '0 8px', cursor: 'pointer', color: '#334155' }}>
-              <option value="">Tất cả kho</option>
-              <option value="Đã nhập kho">Đã nhập kho</option>
-              <option value="Nhập chưa hết">Nhập chưa hết</option>
-              <option value="Chưa nhập kho">Chưa nhập kho</option>
-            </select>
-
-            <select value={itemsPerPage} onChange={e => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
-              style={{ height: '32px', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '0.78rem', padding: '0 8px', cursor: 'pointer', color: '#334155' }}>
-              <option value={15}>15 dòng</option>
-              <option value={30}>30 dòng</option>
-              <option value={50}>50 dòng</option>
-              <option value={100}>100 dòng</option>
-            </select>
-
-            <div style={{ display: 'flex', gap: '6px', marginLeft: 'auto' }}>
-              <button onClick={() => fileInputRef.current?.click()} disabled={importLoading} style={{
-                height: '32px', padding: '0 12px', borderRadius: '8px',
-                border: '1px solid #E2E8F0', background: '#fff', cursor: 'pointer',
-                fontSize: '0.75rem', fontWeight: '600', color: '#334155',
-                display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.2s'
-              }}>
+            <div className="toolbar-right">
+              <button 
+                className="btn btn-outline" 
+                onClick={() => fileInputRef.current?.click()} 
+                disabled={importLoading}
+                style={{
+                  height: '36px',
+                  padding: '0 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #EADCC9',
+                  backgroundColor: '#fff',
+                  color: '#7B5233',
+                  fontWeight: '700',
+                  fontSize: '0.8rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
                 <FileUp size={14} /> {importLoading ? 'Đang nhập...' : 'Nhập Excel'}
               </button>
-              <button onClick={handleExport} style={{
-                height: '32px', padding: '0 12px', borderRadius: '8px',
-                border: '1px solid #E2E8F0', background: '#fff', cursor: 'pointer',
-                fontSize: '0.75rem', fontWeight: '600', color: '#334155',
-                display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.2s'
-              }}>
+
+              <button 
+                className="btn btn-outline" 
+                onClick={handleExport}
+                style={{
+                  height: '36px',
+                  padding: '0 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #EADCC9',
+                  backgroundColor: '#fff',
+                  color: '#7B5233',
+                  fontWeight: '700',
+                  fontSize: '0.8rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
                 <FileDown size={14} /> Xuất Excel
               </button>
             </div>
@@ -391,92 +462,178 @@ const PurchaseRequisitionList = () => {
         )}
 
         {/* Table - fills remaining space */}
-        <div className="table-responsive" style={{ flex: 1, minHeight: 0, overflow: 'auto', borderRadius: '10px', border: '1px solid #E2E8F0', background: '#fff' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#5d3b32', color: '#fff', position: 'sticky', top: 0, zIndex: 2 }}>
-                <th style={thStyle}>STT</th>
-                <th style={thStyle}>Mã đơn mua</th>
-                <th style={thStyle}>Ngày đặt</th>
-                <th style={thStyle}>Ngày giao</th>
-                <th style={thStyle}>Tên NCC</th>
-                <th style={thStyle}>Trạng thái</th>
-                <th style={thStyle}>Nhập kho</th>
-                <th style={thStyle}>Người tạo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>Đang tải dữ liệu...</td></tr>
-              ) : data.length === 0 ? (
-                <tr><td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>Không có dữ liệu hiển thị.</td></tr>
-              ) : data.map((item, idx) => {
+        <div className="admin-list-layout" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0 }}>
+            
+            <div className="table-responsive desktop-only admin-table-scroll" style={{ flex: 1, overflowY: 'auto' }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '80px', textAlign: 'center' }}>STT</th>
+                    <th>Mã đơn mua</th>
+                    <th>Ngày đặt</th>
+                    <th>Ngày giao</th>
+                    <th>Tên NCC</th>
+                    <th style={{ width: '160px', textAlign: 'center' }}>Trạng thái</th>
+                    <th style={{ width: '160px', textAlign: 'center' }}>Nhập kho</th>
+                    <th>Người tạo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr><td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>Đang tải dữ liệu...</td></tr>
+                  ) : data.length === 0 ? (
+                    <tr><td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>Không có dữ liệu hiển thị.</td></tr>
+                  ) : data.map((item, idx) => {
+                    const status = getStatusDisplay(item.status);
+                    const warehouse = getWarehouseDisplay(item.warehouse_status);
+                    const stt = (currentPage - 1) * itemsPerPage + idx + 1;
+                    return (
+                      <tr key={item.id} 
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => navigate(`/admin/purchase-requisitions/${item.id}`)}>
+                        <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>#{stt}</td>
+                        <td style={{ fontWeight: 700, color: '#7B5233' }}>{item.po_code}</td>
+                        <td>{formatDate(item.order_date)}</td>
+                        <td>{formatDate(item.delivery_date)}</td>
+                        <td>{item.vendor_name || item.supplier_name || '---'}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '4px',
+                            padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700,
+                            backgroundColor: status.bg, color: status.color,
+                            border: `1px solid ${status.color}22`
+                          }}>
+                            <status.icon size={12} /> {status.text}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span style={{
+                            display: 'inline-block',
+                            padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700,
+                            backgroundColor: warehouse.bg, color: warehouse.color,
+                            border: `1px solid ${warehouse.color}22`
+                          }}>
+                            {warehouse.text}
+                          </span>
+                        </td>
+                        <td>{item.created_by_name || item.creator || '---'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile View - Cards list */}
+            <div className="mobile-only mgmt-cards-container" style={{ padding: '10px', overflowY: 'auto', flex: 1 }}>
+              {data.map((item, idx) => {
                 const status = getStatusDisplay(item.status);
                 const warehouse = getWarehouseDisplay(item.warehouse_status);
                 const stt = (currentPage - 1) * itemsPerPage + idx + 1;
                 return (
-                  <tr key={item.id} 
-                    style={{ borderBottom: '1px solid #f0ece8', backgroundColor: idx % 2 === 0 ? '#fff' : '#fdfcfb', transition: 'background 0.15s', cursor: 'pointer' }}
-                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f5f0eb'}
-                    onMouseLeave={e => e.currentTarget.style.backgroundColor = idx % 2 === 0 ? '#fff' : '#fdfcfb'}
-                    onClick={() => navigate(`/admin/purchase-requisitions/${item.id}`)}>
-                    <td style={tdStyle} data-label="STT">{stt}</td>
-                    <td style={{ ...tdStyle, fontWeight: 700, color: '#5d3b32' }} data-label="Mã đơn mua">{item.po_code}</td>
-                    <td style={tdStyle} data-label="Ngày đặt">{formatDate(item.order_date)}</td>
-                    <td style={tdStyle} data-label="Ngày giao">{formatDate(item.delivery_date)}</td>
-                    <td style={{ ...tdStyle, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} data-label="Tên NCC">{item.supplier_name || '---'}</td>
-                    <td style={tdStyle} data-label="Trạng thái">
-                      <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 600, backgroundColor: status.bg, color: status.color }}>
-                        {status.text}
+                  <div key={item.id} className="mgmt-card animate-card-entrance" style={{ 
+                    backgroundColor: '#fff', 
+                    borderRadius: '10px', 
+                    border: '1px solid #EADCC9',
+                    padding: '12px',
+                    marginBottom: '10px',
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => navigate(`/admin/purchase-requisitions/${item.id}`)}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontWeight: 'bold', color: '#8D6E63' }}>#{stt}</span>
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '4px',
+                        padding: '2px 8px', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 700,
+                        backgroundColor: status.bg, color: status.color
+                      }}>
+                        <status.icon size={10} /> {status.text}
                       </span>
-                    </td>
-                    <td style={tdStyle} data-label="Nhập kho">
-                      <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 600, backgroundColor: warehouse.bg, color: warehouse.color }}>
-                        {warehouse.text}
-                      </span>
-                    </td>
-                    <td style={tdStyle} data-label="Người tạo">{item.creator || '---'}</td>
-                  </tr>
+                    </div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#7B5233', marginBottom: '4px' }}>
+                      {item.po_code}
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: '#6B7280', marginBottom: '4px' }}>
+                      NCC: {item.vendor_name || item.supplier_name || '---'}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#8D6E63' }}>
+                      <span>Ngày giao: {formatDate(item.delivery_date)}</span>
+                      <span style={{ fontWeight: '700', color: warehouse.color }}>{warehouse.text}</span>
+                    </div>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
+
+            {/* Pagination Container - Desktop inside card */}
+            <div className="admin-pagination-desktop desktop-only">
+              <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
+                Hiển thị <b>{data.length}</b> trên <b>{total}</b> đơn mua
+              </div>
+              {totalPages > 1 && (
+                <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                  <button 
+                    className="page-btn"
+                    onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} 
+                    disabled={currentPage === 1}
+                    style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', opacity: currentPage === 1 ? 0.5 : 1, color: '#7B5233' }}
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  {getPaginationRange().map((page, i) => {
+                    if (page === '...') {
+                      return <span key={`ellipsis-${i}`} style={{ color: '#8D6E63', fontSize: '0.7rem', padding: '0 4px' }}>...</span>;
+                    }
+                    if (page > totalPages) return null;
+                    return (
+                      <button 
+                        key={page} 
+                        className={`page-btn ${currentPage === page ? 'active' : ''}`}
+                        onClick={() => setCurrentPage(page)}
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: '8px',
+                          border: '1px solid #EADCC9',
+                          backgroundColor: currentPage === page ? '#7B5233' : '#FAF6F0',
+                          color: currentPage === page ? '#fff' : '#7B5233',
+                          fontWeight: '700',
+                          fontSize: '0.8rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {page}
+                      </button>
+                    );
+                  })}
+                  <button 
+                    className="page-btn"
+                    onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} 
+                    disabled={currentPage === totalPages}
+                    style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', opacity: currentPage === totalPages ? 0.5 : 1, color: '#7B5233' }}
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
+
+          </div>
         </div>
 
-        {/* Compact Pagination */}
-        <div style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          padding: '6px 12px', background: '#fff', borderRadius: '10px',
-          border: '1px solid #E2E8F0', boxShadow: '0 1px 2px rgba(0,0,0,0.01)'
-        }}>
-          <div style={{ color: '#64748B', fontSize: '0.75rem' }}>
-            Hiển thị <b>{Math.min((currentPage - 1) * itemsPerPage + 1, total)}–{Math.min(currentPage * itemsPerPage, total)}</b> trên <b>{total}</b> đơn
+        {/* Mobile Sticky Pagination */}
+        {totalPages > 1 && (
+          <div className="pagination-mobile-sticky mobile-only">
+            <button className="page-btn" onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>
+              <ChevronLeft size={16} />
+            </button>
+            <span style={{ fontWeight: '700', fontSize: '0.9rem', color: '#7B5233' }}>Trang {currentPage} / {totalPages || 1}</span>
+            <button className="page-btn" onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>
+              <ChevronRight size={16} />
+            </button>
           </div>
-          {totalPages > 1 && (
-            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-              <button onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1}
-                style={{ ...pageBtnStyle, opacity: currentPage === 1 ? 0.4 : 1 }}>
-                <ChevronLeft size={14} />
-              </button>
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let start = Math.max(1, currentPage - 2);
-                if (start + 4 > totalPages) start = Math.max(1, totalPages - 4);
-                const page = start + i;
-                if (page > totalPages) return null;
-                return (
-                  <button key={page} onClick={() => setCurrentPage(page)}
-                    style={{ ...pageBtnStyle, backgroundColor: currentPage === page ? '#5d3b32' : '#fff', color: currentPage === page ? '#fff' : '#444' }}>
-                    {page}
-                  </button>
-                );
-              })}
-              <button onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}
-                style={{ ...pageBtnStyle, opacity: currentPage === totalPages ? 0.4 : 1 }}>
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          )}
-        </div>
+        )}
       </div>
     </>
   );

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { ArrowLeft, Plus, Edit2, Trash2, Check, X, Search, Shield } from 'lucide-react';
+import { ArrowLeft, Plus, Edit2, Trash2, Check, X, Search, Shield, Layers } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import '@styles/components.css';
 
@@ -95,6 +95,23 @@ const PositionManagement = () => {
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState(null);
+  const [actionMenuId, setActionMenuId] = useState(null);
+  const [confirmDeleteData, setConfirmDeleteData] = useState(null);
+  const [showExtraMenu, setShowExtraMenu] = useState(false);
+  const extraMenuRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (extraMenuRef.current && !extraMenuRef.current.contains(e.target)) {
+        setShowExtraMenu(false);
+      }
+      if (!e.target.closest('.action-menu') && !e.target.closest('.action-btn')) {
+        setActionMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // State Modal Form
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -233,41 +250,89 @@ const PositionManagement = () => {
   };
 
   // Dừng hoạt động (Soft delete)
-  const handleDelete = async (pos) => {
-    if (!window.confirm(`Bạn có chắc chắn muốn dừng hoạt động chức vụ "${pos.name}"?`)) return;
-    setError(null);
-    try {
-      await api.delete(`/permissions/${pos.id}`);
-      fetchData();
-    } catch (err) {
-      console.error('Lỗi khi dừng sử dụng chức vụ:', err);
-      setError(err.response?.data?.detail || 'Không thể thay đổi trạng thái hoạt động.');
-    }
+  const handleDelete = (pos) => {
+    setConfirmDeleteData({
+      id: pos.id,
+      name: pos.name,
+      type: 'position'
+    });
   };
 
   return (
     <div style={{ width: '100%', paddingBottom: '40px' }}>
-      {/* ── Tìm kiếm & Tạo mới ── */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: '20px', gap: '15px', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
-          <div className="search-wrapper" style={{ width: '280px' }}>
-            <Search size={18} style={{ position: 'absolute', left: '12px', color: '#A0A0A0' }} />
+      {/* ── Thanh công cụ (Toolbar) ── */}
+      <div className="mgmt-toolbar card" style={{ marginBottom: '20px' }}>
+        {/* Nhóm bộ lọc bên trái */}
+        <div className="toolbar-left" style={{ flex: 1 }}>
+          <div className="search-wrapper">
+            <Search size={18} className="search-icon" />
             <input 
               type="text" 
               placeholder="Tìm kiếm chức vụ..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px 12px 8px 38px',
-                borderRadius: '8px',
-                border: '1px solid #EADCC9',
-                outline: 'none',
-                backgroundColor: '#FAF8F6',
-                color: '#2D1A12',
-                fontSize: '0.9rem'
-              }}
             />
+          </div>
+        </div>
+
+        {/* Nhóm hành động bên phải */}
+        <div className="toolbar-right" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <div style={{ position: 'relative' }} ref={extraMenuRef}>
+            <button
+              onClick={() => setShowExtraMenu(p => !p)}
+              style={{
+                height: '36px',
+                padding: '0 16px',
+                whiteSpace: 'nowrap',
+                borderRadius: '8px',
+                fontWeight: '700',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                border: 'none',
+                backgroundColor: '#7B5233',
+                color: '#fff',
+                fontSize: '0.85rem',
+                cursor: 'pointer',
+                outline: 'none',
+                boxShadow: '0 2px 5px rgba(123, 82, 51, 0.15)'
+              }}
+            >
+              <Layers size={14} />
+              <span className="btn-text-desktop">Khác</span>
+              <span className="btn-text-mobile">Khác</span>
+            </button>
+            {showExtraMenu && (
+              <div className="dropdown-panel" style={{
+                position: 'absolute',
+                top: '100%',
+                right: 0,
+                zIndex: 1000,
+                width: '180px',
+                marginTop: '6px'
+              }}>
+                <p className="dropdown-title">Quản lý nâng cao</p>
+                <button
+                  className="dropdown-item"
+                  onClick={() => { navigate('/admin/users'); setShowExtraMenu(false); }}
+                >
+                  Tài khoản
+                </button>
+                <button
+                  className="dropdown-item"
+                  onClick={() => { navigate('/admin/users/departments'); setShowExtraMenu(false); }}
+                >
+                  Bộ phận
+                </button>
+                <button
+                  className="dropdown-item selected"
+                  onClick={() => { navigate('/admin/users/positions'); setShowExtraMenu(false); }}
+                  style={{ fontWeight: '800' }}
+                >
+                  Chức vụ
+                </button>
+              </div>
+            )}
           </div>
 
           {hasWritePermission && (
@@ -282,7 +347,8 @@ const PositionManagement = () => {
                 gap: '6px',
                 borderRadius: '8px',
                 fontWeight: '700',
-                fontSize: '0.85rem'
+                fontSize: '0.85rem',
+                whiteSpace: 'nowrap'
               }}
             >
               <Plus size={16} /> Tạo chức vụ mới
@@ -317,8 +383,16 @@ const PositionManagement = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredPositions.map(pos => (
-                  <tr key={pos.id} style={{ borderBottom: '1px solid #FAF0E6', transition: 'background-color 0.2s' }}>
+                {filteredPositions.map((pos, index) => (
+                  <tr 
+                    key={pos.id} 
+                    style={{ 
+                      borderBottom: '1px solid #FAF0E6', 
+                      transition: 'background-color 0.2s',
+                      position: 'relative',
+                      zIndex: actionMenuId === pos.id ? 30 : 1
+                    }}
+                  >
                     <td style={{ padding: '14px 16px', color: '#888', fontWeight: '600' }}>#{pos.id}</td>
                     <td style={{ padding: '14px 16px', fontWeight: '700', color: '#2D1A12' }}>{pos.name}</td>
                     <td style={{ padding: '14px 16px' }}>
@@ -363,48 +437,54 @@ const PositionManagement = () => {
                       </span>
                     </td>
                     {hasWritePermission && (
-                      <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
-                          <button 
-                            onClick={() => openEditModal(pos)}
-                            style={{
-                              border: 'none',
-                              background: 'none',
-                              color: '#3B82F6',
-                              cursor: 'pointer',
-                              padding: '4px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              borderRadius: '4px',
-                              transition: 'background 0.2s'
-                            }}
-                            title="Sửa thông tin"
-                          >
-                            <Edit2 size={15} />
-                          </button>
-                          {pos.is_active && (
-                            <button 
-                              onClick={() => handleDelete(pos)}
-                              style={{
-                                border: 'none',
-                                background: 'none',
-                                color: '#EF4444',
-                                cursor: 'pointer',
-                                padding: '4px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                borderRadius: '4px',
-                                transition: 'background 0.2s'
+                      (() => {
+                        const isLastRows = index >= filteredPositions.length - 2 && filteredPositions.length > 2;
+                        return (
+                          <td style={{ position: 'relative', padding: '14px 16px', textAlign: 'center', zIndex: actionMenuId === pos.id ? 40 : 1 }}>
+                            <button
+                              type="button"
+                              className="action-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActionMenuId(actionMenuId === pos.id ? null : pos.id);
                               }}
-                              title="Dừng hoạt động"
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          )}
-                        </div>
-                      </td>
+                            ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
+                            {actionMenuId === pos.id && (
+                              <div className="action-menu" style={{ 
+                                right: '50%', 
+                                transform: 'translateX(50%)', 
+                                top: isLastRows ? 'auto' : '80%', 
+                                bottom: isLastRows ? '80%' : 'auto',
+                                boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+                                zIndex: 1000
+                              }}>
+                                <button 
+                                  type="button"
+                                  className="action-menu-item" 
+                                  onClick={() => {
+                                    setActionMenuId(null);
+                                    openEditModal(pos);
+                                  }}
+                                >
+                                  Chỉnh sửa
+                                </button>
+                                {pos.is_active && (
+                                  <button 
+                                    type="button"
+                                    className="action-menu-item danger" 
+                                    onClick={() => {
+                                      setActionMenuId(null);
+                                      handleDelete(pos);
+                                    }}
+                                  >
+                                    Dừng hoạt động
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })()
                     )}
                   </tr>
                 ))}
@@ -510,48 +590,34 @@ const PositionManagement = () => {
                     padding: '8px 12px', 
                     backgroundColor: '#FAF8F6' 
                   }}>
-                    {SCREEN_GROUPS.map((group) => (
-                      <div key={group.title} style={{ marginBottom: '15px' }}>
-                        <div style={{ 
-                          fontSize: '0.8rem', 
-                          fontWeight: '800', 
-                          color: '#7B5233', 
-                          borderBottom: '1px solid #EADCC9', 
-                          paddingBottom: '4px',
-                          marginBottom: '8px'
-                        }}>
-                          {group.title}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {SCREEN_GROUPS.flatMap(g => g.screens).map((scr) => (
+                        <div key={scr.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.82rem', color: '#444', fontWeight: '600' }}>
+                            {scr.name}
+                          </span>
+                          <select
+                            value={defaultPermissions[scr.key] || 'write'}
+                            onChange={(e) => handlePermissionChange(scr.key, e.target.value)}
+                            style={{
+                              padding: '4px 8px',
+                              borderRadius: '6px',
+                              border: '1px solid #EADCC9',
+                              fontSize: '0.8rem',
+                              fontWeight: '600',
+                              backgroundColor: '#fff',
+                              color: '#2D1A12',
+                              outline: 'none',
+                              width: '130px'
+                            }}
+                          >
+                            <option value="none">Không được phép</option>
+                            <option value="read">Chỉ xem</option>
+                            <option value="write">Có quyền ghi</option>
+                          </select>
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                          {group.screens.map((scr) => (
-                            <div key={scr.key} style={{ display: 'flex', justifycontent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontSize: '0.8rem', color: '#444', fontWeight: '600' }}>
-                                {scr.name}
-                              </span>
-                              <select
-                                value={defaultPermissions[scr.key] || 'write'}
-                                onChange={(e) => handlePermissionChange(scr.key, e.target.value)}
-                                style={{
-                                  padding: '4px 8px',
-                                  borderRadius: '6px',
-                                  border: '1px solid #EADCC9',
-                                  fontSize: '0.8rem',
-                                  fontWeight: '600',
-                                  backgroundColor: '#fff',
-                                  color: '#2D1A12',
-                                  outline: 'none',
-                                  width: '130px'
-                                }}
-                              >
-                                <option value="none">Không được phép</option>
-                                <option value="read">Chỉ xem</option>
-                                <option value="write">Có quyền ghi</option>
-                              </select>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -576,6 +642,76 @@ const PositionManagement = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {confirmDeleteData && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div className="card" style={{ width: '100%', maxWidth: '420px', backgroundColor: '#fff', borderRadius: '16px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid #FAF0E6', backgroundColor: '#FAF6F0' }}>
+              <h4 style={{ margin: 0, color: '#7B5233', fontSize: '1.05rem', fontWeight: '800' }}>Xác nhận dừng hoạt động</h4>
+              <button 
+                type="button" 
+                onClick={() => setConfirmDeleteData(null)} 
+                style={{ border: 'none', background: 'none', color: '#8C7B72', fontSize: '1.1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px' }}
+              >
+                ✕
+              </button>
+            </div>
+            <div style={{ padding: '24px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  backgroundColor: '#FEE2E2',
+                  color: '#DC2626',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                </div>
+                <div style={{ fontSize: '0.88rem', color: '#5D4037', fontWeight: '600', lineHeight: '1.4' }}>
+                  Bạn có chắc chắn muốn dừng hoạt động chức vụ <strong>"{confirmDeleteData.name}"</strong> không?
+                </div>
+              </div>
+            </div>
+            <div style={{ padding: '14px 20px', borderTop: '1px solid #FAF0E6', display: 'flex', justifyContent: 'flex-end', gap: '10px', backgroundColor: '#FAF6F0' }}>
+              <button 
+                type="button" 
+                className="btn btn-outline" 
+                onClick={() => setConfirmDeleteData(null)}
+                style={{ height: '36px', padding: '0 15px', borderRadius: '8px', fontSize: '0.85rem' }}
+              >
+                Hủy bỏ
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-primary" 
+                style={{ height: '36px', padding: '0 15px', borderRadius: '8px', fontSize: '0.85rem', backgroundColor: '#DC2626', borderColor: '#DC2626' }}
+                onClick={async () => {
+                  const pos = confirmDeleteData;
+                  setConfirmDeleteData(null);
+                  setError(null);
+                  try {
+                    await api.delete(`/permissions/${pos.id}`);
+                    fetchData();
+                  } catch (err) {
+                    console.error('Lỗi khi dừng sử dụng chức vụ:', err);
+                    setError(err.response?.data?.detail || 'Không thể thay đổi trạng thái hoạt động.');
+                  }
+                }}
+              >
+                Xác nhận
+              </button>
+            </div>
           </div>
         </div>
       )}

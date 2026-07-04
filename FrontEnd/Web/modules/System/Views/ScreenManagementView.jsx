@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { screenService } from '@modules/System/Models/screen.service';
-import { Search, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Filter, ChevronLeft, ChevronRight, FileDown } from 'lucide-react';
 import { useScreen } from '@shared/context/ScreenContext';
 import '@styles/components.css';
 
@@ -10,13 +10,30 @@ const ScreenManagement = () => {
   const [screens, setScreens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [platformFilter, setPlatformFilter] = useState('All');
+  const [platformFilter, setPlatformFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
   const [editingScreen, setEditingScreen] = useState(null);
   const [formData, setEditingFormData] = useState({ current_code: '', title: '', subtitle: '' });
   const [toast, setToast] = useState(null);
+  const [actionMenuId, setActionMenuId] = useState(null);
+  const [sortBy, setSortBy] = useState('current_code');
+  const [sortDir, setSortDir] = useState('asc');
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [showSortPanel, setShowSortPanel] = useState(false);
+  const filterRef = useRef(null);
+  const sortRef = useRef(null);
   const { refreshScreens } = useScreen();
+
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      setActionMenuId(null);
+      if (filterRef.current && !filterRef.current.contains(e.target)) setShowFilterPanel(false);
+      if (sortRef.current && !sortRef.current.contains(e.target)) setShowSortPanel(false);
+    };
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, []);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -84,17 +101,56 @@ const ScreenManagement = () => {
     }
   };
 
-  const filteredScreens = screens.filter(screen => {
-    const matchesSearch = 
-      screen.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      screen.route_path.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      screen.current_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      screen.default_code.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesPlatform = platformFilter === 'All' || screen.platform === platformFilter;
-    
-    return matchesSearch && matchesPlatform;
-  });
+  const handleSort = (col) => {
+    if (sortBy === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortBy(col); setSortDir('asc'); }
+    setCurrentPage(1);
+  };
+
+  const handleExportCSV = () => {
+    const rows = filteredScreens;
+    const header = ['Mã màn hình', 'Mã mặc định', 'Tiêu đề', 'Nền tảng', 'Đường dẫn', 'Phụ đề'];
+    const csvContent = [
+      header.join(','),
+      ...rows.map(s => [
+        `"${s.current_code || ''}"`,
+        `"${s.default_code || ''}"`,
+        `"${(s.title || '').replace(/"/g, '""')}"`,
+        `"${s.platform || ''}"`,
+        `"${s.route_path || ''}"`,
+        `"${(s.subtitle || '').replace(/"/g, '""')}"`
+      ].join(','))
+    ].join('\n');
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Danh_sach_man_hinh_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Xuất dữ liệu thành công!');
+  };
+
+  const filteredScreens = useMemo(() => {
+    let result = screens.filter(screen => {
+      const q = searchQuery.toLowerCase();
+      const matchesSearch = !q ||
+        screen.title?.toLowerCase().includes(q) ||
+        screen.route_path?.toLowerCase().includes(q) ||
+        screen.current_code?.toLowerCase().includes(q) ||
+        screen.default_code?.toLowerCase().includes(q);
+      const matchesPlatform = !platformFilter || screen.platform === platformFilter;
+      return matchesSearch && matchesPlatform;
+    });
+    result = [...result].sort((a, b) => {
+      let av = (a[sortBy] || '').toString().toLowerCase();
+      let bv = (b[sortBy] || '').toString().toLowerCase();
+      if (av < bv) return sortDir === 'asc' ? -1 : 1;
+      if (av > bv) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return result;
+  }, [screens, searchQuery, platformFilter, sortBy, sortDir]);
 
   const totalPages = Math.ceil(filteredScreens.length / pageSize);
   const paginatedScreens = useMemo(() => {
@@ -117,131 +173,158 @@ const ScreenManagement = () => {
         )}
 
         {/* Toolbar */}
-        <div className="qr-toolbar card-shadow" style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center', 
-            padding: '10px 15px', 
-            background: '#fff', 
-            borderRadius: '12px',
-            border: '1px solid #EADCC9',
-            marginBottom: '20px'
-        }}>
-          <div className="qr-controls" style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px' }}>
-             {/* Row 1: Platform Tabs + Page Size */}
-             <div className="qr-mobile-row">
-                <div className="platform-tabs" style={{ 
-                  display: 'flex', 
-                  gap: '4px', 
-                  background: '#FAF6F0', 
-                  padding: '4px', 
-                  borderRadius: '10px',
-                  border: '1px solid #EADCC9'
-                }}>
-                  <button 
-                    className={`tab-btn ${platformFilter === 'All' ? 'active' : ''}`}
-                    onClick={() => setPlatformFilter('All')}
-                    style={{ 
-                      height: '28px', 
-                      padding: '0 15px',
-                      fontSize: '0.75rem', 
-                      borderRadius: '6px',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontWeight: platformFilter === 'All' ? '700' : '600',
-                      backgroundColor: platformFilter === 'All' ? '#7B5233' : 'transparent',
-                      color: platformFilter === 'All' ? '#FFF' : '#7B5233',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    Tất cả
-                  </button>
-                  <button 
-                    className={`tab-btn ${platformFilter === 'Web' ? 'active' : ''}`}
-                    onClick={() => setPlatformFilter('Web')}
-                    style={{ 
-                      height: '28px', 
-                      padding: '0 15px',
-                      fontSize: '0.75rem', 
-                      borderRadius: '6px',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontWeight: platformFilter === 'Web' ? '700' : '600',
-                      backgroundColor: platformFilter === 'Web' ? '#7B5233' : 'transparent',
-                      color: platformFilter === 'Web' ? '#FFF' : '#7B5233',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    Web
-                  </button>
-                  <button 
-                    className={`tab-btn ${platformFilter === 'Mobile' ? 'active' : ''}`}
-                    onClick={() => setPlatformFilter('Mobile')}
-                    style={{ 
-                      height: '28px', 
-                      padding: '0 15px',
-                      fontSize: '0.75rem', 
-                      borderRadius: '6px',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontWeight: platformFilter === 'Mobile' ? '700' : '600',
-                      backgroundColor: platformFilter === 'Mobile' ? '#7B5233' : 'transparent',
-                      color: platformFilter === 'Mobile' ? '#FFF' : '#7B5233',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    Mobile
-                  </button>
-                </div>
+        <div className="mgmt-toolbar card" style={{ marginBottom: '20px' }}>
+          {/* Nhóm bộ lọc bên trái */}
+          <div className="toolbar-left" style={{ flex: 1 }}>
+            {/* Ô tìm kiếm */}
+            <div className="search-wrapper">
+              <Search size={18} className="search-icon" />
+              <input
+                type="text"
+                placeholder="Tìm theo mã, tiêu đề, đường dẫn..."
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+              />
+            </div>
 
-                <select 
-                    value={pageSize} 
-                    onChange={(e) => { setPageSize(parseInt(e.target.value)); setCurrentPage(1); }}
-                    className="page-size-select"
-                    style={{ 
-                      height: '36px', 
-                      padding: '0 10px',
-                      borderRadius: '8px',
-                      border: '1px solid #EADCC9',
-                      backgroundColor: '#FAF6F0',
-                      color: '#7B5233',
-                      fontWeight: '700',
-                      fontSize: '0.8rem'
-                    }}
+            {/* Nút Lọc + Dropdown Panel */}
+            <div className="dropdown-wrapper" ref={filterRef}>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <Filter size={14} color="#7B5233" style={{ position: 'absolute', left: '10px', pointerEvents: 'none' }} />
+                <button
+                  className={`icon-btn-minimal ${showFilterPanel || platformFilter ? 'active' : ''}`}
+                  style={{
+                    padding: '0 10px 0 30px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    border: '1px solid #EADCC9',
+                    backgroundColor: '#FAF6F0',
+                    color: '#7B5233',
+                    fontSize: '0.8rem',
+                    fontWeight: '700',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap'
+                  }}
+                  onClick={(e) => { e.stopPropagation(); setShowFilterPanel(p => !p); setShowSortPanel(false); }}
                 >
-                    <option value={15}>15 dòng</option>
-                    <option value={30}>30 dòng</option>
-                    <option value={50}>50 dòng</option>
-                    <option value={100}>100 dòng</option>
-                </select>
-             </div>
-
-             <div className="desktop-only" style={{ width: '1px', height: '20px', backgroundColor: '#EADCC9' }}></div>
-
-             {/* Row 2: Search Input */}
-             <div className="qr-mobile-row" style={{ flex: 1 }}>
-                <div className="qr-search-wrapper" style={{ flex: 1 }}>
-                  <Search size={16} style={{ position: 'absolute', left: '12px', color: '#7B5233', pointerEvents: 'none' }} />
-                  <input 
-                    type="text" 
-                    placeholder="Tìm theo mã, tiêu đề, đường dẫn..." 
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    style={{ 
-                      height: '36px', 
-                      paddingLeft: '36px',
-                      borderRadius: '10px',
-                      border: '1px solid #EADCC9',
-                      backgroundColor: '#FAF6F0',
-                      width: '100%',
-                      fontSize: '0.85rem',
-                      color: '#7B5233',
-                      fontWeight: '700',
-                      outline: 'none'
-                    }}
-                  />
+                  {platformFilter || 'Nền tảng'}
+                  {platformFilter && <span className="filter-indicator" style={{ marginLeft: 'auto' }} />}
+                </button>
+              </div>
+              {showFilterPanel && (
+                <div className="dropdown-panel" style={{ position: 'absolute', top: '100%', left: 0, zIndex: 1000, width: '180px' }}>
+                  <p className="dropdown-title">Lọc theo nền tảng</p>
+                  {['', 'Web', 'Mobile'].map(p => (
+                    <button
+                      key={p}
+                      className={`dropdown-item ${platformFilter === p ? 'selected' : ''}`}
+                      onClick={() => { setPlatformFilter(p); setCurrentPage(1); setShowFilterPanel(false); }}
+                    >
+                      {p || 'Tất cả'}
+                    </button>
+                  ))}
                 </div>
-             </div>
+              )}
+            </div>
+
+            {/* Nút Sắp xếp + Dropdown Panel */}
+            <div className="dropdown-wrapper" ref={sortRef}>
+              <button
+                className={`icon-btn-minimal ${showSortPanel ? 'active' : ''}`}
+                title="Sắp xếp"
+                style={{
+                  height: '36px',
+                  width: '40px',
+                  padding: 0,
+                  justifyContent: 'center',
+                  borderRadius: '8px',
+                  border: '1px solid #EADCC9',
+                  backgroundColor: '#FAF6F0',
+                  color: '#7B5233',
+                  display: 'flex',
+                  alignItems: 'center',
+                  cursor: 'pointer'
+                }}
+                onClick={(e) => { e.stopPropagation(); setShowSortPanel(p => !p); setShowFilterPanel(false); }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 5h10M11 9h7M11 13h4M3 17l3 3 3-3M6 18V4"></path>
+                </svg>
+              </button>
+              {showSortPanel && (
+                <div className="dropdown-panel" style={{ position: 'absolute', top: '100%', left: 0, zIndex: 1000, width: '200px' }}>
+                  <p className="dropdown-title">Sắp xếp theo</p>
+                  {[
+                    { label: 'Mã màn hình (A-Z)', value: 'current_code' },
+                    { label: 'Tiêu đề (A-Z)', value: 'title' },
+                    { label: 'Nền tảng', value: 'platform' },
+                    { label: 'Đường dẫn', value: 'route_path' },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      className={`dropdown-item ${sortBy === opt.value ? 'selected' : ''}`}
+                      onClick={() => { handleSort(opt.value); setShowSortPanel(false); }}
+                    >
+                      {opt.label} {sortBy === opt.value ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Chọn số dòng hiển thị */}
+            <select
+              value={pageSize}
+              onChange={(e) => { setPageSize(parseInt(e.target.value)); setCurrentPage(1); }}
+              className="page-size-select"
+              style={{
+                height: '36px',
+                padding: '0 10px',
+                borderRadius: '8px',
+                border: '1px solid #EADCC9',
+                backgroundColor: '#FAF6F0',
+                color: '#7B5233',
+                fontWeight: '700',
+                fontSize: '0.8rem',
+                cursor: 'pointer'
+              }}
+            >
+              <option value={15}>15 dòng</option>
+              <option value={30}>30 dòng</option>
+              <option value={50}>50 dòng</option>
+              <option value={100}>100 dòng</option>
+            </select>
+          </div>
+
+          {/* Nhóm hành động bên phải */}
+          <div className="toolbar-right">
+            {/* Nút Xuất dữ liệu */}
+            <button
+              className="btn btn-outline"
+              onClick={handleExportCSV}
+              style={{
+                height: '36px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '0 15px',
+                borderRadius: '8px',
+                border: '1px solid #EADCC9',
+                backgroundColor: '#fff',
+                color: '#7B5233',
+                fontWeight: '700',
+                fontSize: '0.85rem',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              <FileDown size={16} />
+              <span className="btn-text-desktop">Xuất dữ liệu</span>
+              <span className="btn-text-mobile">Xuất</span>
+            </button>
           </div>
         </div>
 
@@ -285,6 +368,10 @@ const ScreenManagement = () => {
                             navigate(`/admin/screens/${screen.id}`);
                           }}
                           className="clickable-row"
+                          style={{
+                            position: 'relative',
+                            zIndex: actionMenuId === screen.id ? 30 : 1
+                          }}
                         >
                           <td>
                             <span className={`platform-badge ${screen.platform}`}>
@@ -300,25 +387,38 @@ const ScreenManagement = () => {
                           <td className="font-semibold">{screen.title}</td>
                           <td style={{ color: '#666' }}>{screen.subtitle || '-'}</td>
                           <td className="font-mono" style={{ fontSize: '0.8rem' }}>{screen.route_path}</td>
-                          <td>
-                            <div className="actions-cell">
-                              <button 
-                                className="btn-edit"
-                                onClick={() => handleEditClick(screen)}
-                                title="Chỉnh sửa cấu hình"
-                              >
-                                Sửa
-                              </button>
-                              {isModified && (
-                                <button 
-                                  className="btn-reset"
-                                  onClick={() => handleReset(screen)}
-                                  title="Khôi phục mã mặc định"
+                          <td style={{ position: 'relative', textAlign: 'center', zIndex: actionMenuId === screen.id ? 40 : 1 }}>
+                            <button
+                              className="action-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActionMenuId(actionMenuId === screen.id ? null : screen.id);
+                              }}
+                            ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
+                            {actionMenuId === screen.id && (
+                              <div className="action-menu" style={{ right: '50%', transform: 'translateX(50%)', top: '80%' }}>
+                                <button
+                                  className="action-menu-item"
+                                  onClick={() => {
+                                    setActionMenuId(null);
+                                    handleEditClick(screen);
+                                  }}
                                 >
-                                  Khôi phục
+                                  Chỉnh sửa
                                 </button>
-                              )}
-                            </div>
+                                {isModified && (
+                                  <button
+                                    className="action-menu-item warn"
+                                    onClick={() => {
+                                      setActionMenuId(null);
+                                      handleReset(screen);
+                                    }}
+                                  >
+                                    Khôi phục mặc định
+                                  </button>
+                                )}
+                              </div>
+                            )}
                           </td>
                         </tr>
                       );
@@ -532,8 +632,8 @@ const ScreenManagement = () => {
                 />
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn-secondary" onClick={() => setEditingScreen(null)}>Hủy</button>
-                <button type="submit" className="btn-primary">Lưu thay đổi</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setEditingScreen(null)}>Hủy</button>
+                <button type="submit" className="btn btn-primary">Lưu thay đổi</button>
               </div>
             </form>
           </div>

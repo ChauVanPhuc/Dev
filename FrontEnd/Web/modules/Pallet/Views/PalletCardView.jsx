@@ -5,7 +5,7 @@ import {
     AlertCircle, Eye, FileDown, CheckCircle, 
     ArrowRight, ArrowUpRight, ArrowDownRight, 
     X, ChevronLeft, ChevronRight, Info, Calendar,
-    User, Clipboard, Image as ImageIcon
+    User, Clipboard, Image as ImageIcon, Layers, Undo2
 } from 'lucide-react';
 
 const ExceptionDeliveries = () => {
@@ -176,84 +176,55 @@ const ExceptionDeliveries = () => {
             </div>
 
             {/* Thống Kê Tổng Quan */}
-            <div className="stats-grid five-cols animate-card-entrance" style={{ marginBottom: '24px' }}>
-                <div 
-                    onClick={() => { setFilterType('ALL'); setCurrentPage(1); }}
-                    className="stat-card"
-                    style={{ 
-                        background: filterType === 'ALL' ? '#7B5233' : 'white', 
-                        color: filterType === 'ALL' ? 'white' : '#3E2723',
-                        cursor: 'pointer',
-                        border: filterType === 'ALL' ? '1px solid #7B5233' : '1px solid #EFEBE9',
-                    }}
-                >
-                    <p className="stat-title" style={{ color: filterType === 'ALL' ? '#EFEBE9' : '#8D6E63' }}>TỔNG SỐ NGOẠI LỆ</p>
-                    <h3 className="stat-value" style={{ color: 'inherit' }}>{stats.total} <span style={{ fontSize: '14px', fontWeight: '400' }}>Phiếu</span></h3>
-                </div>
-
-                <div 
-                    onClick={() => { setFilterType('LECH_THIEU'); setCurrentPage(1); }}
-                    className="stat-card"
-                    style={{ 
-                        background: filterType === 'LECH_THIEU' ? '#EF4444' : 'white', 
-                        color: filterType === 'LECH_THIEU' ? 'white' : '#3E2723',
-                        cursor: 'pointer',
-                        border: filterType === 'LECH_THIEU' ? '1px solid #EF4444' : '1px solid #FEE2E2',
-                    }}
-                >
-                    <p className="stat-title" style={{ color: filterType === 'LECH_THIEU' ? '#FEE2E2' : '#EF4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <ArrowDownRight size={14} /> LỆCH THIẾU
-                    </p>
-                    <h3 className="stat-value" style={{ color: 'inherit' }}>{stats.lechThieu} <span style={{ fontSize: '14px', fontWeight: '400' }}>Phiếu</span></h3>
-                </div>
-
-                <div 
-                    onClick={() => { setFilterType('LECH_THUA'); setCurrentPage(1); }}
-                    className="stat-card"
-                    style={{ 
-                        background: filterType === 'LECH_THUA' ? '#3B82F6' : 'white', 
-                        color: filterType === 'LECH_THUA' ? 'white' : '#3E2723',
-                        cursor: 'pointer',
-                        border: filterType === 'LECH_THUA' ? '1px solid #3B82F6' : '1px solid #DBEAFE',
-                    }}
-                >
-                    <p className="stat-title" style={{ color: filterType === 'LECH_THUA' ? '#DBEAFE' : '#3B82F6', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <ArrowUpRight size={14} /> LỆCH THỪA
-                    </p>
-                    <h3 className="stat-value" style={{ color: 'inherit' }}>{stats.lechThua} <span style={{ fontSize: '14px', fontWeight: '400' }}>Phiếu</span></h3>
-                </div>
-
-                <div 
-                    onClick={() => { setFilterType('TRA_HANG'); setCurrentPage(1); }}
-                    className="stat-card"
-                    style={{ 
-                        background: filterType === 'TRA_HANG' ? '#D97706' : 'white', 
-                        color: filterType === 'TRA_HANG' ? 'white' : '#3E2723',
-                        cursor: 'pointer',
-                        border: filterType === 'TRA_HANG' ? '1px solid #D97706' : '1px solid #FEF3C7',
-                    }}
-                >
-                    <p className="stat-title" style={{ color: filterType === 'TRA_HANG' ? '#FEF3C7' : '#D97706', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <AlertTriangle size={14} /> TRẢ HÀNG QC
-                    </p>
-                    <h3 className="stat-value" style={{ color: 'inherit' }}>{stats.traHang} <span style={{ fontSize: '14px', fontWeight: '400' }}>Phiếu</span></h3>
-                </div>
-
-                <div 
-                    onClick={() => { setFilterType('LOI_QC'); setCurrentPage(1); }}
-                    className="stat-card"
-                    style={{ 
-                        background: filterType === 'LOI_QC' ? '#8B5CF6' : 'white', 
-                        color: filterType === 'LOI_QC' ? 'white' : '#3E2723',
-                        cursor: 'pointer',
-                        border: filterType === 'LOI_QC' ? '1px solid #8B5CF6' : '1px solid #EDE9FE',
-                    }}
-                >
-                    <p className="stat-title" style={{ color: filterType === 'LOI_QC' ? '#EDE9FE' : '#8B5CF6', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <AlertCircle size={14} /> LỖI ĐÁNH GIÁ QC
-                    </p>
-                    <h3 className="stat-value" style={{ color: 'inherit' }}>{stats.loiQC} <span style={{ fontSize: '14px', fontWeight: '400' }}>Phiếu</span></h3>
-                </div>
+            <div className="stats-grid five-cols animate-card-entrance" style={{ marginBottom: '8px', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '8px' }}>
+                {[
+                    { id: 'ALL', label: 'TỔNG SỐ NGOẠI LỆ', value: stats.total, iconBg: '#FAF6F0', iconColor: '#7B5233', themeColor: '#7B5233', activeBg: '#FAF6F0', Icon: Layers },
+                    { id: 'LECH_THIEU', label: 'LỆCH THIỆU', value: stats.lechThieu, iconBg: '#FFF1F2', iconColor: '#EF4444', themeColor: '#EF4444', activeBg: '#FFF5F6', Icon: ArrowDownRight },
+                    { id: 'LECH_THUA', label: 'LỆCH THỪA', value: stats.lechThua, iconBg: '#EBF5FF', iconColor: '#3B82F6', themeColor: '#3B82F6', activeBg: '#F4F9FF', Icon: ArrowUpRight },
+                    { id: 'TRA_HANG', label: 'TRẢ HÀNG QC', value: stats.traHang, iconBg: '#FFFBEB', iconColor: '#D97706', themeColor: '#D97706', activeBg: '#FFFDF5', Icon: Undo2 },
+                    { id: 'LOI_QC', label: 'LỖI ĐÁNH GIÁ QC', value: stats.loiQC, iconBg: '#F5F3FF', iconColor: '#8B5CF6', themeColor: '#8B5CF6', activeBg: '#FAF8FF', Icon: AlertCircle },
+                ].map((stat) => {
+                    const isActive = filterType === stat.id;
+                    return (
+                        <div 
+                            key={stat.id} 
+                            onClick={() => { setFilterType(stat.id); setCurrentPage(1); }}
+                            className="kpi-card"
+                            style={{ 
+                                background: isActive ? stat.activeBg : '#fff', 
+                                border: '1px solid ' + (isActive ? stat.themeColor : '#E2E8F0'),
+                                padding: '8px 12px', 
+                                borderRadius: '10px', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '8px',
+                                boxShadow: isActive ? `0 0 0 2px ${stat.themeColor}20` : '0 1px 2px rgba(0,0,0,0.01)',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            <div style={{
+                                width: '32px', 
+                                height: '32px', 
+                                borderRadius: '8px',
+                                backgroundColor: stat.iconBg,
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                color: stat.iconColor, 
+                                flexShrink: 0
+                            }}>
+                                <stat.Icon size={18} />
+                            </div>
+                            <div>
+                                <div style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: '700', letterSpacing: '0.05em' }}>{stat.label}</div>
+                                <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0F172A', lineHeight: '1.2' }}>
+                                    {new Intl.NumberFormat('vi-VN').format(stat.value)}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
 
             {/* Bộ Lọc & Tìm Kiếm */}
@@ -299,7 +270,7 @@ const ExceptionDeliveries = () => {
 
             {/* Nội Dung Bảng */}
             <div className="admin-list-layout">
-                <div className="mgmt-table admin-table-card" style={{ background: 'white', border: '1px solid #EFEBE9', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+                <div className="mgmt-table card admin-table-card">
                 {loading ? (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 0', gap: '16px' }}>
                         <RefreshCw size={36} className="animate-spin" style={{ color: '#7B5233' }} />
@@ -312,9 +283,8 @@ const ExceptionDeliveries = () => {
                         <p style={{ fontSize: '13px', color: '#8D6E63', margin: 0 }}>Mọi phiếu giao nhận đều khớp số lượng và đạt tiêu chuẩn chất lượng</p>
                     </div>
                 ) : (
-                    <div className="admin-table-scroll">
-                        <div className="table-responsive">
-                            <table className="manufacture-table">
+                    <div className="table-responsive admin-table-scroll">
+                        <table className="manufacture-table data-table">
                                 <thead>
                                     <tr>
                                         <th>ID</th>
@@ -442,8 +412,7 @@ const ExceptionDeliveries = () => {
                                     })}
                                 </tbody>
                             </table>
-                    </div>
-
+                    
                     {/* Phân Trang - Desktop */}
                     {totalPages > 1 && (
                         <div className="admin-pagination-desktop desktop-only">
@@ -490,7 +459,7 @@ const ExceptionDeliveries = () => {
                             </button>
                         </div>
                     )}
-                </div>
+                    </div>
                 )}
                 </div>
             </div>

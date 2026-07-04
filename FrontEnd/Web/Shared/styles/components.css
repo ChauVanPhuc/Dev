@@ -479,22 +479,26 @@
 .action-btn {
   background: none;
   border: none;
-  font-size: 1.2rem;
+  outline: none;
   cursor: pointer;
   color: #9CA3AF;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+
+.action-btn:focus {
+  outline: none;
 }
 
 .action-btn:hover {
   color: #7B5233;
   background: #FAF6F0;
-  transform: rotate(90deg);
 }
 
 .actions-cell {
@@ -506,19 +510,20 @@
 
 .action-menu {
   position: absolute;
-  right: 100%;
-  top: 0;
+  right: 0;
+  top: calc(100% + 4px);
   background: white;
   border: 1px solid #EADCC9;
   border-radius: 10px;
-  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
+  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.12), 0 4px 10px rgba(0,0,0,0.06);
   min-width: 160px;
   z-index: 1000;
   padding: 6px 0;
   opacity: 0;
-  transform: translateY(-5px);
-  animation: dropdownFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform: translateY(-4px);
+  animation: dropdownFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
 
 .action-menu-item {
   display: block;
@@ -1562,6 +1567,8 @@ tbody tr:nth-child(10) { animation-delay: 0.3s !important; }
     top: 10px;
     display: flex;
     gap: 4px;
+    z-index: 10;
+    overflow: visible;
   }
 
   .mgmt-card-footer {
@@ -1643,6 +1650,11 @@ tbody tr:nth-child(10) { animation-delay: 0.3s !important; }
         flex: 1;
         height: auto !important;
         min-height: 0;
+    }
+    .manufacture-plan-container .mgmt-toolbar {
+        padding: 8px 16px !important;
+        gap: 10px !important;
+        margin-bottom: 4px !important;
     }
 }
 
@@ -2523,8 +2535,8 @@ tbody tr:nth-child(10) { animation-delay: 0.3s !important; }
 .sticky-top-zone {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 16px;
+    gap: 6px;
+    padding: 10px 16px 2px;
 }
 
 @media (max-width: 768px) {

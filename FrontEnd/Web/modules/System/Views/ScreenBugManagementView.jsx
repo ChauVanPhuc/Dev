@@ -5,7 +5,7 @@ import { useWebSocket } from '@shared/hooks/useWebSocket';
 import api, { API_ROOT } from '@webShared/Services/api.service';
 import { 
   Search, Filter, Plus, Trash2, Edit3, CheckCircle, Clock, AlertCircle, 
-  X, RefreshCw, Layers, ShieldAlert, Monitor, Phone
+  X, RefreshCw, Layers, ShieldAlert, Monitor, Phone, Clipboard, FolderOpen
 } from 'lucide-react';
 import '@styles/components.css';
 
@@ -82,6 +82,17 @@ const ScreenBugManagementView = () => {
   const [proofImages, setProofImages] = useState([]);
   const [activeLightboxUrl, setActiveLightboxUrl] = useState(null);
   const [editModalMode, setEditModalMode] = useState('view'); // 'view' | 'edit'
+  const [actionMenuId, setActionMenuId] = useState(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (!e.target.closest('.action-btn') && !e.target.closest('.action-menu')) {
+        setActionMenuId(null);
+      }
+    };
+    document.addEventListener('click', handleOutsideClick);
+    return () => document.removeEventListener('click', handleOutsideClick);
+  }, []);
   
   // Form states
   const [addForm, setAddForm] = useState({
@@ -110,21 +121,69 @@ const ScreenBugManagementView = () => {
   };
 
   const handlePasteImage = async (e, setImagesList) => {
-    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    const clipboardData = e.clipboardData || (e.nativeEvent && e.nativeEvent.clipboardData);
+    if (!clipboardData) return;
+    const items = clipboardData.items;
+    const files = [];
     for (let i = 0; i < items.length; i++) {
       if (items[i].type.indexOf('image') !== -1) {
         const file = items[i].getAsFile();
-        try {
-          showToast('Đang tải ảnh từ clipboard...', 'success');
-          const res = await bugService.uploadImage(file);
-          if (res && res.url) {
-            setImagesList(prev => [...prev, res.url]);
-            showToast('Đã dán ảnh thành công!');
+        if (file) files.push(file);
+      }
+    }
+
+    if (files.length === 0) return;
+
+    for (const file of files) {
+      try {
+        showToast('Đang tải ảnh từ clipboard...', 'success');
+        const res = await bugService.uploadImage(file);
+        if (res && res.url) {
+          setImagesList(prev => [...prev, res.url]);
+          showToast('Đã dán ảnh thành công!');
+        }
+      } catch (error) {
+        console.error('Lỗi tải ảnh từ clipboard:', error);
+        showToast('Tải ảnh từ clipboard thất bại!', 'error');
+      }
+    }
+  };
+
+  const handlePasteFromClipboardAPI = async (setImagesList) => {
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.read) {
+        showToast('Nút dán yêu cầu kết nối bảo mật (HTTPS hoặc localhost) do chính sách bảo mật trình duyệt. Hãy nhấn Ctrl+V để dán ảnh trực tiếp!', 'error');
+        return;
+      }
+      showToast('Đang yêu cầu quyền truy cập clipboard...', 'info');
+      const clipboardItems = await navigator.clipboard.read();
+      const files = [];
+      for (const item of clipboardItems) {
+        for (const type of item.types) {
+          if (type.startsWith('image/')) {
+            const blob = await item.getType(type);
+            const file = new File([blob], 'clipboard-image.png', { type });
+            files.push(file);
           }
-        } catch (error) {
-          showToast('Tải ảnh từ clipboard thất bại!', 'error');
         }
       }
+
+      if (files.length === 0) {
+        showToast('Không tìm thấy hình ảnh nào trong bảng nhớ tạm!', 'warn');
+        return;
+      }
+
+      for (const file of files) {
+        showToast('Đang tải ảnh từ bộ nhớ tạm...', 'success');
+        const res = await bugService.uploadImage(file);
+        if (res && res.url) {
+          setImagesList(prev => [...prev, res.url]);
+          showToast('Đã dán ảnh từ bộ nhớ tạm thành công!');
+        }
+      }
+    } catch (err) {
+      console.error('Lỗi khi đọc clipboard:', err);
+      showToast('Không thể đọc bảng nhớ tạm. Vui lòng cho phép quyền truy cập clipboard khi trình duyệt yêu cầu.', 'error');
     }
   };
 
@@ -482,20 +541,23 @@ const ScreenBugManagementView = () => {
 
   // Badge rendering helpers
   const renderSeverityBadge = (severity) => {
-    let bgColor = '#FFF1F2';
-    let textColor = '#E11D48';
-    let border = '1px solid #FFE4E6';
+    let bgColor = '#FFFBEB';
+    let textColor = '#7B5233';
+    let border = '1px solid #EADCC9';
     let textVi = severity;
     
     if (severity === 'Critical') {
+      bgColor = '#FEF2F2';
+      textColor = '#EF4444';
+      border = '1px solid #FCA5A5';
       textVi = 'Khẩn cấp';
     } else if (severity === 'High') {
-      bgColor = '#FFEDD5';
-      textColor = '#EA580C';
-      border = '1px solid #FFEDD5';
+      bgColor = '#FEF2F2';
+      textColor = '#EF4444';
+      border = '1px solid #FCA5A5';
       textVi = 'Cao';
     } else if (severity === 'Medium') {
-      bgColor = '#FEF3C7';
+      bgColor = '#FFFBEB';
       textColor = '#D97706';
       border = '1px solid #FDE68A';
       textVi = 'Trung bình';
@@ -510,10 +572,10 @@ const ScreenBugManagementView = () => {
       <span style={{
         display: 'inline-flex',
         alignItems: 'center',
-        padding: '4px 10px',
-        borderRadius: '20px',
+        padding: '3px 10px',
+        borderRadius: '12px',
         fontSize: '0.75rem',
-        fontWeight: 'bold',
+        fontWeight: '700',
         backgroundColor: bgColor,
         color: textColor,
         border: border
@@ -525,7 +587,8 @@ const ScreenBugManagementView = () => {
 
   const renderStatusBadge = (status) => {
     let bgColor = '#EFF6FF';
-    let textColor = '#2563EB';
+    let textColor = '#3B82F6';
+    let border = '1px solid #BFDBFE';
     let textVi = status;
     
     if (status === 'New') {
@@ -533,14 +596,17 @@ const ScreenBugManagementView = () => {
     } else if (status === 'In Progress') {
       bgColor = '#FFFBEB';
       textColor = '#D97706';
+      border = '1px solid #FDE68A';
       textVi = 'Đang xử lý';
     } else if (status === 'Resolved') {
       bgColor = '#ECFDF5';
-      textColor = '#059669';
+      textColor = '#10B981';
+      border = '1px solid #A7F3D0';
       textVi = 'Đã sửa';
     } else if (status === 'Verified') {
       bgColor = '#F0FDF4';
       textColor = '#15803D';
+      border = '1px solid #BBF7D0';
       textVi = 'Đã xác nhận';
     }
 
@@ -548,17 +614,15 @@ const ScreenBugManagementView = () => {
       <span style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: '4px',
-        padding: '4px 10px',
-        borderRadius: '8px',
+        padding: '3px 10px',
+        borderRadius: '12px',
         fontSize: '0.75rem',
-        fontWeight: 'bold',
+        fontWeight: '700',
         backgroundColor: bgColor,
-        color: textColor
+        color: textColor,
+        border: border,
+        whiteSpace: 'nowrap'
       }}>
-        {status === 'New' && <Clock size={12} />}
-        {status === 'In Progress' && <RefreshCw size={12} className="spin-icon" />}
-        {(status === 'Resolved' || status === 'Verified') && <CheckCircle size={12} />}
         {textVi}
       </span>
     );
@@ -706,254 +770,245 @@ const ScreenBugManagementView = () => {
         </div>
 
         {/* Search and Filters Toolbar - Span 100% width at top */}
-        <div className="qr-toolbar" style={{ 
+        <div className="mgmt-toolbar card filter-pagination-toolbar" style={{ 
             display: 'flex', 
-            flexDirection: 'column',
-            alignItems: 'stretch',
+            flexWrap: 'wrap',
+            alignItems: 'center',
             gap: '8px',
-            padding: '8px 12px', 
-            background: '#fff', 
-            borderRadius: '10px',
-            border: '1px solid #E2E8F0',
-            marginBottom: '8px',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.01)',
+            padding: '10px 15px', 
+            marginBottom: '12px',
             width: '100%',
-            boxSizing: 'border-box'
+            boxSizing: 'border-box',
+            backgroundColor: '#fff',
+            borderRadius: '12px',
+            border: '1px solid #EADCC9'
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', width: '100%' }}>
-            <div className="search-box" style={{ flex: 1, minWidth: '240px', position: 'relative' }}>
-              <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8', display: 'flex', alignItems: 'center' }}>
-                <Search size={14} />
-              </span>
-              <input 
-                type="text" 
-                className="form-control"
-                placeholder="Tìm theo nội dung, mã màn hình, người xử lý..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                style={{ 
-                  paddingLeft: '32px', 
-                  height: '32px', 
-                  borderRadius: '8px', 
-                  border: '1px solid #E2E8F0',
-                  outline: 'none',
-                  fontSize: '0.78rem',
-                  width: '100%',
-                  boxSizing: 'border-box',
-                  transition: 'all 0.2s'
-                }}
-                onFocus={(e) => e.currentTarget.style.borderColor = '#6366F1'}
-                onBlur={(e) => e.currentTarget.style.borderColor = '#E2E8F0'}
-              />
-            </div>
-
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-              {/* Platform tabs */}
-              <div className="platform-tabs" style={{ 
-                display: 'flex', 
-                gap: '2px', 
-                background: '#F1F5F9', 
-                padding: '2px', 
-                borderRadius: '6px',
-                border: '1px solid #E2E8F0'
-              }}>
-                <button 
-                  className={`tab-btn ${platformFilter === 'All' ? 'active' : ''}`}
-                  onClick={() => setPlatformFilter('All')}
-                  style={{ 
-                    height: '24px', 
-                    padding: '0 10px', 
-                    fontSize: '0.7rem', 
-                    borderRadius: '4px', 
-                    border: 'none', 
-                    cursor: 'pointer',
-                    fontWeight: '600',
-                    transition: 'all 0.2s',
-                    backgroundColor: platformFilter === 'All' ? '#fff' : 'transparent',
-                    color: platformFilter === 'All' ? '#0F172A' : '#64748B',
-                    boxShadow: platformFilter === 'All' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'
-                  }}
-                >
-                  Tất cả
-                </button>
-                <button 
-                  className={`tab-btn ${platformFilter === 'Web' ? 'active' : ''}`}
-                  onClick={() => setPlatformFilter('Web')}
-                  style={{ 
-                    height: '24px', 
-                    padding: '0 10px', 
-                    fontSize: '0.7rem', 
-                    borderRadius: '4px', 
-                    border: 'none', 
-                    cursor: 'pointer',
-                    fontWeight: '600',
-                    transition: 'all 0.2s',
-                    backgroundColor: platformFilter === 'Web' ? '#fff' : 'transparent',
-                    color: platformFilter === 'Web' ? '#0F172A' : '#64748B',
-                    boxShadow: platformFilter === 'Web' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'
-                  }}
-                >
-                  Web
-                </button>
-                <button 
-                  className={`tab-btn ${platformFilter === 'Mobile' ? 'active' : ''}`}
-                  onClick={() => setPlatformFilter('Mobile')}
-                  style={{ 
-                    height: '24px', 
-                    padding: '0 10px', 
-                    fontSize: '0.7rem', 
-                    borderRadius: '4px', 
-                    border: 'none', 
-                    cursor: 'pointer',
-                    fontWeight: '600',
-                    transition: 'all 0.2s',
-                    backgroundColor: platformFilter === 'Mobile' ? '#fff' : 'transparent',
-                    color: platformFilter === 'Mobile' ? '#0F172A' : '#64748B',
-                    boxShadow: platformFilter === 'Mobile' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'
-                  }}
-                >
-                  Mobile
-                </button>
-              </div>
-
-              {/* Bug Report Button */}
-              <button 
-                onClick={() => setShowAddModal(true)}
-                style={{
-                  backgroundColor: '#4F46E5',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '0 12px',
-                  height: '32px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  fontWeight: '600',
-                  fontSize: '0.78rem',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  boxShadow: '0 1px 2px rgba(79, 70, 229, 0.15)'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4338CA'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4F46E5'}
-              >
-                <Plus size={14} /> Báo cáo Bug
-              </button>
-            </div>
+          {/* 1. Search input */}
+          <div className="search-wrapper" style={{ flex: 2, minWidth: '220px', position: 'relative' }}>
+            <Search size={16} className="search-icon" style={{ color: '#7B5233', position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }} />
+            <input 
+              type="text" 
+              placeholder="Tìm theo nội dung, mã màn hình, người xử lý..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ 
+                paddingLeft: '36px', 
+                height: '38px', 
+                borderRadius: '8px', 
+                border: '1px solid #EADCC9',
+                backgroundColor: '#FAF6F0',
+                color: '#2D1A12',
+                outline: 'none',
+                fontSize: '0.82rem',
+                width: '100%',
+                boxSizing: 'border-box',
+                transition: 'all 0.2s',
+                fontWeight: '600'
+              }}
+              onFocus={(e) => e.currentTarget.style.borderColor = '#7B5233'}
+              onBlur={(e) => e.currentTarget.style.borderColor = '#EADCC9'}
+            />
           </div>
 
-          {/* Sub Filter dropdown row */}
-          <div className="sub-filter-row" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', borderTop: '1px solid #F1F5F9', paddingTop: '8px', alignItems: 'center' }}>
-            <div className="sub-filter-item" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: '600' }}>Trạng thái:</span>
-              <select 
-                value={statusFilter} 
-                onChange={(e) => setStatusFilter(e.target.value)}
-                style={{
-                  height: '28px',
-                  padding: '0 6px',
-                  borderRadius: '6px',
-                  fontSize: '0.76rem',
-                  border: '1px solid #E2E8F0',
-                  backgroundColor: '#fff',
-                  color: '#334155',
-                  outline: 'none',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.01)',
-                  cursor: 'pointer'
-                }}
-              >
-                <option value="Unverified">Chưa xác nhận</option>
-                <option value="All">Tất cả</option>
-                <option value="New">Mới</option>
-                <option value="In Progress">Đang xử lý</option>
-                <option value="Resolved">Đã sửa</option>
-                <option value="Verified">Đã xác nhận</option>
-              </select>
-            </div>
-
-            <div className="sub-filter-item" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: '600' }}>Mức độ:</span>
-              <select 
-                value={severityFilter} 
-                onChange={(e) => setSeverityFilter(e.target.value)}
-                style={{
-                  height: '28px',
-                  padding: '0 6px',
-                  borderRadius: '6px',
-                  fontSize: '0.76rem',
-                  border: '1px solid #E2E8F0',
-                  backgroundColor: '#fff',
-                  color: '#334155',
-                  outline: 'none',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.01)',
-                  cursor: 'pointer'
-                }}
-              >
-                <option value="All">Tất cả</option>
-                <option value="Critical">Khẩn cấp</option>
-                <option value="High">Cao</option>
-                <option value="Medium">Trung bình</option>
-                <option value="Low">Thấp</option>
-              </select>
-            </div>
-
-            <div className="sub-filter-item" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: '600' }}>Dự kiến:</span>
-              <input 
-                type="date"
-                value={expectedDateFilter}
-                onChange={(e) => setExpectedDateFilter(e.target.value)}
-                style={{
-                  height: '28px',
-                  padding: '0 6px',
-                  borderRadius: '6px',
-                  fontSize: '0.76rem',
-                  border: '1px solid #E2E8F0',
-                  backgroundColor: '#fff',
-                  color: '#334155',
-                  outline: 'none',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.01)',
-                  cursor: 'pointer'
-                }}
-              />
-            </div>
-
-            <button 
-              className="reset-filter-btn"
-              onClick={() => {
-                setSearchQuery('');
-                setPlatformFilter('All');
-                setStatusFilter('Unverified');
-                setSeverityFilter('All');
-                setExpectedDateFilter('');
-              }}
+          {/* 2. Status filter */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <span style={{ fontSize: '0.65rem', color: '#8c6a51', fontWeight: '700', marginLeft: '4px' }}>Trạng thái</span>
+            <select 
+              value={statusFilter} 
+              onChange={(e) => setStatusFilter(e.target.value)}
               style={{
-                background: 'none',
-                border: 'none',
-                color: '#6366F1',
-                fontSize: '0.7rem',
+                height: '38px',
+                padding: '0 12px',
+                borderRadius: '8px',
+                fontSize: '0.82rem',
+                border: '1px solid #EADCC9',
+                backgroundColor: '#FAF6F0',
+                color: '#7B5233',
                 fontWeight: '600',
+                outline: 'none',
                 cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '3px',
-                marginLeft: 'auto',
-                padding: '4px 8px',
-                borderRadius: '4px',
-                transition: 'all 0.2s'
+                minWidth: '130px'
               }}
             >
-              <RefreshCw size={10} /> Đặt lại bộ lọc
-            </button>
+              <option value="Unverified">Chưa xác nhận</option>
+              <option value="All">Tất cả trạng thái</option>
+              <option value="New">Mới</option>
+              <option value="In Progress">Đang xử lý</option>
+              <option value="Resolved">Đã sửa</option>
+              <option value="Verified">Đã xác nhận</option>
+            </select>
           </div>
+
+          {/* 3. Severity filter */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <span style={{ fontSize: '0.65rem', color: '#8c6a51', fontWeight: '700', marginLeft: '4px' }}>Mức độ</span>
+            <select 
+              value={severityFilter} 
+              onChange={(e) => setSeverityFilter(e.target.value)}
+              style={{
+                height: '38px',
+                padding: '0 12px',
+                borderRadius: '8px',
+                fontSize: '0.82rem',
+                border: '1px solid #EADCC9',
+                backgroundColor: '#FAF6F0',
+                color: '#7B5233',
+                fontWeight: '600',
+                outline: 'none',
+                cursor: 'pointer',
+                minWidth: '110px'
+              }}
+            >
+              <option value="All">Tất cả mức độ</option>
+              <option value="Critical">Khẩn cấp</option>
+              <option value="High">Cao</option>
+              <option value="Medium">Trung bình</option>
+              <option value="Low">Thấp</option>
+            </select>
+          </div>
+
+          {/* 4. Expected Date filter */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <span style={{ fontSize: '0.65rem', color: '#8c6a51', fontWeight: '700', marginLeft: '4px' }}>Dự kiến</span>
+            <input 
+              type="date"
+              value={expectedDateFilter}
+              onChange={(e) => setExpectedDateFilter(e.target.value)}
+              style={{
+                height: '38px',
+                padding: '0 12px',
+                borderRadius: '8px',
+                fontSize: '0.82rem',
+                border: '1px solid #EADCC9',
+                backgroundColor: '#FAF6F0',
+                color: '#7B5233',
+                fontWeight: '600',
+                outline: 'none',
+                cursor: 'pointer',
+                minWidth: '130px'
+              }}
+            />
+          </div>
+
+          {/* 5. Page size select */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <span style={{ fontSize: '0.65rem', color: '#8c6a51', fontWeight: '700', marginLeft: '4px' }}>Hiển thị dòng</span>
+            <select 
+              value={pageSize} 
+              onChange={(e) => setPageSize(parseInt(e.target.value))}
+              style={{
+                height: '38px',
+                padding: '0 12px',
+                borderRadius: '8px',
+                fontSize: '0.82rem',
+                border: '1px solid #EADCC9',
+                backgroundColor: '#FAF6F0',
+                color: '#7B5233',
+                fontWeight: '600',
+                outline: 'none',
+                cursor: 'pointer',
+                minWidth: '100px'
+              }}
+            >
+              <option value={10}>10 dòng</option>
+              <option value={15}>15 dòng</option>
+              <option value={30}>30 dòng</option>
+              <option value={50}>50 dòng</option>
+            </select>
+          </div>
+
+          {/* 6. Platform select dropdown (converted from tabs) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <span style={{ fontSize: '0.65rem', color: '#8c6a51', fontWeight: '700', marginLeft: '4px' }}>Nền tảng</span>
+            <select
+              value={platformFilter}
+              onChange={(e) => setPlatformFilter(e.target.value)}
+              style={{
+                height: '38px',
+                padding: '0 12px',
+                borderRadius: '8px',
+                fontSize: '0.82rem',
+                border: '1px solid #EADCC9',
+                backgroundColor: '#FAF6F0',
+                color: '#7B5233',
+                fontWeight: '600',
+                outline: 'none',
+                cursor: 'pointer',
+                minWidth: '110px'
+              }}
+            >
+              <option value="All">Tất cả</option>
+              <option value="Web">Web</option>
+              <option value="Mobile">Mobile</option>
+            </select>
+          </div>
+
+          {/* 7. Reset filters */}
+          <button 
+            className="reset-filter-btn"
+            onClick={() => {
+              setSearchQuery('');
+              setPlatformFilter('All');
+              setStatusFilter('Unverified');
+              setSeverityFilter('All');
+              setExpectedDateFilter('');
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#7B5233',
+              fontSize: '0.8rem',
+              fontWeight: '700',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '4px',
+              height: '38px',
+              padding: '0 8px',
+              borderRadius: '6px',
+              transition: 'all 0.2s',
+              marginTop: '14px'
+            }}
+            title="Đặt lại bộ lọc"
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF6F0'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          >
+            <RefreshCw size={14} />
+          </button>
+
+          {/* 8. Bug Report button */}
+          <button 
+            onClick={() => setShowAddModal(true)}
+            style={{
+              backgroundColor: '#7B5233',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '0 16px',
+              height: '38px',
+              display: 'flex',
+              alignItems: 'center',
+              fontWeight: '700',
+              fontSize: '0.82rem',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              boxShadow: '0 1px 2px rgba(123, 82, 51, 0.15)',
+              marginTop: '14px',
+              marginLeft: 'auto'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#634229'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#7B5233'}
+          >
+            Báo cáo Bug
+          </button>
         </div>
 
         {/* Container Flex chia đôi Master-Detail */}
         <div style={{ display: 'flex', gap: '10px', alignItems: 'stretch', width: '100%', flex: 1, minHeight: 0, overflow: 'hidden' }}>
           
           {/* Master List (Bên trái: Bảng danh sách) */}
-          <div style={{ 
+          <div className="admin-list-layout" style={{ 
             flex: selectedBug ? '0 0 calc(40% - 10px)' : '1 1 100%', 
             maxWidth: selectedBug ? '40%' : '100%', 
             width: selectedBug ? 'calc(40% - 10px)' : '100%',
@@ -967,7 +1022,7 @@ const ScreenBugManagementView = () => {
             overflow: 'hidden'
           }}>
             {/* Table Container */}
-            <div className="table-responsive" style={{ background: '#fff', borderRadius: '16px', border: '1px solid #E2E8F0', overflow: 'hidden', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+            <div className="mgmt-table card admin-table-card" style={{ boxShadow: '0 4px 12px rgba(123, 82, 51, 0.08)', borderRadius: '16px', overflow: 'hidden', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
               {loading ? (
                 <div style={{ padding: '60px 40px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', color: '#7B5233', fontWeight: 'bold' }}>
                   <RefreshCw size={28} className="spin-icon" style={{ color: '#7B5233' }} />
@@ -980,216 +1035,213 @@ const ScreenBugManagementView = () => {
                 </div>
               ) : (
                 <>
-                  <div style={{ flex: 1, overflowY: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                  <div className="table-responsive admin-table-scroll" style={{ flex: 1, overflowY: 'auto' }}>
+                    <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                       <thead>
-                        <tr style={{ position: 'sticky', top: 0, backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', zIndex: 1 }}>
-                          <th style={{ position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 1, padding: '12px 16px' }}>Màn hình</th>
-                          <th style={{ position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 1, padding: '12px 16px' }}>Nội dung bug</th>
-                          <th style={{ position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 1, padding: '12px 16px', width: selectedBug ? '90px' : '110px' }}>Mức độ</th>
-                          <th style={{ position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 1, padding: '12px 16px', width: selectedBug ? '100px' : '130px' }}>Tiến độ</th>
-                          {!selectedBug && <th style={{ position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 1, padding: '12px 16px' }}>Nhân sự (Báo / Sửa)</th>}
-                          {!selectedBug && <th style={{ position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 1, padding: '12px 16px' }}>Ngày ghi nhận</th>}
-                          {!selectedBug && <th style={{ position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 1, padding: '12px 16px' }}>Hoàn thành dự kiến</th>}
-                          {!selectedBug && <th style={{ position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 1, padding: '12px 16px' }}>Ngày hoàn thành</th>}
-                          {!selectedBug && <th style={{ position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 1, padding: '12px 16px', textAlign: 'center', width: '120px' }}>Thao tác</th>}
+                        <tr style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', borderBottom: '2px solid #EADCC9', color: '#7B5233', fontSize: '0.8rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', zIndex: 1 }}>
+                          <th style={{ padding: '12px 16px' }}>Màn hình</th>
+                          <th style={{ padding: '12px 16px' }}>Nội dung bug</th>
+                          <th style={{ padding: '12px 16px', width: selectedBug ? '90px' : '110px' }}>Mức độ</th>
+                          <th style={{ padding: '12px 16px', width: selectedBug ? '100px' : '130px' }}>Tiến độ</th>
+                          {!selectedBug && <th style={{ padding: '12px 16px' }}>Nhân sự (Báo / Sửa)</th>}
+                          {!selectedBug && <th style={{ padding: '12px 16px' }}>Ngày ghi nhận</th>}
+                          {!selectedBug && <th style={{ padding: '12px 16px' }}>Hoàn thành dự kiến</th>}
+                          {!selectedBug && <th style={{ padding: '12px 16px' }}>Ngày hoàn thành</th>}
+                          {!selectedBug && <th style={{ padding: '12px 16px', textAlign: 'center', width: '120px' }}>Thao tác</th>}
                         </tr>
                       </thead>
-                    <tbody>
-                      {paginatedBugs.map((bug) => (
-                        <tr 
-                          key={bug.id} 
-                          onClick={() => handleRowClick(bug)}
-                          style={{ 
-                            borderBottom: '1px solid #F1F5F9', 
-                            fontSize: '0.85rem', 
-                            transition: 'all 0.2s', 
-                            cursor: 'pointer',
-                            backgroundColor: selectedBug && selectedBug.id === bug.id ? '#F1F5F9' : 'transparent',
-                            borderLeft: selectedBug && selectedBug.id === bug.id ? '4px solid #4F46E5' : '4px solid transparent'
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!selectedBug || selectedBug.id !== bug.id) {
-                              e.currentTarget.style.backgroundColor = '#F8FAFC';
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!selectedBug || selectedBug.id !== bug.id) {
-                              e.currentTarget.style.backgroundColor = 'transparent';
-                            }
-                          }}
-                        >
-                          <td style={{ padding: selectedBug ? '10px 12px' : '16px' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  padding: '2px 6px',
-                                  borderRadius: '4px',
-                                  fontSize: '0.65rem',
-                                  fontWeight: 'bold',
-                                  color: '#fff',
-                                  backgroundColor: bug.platform === 'Web' ? '#3B82F6' : '#EC4899'
-                                }}>
-                                  {bug.platform === 'Web' ? <Monitor size={10} style={{ marginRight: '2px' }} /> : <Phone size={10} style={{ marginRight: '2px' }} />}
-                                  {bug.platform.toUpperCase()}
-                                </span>
-                                <strong style={{ fontFamily: 'monospace', color: '#0F172A' }}>{bug.screen_code}</strong>
-                              </div>
-                              {!selectedBug && (
-                                <span style={{ fontSize: '0.75rem', color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px' }} title={bug.screen_title}>
-                                    {bug.screen_title}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td style={{ padding: selectedBug ? '10px 12px' : '16px', maxWidth: selectedBug ? '150px' : '260px' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                              <div style={{ fontWeight: '500', color: '#334155', wordBreak: 'break-word', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                {(() => {
-                                  const { tag, text } = parseDescription(bug.description);
-                                  return (
-                                    <>
-                                      {tag && (
-                                        <span style={{
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          padding: '2px 6px',
-                                          borderRadius: '4px',
-                                          fontSize: '0.65rem',
-                                          fontWeight: 'bold',
-                                          color: '#4F46E5',
-                                          backgroundColor: '#EEF2FF',
-                                          border: '1px solid #E0E7FF'
-                                        }}>
-                                          {tag}
-                                        </span>
-                                      )}
-                                      <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: selectedBug ? '100px' : '200px' }} title={text}>{text}</span>
-                                    </>
-                                  );
-                                })()}
-                              </div>
-                              {!selectedBug && bug.notes && (
-                                <div style={{ fontSize: '0.7rem', color: '#D97706', fontStyle: 'italic', backgroundColor: '#FFFBEB', padding: '4px 8px', borderRadius: '4px', marginTop: '2px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '200px' }} title={bug.notes}>
-                                  <strong>Ghi chú:</strong> {bug.notes}
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                          <td style={{ padding: selectedBug ? '10px 12px' : '16px' }}>{renderSeverityBadge(bug.severity)}</td>
-                          <td style={{ padding: selectedBug ? '10px 12px' : '16px' }}>{renderStatusBadge(bug.status)}</td>
-                          {!selectedBug && (
-                            <td style={{ padding: '16px' }}>
-                              <div style={{ fontSize: '0.78rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                <div style={{ color: '#4B5563', whiteSpace: 'nowrap' }} title="Người báo cáo">✍️ {bug.reporter || 'Chưa rõ'}</div>
-                                <div style={{ color: '#7B5233', fontWeight: 'bold', whiteSpace: 'nowrap' }} title="Người xử lý">🛠️ {bug.assignee || 'Chưa phân công'}</div>
-                              </div>
-                            </td>
-                          )}
-                          {!selectedBug && <td style={{ padding: '16px', color: '#4B5563' }}>{formatDate(bug.created_at)}</td>}
-                          {!selectedBug && <td style={{ padding: '16px', color: '#4B5563' }}>{formatDate(bug.requested_at)}</td>}
-                          {!selectedBug && (
-                            <td style={{ padding: '16px', color: '#059669', fontWeight: bug.completed_at ? 'bold' : 'normal' }}>
-                              {formatDate(bug.completed_at)}
-                            </td>
-                          )}
-                          {!selectedBug && (
-                            <td style={{ padding: '16px', textAlign: 'center' }}>
-                              <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleEditClick(bug);
-                                  }}
-                                  style={{ 
-                                    border: 'none', 
-                                    background: '#FEF3C7', 
-                                    color: '#D97706', 
-                                    padding: '6px 10px', 
-                                    borderRadius: '6px', 
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '4px',
-                                    fontWeight: 'bold',
-                                    fontSize: '0.75rem'
-                                  }}
-                                  title="Cập nhật tiến độ"
-                                >
-                                  <Edit3 size={12} /> Sửa
-                                </button>
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeleteClick(bug);
-                                  }}
-                                  style={{ 
-                                    border: 'none', 
-                                    background: '#FEE2E2', 
-                                    color: '#DC2626', 
-                                    padding: '6px 10px', 
-                                    borderRadius: '6px', 
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '4px',
-                                    fontWeight: 'bold',
-                                    fontSize: '0.75rem'
-                                  }}
-                                  title="Xóa lỗi này"
-                                >
-                                  <Trash2 size={12} /> Xóa
-                                </button>
-                              </div>
-                            </td>
-                          )}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Pagination */}
-                {totalPages > 1 && (
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '12px 20px',
-                      borderTop: '1px solid #E5E7EB',
-                      backgroundColor: '#fff'
-                    }}>
-                      <div style={{ color: '#6B7280', fontSize: '0.75rem' }}>
-                        Hiển thị <b>{paginatedBugs.length}</b> trên <b>{filteredBugs.length}</b> kết quả
-                      </div>
-                      <div style={{ display: 'flex', gap: '5px' }}>
-                        <button 
-                          disabled={currentPage === 1} 
-                          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
-                          style={{ border: '1px solid #D1D5DB', padding: '5px 10px', borderRadius: '6px', backgroundColor: '#fff', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontSize: '0.75rem' }}
-                        >
-                          Trước
-                        </button>
-                        {[...Array(totalPages)].map((_, i) => (
-                          <button
-                            key={i}
-                            onClick={() => setCurrentPage(i + 1)}
-                            style={{
-                              border: '1px solid #D1D5DB',
-                              padding: '5px 10px',
-                              borderRadius: '6px',
-                              backgroundColor: currentPage === i + 1 ? '#7B5233' : '#fff',
-                              color: currentPage === i + 1 ? '#fff' : '#374151',
-                              fontWeight: currentPage === i + 1 ? 'bold' : 'normal',
+                      <tbody>
+                        {paginatedBugs.map((bug) => (
+                          <tr 
+                            key={bug.id} 
+                            onClick={() => handleRowClick(bug)}
+                            className="animate-card-entrance"
+                            style={{ 
+                              borderBottom: '1px solid #F1F5F9', 
+                              fontSize: '0.85rem', 
+                              transition: 'all 0.2s', 
                               cursor: 'pointer',
-                              fontSize: '0.75rem'
+                              backgroundColor: selectedBug && selectedBug.id === bug.id ? '#F2ECE4 !important' : 'transparent',
+                              borderLeft: selectedBug && selectedBug.id === bug.id ? '4px solid #7B5233 !important' : '4px solid transparent',
+                              position: 'relative',
+                              zIndex: actionMenuId === bug.id ? 30 : 1
                             }}
                           >
-                            {i + 1}
-                          </button>
+                            <td style={{ padding: selectedBug ? '10px 12px !important' : '16px 20px !important' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{
+                                    fontSize: '0.75rem',
+                                    fontWeight: '700',
+                                    color: '#7B5233'
+                                  }}>
+                                    {bug.platform === 'Web' ? 'Web' : 'Mobile'} · 
+                                  </span>
+                                  <strong style={{ fontFamily: 'monospace', color: '#0F172A' }}>{bug.screen_code}</strong>
+                                </div>
+                                {!selectedBug && (
+                                  <span style={{ fontSize: '0.75rem', color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px' }} title={bug.screen_title}>
+                                      {bug.screen_title}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td style={{ padding: selectedBug ? '10px 12px !important' : '16px 20px !important', maxWidth: selectedBug ? '150px' : '260px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <div style={{ fontWeight: '500', color: '#334155', wordBreak: 'break-word', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  {(() => {
+                                    const { tag, text } = parseDescription(bug.description);
+                                    return (
+                                      <>
+                                        {tag && (
+                                          <span style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            padding: '2px 6px',
+                                            borderRadius: '4px',
+                                            fontSize: '0.65rem',
+                                            fontWeight: 'bold',
+                                            color: '#7B5233',
+                                            backgroundColor: '#FAF6F0',
+                                            border: '1px solid #EADCC9'
+                                          }}>
+                                            {tag}
+                                          </span>
+                                        )}
+                                        <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: selectedBug ? '100px' : '200px' }} title={text}>{text}</span>
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                                {!selectedBug && bug.notes && (
+                                  <div style={{ fontSize: '0.7rem', color: '#D97706', fontStyle: 'italic', backgroundColor: '#FFFBEB', padding: '4px 8px', borderRadius: '4px', marginTop: '2px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '200px' }} title={bug.notes}>
+                                    <strong>Ghi chú:</strong> {bug.notes}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                            <td style={{ padding: selectedBug ? '10px 12px !important' : '16px 20px !important' }}>{renderSeverityBadge(bug.severity)}</td>
+                            <td style={{ padding: selectedBug ? '10px 12px !important' : '16px 20px !important' }}>{renderStatusBadge(bug.status)}</td>
+                            {!selectedBug && (
+                              <td style={{ padding: '16px 20px !important' }}>
+                                <div style={{ fontSize: '0.78rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  <div style={{ color: '#4B5563', whiteSpace: 'nowrap' }} title="Người báo cáo">{bug.reporter || 'Chưa rõ'}</div>
+                                  <div style={{ color: '#7B5233', fontWeight: 'bold', whiteSpace: 'nowrap' }} title="Người xử lý">{bug.assignee || 'Chưa phân công'}</div>
+                                </div>
+                              </td>
+                            )}
+                            {!selectedBug && <td style={{ padding: '16px 20px !important', color: '#4B5563' }}>{formatDate(bug.created_at)}</td>}
+                            {!selectedBug && <td style={{ padding: '16px 20px !important', color: '#4B5563' }}>{formatDate(bug.requested_at)}</td>}
+                            {!selectedBug && (
+                              <td style={{ padding: '16px 20px !important', color: '#059669', fontWeight: bug.completed_at ? 'bold' : 'normal' }}>
+                                {formatDate(bug.completed_at)}
+                              </td>
+                            )}
+                            {!selectedBug && (
+                              <td style={{ position: 'relative', zIndex: actionMenuId === bug.id ? 40 : 1, textAlign: 'center' }}>
+                                <button
+                                  className="action-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActionMenuId(actionMenuId === bug.id ? null : bug.id);
+                                  }}
+                                >
+                                  $svgDots
+                                </button>
+                                {actionMenuId === bug.id && (
+                                  <div className="action-menu">
+                                    <button 
+                                      className="action-menu-item" 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActionMenuId(null);
+                                        handleEditClick(bug);
+                                      }}
+                                    >
+                                      Chỉnh sửa
+                                    </button>
+                                    <button 
+                                      className="action-menu-item danger" 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActionMenuId(null);
+                                        handleDeleteClick(bug);
+                                      }}
+                                    >
+                                      Xóa
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                            )}
+                          </tr>
                         ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination */}
+                  <div className="admin-pagination-desktop" style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '12px 20px',
+                    borderTop: '1px solid #E5E7EB',
+                    backgroundColor: '#fff'
+                  }}>
+                    <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
+                      Hiển thị <b>{paginatedBugs.length}</b> trên <b>{filteredBugs.length}</b> lỗi màn hình
+                    </div>
+
+                    {totalPages > 1 && (
+                      <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                        <button
+                          disabled={currentPage === 1}
+                          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                          className="page-btn"
+                          style={{ padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: '6px', backgroundColor: '#fff', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontSize: '0.75rem' }}
+                        >
+                          &lt; Trước
+                        </button>
+                        {(() => {
+                          const pages = [];
+                          const delta = 2;
+                          for (let i = 1; i <= totalPages; i++) {
+                            if (i === 1 || i === totalPages || (i >= currentPage - delta && i <= currentPage + delta)) {
+                              pages.push(i);
+                            } else if (pages[pages.length - 1] !== '...') {
+                              pages.push('...');
+                            }
+                          }
+                          return pages.map((p, idx) => {
+                            if (p === '...') {
+                              return (
+                                <span key={`ell-${idx}`} style={{ padding: '0 8px', color: '#7B5233', fontWeight: '700' }}>
+                                  ...
+                                </span>
+                              );
+                            }
+                            return (
+                              <button
+                                key={p}
+                                className={`page-btn ${currentPage === p ? 'active' : ''}`}
+                                onClick={() => setCurrentPage(p)}
+                                style={{
+                                  border: '1px solid #D1D5DB',
+                                  padding: '5px 10px',
+                                  borderRadius: '6px',
+                                  backgroundColor: currentPage === p ? '#7B5233' : '#fff',
+                                  color: currentPage === p ? '#fff' : '#374151',
+                                  fontWeight: currentPage === p ? 'bold' : 'normal',
+                                  cursor: 'pointer',
+                                  fontSize: '0.75rem'
+                                }}
+                              >
+                                {p}
+                              </button>
+                            );
+                          });
+                        })()}
                         <button 
                           disabled={currentPage >= totalPages} 
                           onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
@@ -1198,8 +1250,8 @@ const ScreenBugManagementView = () => {
                           Sau
                         </button>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </>
               )}
             </div>
@@ -1731,7 +1783,8 @@ const ScreenBugManagementView = () => {
                           value={commentText}
                           onChange={(e) => setCommentText(e.target.value)}
                           onPaste={(e) => {
-                            const items = (e.clipboardData || e.originalEvent.clipboardData)?.items || [];
+                            const clipboardData = e.clipboardData || (e.nativeEvent && e.nativeEvent.clipboardData);
+                            const items = clipboardData?.items || [];
                             let hasImage = false;
                             for (let i = 0; i < items.length; i++) {
                               if (items[i].type.indexOf('image') !== -1) {
@@ -1875,33 +1928,86 @@ const ScreenBugManagementView = () => {
                 {/* Searchable Screen Selector */}
                 <div className="form-group" style={{ position: 'relative' }}>
                   <label className="required">Màn hình lỗi</label>
-                  <div 
-                    style={{ 
-                      border: '1px solid #E5E7EB', 
-                      borderRadius: '8px', 
-                      padding: '10px 14px', 
-                      backgroundColor: '#FAF8F6', 
-                      cursor: 'pointer',
-                      fontSize: '0.9rem',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      boxSizing: 'border-box',
-                      minHeight: '42px'
-                    }}
-                    onClick={() => setIsAddScreenDropdownOpen(!isAddScreenDropdownOpen)}
-                  >
-                    <span style={{ color: addForm.screen_id ? '#2D1A12' : '#9CA3AF' }}>
-                      {addForm.screen_id 
-                        ? (() => {
-                            const selected = screens.find(s => s.id === parseInt(addForm.screen_id));
-                            return selected ? `[${selected.platform}] ${selected.current_code} - ${selected.title}` : 'Chọn màn hình...';
-                          })()
-                        : 'Chọn màn hình...'
-                      }
-                    </span>
-                    <span style={{ fontSize: '0.6rem', color: '#8D6E63' }}>▼</span>
-                  </div>
+                  
+                  {!isAddScreenDropdownOpen ? (
+                    <div 
+                      style={{ 
+                        border: '1px solid #E5E7EB', 
+                        borderRadius: '8px', 
+                        padding: '10px 14px', 
+                        backgroundColor: '#FAF8F6', 
+                        cursor: 'pointer',
+                        fontSize: '0.9rem',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        boxSizing: 'border-box',
+                        minHeight: '42px'
+                      }}
+                      onClick={() => setIsAddScreenDropdownOpen(true)}
+                    >
+                      <span style={{ color: addForm.screen_id ? '#2D1A12' : '#9CA3AF' }}>
+                        {addForm.screen_id 
+                          ? (() => {
+                              const selected = screens.find(s => s.id === parseInt(addForm.screen_id));
+                              return selected ? `[${selected.platform}] ${selected.current_code} - ${selected.title}` : 'Chọn màn hình...';
+                            })()
+                          : 'Chọn màn hình...'
+                        }
+                      </span>
+                      <span style={{ fontSize: '0.6rem', color: '#8D6E63' }}>▼</span>
+                    </div>
+                  ) : (
+                    <div 
+                      style={{ 
+                        border: '1px solid #7B5233', 
+                        borderRadius: '8px', 
+                        backgroundColor: '#fff', 
+                        fontSize: '0.9rem',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        boxSizing: 'border-box',
+                        minHeight: '42px',
+                        position: 'relative'
+                      }}
+                    >
+                      <input 
+                        type="text" 
+                        autoFocus
+                        placeholder="Tìm theo mã hoặc tên màn hình..." 
+                        value={addScreenSearch}
+                        onChange={(e) => setAddScreenSearch(e.target.value)}
+                        style={{ 
+                          width: '100%', 
+                          boxSizing: 'border-box', 
+                          border: 'none', 
+                          padding: '10px 30px 10px 14px', 
+                          fontSize: '0.9rem', 
+                          outline: 'none',
+                          backgroundColor: 'transparent',
+                          color: '#2D1A12'
+                        }}
+                      />
+                      <span 
+                        style={{ 
+                          fontSize: '0.6rem', 
+                          color: '#8D6E63',
+                          position: 'absolute',
+                          right: '14px',
+                          cursor: 'pointer',
+                          padding: '4px'
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsAddScreenDropdownOpen(false);
+                          setAddScreenSearch('');
+                        }}
+                      >
+                        ▲
+                      </span>
+                    </div>
+                  )}
 
                   {isAddScreenDropdownOpen && (
                     <div 
@@ -1920,26 +2026,8 @@ const ScreenBugManagementView = () => {
                         marginTop: '4px'
                       }}
                     >
-                      <input 
-                        type="text" 
-                        placeholder="Tìm theo mã hoặc tên màn hình..." 
-                        value={addScreenSearch}
-                        onChange={(e) => setAddScreenSearch(e.target.value)}
-                        style={{ 
-                          width: '100%', 
-                          boxSizing: 'border-box', 
-                          border: 'none', 
-                          borderBottom: '1px solid #EADCC9', 
-                          padding: '10px 14px', 
-                          fontSize: '0.9rem', 
-                          outline: 'none',
-                          position: 'sticky',
-                          top: 0,
-                          backgroundColor: '#FAF8F6'
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                      />
                       {screens
+                        .filter(s => s.current_code !== 'OTHER')
                         .filter(s => {
                           if (!addScreenSearch) return true;
                           const q = addScreenSearch.toLowerCase();
@@ -1972,7 +2060,36 @@ const ScreenBugManagementView = () => {
                           </div>
                         ))
                       }
-                      {screens.filter(s => {
+                      
+                      {(() => {
+                        const otherScreen = screens.find(s => s.current_code === 'OTHER');
+                        if (!otherScreen) return null;
+                        return (
+                          <div 
+                            key={otherScreen.id} 
+                            onClick={() => {
+                              setAddForm(prev => ({ ...prev, screen_id: otherScreen.id.toString() }));
+                              setIsAddScreenDropdownOpen(false);
+                              setAddScreenSearch('');
+                            }}
+                            style={{ 
+                              padding: '10px 14px', 
+                              cursor: 'pointer', 
+                              fontSize: '0.9rem',
+                              borderTop: '2px solid #EADCC9',
+                              backgroundColor: addForm.screen_id === otherScreen.id.toString() ? '#FAF6F0' : '#fff',
+                              color: '#7B5233',
+                              fontWeight: '700'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF8F6'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = addForm.screen_id === otherScreen.id.toString() ? '#FAF6F0' : '#fff'}
+                          >
+                            <strong>[{otherScreen.platform}] {otherScreen.current_code}</strong> - {otherScreen.title}
+                          </div>
+                        );
+                      })()}
+
+                      {screens.filter(s => s.current_code !== 'OTHER').filter(s => {
                         if (!addScreenSearch) return true;
                         const q = addScreenSearch.toLowerCase();
                         return (
@@ -2000,7 +2117,8 @@ const ScreenBugManagementView = () => {
                     placeholder="Mô tả các bước tái hiện lỗi, kết quả thực tế và mong muốn... Nhấn Ctrl+V để dán ảnh chụp màn hình."
                     required
                     onPaste={(e) => {
-                      const items = (e.clipboardData || e.originalEvent.clipboardData)?.items || [];
+                      const clipboardData = e.clipboardData || (e.nativeEvent && e.nativeEvent.clipboardData);
+                      const items = clipboardData?.items || [];
                       let hasImage = false;
                       for (let i = 0; i < items.length; i++) {
                         if (items[i].type.indexOf('image') !== -1) {
@@ -2108,11 +2226,54 @@ const ScreenBugManagementView = () => {
                       <>
                         <span style={{ fontSize: '1.5rem' }}>📷</span>
                         <p style={{ margin: 0, fontSize: '0.8rem', color: '#5D4037', fontWeight: 'bold' }}>
-                          Click để chọn ảnh hoặc dán ảnh chụp màn hình (Ctrl+V) tại đây
+                          Dán ảnh chụp màn hình (Ctrl+V) hoặc kéo thả tại đây
                         </p>
-                        <span style={{ fontSize: '0.65rem', color: '#8D6E63', fontStyle: 'italic' }}>
-                          Hỗ trợ dán trực tiếp nhiều ảnh chụp màn hình
-                        </span>
+                        <div style={{ display: 'flex', gap: '10px', marginTop: '12px', width: '100%', maxWidth: '360px', justifyContent: 'center' }} onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={() => document.getElementById('add-bug-file-input')?.click()}
+                            style={{
+                              height: '34px',
+                              fontSize: '0.75rem',
+                              fontWeight: '700',
+                              padding: '0 12px',
+                              borderRadius: '6px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px',
+                              backgroundColor: '#4F46E5',
+                              color: '#fff',
+                              border: 'none',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <FolderOpen size={14} /> Duyệt qua các tệp
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-outline"
+                            onClick={() => handlePasteFromClipboardAPI(setAddImages)}
+                            style={{
+                              height: '34px',
+                              fontSize: '0.75rem',
+                              fontWeight: '700',
+                              padding: '0 12px',
+                              backgroundColor: '#fff',
+                              border: '1px solid #7B5233',
+                              color: '#7B5233',
+                              borderRadius: '6px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Clipboard size={14} /> Dán từ bộ nhớ tạm
+                          </button>
+                        </div>
                       </>
                     )}
                     <input 
@@ -2287,24 +2448,7 @@ const ScreenBugManagementView = () => {
             
             <div className="modal-body" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div 
-                onPaste={async (e) => {
-                  const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-                  for (let i = 0; i < items.length; i++) {
-                    if (items[i].type.indexOf('image') !== -1) {
-                      const file = items[i].getAsFile();
-                      try {
-                        showToast('Đang tải ảnh chứng minh từ clipboard...', 'success');
-                        const res = await bugService.uploadImage(file);
-                        if (res && res.url) {
-                          setProofImages(prev => [...prev, res.url]);
-                          showToast('Đã dán ảnh thành công!');
-                        }
-                      } catch (error) {
-                        showToast('Tải ảnh từ clipboard thất bại!', 'error');
-                      }
-                    }
-                  }
-                }}
+                onPaste={(e) => handlePasteImage(e, setProofImages)}
                 tabIndex={0}
                 style={{
                   border: '2px dashed #7B5233',
@@ -2326,11 +2470,54 @@ const ScreenBugManagementView = () => {
               >
                 <span style={{ fontSize: '1.5rem' }}>📷</span>
                 <p style={{ margin: 0, fontSize: '0.8rem', color: '#5D4037', fontWeight: 'bold', lineHeight: '1.4' }}>
-                  Click để chọn ảnh hoặc dán ảnh chụp màn hình (Ctrl+V) tại đây
+                  Dán ảnh chụp màn hình (Ctrl+V) hoặc kéo thả tại đây
                 </p>
-                <span style={{ fontSize: '0.65rem', color: '#8D6E63', fontStyle: 'italic' }}>
-                  Hỗ trợ dán trực tiếp nhiều ảnh chụp màn hình
-                </span>
+                <div style={{ display: 'flex', gap: '10px', marginTop: '12px', width: '100%', maxWidth: '360px', justifyContent: 'center' }} onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => document.getElementById('proof-file-input-manual')?.click()}
+                    style={{
+                      height: '34px',
+                      fontSize: '0.75rem',
+                      fontWeight: '700',
+                      padding: '0 12px',
+                      borderRadius: '6px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      backgroundColor: '#4F46E5',
+                      color: '#fff',
+                      border: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <FolderOpen size={14} /> Duyệt qua các tệp
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => handlePasteFromClipboardAPI(setProofImages)}
+                    style={{
+                      height: '34px',
+                      fontSize: '0.75rem',
+                      fontWeight: '700',
+                      padding: '0 12px',
+                      backgroundColor: '#fff',
+                      border: '1px solid #7B5233',
+                      color: '#7B5233',
+                      borderRadius: '6px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Clipboard size={14} /> Dán từ bộ nhớ tạm
+                  </button>
+                </div>
                 
                 <input 
                   type="file" 

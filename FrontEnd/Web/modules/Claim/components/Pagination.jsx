@@ -1,4 +1,5 @@
 import React from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 /**
  * Component Pagination hỗ trợ phân trang bảng.
@@ -30,39 +31,49 @@ export const Pagination = ({
   const buttons = getPaginationButtons();
 
   return (
-    <div className="report-footer">
-      <div>
-        Hiển thị {Math.min(startIndex + 1, totalItems)}–{Math.min(endIndex, totalItems)} trên {totalItems} kết quả
+    <div className="admin-pagination-desktop desktop-only">
+      <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
+        Hiển thị <b>{Math.min(startIndex + 1, totalItems)}</b>–<b>{Math.min(endIndex, totalItems)}</b> trên <b>{totalItems}</b> kết quả
       </div>
-      <div className="pagination-group">
+      <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
         <button
-          className="pag-btn"
+          className="page-btn"
           disabled={currentPage <= 1}
           onClick={() => onPageChange(Math.max(1, currentPage - 1))}
-          style={{ opacity: currentPage <= 1 ? 0.35 : 1, cursor: currentPage <= 1 ? 'default' : 'pointer' }}
+          style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', cursor: currentPage <= 1 ? 'not-allowed' : 'pointer', opacity: currentPage <= 1 ? 0.5 : 1, color: '#7B5233' }}
         >
-          &lt;
+          <ChevronLeft size={14} />
         </button>
         {buttons.map((btn, idx) => (
           btn === '...' ? (
-            <span key={`ellipsis-${idx}`} className="pag-btn" style={{ cursor: 'default' }}>…</span>
+            <span key={`ellipsis-${idx}`} style={{ color: '#8D6E63', fontSize: '0.7rem', padding: '0 4px' }}>...</span>
           ) : (
             <button
               key={btn}
-              className={`pag-btn ${btn === currentPage ? 'active' : ''}`}
+              className={`page-btn ${btn === currentPage ? 'active' : ''}`}
               onClick={() => onPageChange(btn)}
+              style={{
+                padding: '6px 10px',
+                borderRadius: '8px',
+                border: '1px solid #EADCC9',
+                backgroundColor: btn === currentPage ? '#7B5233' : '#FAF6F0',
+                color: btn === currentPage ? '#fff' : '#7B5233',
+                fontWeight: '700',
+                fontSize: '0.8rem',
+                cursor: 'pointer'
+              }}
             >
               {btn}
             </button>
           )
         ))}
         <button
-          className="pag-btn"
+          className="page-btn"
           disabled={currentPage >= totalPages}
           onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
-          style={{ opacity: currentPage >= totalPages ? 0.35 : 1, cursor: currentPage >= totalPages ? 'default' : 'pointer' }}
+          style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer', opacity: currentPage >= totalPages ? 0.5 : 1, color: '#7B5233' }}
         >
-          &gt;
+          <ChevronRight size={14} />
         </button>
       </div>
     </div>

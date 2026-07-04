@@ -30,6 +30,10 @@ const KPIReportsView = () => {
   
   // Search state for employee list
   const [empSearch, setEmpSearch] = useState('');
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   
   // Loaders
   const [loadingEmp, setLoadingEmp] = useState(false);
@@ -482,6 +486,9 @@ const KPIReportsView = () => {
     emp.employee_id.toLowerCase().includes(empSearch.toLowerCase())
   );
 
+  const totalPages = Math.ceil(filteredEmployees.length / itemsPerPage) || 1;
+  const paginatedEmployees = filteredEmployees.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   return (
     <div style={{ padding: '15px 20px', fontFamily: 'Inter, sans-serif', display: 'flex', flexDirection: 'column' }}>
       
@@ -508,7 +515,7 @@ const KPIReportsView = () => {
             type="text" 
             placeholder="Nhập Họ và tên hoặc Mã NV" 
             value={empSearch}
-            onChange={(e) => setEmpSearch(e.target.value)}
+            onChange={(e) => { setEmpSearch(e.target.value); setCurrentPage(1); }}
             style={{ width: '100%', padding: '8px 12px 8px 32px', borderRadius: '8px', border: '1px solid #EADCC9', fontSize: '12px', outline: 'none', boxSizing: 'border-box' }}
           />
           <Search size={14} style={{ position: 'absolute', left: '10px', top: '10px', color: '#7B5233' }} />
@@ -551,7 +558,8 @@ const KPIReportsView = () => {
           ) : filteredEmployees.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Không tìm thấy nhân viên phù hợp.</div>
           ) : (
-            <div className="table-responsive desktop-only admin-table-scroll">
+            <>
+              <div className="table-responsive desktop-only admin-table-scroll">
               <table className="data-table">
                 <thead>
                   <tr>
@@ -565,7 +573,7 @@ const KPIReportsView = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredEmployees.map((emp) => {
+                  {paginatedEmployees.map((emp) => {
                     const isExpanded = expandedEmpId === emp.employee_id;
                     return (
                       <React.Fragment key={emp.employee_id}>
@@ -961,7 +969,48 @@ const KPIReportsView = () => {
                 </tbody>
               </table>
             </div>
-          )}
+
+            {/* Pagination */}
+            <div className="admin-pagination-desktop" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px' }}>
+              <div style={{ fontSize: '0.85rem', color: '#7B5233', fontWeight: '600' }}>
+                Hiển thị <b>{filteredEmployees.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}</b> - <b>{Math.min(currentPage * itemsPerPage, filteredEmployees.length)}</b> trên <b>{filteredEmployees.length}</b> kết quả
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button 
+                  className="page-btn"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #EADCC9', backgroundColor: '#fff', color: '#7B5233', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', opacity: currentPage === 1 ? 0.5 : 1, fontWeight: '700' }}
+                >
+                  &lt; Trước
+                </button>
+                {[...Array(totalPages)].map((_, idx) => (
+                  <button 
+                    key={idx} 
+                    className={`page-btn ${currentPage === idx + 1 ? 'active' : ''}`}
+                    onClick={() => setCurrentPage(idx + 1)}
+                    style={{ 
+                      padding: '6px 12px', borderRadius: '6px', border: '1px solid #EADCC9', 
+                      backgroundColor: currentPage === idx + 1 ? '#7B5233' : '#fff', 
+                      color: currentPage === idx + 1 ? '#fff' : '#7B5233',
+                      fontWeight: '700', cursor: 'pointer'
+                    }}
+                  >
+                    {idx + 1}
+                  </button>
+                ))}
+                <button 
+                  className="page-btn"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #EADCC9', backgroundColor: '#fff', color: '#7B5233', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', opacity: currentPage === totalPages ? 0.5 : 1, fontWeight: '700' }}
+                >
+                  Sau &gt;
+                </button>
+              </div>
+            </div>
+          </>
+        )}
         </div>
       </div>
 

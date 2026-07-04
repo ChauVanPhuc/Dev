@@ -33,14 +33,14 @@ export const Table = ({
   }
 
   return (
-    <div className="report-table-container">
-      <table className="report-table">
+    <div className="table-responsive desktop-only admin-table-scroll" style={{ flex: 1, overflowY: 'auto' }}>
+      <table className="data-table">
         <thead>
           <tr>
             {headers.map((header, idx) => {
               if (header.isCheckbox) {
                 return (
-                  <th key={idx} className="checkbox-col">
+                  <th key={idx} className="checkbox-col" style={{ width: '60px', textAlign: 'center' }}>
                     {header.label}
                   </th>
                 );
