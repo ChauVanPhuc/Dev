@@ -254,6 +254,30 @@ INITIAL_SCREENS = [
     },
     {
         "platform": "Web",
+        "route_path": "/admin/iso-documents",
+        "default_code": "AD17",
+        "current_code": "AD17",
+        "title": "Quản lý hồ sơ ISO",
+        "subtitle": "Quản lý và lưu trữ hồ sơ tài liệu ISO"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/iso-processes",
+        "default_code": "AD18",
+        "current_code": "AD18",
+        "title": "Quản lý quy trình",
+        "subtitle": "Thiết lập các bước, lưu đồ quy trình và checklist QC"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/iso-documents/edit/:id",
+        "default_code": "AD17.1",
+        "current_code": "AD17.1",
+        "title": "Biểu mẫu chỉnh sửa tài liệu ISO & Quy trình",
+        "subtitle": "Tùy biến cấu hình chi tiết tài liệu quy trình ISO"
+    },
+    {
+        "platform": "Web",
         "route_path": "/admin/claims",
         "default_code": "CL1",
         "current_code": "CL1",

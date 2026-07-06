@@ -13,7 +13,7 @@ export const BrowserFrame = ({ url, onReload, isLive, children }) => {
         <div className="browser-address-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: 'none' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             <span className="lock-icon">🔒</span>
-            <span className="address-text">http://192.168.1.222:5173{url}</span>
+            <span className="address-text">http://192.168.1.222:1222{url}</span>
           </div>
           {onReload && (
             <button 

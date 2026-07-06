@@ -24,6 +24,16 @@ export const ScreenProvider = ({ children }) => {
   }, []);
 
   const getScreenInfo = (path) => {
+    // Custom override for machinery details
+    if (path.includes('/machines/detail/')) {
+      return {
+        screenCode: 'MC37.5',
+        title: 'Thông tin thiết bị máy móc',
+        subtitle: 'Hồ sơ chi tiết thiết bị máy móc, lịch sử bảo dưỡng và hướng dẫn vận hành chuẩn.',
+        isActive: true
+      };
+    }
+
     // Virtual Path Rewriter: Anh xa cac duong dan moi duoi /admin nguoc lai thanh /manufacture de khop DB cu
     let lookupPath = path;
     if (path === '/admin/manufacture-dashboard') {

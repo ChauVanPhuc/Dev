@@ -15,7 +15,7 @@ from modules.notification.routes import notification_router
 from modules.inspection.routes.qc_routes import router as qc_router
 from modules.inspection.routes.inspection_routes import router as inspection_router
 
-from modules.equipment.routes import equipment_router
+from modules.equipment.routes import equipment_router, machinery_router
 
 from modules.kpi.routes import kpi_router, award_discipline_router, staff_evaluation_router, kpi_management_router
 
@@ -26,6 +26,7 @@ from modules.system.routes import system_router, screen_router, screen_bug_route
 from modules.claim.routes.claim_routes import router as claim_router
 
 from modules.purchasing.routes import purchase_requisition_router, purchase_order_item_router
+from modules.inspection.routes.iso_router import router as iso_router
 
 
 
@@ -66,6 +67,7 @@ api_router.include_router(system_router.router, prefix="/system", tags=["system"
 api_router.include_router(inspection_router, prefix="/inspections", tags=["inspections"])
 
 api_router.include_router(equipment_router.router, prefix="/equipments", tags=["equipments"])
+api_router.include_router(machinery_router.router, prefix="/machines", tags=["machines"])
 
 api_router.include_router(pallet_router.router, prefix="/pallet-cards", tags=["pallet-cards"])
 
@@ -87,6 +89,7 @@ api_router.include_router(claim_router, prefix="/claims", tags=["claim"])
 api_router.include_router(purchase_requisition_router.router, prefix="/purchase-requisitions", tags=["purchase-requisitions"])
 
 api_router.include_router(purchase_order_item_router.router, prefix="/purchase-order-items", tags=["purchase-order-items"])
+api_router.include_router(iso_router, prefix="/iso-documents", tags=["iso-documents"])
 
 
 

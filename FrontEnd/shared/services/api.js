@@ -19,8 +19,8 @@ const getBaseURL = () => {
     } 
     
     // Nếu là môi trường phát triển trên máy tính (Web browser localhost hoặc IP cục bộ)
-    if (port === '3000' || port === '5173' || hostname === 'localhost' || hostname.startsWith('192.168.')) {
-      return `http://${hostname}:8000`
+    if (port === '1333' || port === '1222' || port === '3000' || port === '5173' || hostname === 'localhost' || hostname.startsWith('192.168.')) {
+      return `http://${hostname}:1111`
     }
 
     // Mọi trường hợp khác (App Android, iOS, truy cập từ xa)

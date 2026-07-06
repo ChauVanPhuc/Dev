@@ -18,7 +18,7 @@ const getBaseURL = () => {
     // Nếu chạy chế độ Dev tách biệt subdomain
     return 'https://api.smartflowg7.cloud'
   }
-  return 'http://192.168.1.222:8000'
+  return 'http://192.168.1.222:1111'
 }
 
 const API_BASE_URL = getBaseURL();

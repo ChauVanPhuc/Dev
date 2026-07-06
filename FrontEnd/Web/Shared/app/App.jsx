@@ -37,6 +37,10 @@ import EquipmentTraining from '@modules/Equipment/Views/EquipmentTrainingView';
 import EquipmentHandover from '@modules/Equipment/Views/EquipmentHandoverView';
 import EquipmentDetail from '@modules/Equipment/Views/EquipmentDetailView';
 import EquipmentTrainingDetail from '@modules/Equipment/Views/EquipmentTrainingDetailView';
+import MachineManagement from '@modules/Equipment/Views/MachineManagementView';
+import MachineHistory from '@modules/Equipment/Views/MachineHistoryView';
+import MachineTraining from '@modules/Equipment/Views/MachineTrainingView';
+import MachineDetail from '@modules/Equipment/Views/MachineDetailView';
 
 // Import Claim module
 import ClaimPortalLayout from '../../modules/Claim/views/PortalLayout';
@@ -64,6 +68,10 @@ import ExceptionDeliveries from '@modules/Pallet/Views/PalletCardView';
 import PurchaseRequisitionList from '@modules/Purchasing/Views/PurchaseRequisitionListView';
 import PurchaseRequisitionDetail from '@modules/Purchasing/Views/PurchaseRequisitionDetailView';
 import PurchaseOrderItemList from '@modules/Purchasing/Views/PurchaseOrderItemListView';
+
+// Import ISO module
+import ISODocumentList from '@modules/ISO/Views/ISODocumentListView';
+import ISOFormEditor from '@modules/ISO/Views/ISOFormEditorView';
 
 import { authService } from '@modules/Auth/Models/auth.service';
 import { ScreenProvider } from '@shared/context/ScreenContext';
@@ -435,9 +443,26 @@ const ProtectedRoute = ({ permissionKey, children }) => {
     const activePermsStr = localStorage.getItem('smartflow_active_permissions');
     if (activePermsStr) {
       const perms = JSON.parse(activePermsStr);
-      if (perms && perms[permissionKey] !== undefined) {
-        permission = perms[permissionKey];
-        hasExplicitPermission = true;
+      if (perms) {
+        const keys = Array.isArray(permissionKey) ? permissionKey : [permissionKey];
+        // Tìm quyền hạn đầu tiên khác 'none' trong danh sách các khóa quyền được yêu cầu
+        for (const key of keys) {
+          if (perms[key] !== undefined && perms[key] !== 'none') {
+            permission = perms[key];
+            hasExplicitPermission = true;
+            break;
+          }
+        }
+        // Nếu không có quyền nào khác 'none' nhưng có một khóa quyền được định nghĩa rõ ràng
+        if (!hasExplicitPermission) {
+          for (const key of keys) {
+            if (perms[key] !== undefined) {
+              permission = perms[key];
+              hasExplicitPermission = true;
+              break;
+            }
+          }
+        }
       }
     }
   } catch (e) {
@@ -520,6 +545,9 @@ function App() {
             <Route path="reports" element={<ProtectedRoute permissionKey="reports"><InspectionReports /></ProtectedRoute>} />
             <Route path="quality-records" element={<ProtectedRoute permissionKey="quality-records"><QualityRecords /></ProtectedRoute>} />
             <Route path="quality-records/:id" element={<ProtectedRoute permissionKey="quality-records"><QualityRecordsDetail /></ProtectedRoute>} />
+            <Route path="iso-documents" element={<ProtectedRoute permissionKey="iso-documents"><ISODocumentList mode="documents" /></ProtectedRoute>} />
+            <Route path="iso-processes" element={<ProtectedRoute permissionKey="iso-processes"><ISODocumentList mode="processes" /></ProtectedRoute>} />
+            <Route path="iso-documents/edit/:id" element={<ProtectedRoute permissionKey={["iso-documents", "iso-processes"]}><ISOFormEditor /></ProtectedRoute>} />
             <Route path="kpi" element={<ProtectedRoute permissionKey="kpi"><KPIReports /></ProtectedRoute>} />
             <Route path="kpi/checklist" element={<ProtectedRoute permissionKey="kpi-checklist"><KPIChecklist /></ProtectedRoute>} />
             <Route path="kpi/list" element={<ProtectedRoute permissionKey="kpi-list"><KPIItems /></ProtectedRoute>} />
@@ -540,6 +568,12 @@ function App() {
             <Route path="equipment/handover/:id" element={<ProtectedRoute permissionKey="equipment"><EquipmentHandoverRedirect /></ProtectedRoute>} />
             <Route path="equipment/detail/:id" element={<ProtectedRoute permissionKey="equipment"><EquipmentDetail /></ProtectedRoute>} />
             <Route path="equipment/training/detail/:id" element={<ProtectedRoute permissionKey="equipment"><EquipmentTrainingDetail /></ProtectedRoute>} />
+
+            {/* Machinery (Máy móc) Module */}
+            <Route path="machines" element={<ProtectedRoute permissionKey="machines"><MachineManagement /></ProtectedRoute>} />
+            <Route path="machines/history" element={<ProtectedRoute permissionKey="machines"><MachineHistory /></ProtectedRoute>} />
+            <Route path="machines/training" element={<ProtectedRoute permissionKey="machines"><MachineTraining /></ProtectedRoute>} />
+            <Route path="machines/detail/:id" element={<ProtectedRoute permissionKey="machines"><MachineDetail /></ProtectedRoute>} />
 
             {/* Manufacture Routes merged under /admin */}
             <Route path="manufacture-dashboard" element={<ProtectedRoute permissionKey="home"><ManufactureDashboard /></ProtectedRoute>} />

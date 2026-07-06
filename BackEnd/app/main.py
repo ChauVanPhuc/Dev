@@ -207,7 +207,92 @@ async def lifespan(app: FastAPI):
 
             db.rollback()
 
+        # Check and create machines table if not exists
+        print("Checking/creating machines table...")
+        try:
+            db.execute(text("""
+                IF NOT EXISTS (
+                    SELECT * FROM sys.objects 
+                    WHERE object_id = OBJECT_ID('machines') AND type = 'U'
+                )
+                CREATE TABLE machines (
+                    id INT IDENTITY(1,1) PRIMARY KEY,
+                    name NVARCHAR(255) NOT NULL,
+                    code NVARCHAR(100) NOT NULL UNIQUE,
+                    status NVARCHAR(100) NULL,
+                    factory NVARCHAR(255) NULL,
+                    department NVARCHAR(255) NULL,
+                    receive_date DATE NULL,
+                    origin NVARCHAR(255) NULL,
+                    supplier NVARCHAR(255) NULL,
+                    maintenance_cycle INT NULL,
+                    next_maintenance_date DATE NULL,
+                    last_maintenance_date DATE NULL,
+                    notes NVARCHAR(1000) NULL,
+                    images NVARCHAR(MAX) NULL,
+                    qr_code NVARCHAR(255) NULL,
+                    daily_run_time FLOAT NULL,
+                    productivity NVARCHAR(255) NULL,
+                    production_year NVARCHAR(50) NULL,
+                    owner_name NVARCHAR(255) NULL,
+                    created_at DATETIME NULL DEFAULT GETDATE()
+                )
+            """))
+            db.commit()
+            print("Successfully checked/created machines table.")
+        except Exception as e:
+            db.rollback()
+            print(f"Error checking/creating machines table: {e}")
 
+        # Check and create machine_maintenances table if not exists
+        print("Checking/creating machine_maintenances table...")
+        try:
+            db.execute(text("""
+                IF NOT EXISTS (
+                    SELECT * FROM sys.objects 
+                    WHERE object_id = OBJECT_ID('machine_maintenances') AND type = 'U'
+                )
+                CREATE TABLE machine_maintenances (
+                    id INT IDENTITY(1,1) PRIMARY KEY,
+                    machine_id INT NOT NULL FOREIGN KEY REFERENCES machines(id) ON DELETE CASCADE,
+                    performed_by NVARCHAR(255) NULL,
+                    verified_by NVARCHAR(255) NULL,
+                    check_date DATE NULL,
+                    maintenance_date DATE NULL,
+                    status NVARCHAR(100) NULL,
+                    notes NVARCHAR(500) NULL,
+                    created_at DATETIME NULL DEFAULT GETDATE()
+                )
+            """))
+            db.commit()
+            print("Successfully checked/created machine_maintenances table.")
+        except Exception as e:
+            db.rollback()
+            print(f"Error checking/creating machine_maintenances table: {e}")
+
+        # Check and create machine_documents table if not exists
+        print("Checking/creating machine_documents table...")
+        try:
+            db.execute(text("""
+                IF NOT EXISTS (
+                    SELECT * FROM sys.objects 
+                    WHERE object_id = OBJECT_ID('machine_documents') AND type = 'U'
+                )
+                CREATE TABLE machine_documents (
+                    id INT IDENTITY(1,1) PRIMARY KEY,
+                    machine_id INT NOT NULL FOREIGN KEY REFERENCES machines(id) ON DELETE CASCADE,
+                    file_name NVARCHAR(255) NOT NULL,
+                    file_path NVARCHAR(1000) NOT NULL,
+                    category NVARCHAR(100) NOT NULL,
+                    upload_date DATETIME NULL DEFAULT GETDATE(),
+                    uploader NVARCHAR(255) NULL
+                )
+            """))
+            db.commit()
+            print("Successfully checked/created machine_documents table.")
+        except Exception as e:
+            db.rollback()
+            print(f"Error checking/creating machine_documents table: {e}")
 
         # [AUTO-MIGRATION] Auto-run screen migrations
 
@@ -818,10 +903,9 @@ async def serve_ui(request: Request, full_path: str):
 
     # Mặc định là Mobile
 
-    target_file = os.path.join(MOBILE_DIST, full_path)
-
     if os.path.isfile(target_file):
-
+        if full_path.endswith("index.html"):
+            return FileResponse(target_file, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
         return FileResponse(target_file)
 
         

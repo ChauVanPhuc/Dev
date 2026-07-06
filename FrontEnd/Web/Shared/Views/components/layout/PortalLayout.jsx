@@ -961,10 +961,16 @@ const PortalLayout = () => {
 
     try {
       const { API_URL } = await import('@webShared/Services/api.service');
+      const token = localStorage.getItem('token');
+      const authHeaders = { 'ngrok-skip-browser-warning': 'true' };
+      if (token && token !== 'null' && token !== 'undefined') {
+        authHeaders['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch(`${API_URL}${endpoint.replace(/^\/+/, '')}`, {
         method: 'POST',
         body: formData,
-        headers: { 'ngrok-skip-browser-warning': 'true' }
+        headers: authHeaders
       });
 
       if (!response.ok) throw new Error('Lỗi kết nối server');

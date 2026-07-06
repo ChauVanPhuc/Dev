@@ -10,6 +10,8 @@ const SCREEN_GROUPS = [
     screens: [
       { key: 'users', name: 'Quản lý tài khoản' },
       { key: 'quality-records', name: 'Quản lý hồ sơ' },
+      { key: 'iso-documents', name: 'Quản lý hồ sơ ISO' },
+      { key: 'iso-processes', name: 'Quản lý quy trình' },
       { key: 'screens', name: 'Quản lý màn hình' },
       { key: 'logs', name: 'Quản lý lỗi hệ thống' },
       { key: 'feedback', name: 'Quản lý góp ý' },

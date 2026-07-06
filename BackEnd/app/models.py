@@ -37,6 +37,8 @@ from modules.inspection.models.defect_type import DefectType, ClientDefect, Defe
 from modules.chatbot.models.chatbot_history import ChatbotHistory
 from modules.purchasing.models.purchase_requisition import PurchaseRequisition
 from modules.purchasing.models.purchase_order_item import PurchaseOrderItem
+from modules.equipment.models.machinery import Machine, MachineMaintenance, MachineDocument
+from modules.inspection.models.iso_models import ISODocument, ISORevisionLog, ISOSection, ISOProcessStep
 
 __all__ = [
     "Base", "Account", "Category", "Delivery", "DeliveryDetails", "DeliveryImage",
@@ -46,6 +48,7 @@ __all__ = [
     "BackupQRCode", "PalletCard", "KPI", "AwardDiscipline", "StaffEvaluation", "CAPA",
     "CAPAOccurrence", "CAPAEvaluation", "SystemScreen", "SystemComponent", "ScreenBug",
     "ScreenBugUpdate", "ScreenBugImage", "DefectType", "ClientDefect", "DefectGlossary", "ChatbotHistory",
-    "PurchaseRequisition", "PurchaseOrderItem"
+    "PurchaseRequisition", "PurchaseOrderItem", "Machine", "MachineMaintenance", "MachineDocument",
+    "ISODocument", "ISORevisionLog", "ISOSection", "ISOProcessStep"
 ]
 

@@ -60,3 +60,4 @@ class EquipmentTraining(Base):
     evaluation_result= Column(NVARCHAR(500), nullable=True)  # Kết quả sau đánh giá
     file_content_preview = Column(NVARCHAR(None), nullable=True) # Văn bản hiển thị thử file PDF
 
+

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Filter, FileDown, Search, Plus, FolderTree, Briefcase, Settings, Layers } from 'lucide-react';
 import api from '@webShared/Services/api.service';
@@ -12,6 +12,8 @@ const SCREEN_GROUPS = [
     screens: [
       { key: 'users', name: 'Quản lý tài khoản' },
       { key: 'quality-records', name: 'Quản lý hồ sơ' },
+      { key: 'iso-documents', name: 'Quản lý hồ sơ ISO' },
+      { key: 'iso-processes', name: 'Quản lý quy trình' },
       { key: 'screens', name: 'Quản lý màn hình' },
       { key: 'logs', name: 'Quản lý lỗi hệ thống' },
       { key: 'feedback', name: 'Quản lý góp ý' },

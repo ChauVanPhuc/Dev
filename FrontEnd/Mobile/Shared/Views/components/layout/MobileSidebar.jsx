@@ -118,11 +118,7 @@ const Sidebar = () => {
       hasSub: true,
       items: [
         { label: 'Kiểm tra nhập kho', path: '/inspection-stage' },
-        { label: 'Kiểm tra định hình', path: '/inspection-daily-shaping' },
-        { label: 'Kiểm tra lắp ráp', path: '/inspection-daily-assembly' },
-        { label: 'Kiểm tra sơn', path: '/inspection-daily-painting' },
-        { label: 'Kiểm tra đóng gói', path: '/inspection-daily-packaging' },
-        { label: 'Kiểm tra sau đóng gói', path: '/inspection-stage-packaging' },
+        { label: 'Kiểm tra mẫu đầu tiên', path: '/inspection-first-article' },
         { label: 'Kiểm tra thông số', path: '/input-inspection' },
         { label: 'Nhập lỗi', path: '/inspection-daily' },
         { label: 'Lịch sử kiểm tra', path: '/logs' }

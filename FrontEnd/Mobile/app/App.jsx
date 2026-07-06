@@ -10,6 +10,7 @@ import DeliveryDetail from '@modules/delivery/Views/DeliveryDetailView'
 import PlanTracking from '@modules/production/Views/PlanTrackingView'
 import DailyInspection from '@modules/inspection/Views/DailyInspectionView'
 import StageInspection from '@modules/inspection/Views/StageInspectionView'
+import FirstArticleInspection from '@modules/inspection/Views/FirstArticleInspectionView'
 import InspectionLogs from '@modules/inspection/Views/InspectionLogsView'
 import ThermalPrint from '@modules/delivery/Views/components/ThermalPrint'
 import AwardDiscipline from '@modules/kpi/Views/AwardDisciplineView'
@@ -106,6 +107,7 @@ function App() {
             <Route path="/inspection-daily-assembly" element={<AssemblyInspectionView />} />
             <Route path="/inspection-daily-painting" element={<PaintingInspectionView />} />
             <Route path="/inspection-daily-packaging" element={<PackagingInspectionView />} />
+            <Route path="/inspection-first-article" element={<FirstArticleInspection />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/login" replace />} />
