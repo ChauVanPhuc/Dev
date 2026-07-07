@@ -96,6 +96,7 @@ def save_iso_document(
             status=payload.get("status", "Hiệu lực"),
             folder=payload.get("folder", ""),
             doc_type=payload.get("doc_type", ""),
+            document_level=payload.get("document_level", ""),
             diagram_data=payload.get("diagram_data", ""),
             created_at=now_str,
             updated_at=now_str
@@ -118,6 +119,7 @@ def save_iso_document(
         doc.status = payload.get("status", doc.status)
         doc.folder = payload.get("folder", doc.folder)
         doc.doc_type = payload.get("doc_type", doc.doc_type)
+        doc.document_level = payload.get("document_level", doc.document_level)
         doc.diagram_data = payload.get("diagram_data", doc.diagram_data)
         doc.updated_at = now_str
 
@@ -202,6 +204,7 @@ def get_iso_documents(db: Session = Depends(get_db)):
             "status": d.status,
             "folder": d.folder,
             "doc_type": d.doc_type,
+            "document_level": d.document_level,
             "created_at": d.created_at,
             "updated_at": d.updated_at
         })
@@ -273,6 +276,7 @@ def get_iso_document_details(id: int, db: Session = Depends(get_db)):
         "status": doc.status,
         "folder": doc.folder,
         "doc_type": doc.doc_type,
+        "document_level": doc.document_level,
         "diagram_data": doc.diagram_data,
         "revision_logs": revision_logs,
         "sections": sections,
@@ -333,6 +337,7 @@ def get_iso_processes(db: Session = Depends(get_db)):
             "status": p.status,
             "display_at": p.display_at,
             "notes": p.notes,
+            "document_level": p.document_level or (p.iso_document.document_level if p.iso_document else ""),
             "created_at": p.created_at,
             "updated_at": p.updated_at
         })
@@ -382,6 +387,7 @@ def save_iso_process(
             status=payload.get("status", "Dự thảo"),
             display_at=payload.get("display_at", ""),
             notes=payload.get("notes", ""),
+            document_level=payload.get("document_level") or iso_doc.document_level or "",
             diagram_data=payload.get("diagram_data", iso_doc.diagram_data or ""), # Clone diagram mẫu từ ISO nếu ko truyền
             created_at=now_str,
             updated_at=now_str
@@ -440,6 +446,7 @@ def save_iso_process(
         proc.status = payload.get("status", proc.status)
         proc.display_at = payload.get("display_at", proc.display_at)
         proc.notes = payload.get("notes", proc.notes)
+        proc.document_level = payload.get("document_level", proc.document_level)
         proc.diagram_data = payload.get("diagram_data", proc.diagram_data)
         proc.updated_at = now_str
 
@@ -560,6 +567,7 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
         "status": proc.status,
         "display_at": proc.display_at,
         "notes": proc.notes,
+        "document_level": proc.document_level or (proc.iso_document.document_level if proc.iso_document else ""),
         "diagram_data": proc.diagram_data or (proc.iso_document.diagram_data if proc.iso_document else ""),
         "sections": sections,
         "steps": steps

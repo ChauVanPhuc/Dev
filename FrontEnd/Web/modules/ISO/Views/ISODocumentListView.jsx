@@ -384,6 +384,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                     <>
                       <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '120px' }}>MÃ</th>
                       <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233' }}>TÊN QUY TRÌNH</th>
+                      <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '130px' }}>CẤP TÀI LIỆU</th>
                       <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '150px' }}>NGƯỜI PHỤ TRÁCH</th>
                       <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '150px' }}>NGƯỜI BIÊN SOẠN</th>
                       <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '150px' }}>NGƯỜI DUYỆT</th>
@@ -399,6 +400,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                       <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '100px' }}>THƯ MỤC</th>
                       <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '80px', textAlign: 'center' }}>PHIÊN BẢN</th>
                       <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '150px' }}>LOẠI TÀI LIỆU</th>
+                      <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '130px' }}>CẤP TÀI LIỆU</th>
                       <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '150px' }}>NGƯỜI TẠO</th>
                       <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '150px' }}>NGƯỜI DUYỆT</th>
                       <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '120px' }}>NGÀY BAN HÀNH</th>
@@ -428,6 +430,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                       <>
                         <td style={{ padding: '12px 16px', fontSize: '0.85rem', fontWeight: 'bold', color: '#7B5233' }}>{doc.code}</td>
                         <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1e293b', fontWeight: '600' }}>{doc.name}</td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#64748b' }}>{doc.document_level || '---'}</td>
                         <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1e293b' }}>{doc.owner || '---'}</td>
                         <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1e293b' }}>{doc.editor || '---'}</td>
                         <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1e293b' }}>{doc.approver || '---'}</td>
@@ -442,6 +445,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                         <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#64748b' }}>{doc.folder || '---'}</td>
                         <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1e293b', textAlign: 'center', fontWeight: '500' }}>{doc.version}</td>
                         <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#64748b' }}>{doc.doc_type || '---'}</td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#64748b' }}>{doc.document_level || '---'}</td>
                         <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1e293b' }}>{doc.issuer || '---'}</td>
                         <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1e293b' }}>{doc.approver || '---'}</td>
                         <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#64748b' }}>{doc.issue_date}</td>

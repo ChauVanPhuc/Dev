@@ -25,25 +25,12 @@ const ISOFormEditorView = () => {
     status: 'Dự thảo',
     folder: '',
     doc_type: '',
+    document_level: '',
     revision_logs: [
       { seq_no: 1, rev_date: '', content: 'Ban hành lần đầu', page_no: 'Tất cả' }
     ],
-    sections: {
-      'Mục đích': '',
-      'Phạm vi áp dụng': '',
-      'Tài liệu viện dẫn': '',
-      'Định nghĩa và viết tắt': '',
-      'Nội dung': '',
-      'Biểu mẫu': ''
-    },
-    section_types: {
-      'Mục đích': 'text',
-      'Phạm vi áp dụng': 'text',
-      'Tài liệu viện dẫn': 'text',
-      'Định nghĩa và viết tắt': 'text',
-      'Nội dung': 'text',
-      'Biểu mẫu': 'text'
-    },
+    sections: {},
+    section_types: {},
     steps: []
   });
 
@@ -53,29 +40,36 @@ const ISOFormEditorView = () => {
   useEffect(() => {
     if (location.state && location.state.parsedData) {
       const parsed = location.state.parsedData;
-      setFormData(prev => ({
-        ...prev,
-        name: parsed.name || '',
-        version: parsed.version || '01',
-        issue_date: parsed.issue_date || new Date().toISOString().split('T')[0],
-        file_path: parsed.file_path || '',
-        status: parsed.status || 'Hiệu lực',
-        folder: parsed.folder || '',
-        doc_type: parsed.doc_type || '',
-        sections: {
-          'Mục đích': parsed.sections?.['Mục đích'] || '',
-          'Phạm vi áp dụng': parsed.sections?.['Phạm vi áp dụng'] || '',
-          'Tài liệu viện dẫn': parsed.sections?.['Tài liệu viện dẫn'] || '',
-          'Định nghĩa và viết tắt': parsed.sections?.['Định nghĩa và viết tắt'] || parsed.sections?.['Định nghĩa và Từ viết tắt'] || '',
-          'Nội dung': parsed.sections?.['Nội dung'] || parsed.sections?.['Nội dung quy trình'] || '',
-          'Biểu mẫu': parsed.sections?.['Biểu mẫu'] || ''
-        }
-      }));
+      // Lấy nguyên danh sách sections từ parser – không thêm bớt
+      const newSections = parsed.sections || {};
+      const newSectionTypes = {};
+      Object.keys(newSections).forEach(key => {
+        newSectionTypes[key] = parsed.section_types?.[key] || 'text';
+      });
+
+      generateNextCode().then(nextCode => {
+        setFormData(prev => ({
+          ...prev,
+          code: parsed.code || nextCode,
+          name: parsed.name || '',
+          version: parsed.version || '01',
+          issue_date: parsed.issue_date || new Date().toISOString().split('T')[0],
+          file_path: parsed.file_path || '',
+          status: parsed.status || 'Hiệu lực',
+          folder: parsed.folder || '',
+          doc_type: parsed.doc_type || '',
+          document_level: parsed.document_level || '',
+          sections: newSections,
+          section_types: newSectionTypes
+        }));
+      });
       showFeedback('success', 'Đã bóc tách tự động cấu trúc từ tài liệu Word thành công!');
     } else if (isEditMode) {
       fetchDocDetails();
     } else {
-      generateNextCode();
+      generateNextCode().then(nextCode => {
+        setFormData(prev => ({ ...prev, code: nextCode }));
+      });
     }
   }, [id]);
 
@@ -83,10 +77,9 @@ const ISOFormEditorView = () => {
     try {
       const data = await api.get('/iso-documents/');
       const count = (data || []).length + 1;
-      const nextCode = `G7.QT-${String(count).padStart(2, '0')}`;
-      setFormData(prev => ({ ...prev, code: nextCode }));
+      return `G7.QT-${String(count).padStart(2, '0')}`;
     } catch (e) {
-      setFormData(prev => ({ ...prev, code: 'G7.QT-01' }));
+      return 'G7.QT-01';
     }
   };
 
@@ -95,14 +88,7 @@ const ISOFormEditorView = () => {
     try {
       const data = await api.get(`/iso-documents/${id}/details`);
       const receivedSections = { ...(data.sections || {}) };
-      let sectionTypes = {
-        'Mục đích': 'text',
-        'Phạm vi áp dụng': 'text',
-        'Tài liệu viện dẫn': 'text',
-        'Định nghĩa và viết tắt': 'text',
-        'Nội dung': 'text',
-        'Biểu mẫu': 'text'
-      };
+      let sectionTypes = {};
 
       if (receivedSections['__metadata_section_types__']) {
         try {
@@ -112,6 +98,14 @@ const ISOFormEditorView = () => {
         }
         delete receivedSections['__metadata_section_types__'];
       }
+
+      // Sections được lấy nguyên từ DB – không merge thêm key cố định
+
+      Object.keys(receivedSections).forEach(key => {
+        if (sectionTypes[key] === undefined) {
+          sectionTypes[key] = 'text';
+        }
+      });
 
       setFormData({
         id: data.id,
@@ -125,15 +119,9 @@ const ISOFormEditorView = () => {
         status: data.status || 'Hiệu lực',
         folder: data.folder || data.display_at || '',
         doc_type: data.doc_type || data.notes || '',
+        document_level: data.document_level || '',
         revision_logs: data.revision_logs || [],
-        sections: {
-          'Mục đích': receivedSections['Mục đích'] || '',
-          'Phạm vi áp dụng': receivedSections['Phạm vi áp dụng'] || '',
-          'Tài liệu viện dẫn': receivedSections['Tài liệu viện dẫn'] || '',
-          'Định nghĩa và viết tắt': receivedSections['Định nghĩa và viết tắt'] || receivedSections['Định nghĩa và Từ viết tắt'] || '',
-          'Nội dung': receivedSections['Nội dung'] || receivedSections['Nội dung quy trình'] || '',
-          'Biểu mẫu': receivedSections['Biểu mẫu'] || ''
-        },
+        sections: receivedSections,
         section_types: sectionTypes,
         steps: data.steps || []
       });
@@ -309,14 +297,19 @@ const ISOFormEditorView = () => {
           </div>
           
           <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid #EADCC9' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr 1fr', gap: '16px' }}>
               <div>
                 <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>Mã Mẫu</label>
-                <input type="text" value={formData.code} onChange={(e) => handleInputChange('code', e.target.value)} style={{ width: '100%', padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.82rem', outline: 'none' }} />
+                <input type="text" value={formData.code} readOnly style={{ width: '100%', padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.82rem', outline: 'none', backgroundColor: '#f1f5f9', color: '#64748b', cursor: 'not-allowed', fontWeight: '500' }} />
               </div>
               <div>
                 <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>Tên Mẫu ISO</label>
                 <input type="text" value={formData.name} onChange={(e) => handleInputChange('name', e.target.value)} style={{ width: '100%', padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.82rem', outline: 'none' }} />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>Ngày ban hành</label>
+                <input type="date" value={formData.issue_date} onChange={(e) => handleInputChange('issue_date', e.target.value)} style={{ width: '100%', padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.82rem', outline: 'none' }} />
               </div>
               <div>
                 <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>Trạng thái</label>
@@ -328,22 +321,58 @@ const ISOFormEditorView = () => {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '16px' }}>
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>Người soạn</label>
-                <input type="text" value={formData.issuer} onChange={(e) => handleInputChange('issuer', e.target.value)} style={{ width: '100%', padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.82rem', outline: 'none' }} />
-              </div>
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>Người duyệt</label>
-                <input type="text" value={formData.approver} onChange={(e) => handleInputChange('approver', e.target.value)} style={{ width: '100%', padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.82rem', outline: 'none' }} />
-              </div>
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>Ngày ban hành</label>
-                <input type="date" value={formData.issue_date} onChange={(e) => handleInputChange('issue_date', e.target.value)} style={{ width: '100%', padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.82rem', outline: 'none' }} />
-              </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '16px' }}>
               <div>
                 <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>Hiển thị tại</label>
                 <input type="text" value={formData.folder} onChange={(e) => handleInputChange('folder', e.target.value)} placeholder="Màn hình hiển thị..." style={{ width: '100%', padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.82rem', outline: 'none' }} />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>Cấp tài liệu (Chọn 1 hoặc nhiều)</label>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingTop: '4px' }}>
+                  {['Cấp 1', 'Cấp 2', 'Cấp 3', 'Cấp 4'].map(lvl => {
+                    const selectedList = formData.document_level ? formData.document_level.split(',').map(s => s.trim()) : [];
+                    const isSelected = selectedList.includes(lvl);
+                    const handleToggle = () => {
+                      let newList;
+                      if (isSelected) {
+                        newList = selectedList.filter(x => x !== lvl);
+                      } else {
+                        newList = [...selectedList, lvl];
+                      }
+                      handleInputChange('document_level', newList.filter(Boolean).join(', '));
+                    };
+                    return (
+                      <button
+                        key={lvl}
+                        type="button"
+                        onClick={handleToggle}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '20px',
+                          border: isSelected ? '1.5px solid #7B5233' : '1.5px solid #cbd5e1',
+                          backgroundColor: isSelected ? '#FAF6F0' : 'white',
+                          color: isSelected ? '#7B5233' : '#64748b',
+                          fontSize: '0.78rem',
+                          fontWeight: 'bold',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          outline: 'none',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isSelected) e.currentTarget.style.borderColor = '#7B5233';
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isSelected) e.currentTarget.style.borderColor = '#cbd5e1';
+                        }}
+                      >
+                        {lvl} {isSelected && '✓'}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
@@ -351,8 +380,8 @@ const ISOFormEditorView = () => {
               <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>Ghi chú</label>
               <textarea value={formData.doc_type} onChange={(e) => handleInputChange('doc_type', e.target.value)} rows={3} style={{ width: '100%', padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.82rem', outline: 'none', resize: 'none', fontFamily: 'inherit' }} />
             </div>
-          </div>
         </div>
+      </div>
 
         {/* Card: Nội dung quy trình */}
         <div style={cardStyle}>
@@ -377,87 +406,82 @@ const ISOFormEditorView = () => {
               gridTemplateColumns: 'repeat(3, 1fr)',
               gap: '16px'
             }}>
-              {[
-                { id: 'Mục đích', label: '1. Mục đích' },
-                { id: 'Phạm vi áp dụng', label: '2. Phạm vi áp dụng' },
-                { id: 'Tài liệu viện dẫn', label: '3. Tài liệu viện dẫn' },
-                { id: 'Định nghĩa và viết tắt', label: '4. Định nghĩa từ viết tắt' },
-                { id: 'Nội dung', label: '5. Nội dung' },
-                { id: 'Biểu mẫu', label: '6. Biểu mẫu' }
-              ].map((section, sIdx) => {
-                const currentType = formData.section_types?.[section.id] || 'text';
-                return (
-                  <div
-                    key={sIdx}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      padding: '12px 14px',
-                      backgroundColor: '#FAF8F5',
-                      border: '1px solid #EADCC9',
-                      borderRadius: '6px',
-                      transition: 'all 0.2s',
-                      gap: '10px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{
-                        width: '28px',
-                        height: '28px',
-                        borderRadius: '4px',
-                        backgroundColor: '#FAF6F0',
+              {Object.keys(formData.sections || {})
+                .filter(key => !key.startsWith('__'))
+                .map((sectionId, sIdx) => {
+                  const currentType = formData.section_types?.[sectionId] || 'text';
+                  return (
+                    <div
+                      key={sIdx}
+                      style={{
                         display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        border: '1px solid #7B5233',
-                        flexShrink: 0
-                      }}>
-                        {currentType === 'flowchart' ? (
-                          <GitBranch size={14} style={{ color: '#7B5233' }} />
-                        ) : (
-                          <FileText size={14} style={{ color: '#7B5233' }} />
-                        )}
-                      </div>
-                      <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#2D1A12', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {section.label}
-                      </span>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px dashed #EADCC9', paddingTop: '8px' }}>
-                      <span style={{ fontSize: '0.68rem', color: '#64748b' }}>Định dạng:</span>
-                      <select
-                        value={currentType}
-                        onChange={(e) => {
-                          const type = e.target.value;
-                          setFormData(prev => ({
-                            ...prev,
-                            section_types: {
-                              ...(prev.section_types || {}),
-                              [section.id]: type
-                            }
-                          }));
-                        }}
-                        style={{
-                          fontSize: '0.74rem',
-                          padding: '4px 8px',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        padding: '12px 14px',
+                        backgroundColor: '#FAF8F5',
+                        border: '1px solid #EADCC9',
+                        borderRadius: '6px',
+                        transition: 'all 0.2s',
+                        gap: '10px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{
+                          width: '28px',
+                          height: '28px',
                           borderRadius: '4px',
-                          border: '1px solid #cbd5e1',
-                          backgroundColor: 'white',
-                          cursor: 'pointer',
-                          color: '#7B5233',
-                          outline: 'none',
-                          fontWeight: 'bold',
-                          width: '110px'
-                        }}
-                      >
-                        <option value="text">Văn bản</option>
-                        <option value="flowchart">Lưu trình</option>
-                      </select>
+                          backgroundColor: '#FAF6F0',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          border: '1px solid #7B5233',
+                          flexShrink: 0
+                        }}>
+                          {currentType === 'flowchart' ? (
+                            <GitBranch size={14} style={{ color: '#7B5233' }} />
+                          ) : (
+                            <FileText size={14} style={{ color: '#7B5233' }} />
+                          )}
+                        </div>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#2D1A12', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {`${sIdx + 1}. ${sectionId}`}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px dashed #EADCC9', paddingTop: '8px' }}>
+                        <span style={{ fontSize: '0.68rem', color: '#64748b' }}>Định dạng:</span>
+                        <select
+                          value={currentType}
+                          onChange={(e) => {
+                            const type = e.target.value;
+                            setFormData(prev => ({
+                              ...prev,
+                              section_types: {
+                                ...(prev.section_types || {}),
+                                [sectionId]: type
+                              }
+                            }));
+                          }}
+                          style={{
+                            fontSize: '0.74rem',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            border: '1px solid #cbd5e1',
+                            backgroundColor: 'white',
+                            cursor: 'pointer',
+                            color: '#7B5233',
+                            outline: 'none',
+                            fontWeight: 'bold',
+                            width: '110px'
+                          }}
+                        >
+                          <option value="text">Văn bản</option>
+                          <option value="flowchart">Lưu trình</option>
+                        </select>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
             </div>
           </div>
         </div>

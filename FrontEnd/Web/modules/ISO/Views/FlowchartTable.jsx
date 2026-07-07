@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const SVG_W = 860;
@@ -317,8 +317,8 @@ export default function FlowchartTable({ steps = [] }) {
 
   return (
     <div style={{ overflowX: "auto" }}>
-      <svg width={SVG_W} height={svgH}
-        style={{ display: "block", backgroundColor: "white", fontFamily: "Georgia, 'Times New Roman', serif" }}>
+      <svg viewBox={`0 0 ${SVG_W} ${svgH}`}
+        style={{ width: "100%", height: "auto", display: "block", backgroundColor: "white", fontFamily: "Georgia, 'Times New Roman', serif" }}>
         <defs>
           <marker id="arrMain" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
             <path d="M 0 2 L 8 5 L 0 8 z" fill="#000" />

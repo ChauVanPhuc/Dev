@@ -20,6 +20,7 @@ class ISODocument(Base):
     status = Column(NVARCHAR(50), default="Hiệu lực")                    # Hiệu lực, Hết hiệu lực, Dự thảo
     folder = Column(NVARCHAR(100), nullable=True)                        # Thư mục quản lý (ví dụ: "3/2/1")
     doc_type = Column(NVARCHAR(100), nullable=True)                      # Loại tài liệu phê duyệt (ví dụ: "Phê duyệt 1 cấp")
+    document_level = Column(NVARCHAR(100), nullable=True)                # Cấp tài liệu (1 hoặc nhiều)
     diagram_data = Column(NVARCHAR(None), nullable=True)                 # Lưu trữ JSON của sơ đồ lưu đồ (nodes & links)
     created_at = Column(NVARCHAR(50))
     updated_at = Column(NVARCHAR(50))
@@ -99,6 +100,7 @@ class ISOProcess(Base):
     status = Column(NVARCHAR(50), default="Dự thảo")                    # Dự thảo, Hiệu lực, Tạm dừng
     display_at = Column(NVARCHAR(250), nullable=True)                   # Hiệu thị tại (ví dụ: máy, công đoạn...)
     notes = Column(NVARCHAR(None), nullable=True)                        # Ghi chú / Lưu ý
+    document_level = Column(NVARCHAR(100), nullable=True)                # Cấp tài liệu (1 hoặc nhiều)
     diagram_data = Column(NVARCHAR(None), nullable=True)                 # JSON sơ đồ lưu đồ tùy chỉnh riêng cho quy trình này
     created_at = Column(NVARCHAR(50))
     updated_at = Column(NVARCHAR(50))

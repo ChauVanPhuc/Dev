@@ -516,6 +516,29 @@ async def lifespan(app: FastAPI):
             db.rollback()
             print(f"Chatbot histories schema updates migration error: {schema_err}")
 
+        # [AUTO-MIGRATION] ISO documents and processes level schema update
+        try:
+            print("Checking and upgrading iso_documents and iso_processes tables schema...")
+            # Check and add document_level to iso_documents
+            db.execute(text("""
+                IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('iso_documents') AND name = 'document_level')
+                BEGIN
+                    ALTER TABLE iso_documents ADD document_level NVARCHAR(100) NULL;
+                END
+            """))
+            # Check and add document_level to iso_processes
+            db.execute(text("""
+                IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('iso_processes') AND name = 'document_level')
+                BEGIN
+                    ALTER TABLE iso_processes ADD document_level NVARCHAR(100) NULL;
+                END
+            """))
+            db.commit()
+            print("Successfully processed iso_documents & iso_processes schema updates.")
+        except Exception as schema_err:
+            db.rollback()
+            print(f"ISO documents/processes schema updates migration error: {schema_err}")
+
 
 
 

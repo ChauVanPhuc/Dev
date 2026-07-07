@@ -19,12 +19,7 @@ def parse_iso_docx(file_path: str) -> dict:
         "issuer": "",
         "approver": "",
         "revision_logs": [],
-        "sections": {
-            "Mục đích": "",
-            "Phạm vi áp dụng": "",
-            "Tài liệu viện dẫn": "",
-            "Định nghĩa và Từ viết tắt": ""
-        },
+        "sections": {},
         "steps": []
     }
 
@@ -217,19 +212,9 @@ def parse_iso_docx(file_path: str) -> dict:
             continue
 
     # 3. Phân tích nội dung văn bản chính (Các phần lớn từ 1 đến 5)
+    # 3. Phân tích nội dung văn bản chính (Các phần lớn từ 1 đến 5)
     current_section = None
     section_content = []
-
-    sections_keys = {
-        "1. mục đích": "Mục đích",
-        "1 mục đích": "Mục đích",
-        "2. phạm vi": "Phạm vi áp dụng",
-        "2 phạm vi": "Phạm vi áp dụng",
-        "3. tài liệu": "Tài liệu viện dẫn",
-        "3 tài liệu": "Tài liệu viện dẫn",
-        "4. định nghĩa": "Định nghĩa và Từ viết tắt",
-        "4 định nghĩa": "Định nghĩa và Từ viết tắt"
-    }
 
     # Bóc tách danh sách bước trực tiếp từ paragraphs trong phần diễn giải
     extracted_steps = []
@@ -262,20 +247,45 @@ def parse_iso_docx(file_path: str) -> dict:
                 }
                 continue
 
-        # Tìm tiêu đề mục mới để ngắt lưu trữ nội dung cũ
-        matched_section = None
-        for key, sec_name in sections_keys.items():
-            if line_lower.startswith(key):
-                matched_section = sec_name
-                break
+        # Nhận diện tiêu đề mục mới bằng cách quét các thuộc tính hình thức văn bản và từ khóa
+        is_heading = False
+        is_step = re.match(r'^(?:Bước|B)\s*\d+', line, re.IGNORECASE)
+        is_exclude = (
+            "theo dõi sửa đổi" in line_lower or 
+            "diễn giải" in line_lower or 
+            "lưu đồ" in line_lower or
+            "(xem trang" in line_lower or 
+            "xem trang sau" in line_lower
+        )
+        
+        if not is_step and not is_exclude and len(line) <= 80:
+            # Kiểm tra xem style có phải là Heading
+            style_name = p.style.name.lower() if p.style and p.style.name else ""
+            if "heading" in style_name:
+                is_heading = True
+            elif re.match(r'^\s*(?:\d+|[IVXLCDM]+)\s*[\.\-\:\s]\s*[a-zA-ZÀ-ỹ]', line):
+                is_heading = True
+            else:
+                keywords = ["mục đích", "phạm vi", "tài liệu viện dẫn", "tài liệu tham khảo", 
+                            "định nghĩa", "từ viết tắt", "nội dung", "biểu mẫu", "phụ lục"]
+                for kw in keywords:
+                    if kw in line_lower and len(line) < 40:
+                        is_heading = True
+                        break
+                if not is_heading and p.runs and all(run.bold for run in p.runs if run.text.strip()) and len(line) < 40:
+                    is_heading = True
                 
-        if matched_section:
-            if current_section and section_content:
-                result["sections"][current_section] = "<p>" + "</p><p>".join(section_content) + "</p>"
-            current_section = matched_section
+        if is_heading:
+            if current_section is not None:
+                result["sections"][current_section] = "<p>" + "</p><p>".join(section_content) + "</p>" if section_content else ""
+            
+            # Giữ nguyên văn tên mục – bỏ số thứ tự đầu dòng và dấu chấm cuối
+            cleaned_title = re.sub(r'^\s*(?:\d+|[IVXLCDM]+|[A-Z])\s*[\.\-\:\s]\s*', '', line).strip()
+            cleaned_title = re.sub(r'\.$', '', cleaned_title).strip()
+            
+            current_section = cleaned_title if cleaned_title else line.strip()
             section_content = []
             
-            # Gặp tiêu đề mục lớn thì dừng bóc tách bước hiện tại
             if current_step:
                 extracted_steps.append(current_step)
                 current_step = None
@@ -286,15 +296,26 @@ def parse_iso_docx(file_path: str) -> dict:
             # Ghi chỉ dẫn chi tiết cho bước quy trình đang duyệt
             if current_step:
                 # Nếu bắt gặp đầu dòng là mục lớn hoặc chữ số phần lớn, ngắt lưu trữ bước
-                if re.match(r"^\d+\s*[\.\:]", line) or any(line_lower.startswith(k) for k in ["mục đích", "phạm vi", "tài liệu", "định nghĩa"]):
+                is_major_section = False
+                if not is_step and len(line) <= 80:
+                    if re.match(r'^\s*(?:\d+|[IVXLCDM]+)\s*[\.\-\:\s]\s*[a-zA-ZÀ-ỹ]', line):
+                        is_major_section = True
+                    else:
+                        keywords = ["mục đích", "phạm vi", "tài liệu viện dẫn", "tài liệu tham khảo", 
+                                    "định nghĩa", "từ viết tắt", "nội dung", "biểu mẫu", "phụ lục"]
+                        for kw in keywords:
+                            if kw in line_lower and len(line) < 40:
+                                is_major_section = True
+                                break
+                if is_major_section:
                     extracted_steps.append(current_step)
                     current_step = None
                 else:
                     current_step["instructions_list"].append(line)
 
     # Đóng gói mục cuối cùng và bước cuối cùng
-    if current_section and section_content:
-        result["sections"][current_section] = "<p>" + "</p><p>".join(section_content) + "</p>"
+    if current_section is not None:
+        result["sections"][current_section] = "<p>" + "</p><p>".join(section_content) + "</p>" if section_content else ""
     if current_step:
         extracted_steps.append(current_step)
 
@@ -408,5 +429,15 @@ def parse_iso_docx(file_path: str) -> dict:
                     })
         
         result["diagram_data"] = json.dumps({"nodes": nodes, "links": links})
+
+    # Xoá nội dung bên trong của các mục chính, chỉ giữ lại khung sườn (mục chính)
+    if "sections" in result:
+        for key in list(result["sections"].keys()):
+            result["sections"][key] = ""
+
+    # Xoá hướng dẫn chi tiết của các bước lưu đồ
+    if "steps" in result:
+        for step in result["steps"]:
+            step["instructions"] = ""
 
     return result
