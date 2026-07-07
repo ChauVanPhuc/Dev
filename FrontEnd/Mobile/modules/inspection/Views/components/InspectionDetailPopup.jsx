@@ -324,19 +324,19 @@ const InspectionDetailPopup = ({ item, onClose }) => {
                 {extra.visual !== undefined && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: '600' }}>Ngoại quan:</span>
-                    <span style={{ fontWeight: '900', color: extra.visual === 'pass' ? '#22c55e' : '#ef4444', backgroundColor: extra.visual === 'pass' ? '#22c55e10' : '#ef444410', padding: '4px 10px', borderRadius: '8px' }}>{extra.visual === 'pass' ? 'ĐẠT' : 'CHƯA ĐẠT'}</span>
+                    <span style={{ fontWeight: '900', color: extra.visual === 'pass' ? '#22c55e' : '#ef4444', backgroundColor: extra.visual === 'pass' ? '#22c55e10' : '#ef444410', padding: '4px 10px', borderRadius: '8px' }}>{extra.visual === 'pass' ? 'ĐẠT' : 'KHÔNG ĐẠT'}</span>
                   </div>
                 )}
                 {extra.size !== undefined && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: '600' }}>Kích thước:</span>
-                    <span style={{ fontWeight: '900', color: extra.size === 'pass' ? '#22c55e' : '#ef4444', backgroundColor: extra.size === 'pass' ? '#22c55e10' : '#ef444410', padding: '4px 10px', borderRadius: '8px' }}>{extra.size === 'pass' ? 'ĐẠT' : 'CHƯA ĐẠT'}</span>
+                    <span style={{ fontWeight: '900', color: extra.size === 'pass' ? '#22c55e' : '#ef4444', backgroundColor: extra.size === 'pass' ? '#22c55e10' : '#ef444410', padding: '4px 10px', borderRadius: '8px' }}>{extra.size === 'pass' ? 'ĐẠT' : 'KHÔNG ĐẠT'}</span>
                   </div>
                 )}
                 {extra.function !== undefined && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: '600' }}>Chức năng:</span>
-                    <span style={{ fontWeight: '900', color: extra.function === 'pass' ? '#22c55e' : '#ef4444', backgroundColor: extra.function === 'pass' ? '#22c55e10' : '#ef444410', padding: '4px 10px', borderRadius: '8px' }}>{extra.function === 'pass' ? 'ĐẠT' : 'CHƯA ĐẠT'}</span>
+                    <span style={{ fontWeight: '900', color: extra.function === 'pass' ? '#22c55e' : '#ef4444', backgroundColor: extra.function === 'pass' ? '#22c55e10' : '#ef444410', padding: '4px 10px', borderRadius: '8px' }}>{extra.function === 'pass' ? 'ĐẠT' : 'KHÔNG ĐẠT'}</span>
                   </div>
                 )}
                 {extra.detail_bam_dinh && (

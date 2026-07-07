@@ -412,16 +412,16 @@ const DeliveryReceive = () => {
 
       // [NEW] Kiểm tra trạng thái KT đầu vào để hiển thị trên Thẻ Pallet
       if (data.plan_id && data.part_name) {
-          try {
-              const stageParam = data.delivery_stage || '';
-              const inspData = await fetchInspectionsByPlan(data.plan_id, stageParam);
-              const hasInsp = inspData.some(i => 
-                  (i.part_name === data.part_name || (i.part_name && i.part_name.startsWith(data.part_name + " - ")))
-              );
-              setDelivery(prev => ({ ...prev, qc_status: hasInsp ? 'Đã kiểm tra' : 'Chưa test' }));
-          } catch (e) {
-              console.error("Lỗi fetch inspections:", e);
-          }
+        try {
+          const stageParam = data.delivery_stage || '';
+          const inspData = await fetchInspectionsByPlan(data.plan_id, stageParam);
+          const hasInsp = inspData.some(i =>
+            (i.part_name === data.part_name || (i.part_name && i.part_name.startsWith(data.part_name + " - ")))
+          );
+          setDelivery(prev => ({ ...prev, qc_status: hasInsp ? 'Đã kiểm tra' : 'Chưa test' }));
+        } catch (e) {
+          console.error("Lỗi fetch inspections:", e);
+        }
       }
 
     } catch (error) {
@@ -478,13 +478,13 @@ const DeliveryReceive = () => {
 
   const userReceivePerm = permissions?.['mobile_delivery-receive'];
   const hasReceiveActionPermission = isAdmin || (
-    userReceivePerm && userReceivePerm !== 'none' && 
+    userReceivePerm && userReceivePerm !== 'none' &&
     userReceivePerm.split(',').map(p => p.trim()).some(p => ['create', 'edit', 'approve'].includes(p))
   );
 
   const userCreatePerm = permissions?.['mobile_delivery-create'];
   const hasCreateActionPermission = isAdmin || (
-    userCreatePerm && userCreatePerm !== 'none' && 
+    userCreatePerm && userCreatePerm !== 'none' &&
     userCreatePerm.split(',').map(p => p.trim()).includes('edit')
   );
 
@@ -685,7 +685,7 @@ const DeliveryReceive = () => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 10px rgba(0,0,0,0.03)' }}>
                       <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#1e293b', marginBottom: '16px' }}>Lập Phiếu Trả Hàng</h3>
-                      
+
                       <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
                         <div style={{ flex: 1 }}>
                           <FormInput
@@ -742,13 +742,13 @@ const DeliveryReceive = () => {
                       </div>
 
                       {/* File input ẩn */}
-                      <input 
-                        type="file" 
-                        accept="image/*" 
-                        capture="environment" 
-                        ref={returnFileInputRef} 
-                        style={{ display: 'none' }} 
-                        onChange={handleReturnFileChange} 
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        ref={returnFileInputRef}
+                        style={{ display: 'none' }}
+                        onChange={handleReturnFileChange}
                       />
 
                       {/* Ảnh minh chứng */}
@@ -781,11 +781,11 @@ const DeliveryReceive = () => {
                       {/* Ghi chú lỗi */}
                       <div style={{ marginBottom: '20px' }}>
                         <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#64748b', marginBottom: '8px' }}>Ghi chú / Lý do trả hàng</div>
-                        <textarea 
-                          rows="3" 
-                          placeholder="Nhập lý do trả hàng chi tiết..." 
-                          value={returnNote} 
-                          onChange={e => setReturnNote(e.target.value)} 
+                        <textarea
+                          rows="3"
+                          placeholder="Nhập lý do trả hàng chi tiết..."
+                          value={returnNote}
+                          onChange={e => setReturnNote(e.target.value)}
                           style={{
                             width: '100%',
                             padding: '12px',
@@ -796,7 +796,7 @@ const DeliveryReceive = () => {
                             fontFamily: 'inherit',
                             resize: 'none',
                             outline: 'none'
-                          }} 
+                          }}
                         />
                       </div>
                     </div>
@@ -898,9 +898,9 @@ const DeliveryReceive = () => {
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                               {ret.images.map((img, idx) => (
                                 <div key={idx} style={{ width: '80px', height: '60px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-                                  <img 
-                                    src={`${API_ROOT}${img.image_path}`} 
-                                    alt={`Proof ${idx}`} 
+                                  <img
+                                    src={`${API_ROOT}${img.image_path}`}
+                                    alt={`Proof ${idx}`}
                                     style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }}
                                     onClick={() => window.open(`${API_ROOT}${img.image_path}`, '_blank')}
                                   />
@@ -1017,7 +1017,7 @@ const DeliveryReceive = () => {
 
         {/* Sticky Footer Actions */}
         <div id="receive-action-buttons">
-          <DeliveryFooter 
+          <DeliveryFooter
             delivery={delivery}
             isQC={isQC}
             isAdmin={isAdmin}

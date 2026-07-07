@@ -31,7 +31,7 @@ const AwardDiscipline = () => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [messageModal, setMessageModal] = useState({ isOpen: false, type: 'info', title: '', message: '' })
-  
+
   // Dải danh sách nhân sự động từ API
   const [staffOptions, setStaffOptions] = useState([
     { label: 'Hồ Sỹ Khấn', value: 'Hồ Sỹ Khấn' },
@@ -82,7 +82,7 @@ const AwardDiscipline = () => {
             value: item.content
           }))
           setIssueOptions(options)
-          
+
           // Auto-fill form with the first rule details
           const firstRule = resp.data[0]
           setFormData(prev => ({
@@ -150,11 +150,11 @@ const AwardDiscipline = () => {
   const executeSubmit = async () => {
     setIsSubmitting(true)
     setShowConfirmModal(false)
-    
+
     // Tạo ngày định dạng dd.mm.yyyy
     const today = new Date()
     const formattedDate = `${String(today.getDate()).padStart(2, '0')}.${String(today.getMonth() + 1).padStart(2, '0')}.${today.getFullYear()}`
-    
+
     const payload = {
       staff_name: formData.staff,
       issue: formData.issue,
@@ -194,100 +194,100 @@ const AwardDiscipline = () => {
       <PageHeader title="G7 - Smart Flow" subTitle="MB9 | Khen thưởng, kỷ luật" />
 
       <div style={{ padding: '0px', backgroundColor: 'var(--bg-cream)', flex: 1, display: 'flex', flexDirection: 'column' }}>
-        
+
         {/* Nội dung chính */}
         <div style={{ padding: '16px 16px 100px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          
+
           <div id="awards-form-card">
-            <CollapsibleCard 
-              title="Kiểm tra ngày" 
+            <CollapsibleCard
+              title="Kiểm tra ngày"
               extra="22.01.2026"
               defaultOpen={true}
             >
-            {/* Form Fields */}
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
-              <div style={{ flex: 1 }}>
-                <FormSelect 
-                  label="Nhân sự vi phạm" 
-                  name="staff"
-                  value={formData.staff} 
-                  options={staffOptions} 
-                  onChange={handleChange}
-                />
+              {/* Form Fields */}
+              <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+                <div style={{ flex: 1 }}>
+                  <FormSelect
+                    label="Nhân sự vi phạm"
+                    name="staff"
+                    value={formData.staff}
+                    options={staffOptions}
+                    onChange={handleChange}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <FormSelect
+                    label="Vấn đề"
+                    name="issue"
+                    value={formData.issue}
+                    options={issueOptions}
+                    onChange={handleChange}
+                  />
+                </div>
               </div>
-              <div style={{ flex: 1 }}>
-                <FormSelect 
-                  label="Vấn đề" 
-                  name="issue"
-                  value={formData.issue} 
-                  options={issueOptions} 
-                  onChange={handleChange}
-                />
-              </div>
-            </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ fontSize: '0.8rem', fontWeight: '800', color: '#475569', marginBottom: '6px', display: 'block' }}>
-                Ghi chú
-              </label>
-              <textarea 
-                name="note"
-                rows="4" 
-                placeholder="Nhập ghi chú" 
-                value={formData.note}
-                onChange={handleChange}
-                style={{ 
-                  width: '100%', 
-                  padding: '10px 12px', 
-                  borderRadius: '8px', 
-                  border: '1px solid #cbd5e1', 
-                  fontSize: '0.9rem', 
-                  color: '#1e293b',
-                  resize: 'none',
-                  outline: 'none'
-                }} 
-              />
-            </div>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: '800', color: '#475569', marginBottom: '6px', display: 'block' }}>
+                  Ghi chú
+                </label>
+                <textarea
+                  name="note"
+                  rows="4"
+                  placeholder="Nhập ghi chú"
+                  value={formData.note}
+                  onChange={handleChange}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.9rem',
+                    color: '#1e293b',
+                    resize: 'none',
+                    outline: 'none'
+                  }}
+                />
+              </div>
 
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '8px' }}>
-              <div style={{ flex: 1 }}>
-                <FormSelect 
-                  label="Ảnh hưởng" 
-                  name="impact"
-                  value={formData.impact} 
-                  options={impactOptions} 
-                  onChange={handleChange}
-                  disabled={true}
-                />
+              <div style={{ display: 'flex', gap: '12px', marginBottom: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  <FormSelect
+                    label="Ảnh hưởng"
+                    name="impact"
+                    value={formData.impact}
+                    options={impactOptions}
+                    onChange={handleChange}
+                    disabled={true}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <FormInput
+                    label="Điểm"
+                    name="points"
+                    type="number"
+                    value={formData.points}
+                    onChange={handleChange}
+                    readOnly={true}
+                  />
+                </div>
               </div>
-              <div style={{ flex: 1 }}>
-                <FormInput 
-                  label="Điểm" 
-                  name="points"
-                  type="number"
-                  value={formData.points} 
-                  onChange={handleChange}
-                  readOnly={true}
-                />
-              </div>
-            </div>
-          </CollapsibleCard>
+            </CollapsibleCard>
           </div>
 
           {/* Section: Bằng chứng */}
-          <div id="awards-evidence-card" style={{ 
-            backgroundColor: '#fff', 
-            borderRadius: '16px', 
-            padding: '20px', 
+          <div id="awards-evidence-card" style={{
+            backgroundColor: '#fff',
+            borderRadius: '16px',
+            padding: '20px',
             boxShadow: '0 4px 10px rgba(0,0,0,0.03)',
             position: 'relative'
           }}>
-            <input 
-              type="file" 
-              accept="image/*" 
-              capture="environment" 
-              ref={fileInputRef} 
-              style={{ display: 'none' }} 
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              ref={fileInputRef}
+              style={{ display: 'none' }}
               onChange={handleFileChange}
             />
 
@@ -295,7 +295,7 @@ const AwardDiscipline = () => {
               <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#1e293b', margin: 0 }}>Bằng chứng</h3>
               {/* Icon Camera ở trên - Chỉ hiện khi CHƯA có ảnh nào */}
               {photos.length === 0 && (
-                <button 
+                <button
                   onClick={handleAddPhoto}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
                 >
@@ -309,28 +309,28 @@ const AwardDiscipline = () => {
               <div style={{ display: 'flex', gap: '12px', width: '100%' }}>
                 {/* 1. Các ảnh đã chụp */}
                 {photos.map(photo => (
-                  <div key={photo.id} style={{ 
-                    flex: 1, 
+                  <div key={photo.id} style={{
+                    flex: 1,
                     aspectRatio: '1/1', // Đổi sang 1/1 cho vuông vắn theo phong cách icon động
-                    backgroundColor: '#f1f5f9', 
+                    backgroundColor: '#f1f5f9',
                     borderRadius: '12px',
-                    position: 'relative', 
-                    display: 'flex', 
-                    alignItems: 'center', 
+                    position: 'relative',
+                    display: 'flex',
+                    alignItems: 'center',
                     justifyContent: 'center',
                     border: '1px solid #e2e8f0',
                     overflow: 'hidden'
                   }}>
-                    <img 
-                      src={photo.url} 
-                      alt="evidence" 
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                    <img
+                      src={photo.url}
+                      alt="evidence"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
-                    <button 
+                    <button
                       onClick={() => handleRemovePhoto(photo.id)}
-                      style={{ 
-                        position: 'absolute', top: '5px', right: '5px', 
-                        background: '#fff', borderRadius: '50%', border: 'none', 
+                      style={{
+                        position: 'absolute', top: '5px', right: '5px',
+                        background: '#fff', borderRadius: '50%', border: 'none',
                         width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                         boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                       }}
@@ -342,15 +342,15 @@ const AwardDiscipline = () => {
 
                 {/* 2. Icon Camera "nhảy" xuống các ô tiếp theo */}
                 {photos.length > 0 && photos.length < 3 && (
-                  <button 
+                  <button
                     onClick={handleAddPhoto}
-                    style={{ 
-                      flex: 1, 
-                      aspectRatio: '1/1', 
-                      backgroundColor: '#f8fafc', 
+                    style={{
+                      flex: 1,
+                      aspectRatio: '1/1',
+                      backgroundColor: '#f8fafc',
                       borderRadius: '12px',
-                      display: 'flex', 
-                      alignItems: 'center', 
+                      display: 'flex',
+                      alignItems: 'center',
                       justifyContent: 'center',
                       border: '2px dashed #cbd5e1',
                       cursor: 'pointer'
@@ -371,50 +371,50 @@ const AwardDiscipline = () => {
         </div>
 
         {/* Nút hành động (Fixed Bottom) */}
-        <div id="awards-action-buttons" className="responsive-fixed-footer" style={{ 
-          backgroundColor: 'var(--bg-cream)', 
+        <div id="awards-action-buttons" className="responsive-fixed-footer" style={{
+          backgroundColor: 'var(--bg-cream)',
           padding: '16px',
-          display: 'flex', 
+          display: 'flex',
           gap: '12px',
           borderTop: '1px solid #e2e8f0',
           zIndex: 100
         }}>
-          <button 
+          <button
             onClick={handleSubmit}
             disabled={isSubmitting}
             style={{
-              flex: 2, 
-              backgroundColor: isSubmitting ? '#94a3b8' : '#32251e', 
-              color: '#fff', 
-              border: 'none', 
+              flex: 2,
+              backgroundColor: isSubmitting ? '#94a3b8' : '#32251e',
+              color: '#fff',
+              border: 'none',
               borderRadius: '12px',
-              padding: '16px', 
-              fontSize: '1rem', 
-              fontWeight: '700', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              gap: '8px', 
+              padding: '16px',
+              fontSize: '1rem',
+              fontWeight: '700',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
               boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
             }}
           >
             <Check size={20} strokeWidth={3} /> Xác nhận
           </button>
-          <button 
+          <button
             onClick={() => navigate(-1)}
             disabled={isSubmitting}
             style={{
-              flex: 1, 
-              backgroundColor: '#fff', 
-              color: '#94a3b8', 
-              border: '1px solid #cbd5e1', 
+              flex: 1,
+              backgroundColor: '#fff',
+              color: '#94a3b8',
+              border: '1px solid #cbd5e1',
               borderRadius: '12px',
-              padding: '16px', 
-              fontSize: '1.0rem', 
-              fontWeight: '700', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
+              padding: '16px',
+              fontSize: '1.0rem',
+              fontWeight: '700',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               gap: '8px'
             }}
           >

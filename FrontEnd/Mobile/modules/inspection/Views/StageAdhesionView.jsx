@@ -297,7 +297,7 @@ const StageAdhesionView = () => {
                 >
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                     <span style={{ fontSize: '13px', fontWeight: '700', color: '#4b301e' }}>Kiểm tra bám dính ({item.batch_no})</span>
-                    <span style={{ fontSize: '11px', color: '#7c6d5e' }}>SP: {item.product_sku} - Kết quả: <span style={{ fontWeight: '700', color: item.conclusion === 'pass' ? '#10b981' : '#ef4444' }}>{item.conclusion.toUpperCase()}</span></span>
+                    <span style={{ fontSize: '11px', color: '#7c6d5e' }}>SP: {item.product_sku} - Kết quả: <span style={{ fontWeight: '700', color: item.conclusion === 'pass' ? '#10b981' : '#ef4444' }}>{item.conclusion === 'pass' ? 'ĐẠT' : 'KHÔNG ĐẠT'}</span></span>
                   </div>
                   <span style={{ fontSize: '11px', color: '#a3978b' }}>{formatDateTime(item.inspection_date)}</span>
                 </div>

@@ -54,7 +54,7 @@ export const useWebSocket = (onMessage) => {
     
     let wsBase;
     if (port === '1333' || port === '1222' || port === '3000' || port === '5173' || hostname === 'localhost' || hostname.startsWith('192.168.')) {
-      wsBase = `ws://${hostname}:1111`;
+      wsBase = `ws://${hostname}:8000`;
     } else if (hostname.includes('smartflowg7.cloud')) {
       wsBase = `wss://${hostname}`;
     } else {

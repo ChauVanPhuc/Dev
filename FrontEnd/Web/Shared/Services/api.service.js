@@ -5,8 +5,17 @@ export const getBaseURL = () => {
   // Nếu đang chạy ở môi trường Dev (Vite thường dùng cổng 5173, 5174 hoặc 3000)
   // chúng ta cần trỏ cứng về cổng 8000 của BackEnd
   const { hostname, port } = window.location;
+
+  // Nếu là môi trường Cloudflare với tách biệt subdomain
+  if (hostname.includes('smartflowg7.cloud')) {
+    if (hostname === 'smartflowg7.cloud') {
+      return window.location.origin;
+    }
+    return 'https://api.smartflowg7.cloud';
+  }
+
   if (port === '5173' || port === '5174' || port === '5175' || port === '3000' || port === '1222' || port === '1333') {
-    return `http://${hostname}:1111`;
+    return `http://${hostname}:8000`;
   }
   
   // Nếu đang chạy Production (đã build) hoặc qua Ngrok, dùng đường dẫn tương đối

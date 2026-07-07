@@ -17,7 +17,7 @@ const CAPADetail = () => {
   const [occurrencesList, setOccurrencesList] = useState([]);
   const [selectedOccId, setSelectedOccId] = useState(parseInt(occurrenceId));
   const [occurrenceData, setOccurrenceData] = useState(null);
-  
+
   // Form states for investigation details
   const [mainCause, setMainCause] = useState('');
   const [correctiveAction, setCorrectiveAction] = useState('');
@@ -28,7 +28,7 @@ const CAPADetail = () => {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null); // 'save' | 'close_status'
   const [messageModal, setMessageModal] = useState({ isOpen: false, type: 'info', title: '', message: '' });
-  
+
   // Evaluation Modal states
   const [showEvalModal, setShowEvalModal] = useState(false);
   const [evalForm, setEvalForm] = useState({
@@ -196,7 +196,7 @@ const CAPADetail = () => {
   const handleOpenEvalModal = () => {
     const today = new Date();
     const formattedDate = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
-    
+
     setEvalForm({
       content: '',
       execution_date: formattedDate,
@@ -236,7 +236,7 @@ const CAPADetail = () => {
       return;
     }
     setIsSubmitting(true);
-    
+
     const payload = {
       content: evalForm.content,
       execution_date: evalForm.execution_date,
@@ -268,12 +268,12 @@ const CAPADetail = () => {
         notes: evalForm.notes,
         images: JSON.stringify(evalPhotos.map(p => p.url))
       };
-      
+
       setOccurrenceData(prev => ({
         ...prev,
         evaluations: [...(prev?.evaluations || []), mockNewEval]
       }));
-      
+
       setShowEvalModal(false);
       setMessageModal({
         isOpen: true,
@@ -310,10 +310,10 @@ const CAPADetail = () => {
       <PageHeader title="G7 - Smart Flow" subTitle="MH15 | Thông tin CAPA" />
 
       <div style={{ padding: '0px', backgroundColor: 'var(--bg-cream)', flex: 1, display: 'flex', flexDirection: 'column' }}>
-        
+
         {/* Main scrollable body */}
         <div style={{ padding: '16px 16px 100px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
-          
+
           {/* Dropdown Selector for Occurrences */}
           <div id="capa-detail-selector" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <span style={{ fontSize: '14px', fontWeight: '800', color: '#4b301e', whiteSpace: 'nowrap' }}>Lần phát sinh:</span>
@@ -341,7 +341,7 @@ const CAPADetail = () => {
               <div style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#7c6d5e', fontSize: '10px' }}>▼</div>
             </div>
           </div>
- 
+
           {/* Card 1: Thông tin ghi nhận */}
           {occurrenceData && (
             <div id="capa-detail-occ-info" style={{
@@ -367,7 +367,7 @@ const CAPADetail = () => {
                   {status}
                 </span>
               </div>
- 
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '13px' }}>
                 <div>Ngày: <strong style={{ color: '#4b301e' }}>{occurrenceData.occurrence_date}</strong></div>
                 <div>Mã Cont: <strong style={{ color: '#4b301e' }}>{occurrenceData.container_code}</strong></div>
@@ -375,14 +375,14 @@ const CAPADetail = () => {
                 <div>Số lượng: <strong style={{ color: '#4b301e' }}>{occurrenceData.quantity}</strong></div>
                 <div style={{ gridColumn: 'span 2' }}>Kiểm soát bởi: <strong style={{ color: '#4b301e' }}>{occurrenceData.inspector_name}</strong></div>
               </div>
- 
+
               <div style={{ fontSize: '13px', color: '#4b301e', borderTop: '1px dashed #f0ede8', paddingTop: '10px' }}>
                 <strong>Vấn đề chi tiết:</strong>
                 <p style={{ margin: '4px 0 0', lineHeight: '1.4', color: '#7c6d5e' }}>{occurrenceData.issue_detail}</p>
               </div>
             </div>
           )}
- 
+
           {/* Card 2: Thông tin điều tra */}
           <div id="capa-detail-investigation" style={{
             backgroundColor: '#fff',
@@ -397,7 +397,7 @@ const CAPADetail = () => {
             <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#4b301e', margin: 0, borderBottom: '1px solid #f0ede8', paddingBottom: '10px' }}>
               Thông tin điều tra
             </h3>
- 
+
             <div>
               <label style={{ fontSize: '12px', fontWeight: '800', color: '#7c6d5e', marginBottom: '6px', display: 'block' }}>
                 Nguyên nhân chính
@@ -420,7 +420,7 @@ const CAPADetail = () => {
                 }}
               />
             </div>
- 
+
             <div>
               <label style={{ fontSize: '12px', fontWeight: '800', color: '#7c6d5e', marginBottom: '6px', display: 'block' }}>
                 Hành động khắc phục phòng ngừa
@@ -443,7 +443,7 @@ const CAPADetail = () => {
                 }}
               />
             </div>
- 
+
             <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
               <button
                 onClick={handleSaveInvestigation}
@@ -483,7 +483,7 @@ const CAPADetail = () => {
               )}
             </div>
           </div>
- 
+
           {/* Card 3: Bảng theo dõi và đánh giá */}
           <div id="capa-detail-tracking-table" style={{
             backgroundColor: '#fff',

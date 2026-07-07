@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api from '@webShared/Services/api.service';
+import api, { getBaseURL } from '@webShared/Services/api.service';
 import { useOutletContext, useNavigate, useParams } from 'react-router-dom';
 import { 
   ArrowLeft, Edit, FileText, X, Plus, Download, Trash2, ChevronDown, ChevronRight, Settings, Eye, Check
@@ -30,13 +30,7 @@ const MachineDetailView = () => {
   // Dropdown action menus for file items
   const [activeFileMenuId, setActiveFileMenuId] = useState(null);
 
-  const getBaseURL = () => {
-    const { hostname, port } = window.location;
-    if (port === '5173' || port === '3000') {
-      return `http://${hostname}:1111`;
-    }
-    return window.location.origin;
-  };
+
 
   const loadMachineData = async () => {
     setLoading(true);

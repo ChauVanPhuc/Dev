@@ -33,7 +33,7 @@ def print_banner():
     table.add_row("Logistics/Delivery", "/api/v1/deliveries", "[green]Online[/green]")
     
     console.print(table)
-    console.print("\n[bold yellow]>[/bold yellow] [bold white]Docs:[/bold white] http://localhost:1111/docs")
+    console.print("\n[bold yellow]>[/bold yellow] [bold white]Docs:[/bold white] http://localhost:8000/docs")
     console.print("[bold yellow]>[/bold yellow] [bold white]Logs:[/bold white] [dim]Streaming incoming requests...[/dim]\n")
 
 if __name__ == "__main__":

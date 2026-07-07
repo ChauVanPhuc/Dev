@@ -164,7 +164,7 @@ const QualityInspectionDetail = () => {
     // Chỉ khi bấm "Xác nhận" ở màn hình ngoài thì mới gửi lên server
     const handleSave = () => {
         if (isPass === null) {
-            alert('Vui lòng chọn trạng thái Đạt hoặc Chưa Đạt trước khi xác nhận!')
+            alert('Vui lòng chọn trạng thái Đạt hoặc Không đạt trước khi xác nhận!')
             return
         }
         const existingImages = images.filter(img => typeof img === 'string') // URL server

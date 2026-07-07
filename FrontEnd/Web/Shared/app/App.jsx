@@ -72,6 +72,7 @@ import PurchaseOrderItemList from '@modules/Purchasing/Views/PurchaseOrderItemLi
 // Import ISO module
 import ISODocumentList from '@modules/ISO/Views/ISODocumentListView';
 import ISOFormEditor from '@modules/ISO/Views/ISOFormEditorView';
+import ISOProcessEditor from '@modules/ISO/Views/ISOProcessEditorView';
 
 import { authService } from '@modules/Auth/Models/auth.service';
 import { ScreenProvider } from '@shared/context/ScreenContext';
@@ -548,6 +549,7 @@ function App() {
             <Route path="iso-documents" element={<ProtectedRoute permissionKey="iso-documents"><ISODocumentList mode="documents" /></ProtectedRoute>} />
             <Route path="iso-processes" element={<ProtectedRoute permissionKey="iso-processes"><ISODocumentList mode="processes" /></ProtectedRoute>} />
             <Route path="iso-documents/edit/:id" element={<ProtectedRoute permissionKey={["iso-documents", "iso-processes"]}><ISOFormEditor /></ProtectedRoute>} />
+            <Route path="iso-processes/edit/:id" element={<ProtectedRoute permissionKey="iso-processes"><ISOProcessEditor /></ProtectedRoute>} />
             <Route path="kpi" element={<ProtectedRoute permissionKey="kpi"><KPIReports /></ProtectedRoute>} />
             <Route path="kpi/checklist" element={<ProtectedRoute permissionKey="kpi-checklist"><KPIChecklist /></ProtectedRoute>} />
             <Route path="kpi/list" element={<ProtectedRoute permissionKey="kpi-list"><KPIItems /></ProtectedRoute>} />

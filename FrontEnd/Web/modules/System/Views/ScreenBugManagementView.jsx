@@ -666,31 +666,7 @@ const ScreenBugManagementView = () => {
         .admin-main:has(.screen-management-container) {
           height: 100vh !important;
           overflow: hidden !important;
-          margin-left: 260px !important;
-          width: calc(100% - 260px) !important;
           max-width: none !important;
-        }
-
-        @media (min-width: 993px) {
-          .admin-main.sidebar-collapsed:has(.screen-management-container) {
-            margin-left: 80px !important;
-            width: calc(100% - 80px) !important;
-          }
-        }
-
-        @media (max-width: 992px) {
-          .admin-main:has(.screen-management-container) {
-            margin-left: 80px !important;
-            width: calc(100% - 80px) !important;
-          }
-        }
-
-        @media (max-width: 768px) {
-          .admin-main:has(.screen-management-container) {
-            margin-left: 0 !important;
-            width: 100% !important;
-            max-width: 100vw !important;
-          }
         }
 
         .dashboard-content:has(.screen-management-container) {

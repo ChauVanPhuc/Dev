@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import api from '@webShared/Services/api.service';
+import api, { getBaseURL } from '@webShared/Services/api.service';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import ExcelJS from 'exceljs';
 import axios from 'axios';
@@ -214,13 +214,7 @@ const MachineManagementView = () => {
     importFormData.append('file', file);
 
     const token = localStorage.getItem('token');
-    const getBaseURL = () => {
-      const { hostname, port } = window.location;
-      if (port === '5173' || port === '3000') {
-        return `http://${hostname}:1111`;
-      }
-      return window.location.origin;
-    };
+
 
     try {
       const response = await axios.post(

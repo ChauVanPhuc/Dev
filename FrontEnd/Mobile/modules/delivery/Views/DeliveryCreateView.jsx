@@ -46,12 +46,12 @@ const MoistureStepper = ({ label, value, onChange, placeholder }) => {
   return (
     <div style={{ flex: 1, minWidth: 0 }}>
       {label && (
-        <label style={{ 
-          fontSize: '0.8rem', 
-          fontWeight: '800', 
-          color: '#475569', 
-          marginBottom: '2px', 
-          minHeight: '24px', 
+        <label style={{
+          fontSize: '0.8rem',
+          fontWeight: '800',
+          color: '#475569',
+          marginBottom: '2px',
+          minHeight: '24px',
           display: 'block',
           whiteSpace: 'nowrap',
           overflow: 'hidden',
@@ -61,14 +61,14 @@ const MoistureStepper = ({ label, value, onChange, placeholder }) => {
           {label}
         </label>
       )}
-      <div style={{ 
-        display: 'flex', alignItems: 'center', backgroundColor: '#f8fafc', 
-        border: '1.5px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', 
+      <div style={{
+        display: 'flex', alignItems: 'center', backgroundColor: '#f8fafc',
+        border: '1.5px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden',
         height: 'clamp(30px, 8.5vw, 36px)', minWidth: 0
       }}>
-        <button 
-          type="button" 
-          style={btnStyle} 
+        <button
+          type="button"
+          style={btnStyle}
           onClick={() => adjust(-0.1)}
         >-</button>
         <input
@@ -84,14 +84,14 @@ const MoistureStepper = ({ label, value, onChange, placeholder }) => {
             }
           }}
           style={{
-            flex: 1, width: '100%', height: '100%', border: 'none', textAlign: 'center', 
+            flex: 1, width: '100%', height: '100%', border: 'none', textAlign: 'center',
             fontSize: 'clamp(0.75rem, 2.5vw, 0.9rem)', fontWeight: '800', color: '#0f172a', outline: 'none', padding: 0,
             backgroundColor: 'transparent', minWidth: 0
           }}
         />
-        <button 
-          type="button" 
-          style={btnStyle} 
+        <button
+          type="button"
+          style={btnStyle}
           onClick={() => adjust(0.1)}
         >+</button>
       </div>
@@ -126,7 +126,7 @@ const DeliveryCreate = () => {
 
   const userPerm = permissions?.['mobile_delivery-create'];
   const hasActionPermission = isAdmin || (
-    userPerm && userPerm !== 'none' && 
+    userPerm && userPerm !== 'none' &&
     userPerm.split(',').map(p => p.trim()).includes(isEditMode ? 'edit' : 'create')
   );
 
@@ -181,42 +181,42 @@ const DeliveryCreate = () => {
         ])
 
         setDeliveries(deliveryList || [])
-        
-        if (stageParam.toLowerCase().includes('đóng gói')) {
-           const poParts = [];
-           const userStageNorm = stageParam.toLowerCase().trim();
 
-           (planResp?.orders || []).forEach(o => {
-               (o.products || []).forEach(p => {
-                   const checkTree = (nodes) => {
-                       if (!nodes || !Array.isArray(nodes)) return false;
-                       for (let n of nodes) {
-                           const inS = (n.input_stage || '').toLowerCase().trim();
-                           const outS = (n.output_stage || '').toLowerCase().trim();
-                           if (inS === userStageNorm || outS === userStageNorm) return true;
-                           if (inS.includes(userStageNorm) || outS.includes(userStageNorm)) return true;
-                           if (checkTree(n.parts)) return true;
-                       }
-                       return false;
-                   };
-                   
-                    if (!userStageNorm || userStageNorm.includes('đóng gói') || userStageNorm.includes('đg') || checkTree(p.bom_details)) {
-                       poParts.push({
-                          ...p,
-                          name: p.name || p.sku,
-                          displayName: `[${o.name}] ${p.name || p.sku}`,
-                          output_stage: 'Kho thành phẩm',
-                          input_stage: stageParam,
-                          order_code: o.name,
-                          order_id: o.id,
-                          finished_quantity: p.finished_quantity || 0
-                       });
-                   }
-               });
-           });
-           setAggregatedParts(poParts);
+        if (stageParam.toLowerCase().includes('đóng gói')) {
+          const poParts = [];
+          const userStageNorm = stageParam.toLowerCase().trim();
+
+          (planResp?.orders || []).forEach(o => {
+            (o.products || []).forEach(p => {
+              const checkTree = (nodes) => {
+                if (!nodes || !Array.isArray(nodes)) return false;
+                for (let n of nodes) {
+                  const inS = (n.input_stage || '').toLowerCase().trim();
+                  const outS = (n.output_stage || '').toLowerCase().trim();
+                  if (inS === userStageNorm || outS === userStageNorm) return true;
+                  if (inS.includes(userStageNorm) || outS.includes(userStageNorm)) return true;
+                  if (checkTree(n.parts)) return true;
+                }
+                return false;
+              };
+
+              if (!userStageNorm || userStageNorm.includes('đóng gói') || userStageNorm.includes('đg') || checkTree(p.bom_details)) {
+                poParts.push({
+                  ...p,
+                  name: p.name || p.sku,
+                  displayName: `[${o.name}] ${p.name || p.sku}`,
+                  output_stage: 'Kho thành phẩm',
+                  input_stage: stageParam,
+                  order_code: o.name,
+                  order_id: o.id,
+                  finished_quantity: p.finished_quantity || 0
+                });
+              }
+            });
+          });
+          setAggregatedParts(poParts);
         } else {
-           setAggregatedParts(planResp?.bom_details?.handover || [])
+          setAggregatedParts(planResp?.bom_details?.handover || [])
         }
       } catch (err) {
         console.error("Lỗi khi tải dữ liệu chi tiết:", err)
@@ -303,8 +303,8 @@ const DeliveryCreate = () => {
     if (!selectedPartKey) return null;
     const parts = aggregatedParts.filter(p => (p.displayName || p.name || '').trim().toLowerCase() === selectedPartKey.toLowerCase());
     if (selectedSpecification) {
-       const matched = parts.find(p => (p.specification || 'Không có') === selectedSpecification);
-       if (matched) return matched;
+      const matched = parts.find(p => (p.specification || 'Không có') === selectedSpecification);
+      if (matched) return matched;
     }
     return parts[0] || null;
   }, [aggregatedParts, selectedPartKey, selectedSpecification])
@@ -350,7 +350,7 @@ const DeliveryCreate = () => {
     const totalRemainingForSelected = groupedPartProducts
       .filter(g => selectedOrderCodes.includes(g.order_code))
       .reduce((sum, g) => sum + Math.max(0, (g.part_qty_needed || 0) - (g.delivered || 0)), 0);
-    
+
     const calculatedResidual = Math.max(0, totalQty - totalRemainingForSelected);
     setResidual(calculatedResidual.toString());
   }, [totalHandover, selectedOrderCodes, groupedPartProducts]);
@@ -415,10 +415,10 @@ const DeliveryCreate = () => {
         // Nếu là Đóng gói, tạo mock partProducts từ dữ liệu PO đã có sẵn
         if (stageParamActive.toLowerCase().includes('đóng gói') && selectedPart) {
           const mockData = [{
-             order_code: selectedPart.order_code || 'Chung',
-             order_id: selectedPart.order_id || null,
-             part_qty_needed: selectedPart.quantity || 0,
-             delivered: selectedPart.finished_quantity || 0
+            order_code: selectedPart.order_code || 'Chung',
+            order_id: selectedPart.order_id || null,
+            part_qty_needed: selectedPart.quantity || 0,
+            delivered: selectedPart.finished_quantity || 0
           }];
           setPartProducts(mockData);
           if (isEditMode && isFirstEditLoad.current && editData?.details) {
@@ -466,7 +466,7 @@ const DeliveryCreate = () => {
         const stageParam = user?.activeStageDescription || user?.activeStageName || user?.stage_description || user?.stage_name || ''
         // Lấy tất cả KT của KHSX này theo công đoạn
         const allInsps = await fetchInspectionsByPlan(selectedPlanId, stageParam)
-        
+
         // Lọc đúng chi tiết và quy cách đang chọn
         const partInsps = allInsps.filter(i => {
           const nameMatches = (i.part_name || '').trim().toLowerCase() === selectedPartKey.trim().toLowerCase()
@@ -653,20 +653,20 @@ const DeliveryCreate = () => {
         </div>
 
         {backupQrCode && (
-            <div style={{ backgroundColor: '#fffbe1', padding: '10px 16px', color: '#b45309', fontWeight: 'bold', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <ScanLine size={18} /> Đang sử dụng mã QR Dự Phòng: {backupQrCode}
-            </div>
+          <div style={{ backgroundColor: '#fffbe1', padding: '10px 16px', color: '#b45309', fontWeight: 'bold', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <ScanLine size={18} /> Đang sử dụng mã QR Dự Phòng: {backupQrCode}
+          </div>
         )}
 
         {!initialPlanId && (
-            <div style={{ padding: '16px', paddingBottom: '0', backgroundColor: 'var(--bg-cream)' }}>
-                <FormSearchSelect
-                    label="Kế hoạch sản xuất"
-                    value={selectedPlanId}
-                    onChange={e => setSelectedPlanId(e.target.value)}
-                    options={plans.map(p => ({ label: p.name, value: p.id.toString() }))}
-                />
-            </div>
+          <div style={{ padding: '16px', paddingBottom: '0', backgroundColor: 'var(--bg-cream)' }}>
+            <FormSearchSelect
+              label="Kế hoạch sản xuất"
+              value={selectedPlanId}
+              onChange={e => setSelectedPlanId(e.target.value)}
+              options={plans.map(p => ({ label: p.name, value: p.id.toString() }))}
+            />
+          </div>
         )}
 
         <div style={{ padding: '12px var(--spacing-md) 100px', display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
@@ -765,10 +765,10 @@ const DeliveryCreate = () => {
                   />
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                    <label style={{ 
-                      fontSize: '0.8rem', 
-                      fontWeight: '800', 
-                      color: '#475569', 
+                    <label style={{
+                      fontSize: '0.8rem',
+                      fontWeight: '800',
+                      color: '#475569',
                       marginBottom: '4px',
                       display: 'block',
                       whiteSpace: 'nowrap',
@@ -812,13 +812,13 @@ const DeliveryCreate = () => {
             {/* Row 3: Độ ẩm & Số dư */}
             <div style={{ display: 'flex', gap: 'var(--spacing-md)', marginBottom: 'var(--spacing-md)', alignItems: 'flex-end' }}>
               <div id="delivery-moisture-group" style={{ flex: 1.5, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                <label style={{ 
-                  fontSize: '0.8rem', 
-                  fontWeight: '800', 
-                  color: '#475569', 
-                  marginBottom: '2px', 
-                  minHeight: '24px', 
-                  display: 'block', 
+                <label style={{
+                  fontSize: '0.8rem',
+                  fontWeight: '800',
+                  color: '#475569',
+                  marginBottom: '2px',
+                  minHeight: '24px',
+                  display: 'block',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -827,16 +827,16 @@ const DeliveryCreate = () => {
                   Độ ẩm (%)
                 </label>
                 <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'center', minWidth: 0 }}>
-                  <MoistureStepper 
+                  <MoistureStepper
                     placeholder="Min"
-                    value={moistureMin} 
-                    onChange={setMoistureMin} 
+                    value={moistureMin}
+                    onChange={setMoistureMin}
                   />
                   <div style={{ color: '#cbd5e1', fontWeight: 'bold' }}>-</div>
-                  <MoistureStepper 
+                  <MoistureStepper
                     placeholder="Max"
-                    value={moistureMax} 
-                    onChange={setMoistureMax} 
+                    value={moistureMax}
+                    onChange={setMoistureMax}
                   />
                 </div>
               </div>
@@ -910,7 +910,8 @@ const DeliveryCreate = () => {
           </div>
         </div>
 
-        <div className="responsive-fixed-footer" style={{ backgroundColor: 'var(--bg-cream)',
+        <div className="responsive-fixed-footer" style={{
+          backgroundColor: 'var(--bg-cream)',
           padding: '16px', display: 'flex', gap: '12px', borderTop: '1px solid #e2e8f0', zIndex: 30
         }}>
           {hasActionPermission && (

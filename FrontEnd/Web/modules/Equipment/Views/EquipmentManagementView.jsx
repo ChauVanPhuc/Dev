@@ -1,5 +1,5 @@
-﻿import React, { useState, useEffect, useMemo } from 'react';
-import api from '@webShared/Services/api.service';
+import React, { useState, useEffect, useMemo } from 'react';
+import api, { getBaseURL } from '@webShared/Services/api.service';
 import { useOutletContext, useNavigate, useLocation } from 'react-router-dom';
 import ExcelJS from 'exceljs';
 import axios from 'axios';
@@ -150,13 +150,7 @@ const EquipmentManagementView = () => {
       // 2. Xuất tài liệu chi tiết (ZIP chứa các tệp PDF)
       if (exportOptions.docsSelected) {
         const token = localStorage.getItem('token');
-        const getBaseURL = () => {
-          const { hostname, port } = window.location;
-          if (port === '5173' || port === '3000') {
-            return `http://${hostname}:8000`;
-          }
-          return window.location.origin;
-        };
+
 
         const payload = {
           equipment_ids: exportOptions.docsAll ? null : filteredEquipments.map(eq => eq.id),

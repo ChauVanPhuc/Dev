@@ -6,7 +6,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from config.database import get_db
-from modules.inspection.models.iso_models import ISODocument, ISORevisionLog, ISOSection, ISOProcessStep
+from modules.inspection.models.iso_models import ISODocument, ISORevisionLog, ISOSection, ISOProcessStep, ISOProcess, ISOProcessSection, ISOProcessStepInstance
 from modules.inspection.services.iso_parser import parse_iso_docx
 
 router = APIRouter()
@@ -94,6 +94,8 @@ def save_iso_document(
             approver=payload.get("approver", ""),
             file_path=payload.get("file_path", ""),
             status=payload.get("status", "Hiệu lực"),
+            folder=payload.get("folder", ""),
+            doc_type=payload.get("doc_type", ""),
             diagram_data=payload.get("diagram_data", ""),
             created_at=now_str,
             updated_at=now_str
@@ -114,6 +116,8 @@ def save_iso_document(
         doc.approver = payload.get("approver", doc.approver)
         doc.file_path = payload.get("file_path", doc.file_path)
         doc.status = payload.get("status", doc.status)
+        doc.folder = payload.get("folder", doc.folder)
+        doc.doc_type = payload.get("doc_type", doc.doc_type)
         doc.diagram_data = payload.get("diagram_data", doc.diagram_data)
         doc.updated_at = now_str
 
@@ -196,6 +200,8 @@ def get_iso_documents(db: Session = Depends(get_db)):
             "approver": d.approver,
             "file_path": d.file_path,
             "status": d.status,
+            "folder": d.folder,
+            "doc_type": d.doc_type,
             "created_at": d.created_at,
             "updated_at": d.updated_at
         })
@@ -265,6 +271,8 @@ def get_iso_document_details(id: int, db: Session = Depends(get_db)):
         "approver": doc.approver,
         "file_path": doc.file_path,
         "status": doc.status,
+        "folder": doc.folder,
+        "doc_type": doc.doc_type,
         "diagram_data": doc.diagram_data,
         "revision_logs": revision_logs,
         "sections": sections,
@@ -295,3 +303,283 @@ def delete_iso_document(id: int, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Lỗi khi xóa: {str(e)}")
+
+
+# -----------------------------------------------------------------------------
+# QUẢN LÝ QUY TRÌNH THỰC TẾ (ISO PROCESS INSTANCES) APIS
+# -----------------------------------------------------------------------------
+
+@router.get("/processes")
+def get_iso_processes(db: Session = Depends(get_db)):
+    """
+    [GET] Lấy danh sách các quy trình thực tế áp dụng.
+    """
+    procs = db.query(ISOProcess).order_by(ISOProcess.code).all()
+    result = []
+    for p in procs:
+        result.append({
+            "id": p.id,
+            "code": p.code,
+            "name": p.name,
+            "iso_document_id": p.iso_document_id,
+            "iso_document_code": p.iso_document.code if p.iso_document else "---",
+            "iso_document_name": p.iso_document.name if p.iso_document else "---",
+            "owner": p.owner,
+            "editor": p.editor,
+            "approver": p.approver,
+            "issue_date": p.issue_date,
+            "last_checked_date": p.last_checked_date,
+            "last_result": p.last_result,
+            "status": p.status,
+            "display_at": p.display_at,
+            "notes": p.notes,
+            "created_at": p.created_at,
+            "updated_at": p.updated_at
+        })
+    return result
+
+
+@router.post("/processes/save")
+def save_iso_process(
+    payload: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    [POST] Lưu hoặc Cập nhật Quy trình thực tế. 
+    Nếu tạo mới quy trình và không truyền steps/sections, sẽ tự động clone/copy từ ISODocument gốc sang.
+    """
+    proc_id = payload.get("id")
+    code = payload.get("code")
+    name = payload.get("name")
+    iso_doc_id = payload.get("iso_document_id")
+
+    if not code or not name or not iso_doc_id:
+        raise HTTPException(status_code=400, detail="Mã quy trình, Tên quy trình và Khuôn mẫu ISO gốc không được bỏ trống")
+
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Kiểm tra khuôn mẫu ISO gốc có tồn tại không
+    iso_doc = db.query(ISODocument).filter(ISODocument.id == iso_doc_id).first()
+    if not iso_doc:
+        raise HTTPException(status_code=404, detail="Không tìm thấy khuôn mẫu ISO gốc được chọn")
+
+    # Kiểm tra trùng mã code nếu tạo mới
+    if not proc_id:
+        existing = db.query(ISOProcess).filter(ISOProcess.code == code).first()
+        if existing:
+            raise HTTPException(status_code=400, detail=f"Mã quy trình áp dụng '{code}' đã tồn tại trong hệ thống")
+        
+        proc = ISOProcess(
+            code=code,
+            name=name,
+            iso_document_id=iso_doc_id,
+            owner=payload.get("owner", ""),
+            editor=payload.get("editor", ""),
+            approver=payload.get("approver", ""),
+            issue_date=payload.get("issue_date", now_str[:10]),
+            last_checked_date=payload.get("last_checked_date"),
+            last_result=payload.get("last_result", "Chưa đánh giá"),
+            status=payload.get("status", "Dự thảo"),
+            display_at=payload.get("display_at", ""),
+            notes=payload.get("notes", ""),
+            diagram_data=payload.get("diagram_data", iso_doc.diagram_data or ""), # Clone diagram mẫu từ ISO nếu ko truyền
+            created_at=now_str,
+            updated_at=now_str
+        )
+        db.add(proc)
+        db.flush() # Lấy proc.id
+        
+        # Clone sections mẫu từ ISODocument
+        sections = payload.get("sections")
+        if sections is None:
+            # Tự động clone từ ISO template
+            for sec in iso_doc.sections:
+                db_sec = ISOProcessSection(
+                    process_id=proc.id,
+                    section_name=sec.section_name,
+                    content_html=sec.content_html
+                )
+                db.add(db_sec)
+        
+        # Save steps from payload if provided
+        steps = payload.get("steps")
+        if steps is not None:
+            for idx, step in enumerate(steps):
+                checklist = step.get("checklist")
+                checklist_str = json.dumps(checklist) if checklist is not None else step.get("checklist_json", "")
+                
+                transition = step.get("transition")
+                transition_str = json.dumps(transition) if transition is not None else step.get("transition_json", "")
+
+                db_step = ISOProcessStepInstance(
+                    process_id=proc.id,
+                    step_number=step.get("step_number", idx + 1),
+                    name=step.get("name", ""),
+                    assignee_role=step.get("assignee_role", ""),
+                    instructions=step.get("instructions", ""),
+                    checklist_json=checklist_str,
+                    transition_json=transition_str,
+                    flow_node_id=step.get("flow_node_id", f"node_{idx+1}")
+                )
+                db.add(db_step)
+    else:
+        proc = db.query(ISOProcess).filter(ISOProcess.id == proc_id).first()
+        if not proc:
+            raise HTTPException(status_code=404, detail="Không tìm thấy thông tin quy trình thực tế")
+
+        # Cập nhật thông tin chung
+        proc.code = code
+        proc.name = name
+        proc.iso_document_id = iso_doc_id
+        proc.owner = payload.get("owner", proc.owner)
+        proc.editor = payload.get("editor", proc.editor)
+        proc.approver = payload.get("approver", proc.approver)
+        proc.issue_date = payload.get("issue_date", proc.issue_date)
+        proc.last_checked_date = payload.get("last_checked_date", proc.last_checked_date)
+        proc.last_result = payload.get("last_result", proc.last_result)
+        proc.status = payload.get("status", proc.status)
+        proc.display_at = payload.get("display_at", proc.display_at)
+        proc.notes = payload.get("notes", proc.notes)
+        proc.diagram_data = payload.get("diagram_data", proc.diagram_data)
+        proc.updated_at = now_str
+
+        # Xóa các chi tiết cũ của quy trình để ghi đè cập nhật mới
+        db.query(ISOProcessSection).filter(ISOProcessSection.process_id == proc.id).delete()
+        db.query(ISOProcessStepInstance).filter(ISOProcessStepInstance.process_id == proc.id).delete()
+
+    # Nếu có truyền payload cập nhật sections chi tiết
+    if payload.get("sections") is not None:
+        sections = payload.get("sections", {})
+        for sec_name, content in sections.items():
+            db_sec = ISOProcessSection(
+                process_id=proc.id,
+                section_name=sec_name,
+                content_html=content
+            )
+            db.add(db_sec)
+
+    # Nếu có truyền payload cập nhật steps chi tiết
+    if payload.get("steps") is not None:
+        steps = payload.get("steps", [])
+        for idx, step in enumerate(steps):
+            checklist = step.get("checklist")
+            checklist_str = json.dumps(checklist) if checklist is not None else step.get("checklist_json", "")
+            
+            transition = step.get("transition")
+            transition_str = json.dumps(transition) if transition is not None else step.get("transition_json", "")
+
+            db_step = ISOProcessStepInstance(
+                process_id=proc.id,
+                step_number=step.get("step_number", idx + 1),
+                name=step.get("name", ""),
+                assignee_role=step.get("assignee_role", ""),
+                instructions=step.get("instructions", ""),
+                checklist_json=checklist_str,
+                transition_json=transition_str,
+                flow_node_id=step.get("flow_node_id", f"node_{idx+1}")
+            )
+            db.add(db_step)
+
+    try:
+        db.commit()
+        return {
+            "id": proc.id,
+            "code": proc.code,
+            "name": proc.name,
+            "message": "Đã lưu quy trình thực tế thành công!"
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Lỗi khi lưu quy trình thực tế: {str(e)}")
+
+
+@router.get("/processes/{id}/details")
+def get_iso_process_details(id: int, db: Session = Depends(get_db)):
+    """
+    [GET] Lấy chi tiết quy trình thực tế cùng sơ đồ và checklist riêng biệt.
+    """
+    proc = db.query(ISOProcess).filter(ISOProcess.id == id).first()
+    if not proc:
+        raise HTTPException(status_code=404, detail="Không tìm thấy quy trình thực tế")
+
+    # Các phần văn bản
+    sections = {}
+    for s in proc.sections:
+        sections[s.section_name] = s.content_html
+
+    # Nếu rỗng, nạp từ ISO Document mẫu
+    if not sections and proc.iso_document:
+        for s in proc.iso_document.sections:
+            sections[s.section_name] = s.content_html
+
+    # Các bước quy trình thực tế
+    steps = []
+    steps_db = sorted(proc.steps, key=lambda x: x.step_number)
+    
+    # Do not fallback to template steps. Process flowchart starts empty by default.
+        
+    for st in steps_db:
+        checklist = []
+        if st.checklist_json:
+            try:
+                checklist = json.loads(st.checklist_json)
+            except:
+                pass
+        
+        transition = {}
+        if st.transition_json:
+            try:
+                transition = json.loads(st.transition_json)
+            except:
+                pass
+
+        steps.append({
+            "id": st.id,
+            "step_number": st.step_number,
+            "name": st.name,
+            "assignee_role": st.assignee_role,
+            "instructions": st.instructions,
+            "checklist": checklist,
+            "transition": transition,
+            "flow_node_id": st.flow_node_id
+        })
+
+    return {
+        "id": proc.id,
+        "code": proc.code,
+        "name": proc.name,
+        "iso_document_id": proc.iso_document_id,
+        "iso_document_code": proc.iso_document.code if proc.iso_document else "---",
+        "iso_document_name": proc.iso_document.name if proc.iso_document else "---",
+        "owner": proc.owner,
+        "editor": proc.editor,
+        "approver": proc.approver,
+        "issue_date": proc.issue_date,
+        "last_checked_date": proc.last_checked_date,
+        "last_result": proc.last_result,
+        "status": proc.status,
+        "display_at": proc.display_at,
+        "notes": proc.notes,
+        "diagram_data": proc.diagram_data or (proc.iso_document.diagram_data if proc.iso_document else ""),
+        "sections": sections,
+        "steps": steps
+    }
+
+
+@router.delete("/processes/{id}")
+def delete_iso_process(id: int, db: Session = Depends(get_db)):
+    """
+    [DELETE] Xóa một quy trình thực tế khỏi hệ thống.
+    """
+    proc = db.query(ISOProcess).filter(ISOProcess.id == id).first()
+    if not proc:
+        raise HTTPException(status_code=404, detail="Không tìm thấy quy trình thực tế")
+
+    try:
+        db.delete(proc)
+        db.commit()
+        return {"message": "Đã xóa quy trình thực tế thành công!"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Lỗi khi xóa quy trình thực tế: {str(e)}")
+

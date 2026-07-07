@@ -20,11 +20,11 @@ const InputInspection = () => {
   const location = useLocation()
   const { user } = useAuthStore()
 
-  const { 
-    partName = '', 
-    planId = '', 
-    viewOnly = false, 
-    inspection = null, 
+  const {
+    partName = '',
+    planId = '',
+    viewOnly = false,
+    inspection = null,
     stage = '',
     contName = '',
     specifications = [],
@@ -33,8 +33,8 @@ const InputInspection = () => {
 
   const uRole = (user?.role_name || '').toLowerCase();
   const uPerm = (user?.permission_name || '').toLowerCase();
-  const isQC = uRole.includes('qc') || uRole.includes('chất lượng') || 
-               uPerm.includes('qc') || uPerm.includes('chất lượng');
+  const isQC = uRole.includes('qc') || uRole.includes('chất lượng') ||
+    uPerm.includes('qc') || uPerm.includes('chất lượng');
 
   const effectiveViewOnly = viewOnly || !isQC;
 
@@ -90,13 +90,13 @@ const InputInspection = () => {
 
   // Form state — khi viewOnly thì khởi tạo từ inspection
   const [length, setLength] = useState(effectiveViewOnly ? (inspection?.measured_length ?? '') : '')
-  const [width, setWidth]   = useState(effectiveViewOnly ? (inspection?.measured_width  ?? '') : '')
+  const [width, setWidth] = useState(effectiveViewOnly ? (inspection?.measured_width ?? '') : '')
   const [height, setHeight] = useState(effectiveViewOnly ? (inspection?.measured_height ?? '') : '')
   const [result, setResult] = useState(effectiveViewOnly ? (inspection?.result ?? '') : '')
-  const [note, setNote]     = useState(effectiveViewOnly ? (inspection?.note ?? '') : '')
+  const [note, setNote] = useState(effectiveViewOnly ? (inspection?.note ?? '') : '')
   const [loading, setLoading] = useState(false)
   const [compressing, setCompressing] = useState(false) // Trạng thái nén ảnh
-  const [error, setError]   = useState('')
+  const [error, setError] = useState('')
   const [isConfirmOpen, setIsConfirmOpen] = useState(false) // [NEW] Popup xác nhận lưu kết quả
   const [messageModal, setMessageModal] = useState({ isOpen: false, type: 'success', title: '', message: '' })
 
@@ -146,7 +146,7 @@ const InputInspection = () => {
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, width, height);
-          
+
           canvas.toBlob((blob) => {
             const newFile = new File([blob], file.name, {
               type: 'image/jpeg',
@@ -202,20 +202,20 @@ const InputInspection = () => {
       fd.append('plan_id', planId)
       fd.append('part_name', partName)
       if (selectedSpec) fd.append('specification', selectedSpec)
-      
+
       const finalContName = contName || chosenCont
       if (finalContName) fd.append('cont_name', finalContName)
-      
+
       if (stage) fd.append('stage', stage)
       if (user?.id) fd.append('inspector_id', user.id)
       fd.append('result', result)
-      if (length)  fd.append('measured_length', length)
-      if (width)   fd.append('measured_width', width)
-      if (height)  fd.append('measured_height', height)
-      if (note)    fd.append('note', note)
+      if (length) fd.append('measured_length', length)
+      if (width) fd.append('measured_width', width)
+      if (height) fd.append('measured_height', height)
+      if (note) fd.append('note', note)
       images.forEach(f => fd.append('files', f))
       await apiClient.post('/inspections/', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-      
+
       setMessageModal({
         isOpen: true,
         type: 'success',
@@ -312,7 +312,7 @@ const InputInspection = () => {
               {specList.map(({ spec, orderNames }) => {
                 const isSelected = selectedSpec === spec
                 // Đếm số lần quy cách này đã được kiểm tra từ trước
-                const count = (inspections || []).filter(insp => 
+                const count = (inspections || []).filter(insp =>
                   (insp.specification || '').trim().toLowerCase() === spec.trim().toLowerCase()
                 ).length
 
@@ -370,7 +370,7 @@ const InputInspection = () => {
                     )}
 
                     {spec}
-                    
+
                     {/* Badge số lần kiểm tra ở góc nhỏ trái (bottom-left) */}
                     {count > 0 && (
                       <span style={{
@@ -432,13 +432,13 @@ const InputInspection = () => {
         )}
 
         {/* Kích thước (Đã ẩn theo yêu cầu) */}
-        <div id="input-dims-card" style={{...card, display: 'none'}}>
+        <div id="input-dims-card" style={{ ...card, display: 'none' }}>
           <span style={sectionLabel}>📏 Kích thước (mm)</span>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
             {[
-              { label: 'Dài',  value: length, set: setLength },
-              { label: 'Rộng', value: width,  set: setWidth },
-              { label: 'Cao',  value: height, set: setHeight }
+              { label: 'Dài', value: length, set: setLength },
+              { label: 'Rộng', value: width, set: setWidth },
+              { label: 'Cao', value: height, set: setHeight }
             ].map(({ label, value, set }) => (
               <div key={label}>
                 <div style={{ fontSize: '0.68rem', fontWeight: '700', color: '#94a3b8', marginBottom: '4px', textAlign: 'center' }}>
@@ -486,13 +486,13 @@ const InputInspection = () => {
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {effectiveViewOnly
               ? existingImages.map((src, i) => (
-                  <img
-                    key={i}
-                    src={getFullImageUrl(src)}
-                    alt={`Ảnh ${i + 1}`}
-                    style={{ width: '72px', height: '72px', objectFit: 'cover', borderRadius: '10px', border: '1px solid #e2e8f0' }}
-                  />
-                ))
+                <img
+                  key={i}
+                  src={getFullImageUrl(src)}
+                  alt={`Ảnh ${i + 1}`}
+                  style={{ width: '72px', height: '72px', objectFit: 'cover', borderRadius: '10px', border: '1px solid #e2e8f0' }}
+                />
+              ))
               : (
                 <>
                   {previews.map((src, i) => (
@@ -513,12 +513,12 @@ const InputInspection = () => {
                       style={{ width: '72px', height: '72px', borderRadius: '10px', border: '1.5px dashed #cbd5e1', backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', cursor: compressing ? 'not-allowed' : 'pointer', flexShrink: 0 }}
                     >
                       {compressing ? (
-                         <Loader2 size={18} color="#94a3b8" style={{ animation: 'spin 1s linear infinite' }} />
+                        <Loader2 size={18} color="#94a3b8" style={{ animation: 'spin 1s linear infinite' }} />
                       ) : (
-                         <Camera size={18} color="#94a3b8" />
+                        <Camera size={18} color="#94a3b8" />
                       )}
                       <span style={{ fontSize: '0.62rem', color: '#94a3b8', fontWeight: '700' }}>
-                         {compressing ? 'Xử lý...' : 'Thêm'}
+                        {compressing ? 'Xử lý...' : 'Thêm'}
                       </span>
                     </button>
                   )}
@@ -599,14 +599,14 @@ const InputInspection = () => {
         )}
       </div>
 
-      <ConfirmModal 
-        isOpen={isConfirmOpen} 
-        title="Xác nhận lưu kết quả" 
-        message={`Bạn có chắc chắn muốn lưu kết quả kiểm tra đầu vào cho chi tiết "${partName}"${selectedSpec ? ` (Quy cách: ${selectedSpec})` : ''} là "${result.toUpperCase()}" không?`} 
-        onConfirm={handleSubmit} 
-        onCancel={() => setIsConfirmOpen(false)} 
-        confirmText="Xác nhận" 
-        cancelText="Quay lại" 
+      <ConfirmModal
+        isOpen={isConfirmOpen}
+        title="Xác nhận lưu kết quả"
+        message={`Bạn có chắc chắn muốn lưu kết quả kiểm tra đầu vào cho chi tiết "${partName}"${selectedSpec ? ` (Quy cách: ${selectedSpec})` : ''} là "${result.toUpperCase()}" không?`}
+        onConfirm={handleSubmit}
+        onCancel={() => setIsConfirmOpen(false)}
+        confirmText="Xác nhận"
+        cancelText="Quay lại"
       />
 
       <MessageModal

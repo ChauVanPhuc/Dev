@@ -18,12 +18,12 @@ const FirstArticleInspectionView = () => {
   const [isPoSearching, setIsPoSearching] = useState(false);
   const [poNotFound, setPoNotFound] = useState(false);
   const [recentPOs, setRecentPOs] = useState([]);
-  
+
   // Loaded PO & items
   const [poHeader, setPoHeader] = useState(null);
   const [poItems, setPoItems] = useState([]);
   const [selectedItemCode, setSelectedItemCode] = useState('');
-  
+
   // Equipments / Machines
   const [machines, setMachines] = useState([]);
   const [equipments, setEquipments] = useState([]);
@@ -47,7 +47,7 @@ const FirstArticleInspectionView = () => {
       // Nếu tài khoản không được gán công đoạn nào, hiển thị tất cả
       if (userStages.length === 0) return true;
       if (!t.stage) return true; // Nếu lỗi không gán công đoạn cụ thể, hiển thị cho mọi công đoạn
-      
+
       let defectStages = [];
       try {
         defectStages = t.stage.startsWith('[') ? JSON.parse(t.stage) : [t.stage];
@@ -55,7 +55,7 @@ const FirstArticleInspectionView = () => {
         defectStages = [t.stage];
       }
       if (defectStages.length === 0) return true;
-      
+
       return defectStages.some(ds => {
         return userStages.some(us => {
           const uNorm = us.toLowerCase().trim();
@@ -173,8 +173,8 @@ const FirstArticleInspectionView = () => {
       if (Array.isArray(res.data)) {
         // Filter for "mau-dau-tien" and today's date
         const todayStr = now.toISOString().slice(0, 10);
-        const filtered = res.data.filter(item => 
-          item.inspection_type === 'mau-dau-tien' && 
+        const filtered = res.data.filter(item =>
+          item.inspection_type === 'mau-dau-tien' &&
           item.created_at && item.created_at.slice(0, 10) === todayStr
         );
         setHistoryList(filtered);
@@ -238,7 +238,7 @@ const FirstArticleInspectionView = () => {
     const mac = machines.find(m => m.code === code);
     if (mac) {
       setSelectedMachineName(mac.name || '');
-      
+
       // Load operating guidelines steps from matching equipment or machine notes
       const eq = equipments.find(e => e.code === code || e.name === mac.name);
       let steps = [];
@@ -249,17 +249,17 @@ const FirstArticleInspectionView = () => {
           steps = [];
         }
       }
-      
+
       if (steps.length === 0 && mac.notes) {
         // Fallback: split machine notes by semicolon/comma/newline
         const noteSteps = mac.notes.split(/[;\n,]+/).map(s => s.trim()).filter(Boolean);
         steps = noteSteps.map((s, idx) => ({ step: idx + 1, title: s }));
       }
-      
+
       if (steps.length === 0) {
         steps = [{ step: 1, title: 'Kiểm tra hoạt động chung của máy' }];
       }
-      
+
       const newChecklist = steps.map((s, idx) => ({
         step: s.step || idx + 1,
         title: s.title || '',
@@ -437,7 +437,7 @@ const FirstArticleInspectionView = () => {
         message: 'Đã lưu kết quả kiểm tra mẫu đầu tiên thành công!'
       });
       setIsMessageOpen(true);
-      
+
       // Reset form
       handleResetForm();
       fetchTodayHistory();
@@ -483,10 +483,10 @@ const FirstArticleInspectionView = () => {
         <PageHeader title="G7 - Smart Flow" subTitle="Kiểm tra mẫu đầu tiên" />
 
         <div style={{ padding: '16px', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          
+
           {/* 1. Khung Tìm Kiếm PO & Trình chọn Công đoạn */}
           <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '16px', border: '1.5px solid #7B5233', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            
+
 
             {/* Ô tìm kiếm PO */}
             <div>
@@ -532,8 +532,8 @@ const FirstArticleInspectionView = () => {
 
           {/* 2. Thẻ Thông tin kiểm tra */}
           <div style={{ backgroundColor: '#fff', borderRadius: '16px', border: '1.5px solid #7B5233', overflow: 'hidden' }}>
-            <div 
-              onClick={() => setExpandedInfoCard(!expandedInfoCard)} 
+            <div
+              onClick={() => setExpandedInfoCard(!expandedInfoCard)}
               style={{ padding: '12px 16px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #7B5233', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -548,7 +548,7 @@ const FirstArticleInspectionView = () => {
                         setMessageConfig({
                           type: 'info',
                           title: `QTKT - ${eq.name}`,
-                          message: eq.user_manual_steps ? `Các hạng mục kiểm tra kỹ thuật chuẩn: \n${JSON.parse(eq.user_manual_steps).map((s,i) => `${i+1}. ${s.title}`).join('\n')}` : 'Chưa cấu hình tài liệu quy trình kiểm tra chất lượng của máy này ở Admin.'
+                          message: eq.user_manual_steps ? `Các hạng mục kiểm tra kỹ thuật chuẩn: \n${JSON.parse(eq.user_manual_steps).map((s, i) => `${i + 1}. ${s.title}`).join('\n')}` : 'Chưa cấu hình tài liệu quy trình kiểm tra chất lượng của máy này ở Admin.'
                         });
                         setIsMessageOpen(true);
                       } else if (mac && mac.notes) {
@@ -578,7 +578,7 @@ const FirstArticleInspectionView = () => {
 
             {expandedInfoCard && (
               <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                
+
                 {/* Chọn máy móc thiết bị */}
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <div style={{ flex: 1 }}>
@@ -637,11 +637,11 @@ const FirstArticleInspectionView = () => {
                     <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7B5233', display: 'block', marginBottom: '4px' }}>SL sản xuất</label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                       <button onClick={() => setProducedQty(Math.max(1, producedQty - 1))} style={{ width: '28px', height: '32px', borderRadius: '6px 0 0 6px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>-</button>
-                      <input 
-                        type="number" 
-                        value={producedQty} 
+                      <input
+                        type="number"
+                        value={producedQty}
                         onChange={(e) => setProducedQty(Math.max(1, parseInt(e.target.value) || 1))}
-                        style={{ flex: 1, height: '32px', borderTop: '1px solid #cbd5e1', borderBottom: '1px solid #cbd5e1', borderLeft: 'none', borderRight: 'none', textAlign: 'center', fontSize: '13px', fontWeight: 'bold', width: '30px' }} 
+                        style={{ flex: 1, height: '32px', borderTop: '1px solid #cbd5e1', borderBottom: '1px solid #cbd5e1', borderLeft: 'none', borderRight: 'none', textAlign: 'center', fontSize: '13px', fontWeight: 'bold', width: '30px' }}
                       />
                       <button onClick={() => setProducedQty(producedQty + 1)} style={{ width: '28px', height: '32px', borderRadius: '0 6px 6px 0', border: 'none', backgroundColor: '#7B5233', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>+</button>
                     </div>
@@ -652,11 +652,11 @@ const FirstArticleInspectionView = () => {
                     <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7B5233', display: 'block', marginBottom: '4px' }}>SL lấy mẫu</label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                       <button onClick={() => setSampledQty(Math.max(1, sampledQty - 1))} style={{ width: '28px', height: '32px', borderRadius: '6px 0 0 6px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>-</button>
-                      <input 
-                        type="number" 
-                        value={sampledQty} 
+                      <input
+                        type="number"
+                        value={sampledQty}
                         onChange={(e) => setSampledQty(Math.max(1, parseInt(e.target.value) || 1))}
-                        style={{ flex: 1, height: '32px', borderTop: '1px solid #cbd5e1', borderBottom: '1px solid #cbd5e1', borderLeft: 'none', borderRight: 'none', textAlign: 'center', fontSize: '13px', fontWeight: 'bold', width: '30px' }} 
+                        style={{ flex: 1, height: '32px', borderTop: '1px solid #cbd5e1', borderBottom: '1px solid #cbd5e1', borderLeft: 'none', borderRight: 'none', textAlign: 'center', fontSize: '13px', fontWeight: 'bold', width: '30px' }}
                       />
                       <button onClick={() => setSampledQty(sampledQty + 1)} style={{ width: '28px', height: '32px', borderRadius: '0 6px 6px 0', border: 'none', backgroundColor: '#7B5233', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>+</button>
                     </div>
@@ -667,11 +667,11 @@ const FirstArticleInspectionView = () => {
                     <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7B5233', display: 'block', marginBottom: '4px' }}>SL loại</label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                       <button onClick={() => setRejectedQty(Math.max(0, rejectedQty - 1))} style={{ width: '28px', height: '32px', borderRadius: '6px 0 0 6px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>-</button>
-                      <input 
-                        type="number" 
-                        value={rejectedQty} 
+                      <input
+                        type="number"
+                        value={rejectedQty}
                         onChange={(e) => setRejectedQty(Math.max(0, parseInt(e.target.value) || 0))}
-                        style={{ flex: 1, height: '32px', borderTop: '1px solid #cbd5e1', borderBottom: '1px solid #cbd5e1', borderLeft: 'none', borderRight: 'none', textAlign: 'center', fontSize: '13px', fontWeight: 'bold', width: '30px' }} 
+                        style={{ flex: 1, height: '32px', borderTop: '1px solid #cbd5e1', borderBottom: '1px solid #cbd5e1', borderLeft: 'none', borderRight: 'none', textAlign: 'center', fontSize: '13px', fontWeight: 'bold', width: '30px' }}
                       />
                       <button onClick={() => setRejectedQty(rejectedQty + 1)} style={{ width: '28px', height: '32px', borderRadius: '0 6px 6px 0', border: 'none', backgroundColor: '#7B5233', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>+</button>
                     </div>
@@ -681,7 +681,7 @@ const FirstArticleInspectionView = () => {
                 {/* Bảng checklist Kết quả kiểm tra */}
                 <div style={{ marginTop: '10px' }}>
                   <label style={{ fontSize: '12px', fontWeight: '900', color: '#4B301E', display: 'block', marginBottom: '6px' }}>Kết quả kiểm tra chi tiết</label>
-                  
+
                   {checklistResults.length === 0 ? (
                     <div style={{ padding: '24px 12px', textAlign: 'center', color: '#94a3b8', border: '1px dashed #cbd5e1', borderRadius: '8px', fontSize: '12px' }}>
                       Vui lòng chọn Mã máy để tải các bước hướng dẫn kỹ thuật kiểm tra.
@@ -703,13 +703,13 @@ const FirstArticleInspectionView = () => {
                               <td style={{ padding: '8px' }}>
                                 <span style={{ fontSize: '12px', color: '#4B301E', display: 'block', fontWeight: '600' }}>{row.title}</span>
                                 {row.note && <span style={{ fontSize: '10px', color: '#b45309', display: 'block', marginTop: '2px', fontStyle: 'italic' }}>* {row.note}</span>}
-                                
+
                                 <div style={{ display: 'flex', gap: '6px', marginTop: '6px', alignItems: 'center' }}>
                                   {[0, 1, 2].map((imgIdx) => {
                                     const imgPath = row.images ? row.images[imgIdx] : null;
                                     const fullUrl = imgPath ? `${apiClient.defaults.baseURL.split('/api/v1')[0]}${imgPath}` : null;
                                     return (
-                                      <div 
+                                      <div
                                         key={imgIdx}
                                         onClick={() => !imgPath && triggerCamera(idx, imgIdx)}
                                         style={{ width: '38px', height: '38px', borderRadius: '6px', border: '1px dashed #cbd5e1', backgroundColor: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer', position: 'relative' }}
@@ -751,7 +751,7 @@ const FirstArticleInspectionView = () => {
                                       return next;
                                     });
                                   }}
-                                  style={{ 
+                                  style={{
                                     padding: '4px 8px', borderRadius: '6px', border: 'none', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer',
                                     backgroundColor: row.status === 'pass' ? '#e8f5e9' : '#ffebee',
                                     color: row.status === 'pass' ? '#2e7d32' : '#c62828'
@@ -778,7 +778,7 @@ const FirstArticleInspectionView = () => {
                       .filter((_, i) => i !== idx)
                       .map(d => String(d.defectId))
                       .filter(Boolean);
-                    
+
                     // Dòng đầu tiên (idx === 0) chỉ hiện các lỗi QA track (needs_tracking === true)
                     // Các dòng sau (idx > 0) hiện các lỗi còn lại
                     const sourceList = idx === 0 ? qaTrackedDefects : remainingDefects;
@@ -809,8 +809,8 @@ const FirstArticleInspectionView = () => {
                         </div>
 
                         {activeDefects.length > 1 && (
-                          <button 
-                            onClick={() => handleRemoveDefect(idx)} 
+                          <button
+                            onClick={() => handleRemoveDefect(idx)}
                             style={{ border: 'none', backgroundColor: 'transparent', color: '#ef4444', padding: '2px', cursor: 'pointer' }}
                           >
                             <X size={16} />
@@ -833,14 +833,14 @@ const FirstArticleInspectionView = () => {
 
                 {/* Nút Xác nhận / Hủy */}
                 <div style={{ display: 'flex', gap: '12px', marginTop: '6px' }}>
-                  <button 
+                  <button
                     onClick={handleSaveInspection}
                     disabled={isSaving}
                     style={{ flex: 1, backgroundColor: '#7B5233', color: '#fff', border: 'none', borderRadius: '8px', padding: '12px', fontSize: '14px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer' }}
                   >
                     <Check size={16} /> Xác nhận
                   </button>
-                  <button 
+                  <button
                     onClick={handleResetForm}
                     style={{ flex: 1, backgroundColor: '#fff', color: '#94a3b8', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '12px', fontSize: '14px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer' }}
                   >
@@ -857,7 +857,7 @@ const FirstArticleInspectionView = () => {
             <div style={{ padding: '12px 16px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #7B5233', fontWeight: '900', color: '#4B301E', fontSize: '14px' }}>
               Lịch sử kiểm tra trong ngày
             </div>
-            
+
             {isHistoryLoading ? (
               <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '12px' }}>Đang tải lịch sử...</div>
             ) : historyList.length === 0 ? (
@@ -880,8 +880,8 @@ const FirstArticleInspectionView = () => {
                         <td style={{ padding: '10px 8px', fontSize: '11px', color: '#7c6d5e', textAlign: 'center' }}>{item.batch_no}</td>
                         <td style={{ padding: '10px 16px', fontSize: '11px', color: '#7c6d5e', textAlign: 'center' }}>{formatDisplayTime(item.created_at)}</td>
                         <td style={{ padding: '10px 16px', textAlign: 'center' }}>
-                          <span style={{ 
-                            fontWeight: 'bold', fontSize: '11px', 
+                          <span style={{
+                            fontWeight: 'bold', fontSize: '11px',
                             color: item.conclusion === 'pass' ? '#2e7d32' : '#c62828',
                             backgroundColor: item.conclusion === 'pass' ? '#e8f5e9' : '#ffebee',
                             padding: '2px 6px', borderRadius: '4px'
@@ -908,14 +908,14 @@ const FirstArticleInspectionView = () => {
                 <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#4B301E' }}>Ghi chú tiêu chí kiểm tra</span>
                 <button onClick={() => setEditingStepIndex(null)} style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer' }}><X size={16} color="#94a3b8" /></button>
               </div>
-              <textarea 
-                rows="4" 
-                value={tempStepNote} 
-                onChange={(e) => setTempStepNote(e.target.value)} 
+              <textarea
+                rows="4"
+                value={tempStepNote}
+                onChange={(e) => setTempStepNote(e.target.value)}
                 placeholder="Nhập chi tiết thông số đo đạc, độ cong vênh hoặc lỗi quan sát được..."
                 style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #7B5233', fontSize: '13px', outline: 'none', resize: 'none' }}
               />
-              <button 
+              <button
                 onClick={saveStepNote}
                 style={{ width: '100%', padding: '12px', border: 'none', backgroundColor: '#7B5233', color: '#fff', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}
               >
@@ -935,13 +935,13 @@ const FirstArticleInspectionView = () => {
         />
 
         {/* Hidden File Input for Image Capture */}
-        <input 
-          type="file" 
-          ref={fileInputRef} 
-          style={{ display: 'none' }} 
-          accept="image/*" 
-          capture="environment" 
-          onChange={handleFileChange} 
+        <input
+          type="file"
+          ref={fileInputRef}
+          style={{ display: 'none' }}
+          accept="image/*"
+          capture="environment"
+          onChange={handleFileChange}
         />
 
       </div>

@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 from sqlalchemy import func, or_
 from modules.purchasing.models.purchase_order_item import PurchaseOrderItem
 from modules.purchasing.schemas.purchase_order_item import PurchaseOrderItemCreate, PurchaseOrderItemUpdate
@@ -9,7 +9,7 @@ def get_all(db: Session, skip: int = 0, limit: int = 50,
             status: str = None, po_code: str = None,
             search: str = None, supplier_code: str = None):
     """Lấy danh sách chi tiết mặt hàng với filter và search."""
-    query = db.query(PurchaseOrderItem)
+    query = db.query(PurchaseOrderItem).options(defer(PurchaseOrderItem.content))
 
     if status:
         query = query.filter(PurchaseOrderItem.status == status)

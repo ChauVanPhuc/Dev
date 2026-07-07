@@ -38,7 +38,7 @@ from modules.chatbot.models.chatbot_history import ChatbotHistory
 from modules.purchasing.models.purchase_requisition import PurchaseRequisition
 from modules.purchasing.models.purchase_order_item import PurchaseOrderItem
 from modules.equipment.models.machinery import Machine, MachineMaintenance, MachineDocument
-from modules.inspection.models.iso_models import ISODocument, ISORevisionLog, ISOSection, ISOProcessStep
+from modules.inspection.models.iso_models import ISODocument, ISORevisionLog, ISOSection, ISOProcessStep, ISOProcess, ISOProcessSection, ISOProcessStepInstance
 
 __all__ = [
     "Base", "Account", "Category", "Delivery", "DeliveryDetails", "DeliveryImage",
@@ -49,6 +49,7 @@ __all__ = [
     "CAPAOccurrence", "CAPAEvaluation", "SystemScreen", "SystemComponent", "ScreenBug",
     "ScreenBugUpdate", "ScreenBugImage", "DefectType", "ClientDefect", "DefectGlossary", "ChatbotHistory",
     "PurchaseRequisition", "PurchaseOrderItem", "Machine", "MachineMaintenance", "MachineDocument",
-    "ISODocument", "ISORevisionLog", "ISOSection", "ISOProcessStep"
+    "ISODocument", "ISORevisionLog", "ISOSection", "ISOProcessStep",
+    "ISOProcess", "ISOProcessSection", "ISOProcessStepInstance"
 ]
 

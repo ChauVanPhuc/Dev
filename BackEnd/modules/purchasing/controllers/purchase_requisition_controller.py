@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 from sqlalchemy import func, or_
 from modules.purchasing.models.purchase_requisition import PurchaseRequisition
 from modules.purchasing.schemas.purchase_requisition import PurchaseRequisitionCreate, PurchaseRequisitionUpdate
@@ -9,7 +9,7 @@ def get_all(db: Session, skip: int = 0, limit: int = 50,
             status: str = None, warehouse_status: str = None,
             search: str = None, supplier_code: str = None):
     """Lấy danh sách đơn đặt mua với filter và search."""
-    query = db.query(PurchaseRequisition)
+    query = db.query(PurchaseRequisition).options(defer(PurchaseRequisition.note))
 
     if status:
         query = query.filter(PurchaseRequisition.status == status)

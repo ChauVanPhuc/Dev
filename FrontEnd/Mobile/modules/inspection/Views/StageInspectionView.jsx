@@ -49,12 +49,12 @@ const MockupToggle = ({ value, onChange, disabled }) => {
           }}
         />
       </div>
-      <span style={{ 
-        fontWeight: 'bold', 
-        fontSize: '13px', 
-        color: isPass ? '#10b981' : '#ef4444' 
+      <span style={{
+        fontWeight: 'bold',
+        fontSize: '13px',
+        color: isPass ? '#10b981' : '#ef4444'
       }}>
-        {isPass ? 'PASS' : 'Fail'}
+        {isPass ? 'Đạt' : 'Không đạt'}
       </span>
     </div>
   );
@@ -90,7 +90,7 @@ const StageInspection = () => {
   const [poSearchTerm, setPoSearchTerm] = useState('');
   const [isPoSearching, setIsPoSearching] = useState(false);
   const [poNotFound, setPoNotFound] = useState(false);
-  const [poHeader, setPoHeader] = useState(null); 
+  const [poHeader, setPoHeader] = useState(null);
   const [poItems, setPoItems] = useState([]);
   const [poCardExpanded, setPoCardExpanded] = useState(true);
 
@@ -100,25 +100,27 @@ const StageInspection = () => {
 
   // Active item inspection state
   const [selectedItem, setSelectedItem] = useState(null);
-  const [sampleQty, setSampleQty] = useState(20);
+  const [sampleQty, setSampleQty] = useState(3);
   const [samples, setSamples] = useState([]);
   const [isWood, setIsWood] = useState(false);
   const [itemNotes, setItemNotes] = useState('');
   const [itemConclusion, setItemConclusion] = useState('pass');
   const [itemAction, setItemAction] = useState('luu-kho');
+  const [isTableExpanded, setIsTableExpanded] = useState(true);
+  const [isDefectsExpanded, setIsDefectsExpanded] = useState(true);
 
   // Photo modal states
   const [activeSampleIndex, setActiveSampleIndex] = useState(null);
-  const [activeModalType, setActiveModalType] = useState(null); 
+  const [activeModalType, setActiveModalType] = useState(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   // New Smart Popup states for single-photo workflow
   const [activeSizeTab, setActiveSizeTab] = useState('day'); // 'day' | 'rong' | 'dai'
   const [activeMoistureIndex, setActiveMoistureIndex] = useState('new'); // index or 'new'
-  const [tempValues, setTempValues] = useState([]); 
-  const [tempPhotos, setTempPhotos] = useState([]); 
-  const [singleValue, setSingleValue] = useState(''); 
-  const [singlePhoto, setSinglePhoto] = useState(''); 
+  const [tempValues, setTempValues] = useState([]);
+  const [tempPhotos, setTempPhotos] = useState([]);
+  const [singleValue, setSingleValue] = useState('');
+  const [singlePhoto, setSinglePhoto] = useState('');
   const [isOcrProcessing, setIsOcrProcessing] = useState(false);
   const [allowManualInput, setAllowManualInput] = useState(false);
 
@@ -232,7 +234,7 @@ const StageInspection = () => {
           headerInfo.supplier_code = matchedReq.supplier_code;
           headerInfo.supplier_name = matchedReq.supplier_name;
         }
-      } catch (err) {}
+      } catch (err) { }
 
       // Fetch existing inspections for this PO
       const insRes = await apiClient.get(`inspections/stage?batch_no=${searchCode}`);
@@ -299,11 +301,13 @@ const StageInspection = () => {
     setSelectedItem(item);
     const draft = item.item_code ? inspectedDrafts[item.item_code.toLowerCase()] : null;
     const existing = item.item_code ? existingInspectionsMap[item.item_code.toLowerCase()] : null;
+    const maxQty = item.quantity || 9999;
 
     if (draft) {
       const normalizedSamples = ensureTrailingEmptySample(draft.samples);
-      setSampleQty(normalizedSamples.length);
-      setSamples(normalizedSamples);
+      const initialQty = Math.min(normalizedSamples.length, maxQty);
+      setSampleQty(initialQty);
+      setSamples(normalizedSamples.slice(0, initialQty));
       setIsWood(draft.isWood);
       setItemNotes(draft.notes);
       setItemConclusion(draft.conclusion);
@@ -313,21 +317,22 @@ const StageInspection = () => {
       let extra = {};
       try {
         extra = typeof existing.data_json === 'string' ? JSON.parse(existing.data_json) : (existing.data_json || {});
-      } catch (e) {}
+      } catch (e) { }
 
       const savedSamples = extra.samples || [];
-      const initialSamples = savedSamples.length > 0 ? savedSamples : initializeDefaultSamples(3);
+      const initialSamples = savedSamples.length > 0 ? savedSamples : initializeDefaultSamples(Math.min(3, maxQty));
       const normalizedSamples = ensureTrailingEmptySample(initialSamples);
+      const initialQty = Math.min(normalizedSamples.length, maxQty);
 
-      setSampleQty(normalizedSamples.length);
-      setSamples(normalizedSamples);
+      setSampleQty(initialQty);
+      setSamples(normalizedSamples.slice(0, initialQty));
       setIsWood(extra.is_wood !== undefined ? extra.is_wood : isWoodProduct(item.item_name));
       setItemNotes(existing.notes || '');
       setItemConclusion(existing.conclusion || 'pass');
       setItemAction(extra.action || 'luu-kho');
       setActiveDefects(extra.defects && extra.defects.length > 0 ? extra.defects : [{ defectId: '', quantity: 1, isHeavy: true, images: [] }]);
     } else {
-      const defaultQty = 3;
+      const defaultQty = Math.min(3, maxQty);
       setSampleQty(defaultQty);
       setSamples(initializeDefaultSamples(defaultQty));
       setIsWood(isWoodProduct(item.item_name));
@@ -338,26 +343,69 @@ const StageInspection = () => {
     }
   };
 
+  const autoSuggestConclusion = (currentSamples, currentDefects) => {
+    let hasFail = false;
+    for (const sample of currentSamples) {
+      if (sample.visual === 'fail') hasFail = true;
+      if (!isWood && sample.function === 'fail') hasFail = true;
+    }
+    const hasDefect = currentDefects.some(d => d.defectId && d.quantity > 0);
+    if (hasDefect) {
+      hasFail = true;
+    }
+
+    if (hasFail) {
+      setItemConclusion('fail');
+      if (itemAction === 'luu-kho') {
+        setItemAction('tra-ve');
+      }
+    } else {
+      setItemConclusion('pass');
+      if (itemAction === 'tra-ve' || itemAction === 'cach-ly') {
+        setItemAction('luu-kho');
+      }
+    }
+  };
+
   const handleAddDefect = () => {
-    setActiveDefects(prev => [...prev, { defectId: '', quantity: 1, isHeavy: true, images: [] }]);
+    const next = [...activeDefects, { defectId: '', quantity: 1, isHeavy: true, images: [], isExpanded: true }];
+    setActiveDefects(next);
+    autoSuggestConclusion(samples, next);
   };
 
   const handleRemoveDefect = (index) => {
-    setActiveDefects(prev => prev.filter((_, idx) => idx !== index));
+    const next = activeDefects.filter((_, idx) => idx !== index);
+    setActiveDefects(next);
+    autoSuggestConclusion(samples, next);
+  };
+
+  const toggleDefectExpanded = (index) => {
+    setActiveDefects(prev => prev.map((d, idx) => idx === index ? { ...d, isExpanded: d.isExpanded === false ? true : false } : d));
   };
 
   const handleUpdateDefect = (index, field, value) => {
-    setActiveDefects(prev => {
-      const next = [...prev];
-      if (field === 'defectId') {
-        const selectedDefect = defectTypes.find(t => String(t.id) === String(value));
-        const isHeavy = selectedDefect ? (selectedDefect.aql_class === 'Major' || selectedDefect.aql_class === 'Critical') : true;
-        next[index] = { ...next[index], defectId: value, isHeavy };
-      } else {
-        next[index] = { ...next[index], [field]: value };
+    if (field === 'defectId') {
+      const isDuplicate = activeDefects.some((d, idx) => idx !== index && String(d.defectId) === String(value));
+      if (isDuplicate && value !== '') {
+        alert("Loại lỗi này đã được chọn ở một mục khác. Vui lòng điều chỉnh số lượng ở mục đó thay vì tạo mục mới.");
+        return;
       }
-      return next;
-    });
+    }
+
+    const next = [...activeDefects];
+    if (field === 'defectId') {
+      const selectedDefect = defectTypes.find(t => String(t.id) === String(value));
+      const isHeavy = selectedDefect ? (selectedDefect.aql_class === 'Major' || selectedDefect.aql_class === 'Critical') : true;
+      next[index] = { ...next[index], defectId: value, isHeavy };
+    } else if (field === 'quantity') {
+      const maxVal = sampleQty;
+      const cappedVal = Math.max(0, Math.min(value, maxVal));
+      next[index] = { ...next[index], quantity: cappedVal };
+    } else {
+      next[index] = { ...next[index], [field]: value };
+    }
+    setActiveDefects(next);
+    autoSuggestConclusion(samples, next);
   };
 
   const handleTriggerDefectCamera = (defectIdx, photoIdx) => {
@@ -381,10 +429,12 @@ const StageInspection = () => {
 
   const handleUpdateSampleQty = (newQty) => {
     if (newQty < 1) return;
-    setSampleQty(newQty);
+    const maxQty = selectedItem?.quantity || 9999;
+    const cappedQty = Math.min(newQty, maxQty);
+    setSampleQty(cappedQty);
     setSamples(prev => {
-      if (newQty > prev.length) {
-        const extra = Array.from({ length: newQty - prev.length }, (_, i) => ({
+      if (cappedQty > prev.length) {
+        const extra = Array.from({ length: cappedQty - prev.length }, (_, i) => ({
           stt: prev.length + i + 1,
           dimensions: { values: [], photos: [] },
           moisture: { values: [], photos: [] },
@@ -393,7 +443,7 @@ const StageInspection = () => {
         }));
         return [...prev, ...extra];
       } else {
-        return prev.slice(0, newQty);
+        return prev.slice(0, cappedQty);
       }
     });
   };
@@ -402,11 +452,11 @@ const StageInspection = () => {
     setActiveSampleIndex(idx);
     setActiveModalType(type);
     setIsOcrProcessing(false);
-    
+
     const sample = samples[idx];
     if (type === 'size') {
       const currentValues = sample.dimensions?.values || [];
-      
+
       const initialValues = [currentValues[0] || '', currentValues[1] || '', currentValues[2] || ''];
       setTempValues(initialValues);
 
@@ -426,7 +476,7 @@ const StageInspection = () => {
       setAllowManualInput(!!initialValues[tabIdx]);
     } else if (type === 'moisture') {
       const currentValues = sample.moisture?.values || [];
-      
+
       setTempValues([...currentValues]);
       setActiveMoistureIndex('new');
       setSingleValue('');
@@ -511,10 +561,10 @@ const StageInspection = () => {
     } else {
       const localUrl = URL.createObjectURL(files[0]);
       setSinglePhoto(localUrl);
-      
+
       setIsOcrProcessing(true);
       setAllowManualInput(false);
-      
+
       try {
         const ocrFormData = new FormData();
         ocrFormData.append('file', files[0]);
@@ -568,6 +618,13 @@ const StageInspection = () => {
         return;
       }
 
+      // Kiểm tra giá trị hợp lệ
+      const hasInvalid = parsedValues.some(val => isNaN(val) || val <= 0 || val > 10000);
+      if (hasInvalid) {
+        alert("Giá trị kích thước phải lớn hơn 0 và không vượt quá 10000 mm!");
+        return;
+      }
+
       finalValues = parsedValues;
     } else if (activeModalType === 'moisture') {
       const valStr = String(singleValue || '').trim();
@@ -590,87 +647,67 @@ const StageInspection = () => {
         return;
       }
 
+      // Kiểm tra giá trị hợp lệ
+      const hasInvalid = updatedValues.some(val => isNaN(val) || val <= 0 || val > 100);
+      if (hasInvalid) {
+        alert("Giá trị độ ẩm phải lớn hơn 0% và không vượt quá 100%!");
+        return;
+      }
+
       finalValues = updatedValues;
     }
 
-    setSamples(prev => {
-      const next = [...prev];
-      const field = activeModalType === 'size' ? 'dimensions' : 'moisture';
-      next[activeSampleIndex] = {
-        ...next[activeSampleIndex],
-        [field]: {
-          values: finalValues,
-          photos: []
-        }
-      };
-
-      if (activeSampleIndex === next.length - 1) {
-        next.push({
-          stt: next.length + 1,
-          dimensions: { values: [], photos: [] },
-          moisture: { values: [], photos: [] },
-          function: 'pass',
-          visual: 'pass'
-        });
-        setSampleQty(next.length);
+    const next = [...samples];
+    const field = activeModalType === 'size' ? 'dimensions' : 'moisture';
+    next[activeSampleIndex] = {
+      ...next[activeSampleIndex],
+      [field]: {
+        values: finalValues,
+        photos: []
       }
+    };
 
-      return next;
-    });
+    if (activeSampleIndex === next.length - 1) {
+      next.push({
+        stt: next.length + 1,
+        dimensions: { values: [], photos: [] },
+        moisture: { values: [], photos: [] },
+        function: 'pass',
+        visual: 'pass'
+      });
+      setSampleQty(next.length);
+    }
+
+    setSamples(next);
     setActiveModalType(null);
   };
 
   const handleToggleSampleValue = (idx, field, val) => {
-    setSamples(prev => {
-      const next = [...prev];
-      next[idx] = { ...next[idx], [field]: val };
+    const next = [...samples];
+    next[idx] = { ...next[idx], [field]: val };
 
-      // Tự động sinh thêm mẫu tiếp theo nếu vừa toggle mẫu cuối cùng
-      if (idx === next.length - 1) {
-        next.push({
-          stt: next.length + 1,
-          dimensions: { values: [], photo: null },
-          moisture: { values: [], photo: null },
-          function: 'pass',
-          visual: 'pass'
-        });
-        setSampleQty(next.length);
-      }
+    // Tự động sinh thêm mẫu tiếp theo nếu vừa toggle mẫu cuối cùng
+    if (idx === next.length - 1) {
+      next.push({
+        stt: next.length + 1,
+        dimensions: { values: [], photo: null },
+        moisture: { values: [], photo: null },
+        function: 'pass',
+        visual: 'pass'
+      });
+      setSampleQty(next.length);
+    }
 
-      return next;
-    });
+    setSamples(next);
+    autoSuggestConclusion(next, activeDefects);
   };
 
-  useEffect(() => {
-    if (selectedItem) {
-      let hasFail = false;
-      for (const sample of samples) {
-        if (sample.visual === 'fail') hasFail = true;
-        if (!isWood && sample.function === 'fail') hasFail = true;
-      }
-
-      // Check if there is any defect (must have a selected ID and quantity > 0)
-      const hasDefect = activeDefects.some(d => d.defectId && d.quantity > 0);
-      if (hasDefect) {
-        hasFail = true;
-      }
-
-      const computedConclusion = hasFail ? 'fail' : 'pass';
-      setItemConclusion(computedConclusion);
-      
-      if (computedConclusion === 'fail') {
-        if (itemAction === 'luu-kho') {
-          setItemAction('tra-ve');
-        }
-      } else {
-        if (itemAction === 'tra-ve' || itemAction === 'cach-ly') {
-          setItemAction('luu-kho');
-        }
-      }
-    }
-  }, [samples, isWood, selectedItem, activeDefects]);
-
   const handleConfirmItemInspection = () => {
+    if (itemAction === 'cach-ly' && (!itemNotes || !itemNotes.trim())) {
+      alert("Vui lòng nhập ghi chú sản phẩm để nêu rõ nguyên nhân cách ly!");
+      return;
+    }
+
     // Lọc bỏ mẫu cuối cùng nếu nó hoàn toàn chưa được đo
     const cleanedSamples = samples.filter((s, idx) => {
       const isMeasured = (s.dimensions?.values?.length > 0) || (s.moisture?.values?.length > 0) || (s.visual === 'fail') || (s.function === 'fail');
@@ -799,7 +836,7 @@ const StageInspection = () => {
         {selectedItem ? (
           // Screen 2/3: Sample check form
           <div style={{ padding: '16px', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            
+
             {/* Khối 1: Thông tin sản phẩm */}
             <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '16px', border: '1px solid #e8e1d5' }}>
               <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
@@ -820,9 +857,52 @@ const StageInspection = () => {
                 </div>
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                   <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Số lượng mẫu KT</label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%' }}>
                     <button onClick={() => handleUpdateSampleQty(sampleQty - 1)} style={{ width: '36px', height: '36px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', fontWeight: 'bold', fontSize: '18px', cursor: 'pointer' }}>-</button>
-                    <div style={{ flex: 1, padding: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', textAlign: 'center', fontWeight: '800', fontSize: '15px', backgroundColor: '#fff' }}>{sampleQty}</div>
+                    <input
+                      type="number"
+                      value={sampleQty === 0 ? '' : sampleQty}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[-+eE]/g, '');
+                        if (val === '') {
+                          setSampleQty(0);
+                          return;
+                        }
+                        const num = parseInt(val, 10);
+                        if (!isNaN(num)) {
+                          handleUpdateSampleQty(num);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === '-' || e.key === '+' || e.key === 'e' || e.key === 'E') {
+                          e.preventDefault();
+                        }
+                      }}
+                      onPaste={(e) => {
+                        const pasteData = e.clipboardData.getData('text');
+                        if (pasteData.includes('-') || pasteData.includes('+') || pasteData.includes('e') || pasteData.includes('E')) {
+                          e.preventDefault();
+                        }
+                      }}
+                      onBlur={() => {
+                        if (sampleQty < 1) {
+                          handleUpdateSampleQty(1);
+                        }
+                      }}
+                      style={{
+                        flex: 1,
+                        width: '0px',
+                        height: '36px',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: '8px',
+                        textAlign: 'center',
+                        fontWeight: '800',
+                        fontSize: '15px',
+                        backgroundColor: '#fff',
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
                     <button onClick={() => handleUpdateSampleQty(sampleQty + 1)} style={{ width: '36px', height: '36px', borderRadius: '8px', border: 'none', backgroundColor: '#5d3b32', color: '#fff', fontWeight: 'bold', fontSize: '18px', cursor: 'pointer' }}>+</button>
                   </div>
                 </div>
@@ -839,100 +919,124 @@ const StageInspection = () => {
 
             {/* Khối 2: Bảng mẫu kiểm tra */}
             <div style={{ backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #e8e1d5', overflow: 'hidden' }}>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#f8f5f0', borderBottom: '2px solid #e8e1d5', color: '#7c6d5e', fontSize: '12px', fontWeight: 'bold' }}>
-                      <th style={{ padding: '12px 6px' }}>STT</th>
-                      <th style={{ padding: '12px 6px' }}>Kích thước</th>
-                      <th style={{ padding: '12px 6px' }}>{isWood ? 'Độ ẩm' : 'Chức năng'}</th>
-                      <th style={{ padding: '12px 6px' }}>Ngoại quan</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {samples.map((sample, idx) => (
-                      <tr key={sample.stt} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '10px 6px', fontSize: '13px', fontWeight: 'bold', color: '#4b301e' }}>{sample.stt}</td>
-                        <td style={{ padding: '10px 6px', fontSize: '12px' }}>
-                          {sample.dimensions && sample.dimensions.values && sample.dimensions.values.length > 0 ? (
-                            <div onClick={() => handleOpenPhotoModal(idx, 'size')} style={{ cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', color: '#2d1d12' }}>
-                              {sample.dimensions.values.join(' | ')}
-                            </div>
-                          ) : (
-                            <button 
-                              onClick={() => handleOpenPhotoModal(idx, 'size')} 
-                              style={{ 
-                                width: '32px', 
-                                height: '32px', 
-                                borderRadius: '50%', 
-                                border: '1.5px solid #2d1d12', 
-                                backgroundColor: 'transparent', 
-                                display: 'inline-flex', 
-                                alignItems: 'center', 
-                                justifyContent: 'center', 
-                                cursor: 'pointer' 
-                              }}
-                            >
-                              <Plus size={18} color="#2d1d12" strokeWidth={3} />
-                            </button>
-                          )}
-                        </td>
-                        <td style={{ padding: '10px 6px', fontSize: '12px' }}>
-                          {isWood ? (
-                            sample.moisture && sample.moisture.values && sample.moisture.values.length > 0 ? (
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                                <div onClick={() => handleOpenPhotoModal(idx, 'moisture')} style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '13px', fontWeight: 'bold', color: '#2d1d12', cursor: 'pointer' }}>
-                                  {sample.moisture.values.map((v, i) => <span key={i}>{v}</span>)}
-                                </div>
-                                <button 
-                                  onClick={() => handleOpenPhotoModal(idx, 'moisture')} 
-                                  style={{ 
-                                    width: '20px', 
-                                    height: '20px', 
-                                    borderRadius: '50%', 
-                                    border: '1.2px solid #2d1d12', 
-                                    backgroundColor: 'transparent', 
-                                    display: 'inline-flex', 
-                                    alignItems: 'center', 
-                                    justifyContent: 'center', 
-                                    cursor: 'pointer' 
-                                  }}
-                                >
-                                  <Plus size={12} color="#2d1d12" strokeWidth={3} />
-                                </button>
+              <div
+                onClick={() => setIsTableExpanded(!isTableExpanded)}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '12px 16px',
+                  backgroundColor: '#f8f5f0',
+                  borderBottom: isTableExpanded ? '1px solid #e8e1d5' : 'none',
+                  cursor: 'pointer',
+                  userSelect: 'none'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '800', color: '#4b301e' }}>Bảng mẫu kiểm tra ({samples.length} mẫu)</span>
+                  {samples.length > 5 && isTableExpanded && (
+                    <span style={{ fontSize: '10px', color: '#8d6e63', backgroundColor: '#efebe9', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>Cuộn để xem</span>
+                  )}
+                </div>
+                {isTableExpanded ? <ChevronUp size={16} color="#7c6d5e" /> : <ChevronDown size={16} color="#7c6d5e" />}
+              </div>
+
+              {isTableExpanded && (
+                <div style={{ maxHeight: '280px', overflowY: 'auto', overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
+                    <thead style={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#f8f5f0', boxShadow: '0 1px 0 #e8e1d5' }}>
+                      <tr style={{ color: '#7c6d5e', fontSize: '12px', fontWeight: 'bold' }}>
+                        <th style={{ padding: '12px 6px' }}>STT</th>
+                        <th style={{ padding: '12px 6px' }}>Kích thước</th>
+                        <th style={{ padding: '12px 6px' }}>{isWood ? 'Độ ẩm' : 'Chức năng'}</th>
+                        <th style={{ padding: '12px 6px' }}>Ngoại quan</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {samples.map((sample, idx) => (
+                        <tr key={sample.stt} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '10px 6px', fontSize: '13px', fontWeight: 'bold', color: '#4b301e' }}>{sample.stt}</td>
+                          <td style={{ padding: '10px 6px', fontSize: '12px' }}>
+                            {sample.dimensions && sample.dimensions.values && sample.dimensions.values.length > 0 ? (
+                              <div onClick={() => handleOpenPhotoModal(idx, 'size')} style={{ cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', color: '#2d1d12' }}>
+                                {sample.dimensions.values.join(' | ')}
                               </div>
                             ) : (
-                              <button 
-                                onClick={() => handleOpenPhotoModal(idx, 'moisture')} 
-                                style={{ 
-                                  width: '32px', 
-                                  height: '32px', 
-                                  borderRadius: '50%', 
-                                  border: '1.5px solid #2d1d12', 
-                                  backgroundColor: 'transparent', 
-                                  display: 'inline-flex', 
-                                  alignItems: 'center', 
-                                  justifyContent: 'center', 
-                                  cursor: 'pointer' 
+                              <button
+                                onClick={() => handleOpenPhotoModal(idx, 'size')}
+                                style={{
+                                  width: '32px',
+                                  height: '32px',
+                                  borderRadius: '50%',
+                                  border: '1.5px solid #2d1d12',
+                                  backgroundColor: 'transparent',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: 'pointer'
                                 }}
                               >
                                 <Plus size={18} color="#2d1d12" strokeWidth={3} />
                               </button>
-                            )
-                          ) : (
-                            <div style={{ display: 'flex', justifyContent: 'center' }}>
-                              <MockupToggle value={sample.function} onChange={(val) => handleToggleSampleValue(idx, 'function', val)} />
-                            </div>
-                          )}
-                        </td>
-                        <td style={{ padding: '10px 6px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'center' }}><MockupToggle value={sample.visual} onChange={(val) => handleToggleSampleValue(idx, 'visual', val)} /></div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                            )}
+                          </td>
+                          <td style={{ padding: '10px 6px', fontSize: '12px' }}>
+                            {isWood ? (
+                              sample.moisture && sample.moisture.values && sample.moisture.values.length > 0 ? (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                  <div onClick={() => handleOpenPhotoModal(idx, 'moisture')} style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '13px', fontWeight: 'bold', color: '#2d1d12', cursor: 'pointer' }}>
+                                    {sample.moisture.values.map((v, i) => <span key={i}>{v}</span>)}
+                                  </div>
+                                  <button
+                                    onClick={() => handleOpenPhotoModal(idx, 'moisture')}
+                                    style={{
+                                      width: '20px',
+                                      height: '20px',
+                                      borderRadius: '50%',
+                                      border: '1.2px solid #2d1d12',
+                                      backgroundColor: 'transparent',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    <Plus size={12} color="#2d1d12" strokeWidth={3} />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => handleOpenPhotoModal(idx, 'moisture')}
+                                  style={{
+                                    width: '32px',
+                                    height: '32px',
+                                    borderRadius: '50%',
+                                    border: '1.5px solid #2d1d12',
+                                    backgroundColor: 'transparent',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  <Plus size={18} color="#2d1d12" strokeWidth={3} />
+                                </button>
+                              )
+                            ) : (
+                              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                                <MockupToggle value={sample.function} onChange={(val) => handleToggleSampleValue(idx, 'function', val)} />
+                              </div>
+                            )}
+                          </td>
+                          <td style={{ padding: '10px 6px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'center' }}><MockupToggle value={sample.visual} onChange={(val) => handleToggleSampleValue(idx, 'visual', val)} /></div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             {/* Khối 4: Kết quả kiểm tra, Hành động & Ghi chú */}
@@ -944,21 +1048,24 @@ const StageInspection = () => {
                     const label = res === 'pass' ? 'Đạt' : 'Không đạt';
                     const active = itemConclusion === res;
                     return (
-                      <div 
-                        key={res} 
+                      <div
+                        key={res}
                         onClick={() => {
+                          if (res === 'pass') {
+                            setActiveDefects([{ defectId: '', quantity: 1, isHeavy: true, images: [] }]);
+                          }
                           setItemConclusion(res);
                           setItemAction(res === 'pass' ? 'luu-kho' : 'tra-ve');
                         }}
-                        style={{ 
-                          flex: 1, 
-                          padding: '8px', 
-                          textAlign: 'center', 
-                          borderRadius: '6px', 
-                          cursor: 'pointer', 
-                          backgroundColor: active ? '#5d3b32' : '#fff', 
-                          color: active ? '#fff' : '#4b301e', 
-                          fontWeight: 'bold', 
+                        style={{
+                          flex: 1,
+                          padding: '8px',
+                          textAlign: 'center',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          backgroundColor: active ? '#5d3b32' : '#fff',
+                          color: active ? '#fff' : '#4b301e',
+                          fontWeight: 'bold',
                           fontSize: '12px',
                           border: active ? '1px solid #5d3b32' : '1px solid #e2e8f0',
                           boxShadow: active ? '0 2px 4px rgba(0,0,0,0.05)' : 'none',
@@ -978,8 +1085,8 @@ const StageInspection = () => {
                     const label = act === 'luu-kho' ? 'Nhập kho' : act === 'cach-ly' ? 'Cách ly' : 'Trả hàng';
                     const active = itemAction === act;
                     return (
-                      <div 
-                        key={act} 
+                      <div
+                        key={act}
                         onClick={() => {
                           setItemAction(act);
                           if (act === 'tra-ve') {
@@ -987,16 +1094,16 @@ const StageInspection = () => {
                           } else if (act === 'luu-kho') {
                             setItemConclusion('pass');
                           }
-                        }} 
-                        style={{ 
-                          flex: 1, 
-                          padding: '8px', 
-                          textAlign: 'center', 
-                          borderRadius: '6px', 
-                          cursor: 'pointer', 
-                          backgroundColor: active ? '#5d3b32' : '#fff', 
-                          color: active ? '#fff' : '#4b301e', 
-                          fontWeight: 'bold', 
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '8px',
+                          textAlign: 'center',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          backgroundColor: active ? '#5d3b32' : '#fff',
+                          color: active ? '#fff' : '#4b301e',
+                          fontWeight: 'bold',
                           fontSize: '12px',
                           border: active ? '1px solid #5d3b32' : '1px solid #e2e8f0',
                           boxShadow: active ? '0 2px 4px rgba(0,0,0,0.05)' : 'none',
@@ -1010,136 +1117,269 @@ const StageInspection = () => {
                 </div>
               </div>
               <div>
-                <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#4b301e', display: 'block', marginBottom: '4px' }}>Ghi chú sản phẩm</label>
-                <textarea rows="2" value={itemNotes} onChange={(e) => setItemNotes(e.target.value)} placeholder="Nhập ghi chú..." style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none', resize: 'none' }} />
+                <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#4b301e', display: 'block', marginBottom: '4px' }}>
+                  Ghi chú sản phẩm {itemAction === 'cach-ly' && <span style={{ color: '#ef4444' }}>(Bắt buộc khi cách ly) *</span>}
+                </label>
+                <textarea
+                  rows="2"
+                  value={itemNotes}
+                  onChange={(e) => setItemNotes(e.target.value)}
+                  placeholder={itemAction === 'cach-ly' ? "Nhập rõ nguyên nhân cách ly (Bắt buộc)..." : "Nhập ghi chú..."}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: itemAction === 'cach-ly' && !itemNotes.trim() ? '1.5px solid #ef4444' : '1px solid #cbd5e1',
+                    fontSize: '13px',
+                    outline: 'none',
+                    resize: 'none',
+                    transition: 'all 0.2s'
+                  }}
+                />
               </div>
             </div>
 
             {/* Khối 3: Phân hệ Ghi nhận lỗi phát hiện */}
             {itemConclusion === 'fail' && (
-              <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '16px', border: '1px solid #e8e1d5', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#4b301e', borderBottom: '1px dashed #e8e1d5', paddingBottom: '8px', margin: 0 }}>Lỗi phát hiện</h3>
-                
-                {activeDefects.map((defect, defectIdx) => (
-                  <div key={defectIdx} style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderBottom: defectIdx < activeDefects.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: defectIdx < activeDefects.length - 1 ? '14px' : '0' }}>
-                    
-                    {/* Dòng 1: Dropdown chọn lỗi và Nút xóa */}
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <div style={{ flex: 1 }}>
-                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Tên lỗi phát hiện</label>
-                        <select 
-                          value={defect.defectId} 
-                          onChange={(e) => handleUpdateDefect(defectIdx, 'defectId', e.target.value)}
-                          style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none', backgroundColor: '#fff' }}
-                        >
-                          <option value="">-- Chọn loại lỗi --</option>
-                          {defectTypes.map(t => (
-                            <option key={t.id} value={t.id}>{t.name} ({t.code || 'N/A'})</option>
-                          ))}
-                        </select>
-                      </div>
-                      {activeDefects.length > 1 && (
-                        <button 
-                          onClick={() => handleRemoveDefect(defectIdx)} 
-                          style={{ width: '36px', height: '36px', borderRadius: '8px', border: '1px solid #fecaca', backgroundColor: '#fef2f2', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', marginTop: '20px' }}
-                        >
-                          <X size={16} />
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Dòng 2: Số lượng lỗi, Toggle lỗi nặng/lỗi nhẹ */}
-                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                      <div style={{ flex: 1 }}>
-                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Số lượng</label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <button 
-                            onClick={() => handleUpdateDefect(defectIdx, 'quantity', Math.max(1, (defect.quantity || 1) - 1))} 
-                            style={{ width: '32px', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}
-                          >
-                            -
-                          </button>
-                          <div style={{ flex: 1, padding: '6px', border: '1px solid #cbd5e1', borderRadius: '6px', textAlign: 'center', fontWeight: '800', fontSize: '14px', backgroundColor: '#fff' }}>
-                            {defect.quantity || 1}
-                          </div>
-                          <button 
-                            onClick={() => handleUpdateDefect(defectIdx, 'quantity', (defect.quantity || 1) + 1)} 
-                            style={{ width: '32px', height: '32px', borderRadius: '6px', border: 'none', backgroundColor: '#5d3b32', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}
-                          >
-                            +
-                          </button>
-                        </div>
-                      </div>
-
-                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Mức độ lỗi</label>
-                        {!defect.defectId ? (
-                          <div style={{ 
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', height: '32px', 
-                            borderRadius: '8px', fontSize: '12px', fontWeight: '800', 
-                            backgroundColor: '#f1f5f9', color: '#94a3b8', border: '1px solid #cbd5e1', textAlign: 'center' 
-                          }}>
-                            Chọn lỗi...
-                          </div>
-                        ) : (
-                          <div style={{ 
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', height: '32px', 
-                            borderRadius: '8px', fontSize: '12px', fontWeight: '800', 
-                            backgroundColor: defect.isHeavy ? '#fee2e2' : '#f0fdf4', 
-                            color: defect.isHeavy ? '#ef4444' : '#166534', 
-                            border: `1px solid ${defect.isHeavy ? '#fecaca' : '#bbf7d0'}`,
-                            textAlign: 'center' 
-                          }}>
-                            {defect.isHeavy ? 'Lỗi nặng' : 'Lỗi nhẹ'}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Dòng 3: Camera đính kèm ảnh (tối đa 3 ảnh lỗi) */}
-                    <div>
-                      <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '6px' }}>Ảnh lỗi (tối đa 3 ảnh)</label>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        {[0, 1, 2].map((imgIdx) => {
-                          const imgPath = defect.images ? defect.images[imgIdx] : null;
-                          const fullUrl = imgPath ? `${apiClient.defaults.baseURL.split('/api/v1')[0]}${imgPath}` : null;
-                          return (
-                            <div 
-                              key={imgIdx} 
-                              style={{ width: '60px', height: '60px', borderRadius: '8px', border: '1px dashed #cbd5e1', backgroundColor: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden', cursor: 'pointer' }}
-                              onClick={() => !imgPath && handleTriggerDefectCamera(defectIdx, imgIdx)}
-                            >
-                              {fullUrl ? (
-                                <>
-                                  <img src={fullUrl} alt="defect" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                  <button 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleRemoveDefectPhoto(defectIdx, imgIdx);
-                                    }}
-                                    style={{ position: 'absolute', top: '2px', right: '2px', width: '16px', height: '16px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.6)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '10px' }}
-                                  >
-                                    <X size={10} />
-                                  </button>
-                                </>
-                              ) : (
-                                <Camera size={18} color="#94a3b8" />
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                  </div>
-                ))}
-
-                <button 
-                  onClick={handleAddDefect}
-                  style={{ width: '100%', border: '1px dashed #5d3b32', borderRadius: '8px', padding: '10px', backgroundColor: '#faf6f0', color: '#5d3b32', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer', marginTop: '4px' }}
+              <div style={{ backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #e8e1d5', overflow: 'hidden' }}>
+                <div
+                  onClick={() => setIsDefectsExpanded(!isDefectsExpanded)}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '12px 16px',
+                    backgroundColor: '#f8f5f0',
+                    borderBottom: isDefectsExpanded ? '1px solid #e8e1d5' : 'none',
+                    cursor: 'pointer',
+                    userSelect: 'none'
+                  }}
                 >
-                  <Plus size={16} /> + Thêm lỗi khác
-                </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: '800', color: '#4b301e' }}>Lỗi phát hiện ({activeDefects.length} lỗi)</span>
+                    {activeDefects.length >= 2 && isDefectsExpanded && (
+                      <span style={{ fontSize: '10px', color: '#8d6e63', backgroundColor: '#efebe9', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>Đang mở</span>
+                    )}
+                  </div>
+                  {isDefectsExpanded ? <ChevronUp size={16} color="#7c6d5e" /> : <ChevronDown size={16} color="#7c6d5e" />}
+                </div>
+
+                {isDefectsExpanded && (
+                  <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    {activeDefects.map((defect, defectIdx) => {
+                      const foundDefect = defectTypes.find(t => String(t.id) === String(defect.defectId));
+                      const defectName = foundDefect ? `${foundDefect.name} (${foundDefect.code || 'N/A'})` : '';
+                      const isExpanded = defect.isExpanded !== false;
+
+                      return (
+                        <div key={defectIdx} style={{ display: 'flex', flexDirection: 'column', gap: '10px', border: '1px solid #cbd5e1', borderRadius: '12px', padding: '12px', backgroundColor: '#fff', marginBottom: '8px' }}>
+
+                          {/* Header của từng lỗi */}
+                          <div
+                            onClick={() => toggleDefectExpanded(defectIdx)}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              cursor: 'pointer',
+                              userSelect: 'none'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
+                              <span style={{ fontSize: '12px', fontWeight: '800', color: '#4b301e', whiteSpace: 'nowrap' }}>Lỗi #{defectIdx + 1}:</span>
+                              <span style={{
+                                fontSize: '12px',
+                                fontWeight: 'bold',
+                                color: defect.defectId ? '#2d1d12' : '#94a3b8',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                flex: 1
+                              }}>
+                                {defectName || 'Chưa chọn loại lỗi'}
+                                {defect.defectId && ` (SL: ${defect.quantity || 1})`}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }} onClick={(e) => e.stopPropagation()}>
+                              {activeDefects.length > 1 && (
+                                <button
+                                  onClick={() => handleRemoveDefect(defectIdx)}
+                                  style={{ width: '28px', height: '28px', borderRadius: '6px', border: '1px solid #fecaca', backgroundColor: '#fef2f2', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                                >
+                                  <X size={14} />
+                                </button>
+                              )}
+                              <div onClick={() => toggleDefectExpanded(defectIdx)} style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', padding: '2px' }}>
+                                {isExpanded ? <ChevronUp size={16} color="#7c6d5e" /> : <ChevronDown size={16} color="#7c6d5e" />}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Body của lỗi (chỉ hiện khi isExpanded true) */}
+                          {isExpanded && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderTop: '1px dashed #cbd5e1', paddingTop: '10px', marginTop: '4px' }}>
+
+                              {/* Dòng 1: Dropdown chọn lỗi */}
+                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <div style={{ flex: 1 }}>
+                                  <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Tên lỗi phát hiện</label>
+                                  <SearchableSelect
+                                    value={defect.defectId}
+                                    onChange={(e) => handleUpdateDefect(defectIdx, 'defectId', e.target.value)}
+                                    placeholder="-- Gõ để tìm kiếm lỗi --"
+                                    options={defectTypes
+                                      .filter(t => {
+                                        const isAlreadySelected = activeDefects.some((d, idx) => idx !== defectIdx && String(d.defectId) === String(t.id));
+                                        return !isAlreadySelected;
+                                      })
+                                      .map(t => ({
+                                        label: `${t.name} (${t.code || 'N/A'})`,
+                                        value: String(t.id)
+                                      }))
+                                    }
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Dòng 2: Số lượng lỗi, Toggle lỗi nặng/lỗi nhẹ */}
+                              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                <div style={{ flex: 1 }}>
+                                  <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Số lượng</label>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%' }}>
+                                    <button
+                                      onClick={() => handleUpdateDefect(defectIdx, 'quantity', Math.max(1, (defect.quantity || 1) - 1))}
+                                      style={{ width: '32px', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}
+                                    >
+                                      -
+                                    </button>
+                                    <input
+                                      type="number"
+                                      value={defect.quantity === 0 ? '' : (defect.quantity || 1)}
+                                      onChange={(e) => {
+                                        const val = e.target.value.replace(/[-+eE]/g, '');
+                                        if (val === '') {
+                                          handleUpdateDefect(defectIdx, 'quantity', 0);
+                                          return;
+                                        }
+                                        const num = parseInt(val, 10);
+                                        if (!isNaN(num)) {
+                                          handleUpdateDefect(defectIdx, 'quantity', num);
+                                        }
+                                      }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === '-' || e.key === '+' || e.key === 'e' || e.key === 'E') {
+                                          e.preventDefault();
+                                        }
+                                      }}
+                                      onPaste={(e) => {
+                                        const pasteData = e.clipboardData.getData('text');
+                                        if (pasteData.includes('-') || pasteData.includes('+') || pasteData.includes('e') || pasteData.includes('E')) {
+                                          e.preventDefault();
+                                        }
+                                      }}
+                                      onBlur={() => {
+                                        if ((defect.quantity || 0) < 1) {
+                                          handleUpdateDefect(defectIdx, 'quantity', 1);
+                                        }
+                                      }}
+                                      style={{
+                                        flex: 1,
+                                        width: '0px',
+                                        height: '32px',
+                                        border: '1px solid #cbd5e1',
+                                        borderRadius: '6px',
+                                        textAlign: 'center',
+                                        fontWeight: '800',
+                                        fontSize: '14px',
+                                        backgroundColor: '#fff',
+                                        outline: 'none',
+                                        boxSizing: 'border-box'
+                                      }}
+                                    />
+                                    <button
+                                      onClick={() => handleUpdateDefect(defectIdx, 'quantity', (defect.quantity || 1) + 1)}
+                                      style={{ width: '32px', height: '32px', borderRadius: '6px', border: 'none', backgroundColor: '#5d3b32', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                  <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Mức độ lỗi</label>
+                                  {!defect.defectId ? (
+                                    <div style={{
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center', height: '32px',
+                                      borderRadius: '8px', fontSize: '12px', fontWeight: '800',
+                                      backgroundColor: '#f1f5f9', color: '#94a3b8', border: '1px solid #cbd5e1', textAlign: 'center'
+                                    }}>
+                                      Chọn lỗi...
+                                    </div>
+                                  ) : (
+                                    <div style={{
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center', height: '32px',
+                                      borderRadius: '8px', fontSize: '12px', fontWeight: '800',
+                                      backgroundColor: defect.isHeavy ? '#fee2e2' : '#f0fdf4',
+                                      color: defect.isHeavy ? '#ef4444' : '#166534',
+                                      border: `1px solid ${defect.isHeavy ? '#fecaca' : '#bbf7d0'}`,
+                                      textAlign: 'center'
+                                    }}>
+                                      {defect.isHeavy ? 'Lỗi nặng' : 'Lỗi nhẹ'}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Dòng 3: Camera đính kèm ảnh (tối đa 3 ảnh lỗi) */}
+                              <div>
+                                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '6px' }}>Ảnh lỗi (tối đa 3 ảnh)</label>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  {[0, 1, 2].map((imgIdx) => {
+                                    const imgPath = defect.images ? defect.images[imgIdx] : null;
+                                    const fullUrl = imgPath ? `${apiClient.defaults.baseURL.split('/api/v1')[0]}${imgPath}` : null;
+                                    return (
+                                      <div
+                                        key={imgIdx}
+                                        style={{ width: '60px', height: '60px', borderRadius: '8px', border: '1px dashed #cbd5e1', backgroundColor: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden', cursor: 'pointer' }}
+                                        onClick={() => !imgPath && handleTriggerDefectCamera(defectIdx, imgIdx)}
+                                      >
+                                        {fullUrl ? (
+                                          <>
+                                            <img src={fullUrl} alt="defect" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleRemoveDefectPhoto(defectIdx, imgIdx);
+                                              }}
+                                              style={{ position: 'absolute', top: '2px', right: '2px', width: '16px', height: '16px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.6)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '10px' }}
+                                            >
+                                              <X size={10} />
+                                            </button>
+                                          </>
+                                        ) : (
+                                          <Camera size={18} color="#94a3b8" />
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
+                            </div>
+                          )}
+
+                        </div>
+                      );
+                    })}
+
+                    <button
+                      onClick={handleAddDefect}
+                      style={{ width: '100%', border: '1px dashed #5d3b32', borderRadius: '8px', padding: '10px', backgroundColor: '#faf6f0', color: '#5d3b32', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer', marginTop: '4px' }}
+                    >
+                      <Plus size={16} /> + Thêm lỗi khác
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1150,12 +1390,12 @@ const StageInspection = () => {
               <button onClick={handleConfirmItemInspection} style={{ flex: 1, backgroundColor: '#4b301e', color: '#fff', border: 'none', borderRadius: '10px', padding: '14px', fontSize: '15px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', boxShadow: '0 4px 10px rgba(75, 48, 30, 0.2)' }}><Check size={18} /> Xác nhận</button>
               <button onClick={() => setSelectedItem(null)} style={{ flex: 1, backgroundColor: '#fff', color: '#94a3b8', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '14px', fontSize: '15px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}><RotateCcw size={18} /> Hủy</button>
             </div>
-            
+
             {activeModalType && activeModalType !== 'defect' && (
               <div style={{ position: 'fixed', inset: 0, zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
                 <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)' }} onClick={() => setActiveModalType(null)} />
                 <div style={{ position: 'relative', backgroundColor: '#fff', borderRadius: '24px', width: '100%', maxWidth: '380px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  
+
                   {/* Header */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#4b301e' }}>
@@ -1163,9 +1403,9 @@ const StageInspection = () => {
                     </h3>
                     <button onClick={() => setActiveModalType(null)} style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer' }}><X size={18} color="#94a3b8" /></button>
                   </div>
-                  
+
                   <span style={{ fontSize: '12px', color: '#7c6d5e', textAlign: 'center', marginTop: '-4px' }}>Vui lòng xác nhận thông số sau khi chụp ảnh!</span>
-                  
+
                   {/* Khu vực Camera chụp ảnh ở giữa: 1 ô duy nhất */}
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', padding: '10px 0' }}>
                     <div style={{ width: '100px', height: '100px', borderRadius: '16px', border: '2px dashed #cbd5e1', backgroundColor: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
@@ -1175,8 +1415,8 @@ const StageInspection = () => {
                         <Camera size={36} color="#94a3b8" />
                       )}
                     </div>
-                    <button 
-                      onClick={() => modalFileInputRef.current.click()} 
+                    <button
+                      onClick={() => modalFileInputRef.current.click()}
                       disabled={isUploadingImage || isOcrProcessing}
                       style={{ padding: '6px 14px', border: '1px solid #4b301e', backgroundColor: '#fff', color: '#4b301e', borderRadius: '8px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}
                     >
@@ -1216,7 +1456,18 @@ const StageInspection = () => {
                         <input
                           type="number"
                           value={singleValue}
-                          onChange={(e) => setSingleValue(e.target.value)}
+                          onChange={(e) => setSingleValue(e.target.value.replace(/[-+eE]/g, ''))}
+                          onKeyDown={(e) => {
+                            if (e.key === '-' || e.key === '+' || e.key === 'e' || e.key === 'E') {
+                              e.preventDefault();
+                            }
+                          }}
+                          onPaste={(e) => {
+                            const pasteData = e.clipboardData.getData('text');
+                            if (pasteData.includes('-') || pasteData.includes('+') || pasteData.includes('e') || pasteData.includes('E')) {
+                              e.preventDefault();
+                            }
+                          }}
                           disabled={isOcrProcessing || !allowManualInput}
                           placeholder={isOcrProcessing ? "Đang đọc..." : (allowManualInput ? "Nhập..." : "Chụp ảnh để đo")}
                           style={{ width: '100px', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '16px', textAlign: 'center', fontWeight: 'bold', color: '#ef4444', backgroundColor: (isOcrProcessing || !allowManualInput) ? '#f1f5f9' : '#fff' }}
@@ -1249,7 +1500,18 @@ const StageInspection = () => {
                         <input
                           type="number"
                           value={singleValue}
-                          onChange={(e) => setSingleValue(e.target.value)}
+                          onChange={(e) => setSingleValue(e.target.value.replace(/[-+eE]/g, ''))}
+                          onKeyDown={(e) => {
+                            if (e.key === '-' || e.key === '+' || e.key === 'e' || e.key === 'E') {
+                              e.preventDefault();
+                            }
+                          }}
+                          onPaste={(e) => {
+                            const pasteData = e.clipboardData.getData('text');
+                            if (pasteData.includes('-') || pasteData.includes('+') || pasteData.includes('e') || pasteData.includes('E')) {
+                              e.preventDefault();
+                            }
+                          }}
                           disabled={isOcrProcessing || !allowManualInput}
                           placeholder={isOcrProcessing ? "Đang đọc..." : (allowManualInput ? "Nhập..." : "Chụp ảnh để đo")}
                           style={{ width: '90px', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '16px', textAlign: 'center', fontWeight: 'bold', color: '#10b981', backgroundColor: (isOcrProcessing || !allowManualInput) ? '#f1f5f9' : '#fff' }}
@@ -1364,7 +1626,7 @@ const StageInspection = () => {
                       if (existing) {
                         try {
                           extra = typeof existing.data_json === 'string' ? JSON.parse(existing.data_json) : (existing.data_json || {});
-                        } catch (e) {}
+                        } catch (e) { }
                       }
                       // Chỉ cho sửa nếu là phiếu kiểm tra mới (chưa có trong DB) hoặc nháp chưa duyệt hoặc có action là cách ly
                       const isEditable = !existing || (extra.action === 'cach-ly');
@@ -1378,11 +1640,11 @@ const StageInspection = () => {
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                                 {existing ? (
                                   <button onClick={() => setSelectedHistoryItem(existing)} style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', padding: '2px 6px', borderRadius: '6px' }}>
-                                    <span style={{ fontWeight: '950', fontSize: '13px', color: status === 'PASS' ? '#10b981' : '#ef4444' }}>{status}</span>
+                                    <span style={{ fontWeight: '950', fontSize: '13px', color: status === 'PASS' ? '#10b981' : '#ef4444' }}>{status === 'PASS' ? 'Đạt' : 'Không đạt'}</span>
                                     <Eye size={13} color="#94a3b8" />
                                   </button>
                                 ) : (
-                                  <span style={{ fontWeight: '950', fontSize: '13px', color: status === 'PASS' ? '#10b981' : '#ef4444' }}>{status}</span>
+                                  <span style={{ fontWeight: '950', fontSize: '13px', color: status === 'PASS' ? '#10b981' : '#ef4444' }}>{status === 'PASS' ? 'Đạt' : 'Không đạt'}</span>
                                 )}
                                 {isEditable && (
                                   <button onClick={() => handleStartInspection(item)} style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer' }}><Pencil size={12} color="#7c6d5e" /></button>
@@ -1424,9 +1686,9 @@ const StageInspection = () => {
           }}
         />
 
-        <InspectionDetailPopup 
-          item={selectedHistoryItem} 
-          onClose={() => setSelectedHistoryItem(null)} 
+        <InspectionDetailPopup
+          item={selectedHistoryItem}
+          onClose={() => setSelectedHistoryItem(null)}
         />
       </div>
     </Layout>

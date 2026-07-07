@@ -12,7 +12,7 @@ import { CheckCircle2, XCircle, Check, X } from 'lucide-react';
  * @param {boolean} props.disabled - Whether the selector is disabled
  * @param {string} props.variant - 'radio' (default) or 'button' style
  * @param {string} props.passLabel - Label for pass option (default: 'Đạt')
- * @param {string} props.failLabel - Label for fail option (default: 'Chưa Đạt')
+ * @param {string} props.failLabel - Label for fail option (default: 'Không đạt')
  * @param {boolean} props.showIcons - Whether to show icons (default: true)
  */
 const PassFailSelector = ({
@@ -22,7 +22,7 @@ const PassFailSelector = ({
   disabled = false,
   variant = 'radio',
   passLabel = 'Đạt',
-  failLabel = 'Chưa Đạt',
+  failLabel = 'Không đạt',
   showIcons = true
 }) => {
   // Normalize value to boolean for comparison

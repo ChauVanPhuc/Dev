@@ -93,7 +93,7 @@ if not exist node_modules (
     echo [OK] Mobile dependencies are already satisfied.
 )
 :: Open specialized window for Mobile
-start "Mobile - ERP G7" cmd /k "cd /d %~dp0FrontEnd\Mobile && npm run dev -- --port 1333 --host 0.0.0.0"
+start "Mobile - ERP G7" cmd /k "cd /d %~dp0FrontEnd\Mobile && npm run dev -- --port 3000 --host 0.0.0.0"
 
 echo.
 echo ======================================================
@@ -166,7 +166,7 @@ echo  [1/2] Starting Backend (FastAPI)...
 start "Backend (Cloud) - ERP G7" cmd /k "cd /d %~dp0 && call start_server.bat"
 
 echo  [2/3] Starting Mobile App (Vite)...
-start "Mobile Frontend (Cloud) - ERP G7" cmd /k "cd /d %~dp0FrontEnd\Mobile && npm run dev -- --port 1333 --host 0.0.0.0 --no-open"
+start "Mobile Frontend (Cloud) - ERP G7" cmd /k "cd /d %~dp0FrontEnd\Mobile && npm run dev -- --port 3000 --host 0.0.0.0 --no-open"
 
 echo  [3/3] Starting Dashboard (Vite)...
 start "Dashboard (Cloud) - ERP G7" cmd /k "cd /d %~dp0FrontEnd && npm run dev -- --host 0.0.0.0 --no-open"
@@ -248,7 +248,7 @@ echo [!] Make sure you have run Option 5 (Build) before this.
 echo.
 cd /d %~dp0BackEnd
 :: Start Backend without reload, serving static dist folders
-start "ERP G7 PRODUCTION SERVER" cmd /k "uvicorn app.main:app --host 0.0.0.0 --port 1111"
+start "ERP G7 PRODUCTION SERVER" cmd /k "uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
 echo.
 echo ======================================================

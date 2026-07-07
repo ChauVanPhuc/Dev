@@ -124,12 +124,12 @@ const StagePackagingView = () => {
           let extra = {};
           try {
             extra = typeof item.data_json === 'string' ? JSON.parse(item.data_json) : (item.data_json || {});
-          } catch (e) {}
+          } catch (e) { }
 
           let images = {};
           try {
             images = typeof item.images_json === 'string' ? JSON.parse(item.images_json) : (item.images_json || {});
-          } catch (e) {}
+          } catch (e) { }
 
           setFormData({
             batch_no: item.batch_no || '',
@@ -363,7 +363,7 @@ const StagePackagingView = () => {
                   <FormInput label="Người nhập" value={user?.full_name || 'Người kiểm tra'} readOnly={true} />
                 </div>
               </div>
-              
+
               <div style={{ display: 'flex', gap: '12px' }}>
                 <div style={{ flex: 1 }}>
                   <FormSelect
@@ -409,14 +409,14 @@ const StagePackagingView = () => {
           ) : filteredHistory.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {filteredHistory.map((item) => (
-                <div 
+                <div
                   key={item.id}
                   onClick={() => setSelectedHistoryItem(item)}
                   style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', backgroundColor: '#fdfbf7', borderRadius: '10px', border: '1px solid #f0ede8', cursor: 'pointer' }}
                 >
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                     <span style={{ fontSize: '13px', fontWeight: '700', color: '#4b301e' }}>Kiểm tra sau đóng gói ({item.batch_no})</span>
-                    <span style={{ fontSize: '11px', color: '#7c6d5e' }}>SP: {item.product_sku} - Kết quả: <span style={{ fontWeight: '700', color: item.conclusion === 'pass' ? '#10b981' : '#ef4444' }}>{item.conclusion.toUpperCase()}</span></span>
+                    <span style={{ fontSize: '11px', color: '#7c6d5e' }}>SP: {item.product_sku} - Kết quả: <span style={{ fontWeight: '700', color: item.conclusion === 'pass' ? '#10b981' : '#ef4444' }}>{item.conclusion === 'pass' ? 'ĐẠT' : 'KHÔNG ĐẠT'}</span></span>
                   </div>
                   <span style={{ fontSize: '11px', color: '#a3978b' }}>{formatDateTime(item.inspection_date)}</span>
                 </div>
@@ -464,9 +464,9 @@ const StagePackagingView = () => {
           }}
         />
 
-        <InspectionDetailPopup 
-          item={selectedHistoryItem} 
-          onClose={() => setSelectedHistoryItem(null)} 
+        <InspectionDetailPopup
+          item={selectedHistoryItem}
+          onClose={() => setSelectedHistoryItem(null)}
         />
       </div>
     </Layout>

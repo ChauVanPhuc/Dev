@@ -61,11 +61,19 @@ def parse_excel_date(val):
     val_str = str(val).strip()
     if not val_str or val_str.lower() in ('none', 'null', '—', '-'):
         return None
-    for fmt in ('%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y', '%m/%d/%Y'):
+    
+    # Danh sách các định dạng ngày phổ biến (bao gồm có giờ phút giây và dấu gạch chéo)
+    fmts = (
+        '%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y', '%m/%d/%Y', '%Y/%m/%d',
+        '%d/%m/%Y %H:%M:%S', '%Y-%m-%d %H:%M:%S', '%d-%m-%Y %H:%M:%S', '%Y/%m/%d %H:%M:%S',
+        '%d/%m/%Y %H:%M', '%Y-%m-%d %H:%M', '%d-%m-%Y %H:%M', '%Y/%m/%d %H:%M'
+    )
+    for fmt in fmts:
         try:
             return datetime.datetime.strptime(val_str, fmt).date()
         except ValueError:
             continue
+            
     # Xử lý dạng mm/yyyy (ví dụ 06/2025)
     m = re.match(r'^(\d{1,2})/(\d{4})$', val_str)
     if m:
@@ -456,18 +464,49 @@ async def import_machines_excel(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Không thể đọc file Excel: {str(e)}")
         
-    # Đọc tiêu đề để ánh xạ cột
-    headers = [str(cell.value).strip().lower() if cell.value is not None else '' for cell in sheet[1]]
+    # Tìm dòng chứa tiêu đề (quét tối đa 10 dòng đầu tiên)
+    header_row_idx = 1
+    headers = []
+    code_idx = -1
+    name_idx = -1
     
-    # Tìm chỉ số cột dựa trên từ khóa tiêu đề
+    # Danh sách từ khóa chấp nhận cho mã máy và tên máy
+    code_keywords = ['mã máy', 'mã thiết bị', 'ma may', 'mã số máy', 'mã số', 'mã', 'code', 'ma']
+    name_keywords = ['tên máy', 'tên thiết bị', 'ten may', 'tên', 'name', 'ten']
+    
+    for r in range(1, min(11, sheet.max_row + 1)):
+        row_cells = sheet[r]
+        row_headers = [str(cell.value).strip().lower() if cell.value is not None else '' for cell in row_cells]
+        
+        def find_idx_in_row(keywords, row_hdrs):
+            for idx, h in enumerate(row_hdrs):
+                if any(k in h for k in keywords):
+                    return idx
+            return -1
+            
+        c_idx = find_idx_in_row(code_keywords, row_headers)
+        n_idx = find_idx_in_row(name_keywords, row_headers)
+        
+        if c_idx != -1 and n_idx != -1:
+            header_row_idx = r
+            headers = row_headers
+            code_idx = c_idx
+            name_idx = n_idx
+            break
+
+    if code_idx == -1 or name_idx == -1:
+        raise HTTPException(
+            status_code=400,
+            detail="File Excel không hợp lệ. Cần tối thiểu cột chứa từ khóa 'Mã máy' và 'Tên máy'."
+        )
+        
+    # Tìm chỉ số cột khác dựa trên từ khóa tiêu đề
     def find_idx(keywords):
         for idx, h in enumerate(headers):
             if any(k in h for k in keywords):
                 return idx
         return -1
         
-    code_idx = find_idx(['mã máy', 'mã thiết bị', 'ma may'])
-    name_idx = find_idx(['tên máy', 'tên thiết bị', 'ten may'])
     status_idx = find_idx(['tình trạng máy', 'tình trạng', 'trạng thái', 'tinh trang'])
     factory_idx = find_idx(['nhà máy', 'xưởng', 'nha may', 'xuong'])
     dept_idx = find_idx(['tổ', 'bộ phận', 'to', 'bo phan'])
@@ -485,12 +524,6 @@ async def import_machines_excel(
     year_idx = find_idx(['năm sản xuất', 'nam san xuat', 'năm sx'])
     owner_idx = find_idx(['người phụ trách', 'người sở hữu', 'phu trach'])
     
-    if code_idx == -1 or name_idx == -1:
-        raise HTTPException(
-            status_code=400,
-            detail="File Excel không hợp lệ. Cần tối thiểu cột 'Mã máy' và 'Tên máy' ở dòng 1."
-        )
-        
     inserted_count = 0
     updated_count = 0
     
@@ -499,109 +532,119 @@ async def import_machines_excel(
             return default
         return vals[idx]
 
-    # Duyệt từ dòng thứ 2
-    for r in range(2, sheet.max_row + 1):
-        row_vals = [cell.value for cell in sheet[r]]
-        if not row_vals or len(row_vals) <= max(code_idx, name_idx):
-            continue
+    try:
+        # Duyệt từ dòng kế tiếp dòng tiêu đề
+        for r in range(header_row_idx + 1, sheet.max_row + 1):
+            row_vals = [cell.value for cell in sheet[r]]
+            if not row_vals or len(row_vals) <= max(code_idx, name_idx):
+                continue
+                
+            code_raw = get_val(row_vals, code_idx)
+            name_raw = get_val(row_vals, name_idx)
             
-        code_raw = get_val(row_vals, code_idx)
-        name_raw = get_val(row_vals, name_idx)
-        
-        code = str(code_raw).strip() if code_raw is not None else ''
-        name = str(name_raw).strip() if name_raw is not None else ''
-        
-        # Bỏ qua dòng trống
-        if not code or not name:
-            continue
+            code = str(code_raw).strip() if code_raw is not None else ''
+            name = str(name_raw).strip() if name_raw is not None else ''
             
-        # Lấy các trường thông tin
-        status_raw = get_val(row_vals, status_idx)
-        status_val = str(status_raw).strip() if status_raw is not None else "Hoạt động bình thường"
-        
-        factory_raw = get_val(row_vals, factory_idx)
-        factory_val = str(factory_raw).strip() if factory_raw is not None else None
-        
-        dept_raw = get_val(row_vals, dept_idx)
-        dept_val = str(dept_raw).strip() if dept_raw is not None else None
-        
-        receive_raw = get_val(row_vals, receive_date_idx)
-        receive_date = parse_excel_date(receive_raw)
-        
-        origin_raw = get_val(row_vals, origin_idx)
-        origin_val = str(origin_raw).strip() if origin_raw is not None else None
-        
-        supplier_raw = get_val(row_vals, supplier_idx)
-        supplier_val = str(supplier_raw).strip() if supplier_raw is not None else None
-        
-        cycle_raw = get_val(row_vals, cycle_idx)
-        cycle_val = parse_cycle(cycle_raw)
-        
-        next_maint_raw = get_val(row_vals, next_maint_idx)
-        next_maint = parse_excel_date(next_maint_raw)
-        
-        last_maint_raw = get_val(row_vals, last_maint_idx)
-        last_maint = parse_excel_date(last_maint_raw)
-        
-        notes_raw = get_val(row_vals, notes_idx)
-        notes_val = str(notes_raw).strip() if notes_raw is not None else None
-        
-        images_raw = get_val(row_vals, images_idx)
-        images_val = str(images_raw).strip() if images_raw is not None else None
-        
-        qr_raw = get_val(row_vals, qr_idx)
-        qr_val = str(qr_raw).strip() if qr_raw is not None else None
-        
-        runtime_raw = get_val(row_vals, runtime_idx)
-        try:
-            runtime_val = float(runtime_raw) if runtime_raw is not None else None
-        except:
-            runtime_val = None
+            # Bỏ qua dòng trống
+            if not code or not name:
+                continue
+                
+            # Lấy các trường thông tin
+            status_raw = get_val(row_vals, status_idx)
+            status_val = str(status_raw).strip() if status_raw is not None else "Hoạt động bình thường"
             
-        prod_raw = get_val(row_vals, prod_idx)
-        prod_val = str(prod_raw).strip() if prod_raw is not None else None
-        
-        year_raw = get_val(row_vals, year_idx)
-        year_val = str(year_raw).strip() if year_raw is not None else None
-        
-        owner_raw = get_val(row_vals, owner_idx)
-        owner_val = str(owner_raw).strip() if owner_raw is not None else None
-        
-        # Kiểm tra máy đã tồn tại chưa (UPSERT)
-        existing = db.query(Machine).filter(Machine.code == code).first()
-        if existing:
-            existing.name = name
-            existing.status = status_val
-            existing.factory = factory_val
-            existing.department = dept_val
-            existing.receive_date = receive_date or existing.receive_date
-            existing.origin = origin_val
-            existing.supplier = supplier_val
-            existing.maintenance_cycle = cycle_val
-            existing.next_maintenance_date = next_maint or existing.next_maintenance_date
-            existing.last_maintenance_date = last_maint or existing.last_maintenance_date
-            existing.notes = notes_val
-            existing.images = images_val or existing.images
-            existing.qr_code = qr_val or existing.qr_code
-            existing.daily_run_time = runtime_val or existing.daily_run_time
-            existing.productivity = prod_val or existing.productivity
-            existing.production_year = year_val or existing.production_year
-            existing.owner_name = owner_val or existing.owner_name
-            updated_count += 1
-        else:
-            new_mac = Machine(
-                code=code, name=name, status=status_val, factory=factory_val,
-                department=dept_val, receive_date=receive_date, origin=origin_val,
-                supplier=supplier_val, maintenance_cycle=cycle_val,
-                next_maintenance_date=next_maint, last_maintenance_date=last_maint,
-                notes=notes_val, images=images_val, qr_code=qr_val,
-                daily_run_time=runtime_val, productivity=prod_val,
-                production_year=year_val, owner_name=owner_val
-            )
-            db.add(new_mac)
-            inserted_count += 1
+            factory_raw = get_val(row_vals, factory_idx)
+            factory_val = str(factory_raw).strip() if factory_raw is not None else None
             
-    db.commit()
+            dept_raw = get_val(row_vals, dept_idx)
+            dept_val = str(dept_raw).strip() if dept_raw is not None else None
+            
+            receive_raw = get_val(row_vals, receive_date_idx)
+            receive_date = parse_excel_date(receive_raw)
+            
+            origin_raw = get_val(row_vals, origin_idx)
+            origin_val = str(origin_raw).strip() if origin_raw is not None else None
+            
+            supplier_raw = get_val(row_vals, supplier_idx)
+            supplier_val = str(supplier_raw).strip() if supplier_raw is not None else None
+            
+            cycle_raw = get_val(row_vals, cycle_idx)
+            cycle_val = parse_cycle(cycle_raw)
+            
+            next_maint_raw = get_val(row_vals, next_maint_idx)
+            next_maint = parse_excel_date(next_maint_raw)
+            
+            last_maint_raw = get_val(row_vals, last_maint_idx)
+            last_maint = parse_excel_date(last_maint_raw)
+            
+            notes_raw = get_val(row_vals, notes_idx)
+            notes_val = str(notes_raw).strip() if notes_raw is not None else None
+            
+            images_raw = get_val(row_vals, images_idx)
+            images_val = str(images_raw).strip() if images_raw is not None else None
+            
+            qr_raw = get_val(row_vals, qr_idx)
+            qr_val = str(qr_raw).strip() if qr_raw is not None else None
+            
+            runtime_raw = get_val(row_vals, runtime_idx)
+            try:
+                runtime_val = float(runtime_raw) if runtime_raw is not None else None
+            except:
+                runtime_val = None
+                
+            prod_raw = get_val(row_vals, prod_idx)
+            prod_val = str(prod_raw).strip() if prod_raw is not None else None
+            
+            year_raw = get_val(row_vals, year_idx)
+            year_val = str(year_raw).strip() if year_raw is not None else None
+            
+            owner_raw = get_val(row_vals, owner_idx)
+            owner_val = str(owner_raw).strip() if owner_raw is not None else None
+            
+            # Kiểm tra máy đã tồn tại chưa (UPSERT)
+            existing = db.query(Machine).filter(Machine.code == code).first()
+            if existing:
+                existing.name = name
+                existing.status = status_val
+                existing.factory = factory_val
+                existing.department = dept_val
+                existing.receive_date = receive_date or existing.receive_date
+                existing.origin = origin_val
+                existing.supplier = supplier_val
+                existing.maintenance_cycle = cycle_val
+                existing.next_maintenance_date = next_maint or existing.next_maintenance_date
+                existing.last_maintenance_date = last_maint or existing.last_maintenance_date
+                existing.notes = notes_val
+                existing.images = images_val or existing.images
+                existing.qr_code = qr_val or existing.qr_code
+                existing.daily_run_time = runtime_val or existing.daily_run_time
+                existing.productivity = prod_val or existing.productivity
+                existing.production_year = year_val or existing.production_year
+                existing.owner_name = owner_val or existing.owner_name
+                updated_count += 1
+            else:
+                new_mac = Machine(
+                    code=code, name=name, status=status_val, factory=factory_val,
+                    department=dept_val, receive_date=receive_date, origin=origin_val,
+                    supplier=supplier_val, maintenance_cycle=cycle_val,
+                    next_maintenance_date=next_maint, last_maintenance_date=last_maint,
+                    notes=notes_val, images=images_val, qr_code=qr_val,
+                    daily_run_time=runtime_val, productivity=prod_val,
+                    production_year=year_val, owner_name=owner_val
+                )
+                db.add(new_mac)
+                inserted_count += 1
+                
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=400,
+            detail=f"Lỗi nhập dữ liệu ở dòng {r if 'r' in locals() else 'chưa xác định'}: {str(e)}"
+        )
+        
     return {
         "status": "success",
         "message": f"Nhập dữ liệu thành công. Đã thêm mới {inserted_count} máy, cập nhật {updated_count} máy."
