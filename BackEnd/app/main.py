@@ -560,9 +560,16 @@ async def lifespan(app: FastAPI):
 
 
 
-# Create database tables
-
 Base.metadata.create_all(bind=engine)
+
+# [MIGRATION] Add workshop column to machines table
+from sqlalchemy import text
+try:
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE machines ADD workshop NVARCHAR(255) NULL"))
+except Exception as migration_err:
+    # Ignore if column already exists
+    pass
 
 
 

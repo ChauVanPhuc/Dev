@@ -1397,6 +1397,31 @@ body:has(.claim-container),
   border-radius: 50%;
 }
 
+.add-claim-input:disabled, 
+.add-claim-select:disabled, 
+.add-claim-textarea:disabled {
+  background-color: #F5F5F5 !important;
+  color: #757575 !important;
+  border-color: #E0E0E0 !important;
+  cursor: not-allowed !important;
+  opacity: 0.8;
+}
+
+.add-claim-radio-input:disabled {
+  border-color: #E0E0E0 !important;
+  background-color: #F5F5F5 !important;
+  cursor: not-allowed !important;
+}
+
+.add-claim-radio-input:disabled:checked::after {
+  background-color: #BDBDBD !important;
+}
+
+.add-claim-radio-label:has(input:disabled) {
+  color: #9E9E9E !important;
+  cursor: not-allowed !important;
+}
+
 .add-claim-textarea {
   resize: vertical;
   min-height: 100px;

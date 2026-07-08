@@ -22,6 +22,7 @@ class MachineBase(BaseModel):
     code: str
     status: Optional[str] = "Hoạt động bình thường"
     factory: Optional[str] = None
+    workshop: Optional[str] = None
     department: Optional[str] = None
     receive_date: Optional[datetime.date] = None
     origin: Optional[str] = None
@@ -110,40 +111,6 @@ def get_machines(db: Session = Depends(get_db)):
     [GET] Lấy danh sách toàn bộ máy móc từ database.
     """
     machines = db.query(Machine).order_by(Machine.id.desc()).all()
-    
-    # [AUTO-SEED] Nếu bảng trống, tự động thêm một số máy mẫu tương tự file Excel
-    if not machines:
-        sample_data = [
-            {
-                "code": "MC04748", "name": "MÁY KHOAN NẰM TỰ ĐỘNG 1 ĐẦU, ĐH - 04",
-                "status": "Hoạt động bình thường", "factory": "CÔNG TY CỔ PHẦN VINA G7",
-                "department": "ĐỊNH HÌNH", "receive_date": None, "origin": "TRUNG QUỐC",
-                "supplier": "VINA G7", "maintenance_cycle": 30, "next_maintenance_date": datetime.date(2026, 7, 12),
-                "last_maintenance_date": datetime.date(2026, 6, 12), "notes": "Kiểm tra bạc đạn, dây curoa motor",
-                "images": "https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=200", "qr_code": "MC-VINAG7-DINHHINH-75286"
-            },
-            {
-                "code": "MC89995", "name": "MÁY NHÁM THANH TRÒN - MM2012A",
-                "status": "Hoạt động bình thường", "factory": "CÔNG TY CỔ PHẦN VINA G7",
-                "department": "ĐỊNH HÌNH", "receive_date": None, "origin": "TRUNG QUỐC",
-                "supplier": "VINA G7", "maintenance_cycle": 30, "next_maintenance_date": datetime.date(2026, 7, 28),
-                "last_maintenance_date": datetime.date(2026, 6, 28), "notes": "Vệ sinh máy, tủ điện",
-                "images": "", "qr_code": "MC-VINAG7-DINHHINH-30076"
-            }
-        ]
-        for item in sample_data:
-            new_mac = Machine(
-                code=item["code"], name=item["name"], status=item["status"],
-                factory=item["factory"], department=item["department"],
-                receive_date=item["receive_date"], origin=item["origin"],
-                supplier=item["supplier"], maintenance_cycle=item["maintenance_cycle"],
-                next_maintenance_date=item["next_maintenance_date"],
-                last_maintenance_date=item["last_maintenance_date"],
-                notes=item["notes"], images=item["images"], qr_code=item["qr_code"]
-            )
-            db.add(new_mac)
-        db.commit()
-        machines = db.query(Machine).order_by(Machine.id.desc()).all()
         
     return [
         {
@@ -152,6 +119,7 @@ def get_machines(db: Session = Depends(get_db)):
             "code": m.code,
             "status": m.status,
             "factory": m.factory,
+            "workshop": m.workshop,
             "department": m.department,
             "receive_date": m.receive_date,
             "origin": m.origin,
@@ -184,6 +152,7 @@ def get_machine_by_id(machine_id: int, db: Session = Depends(get_db)):
         "code": m.code,
         "status": m.status,
         "factory": m.factory,
+        "workshop": m.workshop,
         "department": m.department,
         "receive_date": m.receive_date,
         "origin": m.origin,
@@ -214,6 +183,7 @@ def create_machine(mac: MachineCreate, db: Session = Depends(get_db)):
         code=mac.code,
         status=mac.status,
         factory=mac.factory,
+        workshop=mac.workshop,
         department=mac.department,
         receive_date=mac.receive_date,
         origin=mac.origin,
@@ -247,6 +217,7 @@ def update_machine(machine_id: int, mac: MachineUpdate, db: Session = Depends(ge
     machine.code = mac.code
     machine.status = mac.status
     machine.factory = mac.factory
+    machine.workshop = mac.workshop
     machine.department = mac.department
     machine.receive_date = mac.receive_date
     machine.origin = mac.origin
@@ -508,7 +479,8 @@ async def import_machines_excel(
         return -1
         
     status_idx = find_idx(['tình trạng máy', 'tình trạng', 'trạng thái', 'tinh trang'])
-    factory_idx = find_idx(['nhà máy', 'xưởng', 'nha may', 'xuong'])
+    factory_idx = find_idx(['nhà máy', 'nha may'])
+    workshop_idx = find_idx(['xưởng', 'xuong'])
     dept_idx = find_idx(['tổ', 'bộ phận', 'to', 'bo phan'])
     receive_date_idx = find_idx(['thời gian máy về xưởng', 'ngày nhận máy', 'ngày nhận', 'ngay ve xuong'])
     origin_idx = find_idx(['xuất xứ', 'xuat xu'])
@@ -555,6 +527,9 @@ async def import_machines_excel(
             
             factory_raw = get_val(row_vals, factory_idx)
             factory_val = str(factory_raw).strip() if factory_raw is not None else None
+            
+            workshop_raw = get_val(row_vals, workshop_idx)
+            workshop_val = str(workshop_raw).strip() if workshop_raw is not None else None
             
             dept_raw = get_val(row_vals, dept_idx)
             dept_val = str(dept_raw).strip() if dept_raw is not None else None
@@ -607,6 +582,7 @@ async def import_machines_excel(
                 existing.name = name
                 existing.status = status_val
                 existing.factory = factory_val
+                existing.workshop = workshop_val
                 existing.department = dept_val
                 existing.receive_date = receive_date or existing.receive_date
                 existing.origin = origin_val
@@ -625,6 +601,7 @@ async def import_machines_excel(
             else:
                 new_mac = Machine(
                     code=code, name=name, status=status_val, factory=factory_val,
+                    workshop=workshop_val,
                     department=dept_val, receive_date=receive_date, origin=origin_val,
                     supplier=supplier_val, maintenance_cycle=cycle_val,
                     next_maintenance_date=next_maint, last_maintenance_date=last_maint,

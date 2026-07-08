@@ -73,6 +73,56 @@ def get_stats(db: Session = Depends(get_db)):
     return controller.get_stats(db)
 
 
+@router.get("/active-pos")
+def get_active_pos(db: Session = Depends(get_db)):
+    """[GET] Lấy danh sách PO hoạt động (1 tháng trước, tháng hiện tại, 2 tháng tới)."""
+    from sqlalchemy import func
+    from shared.utils.timezone import get_vietnam_time
+    from datetime import datetime
+    from modules.delivery.models.order import Order
+
+    vietnam_now = get_vietnam_time()
+    current_year = vietnam_now.year
+    current_month = vietnam_now.month
+    
+    # Ngày bắt đầu: ngày 1 của tháng trước
+    start_month = current_month - 1
+    start_year = current_year
+    if start_month == 0:
+        start_month = 12
+        start_year -= 1
+    start_date = datetime(start_year, start_month, 1, 0, 0, 0)
+    
+    # Ngày kết thúc: ngày cuối của 2 tháng tới (lấy ngày 1 của 3 tháng tới)
+    end_month = current_month + 3
+    end_year = current_year
+    while end_month > 12:
+        end_month -= 12
+        end_year += 1
+    end_date = datetime(end_year, end_month, 1, 0, 0, 0)
+    
+    # Lấy distinct order_code từ bảng Order (KHSX)
+    results = db.query(
+        Order.order_code,
+        func.min(Order.create_date).label("create_date"),
+        func.max(Order.customer).label("customer")
+    ).filter(
+        Order.create_date >= start_date,
+        Order.create_date < end_date,
+        Order.order_code != None,
+        Order.order_code != ""
+    ).group_by(Order.order_code).order_by(func.min(Order.create_date).desc()).all()
+    
+    po_list = []
+    for r in results:
+        po_list.append({
+            "po_code": r.order_code,
+            "po_date": r.create_date.strftime("%Y-%m-%d") if r.create_date else None,
+            "supplier_name": r.customer or "N/A"
+        })
+    return po_list
+
+
 @router.get("/by-po/{po_code:path}")
 def get_by_po(po_code: str, db: Session = Depends(get_db)):
     """[GET] Lấy danh sách mặt hàng theo mã PO. Hỗ trợ mã PO có ký tự gạch chéo."""

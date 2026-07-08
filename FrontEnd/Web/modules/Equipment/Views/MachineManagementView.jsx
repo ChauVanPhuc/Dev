@@ -36,7 +36,7 @@ const MachineManagementView = () => {
   const [editingMachine, setEditingMachine] = useState(null);
   const [formData, setFormData] = useState({
     code: '', name: '', status: 'Hoạt động bình thường',
-    factory: '', department: '', receive_date: '',
+    factory: '', workshop: '', department: '', receive_date: '',
     origin: '', supplier: '', maintenance_cycle: 30,
     next_maintenance_date: '', last_maintenance_date: '',
     notes: '', images: '', qr_code: '', daily_run_time: '',
@@ -139,6 +139,7 @@ const MachineManagementView = () => {
       name: machine.name || '',
       status: machine.status || 'Hoạt động bình thường',
       factory: machine.factory || '',
+      workshop: machine.workshop || '',
       department: machine.department || '',
       receive_date: machine.receive_date || '',
       origin: machine.origin || '',
@@ -162,7 +163,7 @@ const MachineManagementView = () => {
     setEditingMachine(null);
     setFormData({
       code: '', name: '', status: 'Hoạt động bình thường',
-      factory: '', department: '', receive_date: '',
+      factory: '', workshop: '', department: '', receive_date: '',
       origin: '', supplier: '', maintenance_cycle: 30,
       next_maintenance_date: '', last_maintenance_date: '',
       notes: '', images: '', qr_code: '', daily_run_time: '',
@@ -833,12 +834,23 @@ const MachineManagementView = () => {
               </div>
 
               <div>
-                <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Nhà máy (Xưởng)</label>
+                <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Nhà máy</label>
                 <input 
                   type="text" 
                   value={formData.factory}
                   onChange={(e) => setFormData({...formData, factory: e.target.value})}
-                  placeholder="Ví dụ: NHÀ MÁY -2"
+                  placeholder="Ví dụ: CÔNG TY CỔ PHẦN VINA G7"
+                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', marginTop: '4px', outline: 'none' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Xưởng</label>
+                <input 
+                  type="text" 
+                  value={formData.workshop}
+                  onChange={(e) => setFormData({...formData, workshop: e.target.value})}
+                  placeholder="Ví dụ: NHÀ MÁY - 2"
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', marginTop: '4px', outline: 'none' }}
                 />
               </div>

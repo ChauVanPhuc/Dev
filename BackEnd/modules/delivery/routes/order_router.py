@@ -106,18 +106,23 @@ def read_order_products_by_code(order_code: str, db: Session = Depends(get_db)):
     # Lấy products (sản phẩm thực tế)
     product_list = []
     for prod in order.products:
-        # Lấy các chi tiết (BOM Elements) cấp 1
+        # Lấy tất cả các chi tiết (BOM Elements) bao gồm cả các cấp con
         elements = []
         for bom in prod.bom_details:
-            if bom.parent_id is None:
-                elements.append({
-                    "sku": bom.sku,
-                    "name": bom.name
-                })
+            prod_qty = float(prod.total_qty or prod.quantity or 1.0)
+            bom_qty = float(bom.quantity or 0.0)
+            elements.append({
+                "sku": bom.sku,
+                "name": bom.name,
+                "quantity": int(bom_qty * prod_qty),
+                "is_raw_material": bom.is_raw_material,
+                "exclude_production": bom.exclude_production
+            })
 
         product_list.append({
             "sku": prod.sku,
             "name": prod.name,
+            "quantity": int(prod.total_qty or prod.quantity or 0),
             "elements": elements
         })
     

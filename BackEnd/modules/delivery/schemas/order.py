@@ -79,6 +79,7 @@ class OrderResponse(BaseModel):
     estimated_date: Optional[datetime] = None # Ngày dự kiến
     note: Optional[str] = None        # Ghi chú
     is_priority: Optional[int] = 0    # Ưu tiên
+    plan_id: Optional[int] = None      # ID Kế hoạch sản xuất
     items: List[OrderItemResponse] = [] # Danh sách item thô (ID and quantity)
     products: List[ProductResponse] = [] # Danh sách sản phẩm chi tiết (đã phân rã BOM)
 

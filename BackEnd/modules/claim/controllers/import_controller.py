@@ -146,7 +146,8 @@ def process_pdf_import(file_bytes: bytes, filename: str, db=None):
     # Save Excel spreadsheet inside excel/ using shared service
     excel_path = os.path.join(EXCEL_DIR, f"{batch_id}_claims.xlsx")
     try:
-        save_claims_to_excel(claims, excel_path, images_batch_dir, CLAIM_IMPORTS_DIR, resolve_company_error_codes)
+        prices_map = get_cabinet_prices_map(db)
+        save_claims_to_excel(claims, excel_path, images_batch_dir, CLAIM_IMPORTS_DIR, resolve_company_error_codes, prices_map)
     except Exception as exc_err:
         msg = f"Không thể xuất file Excel: {str(exc_err)}"
         logger.warning(msg)
@@ -276,7 +277,8 @@ async def process_folder_import(files, db=None):
     # Save combined Excel using shared service
     excel_path = os.path.join(EXCEL_DIR, f"{batch_id}_claims.xlsx")
     try:
-        save_claims_to_excel(combined_claims, excel_path, images_batch_dir, CLAIM_IMPORTS_DIR, resolve_company_error_codes)
+        prices_map = get_cabinet_prices_map(db)
+        save_claims_to_excel(combined_claims, excel_path, images_batch_dir, CLAIM_IMPORTS_DIR, resolve_company_error_codes, prices_map)
     except Exception as exc_err:
         msg = f"Không thể xuất file Excel: {str(exc_err)}"
         logger.warning(msg)
@@ -461,7 +463,8 @@ async def process_folder_import_streaming(files, db=None):
     # Save combined Excel using shared service
     excel_path = os.path.join(EXCEL_DIR, f"{batch_id}_claims.xlsx")
     try:
-        save_claims_to_excel(combined_claims, excel_path, images_batch_dir, CLAIM_IMPORTS_DIR, resolve_company_error_codes)
+        prices_map = get_cabinet_prices_map(db)
+        save_claims_to_excel(combined_claims, excel_path, images_batch_dir, CLAIM_IMPORTS_DIR, resolve_company_error_codes, prices_map)
     except Exception as exc_err:
         msg = f"Không thể xuất file Excel: {str(exc_err)}"
         logger.warning(msg)
@@ -504,6 +507,37 @@ def load_temp_cabinet_prices():
         except Exception as e:
             logger.warning(f"Error reading temp_cabinet_prices.json: {e}")
     return None
+
+
+def get_cabinet_prices_map(db = None) -> dict:
+    cabinet_prices_map = {}
+    
+    # 1. Load from DB if db is provided
+    if db:
+        try:
+            from modules.claim.models.claim_models import CabinetPrice
+            prices = db.query(CabinetPrice).all()
+            for p in prices:
+                if p.cabinet_code:
+                    cabinet_prices_map[p.cabinet_code.strip().lower()] = p.sale_price or 0.0
+        except Exception as e:
+            logger.warning(f"Error querying cabinet prices from DB in get_cabinet_prices_map: {e}")
+            
+    # 2. Merge/fallback with temp JSON prices
+    try:
+        temp_prices = load_temp_cabinet_prices()
+        if temp_prices:
+            for p in temp_prices:
+                code = p.get("cabinet_code")
+                sale = p.get("sale_price")
+                if code and sale is not None:
+                    clean_code = str(code).strip().lower()
+                    if clean_code not in cabinet_prices_map:
+                        cabinet_prices_map[clean_code] = float(sale)
+    except Exception as e:
+        logger.warning(f"Error loading temp cabinet prices in get_cabinet_prices_map: {e}")
+        
+    return cabinet_prices_map
 
 
 def save_temp_defect_catalog(defects: list):

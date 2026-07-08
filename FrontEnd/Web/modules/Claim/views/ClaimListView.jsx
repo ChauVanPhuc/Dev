@@ -96,12 +96,67 @@ const ClaimListView = () => {
   const [defectCatalog, setDefectCatalog] = useState([]);
   const [cabinetPrices, setCabinetPrices] = useState([]);
 
+  const getCabinetSalePrice = (sku) => {
+    if (!sku) return 0;
+    const cleanSku = sku.trim().toLowerCase();
+    const match = cabinetPrices.find(p => p.cabinet_code && p.cabinet_code.trim().toLowerCase() === cleanSku);
+    if (match) return match.sale_price || 0;
+    return 0;
+  };
+
+  const formatPenaltyValue = (number) => {
+    if (!number || isNaN(number)) return '$0.00';
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(number);
+  };
+
+  const calculateTotalPenalty = (claim) => {
+    const p = normalizePenaltyValue(claim.penalty || 'Không có');
+    const lower = p.toLowerCase();
+    const sku = claim.product_name || claim.sku;
+    let val = 0;
+    if (lower.includes('x2 unit') || lower.includes('x2unit') || lower.includes('2x unit') || lower.includes('x2')) {
+      const salePrice = getCabinetSalePrice(sku);
+      val = salePrice * 2;
+    } else if (lower.includes('full bc') || lower.includes('ful bc')) {
+      const salePrice = getCabinetSalePrice(sku);
+      val = salePrice;
+    } else {
+      const parsed = parseFloat(String(p).replace(/[^0-9.]/g, ''));
+      if (!isNaN(parsed)) {
+        val = parsed;
+      }
+    }
+    return val;
+  };
+
+  const getProcessTotalPenaltyPreview = () => {
+    const mockClaim = {
+      penalty: processGiaTriPhat,
+      product_name: processTenSanPham || activeDetailClaim?.product_name || activeDetailClaim?.sku
+    };
+    return calculateTotalPenalty(mockClaim);
+  };
+
+  const getAddTotalPenaltyPreview = () => {
+    const mockClaim = {
+      penalty: addGiaTriPhat,
+      product_name: addTenSanPham
+    };
+    return calculateTotalPenalty(mockClaim);
+  };
+
   // Fetch defect catalog on mount
   useEffect(() => {
     const fetchCatalog = async () => {
       try {
         const res = await claimService.getDefects();
-        setDefectCatalog(res.items || []);
+        const rawItems = Array.isArray(res) ? res : (res.items || []);
+        const mappedItems = rawItems.map(d => ({
+          ...d,
+          defect_code: d.defect_code || d.code,
+          g7_defect_code: d.g7_defect_code || d.g7_code
+        }));
+        setDefectCatalog(mappedItems);
       } catch (err) {
         console.error('Lỗi tải danh mục lỗi cho khiếu nại:', err);
       }
@@ -201,6 +256,7 @@ const ClaimListView = () => {
   const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState(null); // 'time', 'claim', 'transport', or null
   const [actionMenuId, setActionMenuId] = useState(null);
+  const [modalMode, setModalMode] = useState('view'); // 'edit', 'process', 'view'
 
   // Dropdown click outside hook
   useEffect(() => {
@@ -247,6 +303,8 @@ const ClaimListView = () => {
   const [editDefectCode, setEditDefectCode] = useState('');
   const [editContainer, setEditContainer] = useState('');
   const [editLpn, setEditLpn] = useState('');
+  const [editPenalty, setEditPenalty] = useState('');
+  const [editPenaltyTotal, setEditPenaltyTotal] = useState('');
 
   // States for autocomplete visibility in the filter bar
   const [showSkuSuggestions, setShowSkuSuggestions] = useState(false);
@@ -255,6 +313,8 @@ const ClaimListView = () => {
   const [showClaimItemSuggestions, setShowClaimItemSuggestions] = useState(false);
   const [showContainerSuggestions, setShowContainerSuggestions] = useState(false);
   const [showLpnSuggestions, setShowLpnSuggestions] = useState(false);
+  const [showPenaltySuggestions, setShowPenaltySuggestions] = useState(false);
+  const [showPenaltyTotalSuggestions, setShowPenaltyTotalSuggestions] = useState(false);
 
   // Computed suggestion options using useMemo based on current claims or defectCatalog
   const uniqueSkuOptions = useMemo(() => {
@@ -285,6 +345,15 @@ const ClaimListView = () => {
     return Array.from(new Set(claims.map(c => c.lpn).filter(Boolean)));
   }, [claims]);
 
+  const uniquePenaltyOptions = useMemo(() => {
+    return Array.from(new Set(claims.map(c => normalizePenaltyValue(c.penalty)).filter(Boolean)));
+  }, [claims]);
+
+  const uniquePenaltyTotalOptions = useMemo(() => {
+    return Array.from(new Set(claims.map(c => calculateTotalPenalty(c)).filter(val => val > 0)))
+      .map(val => formatPenaltyValue(val));
+  }, [claims]);
+
   // Active applied filters
   const [appliedFilters, setAppliedFilters] = useState({});
 
@@ -310,11 +379,13 @@ const ClaimListView = () => {
     if (editDefectCode) newFilters.defectCode = editDefectCode;
     if (editContainer) newFilters.container = editContainer;
     if (editLpn) newFilters.lpn = editLpn;
+    if (editPenalty) newFilters.penalty = editPenalty;
+    if (editPenaltyTotal) newFilters.penaltyTotal = editPenaltyTotal;
     setAppliedFilters(newFilters);
   }, [
     editYear, editMonth, editStartDate, editEndDate,
     editStatus, editSku, editCompanyErrorCode, editClaimItem,
-    editDefectCode, editContainer, editLpn
+    editDefectCode, editContainer, editLpn, editPenalty, editPenaltyTotal
   ]);
 
   // Helper to extract integer month from "Tháng X"
@@ -552,6 +623,13 @@ const ClaimListView = () => {
   const [processMaLoiCty, setProcessMaLoiCty] = useState('');
   const [processLpn, setProcessLpn] = useState('');
   const [processMaCont, setProcessMaCont] = useState('');
+  const disabledFieldStyle = {
+    backgroundColor: '#F5F5F5',
+    color: '#757575',
+    borderColor: '#E0E0E0',
+    cursor: 'not-allowed',
+    opacity: 0.8
+  };
   const [processNgayXuat, setProcessNgayXuat] = useState('');
   const [processTrangThaiXuLy, setProcessTrangThaiXuLy] = useState('Mới');
   const [processLinkCapa, setProcessLinkCapa] = useState('');
@@ -761,6 +839,10 @@ const ClaimListView = () => {
                     <td style={{ padding: '8px 12px', fontWeight: 'bold', color: '#7B5233' }}>Giá trị phạt</td>
                     <td style={{ padding: '8px 12px', color: '#2D1A12', fontWeight: '500' }}>{newClaim.penalty}</td>
                   </tr>
+                  <tr style={{ borderBottom: '1px solid #EADCC9' }}>
+                    <td style={{ padding: '8px 12px', fontWeight: 'bold', color: '#7B5233' }}>Tổng giá trị phạt</td>
+                    <td style={{ padding: '8px 12px', color: '#B91C1C', fontWeight: '600' }}>{formatPenaltyValue(calculateTotalPenalty(newClaim))}</td>
+                  </tr>
                   <tr>
                     <td style={{ padding: '8px 12px', fontWeight: 'bold', color: '#7B5233' }}>Container</td>
                     <td style={{ padding: '8px 12px', color: '#2D1A12' }}>{newClaim.cont || 'N/A'}</td>
@@ -838,7 +920,12 @@ const ClaimListView = () => {
         company_error_code: processMaLoiCty,
         description: processGhiChu,
         severity: processMucPhat === 'Hủy đơn' ? 'High' : processMucPhat === 'Phạt tiền' ? 'Medium' : 'Low',
-        status: backendStatus
+        status: backendStatus,
+        action: processGiaTriPhat,
+        lpn: processLpn,
+        container_no: processMaCont,
+        image_paths: processImages,
+        image_captions: processImageCaptions
       };
 
       const result = await claimService.updateClaim(activeDetailClaim.id, claimData);
@@ -1391,6 +1478,8 @@ const ClaimListView = () => {
     setEditDefectCode('');
     setEditContainer('');
     setEditLpn('');
+    setEditPenalty('');
+    setEditPenaltyTotal('');
   };
 
   const removeFilterKey = (key) => {
@@ -1405,6 +1494,8 @@ const ClaimListView = () => {
     else if (key === 'defectCode') setEditDefectCode('');
     else if (key === 'container') setEditContainer('');
     else if (key === 'lpn') setEditLpn('');
+    else if (key === 'penalty') setEditPenalty('');
+    else if (key === 'penaltyTotal') setEditPenaltyTotal('');
   };
 
   // --- CLIENT-SIDE FILTER EXECUTOR ---
@@ -1539,6 +1630,22 @@ const ClaimListView = () => {
         }
       }
 
+      if (appliedFilters.penalty) {
+        const term = appliedFilters.penalty.toLowerCase();
+        if (!claim.penalty?.toLowerCase().includes(term)) {
+          return false;
+        }
+      }
+
+      if (appliedFilters.penaltyTotal) {
+        const term = appliedFilters.penaltyTotal.toLowerCase();
+        const calculatedStr = formatPenaltyValue(calculateTotalPenalty(claim)).toLowerCase();
+        const calculatedRawStr = String(calculateTotalPenalty(claim)).toLowerCase();
+        if (!calculatedStr.includes(term) && !calculatedRawStr.includes(term)) {
+          return false;
+        }
+      }
+
       return true;
     });
   };
@@ -1594,13 +1701,7 @@ const ClaimListView = () => {
   const endIndex = startIndex + rowsPerPage;
   const paginatedClaims = filteredClaimsToDisplay.slice(startIndex, endIndex);
 
-  const getCabinetSalePrice = (sku) => {
-    if (!sku) return 0;
-    const cleanSku = sku.trim().toLowerCase();
-    const match = cabinetPrices.find(p => p.cabinet_code && p.cabinet_code.trim().toLowerCase() === cleanSku);
-    if (match) return match.sale_price || 0;
-    return 0;
-  };
+
 
   const getPenaltyStats = () => {
     const penaltyMap = {};
@@ -1608,23 +1709,7 @@ const ClaimListView = () => {
     filteredClaimsToDisplay.forEach(c => {
       const p = normalizePenaltyValue(c.penalty || 'Không có');
       penaltyMap[p] = (penaltyMap[p] || 0) + 1;
-      
-      const lower = p.toLowerCase();
-      const sku = c.product_name || c.sku;
-      let val = 0;
-      if (lower.includes('x2 unit') || lower.includes('x2unit') || lower.includes('2x unit')) {
-        const salePrice = getCabinetSalePrice(sku);
-        val = salePrice * 2;
-      } else if (lower.includes('full bc') || lower.includes('ful bc')) {
-        const salePrice = getCabinetSalePrice(sku);
-        val = salePrice;
-      } else {
-        const parsed = parseFloat(String(p).replace(/[^0-9.]/g, ''));
-        if (!isNaN(parsed)) {
-          val = parsed;
-        }
-      }
-      totalSum += val;
+      totalSum += calculateTotalPenalty(c);
     });
 
     const uniqueValues = Object.keys(penaltyMap);
@@ -1636,7 +1721,6 @@ const ClaimListView = () => {
   };
 
   const penaltyStats = getPenaltyStats();
-  const uniquePenaltyOptions = Array.from(new Set(claims.map(c => normalizePenaltyValue(c.penalty)).filter(Boolean)));
 
   // Setup headers for Table component
   const tableHeaders = [
@@ -1653,13 +1737,14 @@ const ClaimListView = () => {
     }] : []),
     { label: 'STT', style: { width: '60px' } },
     { label: 'Tên sản phẩm', className: 'text-left' },
-    { label: 'Mã tham chiếu', className: 'text-left' },
     { label: 'Mã lỗi KH' },
     { label: 'Mã lỗi G7' },
     { label: 'Giá trị phạt' },
+    { label: 'Tổng giá trị phạt' },
     { label: 'LPN' },
     { label: 'Container' },
     { label: 'Thời gian' },
+    { label: 'Mã tham chiếu', className: 'text-left' },
     { label: 'Trạng thái' },
     ...(hasWritePermission ? [{ label: 'Thao tác' }] : [])
   ];
@@ -1746,7 +1831,7 @@ const ClaimListView = () => {
   const processModalTitle = (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingRight: '24px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <span style={{ margin: 0 }}>Xử lý khiếu nại</span>
+        <span style={{ margin: 0 }}>{modalMode === 'edit' ? 'Chỉnh sửa khiếu nại' : modalMode === 'process' ? 'Xử lý khiếu nại' : 'Chi tiết khiếu nại'}</span>
         {activeDetailClaim && (
           <div style={{
             fontSize: '0.85rem',
@@ -2328,9 +2413,9 @@ const ClaimListView = () => {
                 <line x1="16" y1="17" x2="8" y2="17"></line>
               </svg>
               <span>Thông tin claim</span>
-              {['status', 'sku', 'defectCode', 'companyErrorCode'].filter(k => appliedFilters[k]).length > 0 && (
+              {['status', 'sku', 'defectCode', 'companyErrorCode', 'penalty', 'penaltyTotal'].filter(k => appliedFilters[k]).length > 0 && (
                 <span className="filter-active-badge">
-                  {['status', 'sku', 'defectCode', 'companyErrorCode'].filter(k => appliedFilters[k]).length}
+                  {['status', 'sku', 'defectCode', 'companyErrorCode', 'penalty', 'penaltyTotal'].filter(k => appliedFilters[k]).length}
                 </span>
               )}
               <span className="dropdown-arrow">▾</span>
@@ -2428,6 +2513,66 @@ const ClaimListView = () => {
                             onMouseDown={() => {
                               setEditCompanyErrorCode(opt);
                               setShowCompanyErrorCodeSuggestions(false);
+                            }}
+                          >
+                            {opt}
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+                <div className="filter-field-group" style={{ position: 'relative' }}>
+                  <label className="filter-field-label">Giá trị phạt</label>
+                  <input
+                    type="text"
+                    placeholder="Giá trị phạt..."
+                    value={editPenalty}
+                    onChange={(e) => setEditPenalty(e.target.value)}
+                    className="filter-dropdown-input"
+                    onFocus={() => setShowPenaltySuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowPenaltySuggestions(false), 200)}
+                  />
+                  {showPenaltySuggestions && (
+                    <div className="custom-autocomplete-suggestions">
+                      {uniquePenaltyOptions
+                        .filter(opt => !editPenalty || opt.toLowerCase().includes(editPenalty.toLowerCase()))
+                        .map((opt, idx) => (
+                          <div
+                            key={idx}
+                            className="custom-autocomplete-option"
+                            onMouseDown={() => {
+                              setEditPenalty(opt);
+                              setShowPenaltySuggestions(false);
+                            }}
+                          >
+                            {opt}
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+                <div className="filter-field-group" style={{ position: 'relative' }}>
+                  <label className="filter-field-label">Tổng giá trị phạt</label>
+                  <input
+                    type="text"
+                    placeholder="Tổng giá trị phạt..."
+                    value={editPenaltyTotal}
+                    onChange={(e) => setEditPenaltyTotal(e.target.value)}
+                    className="filter-dropdown-input"
+                    onFocus={() => setShowPenaltyTotalSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowPenaltyTotalSuggestions(false), 200)}
+                  />
+                  {showPenaltyTotalSuggestions && (
+                    <div className="custom-autocomplete-suggestions">
+                      {uniquePenaltyTotalOptions
+                        .filter(opt => !editPenaltyTotal || opt.toLowerCase().includes(editPenaltyTotal.toLowerCase()))
+                        .map((opt, idx) => (
+                          <div
+                            key={idx}
+                            className="custom-autocomplete-option"
+                            onMouseDown={() => {
+                              setEditPenaltyTotal(opt);
+                              setShowPenaltyTotalSuggestions(false);
                             }}
                           >
                             {opt}
@@ -2684,10 +2829,18 @@ const ClaimListView = () => {
             {paginatedClaims.map((claim, idx) => (
               <tr 
                 key={claim.id} 
-                className={claim.batch_id && claim.batch_id === highlightBatchId ? 'claim-row-highlight' : ''}
+                onClick={(e) => {
+                  if (e.target.closest('.checkbox-col') || e.target.closest('td:last-child') || e.target.closest('.action-btn') || e.target.closest('.action-menu')) {
+                    return;
+                  }
+                  setActiveDetailClaim(claim);
+                  setModalMode('view');
+                }}
+                className={`claim-row-clickable ${claim.batch_id && claim.batch_id === highlightBatchId ? 'claim-row-highlight' : ''}`}
                 style={{
                   position: 'relative',
-                  zIndex: actionMenuId === claim.id ? 30 : 1
+                  zIndex: actionMenuId === claim.id ? 30 : 1,
+                  cursor: 'pointer'
                 }}
               >
                 {hasWritePermission && (
@@ -2702,13 +2855,16 @@ const ClaimListView = () => {
                 )}
                 <td style={{ fontWeight: '600', color: 'var(--text-gray)' }}>{startIndex + idx + 1}</td>
                 <td className="text-left" style={{ fontWeight: '500', color: '#2D1A12' }}>{claim.product_name}</td>
-                <td className="code-ref text-left">{claim.claim_code}</td>
                 <td className="code-error">{claim.order_code}</td>
-                <td className="code-error">{claim.company_error_code || ''}</td>
+                <td className="code-error">{mapCustomerDefectsToCompany(claim.order_code) || claim.company_error_code || ''}</td>
                 <td className="value-penalty">{claim.penalty}</td>
+                <td className="value-penalty" style={{ fontWeight: '600', color: '#B91C1C' }}>
+                  {formatPenaltyValue(calculateTotalPenalty(claim))}
+                </td>
                 <td className="code-lpn">{claim.lpn}</td>
                 <td className="code-cont">{claim.cont}</td>
                 <td>{claim.date}</td>
+                <td className="code-ref text-left">{claim.claim_code}</td>
                 <td>
                   <span className={`status-badge badge-${claim.status === 'Mới' ? 'new' : claim.status === 'Đang xử lý' ? 'pending' : 'accepted'}`}>
                     {claim.status}
@@ -2724,15 +2880,26 @@ const ClaimListView = () => {
                       }}
                     ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
                     {actionMenuId === claim.id && (
-                      <div className="action-menu" style={{ right: '50%', transform: 'translateX(50%)', top: '80%' }}>
+                      <div className="action-menu" style={{ right: '50%', transform: 'translateX(50%)', top: '80%', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         <button 
                           className="action-menu-item" 
                           onClick={() => {
                             setActionMenuId(null);
                             setActiveDetailClaim(claim);
+                            setModalMode('edit');
                           }}
                         >
                           Chỉnh sửa
+                        </button>
+                        <button 
+                          className="action-menu-item" 
+                          onClick={() => {
+                            setActionMenuId(null);
+                            setActiveDetailClaim(claim);
+                            setModalMode('process');
+                          }}
+                        >
+                          Xử lý khiếu nại
                         </button>
                       </div>
                     )}
@@ -3024,7 +3191,7 @@ const ClaimListView = () => {
         title={processModalTitle}
         width="min(95vw, 1150px)"
         cancelLabel="Hủy"
-        confirmLabel="Lưu lại"
+        confirmLabel={modalMode === 'view' ? null : "Lưu lại"}
         leftFooterActions={claimNavFooterActions}
         leftSideAction={claimNavLeftSideAction}
         rightSideAction={claimNavRightSideAction}
@@ -3040,12 +3207,14 @@ const ClaimListView = () => {
                   value={processDongHang}
                   onChange={(e) => setProcessDongHang(e.target.value)}
                   className="add-claim-select"
+                  disabled={modalMode !== 'edit'}
+                  style={modalMode !== 'edit' ? disabledFieldStyle : {}}
                 >
                   {['Atlas', 'Oak', 'Maple', 'Pine'].map(opt => (
                     <option key={opt} value={opt}>{opt}</option>
                   ))}
                   {processDongHang && !['Atlas', 'Oak', 'Maple', 'Pine'].includes(processDongHang) && (
-                    <option value={processDongHang}>{processDongHang}</option>
+                     <option value={processDongHang}>{processDongHang}</option>
                   )}
                 </select>
               </div>
@@ -3055,6 +3224,8 @@ const ClaimListView = () => {
                   value={processLoaiClaim}
                   onChange={(e) => setProcessLoaiClaim(e.target.value)}
                   className="add-claim-select"
+                  disabled={modalMode !== 'edit'}
+                  style={modalMode !== 'edit' ? disabledFieldStyle : {}}
                 >
                   {['Khách nhắc nhở', 'Đền bù', 'Trả hàng', 'Khác'].map(opt => (
                     <option key={opt} value={opt}>{opt}</option>
@@ -3076,6 +3247,8 @@ const ClaimListView = () => {
                   value={processMaThamChieu}
                   onChange={(e) => setProcessMaThamChieu(e.target.value)}
                   className="add-claim-input"
+                  disabled={modalMode !== 'edit'}
+                  style={modalMode !== 'edit' ? disabledFieldStyle : {}}
                 />
               </div>
               <div className="add-claim-field">
@@ -3086,6 +3259,8 @@ const ClaimListView = () => {
                   value={processTenSanPham}
                   onChange={(e) => setProcessTenSanPham(e.target.value)}
                   className="add-claim-input"
+                  disabled={modalMode !== 'edit'}
+                  style={modalMode !== 'edit' ? disabledFieldStyle : {}}
                 />
               </div>
             </div>
@@ -3099,6 +3274,8 @@ const ClaimListView = () => {
                     value={processMucPhat}
                     onChange={(e) => setProcessMucPhat(e.target.value)}
                     className="add-claim-select"
+                    disabled={modalMode !== 'edit'}
+                    style={modalMode !== 'edit' ? disabledFieldStyle : {}}
                   >
                     {['Nhắc nhở', 'Phạt tiền', 'Hủy đơn'].map(opt => (
                       <option key={opt} value={opt}>{opt}</option>
@@ -3116,27 +3293,19 @@ const ClaimListView = () => {
                     value={processGiaTriPhat}
                     onChange={(e) => setProcessGiaTriPhat(e.target.value)}
                     className="add-claim-input"
-                    onFocus={() => setShowProcessSuggestions(true)}
-                    onBlur={() => setTimeout(() => setShowProcessSuggestions(false), 200)}
+                    disabled={modalMode !== 'edit'}
+                    style={modalMode !== 'edit' ? disabledFieldStyle : {}}
                   />
-                  {showProcessSuggestions && (
-                    <div className="custom-autocomplete-suggestions">
-                      {uniquePenaltyOptions
-                        .filter(opt => !processGiaTriPhat || opt.toLowerCase().includes(processGiaTriPhat.toLowerCase()))
-                        .map((opt, idx) => (
-                          <div
-                            key={idx}
-                            className="custom-autocomplete-option"
-                            onMouseDown={() => {
-                              setProcessGiaTriPhat(opt);
-                              setShowProcessSuggestions(false);
-                            }}
-                          >
-                            {opt}
-                          </div>
-                        ))}
-                    </div>
-                  )}
+                </div>
+                <div className="add-claim-field" style={{ flex: '1' }}>
+                  <label className="add-claim-label">Tổng phạt</label>
+                  <input
+                    type="text"
+                    value={formatPenaltyValue(getProcessTotalPenaltyPreview())}
+                    className="add-claim-input"
+                    disabled
+                    style={{ ...disabledFieldStyle, backgroundColor: '#F5F5F5', color: '#B91C1C', fontWeight: '600' }}
+                  />
                 </div>
               </div>
               <div className="add-claim-subgrid-2">
@@ -3148,29 +3317,9 @@ const ClaimListView = () => {
                     value={processMaLoi}
                     onChange={(e) => setProcessMaLoi(e.target.value)}
                     className="add-claim-input"
-                    onFocus={() => setShowProcessDefectSuggestions(true)}
-                    onBlur={() => setTimeout(() => setShowProcessDefectSuggestions(false), 200)}
+                    disabled={modalMode !== 'edit'}
+                    style={modalMode !== 'edit' ? disabledFieldStyle : {}}
                   />
-                  {showProcessDefectSuggestions && (
-                    <div className="custom-autocomplete-suggestions">
-                      {(defectCatalog.map(d => d.defect_code).filter(Boolean).length > 0 
-                        ? defectCatalog.map(d => d.defect_code).filter(Boolean) 
-                        : ['DVA_08', 'DVA_11', 'DVA_14', 'DVA_01', 'DVA_05', 'DVA_06', 'DVA_12', 'DVA_15'])
-                        .filter(opt => !processMaLoi || opt.toLowerCase().includes(processMaLoi.toLowerCase()))
-                        .map((opt, idx) => (
-                          <div
-                            key={idx}
-                            className="custom-autocomplete-option"
-                            onMouseDown={() => {
-                              setProcessMaLoi(opt);
-                              setShowProcessDefectSuggestions(false);
-                            }}
-                          >
-                            {opt}
-                          </div>
-                        ))}
-                    </div>
-                  )}
                 </div>
                 <div className="add-claim-field" style={{ flex: '1' }}>
                   <label className="add-claim-label">Mã lỗi G7</label>
@@ -3180,6 +3329,8 @@ const ClaimListView = () => {
                     value={processMaLoiCty}
                     onChange={(e) => setProcessMaLoiCty(e.target.value)}
                     className="add-claim-input"
+                    disabled={modalMode !== 'edit'}
+                    style={modalMode !== 'edit' ? disabledFieldStyle : {}}
                   />
                 </div>
               </div>
@@ -3201,6 +3352,8 @@ const ClaimListView = () => {
                   value={processLpn}
                   onChange={(e) => setProcessLpn(e.target.value)}
                   className="add-claim-input"
+                  disabled={modalMode !== 'edit'}
+                  style={modalMode !== 'edit' ? disabledFieldStyle : {}}
                 />
               </div>
               <div className="add-claim-field">
@@ -3217,6 +3370,8 @@ const ClaimListView = () => {
                   value={processMaCont}
                   onChange={(e) => setProcessMaCont(e.target.value)}
                   className="add-claim-input"
+                  disabled
+                  style={disabledFieldStyle}
                 />
               </div>
               <div className="add-claim-field">
@@ -3226,6 +3381,8 @@ const ClaimListView = () => {
                   value={processNgayXuat}
                   onChange={(e) => setProcessNgayXuat(e.target.value)}
                   className="add-claim-input"
+                  disabled
+                  style={disabledFieldStyle}
                 />
               </div>
             </div>
@@ -3236,13 +3393,15 @@ const ClaimListView = () => {
                 <label className="add-claim-label">Trạng thái xử lý</label>
                 <div className="add-claim-radio-group">
                   {['Mới', 'Đang xử lý', 'Đã xử lý'].map((statusVal) => (
-                    <label key={statusVal} className="add-claim-radio-label" style={{ whiteSpace: 'nowrap' }}>
+                    <label key={statusVal} className="add-claim-radio-label" style={{ whiteSpace: 'nowrap', color: modalMode === 'view' ? '#9E9E9E' : '#3E2723', cursor: modalMode === 'view' ? 'not-allowed' : 'pointer' }}>
                       <input
                         type="radio"
                         name="processTrangThaiXuLy"
                         value={statusVal}
                         checked={processTrangThaiXuLy === statusVal}
+                        disabled={modalMode === 'view'}
                         onChange={async (e) => {
+                          if (modalMode === 'view') return;
                           const newStatus = e.target.value;
                           setProcessTrangThaiXuLy(newStatus);
                           if (activeDetailClaim) {
@@ -3271,6 +3430,8 @@ const ClaimListView = () => {
                   value={processLinkCapa}
                   onChange={(e) => setProcessLinkCapa(e.target.value)}
                   className="add-claim-input"
+                  disabled={modalMode !== 'edit'}
+                  style={modalMode !== 'edit' ? disabledFieldStyle : {}}
                 />
               </div>
             </div>
@@ -3285,6 +3446,8 @@ const ClaimListView = () => {
                   onChange={(e) => setProcessGhiChu(e.target.value)}
                   className="add-claim-textarea"
                   rows="4"
+                  disabled={modalMode === 'view'}
+                  style={modalMode === 'view' ? disabledFieldStyle : {}}
                 />
               </div>
             </div>
@@ -3301,23 +3464,25 @@ const ClaimListView = () => {
                 </svg>
                 Ảnh minh chứng ({processImages.length})
               </span>
-              <button
-                type="button"
-                onClick={handleProcessAddImageClick}
-                style={{
-                  background: '#FAF6F0',
-                  border: '1px solid #EADCC9',
-                  borderRadius: '6px',
-                  padding: '4px 10px',
-                  fontSize: '0.78rem',
-                  fontWeight: 'bold',
-                  color: '#7B5233',
-                  cursor: 'pointer',
-                  transition: 'background-color 0.2s'
-                }}
-              >
-                + Thêm ảnh
-              </button>
+              {modalMode === 'edit' && (
+                <button
+                  type="button"
+                  onClick={handleProcessAddImageClick}
+                  style={{
+                    background: '#FAF6F0',
+                    border: '1px solid #EADCC9',
+                    borderRadius: '6px',
+                    padding: '4px 10px',
+                    fontSize: '0.78rem',
+                    fontWeight: 'bold',
+                    color: '#7B5233',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.2s'
+                  }}
+                >
+                  + Thêm ảnh
+                </button>
+              )}
             </div>
 
             <div className="add-claim-image-scrollbox" style={{
@@ -3344,57 +3509,58 @@ const ClaimListView = () => {
 
                     return (
                       <div key={index} className="add-claim-image-card-wrapper" style={cardStyle}>
-                        <div style={{ position: 'absolute', top: '8px', right: '8px', display: 'flex', gap: '6px', zIndex: 10 }}>
-                          <button
-                            type="button"
-                            title="Thay thế ảnh"
-                            onClick={() => handleEditProcessImageClick(index)}
-                            style={{
-                              width: '28px',
-                              height: '28px',
-                              borderRadius: '50%',
-                              backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                              border: '1px solid #EADCC9',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              cursor: 'pointer',
-                              color: '#7B5233',
-                              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                            }}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                              <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                            </svg>
-                          </button>
-                          <button
-                            type="button"
-                            title="Xóa ảnh"
-                            onClick={() => handleDeleteProcessImageClick(index)}
-                            style={{
-                              width: '28px',
-                              height: '28px',
-                              borderRadius: '50%',
-                              backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                              border: '1px solid #FCA5A5',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              cursor: 'pointer',
-                              color: '#EF4444',
-                              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                            }}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="3 6 5 6 21 6"></polyline>
-                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                              <line x1="10" y1="11" x2="10" y2="17"></line>
-                              <line x1="14" y1="11" x2="14" y2="17"></line>
-                            </svg>
-                          </button>
-                        </div>
-
+                        {modalMode === 'edit' && (
+                          <div style={{ position: 'absolute', top: '8px', right: '8px', display: 'flex', gap: '6px', zIndex: 10 }}>
+                            <button
+                              type="button"
+                              title="Thay thế ảnh"
+                              onClick={() => handleEditProcessImageClick(index)}
+                              style={{
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '50%',
+                                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                                border: '1px solid #EADCC9',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                color: '#7B5233',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                              }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                              </svg>
+                            </button>
+                            <button
+                              type="button"
+                              title="Xóa ảnh"
+                              onClick={() => handleDeleteProcessImageClick(index)}
+                              style={{
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '50%',
+                                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                                border: '1px solid #FCA5A5',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                color: '#EF4444',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                              }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                <line x1="10" y1="11" x2="10" y2="17"></line>
+                                <line x1="14" y1="11" x2="14" y2="17"></line>
+                              </svg>
+                            </button>
+                          </div>
+                        )}
                         <img
                           src={getFullImagePath(path)}
                           alt={`Defect photo ${index + 1}`}
@@ -3427,15 +3593,14 @@ const ClaimListView = () => {
                     );
                   })
                 ) : (
-                  Array.from({ length: 3 }).map((_, idx) => (
-                    <div key={idx} className="add-claim-image-card-placeholder" onClick={handleProcessAddImageClick}>
-                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                        <polyline points="21 15 16 10 5 21"></polyline>
-                      </svg>
-                    </div>
-                  ))
+                  <div className="add-claim-image-card-placeholder" style={{ cursor: 'default', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '200px', border: '1.5px dashed #D1D5DB', borderRadius: '6px', backgroundColor: '#FAF9F8' }}>
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                      <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                      <polyline points="21 15 16 10 5 21"></polyline>
+                    </svg>
+                    <span style={{ fontSize: '0.8rem', color: '#9CA3AF', marginTop: '8px', fontWeight: '500' }}>Không có ảnh minh chứng</span>
+                  </div>
                 )}
               </div>
             </div>
@@ -3537,6 +3702,16 @@ const ClaimListView = () => {
                     className="add-claim-input"
                     onFocus={() => setShowAddSuggestions(true)}
                     onBlur={() => setTimeout(() => setShowAddSuggestions(false), 200)}
+                  />
+                </div>
+                <div className="add-claim-field" style={{ flex: '1' }}>
+                  <label className="add-claim-label">Tổng phạt</label>
+                  <input
+                    type="text"
+                    value={formatPenaltyValue(getAddTotalPenaltyPreview())}
+                    className="add-claim-input"
+                    disabled
+                    style={{ ...disabledFieldStyle, color: '#B91C1C', fontWeight: '600' }}
                   />
                   {showAddSuggestions && (
                     <div className="custom-autocomplete-suggestions">

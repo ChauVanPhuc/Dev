@@ -34,6 +34,24 @@ def read_claims(
     skip = (page - 1) * size if size else 0
     db_items, total = controllers.get_claims(db, skip=skip, limit=size or 100000, search=search, status=status, year=year)
     
+    # Auto sync company error codes on load
+    synced_any = False
+    for item in db_items:
+        if item.order_code:
+            expected = resolve_company_error_codes(item.order_code, db)
+            if item.company_error_code != expected:
+                item.company_error_code = expected
+                synced_any = True
+                
+    if synced_any:
+        try:
+            db.commit()
+            for item in db_items:
+                db.refresh(item)
+        except Exception as e:
+            db.rollback()
+            controllers_import.logger.error(f"Error auto-syncing claims company_error_code: {e}")
+            
     # Convert SQLAlchemy models to Pydantic schemas
     items = [schemas.CustomerClaimResponse.model_validate(item) for item in db_items]
     
@@ -76,7 +94,8 @@ def export_claims_excel(
             })
             
         # Generate Excel
-        controllers_import.save_claims_to_excel(normalized_claims, temp_excel_path)
+        prices_map = controllers_import.get_cabinet_prices_map(db)
+        controllers_import.save_claims_to_excel(normalized_claims, temp_excel_path, cabinet_prices_map=prices_map)
         
         def remove_file(path: str):
             try:

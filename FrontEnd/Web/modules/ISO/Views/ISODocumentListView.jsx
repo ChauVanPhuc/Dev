@@ -40,10 +40,10 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
     setCustomTitle('G7 - Smart Flow');
     if (mode === 'processes') {
       setCustomSubtitle('Quản lý & Thiết lập quy trình ISO');
-      setCustomScreenCode('ISO-PROCS');
+      setCustomScreenCode('AD18');
     } else {
       setCustomSubtitle('Mẫu ISO');
-      setCustomScreenCode('ISO-DOCS');
+      setCustomScreenCode('AD17');
     }
     fetchDocuments();
   }, [mode]);

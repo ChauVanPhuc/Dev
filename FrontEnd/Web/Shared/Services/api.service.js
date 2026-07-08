@@ -126,6 +126,11 @@ api.interceptors.response.use(
   (response) => response.data,
   (error) => {
     console.error('API Error:', error.response?.data || error.message);
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('smartflow_user');
+      window.location.href = '/login';
+    }
     return Promise.reject(error);
   }
 );

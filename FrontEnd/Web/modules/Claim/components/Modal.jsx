@@ -122,12 +122,14 @@ export const FormModal = ({
             >
               {cancelLabel}
             </button>
-            <button 
-              type="submit"
-              className="add-claim-btn-save"
-            >
-              {confirmLabel}
-            </button>
+            {confirmLabel && (
+              <button 
+                type="submit"
+                className="add-claim-btn-save"
+              >
+                {confirmLabel}
+              </button>
+            )}
           </div>
         </form>
         {rightSideAction}

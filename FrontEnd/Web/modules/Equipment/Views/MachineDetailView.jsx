@@ -399,15 +399,19 @@ const MachineDetailView = () => {
                 <input type="text" readOnly value={machine.status || 'Bình thường'} style={fieldInputStyle} />
               </div>
               
-              <div style={{ gridColumn: 'span 4' }}>
+              <div style={{ gridColumn: 'span 3' }}>
                 <label style={fieldLabelStyle}>Nhà máy</label>
                 <input type="text" readOnly value={machine.factory || ''} style={fieldInputStyle} />
               </div>
-              <div style={{ gridColumn: 'span 4' }}>
+              <div style={{ gridColumn: 'span 3' }}>
+                <label style={fieldLabelStyle}>Xưởng</label>
+                <input type="text" readOnly value={machine.workshop || ''} style={fieldInputStyle} />
+              </div>
+              <div style={{ gridColumn: 'span 3' }}>
                 <label style={fieldLabelStyle}>Bộ phận</label>
                 <input type="text" readOnly value={machine.department || ''} style={fieldInputStyle} />
               </div>
-              <div style={{ gridColumn: 'span 4' }}>
+              <div style={{ gridColumn: 'span 3' }}>
                 <label style={fieldLabelStyle}>Ngày nhận máy</label>
                 <input type="text" readOnly value={machine.receive_date || ''} style={fieldInputStyle} />
               </div>

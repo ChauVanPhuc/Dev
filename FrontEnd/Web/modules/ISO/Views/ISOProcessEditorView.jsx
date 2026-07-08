@@ -4,7 +4,7 @@ const logoCty = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACeCAIAAAA63
 import FlowchartTable from './FlowchartTable';
 import { useOutletContext, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { 
-  ArrowLeft, Save, Plus, Trash2, ChevronUp, ChevronDown, CheckCircle, AlertCircle, 
+  ArrowLeft, Save, Plus, Trash2, Edit, ChevronUp, ChevronDown, CheckCircle, AlertCircle, 
   ListPlus, Settings, FileText, Activity, Download, Upload, HelpCircle, Eye,
   Bold, Italic, Underline, Strikethrough, List, ListOrdered, AlignLeft, AlignCenter, 
   AlignRight, AlignJustify, Quote, Link, Image, Grid, Smile, Undo, Redo,
@@ -671,6 +671,7 @@ const ISOProcessEditorView = () => {
   const [selectedStepIdx, setSelectedStepIdx] = useState(-1);
 
   const [infoExpanded, setInfoExpanded] = useState(true);
+  const [selectedInstructionId, setSelectedInstructionId] = useState(null);
   // Accordion collapsed states - initialized to false (collapsed) by default
   const [stepsAccordionExpanded, setStepsAccordionExpanded] = useState(false);
   const [historyAccordionExpanded, setHistoryAccordionExpanded] = useState(false);
@@ -697,11 +698,37 @@ const ISOProcessEditorView = () => {
     sections: {},
     section_types: {},
     steps: [],
-    instruction_steps: []
+    instruction_steps: [],
+    work_instructions: []
   });
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [systemScreens, setSystemScreens] = useState([]);
+  const [isScreenDropdownOpen, setIsScreenDropdownOpen] = useState(false);
+
+  useEffect(() => {
+    const fetchScreens = async () => {
+      try {
+        const data = await api.get('/screens');
+        setSystemScreens(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('Lỗi khi tải danh sách màn hình:', err);
+      }
+    };
+    fetchScreens();
+  }, []);
+
+  const handleToggleScreen = (routePath) => {
+    const currentList = formData.folder ? formData.folder.split(',').map(s => s.trim()).filter(Boolean) : [];
+    let newList;
+    if (currentList.includes(routePath)) {
+      newList = currentList.filter(p => p !== routePath);
+    } else {
+      newList = [...currentList, routePath];
+    }
+    handleInputChange('folder', newList.join(', '));
+  };
 
   // Get all sidestep numbers that are in a No-branch chain
   const getSidestepsInfo = () => {
@@ -1011,10 +1038,10 @@ const ISOProcessEditorView = () => {
     setCustomTitle('G7 - Smart Flow');
     if (isProcessMode) {
       setCustomSubtitle(isEditMode ? 'Thiết lập & Cấu hình Quy trình ISO' : 'Thêm mới Quy trình & Checklist ISO');
-      setCustomScreenCode(isEditMode ? 'ISO-PROC-EDIT' : 'ISO-PROC-CREATE');
+      setCustomScreenCode(isEditMode ? 'AD55' : 'AD18');
     } else {
       setCustomSubtitle(isEditMode ? 'Chỉnh sửa Mẫu ISO' : 'Thêm mới Mẫu ISO');
-      setCustomScreenCode(isEditMode ? 'ISO-DOC-EDIT' : 'ISO-DOC-CREATE');
+      setCustomScreenCode(isEditMode ? 'AD17.1' : 'AD17');
     }
 
     if (location.state && location.state.parsedData) {
@@ -1060,7 +1087,17 @@ const ISOProcessEditorView = () => {
             step_number: step.step_number || (idx + 1),
             name: step.name || '',
             image_url: step.transition?.image_url || step.image_url || ''
-          }))
+          })),
+          work_instructions: [{
+            id: `inst_${Date.now()}`,
+            title: 'Hướng dẫn thực hiện quy trình',
+            steps: (parsed.steps || []).map((step, idx) => ({
+              id: `step_${Date.now()}_${idx}`,
+              step_number: step.step_number || (idx + 1),
+              name: step.name || '',
+              image_urls: (step.transition?.image_url || step.image_url) ? [step.transition?.image_url || step.image_url] : []
+            }))
+          }]
         });
       });
       showFeedback('success', 'Đã bóc tách tự động dữ liệu từ file Word thành công!');
@@ -1111,6 +1148,29 @@ const ISOProcessEditorView = () => {
         }));
       }
 
+      let workInstructions = [];
+      if (receivedSections['__metadata_work_instructions__']) {
+        try {
+          workInstructions = JSON.parse(receivedSections['__metadata_work_instructions__']);
+        } catch (e) {
+          console.error('Error parsing work instructions metadata:', e);
+        }
+        delete receivedSections['__metadata_work_instructions__'];
+      } else {
+        // Fallback: convert instructionSteps to workInstructions
+        const convertedSteps = (instructionSteps && instructionSteps.length > 0 ? instructionSteps : (data.steps || [])).map((step, idx) => ({
+          id: step.id || `step_${Date.now()}_${idx}`,
+          step_number: step.step_number || (idx + 1),
+          name: step.name || '',
+          image_urls: step.image_urls || (step.image_url ? [step.image_url] : [])
+        }));
+        workInstructions = [{
+          id: `inst_${Date.now()}`,
+          title: 'Hướng dẫn thực hiện quy trình',
+          steps: convertedSteps
+        }];
+      }
+
       // Sections được lấy nguyên từ DB – không merge thêm key cố định
 
       Object.keys(receivedSections).forEach(key => {
@@ -1145,7 +1205,8 @@ const ISOProcessEditorView = () => {
           fail_path: step.transition?.fail_path || step.fail_path || [],
           image_url: step.transition?.image_url || ''
         })),
-        instruction_steps: instructionSteps
+        instruction_steps: instructionSteps,
+        work_instructions: workInstructions
       });
     } catch (error) {
       console.error('Lỗi khi tải chi tiết quy trình:', error);
@@ -1284,6 +1345,138 @@ const ISOProcessEditorView = () => {
       handleUpdateInstructionStep(index, 'image_url', reader.result);
     };
     reader.readAsDataURL(file);
+  };
+
+  // Work Instructions CRUD & Image Helpers
+  const handleAddWorkInstruction = () => {
+    const newInst = {
+      id: `inst_${Date.now()}`,
+      title: `Hướng dẫn thực hiện ${ (formData.work_instructions || []).length + 1 }`,
+      steps: [
+        { id: `step_${Date.now()}_0`, step_number: 1, name: '', image_urls: [] }
+      ]
+    };
+    setFormData(prev => ({
+      ...prev,
+      work_instructions: [...(prev.work_instructions || []), newInst]
+    }));
+    setSelectedInstructionId(newInst.id);
+    setCurrentScreen('step_instructions');
+  };
+
+  const handleUpdateWorkInstructionTitle = (id, newTitle) => {
+    setFormData(prev => {
+      const nextInstructions = (prev.work_instructions || []).map(inst => {
+        if (inst.id === id) {
+          return { ...inst, title: newTitle };
+        }
+        return inst;
+      });
+      return { ...prev, work_instructions: nextInstructions };
+    });
+  };
+
+  const handleRemoveWorkInstruction = (id) => {
+    if (window.confirm("Bạn có chắc chắn muốn xóa hướng dẫn này cùng toàn bộ các bước và hình ảnh?")) {
+      setFormData(prev => {
+        const nextInstructions = (prev.work_instructions || []).filter(inst => inst.id !== id);
+        return { ...prev, work_instructions: nextInstructions };
+      });
+    }
+  };
+
+  const handleAddWorkInstructionStep = (instId) => {
+    setFormData(prev => {
+      const nextInstructions = (prev.work_instructions || []).map(inst => {
+        if (inst.id === instId) {
+          const nextStepNum = (inst.steps || []).length + 1;
+          const newStep = {
+            id: `step_${Date.now()}_${nextStepNum}`,
+            step_number: nextStepNum,
+            name: '',
+            image_urls: []
+          };
+          return {
+            ...inst,
+            steps: [...(inst.steps || []), newStep]
+          };
+        }
+        return inst;
+      });
+      return { ...prev, work_instructions: nextInstructions };
+    });
+  };
+
+  const handleUpdateWorkInstructionStep = (instId, stepIdx, field, val) => {
+    setFormData(prev => {
+      const nextInstructions = (prev.work_instructions || []).map(inst => {
+        if (inst.id === instId) {
+          const nextSteps = [...(inst.steps || [])];
+          if (nextSteps[stepIdx]) {
+            nextSteps[stepIdx] = { ...nextSteps[stepIdx], [field]: val };
+          }
+          return { ...inst, steps: nextSteps };
+        }
+        return inst;
+      });
+      return { ...prev, work_instructions: nextInstructions };
+    });
+  };
+
+  const handleRemoveWorkInstructionStep = (instId, stepIdx) => {
+    setFormData(prev => {
+      const nextInstructions = (prev.work_instructions || []).map(inst => {
+        if (inst.id === instId) {
+          const nextSteps = (inst.steps || []).filter((_, idx) => idx !== stepIdx)
+            .map((step, idx) => ({ ...step, step_number: idx + 1 }));
+          return { ...inst, steps: nextSteps };
+        }
+        return inst;
+      });
+      return { ...prev, work_instructions: nextInstructions };
+    });
+  };
+
+  const handleWorkInstructionImageUpload = (instId, stepIdx, file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setFormData(prev => {
+        const nextInstructions = (prev.work_instructions || []).map(inst => {
+          if (inst.id === instId) {
+            const nextSteps = [...(inst.steps || [])];
+            if (nextSteps[stepIdx]) {
+              const currentUrls = [...(nextSteps[stepIdx].image_urls || [])];
+              if (currentUrls.length < 3) {
+                currentUrls.push(reader.result);
+                nextSteps[stepIdx] = { ...nextSteps[stepIdx], image_urls: currentUrls };
+              }
+            }
+            return { ...inst, steps: nextSteps };
+          }
+          return inst;
+        });
+        return { ...prev, work_instructions: nextInstructions };
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveWorkInstructionImage = (instId, stepIdx, imageIdx) => {
+    setFormData(prev => {
+      const nextInstructions = (prev.work_instructions || []).map(inst => {
+        if (inst.id === instId) {
+          const nextSteps = [...(inst.steps || [])];
+          if (nextSteps[stepIdx]) {
+            const currentUrls = (nextSteps[stepIdx].image_urls || []).filter((_, idx) => idx !== imageIdx);
+            nextSteps[stepIdx] = { ...nextSteps[stepIdx], image_urls: currentUrls };
+          }
+          return { ...inst, steps: nextSteps };
+        }
+        return inst;
+      });
+      return { ...prev, work_instructions: nextInstructions };
+    });
   };
 
   const handlePrintPdf = () => {
@@ -1807,6 +2000,13 @@ const ISOProcessEditorView = () => {
         };
       });
 
+      const flattenedInstructionSteps = (formData.work_instructions?.[0]?.steps || []).map(step => ({
+        id: step.id,
+        step_number: step.step_number,
+        name: step.name,
+        image_url: step.image_urls?.[0] || ''
+      }));
+
       const finalPayload = {
         ...formData,
         display_at: formData.folder,
@@ -1816,7 +2016,8 @@ const ISOProcessEditorView = () => {
         sections: {
           ...(formData.sections || {}),
           '__metadata_section_types__': JSON.stringify(formData.section_types || {}),
-          '__metadata_instruction_steps__': JSON.stringify(formData.instruction_steps || [])
+          '__metadata_instruction_steps__': JSON.stringify(flattenedInstructionSteps),
+          '__metadata_work_instructions__': JSON.stringify(formData.work_instructions || [])
         }
       };
 
@@ -1962,9 +2163,9 @@ const ISOProcessEditorView = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' }}>
           
           {/* Card: Thông tin quy trình - Có thể thu gọn/mở rộng */}
-          <div style={cardStyle}>
+          <div style={{ ...cardStyle, overflow: 'visible' }}>
             <div 
-              style={{ ...headerStyle, cursor: 'pointer' }}
+              style={{ ...headerStyle, borderTopLeftRadius: '5px', borderTopRightRadius: '5px', cursor: 'pointer' }}
               onClick={() => setInfoExpanded(!infoExpanded)}
             >
               <span style={headerTextStyle}>{isProcessMode ? 'Thông tin quy trình' : 'Thông tin Mẫu ISO'}</span>
@@ -2025,9 +2226,142 @@ const ISOProcessEditorView = () => {
                   <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>Người duyệt</label>
                   <input type="text" value={formData.approver} onChange={(e) => handleInputChange('approver', e.target.value)} style={{ width: '100%', padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.82rem', outline: 'none' }} />
                 </div>
-                <div>
+                <div style={{ position: 'relative' }}>
                   <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>Hiển thị tại</label>
-                  <input type="text" value={formData.folder} onChange={(e) => handleInputChange('folder', e.target.value)} placeholder="Màn hình hiển thị..." style={{ width: '100%', padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.82rem', outline: 'none' }} />
+                  <div 
+                    onClick={() => setIsScreenDropdownOpen(!isScreenDropdownOpen)}
+                    style={{ 
+                      width: '100%', 
+                      padding: '6px 10px', 
+                      border: '1px solid #cbd5e1', 
+                      borderRadius: '4px', 
+                      fontSize: '0.82rem', 
+                      minHeight: '32px',
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '4px',
+                      alignItems: 'center',
+                      backgroundColor: 'white',
+                      cursor: 'pointer',
+                      userSelect: 'none'
+                    }}
+                  >
+                    {(() => {
+                      const selectedScreens = formData.folder ? formData.folder.split(',').map(s => s.trim()).filter(Boolean) : [];
+                      if (selectedScreens.length === 0) {
+                        return <span style={{ color: '#94a3b8' }}>Màn hình hiển thị...</span>;
+                      }
+                      return selectedScreens.map(scrPath => {
+                        const scrObj = systemScreens.find(s => s.route_path === scrPath);
+                        const label = scrObj ? `${scrObj.title} (${scrObj.route_path})` : scrPath;
+                        return (
+                          <span 
+                            key={scrPath}
+                            style={{ 
+                              backgroundColor: '#FAF6F0', 
+                              color: '#7B5233', 
+                              border: '1px solid #7B5233',
+                              padding: '2px 6px',
+                              borderRadius: '12px',
+                              fontSize: '0.7rem',
+                              fontWeight: 'bold',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            {label}
+                            <span 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleScreen(scrPath);
+                              }}
+                              style={{ cursor: 'pointer', fontWeight: '900' }}
+                            >
+                              ×
+                            </span>
+                          </span>
+                        );
+                      });
+                    })()}
+                  </div>
+
+                  {isScreenDropdownOpen && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      maxHeight: '240px',
+                      overflowY: 'auto',
+                      backgroundColor: 'white',
+                      border: '1.5px solid #EADCC9',
+                      borderRadius: '6px',
+                      boxShadow: '0 4px 12px rgba(45, 26, 18, 0.08)',
+                      zIndex: 1000,
+                      marginTop: '4px',
+                      padding: '6px'
+                    }}>
+                      <div style={{ padding: '4px 8px', fontSize: '0.72rem', color: '#64748b', fontWeight: 'bold', borderBottom: '1px solid #FAF6F0', marginBottom: '4px' }}>
+                        Chọn màn hình:
+                      </div>
+                      {systemScreens.length === 0 ? (
+                        <div style={{ padding: '8px 12px', fontSize: '0.8rem', color: '#94a3b8', fontStyle: 'italic' }}>
+                          Đang tải màn hình...
+                        </div>
+                      ) : (
+                        (() => {
+                          const selectedScreens = formData.folder ? formData.folder.split(',').map(s => s.trim()).filter(Boolean) : [];
+                          const mobileScreens = systemScreens.filter(scr => 
+                            scr.platform && 
+                            scr.platform.toLowerCase() === 'mobile' && 
+                            ((scr.route_path || '').toLowerCase().includes('inspection') || 
+                             (scr.title || '').toLowerCase().includes('kiểm tra'))
+                          );
+                          return mobileScreens.map(scr => {
+                            const isSelected = selectedScreens.includes(scr.route_path);
+                            return (
+                              <div
+                                key={scr.id}
+                                onClick={() => handleToggleScreen(scr.route_path)}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  padding: '6px 8px',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  backgroundColor: isSelected ? '#FAF6F0' : 'transparent',
+                                  transition: 'all 0.15s ease'
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (!isSelected) e.currentTarget.style.backgroundColor = '#FAF8F5';
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
+                                }}
+                              >
+                                <input 
+                                  type="checkbox" 
+                                  checked={isSelected} 
+                                  readOnly
+                                  style={{ accentColor: '#7B5233', cursor: 'pointer' }}
+                                />
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                  <span style={{ fontSize: '0.8rem', fontWeight: isSelected ? 'bold' : 'normal', color: isSelected ? '#7B5233' : '#334155' }}>
+                                    {scr.title || 'Màn hình'}
+                                  </span>
+                                  <span style={{ fontSize: '0.68rem', color: '#64748b' }}>
+                                    [{scr.platform}] {scr.route_path}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>Cấp tài liệu (Chọn 1 hoặc nhiều)</label>
@@ -3116,72 +3450,118 @@ const ISOProcessEditorView = () => {
           {activeTab === 'instructions' && isProcessMode && (
             <div style={cardStyle}>
               <div style={{ ...headerStyle, cursor: 'default' }}>
-                <span style={headerTextStyle}>Hướng dẫn thực hiện (Các bước lưu đồ)</span>
+                <span style={headerTextStyle}>Hướng dẫn thực hiện (Quy trình dạng hình ảnh)</span>
               </div>
-              <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid #EADCC9' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '12px' }}>
-                  {(formData.instruction_steps || []).map((step, idx) => (
-                    <div
-                      key={idx}
-                      onClick={() => {
-                        setCurrentScreen('step_instructions');
-                      }}
-                      style={{
-                        padding: '12px 16px',
-                        border: '1.5px solid #cbd5e1',
-                        borderRadius: '6px',
-                        fontSize: '0.85rem',
-                        fontWeight: 'bold',
-                        cursor: 'pointer',
-                        backgroundColor: 'white',
-                        color: '#7B5233',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
-                        transition: 'all 0.15s ease'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = '#7B5233';
-                        e.currentTarget.style.backgroundColor = '#FAF6F0';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = '#cbd5e1';
-                        e.currentTarget.style.backgroundColor = 'white';
-                      }}
-                    >
-                      <span style={{ fontSize: '0.72rem', backgroundColor: '#7B5233', color: 'white', padding: '2px 6px', borderRadius: '3px', fontWeight: 'bold' }}>Bước {step.step_number}</span>
-                      <span>{step.name || '(Chưa nhập tên công việc)'}</span>
-                    </div>
-                  ))}
-                </div>
+              <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', borderTop: '1px solid #EADCC9' }}>
+                
+                {(!formData.work_instructions || formData.work_instructions.length === 0) ? (
+                  <div style={{ padding: '40px 20px', textAlign: 'center', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.88rem' }}>
+                    Chưa có hướng dẫn thực hiện nào cho quy trình này. Vui lòng bấm nút bên dưới để thêm mới.
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+                    {formData.work_instructions.map((inst, idx) => (
+                      <div
+                        key={inst.id || idx}
+                        style={{
+                          padding: '16px',
+                          border: '1.5px solid #cbd5e1',
+                          borderRadius: '8px',
+                          backgroundColor: 'white',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '12px',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+                          position: 'relative'
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#2d1a12', marginBottom: '4px' }}>
+                            {inst.title || `Hướng dẫn thực hiện ${idx + 1}`}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                            Số lượng công đoạn: <span style={{ fontWeight: 'bold', color: '#7B5233' }}>{inst.steps?.length || 0} bước</span>
+                          </div>
+                        </div>
+                        
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedInstructionId(inst.id);
+                              setCurrentScreen('step_instructions');
+                            }}
+                            style={{
+                              flex: 1,
+                              padding: '6px 12px',
+                              backgroundColor: '#FAF6F0',
+                              color: '#7B5233',
+                              border: '1px solid #7B5233',
+                              borderRadius: '4px',
+                              fontSize: '0.78rem',
+                              fontWeight: 'bold',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '4px',
+                              transition: 'all 0.15s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF0E6'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FAF6F0'}
+                          >
+                            <Edit size={14} /> Sửa chi tiết
+                          </button>
+                          
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveWorkInstruction(inst.id)}
+                            style={{
+                              padding: '6px 10px',
+                              backgroundColor: '#fef2f2',
+                              color: '#ef4444',
+                              border: '1px solid #fca5a5',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'all 0.15s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fee2e2'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <button
-                  onClick={() => {
-                    if (!formData.instruction_steps || formData.instruction_steps.length === 0) {
-                      handleAddInstructionStep();
-                    }
-                    setCurrentScreen('step_instructions');
-                  }}
+                  onClick={handleAddWorkInstruction}
                   style={{
                     alignSelf: 'flex-start',
                     padding: '8px 20px',
-                    backgroundColor: '#FAF6F0',
-                    border: '1.5px solid #7B5233',
+                    backgroundColor: '#7B5233',
+                    color: 'white',
+                    border: 'none',
                     borderRadius: '6px',
-                    color: '#7B5233',
                     fontSize: '0.8rem',
                     fontWeight: 'bold',
                     cursor: 'pointer',
-                    display: 'flex',
+                    display: 'inline-flex',
                     alignItems: 'center',
                     gap: '6px',
-                    marginTop: '12px',
+                    marginTop: '8px',
+                    boxShadow: '0 2px 8px rgba(123, 82, 51, 0.15)',
                     transition: 'all 0.2s ease'
                   }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF0E6'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FAF6F0'}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#623f25'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#7B5233'}
                 >
-                  <Plus size={14} /> Cấu hình hướng dẫn thực hiện hình ảnh
+                  <Plus size={14} /> Thêm hướng dẫn mới
                 </button>
               </div>
             </div>
@@ -3354,181 +3734,267 @@ const ISOProcessEditorView = () => {
       )}
 
       {/* --- SCREEN 2: HƯỚNG DẪN THỰC HIỆN DẠNG BƯỚC HÌNH ẢNH (Ảnh 4) --- */}
-      {currentScreen === 'step_instructions' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '8px',
-            border: `1.5px solid ${cardBorderColor}`,
-            padding: '20px',
-            boxShadow: '0 4px 16px rgba(123, 82, 51, 0.05)'
-          }}>
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center', 
-              borderBottom: '1px solid #EADCC9', 
-              paddingBottom: '10px', 
-              marginBottom: '20px' 
-            }}>
-              <span style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#7B5233' }}>
-                Hướng dẫn thực hiện (Quy trình hình ảnh)
-              </span>
-              <button 
-                type="button"
-                onClick={() => setCurrentScreen('overview')}
-                style={{
-                  padding: '6px 14px',
-                  backgroundColor: '#7B5233',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  fontSize: '0.8rem',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                ← Quay lại lưu trình
-              </button>
-            </div>
-
-            {/* Grid of step cards */}
+      {currentScreen === 'step_instructions' && (() => {
+        const activeInst = (formData.work_instructions || []).find(inst => inst.id === selectedInstructionId);
+        if (!activeInst) return null;
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
             <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-              gap: '20px',
-              alignItems: 'stretch'
+              backgroundColor: 'white',
+              borderRadius: '8px',
+              border: `1.5px solid ${cardBorderColor}`,
+              padding: '20px',
+              boxShadow: '0 4px 16px rgba(123, 82, 51, 0.05)'
             }}>
-              {(formData.instruction_steps || []).map((step, idx) => (
-                <div 
-                  key={step.id || idx} 
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                borderBottom: '1px solid #EADCC9', 
+                paddingBottom: '10px', 
+                marginBottom: '20px',
+                gap: '16px',
+                flexWrap: 'wrap'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '0.88rem', fontWeight: 'bold', color: '#64748b', whiteSpace: 'nowrap' }}>Tên hướng dẫn:</span>
+                  <input 
+                    type="text" 
+                    value={activeInst.title || ''} 
+                    onChange={(e) => handleUpdateWorkInstructionTitle(activeInst.id, e.target.value)}
+                    style={{
+                      fontSize: '1rem', 
+                      fontWeight: 'bold', 
+                      color: '#7B5233',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '4px',
+                      padding: '6px 12px',
+                      width: '320px',
+                      outline: 'none'
+                    }}
+                    placeholder="Nhập tiêu đề hướng dẫn..."
+                  />
+                </div>
+                
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setSelectedInstructionId(null);
+                    setCurrentScreen('overview');
+                  }}
                   style={{
-                    backgroundColor: 'white',
-                    border: '1.5px solid #EADCC9',
-                    borderRadius: '8px',
-                    padding: '12px',
+                    padding: '6px 14px',
+                    backgroundColor: '#7B5233',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    fontSize: '0.8rem',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
                     display: 'flex',
-                    flexDirection: 'column',
-                    gap: '10px',
-                    position: 'relative',
-                    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.02)'
+                    alignItems: 'center',
+                    gap: '6px'
                   }}
                 >
-                  {/* Delete step button */}
-                  <button
-                    onClick={() => handleRemoveInstructionStep(idx)}
-                    style={{
-                      position: 'absolute',
-                      top: '8px',
-                      right: '8px',
-                      border: 'none',
-                      backgroundColor: 'transparent',
-                      color: '#ef4444',
-                      cursor: 'pointer',
-                      zIndex: 10
-                    }}
-                    title="Xóa bước này"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  ← Quay lại danh sách
+                </button>
+              </div>
 
-                  {/* Image Uploader Panel */}
-                  <div 
-                    onClick={() => {
-                      const input = document.createElement('input');
-                      input.type = 'file';
-                      input.accept = 'image/*';
-                      input.onchange = (e) => {
-                        const file = e.target.files[0];
-                        handleInstructionImageUpload(idx, file);
-                      };
-                      input.click();
-                    }}
-                    style={{
-                      height: '140px',
-                      backgroundColor: '#f1f5f9',
-                      borderRadius: '6px',
-                      border: '1px dashed #cbd5e1',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer',
-                      overflow: 'hidden',
-                      position: 'relative'
-                    }}
-                  >
-                    {step.image_url ? (
-                      <img 
-                        src={step.image_url} 
-                        alt={step.name} 
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                      />
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', color: '#94a3b8' }}>
-                        <Image size={32} />
-                        <span style={{ fontSize: '0.7rem' }}>Tải ảnh công đoạn</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Bottom input section */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{
-                      backgroundColor: '#0284c7',
-                      color: 'white',
-                      fontSize: '0.75rem',
-                      fontWeight: 'bold',
-                      padding: '4px 10px',
-                      borderRadius: '4px',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      Bước {step.step_number}
-                    </span>
-                    <input
-                      type="text"
-                      value={step.name || ''}
-                      onChange={(e) => handleUpdateInstructionStep(idx, 'name', e.target.value)}
-                      placeholder="Nhập công việc..."
+              {/* Vertical list of step cards */}
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px'
+              }}>
+                {(activeInst.steps || []).map((step, idx) => {
+                  const images = step.image_urls || [];
+                  return (
+                    <div 
+                      key={step.id || idx} 
                       style={{
-                        flex: 1,
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        border: '1px solid #cbd5e1',
-                        fontSize: '0.78rem',
-                        outline: 'none'
+                        backgroundColor: 'white',
+                        border: '1.5px solid #EADCC9',
+                        borderRadius: '8px',
+                        padding: '16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '14px',
+                        position: 'relative',
+                        boxShadow: '0 2px 6px rgba(0, 0, 0, 0.02)'
                       }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
+                    >
+                      {/* Top Row: step badge, text input, trash icon */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <span style={{
+                          backgroundColor: '#0284c7',
+                          color: 'white',
+                          fontSize: '0.75rem',
+                          fontWeight: 'bold',
+                          padding: '6px 12px',
+                          borderRadius: '4px',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          Bước {step.step_number}
+                        </span>
+                        
+                        <input
+                          type="text"
+                          value={step.name || ''}
+                          onChange={(e) => handleUpdateWorkInstructionStep(activeInst.id, idx, 'name', e.target.value)}
+                          placeholder="Mô tả công việc thực hiện..."
+                          style={{
+                            flex: 1,
+                            padding: '6px 12px',
+                            borderRadius: '4px',
+                            border: '1px solid #cbd5e1',
+                            fontSize: '0.82rem',
+                            outline: 'none'
+                          }}
+                        />
 
-            {/* Add step button */}
-            <button
-              onClick={handleAddInstructionStep}
-              style={{
-                alignSelf: 'flex-start',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                backgroundColor: 'transparent',
-                border: 'none',
-                color: '#7B5233',
-                fontSize: '0.88rem',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                padding: '6px 0',
-                marginTop: '16px'
-              }}
-            >
-              <Plus size={16} /> Thêm bước mới
-            </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveWorkInstructionStep(activeInst.id, idx)}
+                          style={{
+                            border: 'none',
+                            backgroundColor: 'transparent',
+                            color: '#ef4444',
+                            cursor: 'pointer',
+                            padding: '4px',
+                            display: 'inline-flex',
+                            alignItems: 'center'
+                          }}
+                          title="Xóa bước này"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+
+                      {/* Bottom Row: images grid up to 3 images */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b' }}>
+                          Hình ảnh minh họa công việc (Tối đa 3 ảnh):
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                          {images.map((imgUrl, imgIdx) => (
+                            <div 
+                              key={imgIdx} 
+                              style={{ 
+                                position: 'relative', 
+                                width: '120px', 
+                                height: '90px', 
+                                borderRadius: '6px', 
+                                overflow: 'hidden', 
+                                border: '1.5px solid #cbd5e1',
+                                backgroundColor: '#f1f5f9'
+                              }}
+                            >
+                              <img 
+                                src={imgUrl} 
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                                alt={`minh hoa ${imgIdx + 1}`}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveWorkInstructionImage(activeInst.id, idx, imgIdx)}
+                                style={{
+                                  position: 'absolute',
+                                  top: '4px',
+                                  right: '4px',
+                                  backgroundColor: 'rgba(239, 68, 68, 0.9)',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '50%',
+                                  width: '18px',
+                                  height: '18px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: 'pointer',
+                                  fontSize: '9px',
+                                  fontWeight: 'bold',
+                                  boxShadow: '0 1px 4px rgba(0,0,0,0.2)'
+                                }}
+                                title="Xóa ảnh này"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+
+                          {images.length < 3 && (
+                            <div 
+                              onClick={() => {
+                                const input = document.createElement('input');
+                                input.type = 'file';
+                                input.accept = 'image/*';
+                                input.onchange = (e) => {
+                                  const file = e.target.files[0];
+                                  handleWorkInstructionImageUpload(activeInst.id, idx, file);
+                                };
+                                input.click();
+                              }}
+                              style={{
+                                width: '120px',
+                                height: '90px',
+                                border: '1.5px dashed #cbd5e1',
+                                borderRadius: '6px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                backgroundColor: '#f8fafc',
+                                color: '#94a3b8',
+                                gap: '4px',
+                                transition: 'all 0.2s'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.borderColor = '#7B5233';
+                                e.currentTarget.style.backgroundColor = '#FAF6F0';
+                                e.currentTarget.style.color = '#7B5233';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.borderColor = '#cbd5e1';
+                                e.currentTarget.style.backgroundColor = '#f8fafc';
+                                e.currentTarget.style.color = '#94a3b8';
+                              }}
+                            >
+                              <Plus size={16} />
+                              <span style={{ fontSize: '0.65rem', fontWeight: 'bold' }}>Tải ảnh lên</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Add step button */}
+              <button
+                type="button"
+                onClick={() => handleAddWorkInstructionStep(activeInst.id)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  color: '#7B5233',
+                  fontSize: '0.88rem',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  padding: '6px 0',
+                  marginTop: '16px'
+                }}
+              >
+                <Plus size={16} /> Thêm bước mới
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* --- PREVIEW MODAL: HIGH-FIDELITY PDF/A4 PRINT PREVIEW (G7.CL -QT01 Template Format) --- */}
       {showPdfPreview && (
@@ -3957,9 +4423,9 @@ const ISOProcessEditorView = () => {
                                 </div>
                               </div>
 
-                              {/* 2. Visual user manual (only if there are instruction steps configured) */}
-                              {isProcessMode && (
-                                <div style={{ marginBottom: '24px', pageBreakBefore: 'always' }}>
+                              {/* 2. Visual user manual (only if there are work instructions configured) */}
+                              {isProcessMode && (formData.work_instructions || []).map((inst, instIdx) => (
+                                <div key={inst.id || instIdx} style={{ marginBottom: '24px', pageBreakBefore: 'always' }}>
                                   <h3 style={{
                                     fontSize: '13pt',
                                     fontWeight: 'bold',
@@ -3967,62 +4433,80 @@ const ISOProcessEditorView = () => {
                                     borderBottom: '1px solid black',
                                     paddingBottom: '2px'
                                   }}>
-                                    {sIdx + 1}.1. Hướng dẫn thực hiện chi tiết (Quy trình hình ảnh)
+                                    {sIdx + 1}.{instIdx + 1}. {inst.title || `Hướng dẫn thực hiện ${instIdx + 1}`}
                                   </h3>
                                   
                                   <div className="instruction-grid" style={{
-                                    display: 'grid',
-                                    gridTemplateColumns: '1fr 1fr',
-                                    gap: '20px',
-                                    alignItems: 'stretch'
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '16px'
                                   }}>
-                                    {(formData.instruction_steps || []).map((step, idx) => (
-                                      <div key={idx} className="instruction-card" style={{
-                                        border: '1px solid black',
-                                        padding: '10px',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: '8px'
-                                      }}>
-                                        {/* Image */}
-                                        <div style={{
-                                          height: '150px',
-                                          backgroundColor: '#f8fafc',
-                                          overflow: 'hidden',
+                                    {(inst.steps || []).map((step, idx) => {
+                                      const images = step.image_urls || [];
+                                      return (
+                                        <div key={idx} className="instruction-card" style={{
+                                          border: '1px solid black',
+                                          padding: '12px',
                                           display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          border: '1px solid black'
+                                          flexDirection: 'column',
+                                          gap: '10px'
                                         }}>
-                                          {step.image_url ? (
-                                            <img src={step.image_url} alt={step.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                          {/* Work description */}
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <span style={{
+                                              border: '1px solid black',
+                                              fontSize: '9.5pt',
+                                              fontWeight: 'bold',
+                                              padding: '3px 10px',
+                                              whiteSpace: 'nowrap'
+                                            }}>
+                                              Bước {step.step_number}
+                                            </span>
+                                            <span style={{ fontSize: '11pt', fontWeight: 'bold' }}>{step.name || '(Chưa nhập công việc)'}</span>
+                                          </div>
+
+                                          {/* Images row/grid */}
+                                          {images.length > 0 ? (
+                                            <div style={{ 
+                                              display: 'grid', 
+                                              gridTemplateColumns: `repeat(${images.length}, 1fr)`, 
+                                              gap: '10px',
+                                              marginTop: '4px'
+                                            }}>
+                                              {images.map((imgUrl, imgIdx) => (
+                                                <div 
+                                                  key={imgIdx} 
+                                                  style={{
+                                                    height: '140px',
+                                                    border: '1px solid black',
+                                                    overflow: 'hidden',
+                                                    backgroundColor: '#f8fafc'
+                                                  }}
+                                                >
+                                                  <img 
+                                                    src={imgUrl} 
+                                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                                                    alt={`hinh ${imgIdx + 1}`}
+                                                  />
+                                                </div>
+                                              ))}
+                                            </div>
                                           ) : (
-                                            <span style={{ fontSize: '10pt', color: '#94a3b8', fontStyle: 'italic' }}>Chưa có hình ảnh</span>
+                                            <div style={{ fontSize: '10pt', color: '#64748b', fontStyle: 'italic', paddingLeft: '8px' }}>
+                                              (Chưa có hình ảnh minh họa cho bước này)
+                                            </div>
                                           )}
                                         </div>
-                                        {/* Work description */}
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                          <span style={{
-                                            border: '1px solid black',
-                                            fontSize: '9pt',
-                                            fontWeight: 'bold',
-                                            padding: '2px 8px',
-                                            whiteSpace: 'nowrap'
-                                          }}>
-                                            Bước {step.step_number}
-                                          </span>
-                                          <span style={{ fontSize: '11pt', fontWeight: 'bold' }}>{step.name || '(Chưa nhập công việc)'}</span>
-                                        </div>
-                                      </div>
-                                    ))}
-                                    {(!formData.instruction_steps || formData.instruction_steps.length === 0) && (
-                                      <div style={{ gridColumn: 'span 2', color: '#94a3b8', fontStyle: 'italic', textAlign: 'center', padding: '24px' }}>
-                                        Chưa có bước hướng dẫn thực hiện nào được cấu hình.
+                                      );
+                                    })}
+                                    {(!inst.steps || inst.steps.length === 0) && (
+                                      <div style={{ color: '#94a3b8', fontStyle: 'italic', textAlign: 'center', padding: '24px' }}>
+                                        Chưa có bước hướng dẫn nào được cấu hình trong tài liệu này.
                                       </div>
                                     )}
                                   </div>
                                 </div>
-                              )}
+                              ))}
                             </React.Fragment>
                           );
                         } else {

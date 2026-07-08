@@ -7,6 +7,7 @@ import apiClient from '@shared/services/api';
 import useAuthStore from '@modules/auth/Models/authModel';
 import ConfirmModal from '@mobile/Shared/Views/components/feedback/ConfirmModal';
 import MessageModal from '@mobile/Shared/Views/components/feedback/MessageModal';
+import FlowchartTable from '../../../../Web/modules/ISO/Views/FlowchartTable';
 
 const FirstArticleInspectionView = () => {
   const { user } = useAuthStore();
@@ -18,6 +19,8 @@ const FirstArticleInspectionView = () => {
   const [isPoSearching, setIsPoSearching] = useState(false);
   const [poNotFound, setPoNotFound] = useState(false);
   const [recentPOs, setRecentPOs] = useState([]);
+  const [activePOs, setActivePOs] = useState([]);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   // Loaded PO & items
   const [poHeader, setPoHeader] = useState(null);
@@ -30,6 +33,17 @@ const FirstArticleInspectionView = () => {
   const [selectedMachineCode, setSelectedMachineCode] = useState('');
   const [selectedMachineName, setSelectedMachineName] = useState('');
   const [checklistResults, setChecklistResults] = useState([]); // Array of { step, title, status: 'pass'|'fail', note: '', images: [] }
+
+  // ISO Processes match states
+  const [isoProcesses, setIsoProcesses] = useState([]);
+  const [matchedProcess, setMatchedProcess] = useState(null);
+  const [isProcessModalOpen, setIsProcessModalOpen] = useState(false);
+  const [processModalTab, setProcessModalTab] = useState('quick'); // 'quick' or 'detail'
+  const [selectedProcessDetails, setSelectedProcessDetails] = useState(null);
+  const [isDetailInspectionOpen, setIsDetailInspectionOpen] = useState(false);
+  const [detailIdx, setDetailIdx] = useState(null);
+  const [detailSteps, setDetailSteps] = useState([]);
+  const [previewUrl, setPreviewUrl] = useState(null);
 
   // Quantities
   const [producedQty, setProducedQty] = useState(10);
@@ -74,6 +88,41 @@ const FirstArticleInspectionView = () => {
   const remainingDefects = useMemo(() => {
     return myStageDefects.filter(t => t.needs_tracking !== true);
   }, [myStageDefects]);
+
+  // Lọc máy móc theo công đoạn của tài khoản khớp với bộ phận
+  const filteredMachines = useMemo(() => {
+    const userStages = user?.stageNames || [];
+    // Nếu tài khoản không được gán công đoạn nào, hiển thị tất cả
+    if (userStages.length === 0) {
+      if (activeStage) {
+        return machines.filter(m => {
+          if (!m.department) return false;
+          const sNorm = activeStage.toLowerCase().replace(/\s+/g, '');
+          const dNorm = m.department.toLowerCase().replace(/\s+/g, '');
+          return sNorm === dNorm || sNorm.includes(dNorm) || dNorm.includes(sNorm);
+        });
+      }
+      return machines;
+    }
+    return machines.filter(m => {
+      if (!m.department) return false;
+      return userStages.some(stage => {
+        const sNorm = stage.toLowerCase().replace(/\s+/g, '');
+        const dNorm = m.department.toLowerCase().replace(/\s+/g, '');
+        return sNorm === dNorm || sNorm.includes(dNorm) || dNorm.includes(sNorm);
+      });
+    });
+  }, [machines, user, activeStage]);
+
+  // Lọc PO hoạt động theo từ khóa tìm kiếm (poSearchTerm)
+  const filteredPOs = useMemo(() => {
+    if (!poSearchTerm) return activePOs;
+    const term = poSearchTerm.toLowerCase().trim();
+    return activePOs.filter(po =>
+      (po.po_code || '').toLowerCase().includes(term) ||
+      (po.supplier_name || '').toLowerCase().includes(term)
+    );
+  }, [activePOs, poSearchTerm]);
 
   // Modals & Feedback
   const [isSaving, setIsSaving] = useState(false);
@@ -156,11 +205,164 @@ const FirstArticleInspectionView = () => {
       }
     };
 
+    // Fetch active POs list (4 months window)
+    const fetchActivePOs = async () => {
+      try {
+        const res = await apiClient.get('purchase-order-items/active-pos');
+        if (Array.isArray(res.data)) {
+          setActivePOs(res.data);
+        }
+      } catch (err) {
+        console.error('Lỗi khi tải danh sách PO hoạt động:', err);
+      }
+    };
+
+    // Fetch active ISO processes list
+    const fetchIsoProcesses = async () => {
+      try {
+        const res = await apiClient.get('iso-documents/processes');
+        if (Array.isArray(res.data)) {
+          setIsoProcesses(res.data);
+        }
+      } catch (err) {
+        console.error('Lỗi khi tải danh sách quy trình ISO:', err);
+      }
+    };
+
     fetchMachines();
     fetchEquipments();
     fetchDefectTypes();
+    fetchActivePOs();
+    fetchIsoProcesses();
     fetchTodayHistory();
   }, [user]);
+
+  // Hook to match process based on machine selection or current page route
+  useEffect(() => {
+    if (isoProcesses.length === 0) {
+      setMatchedProcess(null);
+      return;
+    }
+    let match = null;
+    if (selectedMachineCode) {
+      match = isoProcesses.find(p => {
+        const displayList = p.display_at ? p.display_at.split(',').map(s => s.trim().toUpperCase()) : [];
+        return displayList.includes(selectedMachineCode.toUpperCase());
+      });
+    }
+    if (!match) {
+      match = isoProcesses.find(p => {
+        const displayList = p.display_at ? p.display_at.split(',').map(s => s.trim().toLowerCase()) : [];
+        return displayList.includes('/inspection-first-article');
+      });
+    }
+    setMatchedProcess(match || null);
+  }, [isoProcesses, selectedMachineCode]);
+
+  // Hook to fetch matching process details (diagram and sections content)
+  useEffect(() => {
+    if (!matchedProcess) {
+      setSelectedProcessDetails(null);
+      return;
+    }
+    const fetchProcessDetails = async () => {
+      try {
+        const res = await apiClient.get(`iso-documents/processes/${matchedProcess.id}/details`);
+        if (res.data) {
+          setSelectedProcessDetails(res.data);
+        }
+      } catch (err) {
+        console.error('Lỗi khi tải chi tiết quy trình ISO:', err);
+      }
+    };
+    fetchProcessDetails();
+  }, [matchedProcess]);
+
+  // Hook to dynamically synchronize checklistResults (samples) with sampledQty (min 1, max 5) and matching process steps
+  useEffect(() => {
+    // Determine the steps source
+    let stepsSource = [];
+    if (selectedProcessDetails) {
+      let allSteps = [];
+      if (selectedProcessDetails.sections && selectedProcessDetails.sections['__metadata_work_instructions__']) {
+        try {
+          const parsed = JSON.parse(selectedProcessDetails.sections['__metadata_work_instructions__']);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const firstInstruction = parsed[0];
+            allSteps = (firstInstruction.steps || []).map(s => ({
+              ...s,
+              work_instruction_title: firstInstruction.title
+            }));
+          }
+        } catch (err) {
+          allSteps = [];
+        }
+      }
+      stepsSource = allSteps.length > 0 ? allSteps : (selectedProcessDetails.steps || []);
+    } else {
+      // Fallback from machine selection
+      const eq = equipments.find(e => e.code === selectedMachineCode || e.name === selectedMachineName);
+      let steps = [];
+      if (eq && eq.user_manual_steps) {
+        try {
+          steps = JSON.parse(eq.user_manual_steps || '[]');
+        } catch (err) {
+          steps = [];
+        }
+      }
+      if (steps.length === 0 && selectedMachineName) {
+        const mac = machines.find(m => m.code === selectedMachineCode);
+        if (mac && mac.notes) {
+          const noteSteps = mac.notes.split(/[;\n,]+/).map(s => s.trim()).filter(Boolean);
+          steps = noteSteps.map((s, idx) => ({ step: idx + 1, title: s }));
+        }
+      }
+      if (steps.length === 0) {
+        steps = [{ step: 1, title: 'Kiểm tra hoạt động chung của máy' }];
+      }
+      stepsSource = steps;
+    }
+
+    const numSamples = Math.min(5, Math.max(1, sampledQty));
+
+    setChecklistResults(prev => {
+      const newResults = [];
+      for (let i = 0; i < numSamples; i++) {
+        const existingSample = prev[i] || null;
+        
+        const mappedSteps = stepsSource.map((s, idx) => {
+          const stepNum = s.step_number || s.step || idx + 1;
+          const stepTitle = s.name || s.title || `Bước ${stepNum}`;
+          
+          const existingStep = existingSample && existingSample.steps
+            ? existingSample.steps.find(st => st.step === stepNum)
+            : null;
+            
+          return {
+            step: stepNum,
+            title: stepTitle,
+            status: existingStep ? existingStep.status : 'pass',
+            note: existingStep ? existingStep.note : '',
+            images: existingStep ? existingStep.images : [],
+            instructions: s.instructions || ''
+          };
+        });
+
+        const hasStepFailure = mappedSteps.some(st => st.status === 'fail');
+        const overallStatus = existingSample ? (hasStepFailure ? 'fail' : existingSample.status) : (hasStepFailure ? 'fail' : 'pass');
+
+        newResults.push({
+          sampleNum: i + 1,
+          title: `Mẫu số ${i + 1}`,
+          status: overallStatus,
+          note: existingSample ? existingSample.note : '',
+          images: existingSample ? existingSample.images : [],
+          steps: mappedSteps
+        });
+      }
+      return newResults;
+    });
+  }, [sampledQty, selectedProcessDetails, selectedMachineCode, selectedMachineName, equipments, machines]);
 
   // Fetch today's inspection logs
   const fetchTodayHistory = async () => {
@@ -193,10 +395,117 @@ const FirstArticleInspectionView = () => {
     setIsPoSearching(true);
     setPoNotFound(false);
     try {
-      const res = await apiClient.get(`purchase-order-items/by-po/${searchCode}`);
-      const items = res.data;
+      // 1. Fetch Order Header details
+      const resHeader = await apiClient.get(`orders/code/${searchCode}`);
+      const order = resHeader.data;
 
-      if (!items || items.length === 0) {
+      if (!order) {
+        setPoNotFound(true);
+        setPoItems([]);
+        setPoHeader(null);
+        setSelectedItemCode('');
+        return;
+      }
+
+      const aggregated = {};
+      const addPart = (code, name, qty, opts = {}) => {
+        const key = (name || code || '').trim();
+        if (!key) return;
+
+        // Loại bỏ mã sản phẩm cha (như 2-30-BRO, 2-42-BRO)
+        const isProductSku = /^[A-Z0-9\-_]+$/.test(key) && key.includes('-');
+        if (isProductSku) return;
+
+        // Bỏ các loại ván ghép, ván ép, ván MDF, ván HMR (nguyên vật liệu thô)
+        const nameLower = key.toLowerCase();
+        if (opts.is_raw_material || 
+            opts.exclude_production || 
+            nameLower.startsWith('ván') || 
+            nameLower.includes('veneer') ||
+            nameLower.includes('mdf') ||
+            nameLower.includes('hmr')) {
+          return;
+        }
+
+        if (!aggregated[key]) {
+          aggregated[key] = {
+            item_code: key,
+            item_name: key,
+            quantity: qty || 0
+          };
+        } else {
+          aggregated[key].quantity = Math.max(aggregated[key].quantity, qty || 0);
+        }
+      };
+
+      // A. Load from PO Items (Excel PurchaseOrderItems)
+      try {
+        const resItems = await apiClient.get(`purchase-order-items/by-po/${searchCode}`);
+        if (resItems.data && Array.isArray(resItems.data)) {
+          resItems.data.forEach(it => {
+            addPart(it.item_code, it.item_name, it.quantity || 0, {
+              is_raw_material: it.is_raw_material,
+              exclude_production: it.exclude_production
+            });
+          });
+        }
+      } catch (err) {
+        console.log('No purchase order items:', err);
+      }
+
+      // B. Load from Plan Handover details
+      if (order.plan_id) {
+        try {
+          const resPlan = await apiClient.get(`plans/${order.plan_id}?limit=0`);
+          const planDetail = resPlan.data || {};
+          if (planDetail.bom_details && Array.isArray(planDetail.bom_details.handover)) {
+            const filteredHandover = planDetail.bom_details.handover.filter(item => {
+              const names = Array.isArray(item.order_names) ? item.order_names : [];
+              return names.map(n => n.trim().toUpperCase()).includes(searchCode);
+            });
+            filteredHandover.forEach(it => {
+              addPart(it.name, it.name, it.quantity || 0, {
+                is_raw_material: it.is_raw_material,
+                exclude_production: it.exclude_production
+              });
+            });
+          }
+        } catch (planErr) {
+          console.error('Lỗi khi tải chi tiết kế hoạch sản xuất:', planErr);
+        }
+      }
+
+      // C. Load from PO products BOM elements (including sub-elements)
+      try {
+        const resProducts = await apiClient.get(`orders/by-code/${searchCode}/products`);
+        const productsData = resProducts.data || {};
+        if (Array.isArray(productsData.items)) {
+          productsData.items.forEach(it => {
+            addPart(it.sku, it.name, 0);
+          });
+        }
+        if (Array.isArray(productsData.products)) {
+          productsData.products.forEach(p => {
+            if (Array.isArray(p.elements)) {
+              p.elements.forEach(el => {
+                addPart(el.sku, el.name, el.quantity || 0, {
+                  is_raw_material: el.is_raw_material,
+                  exclude_production: el.exclude_production
+                });
+              });
+            }
+          });
+        }
+      } catch (prodErr) {
+        console.error('Lỗi khi tải danh sách sản phẩm BOM:', prodErr);
+      }
+
+      const items = Object.values(aggregated).map((it, idx) => ({
+        id: `po_item_${idx}_${Date.now()}`,
+        ...it
+      }));
+
+      if (items.length === 0) {
         setPoNotFound(true);
         setPoItems([]);
         setPoHeader(null);
@@ -207,13 +516,16 @@ const FirstArticleInspectionView = () => {
       // Populate PO details
       setPoHeader({
         po_code: searchCode,
-        supplier_name: items[0].supplier_name || 'N/A',
-        order_date: items[0].po_date || '',
-        delivery_date: items[0].requested_delivery_date || ''
+        supplier_name: order.customer || 'N/A',
+        order_date: order.create_date || '',
+        delivery_date: order.estimated_date || ''
       });
       setPoItems(items);
       if (items.length > 0) {
         setSelectedItemCode(items[0].item_code || '');
+        if (items[0].quantity) {
+          setProducedQty(items[0].quantity);
+        }
       }
 
       // Add to recent search histories
@@ -238,45 +550,14 @@ const FirstArticleInspectionView = () => {
     const mac = machines.find(m => m.code === code);
     if (mac) {
       setSelectedMachineName(mac.name || '');
-
-      // Load operating guidelines steps from matching equipment or machine notes
-      const eq = equipments.find(e => e.code === code || e.name === mac.name);
-      let steps = [];
-      if (eq && eq.user_manual_steps) {
-        try {
-          steps = JSON.parse(eq.user_manual_steps || '[]');
-        } catch (err) {
-          steps = [];
-        }
-      }
-
-      if (steps.length === 0 && mac.notes) {
-        // Fallback: split machine notes by semicolon/comma/newline
-        const noteSteps = mac.notes.split(/[;\n,]+/).map(s => s.trim()).filter(Boolean);
-        steps = noteSteps.map((s, idx) => ({ step: idx + 1, title: s }));
-      }
-
-      if (steps.length === 0) {
-        steps = [{ step: 1, title: 'Kiểm tra hoạt động chung của máy' }];
-      }
-
-      const newChecklist = steps.map((s, idx) => ({
-        step: s.step || idx + 1,
-        title: s.title || '',
-        status: 'pass', // Default all steps as passed
-        note: '',
-        images: []
-      }));
-      setChecklistResults(newChecklist);
     } else {
       setSelectedMachineName('');
-      setChecklistResults([]);
     }
   };
 
   // 4. Image Upload & Camera handlers
-  const triggerCamera = (stepIndex, imgIndex) => {
-    setUploadTarget({ stepIndex, imgIndex });
+  const triggerCamera = (sampleIndex, stepIndex, imgIndex) => {
+    setUploadTarget({ sampleIndex, stepIndex, imgIndex, isDetail: false });
     fileInputRef.current.click();
   };
 
@@ -294,16 +575,29 @@ const FirstArticleInspectionView = () => {
       });
       const imageUrl = res.data.url;
 
-      // Update checklist state
-      setChecklistResults(prev => {
-        const next = [...prev];
-        const step = { ...next[uploadTarget.stepIndex] };
-        const newImages = [...(step.images || [])];
-        newImages[uploadTarget.imgIndex] = imageUrl;
-        step.images = newImages;
-        next[uploadTarget.stepIndex] = step;
-        return next;
-      });
+      if (uploadTarget.isDetail) {
+        setDetailSteps(prev => {
+          const next = [...prev];
+          next[uploadTarget.stepIndex] = {
+            ...next[uploadTarget.stepIndex],
+            images: [imageUrl]
+          };
+          return next;
+        });
+      } else {
+        setChecklistResults(prev => {
+          const next = [...prev];
+          const sample = { ...next[uploadTarget.sampleIndex] };
+          const steps = [...sample.steps];
+          const step = { ...steps[uploadTarget.stepIndex] };
+          step.images = [imageUrl];
+          steps[uploadTarget.stepIndex] = step;
+          sample.steps = steps;
+          sample.images = [imageUrl];
+          next[uploadTarget.sampleIndex] = sample;
+          return next;
+        });
+      }
 
     } catch (err) {
       console.error('Lỗi khi tải hình ảnh lên:', err);
@@ -315,31 +609,59 @@ const FirstArticleInspectionView = () => {
     }
   };
 
-  const removePhoto = (stepIndex, imgIndex) => {
+  const removePhoto = (sampleIndex, stepIndex, imgIndex) => {
     setChecklistResults(prev => {
       const next = [...prev];
-      const step = { ...next[stepIndex] };
-      const newImages = [...(step.images || [])];
-      newImages[imgIndex] = null;
-      step.images = newImages.filter(x => x !== null);
-      next[stepIndex] = step;
+      const sample = { ...next[sampleIndex] };
+      const steps = [...sample.steps];
+      const step = { ...steps[stepIndex] };
+      step.images = [];
+      steps[stepIndex] = step;
+      sample.steps = steps;
+      sample.images = [];
+      next[sampleIndex] = sample;
       return next;
     });
   };
 
-  // 5. Checklist Step Notes Popups
-  const openNoteModal = (idx) => {
-    setEditingStepIndex(idx);
-    setTempStepNote(checklistResults[idx].note || '');
+  // 5. Checklist Step Notes & Guideline Popups
+  const openDetailInspectionModal = (idx) => {
+    const sample = checklistResults[idx];
+    setDetailIdx(idx);
+    setDetailSteps(sample.steps.map(s => ({
+      ...s,
+      images: [...s.images]
+    })));
+    setIsDetailInspectionOpen(true);
   };
 
-  const saveStepNote = () => {
+  const saveDetailInspection = () => {
     setChecklistResults(prev => {
       const next = [...prev];
-      next[editingStepIndex].note = tempStepNote;
+      const sample = { ...next[detailIdx] };
+      sample.steps = detailSteps;
+
+      // Automatically determine overall sample status: fail if any step is fail
+      const hasStepFailure = detailSteps.some(s => s.status === 'fail');
+      sample.status = hasStepFailure ? 'fail' : 'pass';
+
+      // Automatically compose sample note: join notes of all steps
+      sample.note = detailSteps.map(s => s.note?.trim()).filter(Boolean).join('; ');
+
+      // Extract all step images into sample.images for outer display
+      const allStepImages = [];
+      detailSteps.forEach(s => {
+        if (s.images?.[0]) {
+          allStepImages.push(s.images[0]);
+        }
+      });
+      sample.images = allStepImages;
+
+      next[detailIdx] = sample;
       return next;
     });
-    setEditingStepIndex(null);
+    setIsDetailInspectionOpen(false);
+    setDetailIdx(null);
   };
 
   // 6. Defect tracking handlers
@@ -379,10 +701,14 @@ const FirstArticleInspectionView = () => {
     try {
       // Gather all photos
       const allPhotos = [];
-      checklistResults.forEach(r => {
-        if (r.images) {
-          r.images.forEach(img => {
-            if (img) allPhotos.push(img);
+      checklistResults.forEach(sampleRow => {
+        if (sampleRow.steps) {
+          sampleRow.steps.forEach(stepRow => {
+            if (stepRow.images) {
+              stepRow.images.forEach(img => {
+                if (img) allPhotos.push(img);
+              });
+            }
           });
         }
       });
@@ -399,7 +725,7 @@ const FirstArticleInspectionView = () => {
           };
         });
 
-      // Determine conclusion: fails if SL loại > 0 or any step is fail
+      // Determine conclusion: fails if SL loại > 0 or any step/sample is fail
       const hasStepFailure = checklistResults.some(r => r.status === 'fail');
       const isConclusionPass = (rejectedQty === 0) && !hasStepFailure;
 
@@ -418,11 +744,18 @@ const FirstArticleInspectionView = () => {
           quantity_sampled: sampledQty,
           quantity_rejected: rejectedQty,
           checklist_results: checklistResults.map(r => ({
-            step: r.step,
+            sampleNum: r.sampleNum,
             title: r.title,
             status: r.status,
             note: r.note,
-            images: r.images
+            images: r.images,
+            steps: r.steps.map(s => ({
+              step: s.step,
+              title: s.title,
+              status: s.status,
+              note: s.note,
+              images: s.images
+            }))
           })),
           defects: validDefects
         }),
@@ -489,17 +822,36 @@ const FirstArticleInspectionView = () => {
 
 
             {/* Ô tìm kiếm PO */}
-            <div>
+            <div style={{ position: 'relative' }}>
               <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7B5233', display: 'block', marginBottom: '4px' }}>Mã PO</label>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <input
-                  type="text"
-                  value={poSearchTerm}
-                  onChange={(e) => setPoSearchTerm(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSearchPO()}
-                  placeholder="Nhập mã PO (vd: APT0081)..."
-                  style={{ flex: 1, padding: '10px 12px', borderRadius: '8px', border: '1px solid #7B5233', fontSize: '13px', outline: 'none' }}
-                />
+                <div style={{ flex: 1, position: 'relative' }}>
+                  <input
+                    type="text"
+                    value={poSearchTerm}
+                    onChange={(e) => {
+                      setPoSearchTerm(e.target.value);
+                      setIsDropdownOpen(true);
+                    }}
+                    onFocus={() => setIsDropdownOpen(true)}
+                    placeholder="Chọn hoặc nhập tìm kiếm mã PO..."
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #7B5233', fontSize: '13px', outline: 'none', boxSizing: 'border-box', backgroundColor: '#fff' }}
+                  />
+                  {poSearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPoSearchTerm('');
+                        setPoHeader(null);
+                        setPoItems([]);
+                        setSelectedItemCode('');
+                      }}
+                      style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', backgroundColor: 'transparent', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                </div>
                 <button
                   onClick={() => handleSearchPO()}
                   disabled={isPoSearching}
@@ -508,6 +860,62 @@ const FirstArticleInspectionView = () => {
                   <Search size={18} color="#fff" />
                 </button>
               </div>
+
+              {/* Suggestions Dropdown list */}
+              {isDropdownOpen && (
+                <>
+                  <div
+                    onClick={() => setIsDropdownOpen(false)}
+                    style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }}
+                  />
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    backgroundColor: '#fff',
+                    border: '1px solid #7B5233',
+                    borderRadius: '8px',
+                    marginTop: '4px',
+                    maxHeight: '220px',
+                    overflowY: 'auto',
+                    zIndex: 999,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                  }}>
+                    {filteredPOs.length === 0 ? (
+                      <div style={{ padding: '10px', fontSize: '12px', color: '#94a3b8', fontStyle: 'italic', textAlign: 'center' }}>
+                        Không tìm thấy PO nào
+                      </div>
+                    ) : (
+                      filteredPOs.map((po) => (
+                        <div
+                          key={po.po_code}
+                          onClick={() => {
+                            setPoSearchTerm(po.po_code);
+                            handleSearchPO(po.po_code);
+                            setIsDropdownOpen(false);
+                          }}
+                          style={{
+                            padding: '10px 12px',
+                            fontSize: '12px',
+                            borderBottom: '1px solid #f1f5f9',
+                            cursor: 'pointer',
+                            color: '#4B301E'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#FAF6F0';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = 'transparent';
+                          }}
+                        >
+                          <span style={{ fontWeight: 'bold', color: '#7B5233' }}>{po.po_code}</span> - {po.supplier_name} ({po.po_date})
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
               {poNotFound && <div style={{ color: '#ef4444', fontSize: '11px', fontWeight: 'bold', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}><AlertCircle size={13} /> Không tìm thấy mã PO nào trùng khớp</div>}
             </div>
 
@@ -531,47 +939,70 @@ const FirstArticleInspectionView = () => {
           </div>
 
           {/* 2. Thẻ Thông tin kiểm tra */}
-          <div style={{ backgroundColor: '#fff', borderRadius: '16px', border: '1.5px solid #7B5233', overflow: 'hidden' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: '16px', border: '1.5px solid #7B5233', overflow: 'visible' }}>
             <div
               onClick={() => setExpandedInfoCard(!expandedInfoCard)}
               style={{ padding: '12px 16px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #7B5233', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '14px', fontWeight: '900', color: '#4B301E' }}>Thông tin kiểm tra</span>
-                {selectedMachineCode && (
+                {matchedProcess ? (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      const mac = machines.find(x => x.code === selectedMachineCode);
-                      const eq = equipments.find(x => x.code === selectedMachineCode || (mac && x.name === mac.name));
-                      if (eq) {
-                        setMessageConfig({
-                          type: 'info',
-                          title: `QTKT - ${eq.name}`,
-                          message: eq.user_manual_steps ? `Các hạng mục kiểm tra kỹ thuật chuẩn: \n${JSON.parse(eq.user_manual_steps).map((s, i) => `${i + 1}. ${s.title}`).join('\n')}` : 'Chưa cấu hình tài liệu quy trình kiểm tra chất lượng của máy này ở Admin.'
-                        });
-                        setIsMessageOpen(true);
-                      } else if (mac && mac.notes) {
-                        setMessageConfig({
-                          type: 'info',
-                          title: `Ghi chú thiết bị - ${mac.name}`,
-                          message: `Các tiêu chí ghi chú của thiết bị:\n${mac.notes}`
-                        });
-                        setIsMessageOpen(true);
-                      } else {
-                        setMessageConfig({
-                          type: 'info',
-                          title: 'Thông tin quy trình',
-                          message: 'Chưa có thông tin tài liệu quy trình kiểm tra chất lượng hoặc ghi chú của máy này.'
-                        });
-                        setIsMessageOpen(true);
-                      }
+                      setIsProcessModalOpen(true);
                     }}
-                    style={{ padding: '2px 8px', border: 'none', borderRadius: '4px', backgroundColor: '#7B5233', color: '#fff', fontSize: '9px', fontWeight: 'bold', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                    style={{
+                      padding: '4px 10px',
+                      backgroundColor: '#4B301E',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
                   >
                     Xem QTKT
                   </button>
-                )}
+                ) : (
+                  selectedMachineCode && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const mac = machines.find(x => x.code === selectedMachineCode);
+                        const eq = equipments.find(x => x.code === selectedMachineCode || (mac && x.name === mac.name));
+                        if (eq) {
+                          setMessageConfig({
+                            type: 'info',
+                            title: `QTKT - ${eq.name}`,
+                            message: eq.user_manual_steps ? `Các hạng mục kiểm tra kỹ thuật chuẩn: \n${JSON.parse(eq.user_manual_steps).map((s, i) => `${i + 1}. ${s.title}`).join('\n')}` : 'Chưa cấu hình tài liệu quy trình kiểm tra chất lượng của máy này ở Admin.'
+                          });
+                          setIsMessageOpen(true);
+                        } else if (mac && mac.notes) {
+                          setMessageConfig({
+                            type: 'info',
+                            title: `Ghi chú thiết bị - ${mac.name}`,
+                            message: `Các tiêu chí ghi chú của thiết bị:\n${mac.notes}`
+                          });
+                          setIsMessageOpen(true);
+                        } else {
+                          setMessageConfig({
+                            type: 'info',
+                            title: 'Thông tin quy trình',
+                            message: 'Chưa có thông tin tài liệu quy trình kiểm tra chất lượng hoặc ghi chú của máy này.'
+                          });
+                          setIsMessageOpen(true);
+                        }
+                      }}
+                      style={{ padding: '2px 8px', border: 'none', borderRadius: '4px', backgroundColor: '#7B5233', color: '#fff', fontSize: '9px', fontWeight: 'bold', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                    >
+                      Xem QTKT
+                    </button>
+                ) )}
               </div>
               {expandedInfoCard ? <ChevronUp size={18} color="#4B301E" /> : <ChevronDown size={18} color="#4B301E" />}
             </div>
@@ -589,7 +1020,7 @@ const FirstArticleInspectionView = () => {
                       style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #7B5233', fontSize: '13px', outline: 'none', backgroundColor: '#fff' }}
                     >
                       <option value="">-- Chọn mã --</option>
-                      {machines.map(m => (
+                      {filteredMachines.map(m => (
                         <option key={m.code} value={m.code}>{m.code}</option>
                       ))}
                     </select>
@@ -611,7 +1042,14 @@ const FirstArticleInspectionView = () => {
                   <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7B5233', display: 'block', marginBottom: '4px' }}>Chi tiết (Mặt hàng)</label>
                   <select
                     value={selectedItemCode}
-                    onChange={(e) => setSelectedItemCode(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSelectedItemCode(val);
+                      const found = poItems.find(x => x.item_code === val);
+                      if (found && found.quantity) {
+                        setProducedQty(found.quantity);
+                      }
+                    }}
                     disabled={!poHeader}
                     style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #7B5233', fontSize: '13px', outline: 'none', backgroundColor: !poHeader ? '#f1f5f9' : '#fff' }}
                   >
@@ -622,7 +1060,7 @@ const FirstArticleInspectionView = () => {
                         <option value="">-- Chọn mặt hàng chi tiết --</option>
                         {poItems.map(item => (
                           <option key={item.id} value={item.item_code}>
-                            {item.item_code} - {item.item_name}
+                            {item.item_name}
                           </option>
                         ))}
                       </>
@@ -699,19 +1137,24 @@ const FirstArticleInspectionView = () => {
                         <tbody>
                           {checklistResults.map((row, idx) => (
                             <tr key={idx} style={{ borderBottom: idx < checklistResults.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
-                              <td style={{ padding: '8px', fontSize: '12px', fontWeight: 'bold', color: '#4B301E', textAlign: 'center' }}>{row.step}</td>
+                              <td style={{ padding: '8px', fontSize: '12px', fontWeight: 'bold', color: '#4B301E', textAlign: 'center' }}>{row.sampleNum}</td>
                               <td style={{ padding: '8px' }}>
                                 <span style={{ fontSize: '12px', color: '#4B301E', display: 'block', fontWeight: '600' }}>{row.title}</span>
                                 {row.note && <span style={{ fontSize: '10px', color: '#b45309', display: 'block', marginTop: '2px', fontStyle: 'italic' }}>* {row.note}</span>}
 
                                 <div style={{ display: 'flex', gap: '6px', marginTop: '6px', alignItems: 'center' }}>
-                                  {[0, 1, 2].map((imgIdx) => {
-                                    const imgPath = row.images ? row.images[imgIdx] : null;
+                                  {(() => {
+                                    const imgPath = row.images?.[0] || row.steps?.[0]?.images?.[0] || null;
                                     const fullUrl = imgPath ? `${apiClient.defaults.baseURL.split('/api/v1')[0]}${imgPath}` : null;
                                     return (
                                       <div
-                                        key={imgIdx}
-                                        onClick={() => !imgPath && triggerCamera(idx, imgIdx)}
+                                        onClick={() => {
+                                          if (imgPath) {
+                                            setPreviewUrl(fullUrl);
+                                          } else {
+                                            triggerCamera(idx, 0, 0); // sampleIndex, stepIndex, imgIndex
+                                          }
+                                        }}
                                         style={{ width: '38px', height: '38px', borderRadius: '6px', border: '1px dashed #cbd5e1', backgroundColor: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer', position: 'relative' }}
                                       >
                                         {fullUrl ? (
@@ -720,7 +1163,7 @@ const FirstArticleInspectionView = () => {
                                             <button
                                               onClick={(e) => {
                                                 e.stopPropagation();
-                                                removePhoto(idx, imgIdx);
+                                                removePhoto(idx, 0, 0); // sampleIndex, stepIndex, imgIndex
                                               }}
                                               style={{ position: 'absolute', top: '1px', right: '1px', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', fontSize: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                                             >
@@ -732,10 +1175,10 @@ const FirstArticleInspectionView = () => {
                                         )}
                                       </div>
                                     );
-                                  })}
+                                  })()}
 
                                   <button
-                                    onClick={() => openNoteModal(idx)}
+                                    onClick={() => openDetailInspectionModal(idx)}
                                     style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7c6d5e' }}
                                   >
                                     <Pencil size={14} />
@@ -925,6 +1368,717 @@ const FirstArticleInspectionView = () => {
           </div>
         )}
 
+        {/* Hướng dẫn kiểm tra Modal */}
+        {isDetailInspectionOpen && detailIdx !== null && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '16px'
+          }}>
+            <div style={{
+              backgroundColor: 'white',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '360px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              border: '1.5px solid #7B5233',
+              boxShadow: '0 8px 32px rgba(45, 26, 18, 0.15)',
+              display: 'flex',
+              flexDirection: 'column'
+            }}>
+              <div style={{
+                padding: '12px 16px',
+                backgroundColor: '#FAF6F0',
+                borderBottom: '1px solid #EADCC9',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <span style={{ fontSize: '14px', fontWeight: '900', color: '#4B301E' }}>Hướng dẫn kiểm tra</span>
+                <button
+                  onClick={() => setIsDetailInspectionOpen(false)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#7B5233', fontWeight: 'bold', textTransform: 'uppercase' }}>Mẫu kiểm tra</span>
+                  <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#4B301E', display: 'block', marginTop: '2px' }}>
+                    Chi tiết Mẫu số {detailIdx + 1}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', maxHeight: '50vh', paddingRight: '4px' }}>
+                  {detailSteps.map((stepRow, stepIdx) => {
+                    const imgPath = stepRow.images?.[0] || null;
+                    const fullUrl = imgPath ? `${apiClient.defaults.baseURL.split('/api/v1')[0]}${imgPath}` : null;
+                    const itemLabel = `${stepRow.title}`;
+
+                    return (
+                      <div key={stepIdx} style={{ display: 'flex', flexDirection: 'column', gap: '6px', borderBottom: '1px dashed #EADCC9', paddingBottom: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#4B301E' }}>
+                              Bước {stepRow.step}: {itemLabel}
+                            </span>
+                            {stepRow.instructions && (
+                              <span style={{ fontSize: '11px', color: '#64748b', display: 'block', marginTop: '2px', fontStyle: 'italic' }}>
+                                * HD: {stepRow.instructions}
+                              </span>
+                            )}
+                          </div>
+                          
+                          <button
+                            onClick={() => {
+                              setDetailSteps(prev => {
+                                const next = [...prev];
+                                next[stepIdx] = {
+                                  ...next[stepIdx],
+                                  status: next[stepIdx].status === 'pass' ? 'fail' : 'pass'
+                                };
+                                return next;
+                              });
+                            }}
+                            style={{
+                              border: 'none',
+                              borderRadius: '4px',
+                              fontSize: '10px',
+                              fontWeight: 'bold',
+                              padding: '2px 8px',
+                              cursor: 'pointer',
+                              backgroundColor: stepRow.status === 'pass' ? '#e6f4ea' : '#fce8e6',
+                              color: stepRow.status === 'pass' ? '#137333' : '#c5221f',
+                              marginLeft: '8px'
+                            }}
+                          >
+                            {stepRow.status === 'pass' ? 'Đạt' : 'Lỗi'}
+                          </button>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '4px' }}>
+                          <div
+                            onClick={() => {
+                              if (imgPath) {
+                                setPreviewUrl(fullUrl);
+                              } else {
+                                setUploadTarget({ isDetail: true, stepIndex: stepIdx, imgIndex: 0 });
+                                fileInputRef.current.click();
+                              }
+                            }}
+                            style={{
+                              width: '42px',
+                              height: '42px',
+                              borderRadius: '8px',
+                              border: '1px dashed #cbd5e1',
+                              backgroundColor: '#f8fafc',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              position: 'relative',
+                              cursor: 'pointer',
+                              flexShrink: 0
+                            }}
+                          >
+                            {fullUrl ? (
+                              <>
+                                <img src={fullUrl} alt="step" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }} />
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDetailSteps(prev => {
+                                      const next = [...prev];
+                                      next[stepIdx] = {
+                                        ...next[stepIdx],
+                                        images: []
+                                      };
+                                      return next;
+                                    });
+                                  }}
+                                  style={{
+                                    position: 'absolute',
+                                    top: '-2px',
+                                    right: '-2px',
+                                    width: '14px',
+                                    height: '14px',
+                                    borderRadius: '50%',
+                                    backgroundColor: 'rgba(0,0,0,0.6)',
+                                    color: '#fff',
+                                    border: 'none',
+                                    fontSize: '8px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  <X size={8} />
+                                </button>
+                              </>
+                            ) : (
+                              <Camera size={16} color="#94a3b8" />
+                            )}
+                          </div>
+
+                          <div style={{ flex: 1 }}>
+                            <input
+                              type="text"
+                              value={stepRow.note || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setDetailSteps(prev => {
+                                  const next = [...prev];
+                                  next[stepIdx] = {
+                                    ...next[stepIdx],
+                                    note: val
+                                  };
+                                  return next;
+                                });
+                              }}
+                              placeholder="Nhập ghi chú cho bước này..."
+                              style={{
+                                width: '100%',
+                                padding: '4px 8px',
+                                border: '1px solid #cbd5e1',
+                                borderRadius: '4px',
+                                fontSize: '12px',
+                                outline: 'none',
+                                boxSizing: 'border-box'
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div style={{ borderTop: '1px solid #EADCC9', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#4B301E' }}>Kết quả tổng thể mẫu</span>
+                  <span style={{
+                    fontWeight: 'bold',
+                    fontSize: '13px',
+                    color: detailSteps.some(s => s.status === 'fail') ? '#c5221f' : '#137333',
+                    backgroundColor: detailSteps.some(s => s.status === 'fail') ? '#fce8e6' : '#e6f4ea',
+                    padding: '4px 12px',
+                    borderRadius: '6px'
+                  }}>
+                    {detailSteps.some(s => s.status === 'fail') ? 'LỖI' : 'ĐẠT'}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
+                  <button
+                    onClick={saveDetailInspection}
+                    style={{
+                      flex: 1,
+                      padding: '10px',
+                      border: 'none',
+                      backgroundColor: '#7B5233',
+                      color: 'white',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Xác nhận
+                  </button>
+                  <button
+                    onClick={() => setIsDetailInspectionOpen(false)}
+                    style={{
+                      padding: '10px 16px',
+                      border: '1.5px solid #7B5233',
+                      backgroundColor: 'white',
+                      color: '#7B5233',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Hủy
+                  </button>
+                </div>
+
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* Xem QTKT Quy Trình Kiểm Tra Modal */}
+        {isProcessModalOpen && selectedProcessDetails && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '16px'
+          }}>
+            <div style={{
+              backgroundColor: 'white',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '360px',
+              height: '80vh',
+              border: '1.5px solid #7B5233',
+              boxShadow: '0 8px 32px rgba(45, 26, 18, 0.15)',
+              display: 'flex',
+              flexDirection: 'column'
+            }}>
+              <div style={{
+                padding: '12px 16px',
+                backgroundColor: '#FAF6F0',
+                borderBottom: '1px solid #EADCC9',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '900', color: '#4B301E' }}>Quy trình kiểm tra</span>
+                  <span style={{ fontSize: '11px', color: '#7B5233', fontWeight: 'bold' }}>{selectedProcessDetails.name}</span>
+                </div>
+                <button
+                  onClick={() => setIsProcessModalOpen(false)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', borderBottom: '1px solid #EADCC9', backgroundColor: '#FAF8F5' }}>
+                <button
+                  onClick={() => setProcessModalTab('quick')}
+                  style={{
+                    flex: 1,
+                    padding: '10px 0',
+                    border: 'none',
+                    borderBottom: processModalTab === 'quick' ? '2px solid #7B5233' : 'none',
+                    backgroundColor: 'transparent',
+                    color: processModalTab === 'quick' ? '#7B5233' : '#64748b',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Hướng dẫn nhanh
+                </button>
+                <button
+                  onClick={() => setProcessModalTab('detail')}
+                  style={{
+                    flex: 1,
+                    padding: '10px 0',
+                    border: 'none',
+                    borderBottom: processModalTab === 'detail' ? '2px solid #7B5233' : 'none',
+                    backgroundColor: 'transparent',
+                    color: processModalTab === 'detail' ? '#7B5233' : '#64748b',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Quy trình chi tiết
+                </button>
+              </div>
+
+              <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+                {processModalTab === 'quick' ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {(() => {
+                      let workInstructionsList = [];
+                      if (selectedProcessDetails && selectedProcessDetails.sections && selectedProcessDetails.sections['__metadata_work_instructions__']) {
+                        try {
+                          workInstructionsList = JSON.parse(selectedProcessDetails.sections['__metadata_work_instructions__']);
+                        } catch (err) {
+                          workInstructionsList = [];
+                        }
+                      }
+
+                      if (workInstructionsList.length > 0) {
+                        return workInstructionsList.map((inst, instIdx) => (
+                          <div key={inst.id || instIdx} style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px', width: '100%' }}>
+                            <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#7B5233', backgroundColor: '#FAF6F0', padding: '6px 10px', borderRadius: '6px', borderLeft: '3px solid #7B5233' }}>
+                              {inst.title || `Hướng dẫn thực hiện ${instIdx + 1}`}
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingLeft: '8px' }}>
+                              {(inst.steps || []).map((step, sIdx) => (
+                                <div key={step.id || sIdx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                  <div style={{
+                                    width: '100%',
+                                    padding: '10px 12px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #7B5233',
+                                    backgroundColor: '#FAF6F0',
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                                  }}>
+                                    <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#7B5233', display: 'block' }}>
+                                      Bước {step.step_number}
+                                    </span>
+                                    {step.name && (
+                                      <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#4B301E', display: 'block', marginTop: '2px' }}>
+                                        {step.name}
+                                      </span>
+                                    )}
+                                    {step.instructions && (
+                                      <p style={{ fontSize: '11px', color: '#64748b', margin: '4px 0 0 0', lineHeight: '1.4' }}>
+                                        {step.instructions}
+                                      </p>
+                                    )}
+                                    {step.checklist && step.checklist.length > 0 && (
+                                      <div style={{ marginTop: '6px', borderTop: '1px dashed #cbd5e1', paddingTop: '4px' }}>
+                                        {step.checklist.map((c, cIdx) => (
+                                          <span key={cIdx} style={{ fontSize: '10px', color: '#475569', display: 'block', margin: '2px 0' }}>
+                                            • {c}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                  {sIdx < inst.steps.length - 1 && (
+                                    <div style={{ width: '2px', height: '16px', backgroundColor: '#7B5233', margin: '4px 0' }} />
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ));
+                      }
+
+                      // Fallback to process flowchart steps
+                      const steps = selectedProcessDetails.steps || [];
+                      if (steps.length > 0) {
+                        return steps.map((step, sIdx) => (
+                          <div key={step.id || sIdx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                            <div style={{
+                              width: '100%',
+                              padding: '10px 12px',
+                              borderRadius: '8px',
+                              border: '1px solid #7B5233',
+                              backgroundColor: '#FAF6F0',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                            }}>
+                              <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#7B5233', display: 'block' }}>
+                                Bước {step.step_number} [{step.assignee_role || 'QC'}]
+                              </span>
+                              <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#4B301E', display: 'block', marginTop: '2px' }}>
+                                {step.name}
+                              </span>
+                              {step.instructions && (
+                                <p style={{ fontSize: '11px', color: '#64748b', margin: '4px 0 0 0', lineHeight: '1.4' }}>
+                                  {step.instructions}
+                                </p>
+                              )}
+                              {step.checklist && step.checklist.length > 0 && (
+                                <div style={{ marginTop: '6px', borderTop: '1px dashed #cbd5e1', paddingTop: '4px' }}>
+                                  {step.checklist.map((c, cIdx) => (
+                                    <span key={cIdx} style={{ fontSize: '10px', color: '#475569', display: 'block', margin: '2px 0' }}>
+                                      • {c}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            {sIdx < steps.length - 1 && (
+                              <div style={{ width: '2px', height: '16px', backgroundColor: '#7B5233', margin: '4px 0' }} />
+                            )}
+                          </div>
+                        ));
+                      }
+
+                      return (
+                        <div style={{ textAlign: 'center', color: '#94a3b8', fontStyle: 'italic', fontSize: '12px', padding: '24px 0' }}>
+                          Không có các bước hướng dẫn thực hiện hoặc lưu đồ nào được thiết lập.
+                        </div>
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  <div style={{ backgroundColor: '#f1f5f9', padding: '16px 8px', borderRadius: '8px' }}>
+                    <div style={{
+                      backgroundColor: 'white',
+                      padding: '24px 16px',
+                      borderRadius: '4px',
+                      boxShadow: '0 4px 10px rgba(0,0,0,0.06)',
+                      border: '1px solid #cbd5e1',
+                      fontFamily: 'Inter, sans-serif',
+                      color: '#000'
+                    }}>
+                      
+                      {/* Outer Border Frame */}
+                      <div style={{ border: '1.5px solid #000', padding: '16px 12px', minHeight: '520px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                        <div>
+                          {/* Logo and Company Header Table */}
+                          <table style={{ width: '100%', borderCollapse: 'collapse', border: '1.5px solid #000', marginBottom: '24px' }}>
+                            <tbody>
+                              <tr>
+                                <td style={{ width: '30%', border: '1.5px solid #000', padding: '8px', textAlign: 'center', verticalAlign: 'middle' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                                    <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#00529c', lineHeight: '1.1' }}>PHU TAI</div>
+                                    <div style={{ fontSize: '6px', color: '#e06000', fontWeight: 'bold' }}>VINA G7 JSC</div>
+                                  </div>
+                                </td>
+                                <td style={{ width: '70%', border: '1.5px solid #000', padding: '8px', textAlign: 'center', fontWeight: 'bold', fontSize: '12px', color: '#000', textTransform: 'uppercase', verticalAlign: 'middle' }}>
+                                  CÔNG TY CỔ PHẦN VINA G7
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+
+                          {/* Centered Title */}
+                          <div style={{ textAlign: 'center', margin: '30px 0 20px 0' }}>
+                            <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#000', letterSpacing: '0.5px', textTransform: 'uppercase', margin: 0 }}>
+                              {selectedProcessDetails.name}
+                            </h2>
+                          </div>
+
+                          {/* Metadata Details Table (Dashed borders centered) */}
+                          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '30px' }}>
+                            <table style={{ width: '80%', borderCollapse: 'collapse', border: '1.5px dashed #000', fontSize: '11px' }}>
+                              <tbody>
+                                <tr>
+                                  <td style={{ width: '45%', border: '1.5px dashed #000', padding: '6px 10px', fontWeight: 'bold' }}>Mã hiệu:</td>
+                                  <td style={{ width: '55%', border: '1.5px dashed #000', padding: '6px 10px' }}>{selectedProcessDetails.code}</td>
+                                </tr>
+                                <tr>
+                                  <td style={{ border: '1.5px dashed #000', padding: '6px 10px', fontWeight: 'bold' }}>Lần ban hành:</td>
+                                  <td style={{ border: '1.5px dashed #000', padding: '6px 10px' }}>01</td>
+                                </tr>
+                                <tr>
+                                  <td style={{ border: '1.5px dashed #000', padding: '6px 10px', fontWeight: 'bold' }}>Ngày ban hành:</td>
+                                  <td style={{ border: '1.5px dashed #000', padding: '6px 10px' }}>{selectedProcessDetails.issue_date || '2026-07-07'}</td>
+                                </tr>
+                                <tr>
+                                  <td style={{ border: '1.5px dashed #000', padding: '6px 10px', fontWeight: 'bold' }}>Bộ phận thực hiện:</td>
+                                  <td style={{ border: '1.5px dashed #000', padding: '6px 10px' }}>{selectedProcessDetails.display_at || '/inspection-first-article'}</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Responsibility Table */}
+                        <table style={{ width: '100%', borderCollapse: 'collapse', border: '1.5px solid #000', fontSize: '10px', textAlign: 'center' }}>
+                          <thead>
+                            <tr style={{ fontWeight: 'bold' }}>
+                              <th style={{ border: '1.5px solid #000', padding: '6px', width: '25%' }}>TRÁCH NHIỆM</th>
+                              <th style={{ border: '1.5px solid #000', padding: '6px', width: '35%' }}>HỌ TÊN</th>
+                              <th style={{ border: '1.5px solid #000', padding: '6px', width: '20%' }}>CHỨC VỤ</th>
+                              <th style={{ border: '1.5px solid #000', padding: '6px', width: '20%' }}>KÝ TÊN</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td style={{ border: '1.5px solid #000', padding: '6px', fontWeight: 'bold' }}>Biên soạn</td>
+                              <td style={{ border: '1.5px solid #000', padding: '6px' }}>{selectedProcessDetails.editor || 'ĐẶNG VĂN NAM'}</td>
+                              <td style={{ border: '1.5px solid #000', padding: '6px' }}>a</td>
+                              <td style={{ border: '1.5px solid #000', padding: '6px' }}></td>
+                            </tr>
+                            <tr>
+                              <td style={{ border: '1.5px solid #000', padding: '6px', fontWeight: 'bold' }}>Phê duyệt</td>
+                              <td style={{ border: '1.5px solid #000', padding: '6px' }}>{selectedProcessDetails.approver || 'a'}</td>
+                              <td style={{ border: '1.5px solid #000', padding: '6px' }}>á</td>
+                              <td style={{ border: '1.5px solid #000', padding: '6px' }}></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Footer Info line */}
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontSize: '9px',
+                        fontStyle: 'italic',
+                        color: '#000',
+                        marginTop: '8px',
+                        padding: '0 4px'
+                      }}>
+                        <span>Mã hiệu: {selectedProcessDetails.code}</span>
+                        <span>Ngày ban hành: {selectedProcessDetails.issue_date || '2026-07-07'}</span>
+                        <span>Ngày hiệu chỉnh: </span>
+                        <span>Lần ban hành: 01 | Trang 1</span>
+                      </div>
+
+                      {/* Content Sections */}
+                      <div style={{ borderTop: '2px solid #cbd5e1', paddingTop: '20px', display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '24px' }}>
+                        {(() => {
+                          const visibleSections = Object.entries(selectedProcessDetails.sections || {})
+                            .filter(([secName]) => !secName.startsWith('__'));
+                          
+                          let sectionTypes = {};
+                          if (selectedProcessDetails.sections && selectedProcessDetails.sections['__metadata_section_types__']) {
+                            try {
+                              sectionTypes = JSON.parse(selectedProcessDetails.sections['__metadata_section_types__']);
+                            } catch (e) {}
+                          }
+
+                          let workInstructions = [];
+                          if (selectedProcessDetails.sections && selectedProcessDetails.sections['__metadata_work_instructions__']) {
+                            try {
+                              workInstructions = JSON.parse(selectedProcessDetails.sections['__metadata_work_instructions__']);
+                            } catch (e) {}
+                          }
+
+                          const getFullImgUrl = (imgUrl) => {
+                            if (!imgUrl) return '';
+                            if (imgUrl.startsWith('http://') || imgUrl.startsWith('https://')) return imgUrl;
+                            return `${apiClient.defaults.baseURL.split('/api/v1')[0]}${imgUrl}`;
+                          };
+
+                          if (visibleSections.length > 0) {
+                            return visibleSections.map(([secName, content], sIdx) => {
+                              const isFlowchart = sectionTypes[secName] === 'flowchart';
+
+                              if (isFlowchart) {
+                                return (
+                                  <React.Fragment key={secName}>
+                                    {/* 1. Flowchart Diagram */}
+                                    <div style={{ marginBottom: '24px' }}>
+                                      <h4 style={{ fontSize: '13px', fontWeight: 'bold', color: '#7B5233', borderBottom: '1px solid #EADCC9', paddingBottom: '4px', marginBottom: '8px' }}>
+                                        {sIdx + 1}. {secName}
+                                      </h4>
+                                      
+                                      <div style={{ marginBottom: '20px' }}>
+                                        <FlowchartTable steps={selectedProcessDetails.steps || []} />
+                                      </div>
+
+                                      {/* Explanations section details */}
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
+                                        {(selectedProcessDetails.steps || []).map((step, idx) => {
+                                          const stepLabel = `Bước ${step.step_number}`;
+                                          return (
+                                            <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                              <div style={{ fontWeight: 'bold', fontStyle: 'italic', fontSize: '11px', color: 'black' }}>
+                                                {stepLabel}: {step.name}
+                                              </div>
+                                              {step.instructions ? (
+                                                <div 
+                                                  dangerouslySetInnerHTML={{ __html: step.instructions }} 
+                                                  style={{ paddingLeft: '16px', color: 'black', fontSize: '11px', lineHeight: '1.4' }}
+                                                />
+                                              ) : (
+                                                <div style={{ paddingLeft: '16px', color: '#777', fontStyle: 'italic', fontSize: '10.5px' }}>
+                                                  (Chưa có giải thích cho bước này)
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+
+                                    {/* 2. Visual work manual */}
+                                    {workInstructions.map((inst, instIdx) => (
+                                      <div key={inst.id || instIdx} style={{ marginBottom: '24px', marginTop: '20px' }}>
+                                        <h4 style={{ fontSize: '13px', fontWeight: 'bold', color: '#7B5233', borderBottom: '1px solid #EADCC9', paddingBottom: '4px', marginBottom: '8px' }}>
+                                          {sIdx + 1}.{instIdx + 1}. {inst.title || `Hướng dẫn thực hiện ${instIdx + 1}`}
+                                        </h4>
+                                        
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                          {(inst.steps || []).map((step, idx) => {
+                                            const images = step.image_urls || [];
+                                            return (
+                                              <div key={idx} style={{ border: '1px solid black', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                  <span style={{ border: '1px solid black', fontSize: '10px', fontWeight: 'bold', padding: '3px 10px', whiteSpace: 'nowrap' }}>
+                                                    Bước {step.step_number}
+                                                  </span>
+                                                  <span style={{ fontSize: '11px', fontWeight: 'bold' }}>{step.name || '(Chưa nhập công việc)'}</span>
+                                                </div>
+                                                {images.length > 0 ? (
+                                                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${images.length}, 1fr)`, gap: '10px', marginTop: '4px' }}>
+                                                    {images.map((imgUrl, imgIdx) => (
+                                                      <div key={imgIdx} style={{ height: '140px', border: '1px solid black', overflow: 'hidden', backgroundColor: '#f8fafc' }}>
+                                                        <img src={getFullImgUrl(imgUrl)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={`hinh ${imgIdx + 1}`} />
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                                ) : (
+                                                  <div style={{ fontSize: '10px', color: '#64748b', fontStyle: 'italic', paddingLeft: '8px' }}>
+                                                    (Chưa có hình ảnh minh họa cho bước này)
+                                                  </div>
+                                                )}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </React.Fragment>
+                                );
+                              } else {
+                                return (
+                                  <div key={secName} style={{ marginBottom: '12px' }}>
+                                    <h4 style={{ fontSize: '13px', fontWeight: 'bold', color: '#7B5233', borderBottom: '1px solid #EADCC9', paddingBottom: '4px', marginBottom: '8px' }}>
+                                      {sIdx + 1}. {secName}
+                                    </h4>
+                                    <div
+                                      dangerouslySetInnerHTML={{ __html: content }}
+                                      style={{
+                                        fontSize: '11px',
+                                        lineHeight: '1.5',
+                                        color: '#334155',
+                                        overflowX: 'auto'
+                                      }}
+                                    />
+                                  </div>
+                                );
+                              }
+                            });
+                          }
+                          return (
+                            <div style={{ textAlign: 'center', color: '#94a3b8', fontStyle: 'italic', fontSize: '11px', padding: '16px 0' }}>
+                              Chưa cấu hình nội dung tài liệu chi tiết.
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ padding: '12px 16px', borderTop: '1px solid #EADCC9', display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => setIsProcessModalOpen(false)}
+                  style={{
+                    padding: '8px 20px',
+                    border: 'none',
+                    backgroundColor: '#7B5233',
+                    color: 'white',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Đóng
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )}
+
         {/* Message Alert Modal */}
         <MessageModal
           isOpen={isMessageOpen}
@@ -933,6 +2087,54 @@ const FirstArticleInspectionView = () => {
           message={messageConfig.message}
           onConfirm={() => setIsMessageOpen(false)}
         />
+
+        {/* Full-screen Image Preview Modal */}
+        {previewUrl && (
+          <div 
+            onClick={() => setPreviewUrl(null)}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.9)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 100000,
+              cursor: 'zoom-out'
+            }}
+          >
+            <div style={{ position: 'relative', maxWidth: '95%', maxHeight: '95%' }} onClick={(e) => e.stopPropagation()}>
+              <img 
+                src={previewUrl} 
+                alt="Preview" 
+                style={{ maxWidth: '100%', maxHeight: '90vh', objectFit: 'contain', borderRadius: '8px' }} 
+              />
+              <button
+                onClick={() => setPreviewUrl(null)}
+                style={{
+                  position: 'absolute',
+                  top: '-40px',
+                  right: '0px',
+                  backgroundColor: 'white',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+                }}
+              >
+                <X size={20} color="#333" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Hidden File Input for Image Capture */}
         <input

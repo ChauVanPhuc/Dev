@@ -473,7 +473,32 @@ def parse_pdf_claims(pdf_path, batch_id, images_batch_dir, seen_keys=None, norma
     return claims, period or datetime.now().strftime("%m-%Y"), parse_warnings
 
 
-def save_claims_to_excel(claims, excel_path, images_batch_dir=None, claim_imports_dir=None, resolve_company_func=None):
+def calculate_total_penalty(action, sku, cabinet_prices_map) -> float:
+    if not action:
+        return 0.0
+    action_str = str(action).strip().lower()
+    sku_clean = str(sku).strip().lower() if sku else ""
+    cabinet_prices_map = cabinet_prices_map or {}
+    
+    # Check if we need to get price from map
+    sale_price = cabinet_prices_map.get(sku_clean, 0.0)
+    
+    if any(k in action_str for k in ['x2 unit', 'x2unit', '2x unit', 'x2']):
+        return float(sale_price * 2)
+    elif any(k in action_str for k in ['full bc', 'ful bc']):
+        return float(sale_price)
+    else:
+        # Extract number if it's money
+        try:
+            num_str = re.sub(r'[^0-9.]', '', action_str)
+            if num_str:
+                return float(num_str)
+        except Exception:
+            pass
+    return 0.0
+
+
+def save_claims_to_excel(claims, excel_path, images_batch_dir=None, claim_imports_dir=None, resolve_company_func=None, cabinet_prices_map=None):
     """
     Saves the extracted claim records into a styled Excel file.
     Supports embedding defect photos directly in columns.
@@ -484,15 +509,16 @@ def save_claims_to_excel(claims, excel_path, images_batch_dir=None, claim_import
         images_batch_dir: Directory containing claim images
         claim_imports_dir: Base directory for claim imports
         resolve_company_func: Function to resolve company error codes
+        cabinet_prices_map: Dictionary of cabinet codes to sale prices
     """
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Claims Report"
     
     headers = [
-        "STT", "Cabinet No", "SKU", "Description", 
-        "Mã lỗi KH", "Mã lỗi G7", "Action", "LPN", 
-        "Container", "Thời gian", "Hình ảnh 1", "Hình ảnh 2", "Hình ảnh 3"
+        "STT", "SKU", "Description", "Mã lỗi KH", "Mã lỗi G7", 
+        "Action", "Tổng giá trị phạt", "LPN", "Container", 
+        "Thời gian", "Cabinet No", "Hình ảnh 1", "Hình ảnh 2", "Hình ảnh 3"
     ]
     
     # Styled header block matching wood-brown dashboard color #7B5233
@@ -511,22 +537,34 @@ def save_claims_to_excel(claims, excel_path, images_batch_dir=None, claim_import
         row_num = idx + 2 # Header is row 1
         
         # Write values directly to cells
-        ws.cell(row=row_num, column=1, value=c["stt"])
-        ws.cell(row=row_num, column=2, value=f"Cabinet #{c['cabinet_no']}")
-        ws.cell(row=row_num, column=3, value=c["sku"])
-        ws.cell(row=row_num, column=4, value=c["claim_description"])
-        ws.cell(row=row_num, column=5, value=c["defect_code"])
+        ws.cell(row=row_num, column=1, value=c.get("stt") or (idx + 1))
+        ws.cell(row=row_num, column=2, value=c.get("sku") or "")
+        ws.cell(row=row_num, column=3, value=c.get("claim_description") or "")
+        ws.cell(row=row_num, column=4, value=c.get("defect_code") or "")
+        
         resolved_company_code = c.get("company_error_code") or ""
         if resolve_company_func:
             resolved_company_code = resolve_company_func(c.get("defect_code") or "")
-        ws.cell(row=row_num, column=6, value=resolved_company_code)
-        ws.cell(row=row_num, column=7, value=c["action"])
-        ws.cell(row=row_num, column=8, value=c["lpn"])
-        ws.cell(row=row_num, column=9, value=c["container_no"])
-        ws.cell(row=row_num, column=10, value=c["period"])
+        ws.cell(row=row_num, column=5, value=resolved_company_code)
+        
+        action_val = c.get("action") or ""
+        ws.cell(row=row_num, column=6, value=action_val)
+        
+        # Calculate and format total penalty
+        tot = calculate_total_penalty(action_val, c.get("sku"), cabinet_prices_map)
+        ws.cell(row=row_num, column=7, value=f"${tot:.2f}")
+        
+        ws.cell(row=row_num, column=8, value=c.get("lpn") or "")
+        ws.cell(row=row_num, column=9, value=c.get("container_no") or "")
+        ws.cell(row=row_num, column=10, value=c.get("period") or "")
+        
+        cabinet_no = c.get("cabinet_no") or ""
+        if cabinet_no and not str(cabinet_no).startswith("Cabinet #"):
+            cabinet_no = f"Cabinet #{cabinet_no}"
+        ws.cell(row=row_num, column=11, value=cabinet_no)
         
         # Set alignment for cells
-        for col_num in range(1, 11):
+        for col_num in range(1, 12):
             ws.cell(row=row_num, column=col_num).alignment = Alignment(vertical="center", horizontal="center")
             
         # Embed images if available
@@ -553,14 +591,14 @@ def save_claims_to_excel(claims, excel_path, images_batch_dir=None, claim_import
                 if local_img_path and os.path.exists(local_img_path):
                     try:
                         img = OpenpyxlImage(local_img_path)
-                        col_letter = openpyxl.utils.get_column_letter(11 + img_idx)
+                        col_letter = openpyxl.utils.get_column_letter(12 + img_idx)
                         cell_coordinate = f"{col_letter}{row_num}"
                         ws.add_image(img, cell_coordinate)
                     except Exception as e:
                         logger.warning(f"Không thể chèn ảnh {local_img_path} vào Excel: {str(e)}")
                         
-    # Auto-adjust column sizes for text columns (1 to 10)
-    for col_idx in range(1, 11):
+    # Auto-adjust column sizes for text columns (1 to 11)
+    for col_idx in range(1, 12):
         col_letter = openpyxl.utils.get_column_letter(col_idx)
         max_len = 0
         for cell in ws[col_letter]:
@@ -570,8 +608,8 @@ def save_claims_to_excel(claims, excel_path, images_batch_dir=None, claim_import
         ws.column_dimensions[col_letter].width = max(max_len + 3, 10)
         
     # Set fixed column widths for Image columns
-    ws.column_dimensions["K"].width = 20
     ws.column_dimensions["L"].width = 20
     ws.column_dimensions["M"].width = 20
+    ws.column_dimensions["N"].width = 20
     
     wb.save(excel_path)

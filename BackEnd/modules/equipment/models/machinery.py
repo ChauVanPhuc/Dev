@@ -14,6 +14,7 @@ class Machine(Base):
     code              = Column(NVARCHAR(100), nullable=False, unique=True)
     status            = Column(NVARCHAR(100), nullable=True) # Hoạt động bình thường, Bảo trì...
     factory           = Column(NVARCHAR(255), nullable=True) # Nhà máy
+    workshop          = Column(NVARCHAR(255), nullable=True) # Xưởng
     department        = Column(NVARCHAR(255), nullable=True) # Tổ / Bộ phận
     receive_date      = Column(Date, nullable=True)          # Ngày nhận máy / Về xưởng
     origin            = Column(NVARCHAR(255), nullable=True) # Xuất xứ

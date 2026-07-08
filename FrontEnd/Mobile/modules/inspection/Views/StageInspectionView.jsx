@@ -88,6 +88,7 @@ const StageInspection = () => {
 
   // --- Redesigned Input Inspection (dau-vao) states ---
   const [poSearchTerm, setPoSearchTerm] = useState('');
+  const [recentPOs, setRecentPOs] = useState([]);
   const [isPoSearching, setIsPoSearching] = useState(false);
   const [poNotFound, setPoNotFound] = useState(false);
   const [poHeader, setPoHeader] = useState(null);
@@ -157,6 +158,9 @@ const StageInspection = () => {
   useEffect(() => {
     fetchHistory();
 
+    const saved = JSON.parse(localStorage.getItem('recent_stage_po_searches') || '[]');
+    setRecentPOs(saved);
+
     const fetchPOs = async () => {
       try {
         const res = await apiClient.get('purchase-requisitions/?limit=200');
@@ -206,10 +210,132 @@ const StageInspection = () => {
     setIsPoSearching(true);
     setPoNotFound(false);
     try {
-      const itemsRes = await apiClient.get(`purchase-order-items/by-po/${searchCode}`);
-      const items = itemsRes.data;
+      // 1. Fetch Order Header details to see if PO exists
+      let order = null;
+      try {
+        const resHeader = await apiClient.get(`orders/code/${searchCode}`);
+        order = resHeader.data;
+      } catch (hErr) {}
 
-      if (!items || items.length === 0) {
+      // A. Load from PO Items (Excel PurchaseOrderItems)
+      let itemsList = [];
+      let supplierName = 'N/A';
+      let supplierCode = '';
+      let orderDate = '';
+      let deliveryDate = '';
+
+      try {
+        const itemsRes = await apiClient.get(`purchase-order-items/by-po/${searchCode}`);
+        if (itemsRes.data && itemsRes.data.length > 0) {
+          itemsList = itemsRes.data;
+          supplierCode = itemsList[0].supplier_code || '';
+          supplierName = itemsList[0].supplier_name || '';
+          orderDate = itemsList[0].po_date || '';
+          deliveryDate = itemsList[0].requested_delivery_date || '';
+        }
+      } catch (err) {}
+
+      if (!order && itemsList.length === 0) {
+        setPoNotFound(true);
+        setPoItems([]);
+        setPoHeader(null);
+        setIsPoSearching(false);
+        return;
+      }
+
+      // Aggregate all elements/items
+      const aggregated = {};
+      const addPart = (code, name, qty, opts = {}) => {
+        const key = (name || code || '').trim();
+        if (!key) return;
+
+        // Loại bỏ mã sản phẩm cha (như 2-30-BRO, 2-42-BRO)
+        const isProductSku = /^[A-Z0-9\-_]+$/.test(key) && key.includes('-');
+        if (isProductSku) return;
+
+        // Bỏ các loại ván ghép, ván ép, ván MDF, ván HMR (nguyên vật liệu thô)
+        const nameLower = key.toLowerCase();
+        if (opts.is_raw_material || 
+            opts.exclude_production || 
+            nameLower.startsWith('ván') || 
+            nameLower.includes('veneer') ||
+            nameLower.includes('mdf') ||
+            nameLower.includes('hmr')) {
+          return;
+        }
+
+        if (!aggregated[key]) {
+          aggregated[key] = {
+            item_code: key,
+            item_name: key,
+            quantity: qty || 0
+          };
+        } else {
+          aggregated[key].quantity = Math.max(aggregated[key].quantity, qty || 0);
+        }
+      };
+
+      // Add Excel items
+      itemsList.forEach(it => {
+        addPart(it.item_code, it.item_name, it.quantity || 0, {
+          is_raw_material: it.is_raw_material,
+          exclude_production: it.exclude_production
+        });
+      });
+
+      // B. Load from Plan Handover details
+      if (order && order.plan_id) {
+        try {
+          const resPlan = await apiClient.get(`plans/${order.plan_id}?limit=0`);
+          const planDetail = resPlan.data || {};
+          if (planDetail.bom_details && Array.isArray(planDetail.bom_details.handover)) {
+            const filteredHandover = planDetail.bom_details.handover.filter(item => {
+              const names = Array.isArray(item.order_names) ? item.order_names : [];
+              return names.map(n => n.trim().toUpperCase()).includes(searchCode);
+            });
+            filteredHandover.forEach(it => {
+              addPart(it.name, it.name, it.quantity || 0, {
+                is_raw_material: it.is_raw_material,
+                exclude_production: it.exclude_production
+              });
+            });
+          }
+        } catch (planErr) {
+          console.error('Lỗi khi tải chi tiết kế hoạch sản xuất:', planErr);
+        }
+      }
+
+      // C. Load from PO products BOM elements (including sub-elements)
+      try {
+        const resProducts = await apiClient.get(`orders/by-code/${searchCode}/products`);
+        const productsData = resProducts.data || {};
+        if (Array.isArray(productsData.items)) {
+          productsData.items.forEach(it => {
+            addPart(it.sku, it.name, 0);
+          });
+        }
+        if (Array.isArray(productsData.products)) {
+          productsData.products.forEach(p => {
+            if (Array.isArray(p.elements)) {
+              p.elements.forEach(el => {
+                addPart(el.sku, el.name, el.quantity || 0, {
+                  is_raw_material: el.is_raw_material,
+                  exclude_production: el.exclude_production
+                });
+              });
+            }
+          });
+        }
+      } catch (prodErr) {
+        console.error('Lỗi khi tải danh sách sản phẩm BOM:', prodErr);
+      }
+
+      const mergedItems = Object.values(aggregated).map((it, idx) => ({
+        id: `po_item_${idx}_${Date.now()}`,
+        ...it
+      }));
+
+      if (mergedItems.length === 0) {
         setPoNotFound(true);
         setPoItems([]);
         setPoHeader(null);
@@ -219,10 +345,10 @@ const StageInspection = () => {
 
       let headerInfo = {
         po_code: searchCode,
-        supplier_code: items[0].supplier_code || '',
-        supplier_name: items[0].supplier_name || '',
-        order_date: items[0].po_date || '',
-        delivery_date: items[0].requested_delivery_date || ''
+        supplier_code: supplierCode,
+        supplier_name: supplierName || (order ? order.customer : 'N/A'),
+        order_date: orderDate || (order ? order.create_date : ''),
+        delivery_date: deliveryDate || (order ? order.estimated_date : '')
       };
 
       try {
@@ -254,8 +380,14 @@ const StageInspection = () => {
 
       setExistingInspectionsMap(map);
       setPoHeader(headerInfo);
-      setPoItems(items);
+      setPoItems(mergedItems);
       setInspectedDrafts({});
+
+      // Add to recent search histories
+      let list = JSON.parse(localStorage.getItem('recent_stage_po_searches') || '[]');
+      list = [searchCode, ...list.filter(x => x !== searchCode)].slice(0, 5);
+      localStorage.setItem('recent_stage_po_searches', JSON.stringify(list));
+      setRecentPOs(list);
     } catch (err) {
       console.error("Lỗi khi tìm PO:", err);
       setPoNotFound(true);
@@ -1571,6 +1703,21 @@ const StageInspection = () => {
                 }}
               />
               {poNotFound && <div style={{ color: '#ef4444', fontSize: '12px', fontWeight: 'bold', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}><AlertCircle size={14} /> Không tìm thấy mã PO</div>}
+              
+              {/* Pills 5 lịch sử PO tìm kiếm gần nhất */}
+              {recentPOs.length > 0 && (
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #cbd5e1' }}>
+                  {recentPOs.map((code) => (
+                    <button
+                      key={code}
+                      onClick={() => handleSearchPOByCode(code)}
+                      style={{ padding: '4px 10px', borderRadius: '12px', border: '1px solid #7B5233', backgroundColor: '#FAF6F0', color: '#7B5233', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}
+                    >
+                      {code}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
 
