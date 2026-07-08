@@ -593,7 +593,15 @@ const FirstArticleInspectionView = () => {
           step.images = [imageUrl];
           steps[uploadTarget.stepIndex] = step;
           sample.steps = steps;
-          sample.images = [imageUrl];
+          
+          const allStepImages = [];
+          steps.forEach(s => {
+            if (s.images?.[0]) {
+              allStepImages.push(s.images[0]);
+            }
+          });
+          sample.images = allStepImages;
+          
           next[uploadTarget.sampleIndex] = sample;
           return next;
         });
@@ -618,7 +626,15 @@ const FirstArticleInspectionView = () => {
       step.images = [];
       steps[stepIndex] = step;
       sample.steps = steps;
-      sample.images = [];
+      
+      const allStepImages = [];
+      steps.forEach(s => {
+        if (s.images?.[0]) {
+          allStepImages.push(s.images[0]);
+        }
+      });
+      sample.images = allStepImages;
+      
       next[sampleIndex] = sample;
       return next;
     });
@@ -1142,28 +1158,30 @@ const FirstArticleInspectionView = () => {
                                 <span style={{ fontSize: '12px', color: '#4B301E', display: 'block', fontWeight: '600' }}>{row.title}</span>
                                 {row.note && <span style={{ fontSize: '10px', color: '#b45309', display: 'block', marginTop: '2px', fontStyle: 'italic' }}>* {row.note}</span>}
 
-                                <div style={{ display: 'flex', gap: '6px', marginTop: '6px', alignItems: 'center' }}>
-                                  {(() => {
-                                    const imgPath = row.images?.[0] || row.steps?.[0]?.images?.[0] || null;
+                                <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                  {row.steps.map((step, stepIdx) => {
+                                    const imgPath = step.images?.[0] || null;
                                     const fullUrl = imgPath ? `${apiClient.defaults.baseURL.split('/api/v1')[0]}${imgPath}` : null;
                                     return (
                                       <div
+                                        key={stepIdx}
                                         onClick={() => {
                                           if (imgPath) {
                                             setPreviewUrl(fullUrl);
                                           } else {
-                                            triggerCamera(idx, 0, 0); // sampleIndex, stepIndex, imgIndex
+                                            triggerCamera(idx, stepIdx, 0); // sampleIndex, stepIndex, imgIndex
                                           }
                                         }}
                                         style={{ width: '38px', height: '38px', borderRadius: '6px', border: '1px dashed #cbd5e1', backgroundColor: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer', position: 'relative' }}
+                                        title={`Bước ${step.step}: ${step.title}`}
                                       >
                                         {fullUrl ? (
                                           <>
-                                            <img src={fullUrl} alt="check" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                            <img src={fullUrl} alt={`Step ${step.step}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                             <button
                                               onClick={(e) => {
                                                 e.stopPropagation();
-                                                removePhoto(idx, 0, 0); // sampleIndex, stepIndex, imgIndex
+                                                removePhoto(idx, stepIdx, 0); // sampleIndex, stepIndex, imgIndex
                                               }}
                                               style={{ position: 'absolute', top: '1px', right: '1px', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', fontSize: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                                             >
@@ -1175,7 +1193,7 @@ const FirstArticleInspectionView = () => {
                                         )}
                                       </div>
                                     );
-                                  })()}
+                                  })}
 
                                   <button
                                     onClick={() => openDetailInspectionModal(idx)}
