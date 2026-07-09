@@ -1,0 +1,37 @@
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ESNext",
+    "jsx": "react-jsx",
+    "baseUrl": "./",
+    "paths": {
+      "@shared/*": ["shared/*"],
+      "@web/*": ["Web/*"],
+      "@mobile/*": ["Mobile/*"],
+      "@webShared/*": ["Web/Shared/*"],
+      "@styles/*": ["Web/Shared/styles/*"],
+      "@assets/*": ["Web/Shared/assets/*"],
+      "@modules/*": ["Web/modules/*"],
+      "@modules/auth/*": ["Web/modules/Auth/*"],
+      "@modules/capa/*": ["Web/modules/CAPA/*"],
+      "@modules/dashboard/*": ["Web/modules/Dashboard/*"],
+      "@modules/delivery/*": ["Web/modules/Delivery/*"],
+      "@modules/equipment/*": ["Web/modules/Equipment/*"],
+      "@modules/inspection/*": ["Web/modules/Inspection/*"],
+      "@modules/kpi/*": ["Web/modules/KPI/*"],
+      "@modules/notification/*": ["Web/modules/Notification/*"],
+      "@modules/order/*": ["Web/modules/Order/*"],
+      "@modules/pallet/*": ["Web/modules/Pallet/*"],
+      "@modules/plan/*": ["Web/modules/Plan/*"],
+      "@modules/product/*": ["Web/modules/Product/*"],
+      "@modules/report/*": ["Web/modules/Report/*"],
+      "@modules/system/*": ["Web/modules/System/*"]
+    }
+  },
+  "include": [
+    "shared",
+    "Web",
+    "Mobile"
+  ]
+}

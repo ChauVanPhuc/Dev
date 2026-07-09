@@ -1,0 +1,80 @@
+# --- SMARTFLOW G7 GITIGNORE ---
+
+# Thư viện JavaScript & Build (FrontEnd / Mobile)
+node_modules/
+dist/
+dist-ssr/
+build/
+.cache/
+.vite/
+package-lock.json
+*.local
+
+# Python & Môi trường ảo (BackEnd)
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+ENV/
+env/
+.venv/
+.env
+.python-version
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Mobile (Android / iOS / Capacitor)
+android/app/build/
+android/.gradle/
+android/local.properties
+android/captures/
+ios/App/build/
+ios/App/Pods/
+ios/App/Frameworks/
+*.apk
+*.ipa
+
+# Hệ điều hành & IDE
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.bak
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Database and Uploads
+BackEnd/app.db
+BackEnd/test_db.db
+*.db
+BackEnd/static/uploads/
+BackEnd/modules/claim_imports/
+
+# Sample Data & Excel Imports
+data/
+*.xlsx
+*.xls
+*.csv
+~$*.xlsx
+
+# Python Test Cache
+.pytest_cache/
+.pytest/
+htmlcov/
+.coverage
+.coverage.*
+.cache/
+
+# Large workspace files
+sql.ipynb
+

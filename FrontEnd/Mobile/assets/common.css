@@ -1,0 +1,211 @@
+/* 
+  Common CSS - Các lớp giao diện dùng chung
+  Dùng lại cho toàn bộ ứng dụng để đảm bảo tính nhất quán.
+*/
+
+/* 1. Nút bấm (Buttons) */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 24px;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  font-size: 1rem;
+  width: 100%;
+  gap: 8px;
+}
+
+.btn-primary {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.btn-primary:active {
+  background-color: var(--primary-light);
+}
+
+.btn-secondary {
+  background-color: transparent;
+  border: 1.5px solid var(--primary-color);
+  color: var(--primary-color);
+}
+
+/* 2. Thẻ nội dung (Cards) */
+.card {
+  background: var(--bg-white);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow-md);
+  width: 100%;
+}
+
+.card-elevated {
+  box-shadow: var(--shadow-lg);
+}
+
+/* 3. Ô nhập liệu (Inputs) */
+.input-group {
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left; /* Căn lề trái cho label */
+}
+
+.input-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.input-field-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-field {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+  outline: none;
+}
+
+.input-field:focus {
+  border-color: var(--primary-color);
+}
+
+.input-icon {
+  position: absolute;
+  right: 16px;
+  color: var(--text-muted);
+}
+
+/* 4. Thanh tìm kiếm (Search Bar) */
+.search-container {
+  display: flex;
+  align-items: center;
+  background: var(--bg-white);
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid #eee;
+  gap: 12px;
+}
+
+.search-input {
+  border: none;
+  outline: none;
+  flex: 1;
+  font-size: 0.95rem;
+}
+
+/* 5. Tiện ích (Utilities) */
+.text-center { text-align: center; }
+.mt-4 { margin-top: 1rem; }
+.mb-4 { margin-bottom: 1rem; }
+.flex-column { display: flex; flex-direction: column; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+
+/* 5. Tiện ích (Utilities) */
+.text-center { text-align: center; }
+.mt-4 { margin-top: 1rem; }
+.mb-4 { margin-bottom: 1rem; }
+.flex-column { display: flex; flex-direction: column; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+
+/* 6. Hỗ trợ In máy POS (Thermal Printing) */
+@media print {
+  /* Reset toàn bộ trang */
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+    background: none !important;
+  }
+
+  /* Ẩn triệt để UI ứng dụng - Cách tiếp cận an toàn hơn */
+  #root, 
+  .layout-container, 
+  .page-content, 
+  .sidebar, 
+  .fixed-bottom-bar,
+  header, 
+  footer,
+  nav {
+    display: none !important;
+  }
+
+  /* Chỉ hiện duy nhất print-area */
+  .print-area {
+    display: block !important;
+    visibility: visible !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 58mm !important;
+    padding: 2mm !important;
+    margin: 0 !important;
+    background-color: #fff !important;
+    color: #000 !important;
+    font-size: 10pt !important;
+    font-family: Arial, sans-serif !important;
+  }
+
+  .print-header {
+    text-align: center;
+    border-bottom: 2px solid #000;
+    padding-bottom: 8px;
+    margin-bottom: 15px;
+  }
+
+  .print-title {
+    font-size: 16pt;
+    font-weight: bold;
+    text-transform: uppercase;
+  }
+
+  .print-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0;
+  }
+
+  .print-table th {
+    text-align: left;
+    border-bottom: 2px solid #000;
+    font-size: 11pt;
+    padding: 4px 0;
+  }
+
+  .print-table td {
+    padding: 8px 0;
+    font-size: 11pt;
+    border-bottom: 1px dashed #eee;
+  }
+
+  .print-footer {
+    margin-top: 20px;
+    border-top: 2px solid #000;
+    padding-top: 10px;
+    text-align: center;
+    font-size: 10pt;
+  }
+
+  .print-signatures {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 30px;
+    font-size: 10pt;
+  }
+}
+
+/* Đảm bảo print-area luôn ẩn trên màn hình */
+.print-area {
+  display: none;
+}

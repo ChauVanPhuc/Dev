@@ -1,0 +1,247 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  --primary: #4b301e;
+  --primary-rgb: 75, 48, 30;
+  --bg-cream: #fcf8f1;
+  --bg-white: #ffffff;
+  --text-main: #2d231a;
+  --text-muted: #7c6d5e;
+  --border: #e8e1d5;
+  --input-bg: #ffffff;
+  --shadow-sm: 0 2px 4px rgba(0,0,0,0.05);
+  --shadow-md: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+  --radius: 12px;
+  
+  /* Dynamic responsive spacings */
+  --spacing-xs: clamp(2px, 1vw, 4px);
+  --spacing-sm: clamp(4px, 2vw, 8px);
+  --spacing-md: clamp(8px, 4vw, 16px);
+  --spacing-lg: clamp(12px, 6vw, 24px);
+  --spacing-xl: clamp(16px, 8vw, 32px);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background-color: #dcd6ce; /* Nền xám nhạt để làm nổi bật khung điện thoại */
+  color: var(--text-main);
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0;
+  display: flex;
+  flex-direction: row; /* Đè đè flex-direction: column của theme.css để căn giữa ngang */
+  justify-content: center;
+  align-items: flex-start;
+  overflow-x: hidden;
+}
+
+#root {
+  width: 100%;
+  max-width: 450px; /* Chiều rộng chuẩn điện thoại */
+  height: 100vh;
+  height: 100dvh;
+  background-color: var(--bg-cream);
+  box-shadow: 0 0 60px rgba(0,0,0,0.2);
+  position: relative;
+  overflow: hidden; /* Không cho cuộn toàn cục, chỉ cho cuộn trong khung mobile */
+  display: flex;
+  flex-direction: column;
+}
+
+/* Giữ giao diện tràn màn hình khi dùng trên điện thoại thật */
+@media (max-width: 450px) {
+  #root {
+    max-width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    box-shadow: none;
+  }
+}
+
+/* Safe area utilities */
+.safe-padding-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-padding-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.safe-margin-top {
+  margin-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-margin-bottom {
+  margin-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Table scroll safety */
+.responsive-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* For actual mobile devices */
+@media (max-width: 440px) {
+  #root {
+    max-width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    box-shadow: none;
+  }
+}
+
+input {
+  font-family: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: inherit;
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.premium-input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  background: white;
+  font-size: 16px;
+  color: var(--text-main);
+}
+
+.premium-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.primary-button {
+  background: var(--primary);
+  color: white;
+  padding: 14px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 16px;
+  width: 100%;
+  box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.2);
+}
+
+.primary-button:hover {
+  filter: brightness(1.1);
+}
+
+/* Animations removed for POS performance */
+
+/* Login page responsive rules */
+.login-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background-color: #f9f3ea;
+  -webkit-overflow-scrolling: touch;
+}
+
+.login-image-side {
+  flex: none;
+  height: 35vh;
+  max-height: 350px;
+  min-height: 200px;
+  width: 100%;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.login-form-side {
+  flex: 1;
+  background-color: #f9f3ea;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 15px;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
+  padding-top: 20px;
+  border-top-left-radius: 35px;
+  border-top-right-radius: 35px;
+  margin-top: -80px;
+  z-index: 10;
+  transition: all 0.3s ease;
+}
+
+.login-box {
+  width: 92%;
+  max-width: 380px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Short screens or keyboard active state adjustments */
+@media (max-height: 580px) {
+  .login-image-side {
+    height: 15vh;
+    min-height: 100px;
+  }
+  .login-form-side {
+    margin-top: -30px;
+    padding-top: 10px;
+  }
+}
+
+@media (max-height: 460px) {
+  .login-image-side {
+    display: none;
+  }
+  .login-form-side {
+    margin-top: 0;
+    border-radius: 0;
+    padding-top: 15px;
+  }
+}
+
+/* Responsive bottom footer utility */
+.responsive-fixed-footer {
+  position: fixed !important;
+  bottom: 0 !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  width: 100% !important;
+  max-width: 450px !important;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px) !important;
+  box-sizing: border-box;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.hide-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
