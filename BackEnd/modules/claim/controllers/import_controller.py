@@ -29,20 +29,159 @@ DEFECT_IMPORTS_DIR = os.path.join(BACKEND_DIR, "defect_imports")
 UPLOADS_DIR = os.path.join(CLAIM_IMPORTS_DIR, "uploads")
 JSON_DIR = os.path.join(CLAIM_IMPORTS_DIR, "json")
 EXCEL_DIR = os.path.join(CLAIM_IMPORTS_DIR, "excel")
-# Use BackEnd/static/uploads for images
-BACKEND_STATIC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "static"))
+# Use BackEnd/static/uploads for images and PDF archives
+BACKEND_STATIC_DIR = os.path.join(os.path.dirname(BACKEND_DIR), "static")
 IMAGES_DIR = os.path.join(BACKEND_STATIC_DIR, "uploads", "claim_imports", "images")
+PDFS_DIR = os.path.join(BACKEND_STATIC_DIR, "uploads", "claim_imports", "pdfs")
 
 # Ensure all self-contained directories exist
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 os.makedirs(JSON_DIR, exist_ok=True)
 os.makedirs(EXCEL_DIR, exist_ok=True)
 os.makedirs(IMAGES_DIR, exist_ok=True)
+os.makedirs(PDFS_DIR, exist_ok=True)
 os.makedirs(PRICE_IMPORTS_DIR, exist_ok=True)
 os.makedirs(DEFECT_IMPORTS_DIR, exist_ok=True)
 
+def save_pdf_to_static_storage(filename: str, file_bytes: bytes, batch_id: str):
+    """Saves the imported PDF file into the static folder for later download and preview."""
+    import re
+    safe_filename = filename.split('/')[-1].split('\\')[-1]
+    # Replace non-alphanumeric (except dots, dashes and underscores) with underscores
+    safe_filename = re.sub(r'[^a-zA-Z0-9._-]', '_', safe_filename)
+    safe_filename = re.sub(r'_+', '_', safe_filename)
+    
+    saved_name = f"{batch_id}_{safe_filename}"
+    pdf_path = os.path.join(PDFS_DIR, saved_name)
+    with open(pdf_path, "wb") as f:
+        f.write(file_bytes)
+    return saved_name
+
+def get_imported_pdfs_list():
+    """Returns list of all imported PDF files saved in static directory."""
+    if not os.path.exists(PDFS_DIR):
+        return []
+    
+    pdfs = []
+    for fn in os.listdir(PDFS_DIR):
+        if not fn.lower().endswith('.pdf'):
+            continue
+        full_path = os.path.join(PDFS_DIR, fn)
+        stat = os.stat(full_path)
+        
+        # Extract original filename by removing batch prefix (YYYYMMDD_HHMMSS_)
+        orig_name = fn
+        if len(fn) > 16 and fn[15] == '_':
+            orig_name = fn[16:]
+        elif "original.pdf" in fn:
+            orig_name = fn
+            
+        pdfs.append({
+            "filename": fn,
+            "original_name": orig_name,
+            "size": stat.st_size,
+            "created_at": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+            "url": f"/static/uploads/claim_imports/pdfs/{fn}"
+        })
+    # Sort by created_at newest first
+    pdfs.sort(key=lambda x: x["created_at"], reverse=True)
+    return pdfs
+
+def delete_imported_pdf(filename: str):
+    """Deletes an imported PDF file from disk."""
+    pdf_path = os.path.join(PDFS_DIR, filename)
+    if os.path.exists(pdf_path):
+        os.remove(pdf_path)
+        return True
+    return False
+
+def validate_import_files(files, db=None):
+    """
+    Validates that all uploaded PDF files contain at least one valid claim.
+    Also checks if claims already exist in DB - blocks import if all claims are duplicates.
+    Raises ValueError if any file is invalid, empty, or contains only duplicate data.
+    """
+    # Get existing keys from DB for duplicate checking
+    existing_keys = get_existing_claims_keys(db) if db else set()
+    
+    total_new_claims = 0
+    total_duplicate_claims = 0
+    
+    for upload_file in files:
+        filename = upload_file.filename.split('/')[-1].split('\\')[-1]
+        
+        # Read file bytes
+        file_bytes = upload_file.file.read()
+        upload_file.file.seek(0)
+        
+        temp_pdf_name = f"val_route_{datetime.now().strftime('%H%M%S_%f')}_{filename}"
+        temp_pdf_path = os.path.join(UPLOADS_DIR, temp_pdf_name)
+        with open(temp_pdf_path, "wb") as f:
+            f.write(file_bytes)
+            
+        try:
+            seen_keys_temp = set()
+            claims, period, parse_warnings, mechanism_info = parse_pdf_claims(temp_pdf_path, "val_batch", "", seen_keys_temp, normalize_penalty_value, claims_only=True)
+            
+            if os.path.exists(temp_pdf_path):
+                os.remove(temp_pdf_path)
+                
+            if not claims or len(claims) == 0:
+                raise ValueError(f"file PDF [{filename}] ko hợp lệ, yêu cầu kiểm tra lại")
+            
+            # Check how many claims are duplicates
+            if existing_keys:
+                for c in claims:
+                    try:
+                        cab_no = int(c["cabinet_no"]) if c.get("cabinet_no") is not None else None
+                    except (ValueError, TypeError):
+                        cab_no = c.get("cabinet_no")
+                    
+                    data_fields = (
+                        str(c.get("sku") or "").strip(),
+                        str(c.get("claim_description") or "").strip(),
+                        str(c.get("defect_code") or "").strip(),
+                        normalize_penalty_value(c.get("action")),
+                        str(c.get("lpn") or "").strip(),
+                        str(c.get("container_no") or "").strip(),
+                        str(c.get("period") or "").strip()
+                    )
+                    key_with_cab = (cab_no,) + data_fields
+                    key_without_cab = (None,) + data_fields
+                    
+                    if key_with_cab in existing_keys or key_without_cab in existing_keys:
+                        total_duplicate_claims += 1
+                    else:
+                        total_new_claims += 1
+            else:
+                total_new_claims += len(claims)
+                
+        except Exception as e:
+            if os.path.exists(temp_pdf_path):
+                os.remove(temp_pdf_path)
+            if isinstance(e, ValueError) and "ko hợp lệ" in str(e):
+                raise e
+            raise ValueError(f"Lỗi khi đọc file {filename}: {str(e)}")
+    
+    # If ALL claims are duplicates, block the import
+    if total_new_claims == 0 and total_duplicate_claims > 0:
+        raise ValueError(
+            f"Dữ liệu đã tồn tại trong hệ thống! "
+            f"Tất cả {total_duplicate_claims} dòng khiếu nại đã được import trước đó. "
+            f"Không thể import trùng lặp."
+        )
+
+
+
 def get_existing_claims_keys(db=None):
-    """Checks database for existing claims to avoid duplicates during import"""
+    """Checks database for existing claims to avoid duplicates during import.
+    
+    Key format must match the deduplication key in parse_pdf_claims:
+    (cabinet_no, sku, claim_description, defect_code, action, lpn, container_no, period)
+    
+    Since cabinet_no is NOT stored in DB, we extract it from claim_code if possible,
+    otherwise we use None (which still allows matching when parser also produces None).
+    """
     keys = set()
     if db is None:
         return keys
@@ -51,13 +190,17 @@ def get_existing_claims_keys(db=None):
         from modules.claim.models.claim_models import CustomerClaim
         db_items = db.query(CustomerClaim).all()
         for c in db_items:
-            # Match the key format used in parse_pdf_claims for deduplication
+            # Extract cabinet_no from claim_code
+            # claim_code formats: "20260709_093016_1" or "Cabinet #45" or "batch_Cabinet#45_1"
             cab_no = None
-            if c.claim_code and c.claim_code.startswith("Cabinet #"):
-                try:
-                    cab_no = int(c.claim_code.replace("Cabinet #", ""))
-                except:
-                    cab_no = c.claim_code
+            if c.claim_code:
+                # Try "Cabinet #XX" format
+                cab_match = re.search(r'Cabinet\s*#?\s*(\d+)', c.claim_code, re.IGNORECASE)
+                if cab_match:
+                    try:
+                        cab_no = int(cab_match.group(1))
+                    except:
+                        pass
             
             key = (
                 cab_no,
@@ -73,6 +216,7 @@ def get_existing_claims_keys(db=None):
     except Exception as e:
         logger.warning(f"Error reading existing claims from database: {e}")
     return keys
+
 
 def process_pdf_import(file_bytes: bytes, filename: str, db=None):
     """
@@ -92,11 +236,15 @@ def process_pdf_import(file_bytes: bytes, filename: str, db=None):
     pdf_path = os.path.join(UPLOADS_DIR, f"{batch_id}_original.pdf")
     with open(pdf_path, "wb") as f:
         f.write(file_bytes)
+    
+    # Save copy to static storage for downloads/previews
+    save_pdf_to_static_storage(filename, file_bytes, batch_id)
         
     # 2. Parse claims using shared service
     try:
         seen_keys = get_existing_claims_keys(db)
-        claims, period, parse_warnings = parse_pdf_claims(pdf_path, batch_id, images_batch_dir, seen_keys, normalize_penalty_value)
+        claims, period, parse_warnings, mechanism_info = parse_pdf_claims(pdf_path, batch_id, images_batch_dir, seen_keys, normalize_penalty_value)
+        logger.info(f"File {filename}: Sử dụng {mechanism_info['name']} — {len(claims)} claims, period={period}")
     except Exception as parse_err:
         logger.exception("PDF parsing process failed critically.")
         # Cleanup PDF and images
@@ -143,15 +291,8 @@ def process_pdf_import(file_bytes: bytes, filename: str, db=None):
                 parse_warnings.append(f"Lỗi lưu vào DB: {code}")
 
     
-    # Save Excel spreadsheet inside excel/ using shared service
-    excel_path = os.path.join(EXCEL_DIR, f"{batch_id}_claims.xlsx")
-    try:
-        prices_map = get_cabinet_prices_map(db)
-        save_claims_to_excel(claims, excel_path, images_batch_dir, CLAIM_IMPORTS_DIR, resolve_company_error_codes, prices_map)
-    except Exception as exc_err:
-        msg = f"Không thể xuất file Excel: {str(exc_err)}"
-        logger.warning(msg)
-        parse_warnings.append(msg)
+    # Excel export removed from import flow (triggered manually by export button instead)
+    pass
             
     return {
         "success": True,
@@ -164,9 +305,11 @@ def process_pdf_import(file_bytes: bytes, filename: str, db=None):
             {
                 "filename": filename,
                 "claims_count": len(claims),
-                "period": period
+                "period": period,
+                "mechanism": mechanism_info
             }
-        ]
+        ],
+        "mechanism": mechanism_info
     }
 
 
@@ -207,17 +350,20 @@ async def process_folder_import(files, db=None):
         with open(pdf_path, "wb") as f:
             f.write(file_bytes)
             
+        # Save copy to static storage for downloads/previews
+        save_pdf_to_static_storage(filename, file_bytes, batch_id)
+            
         try:
-            # Parse this PDF using shared service
-            claims, period, parse_warnings = parse_pdf_claims(pdf_path, batch_id, images_batch_dir, seen_keys, normalize_penalty_value)
+            claims, period, parse_warnings, mechanism_info = parse_pdf_claims(pdf_path, batch_id, images_batch_dir, seen_keys, normalize_penalty_value)
             total_parsed_count += len(claims)
-            logger.info(f"File {filename}: Parsed {len(claims)} claims, period={period}")
+            logger.info(f"File {filename}: Sử dụng {mechanism_info['name']} — {len(claims)} claims, period={period}")
             
             # Record individual file statistics
             file_stats.append({
                 "filename": filename,
                 "claims_count": len(claims),
-                "period": period
+                "period": period,
+                "mechanism": mechanism_info
             })
             
             # Save each claim to Database
@@ -274,15 +420,8 @@ async def process_folder_import(files, db=None):
     # Decide the final period
     final_period = ", ".join(sorted(list(set(periods)))) if periods else "N/A"
     
-    # Save combined Excel using shared service
-    excel_path = os.path.join(EXCEL_DIR, f"{batch_id}_claims.xlsx")
-    try:
-        prices_map = get_cabinet_prices_map(db)
-        save_claims_to_excel(combined_claims, excel_path, images_batch_dir, CLAIM_IMPORTS_DIR, resolve_company_error_codes, prices_map)
-    except Exception as exc_err:
-        msg = f"Không thể xuất file Excel: {str(exc_err)}"
-        logger.warning(msg)
-        combined_warnings.append(msg)
+    # Excel export removed from import flow (triggered manually by export button instead)
+    pass
     
     logger.info(f"Import summary: Total parsed={total_parsed_count}, Combined unique={len(combined_claims)}, DB saved={db_saved_count}")
             
@@ -356,16 +495,20 @@ async def process_folder_import_streaming(files, db=None):
         with open(pdf_path, "wb") as f:
             f.write(file_bytes)
         
+        # Save copy to static storage for downloads/previews
+        save_pdf_to_static_storage(filename, file_bytes, batch_id)
+        
         claims_count = 0
         try:
-            # Parse this PDF using shared service
-            claims, period, parse_warnings = parse_pdf_claims(pdf_path, batch_id, images_batch_dir, seen_keys, normalize_penalty_value)
+            claims, period, parse_warnings, mechanism_info = parse_pdf_claims(pdf_path, batch_id, images_batch_dir, seen_keys, normalize_penalty_value)
+            logger.info(f"File {filename}: Sử dụng {mechanism_info['name']} — {len(claims)} claims, period={period}")
             
             # Record individual file statistics
             file_stats.append({
                 "filename": filename,
                 "claims_count": len(claims),
-                "period": period
+                "period": period,
+                "mechanism": mechanism_info
             })
             
             # Save each claim to Database
@@ -424,6 +567,7 @@ async def process_folder_import_streaming(files, db=None):
                 "filename": filename,
                 "status": "done",
                 "claims_found": claims_count,
+                "mechanism": mechanism_info,
                 "percent": int(((file_idx + 1) / total_files) * 90)
             }
             yield f"data: {json.dumps(done_event, ensure_ascii=False)}\n\n"
@@ -445,30 +589,8 @@ async def process_folder_import_streaming(files, db=None):
             yield f"data: {json.dumps(error_event, ensure_ascii=False)}\n\n"
             await asyncio.sleep(0)
     
-    # Yield Excel generation progress
-    excel_event = {
-        "type": "progress",
-        "file_index": total_files,
-        "total_files": total_files,
-        "filename": "Excel export",
-        "status": "processing",
-        "percent": 92
-    }
-    yield f"data: {json.dumps(excel_event, ensure_ascii=False)}\n\n"
-    await asyncio.sleep(0)
-    
-    # Final period
+    # Excel export removed from import flow (triggered manually by export button instead)
     final_period = periods[0] if periods else "N/A"
-    
-    # Save combined Excel using shared service
-    excel_path = os.path.join(EXCEL_DIR, f"{batch_id}_claims.xlsx")
-    try:
-        prices_map = get_cabinet_prices_map(db)
-        save_claims_to_excel(combined_claims, excel_path, images_batch_dir, CLAIM_IMPORTS_DIR, resolve_company_error_codes, prices_map)
-    except Exception as exc_err:
-        msg = f"Không thể xuất file Excel: {str(exc_err)}"
-        logger.warning(msg)
-        combined_warnings.append(msg)
     
     # Yield final result
     final_event = {
@@ -643,3 +765,60 @@ def list_import_batches(db=None):
     Since there's no ImportBatch model, returns empty list for now.
     """
     return []
+
+def parse_credit_note_pdf_content(content: bytes):
+    """
+    Parses a Credit Note PDF from bytes.
+    Extracts the month (e.g. "06-2026") and the total credit amount.
+    """
+    import fitz
+    import re
+    
+    # Open the PDF using fitz from bytes
+    doc = fitz.open(stream=content, filetype="pdf")
+    text = ""
+    for page in doc:
+        text += page.get_text() + "\n"
+    
+    # 1. Map months
+    month_map = {
+        "january": "01", "february": "02", "march": "03", "april": "04",
+        "may": "05", "june": "06", "july": "07", "august": "08",
+        "september": "09", "october": "10", "november": "11", "december": "12"
+    }
+    
+    # Search for "Month YYYY" pattern, e.g., "(JUNE 2026)" or "June 2026"
+    month_year_match = re.search(
+        r"\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{4})\b",
+        text,
+        re.IGNORECASE
+    )
+    
+    parsed_month = None
+    if month_year_match:
+        m_name = month_year_match.group(1).lower()
+        year = month_year_match.group(2)
+        m_digit = month_map.get(m_name)
+        if m_digit:
+            parsed_month = f"{m_digit}-{year}"
+            
+    # 2. Search for TOTAL CREDIT AMOUNT
+    amount_match = re.search(
+        r"TOTAL\s+CREDIT\s+AMOUNT:\s*\$?\s*([\d,]+(?:\.\d+)?)",
+        text,
+        re.IGNORECASE
+    )
+    
+    parsed_amount = 0.0
+    if amount_match:
+        amount_str = amount_match.group(1).replace(",", "")
+        try:
+            parsed_amount = float(amount_str)
+        except ValueError:
+            pass
+            
+    return {
+        "month": parsed_month,
+        "total_amount": parsed_amount,
+        "success": parsed_month is not None and parsed_amount > 0
+    }

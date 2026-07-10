@@ -60,41 +60,50 @@ const ClaimListView = () => {
   };
 
   const handleExportExcel = async () => {
-    let batchId = latestImport?.batch_id;
-
-    if (!batchId) {
-      try {
-        setLoading(true);
-        const batches = await claimService.getImportBatches();
-        if (batches && batches.length > 0) {
-          batchId = batches[0].batch_id;
-        }
-      } catch (err) {
-        console.error('Lỗi khi lấy danh sách lô import:', err);
-      } finally {
-        setLoading(false);
-      }
+    if (!filteredClaimsToDisplay || filteredClaimsToDisplay.length === 0) {
+      showModal('Thông báo', 'Không có dữ liệu khiếu nại nào hiển thị để xuất Excel.', 'info');
+      return;
     }
 
-    if (batchId) {
-      const downloadUrl = getFullImagePath(`/api/v1/claims/claim_imports/excel/${batchId}_claims.xlsx`);
+    try {
+      setIsExporting(true);
+      const response = await claimService.exportExcel(filteredClaimsToDisplay);
+      const blob = new Blob([response.data || response], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.setAttribute('download', `${batchId}_claims.xlsx`);
+      const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      link.setAttribute('download', `SmartFlow_Claims_${dateStr}.xlsx`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-    } else {
-      showModal('Thông báo', 'Không có dữ liệu lô import nào để xuất Excel. Vui lòng import PDF trước.', 'info');
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      console.error('Lỗi khi xuất file Excel:', err);
+      showModal('Lỗi', `Không thể xuất file Excel: ${err.message || err}`, 'error');
+    } finally {
+      setIsExporting(false);
     }
   };
 
   const [claims, setClaims] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState(null);
   const [expandedDeleteItems, setExpandedDeleteItems] = useState({});
   const [defectCatalog, setDefectCatalog] = useState([]);
   const [cabinetPrices, setCabinetPrices] = useState([]);
+
+  // Exception modal state
+  const [isExceptionModalOpen, setIsExceptionModalOpen] = useState(false);
+  const [expandedExceptionItems, setExpandedExceptionItems] = useState({});
+  const [exceptionActiveTab, setExceptionActiveTab] = useState('claim');
+
+  // Monthly trends analytics modal state
+  const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
+  const [analyticsViewTab, setAnalyticsViewTab] = useState('chart'); // 'chart' or 'table'
 
   const getCabinetSalePrice = (sku) => {
     if (!sku) return 0;
@@ -246,11 +255,14 @@ const ClaimListView = () => {
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(11);
+  const [rowsPerPage, setRowsPerPage] = useState(15);
 
   // Quick search input state
   const [quickSearch, setQuickSearch] = useState('');
   const [sortOption, setSortOption] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
 
   // Filter bar visibility
   const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
@@ -531,18 +543,31 @@ const ClaimListView = () => {
   };
 
   const handleProcessSelectedClaim = () => {
+    // 1. Nếu có hàng được tích chọn
     if (selectedClaimIds.length > 0) {
-      const targetClaim = claims.find(c => c.id === selectedClaimIds[0]);
+      const selectedClaims = claims.filter(c => selectedClaimIds.includes(c.id));
+      const targetClaim = selectedClaims.find(c => c.status === 'Mới' || c.status === 'Đang xử lý');
       if (targetClaim) {
+        setModalMode('edit');
         setActiveDetailClaim(targetClaim);
+        return;
+      } else {
+        showModal(
+          'Thông báo', 
+          'Không thể xử lý: Tất cả các dòng được chọn đều đã ở trạng thái "Đã xử lý". Để chỉnh sửa dòng đã xử lý, vui lòng nhấp vào dòng đó để xem chi tiết rồi nhấn biểu tượng cây bút 📝 ở góc trên, hoặc chọn "Xử lý khiếu nại" từ menu thao tác của dòng đó.', 
+          'info'
+        );
         return;
       }
     }
 
-    if (claims.length > 0) {
-      setActiveDetailClaim(claims[0]);
+    // 2. Nếu không tích dòng nào, tìm dòng đầu tiên là Mới hoặc Đang xử lý
+    const targetClaim = filteredClaimsToDisplay.find(c => c.status === 'Mới' || c.status === 'Đang xử lý');
+    if (targetClaim) {
+      setModalMode('edit');
+      setActiveDetailClaim(targetClaim);
     } else {
-      showModal('Thông báo', 'Không có dữ liệu khiếu nại nào để xử lý.', 'info');
+      showModal('Thông báo', 'Không còn khiếu nại nào ở trạng thái "Mới" hoặc "Đang xử lý" để xử lý.', 'info');
     }
   };
 
@@ -587,26 +612,100 @@ const ClaimListView = () => {
   // Highlighting state
   const [highlightBatchId, setHighlightBatchId] = useState(null);
 
-  // Success summary modal state
-  const [successSummary, setSuccessSummary] = useState({
-    isOpen: false,
-    batchId: '',
-    claimsCount: 0,
-    photoCount: 0,
-    warningsCount: 0,
-    warnings: [],
-    fileStats: []
-  });
-
-  // Error modal state
-  const [importError, setImportError] = useState({
-    isOpen: false,
-    message: ''
-  });
-
   // Selected detail modal states
   const [activeDetailClaim, setActiveDetailClaim] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
+  const [zoomScale, setZoomScale] = useState(1);
+  const [zoomPosition, setZoomPosition] = useState({ x: 0, y: 0 });
+  const [isZoomDragging, setIsZoomDragging] = useState(false);
+  const [zoomDragStart, setZoomDragStart] = useState({ x: 0, y: 0 });
+  const [customerPenalties, setCustomerPenalties] = useState(() => {
+    const saved = localStorage.getItem('smartflow_customer_penalties');
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  useEffect(() => {
+    localStorage.setItem('smartflow_customer_penalties', JSON.stringify(customerPenalties));
+  }, [customerPenalties]);
+
+  const [editingMonthData, setEditingMonthData] = useState(null);
+  const [editValue, setEditValue] = useState('');
+  const [isParsingPdf, setIsParsingPdf] = useState(false);
+
+  const handleCreditNotePdfChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      showModal('Lỗi', 'Chỉ chấp nhận tệp tin định dạng PDF.', 'error');
+      return;
+    }
+
+    setIsParsingPdf(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await claimService.parseCreditNote(formData);
+      setIsParsingPdf(false);
+      
+      if (!res.success || !res.month) {
+        showModal(
+          'Lỗi đọc tệp', 
+          'Không thể trích xuất thông tin tháng hoặc tổng tiền phạt từ tệp PDF này. Vui lòng kiểm tra lại cấu trúc tệp.', 
+          'error'
+        );
+        return;
+      }
+
+      // Check month match
+      if (res.month !== editingMonthData.month) {
+        showModal(
+          'Sai tháng thống kê',
+          `Tháng trong tệp Credit Note (${res.month}) không khớp với tháng bạn đang cập nhật (${editingMonthData.month})!`,
+          'error'
+        );
+        return;
+      }
+
+      // Populate value
+      setEditValue(res.total_amount);
+      showModal(
+        'Đọc thành công',
+        `Đã trích xuất số tiền $${res.total_amount.toLocaleString()} từ Credit Note của tháng ${res.month}!`,
+        'success'
+      );
+    } catch (err) {
+      setIsParsingPdf(false);
+      const errMsg = err.response?.data?.detail || err.message || 'Lỗi khi đọc file PDF.';
+      showModal('Lỗi đọc tệp', errMsg, 'error');
+    } finally {
+      // Clear input so same file can be selected again
+      e.target.value = '';
+    }
+  };
+
+  // Reset zoom states when preview image changes or is closed
+  useEffect(() => {
+    setZoomScale(1);
+    setZoomPosition({ x: 0, y: 0 });
+    setIsZoomDragging(false);
+  }, [previewImage]);
+
+  // Handle escape key to close the image preview modal
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setPreviewImage(null);
+      }
+    };
+    if (previewImage) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [previewImage]);
 
   // Process claim modal state
   const [processDongHang, setProcessDongHang] = useState('Atlas');
@@ -840,7 +939,7 @@ const ClaimListView = () => {
                     <td style={{ padding: '8px 12px', color: '#2D1A12', fontWeight: '500' }}>{newClaim.penalty}</td>
                   </tr>
                   <tr style={{ borderBottom: '1px solid #EADCC9' }}>
-                    <td style={{ padding: '8px 12px', fontWeight: 'bold', color: '#7B5233' }}>Tổng giá trị phạt</td>
+                    <td style={{ padding: '8px 12px', fontWeight: 'bold', color: '#7B5233' }}>Tổng tiền phạt</td>
                     <td style={{ padding: '8px 12px', color: '#B91C1C', fontWeight: '600' }}>{formatPenaltyValue(calculateTotalPenalty(newClaim))}</td>
                   </tr>
                   <tr>
@@ -866,8 +965,10 @@ const ClaimListView = () => {
                         objectFit: 'cover', 
                         borderRadius: '6px', 
                         border: '1px solid #EADCC9',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                        cursor: 'zoom-in'
                       }} 
+                      onClick={() => setPreviewImage(imgUrl)}
                     />
                   ))}
                 </div>
@@ -975,21 +1076,16 @@ const ClaimListView = () => {
       setProcessImages(activeDetailClaim.image_paths || []);
       setProcessImageCaptions(activeDetailClaim.image_captions || []);
 
+      // Ngày xuất: only month/year from period field, no fake day
       let formattedDate = '';
-      if (activeDetailClaim.date) {
-        const parts = activeDetailClaim.date.split('-');
+      const rawPeriod = activeDetailClaim.date || activeDetailClaim.period || '';
+      if (rawPeriod) {
+        // period format: "MM-YYYY" or "MM/YYYY"
+        const parts = rawPeriod.split(/[-/]/);
         if (parts.length === 2) {
-          formattedDate = `${parts[1]}-${parts[0].padStart(2, '0')}-01`;
-        } else if (activeDetailClaim.date.includes('/')) {
-          const partsSlash = activeDetailClaim.date.split('/');
-          if (partsSlash.length === 2) {
-            formattedDate = `${partsSlash[1]}-${partsSlash[0].padStart(2, '0')}-01`;
-          }
-        }
-      } else if (activeDetailClaim.period) {
-        const parts = activeDetailClaim.period.split('-');
-        if (parts.length === 2) {
-          formattedDate = `${parts[1]}-${parts[0].padStart(2, '0')}-01`;
+          formattedDate = `${parts[0].padStart(2, '0')}/${parts[1]}`; // display as MM/YYYY
+        } else {
+          formattedDate = rawPeriod;
         }
       }
       setProcessNgayXuat(formattedDate);
@@ -999,25 +1095,68 @@ const ClaimListView = () => {
     }
   }, [activeDetailClaim]);
 
-  // Dropdown states & refs for Import
+  // Dropdown states & refs
+  const [isOtherDropdownOpen, setIsOtherDropdownOpen] = useState(false);
   const [isImportDropdownOpen, setIsImportDropdownOpen] = useState(false);
   const pdfInputRef = useRef(null);
   const folderInputRef = useRef(null);
 
-  // Simulated PDF OCR ingestion state
-  const [uploadingState, setUploadingState] = useState({
-    isOpen: false,
-    title: '',
-    progress: 0,
-    statusText: '',
-    filesCount: 0
-  });
+  // PDF Archive states
+  const [isPdfFolderModalOpen, setIsPdfFolderModalOpen] = useState(false);
+  const [importedPdfs, setImportedPdfs] = useState([]);
+  const [selectedPdfForPreview, setSelectedPdfForPreview] = useState(null);
+  const [pdfActionMenuId, setPdfActionMenuId] = useState(null);
+  const [pdfSearchQuery, setPdfSearchQuery] = useState('');
 
-  // Dropdown click outside hook for Import dropdown
+  const fetchImportedPdfs = async () => {
+    try {
+      const res = await claimService.getImportedPdfs();
+      setImportedPdfs(res || []);
+    } catch (err) {
+      console.error('Lỗi khi tải danh sách PDF:', err);
+    }
+  };
+
+  const getFullPdfUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('http')) return url;
+    const cleanUrl = url.startsWith('/') ? url.slice(1) : url;
+    return `${API_ROOT}${cleanUrl}`;
+  };
+
+  const handleOpenPdfFolderModal = () => {
+    setIsPdfFolderModalOpen(true);
+    fetchImportedPdfs();
+  };
+
+  const handleDeletePdf = async (filename) => {
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa file PDF này? Hành động này không thể khôi phục.`)) {
+      return;
+    }
+    try {
+      setLoading(true);
+      await claimService.deleteImportedPdf(filename);
+      setPdfActionMenuId(null);
+      fetchImportedPdfs();
+      setLoading(false);
+    } catch (err) {
+      setLoading(false);
+      console.error('Lỗi khi xóa PDF:', err);
+      alert('Không thể xóa file PDF. Lỗi: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  // Dropdown click outside hook for new Import dropdown & Other dropdown
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (!event.target.closest('.import-dropdown-container')) {
         setIsImportDropdownOpen(false);
+      }
+      if (!event.target.closest('.other-dropdown-container')) {
+        setIsOtherDropdownOpen(false);
+      }
+      if (!event.target.closest('.pdf-action-menu-container')) {
+        setPdfActionMenuId(null);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -1038,180 +1177,22 @@ const ClaimListView = () => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
 
-    const file = files[0];
-    if (!file.name.toLowerCase().endsWith('.pdf')) {
-      setImportError({
-        isOpen: true,
-        message: 'Chỉ chấp nhận các tệp tin định dạng PDF.'
-      });
+    const pdfFiles = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+    if (pdfFiles.length === 0) {
+      window.dispatchEvent(new CustomEvent('start-claim-pdf-import-error', {
+        detail: { message: 'Chỉ chấp nhận các tệp tin định dạng PDF.' }
+      }));
+      if (pdfInputRef.current) pdfInputRef.current.value = '';
       return;
     }
 
-    setUploadingState({
-      isOpen: true,
-      title: 'Đang xử lý PDF...',
-      progress: 10,
-      statusText: 'Đang khởi tạo...',
-      filesCount: 1
-    });
-
-    let progressVal = 10;
-    const progressInterval = setInterval(() => {
-      progressVal += 5;
-      if (progressVal > 95) {
-        clearInterval(progressInterval);
-      } else {
-        let statusText = 'Đang đọc cấu trúc tệp tin PDF...';
-        if (progressVal > 30 && progressVal <= 60) {
-          statusText = 'Đang phân tích và trích xuất dữ liệu khiếu nại...';
-        } else if (progressVal > 60 && progressVal <= 85) {
-          statusText = 'Đang định vị và liên kết hình ảnh lỗi...';
-        } else if (progressVal > 85) {
-          statusText = 'Đang đóng gói dữ liệu và tạo tệp Excel...';
-        }
-        setUploadingState(prev => ({
-          ...prev,
-          progress: progressVal,
-          statusText
-        }));
+    window.dispatchEvent(new CustomEvent('start-claim-pdf-import', {
+      detail: {
+        files: pdfFiles,
+        isMultiple: pdfFiles.length > 1
       }
-    }, 150);
-
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      const response = await claimService.importPdf(formData);
-      clearInterval(progressInterval);
-
-      setUploadingState(prev => ({
-        ...prev,
-        progress: 100,
-        statusText: 'Hoàn tất!'
-      }));
-
-      setTimeout(() => {
-        setUploadingState(prev => ({ ...prev, isOpen: false }));
-
-        if (response.success && response.total_records > 0) {
-          // Fetch claims from DB (records no longer in response since JSON save disabled)
-          fetchClaims();
-
-          // Scroll to top of table and window
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-          const tableContainer = document.querySelector('.report-table-container');
-          if (tableContainer) tableContainer.scrollTop = 0;
-
-          // Highlight row animation
-          setHighlightBatchId(response.batch_id);
-          setTimeout(() => {
-            setHighlightBatchId(null);
-          }, 4000);
-
-          // Update latest import metadata banner
-          setLatestImport({
-            batch_id: response.batch_id,
-            period: response.period,
-            total_records: response.total_records,
-            warnings_count: response.parse_warnings ? response.parse_warnings.length : 0,
-            imported_at: new Date().toLocaleString('vi-VN')
-          });
-
-          // Show production success dialog
-          setSuccessSummary({
-            isOpen: true,
-            batchId: response.batch_id,
-            claimsCount: response.db_saved_count || response.total_records,
-            photoCount: 0,
-            warningsCount: response.parse_warnings ? response.parse_warnings.length : 0,
-            warnings: response.parse_warnings || [],
-            fileStats: response.file_stats || []
-          });
-
-        } else if (response.success && response.total_records === 0) {
-          setImportError({
-            isOpen: true,
-            message: 'Không tìm thấy dữ liệu khiếu nại nào trong file PDF.'
-          });
-        } else {
-          setImportError({
-            isOpen: true,
-            message: 'Định dạng phản hồi không hợp lệ từ máy chủ.'
-          });
-        }
-      }, 400);
-
-    } catch (error) {
-      clearInterval(progressInterval);
-      setUploadingState(prev => ({ ...prev, isOpen: false }));
-      const errorMsg = error.response?.data?.detail || error.message || 'Lỗi kết nối máy chủ.';
-      setImportError({
-        isOpen: true,
-        message: errorMsg
-      });
-    } finally {
-      if (pdfInputRef.current) pdfInputRef.current.value = '';
-    }
-  };
-
-  const handleFolderImportSuccess = (response) => {
-    setUploadingState(prev => ({
-      ...prev,
-      progress: 100,
-      statusText: 'Hoàn tất!'
     }));
-
-    setTimeout(() => {
-      setUploadingState(prev => ({ ...prev, isOpen: false }));
-
-      if (response.success && response.total_records > 0) {
-
-        // Fetch claims from DB to get up-to-date list (records no longer in response)
-        fetchClaims();
-
-        // Scroll to top
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        const tableContainer = document.querySelector('.report-table-container');
-        if (tableContainer) tableContainer.scrollTop = 0;
-
-        // Highlight
-        setHighlightBatchId(response.batch_id);
-        setTimeout(() => {
-          setHighlightBatchId(null);
-        }, 4000);
-
-        // Update latest import metadata
-        setLatestImport({
-          batch_id: response.batch_id,
-          period: response.period,
-          total_records: response.total_records,
-          warnings_count: response.parse_warnings ? response.parse_warnings.length : 0,
-          imported_at: new Date().toLocaleString('vi-VN')
-        });
-
-        // Success dialog
-        setSuccessSummary({
-          isOpen: true,
-          batchId: response.batch_id,
-          claimsCount: response.db_saved_count || response.total_records,
-          photoCount: 0,
-          warningsCount: response.parse_warnings ? response.parse_warnings.length : 0,
-          warnings: response.parse_warnings || [],
-          fileStats: response.file_stats || []
-        });
-
-      } else if (response.success && response.total_records === 0) {
-        setImportError({
-          isOpen: true,
-          message: 'Không tìm thấy dữ liệu khiếu nại nào trong các file PDF đã chọn.'
-        });
-      } else {
-        setImportError({
-          isOpen: true,
-          message: 'Định dạng phản hồi không hợp lệ từ máy chủ hoặc thư mục rỗng.'
-        });
-      }
-    }, 400);
+    if (pdfInputRef.current) pdfInputRef.current.value = '';
   };
 
   const handleFolderFileChange = async (e) => {
@@ -1220,124 +1201,50 @@ const ClaimListView = () => {
 
     const pdfFiles = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
     if (pdfFiles.length === 0) {
-      setImportError({
-        isOpen: true,
-        message: 'Không tìm thấy tệp tin PDF nào trong thư mục đã chọn.'
-      });
+      window.dispatchEvent(new CustomEvent('start-claim-pdf-import-error', {
+        detail: { message: 'Không tìm thấy tệp tin PDF nào trong thư mục đã chọn.' }
+      }));
+      if (folderInputRef.current) folderInputRef.current.value = '';
       return;
     }
 
-    setUploadingState({
-      isOpen: true,
-      title: `Đang xử lý ${pdfFiles.length} file PDF...`,
-      progress: 5,
-      statusText: `Đã phát hiện ${pdfFiles.length} file PDF. Đang tải lên...`,
-      filesCount: pdfFiles.length
-    });
-
-    const formData = new FormData();
-    pdfFiles.forEach(file => {
-      formData.append('files', file);
-    });
-
-    try {
-      // Try SSE streaming endpoint first (real-time progress)
-      const response = await claimService.importFolderStream(formData, (event) => {
-        if (event.type === 'start') {
-          setUploadingState(prev => ({
-            ...prev,
-            progress: 8,
-            statusText: `Bắt đầu xử lý ${event.total_files} file PDF...`
-          }));
-        } else if (event.type === 'progress') {
-          const percent = Math.min(event.percent || 0, 98);
-          let statusText = '';
-          if (event.status === 'processing') {
-            statusText = event.filename === 'Excel export'
-              ? 'Đang tạo file Excel kết quả...'
-              : `Đang phân tích: ${event.filename} (${event.file_index}/${event.total_files})`;
-          } else if (event.status === 'done') {
-            statusText = `✓ Hoàn tất: ${event.filename} — ${event.claims_found || 0} khiếu nại (${event.file_index}/${event.total_files})`;
-          } else if (event.status === 'error') {
-            statusText = `⚠ Lỗi file: ${event.filename} (${event.file_index}/${event.total_files})`;
-          }
-          setUploadingState(prev => ({
-            ...prev,
-            progress: percent,
-            statusText
-          }));
-        }
-      });
-
-      handleFolderImportSuccess(response);
-
-    } catch (streamError) {
-      // If streaming endpoint fails (405 Method Not Allowed = server not updated),
-      // automatically fallback to old non-streaming endpoint
-      const is405 = streamError.message?.includes('Method Not Allowed') || streamError.message?.includes('405');
-
-      if (is405) {
-        console.warn('Streaming endpoint unavailable, falling back to standard import...');
-        setUploadingState(prev => ({
-          ...prev,
-          progress: 10,
-          statusText: `Đang xử lý ${pdfFiles.length} file PDF (chế độ tiêu chuẩn)...`
-        }));
-
-        // Rebuild FormData since the original one was consumed
-        const formData2 = new FormData();
-        pdfFiles.forEach(file => {
-          formData2.append('files', file);
-        });
-
-        // Simulated progress for fallback
-        let progressVal = 10;
-        const progressInterval = setInterval(() => {
-          progressVal += 2;
-          if (progressVal > 95) {
-            clearInterval(progressInterval);
-          } else {
-            let statusText = 'Đang tải lên các tệp PDF...';
-            if (progressVal > 25 && progressVal <= 60) {
-              statusText = `Đang trích xuất dữ liệu khiếu nại từ ${pdfFiles.length} tệp...`;
-            } else if (progressVal > 60 && progressVal <= 80) {
-              statusText = 'Đang cắt và liên kết hình ảnh lỗi...';
-            } else if (progressVal > 80) {
-              statusText = 'Đang đóng gói và kết xuất tệp Excel...';
-            }
-            setUploadingState(prev => ({
-              ...prev,
-              progress: progressVal,
-              statusText
-            }));
-          }
-        }, 500);
-
-        try {
-          const response = await claimService.importFolder(formData2);
-          clearInterval(progressInterval);
-          handleFolderImportSuccess(response);
-        } catch (fallbackError) {
-          clearInterval(progressInterval);
-          setUploadingState(prev => ({ ...prev, isOpen: false }));
-          const errorMsg = fallbackError.response?.data?.detail || fallbackError.message || 'Lỗi kết nối máy chủ.';
-          setImportError({
-            isOpen: true,
-            message: `Không thể nhập khiếu nại từ thư mục. Lỗi: ${errorMsg}`
-          });
-        }
-      } else {
-        setUploadingState(prev => ({ ...prev, isOpen: false }));
-        const errorMsg = streamError.message || 'Lỗi kết nối máy chủ.';
-        setImportError({
-          isOpen: true,
-          message: `Không thể nhập khiếu nại từ thư mục. Lỗi: ${errorMsg}`
-        });
+    window.dispatchEvent(new CustomEvent('start-claim-pdf-import', {
+      detail: {
+        files: pdfFiles,
+        isMultiple: true
       }
-    } finally {
-      if (folderInputRef.current) folderInputRef.current.value = '';
-    }
+    }));
+    if (folderInputRef.current) folderInputRef.current.value = '';
   };
+
+  useEffect(() => {
+    const handleSuccessRefresh = (e) => {
+      const response = e.detail;
+      fetchClaims();
+      // Scroll to top of table and window
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      const tableContainer = document.querySelector('.report-table-container');
+      if (tableContainer) tableContainer.scrollTop = 0;
+
+      // Highlight row animation
+      setHighlightBatchId(response.batch_id);
+      setTimeout(() => {
+        setHighlightBatchId(null);
+      }, 4000);
+
+      // Update latest import metadata banner
+      setLatestImport({
+        batch_id: response.batch_id,
+        period: response.period,
+        total_records: response.total_records,
+        warnings_count: response.parse_warnings ? response.parse_warnings.length : 0,
+        imported_at: new Date().toLocaleString('vi-VN')
+      });
+    };
+
+    window.addEventListener('pdf-import-success-refresh', handleSuccessRefresh);
+    return () => window.removeEventListener('pdf-import-success-refresh', handleSuccessRefresh);
+  }, []);
 
   useEffect(() => {
     // Set Header titles exactly like the top of screenshot
@@ -1590,6 +1497,13 @@ const ClaimListView = () => {
         }
       }
 
+      // Inline status filter from toolbar button
+      if (statusFilter) {
+        if (claim.status !== statusFilter) {
+          return false;
+        }
+      }
+
       if (appliedFilters.sku) {
         if (!claim.product_name?.toLowerCase().includes(appliedFilters.sku.toLowerCase())) {
           return false;
@@ -1674,31 +1588,21 @@ const ClaimListView = () => {
   const filteredClaimsToDisplay = getSortedClaims(getFilteredClaims());
 
   // --- DYNAMIC ROWS PER PAGE CALCULATION ---
-  const TABLE_ROW_HEIGHT = 56;
-  const FIXED_CHROME_HEIGHT = 380; // Adjusted from 420 to prevent extra empty space at the bottom
-
-  useEffect(() => {
-    const handleResize = () => {
-      const availableHeight = window.innerHeight - FIXED_CHROME_HEIGHT;
-      const rows = Math.max(11, Math.floor(availableHeight / TABLE_ROW_HEIGHT));
-      setRowsPerPage(rows);
-    };
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  // rowsPerPage is now controlled by user selection (10, 15, 20, All)
+  // No dynamic calculation needed - user picks from dropdown
 
   // Reset page when filters change, sort option changes or data changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [claims, quickSearch, appliedFilters, sortOption]);
+  }, [claims, quickSearch, appliedFilters, sortOption, statusFilter]);
 
   // Pagination computed values
   const totalFilteredItems = filteredClaimsToDisplay.length;
-  const totalPages = Math.max(1, Math.ceil(totalFilteredItems / rowsPerPage));
+  const isAllRows = rowsPerPage === Infinity || rowsPerPage === 'all';
+  const totalPages = isAllRows ? 1 : Math.max(1, Math.ceil(totalFilteredItems / rowsPerPage));
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = (safeCurrentPage - 1) * rowsPerPage;
-  const endIndex = startIndex + rowsPerPage;
+  const startIndex = isAllRows ? 0 : (safeCurrentPage - 1) * rowsPerPage;
+  const endIndex = isAllRows ? totalFilteredItems : startIndex + rowsPerPage;
   const paginatedClaims = filteredClaimsToDisplay.slice(startIndex, endIndex);
 
 
@@ -1722,6 +1626,195 @@ const ClaimListView = () => {
 
   const penaltyStats = getPenaltyStats();
 
+  const getMonthYear = (claim) => {
+    const dateStr = claim.date || claim.period || '';
+    if (!dateStr) return 'N/A';
+    if (/^\d{2}-\d{4}$/.test(dateStr)) {
+      return dateStr;
+    }
+    const match = dateStr.match(/^(\d{4})-(\d{2})/);
+    if (match) {
+      return `${match[2]}-${match[1]}`;
+    }
+    return dateStr;
+  };
+
+  const analyticsData = useMemo(() => {
+    const monthlyMap = {};
+    filteredClaimsToDisplay.forEach(c => {
+      const month = getMonthYear(c);
+      if (!monthlyMap[month]) {
+        monthlyMap[month] = { month, count: 0, totalAmount: 0 };
+      }
+      monthlyMap[month].count += 1;
+      monthlyMap[month].totalAmount += calculateTotalPenalty(c);
+    });
+
+    const sortedMonths = Object.keys(monthlyMap).sort((a, b) => {
+      if (a === 'N/A') return 1;
+      if (b === 'N/A') return -1;
+      const [aMonth, aYear] = a.split('-').map(Number);
+      const [bMonth, bYear] = b.split('-').map(Number);
+      if (aYear !== bYear) return aYear - bYear;
+      return aMonth - bMonth;
+    });
+
+    // Limit to maximum of recent 12 months from the filtered data
+    const displayedMonths = sortedMonths.slice(-12);
+
+    return displayedMonths.map(month => {
+      const data = monthlyMap[month];
+      return {
+        month,
+        count: data.count,
+        totalAmount: data.totalAmount,
+        customerAmount: customerPenalties[month] || 0,
+        average: data.count > 0 ? (data.totalAmount / data.count) : 0
+      };
+    });
+  }, [filteredClaimsToDisplay, customerPenalties]);
+
+  // ============ EXCEPTION DETECTION LOGIC ============
+  // Computes exception claims split into Claim Info and Transport sections
+  const exceptionData = useMemo(() => {
+    const claimInfoExceptions = [];
+    const transportExceptions = [];
+
+    // Build a Set of known defect codes from catalog for fast lookup
+    const knownDefectCodes = new Set(
+      defectCatalog.map(d => (d.defect_code || '').trim().toUpperCase()).filter(Boolean)
+    );
+
+    // Group claims to identify exact 100% duplicates
+    const keyMap = {};
+    filteredClaimsToDisplay.forEach(claim => {
+      const cabNo = claim.claim_code || '';
+      const sku = claim.product_name || claim.sku || '';
+      const desc = claim.claim_description || claim.description || '';
+      const defect = claim.order_code || claim.defect_code || '';
+      const penalty = normalizePenaltyValue(claim.penalty || 'Không có');
+      const lpn = claim.lpn || '';
+      const cont = claim.cont || claim.container_no || '';
+      const period = claim.date || claim.period || '';
+      
+      const key = `${cabNo}|${sku}|${desc}|${defect}|${penalty}|${lpn}|${cont}|${period}`.toLowerCase();
+      if (!keyMap[key]) {
+        keyMap[key] = [];
+      }
+      keyMap[key].push(claim);
+    });
+
+    filteredClaimsToDisplay.forEach(claim => {
+      const claimExceptions = [];
+      const transportIssues = [];
+
+      // 1. Kiểm tra mã lỗi KH không có trong danh sách mã lỗi
+      const customerDefectCode = (claim.order_code || claim.defect_code || '').trim();
+      if (customerDefectCode && knownDefectCodes.size > 0) {
+        const tokens = customerDefectCode.split(/[\\,\/;]|\s+/).map(t => t.trim().toUpperCase()).filter(Boolean);
+        const unmatchedCodes = tokens.filter(token => {
+          return !defectCatalog.some(d => {
+            const catalogCode = (d.defect_code || '').trim().toUpperCase();
+            return catalogCode === token || catalogCode.replace('-', '_') === token.replace('-', '_');
+          });
+        });
+        if (unmatchedCodes.length > 0) {
+          claimExceptions.push({
+            type: 'missing_defect_code',
+            label: 'Mã lỗi KH không có trong danh mục',
+            detail: `Mã lỗi: ${unmatchedCodes.join(', ')} — không tìm thấy trong danh sách mã lỗi hệ thống.`,
+            severity: 'warning'
+          });
+        }
+      } else if (!customerDefectCode) {
+        claimExceptions.push({
+          type: 'no_defect_code',
+          label: 'Không có mã lỗi KH',
+          detail: 'Claim này chưa được gán mã lỗi khách hàng.',
+          severity: 'info'
+        });
+      }
+
+      // 2. Có giá trị phạt nhưng tổng phạt = 0
+      const penaltyRaw = normalizePenaltyValue(claim.penalty || 'Không có');
+      const penaltyLower = penaltyRaw.toLowerCase();
+      const hasPenaltyKeyword = penaltyLower.includes('x2 unit') || penaltyLower.includes('x2unit') ||
+        penaltyLower.includes('2x unit') || penaltyLower.includes('x2') ||
+        penaltyLower.includes('full bc') || penaltyLower.includes('ful bc');
+      const totalPenalty = calculateTotalPenalty(claim);
+
+      if (hasPenaltyKeyword && totalPenalty === 0) {
+        const sku = claim.product_name || claim.sku || 'N/A';
+        claimExceptions.push({
+          type: 'penalty_no_total',
+          label: 'Có giá trị phạt nhưng không tính được tổng phạt',
+          detail: `Giá trị phạt: "${penaltyRaw}" — SKU "${sku}" không có trong bảng giá tủ (Module Kinh doanh). Cần dò giá với quản lý giá tủ.`,
+          severity: 'error'
+        });
+      }
+
+      // 3. Kiểm tra trùng lặp dữ liệu 100% trong đợt này
+      const cabNo = claim.claim_code || '';
+      const sku = claim.product_name || claim.sku || '';
+      const desc = claim.claim_description || claim.description || '';
+      const defect = claim.order_code || claim.defect_code || '';
+      const penalty = normalizePenaltyValue(claim.penalty || 'Không có');
+      const lpn = claim.lpn || '';
+      const cont = claim.cont || claim.container_no || '';
+      const period = claim.date || claim.period || '';
+      const key = `${cabNo}|${sku}|${desc}|${defect}|${penalty}|${lpn}|${cont}|${period}`.toLowerCase();
+      
+      const duplicates = keyMap[key] || [];
+      if (duplicates.length > 1) {
+        const otherDups = duplicates.filter(d => d.id !== claim.id);
+        claimExceptions.push({
+          type: 'duplicate_claim',
+          label: 'Trùng lặp dữ liệu 100%',
+          detail: `Phát hiện dòng dữ liệu bị trùng lặp hoàn toàn với dòng khác. Vui lòng đối chiếu ảnh minh chứng bên dưới để xem có bị trùng lặp ảnh hay không.`,
+          severity: 'error',
+          duplicates: otherDups
+        });
+      }
+
+      // --- TRANSPORT EXCEPTIONS ---
+      // 4. Thiếu LPN
+      const lpnVal = (claim.lpn || '').trim();
+      if (!lpnVal || lpnVal === 'N/A' || lpnVal === 'n/a' || lpnVal === '-') {
+        transportIssues.push({
+          type: 'missing_lpn',
+          label: 'Thiếu LPN',
+          detail: 'Claim này chưa có mã LPN (License Plate Number).',
+          severity: 'warning'
+        });
+      }
+
+      // 5. Thiếu Container
+      const contVal = (claim.cont || claim.container_no || '').trim();
+      if (!contVal || contVal === 'N/A' || contVal === 'n/a' || contVal === '-') {
+        transportIssues.push({
+          type: 'missing_container',
+          label: 'Thiếu Container',
+          detail: 'Claim này chưa có mã Container (mã vận chuyển).',
+          severity: 'warning'
+        });
+      }
+
+      if (claimExceptions.length > 0) {
+        claimInfoExceptions.push({ claim, exceptions: claimExceptions });
+      }
+      if (transportIssues.length > 0) {
+        transportExceptions.push({ claim, exceptions: transportIssues });
+      }
+    });
+
+    return {
+      claimInfo: claimInfoExceptions,
+      transport: transportExceptions,
+      totalCount: claimInfoExceptions.length + transportExceptions.length
+    };
+  }, [filteredClaimsToDisplay, defectCatalog, cabinetPrices]);
+  // ============ END EXCEPTION DETECTION LOGIC ============
+
   // Setup headers for Table component
   const tableHeaders = [
     ...(hasWritePermission ? [{
@@ -1740,10 +1833,10 @@ const ClaimListView = () => {
     { label: 'Mã lỗi KH' },
     { label: 'Mã lỗi G7' },
     { label: 'Giá trị phạt' },
-    { label: 'Tổng giá trị phạt' },
+    { label: 'Tổng tiền phạt' },
     { label: 'LPN' },
     { label: 'Container' },
-    { label: 'Thời gian' },
+    { label: 'Thời gian Claim' },
     { label: 'Mã tham chiếu', className: 'text-left' },
     { label: 'Trạng thái' },
     ...(hasWritePermission ? [{ label: 'Thao tác' }] : [])
@@ -1831,7 +1924,7 @@ const ClaimListView = () => {
   const processModalTitle = (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingRight: '24px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <span style={{ margin: 0 }}>{modalMode === 'edit' ? 'Chỉnh sửa khiếu nại' : modalMode === 'process' ? 'Xử lý khiếu nại' : 'Chi tiết khiếu nại'}</span>
+        <span style={{ margin: 0 }}>{modalMode === 'edit' || modalMode === 'process' ? 'Xử lý khiếu nại' : 'Chi tiết khiếu nại'}</span>
         {activeDetailClaim && (
           <div style={{
             fontSize: '0.85rem',
@@ -1843,7 +1936,7 @@ const ClaimListView = () => {
             borderRadius: '6px',
             display: 'inline-block'
           }}>
-            {activeDetailClaim.claim_code} · {activeDetailClaim.product_name || activeDetailClaim.sku} · Ngày xuất: {activeDetailClaim.date || activeDetailClaim.period}
+            {activeDetailClaim.claim_code} · {activeDetailClaim.product_name || activeDetailClaim.sku} · Thời gian Claim: {activeDetailClaim.date || activeDetailClaim.period}
           </div>
         )}
       </div>
@@ -1968,14 +2061,22 @@ const ClaimListView = () => {
     <div className="claim-container">
       {/* SECTION 2: THREE SUMMARY CARDS */}
       <div className="overview-cards-grid">
-        <div className="summary-card" title={penaltyStats.breakdown}>
+        <div 
+          className="summary-card" 
+          style={{ transition: 'transform 0.2s ease' }}
+        >
           <div className="summary-card-left">
             <span className="summary-card-label">Tổng số tiền phạt</span>
             <span className="summary-card-value">
               {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(penaltyStats.totalSum)}
             </span>
           </div>
-          <div className="summary-card-icon-wrapper">
+          <div 
+            className="summary-card-icon-wrapper" 
+            style={{ cursor: 'pointer' }}
+            title="Nhấn để xem chi tiết thống kê theo tháng"
+            onClick={() => setIsAnalyticsOpen(true)}
+          >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <line x1="12" y1="1" x2="12" y2="23"></line>
               <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
@@ -1983,12 +2084,20 @@ const ClaimListView = () => {
           </div>
         </div>
 
-        <div className="summary-card">
+        <div 
+          className="summary-card"
+          style={{ transition: 'transform 0.2s ease' }}
+        >
           <div className="summary-card-left">
             <span className="summary-card-label">Tổng số vụ ghi nhận</span>
             <span className="summary-card-value">{filteredClaimsToDisplay.length}</span>
           </div>
-          <div className="summary-card-icon-wrapper">
+          <div 
+            className="summary-card-icon-wrapper" 
+            style={{ cursor: 'pointer' }}
+            title="Nhấn để xem chi tiết thống kê theo tháng"
+            onClick={() => setIsAnalyticsOpen(true)}
+          >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
               <polyline points="14 2 14 8 20 8"></polyline>
@@ -2002,185 +2111,481 @@ const ClaimListView = () => {
       </div>
 
       {/* SECTION 3: DETAILED REPORT HEADER */}
-      <div className="mgmt-toolbar card" style={{ marginBottom: '20px' }}>
-        <div className="toolbar-left" style={{ flex: 1 }}>
-          <div className="search-wrapper">
-            <Search size={18} className="search-icon" />
+      {/* SECTION 3: DETAILED REPORT HEADER */}
+      <div className="mgmt-toolbar card" style={{ 
+        marginBottom: '12px', 
+        flexShrink: 0, 
+        padding: '8px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderRadius: '10px',
+        backgroundColor: '#FFFFFF',
+        border: '1px solid #EADCC9',
+        height: '52px',
+        boxSizing: 'border-box'
+      }}>
+        {/* Left Side: Search + A↓Z + Filter */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+          {/* Search Input Box */}
+          <div className="search-wrapper" style={{ 
+            margin: 0, 
+            height: '36px', 
+            borderRadius: '20px', 
+            border: '1px solid #C4B5A5', 
+            padding: '0 14px',
+            width: '320px',
+            backgroundColor: '#FFFFFF',
+            display: 'flex',
+            alignItems: 'center'
+          }}>
+            <Search size={16} className="search-icon" style={{ color: '#8D6E63', marginRight: '8px' }} />
             <input 
               type="text" 
               placeholder="Search nhanh SKU, Cont, LPN..." 
               value={quickSearch}
               onChange={(e) => setQuickSearch(e.target.value)}
+              style={{
+                fontSize: '0.85rem',
+                fontWeight: '600',
+                color: '#2D1A12',
+                backgroundColor: 'transparent',
+                border: 'none',
+                outline: 'none',
+                width: '100%'
+              }}
             />
           </div>
 
-          <button
-            type="button"
-            className={`icon-btn-minimal ${isFilterBarOpen ? 'active' : ''}`}
-            onClick={() => setIsFilterBarOpen(!isFilterBarOpen)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              height: '36px',
-              border: '1px solid #EADCC9',
-              backgroundColor: isFilterBarOpen ? '#7B5233' : '#FAF6F0',
-              color: isFilterBarOpen ? '#FFFFFF' : '#7B5233',
-              fontWeight: 'bold',
-              borderRadius: '8px',
-              padding: '0 16px',
-              cursor: 'pointer',
-              fontSize: '0.8rem'
-            }}
-          >
-            <Filter size={14} />
-            Bộ lọc
-            {activeFiltersCount > 0 && (
-              <span style={{
-                backgroundColor: isFilterBarOpen ? '#FFFFFF' : '#7B5233',
-                color: isFilterBarOpen ? '#7B5233' : '#FFFFFF',
-                borderRadius: '50%',
-                width: '18px',
-                height: '18px',
-                display: 'inline-flex',
+          {/* Sort Button A↓Z */}
+          <div style={{ position: 'relative', display: 'inline-block' }}>
+            <button
+              type="button"
+              onClick={() => { setShowSortDropdown(!showSortDropdown); }}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '4px',
+                color: sortOption ? '#7B5233' : '#8D6E63',
+                display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '0.7rem',
-                fontWeight: 'bold',
-                marginLeft: '4px'
-              }}>
-                {activeFiltersCount}
-              </span>
-            )}
-          </button>
-
-          {/* SORT DROPDOWN */}
-          <div style={{ position: 'relative', display: 'inline-block' }}>
-            <select
-              value={sortOption}
-              onChange={(e) => setSortOption(e.target.value)}
-              className="select-minimal"
-              style={{
                 height: '36px',
-                borderColor: '#EADCC9',
-                color: '#7B5233',
-                fontWeight: 'bold',
-                borderRadius: '8px',
-                padding: '0 12px 0 28px',
-                cursor: 'pointer',
-                backgroundColor: '#FAF6F0',
                 outline: 'none',
-                fontSize: '0.8rem'
+                transition: 'all 0.2s ease'
               }}
+              title="Sắp xếp danh sách"
+              onMouseEnter={(e) => e.currentTarget.style.color = '#7B5233'}
+              onMouseLeave={(e) => e.currentTarget.style.color = sortOption ? '#7B5233' : '#8D6E63'}
             >
-              <option value="">Sắp xếp</option>
-              <option value="name-asc">Tên: A-Z</option>
-              <option value="name-desc">Tên: Z-A</option>
-              <option value="time-asc">Thời gian: Sớm nhất</option>
-              <option value="time-desc">Thời gian: Trễ nhất</option>
-            </select>
-            <svg 
-              style={{ position: 'absolute', left: '8px', top: '11px', pointerEvents: 'none', color: '#7B5233' }} 
-              width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+              {/* Custom A↓Z down arrow SVG */}
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="15" y1="4" x2="15" y2="20" />
+                <polyline points="11 16 15 20 19 16" />
+                <text x="3" y="10" fontFamily="sans-serif" fontSize="10" fontWeight="bold" fill="currentColor">A</text>
+                <text x="3" y="20" fontFamily="sans-serif" fontSize="10" fontWeight="bold" fill="currentColor">Z</text>
+              </svg>
+            </button>
+            {showSortDropdown && (
+              <div style={{
+                position: 'absolute', top: '40px', left: 0, zIndex: 100,
+                background: '#fff', border: '1px solid #EADCC9', borderRadius: '10px',
+                boxShadow: '0 8px 24px rgba(123,82,51,0.12)', padding: '6px 0',
+                minWidth: '190px', animation: 'fadeIn 0.15s ease'
+              }}>
+                {[
+                  { value: '', label: 'Mặc định' },
+                  { value: 'name-asc', label: 'Tên: A → Z' },
+                  { value: 'name-desc', label: 'Tên: Z → A' },
+                  { value: 'time-asc', label: 'Thời gian: Sớm nhất' },
+                  { value: 'time-desc', label: 'Thời gian: Mới nhất' }
+                ].map(item => (
+                  <div
+                    key={item.value}
+                    onClick={() => { setSortOption(item.value); setShowSortDropdown(false); }}
+                    style={{
+                      padding: '8px 16px', cursor: 'pointer', fontSize: '0.82rem',
+                      fontWeight: sortOption === item.value ? '700' : '500',
+                      color: sortOption === item.value ? '#7B5233' : '#5D4037',
+                      backgroundColor: sortOption === item.value ? '#FAF6F0' : 'transparent',
+                      transition: 'background 0.15s'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#FAF6F0'}
+                    onMouseLeave={e => e.currentTarget.style.backgroundColor = sortOption === item.value ? '#FAF6F0' : 'transparent'}
+                  >
+                    {item.label}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Filter Funnel Icon Button */}
+          <div style={{ position: 'relative', display: 'inline-block' }}>
+            <button
+              type="button"
+              onClick={() => setIsFilterBarOpen(!isFilterBarOpen)}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '4px',
+                color: isFilterBarOpen || activeFiltersCount > 0 ? '#7B5233' : '#8D6E63',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '36px',
+                outline: 'none',
+                transition: 'all 0.2s ease',
+                position: 'relative'
+              }}
+              title="Bộ lọc nâng cao"
+              onMouseEnter={(e) => e.currentTarget.style.color = '#7B5233'}
+              onMouseLeave={(e) => e.currentTarget.style.color = isFilterBarOpen || activeFiltersCount > 0 ? '#7B5233' : '#8D6E63'}
             >
-              <path d="M15 18H3M21 14H3M17 10H3M21 6H3"></path>
-            </svg>
+              <Filter size={20} strokeWidth={2.5} />
+              {activeFiltersCount > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: '-2px',
+                  right: '-2px',
+                  backgroundColor: '#7B5233',
+                  color: '#FFFFFF',
+                  borderRadius: '50%',
+                  width: '14px',
+                  height: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.6rem',
+                  fontWeight: 'bold'
+                }}>
+                  {activeFiltersCount}
+                </span>
+              )}
+            </button>
           </div>
         </div>
 
-        <div className="toolbar-right">
-          {hasWritePermission && (
+        {/* Right Side Actions: Khác, Nhập dữ liệu, Xuất dữ liệu, + Tạo mới */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          
+          {/* 1. NÚT KHÁC (Dropdown) */}
+          <div className="other-dropdown-container" style={{ position: 'relative' }}>
             <button
-              className="btn btn-primary"
-              onClick={handleProcessSelectedClaim}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                height: '36px',
-                padding: '0 16px',
-                borderRadius: '8px',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                backgroundColor: '#e65100',
-                color: '#fff'
-              }}
-            >
-              Xử lý khiếu nại
-            </button>
-          )}
-
-          {hasWritePermission && (
-            <button 
-              className="btn btn-primary" 
-              onClick={handleOpenAddNewClaim}
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setIsOtherDropdownOpen(!isOtherDropdownOpen); setIsImportDropdownOpen(false); }}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '8px',
-                height: '36px',
-                padding: '0 20px',
-                borderRadius: '8px',
+                height: '34px',
+                padding: '0 14px',
+                borderRadius: '6px',
                 fontWeight: 'bold',
+                fontSize: '0.82rem',
                 cursor: 'pointer',
-                backgroundColor: '#7B5233',
-                color: '#fff'
+                backgroundColor: '#4A2E1B',
+                color: '#FFFFFF',
+                border: 'none',
+                transition: 'background-color 0.2s',
+                boxShadow: 'none'
               }}
             >
-              <Plus size={16} />
-              Thêm mới
+              {/* Grid 4 square icon */}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+                <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+                <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+                <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+              </svg>
+              <span>Khác</span>
+            </button>
+            {isOtherDropdownOpen && (
+              <div 
+                className="actions-dropdown-menu"
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 6px)',
+                  right: 0,
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #EADCC9',
+                  borderRadius: '8px',
+                  boxShadow: '0 10px 25px rgba(123, 82, 51, 0.12)',
+                  minWidth: '200px',
+                  zIndex: 1000,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  padding: '6px 0',
+                  overflow: 'hidden',
+                  animation: 'slideDown 0.2s ease forwards',
+                  transformOrigin: 'top right'
+                }}
+              >
+                {hasWritePermission && (
+                  <button
+                    type="button"
+                    className="import-dropdown-item"
+                    onClick={() => { setIsOtherDropdownOpen(false); handleProcessSelectedClaim(); }}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: '600', fontSize: '0.85rem', color: '#2D1A12' }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <polyline points="9 11 12 14 22 4"></polyline>
+                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                      </svg>
+                      <span>Xử lý khiếu nại</span>
+                    </div>
+                    {claims.filter(c => c.status === 'Mới' || c.status === 'Đang xử lý').length > 0 && (
+                      <span style={{
+                        backgroundColor: '#7B5233',
+                        color: '#FFFFFF',
+                        borderRadius: '10px',
+                        padding: '2px 6px',
+                        fontSize: '0.7rem',
+                        fontWeight: 'bold',
+                        marginLeft: '8px'
+                      }}>
+                        {claims.filter(c => c.status === 'Mới' || c.status === 'Đang xử lý').length}
+                      </span>
+                    )}
+                  </button>
+                )}
+                
+                <button
+                  type="button"
+                  className="import-dropdown-item"
+                  onClick={() => { setIsOtherDropdownOpen(false); handleOpenPdfFolderModal(); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: '600', fontSize: '0.85rem', color: '#2D1A12' }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7B5233" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                  </svg>
+                  Thư mục PDF
+                </button>
+
+                {/* NGOẠI LỆ (EXCEPTIONS) BUTTON (MOVED HERE) */}
+                <button
+                  type="button"
+                  className="import-dropdown-item"
+                  onClick={() => { setIsOtherDropdownOpen(false); setIsExceptionModalOpen(true); setExpandedExceptionItems({}); }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: '600', fontSize: '0.85rem', color: exceptionData.totalCount > 0 ? '#C2410C' : '#2D1A12' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                      <line x1="12" y1="9" x2="12" y2="13"></line>
+                      <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                    </svg>
+                    <span>Ngoại lệ</span>
+                  </div>
+                  {exceptionData.totalCount > 0 && (
+                    <span style={{
+                      backgroundColor: '#C2410C',
+                      color: '#FFFFFF',
+                      borderRadius: '10px',
+                      padding: '2px 6px',
+                      fontSize: '0.7rem',
+                      fontWeight: 'bold'
+                    }}>
+                      {exceptionData.totalCount}
+                    </span>
+                  )}
+                </button>
+                
+                {hasWritePermission && selectedClaimIds.length > 0 && (
+                  <button
+                    type="button"
+                    className="import-dropdown-item"
+                    onClick={() => {
+                      if (selectedClaimIds.length === 0) return;
+                      setIsOtherDropdownOpen(false);
+                      const selectedClaims = claims.filter(c => selectedClaimIds.includes(c.id));
+                      setExpandedDeleteItems({});
+                      setDeleteConfirmation({
+                        items: selectedClaims,
+                        onConfirm: async () => {
+                          setLoading(true);
+                          const results = [];
+                          for (const claim of selectedClaims) {
+                            try {
+                              await claimService.deleteClaim(claim.id);
+                              results.push({ claim, success: true });
+                            } catch (error) {
+                              console.error(`Error deleting claim ${claim.id}:`, error);
+                              const errMsg = error.response?.data?.detail || error.message || 'Lỗi không xác định';
+                              results.push({ claim, success: false, error: errMsg });
+                            }
+                          }
+                          setLoading(false);
+                          setSelectedClaimIds([]);
+                          fetchClaims();
+                          
+                          const failures = results.filter(r => !r.success);
+                          if (failures.length > 0) {
+                            showModal('Kết quả xóa', `Đã xóa thành công ${results.length - failures.length}/${results.length} khiếu nại. Có ${failures.length} mục lỗi không xóa được.`, 'warning');
+                          }
+                        }
+                      });
+                    }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: '600', fontSize: '0.85rem', color: '#DC2626' }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                    Xóa các mục đã chọn
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 2. NÚT NHẬP DỮ LIỆU (Dropdown for PDF/Folder Ingestion) */}
+          <div className="import-dropdown-container" style={{ position: 'relative' }}>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setIsImportDropdownOpen(!isImportDropdownOpen); setIsOtherDropdownOpen(false); }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                height: '34px',
+                padding: '0 14px',
+                borderRadius: '6px',
+                fontWeight: 'bold',
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+                backgroundColor: '#4A2E1B',
+                color: '#FFFFFF',
+                border: 'none',
+                transition: 'background-color 0.2s',
+                boxShadow: 'none'
+              }}
+            >
+              {/* Import in-box icon */}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              <span>Nhập dữ liệu</span>
+            </button>
+            {isImportDropdownOpen && (
+              <div 
+                className="actions-dropdown-menu"
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 6px)',
+                  right: 0,
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #EADCC9',
+                  borderRadius: '8px',
+                  boxShadow: '0 10px 25px rgba(123, 82, 51, 0.12)',
+                  minWidth: '180px',
+                  zIndex: 1000,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  padding: '6px 0',
+                  overflow: 'hidden',
+                  animation: 'slideDown 0.2s ease forwards',
+                  transformOrigin: 'top right'
+                }}
+              >
+                {hasWritePermission && (
+                  <>
+                    <button
+                      type="button"
+                      className="import-dropdown-item"
+                      onClick={() => { setIsImportDropdownOpen(false); triggerPdfUpload(); }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: '600', fontSize: '0.85rem', color: '#2D1A12' }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                      </svg>
+                      Nhập file PDF
+                    </button>
+                    <div style={{ height: '1px', backgroundColor: '#F0E6D8', margin: '4px 0' }}></div>
+                    <button
+                      type="button"
+                      className="import-dropdown-item"
+                      onClick={() => { setIsImportDropdownOpen(false); triggerFolderUpload(); }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: '600', fontSize: '0.85rem', color: '#2D1A12' }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                      </svg>
+                      Nhập thư mục
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 3. NÚT XUẤT DỮ LIỆU */}
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={isExporting}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              height: '34px',
+              padding: '0 14px',
+              borderRadius: '6px',
+              fontWeight: 'bold',
+              fontSize: '0.82rem',
+              cursor: isExporting ? 'not-allowed' : 'pointer',
+              backgroundColor: '#4A2E1B',
+              color: '#FFFFFF',
+              border: 'none',
+              transition: 'background-color 0.2s',
+              boxShadow: 'none',
+              opacity: isExporting ? 0.7 : 1
+            }}
+          >
+            {/* Export out-of-box icon */}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <span>{isExporting ? 'Đang xuất...' : 'Xuất dữ liệu'}</span>
+          </button>
+
+          {/* 4. NÚT TẠO MỚI */}
+          {hasWritePermission && (
+            <button
+              type="button"
+              onClick={handleOpenAddNewClaim}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                height: '34px',
+                padding: '0 14px',
+                borderRadius: '6px',
+                fontWeight: 'bold',
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+                backgroundColor: '#4A2E1B',
+                color: '#FFFFFF',
+                border: 'none',
+                transition: 'background-color 0.2s',
+                boxShadow: 'none'
+              }}
+            >
+              <Plus size={14} strokeWidth={3} />
+              <span>Tạo mới</span>
             </button>
           )}
 
-          {hasWritePermission && (
-            <div className="import-dropdown-container" style={{ position: 'relative' }}>
-              <button
-                className="btn btn-outline"
-                onClick={() => setIsImportDropdownOpen(!isImportDropdownOpen)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  height: '36px',
-                  borderColor: '#EADCC9',
-                  color: '#7B5233',
-                  fontWeight: 'bold',
-                  borderRadius: '8px',
-                  padding: '0 16px',
-                  cursor: 'pointer',
-                  backgroundColor: '#fff'
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                  <polyline points="7 10 12 15 17 10"></polyline>
-                  <line x1="12" y1="15" x2="12" y2="3"></line>
-                </svg>
-                Import
-                <svg style={{ marginLeft: '6px', transform: isImportDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="6 9 12 15 18 9"></polyline>
-                </svg>
-              </button>
-              {isImportDropdownOpen && (
-                <div className="import-dropdown-menu" style={{ minWidth: '160px', position: 'absolute', top: '100%', right: 0, zIndex: 1000 }}>
-                  <button className="import-dropdown-item" onClick={() => { setIsImportDropdownOpen(false); triggerPdfUpload(); }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                      <polyline points="14 2 14 8 20 8"></polyline>
-                      <line x1="16" y1="13" x2="8" y2="13"></line>
-                      <line x1="16" y1="17" x2="8" y2="17"></line>
-                    </svg>
-                    File PDF
-                  </button>
-                  <button className="import-dropdown-item" onClick={() => { setIsImportDropdownOpen(false); triggerFolderUpload(); }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                    </svg>
-                    Thư mục PDF
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+        </div>
+
 
           {hasWritePermission && (
             <input
@@ -2203,124 +2608,62 @@ const ClaimListView = () => {
               onChange={handleFolderFileChange}
             />
           )}
-
-          <button
-            className="btn btn-outline"
-            onClick={handleExportExcel}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              height: '36px',
-              padding: '0 16px',
-              borderRadius: '8px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              border: '1px solid #EADCC9',
-              backgroundColor: '#fff',
-              color: '#7B5233'
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="17 8 12 3 7 8"></polyline>
-              <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
-            Export
-          </button>
-
-          {hasWritePermission && (
-            <button
-              className="btn btn-outline"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                height: '36px',
-                borderColor: selectedClaimIds.length === 0 ? '#CBD5E1' : '#A0301B',
-                color: selectedClaimIds.length === 0 ? '#94A3B8' : '#A0301B',
-                cursor: selectedClaimIds.length === 0 ? 'not-allowed' : 'pointer',
-                fontWeight: 'bold',
-                borderRadius: '8px',
-                padding: '0 16px',
-                backgroundColor: '#fff'
-              }}
-              disabled={selectedClaimIds.length === 0}
-              onClick={() => {
-                const selectedClaims = claims.filter(c => selectedClaimIds.includes(c.id));
-                setExpandedDeleteItems({});
-                setDeleteConfirmation({
-                  items: selectedClaims,
-                  onConfirm: async () => {
-                    setLoading(true);
-                    const results = [];
-                    for (const claim of selectedClaims) {
-                      try {
-                        await claimService.deleteClaim(claim.id);
-                        results.push({ claim, success: true });
-                      } catch (error) {
-                        console.error(`Error deleting claim ${claim.id}:`, error);
-                        const errMsg = error.response?.data?.detail || error.message || 'Lỗi không xác định';
-                        results.push({ claim, success: false, error: errMsg });
-                      }
-                    }
-                    setLoading(false);
-                    
-                    const succeeded = results.filter(r => r.success);
-                    const failed = results.filter(r => !r.success);
-                    
-                    const remainingClaims = claims.filter(c => !succeeded.map(s => s.claim.id).includes(c.id));
-                    setClaims(remainingClaims);
-                    setSelectedClaimIds(prev => prev.filter(id => failed.map(f => f.claim.id).includes(id)));
-                    
-                    if (remainingClaims.length === 0) {
-                      setLatestImport(null);
-                    }
-                    
-                    const isAllSuccess = failed.length === 0;
-                    const msgTitle = isAllSuccess ? 'Xóa thành công' : 'Kết quả xóa';
-                    const msgType = isAllSuccess ? 'success' : failed.length === selectedClaims.length ? 'error' : 'info';
-                    
-                    const notificationContent = (
-                      <div style={{ width: '100%', maxHeight: '400px', overflowY: 'auto', overflowX: 'hidden', paddingRight: '4px' }}>
-                        {succeeded.length > 0 && (
-                          <div style={{ marginBottom: failed.length > 0 ? '16px' : '0' }}>
-                            <p style={{ fontWeight: '600', color: '#059669', marginBottom: '8px' }}>
-                              Đã xóa thành công {succeeded.length} khiếu nại:
-                            </p>
-                            <DeleteResultList items={succeeded} type="success" />
-                          </div>
-                        )}
-                        
-                        {failed.length > 0 && (
-                          <div>
-                            <p style={{ fontWeight: '600', color: '#DC2626', marginBottom: '8px' }}>
-                              Xóa thất bại {failed.length} khiếu nại:
-                            </p>
-                            <DeleteResultList items={failed} type="error" />
-                          </div>
-                        )}
-                      </div>
-                    );
-                    
-                    showModal(msgTitle, notificationContent, msgType);
-                  }
-                });
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-              </svg>
-              Xóa đã chọn
-            </button>
-          )}
-        </div>
       </div>
 
       {/* INLINE EXPANDABLE FILTER BAR */}
       {isFilterBarOpen && (
         <div className="filter-inline-bar">
+          {/* CATEGORY 0: HIỂN THỊ SỐ DÒNG */}
+          <div className="filter-dropdown-wrapper">
+            <button
+              type="button"
+              className={`btn-filter-dropdown ${activeDropdown === 'rows' ? 'active' : ''}`}
+              onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === 'rows' ? null : 'rows'); }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="9" y1="9" x2="15" y2="9"></line>
+                <line x1="9" y1="13" x2="15" y2="13"></line>
+                <line x1="9" y1="17" x2="13" y2="17"></line>
+              </svg>
+              <span>Hiển thị: {rowsPerPage === Infinity ? 'Tất cả' : `${rowsPerPage} dòng`}</span>
+              <span className="dropdown-arrow">▾</span>
+            </button>
+            {activeDropdown === 'rows' && (
+              <div className="filter-dropdown-card" style={{ width: '160px', padding: '12px' }} onClick={(e) => e.stopPropagation()}>
+                <div className="filter-field-group" style={{ margin: 0 }}>
+                  <label className="filter-field-label">Hiển thị số dòng</label>
+                  <select
+                    value={rowsPerPage === Infinity ? 'all' : rowsPerPage}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setRowsPerPage(val === 'all' ? Infinity : parseInt(val, 10));
+                      setCurrentPage(1);
+                      setActiveDropdown(null);
+                    }}
+                    style={{
+                      width: '100%',
+                      height: '32px',
+                      border: '1px solid #EADCC9',
+                      borderRadius: '6px',
+                      padding: '0 8px',
+                      fontSize: '0.8rem',
+                      color: '#7B5233',
+                      fontWeight: 'bold',
+                      backgroundColor: '#FAF6F0',
+                      outline: 'none'
+                    }}
+                  >
+                    <option value={10}>10 dòng</option>
+                    <option value={15}>15 dòng</option>
+                    <option value={20}>20 dòng</option>
+                    <option value="all">Tất cả</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* CATEGORY 1: THỜI GIAN */}
           <div className="filter-dropdown-wrapper">
             <button
@@ -2552,10 +2895,10 @@ const ClaimListView = () => {
                   )}
                 </div>
                 <div className="filter-field-group" style={{ position: 'relative' }}>
-                  <label className="filter-field-label">Tổng giá trị phạt</label>
+                  <label className="filter-field-label">Tổng tiền phạt</label>
                   <input
                     type="text"
-                    placeholder="Tổng giá trị phạt..."
+                    placeholder="Tổng tiền phạt..."
                     value={editPenaltyTotal}
                     onChange={(e) => setEditPenaltyTotal(e.target.value)}
                     className="filter-dropdown-input"
@@ -2889,16 +3232,6 @@ const ClaimListView = () => {
                             setModalMode('edit');
                           }}
                         >
-                          Chỉnh sửa
-                        </button>
-                        <button 
-                          className="action-menu-item" 
-                          onClick={() => {
-                            setActionMenuId(null);
-                            setActiveDetailClaim(claim);
-                            setModalMode('process');
-                          }}
-                        >
                           Xử lý khiếu nại
                         </button>
                       </div>
@@ -2925,263 +3258,6 @@ const ClaimListView = () => {
 
 
 
-      {/* CENTERED STEP-BY-STEP PROGRESS MODAL */}
-      {uploadingState.isOpen && (
-        <div className="import-progress-overlay">
-          <div className="import-progress-modal">
-            <h2 style={{
-              fontSize: '1.25rem',
-              fontWeight: 800,
-              color: 'var(--text-dark)',
-              marginBottom: '20px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px'
-            }}>
-              <svg style={{ color: 'var(--primary-color)', animation: 'spin 1.5s linear infinite' }} width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="12"></circle>
-              </svg>
-              {uploadingState.title}
-            </h2>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginBottom: '24px' }}>
-              <div className={`import-step-item ${uploadingState.progress >= 10 ? (uploadingState.progress > 20 ? 'import-step-done' : 'import-step-active') : 'import-step-pending'}`}>
-                <span style={{ fontSize: '1.1rem', width: '20px', display: 'inline-block' }}>
-                  {uploadingState.progress > 20 ? '✓' : '●'}
-                </span>
-                <span>Đang đọc cấu trúc PDF...</span>
-              </div>
-
-              <div className={`import-step-item ${uploadingState.progress >= 20 ? (uploadingState.progress > 50 ? 'import-step-done' : 'import-step-active') : 'import-step-pending'}`}>
-                <span style={{ fontSize: '1.1rem', width: '20px', display: 'inline-block' }}>
-                  {uploadingState.progress > 50 ? '✓' : '●'}
-                </span>
-                <span>Đang trích xuất dữ liệu khiếu nại...</span>
-              </div>
-
-              <div className={`import-step-item ${uploadingState.progress >= 50 ? (uploadingState.progress > 80 ? 'import-step-done' : 'import-step-active') : 'import-step-pending'}`}>
-                <span style={{ fontSize: '1.1rem', width: '20px', display: 'inline-block' }}>
-                  {uploadingState.progress > 80 ? '✓' : '●'}
-                </span>
-                <span>Đang liên kết hình ảnh minh chứng...</span>
-              </div>
-
-              <div className={`import-step-item ${uploadingState.progress >= 80 ? (uploadingState.progress > 95 ? 'import-step-done' : 'import-step-active') : 'import-step-pending'}`}>
-                <span style={{ fontSize: '1.1rem', width: '20px', display: 'inline-block' }}>
-                  {uploadingState.progress > 95 ? '✓' : '●'}
-                </span>
-                <span>Đang kết xuất tệp Excel...</span>
-              </div>
-
-              <div className={`import-step-item ${uploadingState.progress >= 95 ? (uploadingState.progress === 100 ? 'import-step-done' : 'import-step-active') : 'import-step-pending'}`}>
-                <span style={{ fontSize: '1.1rem', width: '20px', display: 'inline-block' }}>
-                  {uploadingState.progress === 100 ? '✓' : '●'}
-                </span>
-                <span>Đang lưu trữ dữ liệu...</span>
-              </div>
-            </div>
-
-            <div className="progress-container">
-              <div className="progress-bar-bg" style={{
-                width: '100%',
-                height: '8px',
-                backgroundColor: '#E5E7EB',
-                borderRadius: '4px',
-                overflow: 'hidden',
-                position: 'relative'
-              }}>
-                <div className="progress-bar-fill" style={{
-                  width: `${uploadingState.progress}%`,
-                  height: '100%',
-                  backgroundColor: uploadingState.progress === 100 ? '#16A34A' : '#7B5233',
-                  borderRadius: '4px',
-                  transition: 'width 0.4s ease, background-color 0.3s ease'
-                }}></div>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#8D6E63', marginTop: '8px', fontWeight: '600' }}>
-                <span style={{ flex: 1, wordBreak: 'break-word', paddingRight: '12px' }}>{uploadingState.statusText}</span>
-                <span style={{ flexShrink: 0 }}>{uploadingState.progress}%</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* IMPORT SUCCESS DETAILS MODAL */}
-      {successSummary.isOpen && (
-        <div className="filter-modal-backdrop" style={{ zIndex: 1600 }}>
-          <div className="filter-modal" style={{ maxWidth: '960px', width: '90%', maxHeight: '85vh' }}>
-            <div className="filter-modal-header" style={{ borderBottom: '1px solid #E5E7EB', padding: '16px 20px', backgroundColor: '#ECFDF5' }}>
-              <div className="filter-modal-title-area">
-                <h3 className="filter-modal-title" style={{ color: '#065F46', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                  </svg>
-                  Import PDF thành công
-                </h3>
-              </div>
-              <button className="filter-modal-close" onClick={() => setSuccessSummary(prev => ({ ...prev, isOpen: false }))}>&times;</button>
-            </div>
-
-            <div className="filter-modal-body" style={{
-              display: 'grid',
-              gridTemplateColumns: successSummary.warningsCount > 0 ? '240px 1fr 1fr' : '240px 1fr',
-              gridTemplateRows: successSummary.claimsCount === 0 ? 'auto 1fr' : '1fr',
-              gap: '20px',
-              padding: '20px',
-              backgroundColor: '#FFFFFF',
-              height: '450px',
-              maxHeight: 'calc(85vh - 160px)',
-              overflow: 'hidden'
-            }}>
-              {successSummary.claimsCount === 0 && (
-                <div style={{
-                  gridColumn: '1 / -1',
-                  backgroundColor: '#FAF6F0',
-                  border: '1px solid #7B5233',
-                  borderRadius: '8px',
-                  padding: '12px 16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  color: '#2D1A12',
-                  fontSize: '0.85rem',
-                  fontWeight: '500',
-                  lineHeight: '1.5',
-                  boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
-                }}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ flexShrink: 0, color: '#7B5233' }}>
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="16" x2="12" y2="12"></line>
-                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                  </svg>
-                  <span>
-                    <strong>Thông báo:</strong> File PDF này không có thêm dòng khiếu nại mới nào vì toàn bộ dữ liệu đã được nhập từ trước (hệ thống tự động bỏ qua để tránh ghi đè hoặc tạo dữ liệu trùng lặp).
-                  </span>
-                </div>
-              )}
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', height: '100%' }}>
-                <div style={{ backgroundColor: '#FAF6F0', padding: '12px', borderRadius: '8px', border: '1px solid #EADCC9', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ fontSize: '0.8rem', color: '#8D6E63', fontWeight: '600' }}>Mã lô (Batch ID)</div>
-                  <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#2D1A12', marginTop: '2px', wordBreak: 'break-all' }}>{successSummary.batchId}</div>
-                </div>
-                <div style={{ backgroundColor: '#FAF6F0', padding: '12px', borderRadius: '8px', border: '1px solid #EADCC9', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ fontSize: '0.8rem', color: '#8D6E63', fontWeight: '600' }}>Số dòng đã trích xuất</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#2D1A12', marginTop: '2px' }}>{successSummary.claimsCount}</div>
-                </div>
-                <div style={{ backgroundColor: '#FAF6F0', padding: '12px', borderRadius: '8px', border: '1px solid #EADCC9', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ fontSize: '0.8rem', color: '#8D6E63', fontWeight: '600' }}>Ảnh minh chứng đã khớp</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#2D1A12', marginTop: '2px' }}>{successSummary.photoCount}</div>
-                </div>
-                <div style={{ backgroundColor: '#FAF6F0', padding: '12px', borderRadius: '8px', border: '1px solid #EADCC9', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ fontSize: '0.8rem', color: '#8D6E63', fontWeight: '600' }}>Số cảnh báo lỗi cấu trúc</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#DC2626', marginTop: '2px' }}>{successSummary.warningsCount}</div>
-                </div>
-              </div>
-
-              {successSummary.fileStats && successSummary.fileStats.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', height: '100%', overflow: 'hidden' }}>
-                  <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#1E293B', flexShrink: 0 }}>
-                    Danh sách file PDF đã xử lý ({successSummary.fileStats.length} file - {successSummary.claimsCount} dòng):
-                  </span>
-                  <div style={{
-                    flex: 1,
-                    overflowY: 'auto',
-                    backgroundColor: '#F8FAFC',
-                    border: '1px solid #E2E8F0',
-                    borderRadius: '6px',
-                    padding: '8px 12px',
-                    fontSize: '0.8rem',
-                    color: '#334155',
-                    lineHeight: '1.6'
-                  }}>
-                    {successSummary.fileStats.map((file, index) => (
-                      <div key={index} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: index < successSummary.fileStats.length - 1 ? '1px solid #F1F5F9' : 'none', padding: '6px 0', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }} title={file.filename}>
-                          📄 {file.filename}
-                        </span>
-                        <span style={{ color: '#0F172A', fontWeight: '600', flexShrink: 0 }}>
-                          {file.claims_count} dòng ({file.period || 'N/A'})
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '6px', fontSize: '0.8rem', color: '#64748B' }}>
-                  Không có danh sách file
-                </div>
-              )}
-
-              {successSummary.warningsCount > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', height: '100%', overflow: 'hidden' }}>
-                  <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#EA580C', flexShrink: 0 }}>
-                    Danh sách cảnh báo ({successSummary.warningsCount}):
-                  </span>
-                  <div style={{
-                    flex: 1,
-                    overflowY: 'auto',
-                    backgroundColor: '#FFF7ED',
-                    border: '1px solid #FFEDD5',
-                    borderRadius: '6px',
-                    padding: '8px 12px',
-                    fontSize: '0.8rem',
-                    color: '#C2410C',
-                    lineHeight: '1.4'
-                  }}>
-                    {successSummary.warnings.map((warn, index) => (
-                      <div key={index} style={{ marginBottom: '6px', borderBottom: index < successSummary.warnings.length - 1 ? '1px solid #FFEDD5' : 'none', paddingBottom: '4px' }}>
-                        • {warn}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="filter-modal-footer" style={{ borderTop: '1px solid #E5E7EB', padding: '12px 20px', display: 'flex', gap: '8px', justifyContent: 'flex-end', backgroundColor: '#F9FAFB' }}>
-              <button
-                type="button"
-                className="btn-modal-apply"
-                onClick={() => setSuccessSummary(prev => ({ ...prev, isOpen: false }))}
-              >
-                Đồng ý
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* INGESTION ERROR MODAL */}
-      {importError.isOpen && (
-        <div className="filter-modal-backdrop" style={{ zIndex: 1600 }}>
-          <div className="filter-modal" style={{ maxWidth: '450px' }}>
-            <div className="filter-modal-header" style={{ borderBottom: '1px solid #E5E7EB', padding: '14px 20px', backgroundColor: '#FEF2F2' }}>
-              <div className="filter-modal-title-area">
-                <h3 className="filter-modal-title" style={{ color: '#991B1B', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="8" x2="12" y2="12"></line>
-                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                  </svg>
-                  Lỗi Nhập PDF
-                </h3>
-              </div>
-              <button className="filter-modal-close" onClick={() => setImportError(prev => ({ ...prev, isOpen: false }))}>&times;</button>
-            </div>
-            <div className="filter-modal-body" style={{ padding: '20px', fontSize: '0.85rem', color: '#1F2937', backgroundColor: '#FFFFFF', whiteSpace: 'pre-wrap' }}>
-              {importError.message}
-            </div>
-            <div className="filter-modal-footer" style={{ borderTop: '1px solid #E5E7EB', padding: '12px 20px', display: 'flex', justifyContent: 'flex-end', backgroundColor: '#F9FAFB' }}>
-              <button type="button" className="btn-modal-apply" style={{ backgroundColor: '#DC2626' }} onClick={() => setImportError(prev => ({ ...prev, isOpen: false }))}>
-                Đóng
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* POPUP XỬ LÝ KHIẾU NẠI (Sử dụng FormModal dùng chung) */}
       <FormModal
@@ -3195,6 +3271,34 @@ const ClaimListView = () => {
         leftFooterActions={claimNavFooterActions}
         leftSideAction={claimNavLeftSideAction}
         rightSideAction={claimNavRightSideAction}
+        headerActions={
+          modalMode === 'view' && (
+            <button
+              type="button"
+              title="Xử lý khiếu nại"
+              onClick={() => setModalMode('edit')}
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '1.25rem',
+                cursor: 'pointer',
+                padding: '4px 6px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'transform 0.15s ease',
+                outline: 'none'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.2)'}
+              onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7B5233" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 20h9"></path>
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+              </svg>
+            </button>
+          )
+        }
       >
         <div className="add-claim-layout-split">
           {/* Left Column: Form Inputs */}
@@ -3207,8 +3311,8 @@ const ClaimListView = () => {
                   value={processDongHang}
                   onChange={(e) => setProcessDongHang(e.target.value)}
                   className="add-claim-select"
-                  disabled={modalMode !== 'edit'}
-                  style={modalMode !== 'edit' ? disabledFieldStyle : {}}
+                  disabled
+                  style={disabledFieldStyle}
                 >
                   {['Atlas', 'Oak', 'Maple', 'Pine'].map(opt => (
                     <option key={opt} value={opt}>{opt}</option>
@@ -3224,8 +3328,8 @@ const ClaimListView = () => {
                   value={processLoaiClaim}
                   onChange={(e) => setProcessLoaiClaim(e.target.value)}
                   className="add-claim-select"
-                  disabled={modalMode !== 'edit'}
-                  style={modalMode !== 'edit' ? disabledFieldStyle : {}}
+                  disabled
+                  style={disabledFieldStyle}
                 >
                   {['Khách nhắc nhở', 'Đền bù', 'Trả hàng', 'Khác'].map(opt => (
                     <option key={opt} value={opt}>{opt}</option>
@@ -3247,8 +3351,8 @@ const ClaimListView = () => {
                   value={processMaThamChieu}
                   onChange={(e) => setProcessMaThamChieu(e.target.value)}
                   className="add-claim-input"
-                  disabled={modalMode !== 'edit'}
-                  style={modalMode !== 'edit' ? disabledFieldStyle : {}}
+                  disabled
+                  style={disabledFieldStyle}
                 />
               </div>
               <div className="add-claim-field">
@@ -3259,8 +3363,8 @@ const ClaimListView = () => {
                   value={processTenSanPham}
                   onChange={(e) => setProcessTenSanPham(e.target.value)}
                   className="add-claim-input"
-                  disabled={modalMode !== 'edit'}
-                  style={modalMode !== 'edit' ? disabledFieldStyle : {}}
+                  disabled
+                  style={disabledFieldStyle}
                 />
               </div>
             </div>
@@ -3274,8 +3378,8 @@ const ClaimListView = () => {
                     value={processMucPhat}
                     onChange={(e) => setProcessMucPhat(e.target.value)}
                     className="add-claim-select"
-                    disabled={modalMode !== 'edit'}
-                    style={modalMode !== 'edit' ? disabledFieldStyle : {}}
+                    disabled
+                    style={disabledFieldStyle}
                   >
                     {['Nhắc nhở', 'Phạt tiền', 'Hủy đơn'].map(opt => (
                       <option key={opt} value={opt}>{opt}</option>
@@ -3293,8 +3397,8 @@ const ClaimListView = () => {
                     value={processGiaTriPhat}
                     onChange={(e) => setProcessGiaTriPhat(e.target.value)}
                     className="add-claim-input"
-                    disabled={modalMode !== 'edit'}
-                    style={modalMode !== 'edit' ? disabledFieldStyle : {}}
+                    disabled
+                    style={disabledFieldStyle}
                   />
                 </div>
                 <div className="add-claim-field" style={{ flex: '1' }}>
@@ -3317,8 +3421,8 @@ const ClaimListView = () => {
                     value={processMaLoi}
                     onChange={(e) => setProcessMaLoi(e.target.value)}
                     className="add-claim-input"
-                    disabled={modalMode !== 'edit'}
-                    style={modalMode !== 'edit' ? disabledFieldStyle : {}}
+                    disabled
+                    style={disabledFieldStyle}
                   />
                 </div>
                 <div className="add-claim-field" style={{ flex: '1' }}>
@@ -3336,7 +3440,7 @@ const ClaimListView = () => {
               </div>
             </div>
 
-            {/* Row 4: LPN & Mã cont & Ngày xuất */}
+            {/* Row 4: LPN & Mã cont & Thời gian Claim */}
             <div className="add-claim-row add-claim-grid-3">
               <div className="add-claim-field">
                 <label className="add-claim-label">
@@ -3352,8 +3456,8 @@ const ClaimListView = () => {
                   value={processLpn}
                   onChange={(e) => setProcessLpn(e.target.value)}
                   className="add-claim-input"
-                  disabled={modalMode !== 'edit'}
-                  style={modalMode !== 'edit' ? disabledFieldStyle : {}}
+                  disabled
+                  style={disabledFieldStyle}
                 />
               </div>
               <div className="add-claim-field">
@@ -3375,14 +3479,15 @@ const ClaimListView = () => {
                 />
               </div>
               <div className="add-claim-field">
-                <label className="add-claim-label">Ngày xuất</label>
+                <label className="add-claim-label">Thời gian Claim</label>
                 <input
-                  type="date"
+                  type="text"
                   value={processNgayXuat}
                   onChange={(e) => setProcessNgayXuat(e.target.value)}
                   className="add-claim-input"
                   disabled
                   style={disabledFieldStyle}
+                  placeholder="MM/YYYY"
                 />
               </div>
             </div>
@@ -3430,8 +3535,8 @@ const ClaimListView = () => {
                   value={processLinkCapa}
                   onChange={(e) => setProcessLinkCapa(e.target.value)}
                   className="add-claim-input"
-                  disabled={modalMode !== 'edit'}
-                  style={modalMode !== 'edit' ? disabledFieldStyle : {}}
+                  disabled
+                  style={disabledFieldStyle}
                 />
               </div>
             </div>
@@ -3779,7 +3884,7 @@ const ClaimListView = () => {
               </div>
             </div>
 
-            {/* Row 4: LPN & Mã cont & Ngày xuất */}
+            {/* Row 4: LPN & Mã cont & Thời gian Claim */}
             <div className="add-claim-row add-claim-grid-3">
               <div className="add-claim-field">
                 <label className="add-claim-label">
@@ -3814,7 +3919,7 @@ const ClaimListView = () => {
                 />
               </div>
               <div className="add-claim-field">
-                <label className="add-claim-label">Ngày xuất <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span></label>
+                <label className="add-claim-label">Thời gian Claim <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span></label>
                 <input
                   type="date"
                   value={addNgayXuat}
@@ -4058,17 +4163,37 @@ const ClaimListView = () => {
             left: 0,
             right: 0,
             bottom: 0,
-            background: 'rgba(0, 0, 0, 0.75)',
-            backdropFilter: 'blur(6px)',
+            background: 'rgba(0, 0, 0, 0.85)',
+            backdropFilter: 'blur(8px)',
             zIndex: 2000,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            cursor: 'zoom-out',
-            animation: 'fadeIn 0.2s ease'
+            overflow: 'hidden',
+            cursor: zoomScale > 1 ? (isZoomDragging ? 'grabbing' : 'grab') : 'zoom-out',
+            animation: 'fadeIn 0.2s ease',
+            userSelect: 'none'
           }}
           onClick={() => setPreviewImage(null)}
+          onWheel={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const zoomFactor = 0.15;
+            let newScale = zoomScale;
+            if (e.deltaY < 0) {
+              // Zoom in
+              newScale = Math.min(zoomScale + zoomFactor, 5);
+            } else {
+              // Zoom out
+              newScale = Math.max(zoomScale - zoomFactor, 1);
+            }
+            if (newScale === 1) {
+              setZoomPosition({ x: 0, y: 0 });
+            }
+            setZoomScale(newScale);
+          }}
         >
+          {/* ZOOMABLE IMAGE */}
           <img
             src={previewImage}
             alt="Zoomed preview"
@@ -4077,9 +4202,479 @@ const ClaimListView = () => {
               maxHeight: '90%',
               borderRadius: '8px',
               boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
-              objectFit: 'contain'
+              objectFit: 'contain',
+              transform: `translate(${zoomPosition.x}px, ${zoomPosition.y}px) scale(${zoomScale})`,
+              cursor: zoomScale > 1 ? (isZoomDragging ? 'grabbing' : 'grab') : 'zoom-in',
+              transition: isZoomDragging ? 'none' : 'transform 0.15s cubic-bezier(0.25, 0.8, 0.25, 1)',
+              userSelect: 'none',
+              pointerEvents: 'auto'
             }}
+            onMouseDown={(e) => {
+              if (zoomScale <= 1) return;
+              e.preventDefault();
+              setIsZoomDragging(true);
+              setZoomDragStart({
+                x: e.clientX - zoomPosition.x,
+                y: e.clientY - zoomPosition.y
+              });
+            }}
+            onMouseMove={(e) => {
+              if (!isZoomDragging) return;
+              e.preventDefault();
+              setZoomPosition({
+                x: e.clientX - zoomDragStart.x,
+                y: e.clientY - zoomDragStart.y
+              });
+            }}
+            onMouseUp={() => setIsZoomDragging(false)}
+            onMouseLeave={() => setIsZoomDragging(false)}
+            onClick={(e) => e.stopPropagation()}
           />
+
+          {/* FLOATING CONTROL BAR */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '32px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              display: 'flex',
+              gap: '16px',
+              backgroundColor: 'rgba(0, 0, 0, 0.75)',
+              padding: '10px 24px',
+              borderRadius: '30px',
+              border: '1px solid rgba(255, 255, 255, 0.25)',
+              backdropFilter: 'blur(8px)',
+              zIndex: 2100,
+              alignItems: 'center',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* THU NHỎ (ZOOM OUT) */}
+            <button
+              type="button"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#FFFFFF',
+                width: '36px',
+                height: '36px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                borderRadius: '50%',
+                transition: 'background-color 0.2s',
+                outline: 'none'
+              }}
+              onClick={() => {
+                const newScale = Math.max(zoomScale - 0.25, 1);
+                if (newScale === 1) setZoomPosition({ x: 0, y: 0 });
+                setZoomScale(newScale);
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              title="Thu nhỏ"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                <line x1="8" y1="11" x2="14" y2="11"></line>
+              </svg>
+            </button>
+
+            {/* PHẦN TRĂM ZOOM */}
+            <span style={{ color: '#FFFFFF', fontSize: '0.9rem', fontWeight: '800', minWidth: '56px', textAlign: 'center', userSelect: 'none', fontFamily: 'monospace' }}>
+              {Math.round(zoomScale * 100)}%
+            </span>
+
+            {/* PHÓNG TO (ZOOM IN) */}
+            <button
+              type="button"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#FFFFFF',
+                width: '36px',
+                height: '36px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                borderRadius: '50%',
+                transition: 'background-color 0.2s',
+                outline: 'none'
+              }}
+              onClick={() => setZoomScale(prev => Math.min(prev + 0.25, 5))}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              title="Phóng to"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                <line x1="11" y1="8" x2="11" y2="14"></line>
+                <line x1="8" y1="11" x2="14" y2="11"></line>
+              </svg>
+            </button>
+
+            {/* ĐẶT LẠI (RESET) */}
+            <button
+              type="button"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#FFFFFF',
+                width: '36px',
+                height: '36px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                borderRadius: '50%',
+                transition: 'background-color 0.2s',
+                outline: 'none'
+              }}
+              onClick={() => {
+                setZoomScale(1);
+                setZoomPosition({ x: 0, y: 0 });
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              title="Đặt lại kích thước"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M23 4v6h-6"></path>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+              </svg>
+            </button>
+
+            {/* PHÂN CÁCH (SEPARATOR) */}
+            <div style={{ width: '1px', height: '20px', backgroundColor: 'rgba(255, 255, 255, 0.25)' }}></div>
+
+            {/* ĐÓNG (CLOSE) */}
+            <button
+              type="button"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#FFFFFF',
+                width: '36px',
+                height: '36px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                borderRadius: '50%',
+                transition: 'all 0.2s ease',
+                outline: 'none'
+              }}
+              onClick={() => setPreviewImage(null)}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.85)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              title="Đóng (Esc)"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* POPUP THƯ MỤC PDF */}
+      {isPdfFolderModalOpen && (
+        <div className="add-claim-backdrop" style={{ zIndex: 1998 }} onClick={() => setIsPdfFolderModalOpen(false)}>
+          <div className="form-modal-wrapper" onClick={(e) => e.stopPropagation()}>
+            <div className="add-claim-modal" style={{ width: 'min(95vw, 850px)', display: 'flex', flexDirection: 'column', height: '80vh', border: '1px solid #EADCC9', borderRadius: '12px', boxShadow: '0 20px 50px rgba(123, 82, 51, 0.15)', overflow: 'hidden' }}>
+              
+              {/* Header */}
+              <div className="add-claim-header" style={{ padding: '16px 24px', borderBottom: '1px solid #EADCC9', backgroundColor: '#FFFDFB' }}>
+                <h2 className="add-claim-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#7B5233', margin: 0, fontSize: '1.2rem', fontWeight: 'bold' }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: '#7B5233' }}>
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                  </svg>
+                  Thư mục PDF đã nhập ({importedPdfs.length})
+                </h2>
+                <button
+                  type="button"
+                  className="add-claim-icon-btn"
+                  title="Đóng"
+                  onClick={() => setIsPdfFolderModalOpen(false)}
+                  style={{ fontSize: '1.6rem', padding: '0 6px', lineHeight: 1, background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}
+                >
+                  &times;
+                </button>
+              </div>
+
+              {/* Sub-header with Search */}
+              <div style={{ padding: '12px 24px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #F0E6D8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="search-wrapper" style={{ margin: 0, width: '320px', height: '32px', position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <Search size={14} className="search-icon" style={{ position: 'absolute', left: '10px', color: '#A1887F' }} />
+                  <input
+                    type="text"
+                    placeholder="Tìm nhanh tên file PDF..."
+                    value={pdfSearchQuery}
+                    onChange={(e) => setPdfSearchQuery(e.target.value)}
+                    style={{ fontSize: '0.82rem', width: '100%', height: '100%', padding: '0 12px 0 32px', border: '1px solid #EADCC9', borderRadius: '6px', outline: 'none', backgroundColor: '#FFFFFF' }}
+                  />
+                </div>
+              </div>
+
+              {/* Body (Table List) */}
+              <div className="add-claim-body" style={{ flex: 1, overflowY: 'auto', padding: '16px 24px', backgroundColor: '#FFFFFF' }}>
+                {importedPdfs.filter(pdf => pdf.original_name.toLowerCase().includes(pdfSearchQuery.toLowerCase())).length === 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#8D6E63', gap: '12px' }}>
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.5">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                      <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    <span style={{ fontWeight: '600', fontSize: '0.9rem' }}>Chưa có file PDF nào được lưu trữ hoặc tìm thấy.</span>
+                  </div>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1.5px solid #EADCC9', color: '#7B5233', fontWeight: 'bold', textAlign: 'left' }}>
+                        <th style={{ padding: '10px 8px' }}>Tên file gốc</th>
+                        <th style={{ padding: '10px 8px', width: '120px' }}>Dung lượng</th>
+                        <th style={{ padding: '10px 8px', width: '160px' }}>Thời gian import</th>
+                        <th style={{ padding: '10px 8px', width: '80px', textAlign: 'center' }}>Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importedPdfs
+                        .filter(pdf => pdf.original_name.toLowerCase().includes(pdfSearchQuery.toLowerCase()))
+                        .map((pdf) => (
+                          <tr 
+                            key={pdf.filename} 
+                            style={{ borderBottom: '1px solid #F0E6D8', color: '#2D1A12', transition: 'background-color 0.15s', cursor: 'pointer' }} 
+                            className="table-row-hover"
+                            onClick={(e) => {
+                              if (e.target.closest('.pdf-action-menu-container') || e.target.closest('.action-menu')) {
+                                return;
+                              }
+                              setSelectedPdfForPreview(pdf);
+                            }}
+                          >
+                            <td style={{ padding: '12px 8px', fontWeight: '500', wordBreak: 'break-all' }}>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedPdfForPreview(pdf)}
+                                style={{
+                                  border: 'none',
+                                  background: 'none',
+                                  padding: 0,
+                                  margin: 0,
+                                  color: '#7B5233',
+                                  fontWeight: '600',
+                                  textDecoration: 'none',
+                                  cursor: 'pointer',
+                                  textAlign: 'left',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  transition: 'color 0.15s ease'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.color = '#A0301B';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.color = '#7B5233';
+                                }}
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ flexShrink: 0 }}>
+                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                  <polyline points="14 2 14 8 20 8"></polyline>
+                                </svg>
+                                {pdf.original_name.replace(/_/g, ' ')}
+                              </button>
+                            </td>
+                            <td style={{ padding: '12px 8px', color: '#5D4037' }}>
+                              {pdf.size ? (pdf.size / 1024 / 1024).toFixed(2) + ' MB' : 'N/A'}
+                            </td>
+                            <td style={{ padding: '12px 8px', color: '#5D4037' }}>
+                              {pdf.created_at}
+                            </td>
+                            <td style={{ padding: '12px 8px', textAlign: 'center', position: 'relative' }} className="pdf-action-menu-container">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPdfActionMenuId(pdfActionMenuId === pdf.filename ? null : pdf.filename);
+                                }}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  color: '#7B5233',
+                                  padding: '4px 8px',
+                                  borderRadius: '4px'
+                                }}
+                              >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                  <circle cx="12" cy="5" r="2"/>
+                                  <circle cx="12" cy="12" r="2"/>
+                                  <circle cx="12" cy="19" r="2"/>
+                                </svg>
+                              </button>
+                              {pdfActionMenuId === pdf.filename && (
+                                <div
+                                  className="action-menu"
+                                  style={{
+                                    right: '100%',
+                                    top: '0',
+                                    transform: 'translateX(-4px)',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '4px',
+                                    zIndex: 1500,
+                                    position: 'absolute',
+                                    backgroundColor: '#FFFFFF',
+                                    border: '1px solid #EADCC9',
+                                    borderRadius: '6px',
+                                    boxShadow: '0 4px 12px rgba(123, 82, 51, 0.15)',
+                                    padding: '4px 0',
+                                    minWidth: '120px'
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    className="action-menu-item"
+                                    onClick={() => {
+                                      setPdfActionMenuId(null);
+                                      setSelectedPdfForPreview(pdf);
+                                    }}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', fontSize: '0.8rem', border: 'none', background: 'none', cursor: 'pointer', width: '100%', textAlign: 'left', color: '#2D1A12', fontWeight: '500' }}
+                                  >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                      <circle cx="12" cy="12" r="3"></circle>
+                                    </svg>
+                                    Xem trước
+                                  </button>
+                                  <a
+                                    href={getFullPdfUrl(pdf.url)}
+                                    download={pdf.original_name}
+                                    onClick={() => setPdfActionMenuId(null)}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', fontSize: '0.8rem', textDecoration: 'none', color: '#2D1A12', fontWeight: '500' }}
+                                  >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                      <polyline points="7 10 12 15 17 10"></polyline>
+                                      <line x1="12" y1="15" x2="12" y2="3"></line>
+                                    </svg>
+                                    Tải về
+                                  </a>
+                                  {hasWritePermission && (
+                                    <button
+                                      type="button"
+                                      className="action-menu-item"
+                                      onClick={() => handleDeletePdf(pdf.filename)}
+                                      style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', fontSize: '0.8rem', border: 'none', background: 'none', cursor: 'pointer', width: '100%', textAlign: 'left', color: '#DC2626', fontWeight: '500' }}
+                                    >
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                      </svg>
+                                      Xóa file
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="add-claim-actions-row" style={{ borderTop: '1px solid #E5E7EB', padding: '12px 24px', display: 'flex', justifyContent: 'flex-end', backgroundColor: '#FFFDFB', margin: 0 }}>
+                <button type="button" className="add-claim-btn-cancel" onClick={() => setIsPdfFolderModalOpen(false)}>
+                  Đóng
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* POPUP XEM TRƯỚC PDF */}
+      {selectedPdfForPreview && (
+        <div className="add-claim-backdrop" style={{ zIndex: 1999 }} onClick={() => setSelectedPdfForPreview(null)}>
+          <div className="form-modal-wrapper" onClick={(e) => e.stopPropagation()}>
+            <div className="add-claim-modal" style={{ width: 'min(95vw, 1000px)', display: 'flex', flexDirection: 'column', height: '90vh', border: '1px solid #EADCC9', borderRadius: '12px', boxShadow: '0 20px 50px rgba(123, 82, 51, 0.15)', overflow: 'hidden' }}>
+              
+              {/* Header */}
+              <div className="add-claim-header" style={{ padding: '16px 24px', borderBottom: '1px solid #EADCC9', backgroundColor: '#FFFDFB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2 className="add-claim-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#7B5233', fontSize: '1.1rem', fontWeight: 'bold', margin: 0, maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                  </svg>
+                  Xem trước: {selectedPdfForPreview.original_name.replace(/_/g, ' ')}
+                </h2>
+                
+                {/* Header Actions */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <a
+                    href={getFullPdfUrl(selectedPdfForPreview.url)}
+                    download={selectedPdfForPreview.original_name}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      backgroundColor: '#7B5233',
+                      color: '#FFFFFF',
+                      fontSize: '0.78rem',
+                      fontWeight: 'bold',
+                      textDecoration: 'none',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.15)'
+                    }}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                      <polyline points="7 10 12 15 17 10"></polyline>
+                      <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    Tải về máy
+                  </a>
+                  <button
+                    type="button"
+                    className="add-claim-icon-btn"
+                    title="Đóng"
+                    onClick={() => setSelectedPdfForPreview(null)}
+                    style={{ fontSize: '1.6rem', padding: '0 6px', lineHeight: 1, background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}
+                  >
+                    &times;
+                  </button>
+                </div>
+              </div>
+
+              {/* Body (Iframe view) */}
+              <div className="add-claim-body" style={{ flex: 1, padding: 0, backgroundColor: '#525659', display: 'flex', flexDirection: 'column' }}>
+                <iframe
+                  src={getFullPdfUrl(selectedPdfForPreview.url)}
+                  title="PDF Preview"
+                  width="100%"
+                  height="100%"
+                  style={{ border: 'none', flex: 1 }}
+                />
+              </div>
+
+              {/* Footer */}
+              <div className="add-claim-actions-row" style={{ borderTop: '1px solid #E5E7EB', padding: '12px 24px', display: 'flex', justifyContent: 'flex-end', backgroundColor: '#FFFDFB', margin: 0 }}>
+                <button type="button" className="add-claim-btn-cancel" onClick={() => setSelectedPdfForPreview(null)}>
+                  Đóng
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -4232,6 +4827,835 @@ const ClaimListView = () => {
           );
         }}
       />
+
+      {/* ============ MONTHLY TRENDS ANALYTICS MODAL ============ */}
+      {isAnalyticsOpen && (
+        <div
+          className="exception-modal-backdrop"
+          style={{ zIndex: 2500 }}
+          onClick={() => setIsAnalyticsOpen(false)}
+        >
+          <div
+            className="exception-modal"
+            style={{ width: 'min(95vw, 1024px)', animation: 'modalScaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* MODAL HEADER */}
+            <div className="exception-modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '14px', borderBottom: '1px solid #F0E6D8' }}>
+              <div className="exception-modal-title-area" style={{ flex: 1, paddingRight: '16px' }}>
+                <h3 className="exception-modal-title" style={{ fontSize: '1.25rem', margin: 0 }}>
+                  Thống kê khiếu nại theo tháng
+                </h3>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                {/* VIEW SWITCH TAB CONTROLLER */}
+                <div style={{ 
+                  display: 'inline-flex', 
+                  backgroundColor: '#FAF6F0', 
+                  padding: '3px', 
+                  borderRadius: '8px', 
+                  border: '1px solid #EADCC9' 
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => setAnalyticsViewTab('chart')}
+                    style={{
+                      padding: '5px 16px',
+                      borderRadius: '6px',
+                      fontWeight: 'bold',
+                      fontSize: '0.8rem',
+                      cursor: 'pointer',
+                      border: 'none',
+                      backgroundColor: analyticsViewTab === 'chart' ? '#7B5233' : 'transparent',
+                      color: analyticsViewTab === 'chart' ? '#FFFFFF' : '#7B5233',
+                      transition: 'all 0.2s ease',
+                      outline: 'none'
+                    }}
+                  >
+                    Biểu đồ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAnalyticsViewTab('table')}
+                    style={{
+                      padding: '5px 16px',
+                      borderRadius: '6px',
+                      fontWeight: 'bold',
+                      fontSize: '0.8rem',
+                      cursor: 'pointer',
+                      border: 'none',
+                      backgroundColor: analyticsViewTab === 'table' ? '#7B5233' : 'transparent',
+                      color: analyticsViewTab === 'table' ? '#FFFFFF' : '#7B5233',
+                      transition: 'all 0.2s ease',
+                      outline: 'none'
+                    }}
+                  >
+                    Bảng số liệu
+                  </button>
+                </div>
+                <button
+                  className="exception-modal-close"
+                  onClick={() => setIsAnalyticsOpen(false)}
+                  aria-label="Đóng"
+                  style={{ position: 'relative', top: 'auto', right: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: 0 }}
+                >
+                  &times;
+                </button>
+              </div>
+            </div>
+
+            {/* MODAL BODY */}
+            <div className="exception-modal-body" style={{ padding: '20px 24px', overflowY: 'auto' }}>
+              {analyticsData.length === 0 ? (
+                <div className="exception-empty-state">
+                  <span>Không có dữ liệu khiếu nại để thống kê</span>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {/* CHART VIEW */}
+                  {analyticsViewTab === 'chart' && (
+                    <div style={{ 
+                      border: '1px solid #F0E6D8', 
+                      borderRadius: '12px', 
+                      padding: '24px 20px 16px 20px', 
+                      backgroundColor: '#FCFAF8',
+                      position: 'relative'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '8px' }}>
+                        <h4 style={{ margin: 0, color: '#7B5233', fontSize: '0.95rem', fontWeight: 'bold' }}>
+                          Biểu đồ xu hướng (Tối đa 12 tháng gần nhất)
+                        </h4>
+                        <div style={{ display: 'flex', gap: '16px', fontSize: '0.8rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ width: '12px', height: '12px', backgroundColor: '#8FA5B5', borderRadius: '3px' }}></div>
+                            <span style={{ color: '#4B5563', fontWeight: '500' }}>Số lượng khiếu nại (vụ)</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ width: '12px', height: '12px', backgroundColor: '#8B6D58', borderRadius: '3px' }}></div>
+                            <span style={{ color: '#4B5563', fontWeight: '500' }}>Tổng tiền phạt G7 ($)</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ width: '12px', height: '12px', backgroundColor: '#C25953', borderRadius: '3px' }}></div>
+                            <span style={{ color: '#4B5563', fontWeight: '500' }}>Tổng tiền phạt Khách hàng ($)</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* BARS CONTAINER */}
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-around', 
+                        alignItems: 'flex-end', 
+                        height: '200px', 
+                        paddingBottom: '8px',
+                        borderBottom: '2px solid #EADCC9',
+                        position: 'relative',
+                        gap: '8px'
+                      }}>
+                        {analyticsData.map((d) => {
+                          const maxAmountVal = Math.max(...analyticsData.map(m => Math.max(m.totalAmount, m.customerAmount)), 1);
+                          const maxCountVal = Math.max(...analyticsData.map(m => m.count), 1);
+                          
+                          const countHeight = (d.count / maxCountVal) * 135;
+                          const g7Height = (d.totalAmount / maxAmountVal) * 135;
+                          const customerHeight = (d.customerAmount / maxAmountVal) * 135;
+                          const formatCompact = (val) => val >= 1000 ? '$' + (val / 1000).toFixed(1).replace('.0', '') + 'k' : '$' + val;
+
+                          return (
+                            <div key={d.month} style={{ 
+                              display: 'flex', 
+                              flexDirection: 'column', 
+                              alignItems: 'center', 
+                              flex: 1,
+                              position: 'relative'
+                            }}>
+                              {/* Bars group with datalabels */}
+                              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', height: '170px' }}>
+                                {/* Count Column Group */}
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                                  <span style={{ fontSize: '0.68rem', fontWeight: 'bold', color: '#6B7C8A', whiteSpace: 'nowrap' }}>
+                                    {d.count}
+                                  </span>
+                                  <div 
+                                    className="analytics-bar count-bar"
+                                    style={{ 
+                                      width: '24px', 
+                                      height: `${Math.max(countHeight, 4)}px`, 
+                                      backgroundColor: '#8FA5B5', 
+                                      borderRadius: '2px 2px 0 0',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s ease',
+                                    }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.opacity = '0.9'; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.opacity = '1'; }}
+                                    title={`Số lượng: ${d.count} vụ`}
+                                  >
+                                  </div>
+                                </div>
+
+                                {/* G7 Amount Column Group */}
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                                  <span style={{ fontSize: '0.68rem', fontWeight: 'bold', color: '#6E5241', whiteSpace: 'nowrap' }}>
+                                    {formatCompact(d.totalAmount)}
+                                  </span>
+                                  <div 
+                                    className="analytics-bar g7-bar"
+                                    style={{ 
+                                      width: '24px', 
+                                      height: `${Math.max(g7Height, 4)}px`, 
+                                      backgroundColor: '#8B6D58', 
+                                      borderRadius: '2px 2px 0 0',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s ease',
+                                    }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.opacity = '0.9'; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.opacity = '1'; }}
+                                    title={`Tổng tiền phạt G7: $${d.totalAmount.toLocaleString()}`}
+                                  >
+                                  </div>
+                                </div>
+
+                                {/* Customer Amount Column Group */}
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                                  <span style={{ fontSize: '0.68rem', fontWeight: 'bold', color: '#9C413D', whiteSpace: 'nowrap' }}>
+                                    {formatCompact(d.customerAmount)}
+                                  </span>
+                                  <div 
+                                    className="analytics-bar customer-bar"
+                                    style={{ 
+                                      width: '24px', 
+                                      height: `${Math.max(customerHeight, 4)}px`, 
+                                      backgroundColor: '#C25953', 
+                                      borderRadius: '2px 2px 0 0',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s ease',
+                                    }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.opacity = '0.9'; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.opacity = '1'; }}
+                                    title={`Tổng tiền phạt Khách hàng: $${d.customerAmount.toLocaleString()}`}
+                                  >
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* X-axis label */}
+                              <span style={{ 
+                                marginTop: '8px', 
+                                fontSize: '0.8rem', 
+                                fontWeight: 'bold', 
+                                color: '#5D4037',
+                                whiteSpace: 'nowrap'
+                              }}>
+                                {d.month}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TABLE VIEW */}
+                  {analyticsViewTab === 'table' && (
+                    <div style={{ overflowX: 'auto', border: '1px solid #F0E6D8', borderRadius: '12px' }}>
+                      <table className="report-table exception-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '1.05rem' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#FCFAF8', borderBottom: '1.5px solid #F0E6D8' }}>
+                            <th style={{ padding: '14px 18px', textAlign: 'center', color: '#7B5233', fontWeight: '800', fontSize: '1.1rem' }}>Tháng</th>
+                            <th style={{ padding: '14px 18px', textAlign: 'center', color: '#7B5233', fontWeight: '800', fontSize: '1.1rem' }}>Số lượng khiếu nại (vụ)</th>
+                            <th style={{ padding: '14px 18px', textAlign: 'right', color: '#7B5233', fontWeight: '800', fontSize: '1.1rem' }}>Tổng tiền phạt G7</th>
+                            <th style={{ padding: '14px 18px', textAlign: 'right', color: '#7B5233', fontWeight: '800', fontSize: '1.1rem' }}>Tổng tiền phạt Khách hàng</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {analyticsData.map((d, idx) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid #F3EAE0' }}>
+                              <td style={{ padding: '14px 18px', textAlign: 'center', fontWeight: '700', color: '#2D1A12', fontSize: '1.1rem' }}>
+                                {d.month}
+                              </td>
+                              <td style={{ padding: '14px 18px', textAlign: 'center', color: '#7B5233', fontWeight: '600', fontSize: '1.05rem' }}>
+                                {d.count}
+                              </td>
+                              <td style={{ padding: '14px 18px', textAlign: 'right', color: '#2D1A12', fontWeight: '700', fontSize: '1.1rem' }}>
+                                ${d.totalAmount.toLocaleString()}
+                              </td>
+                              <td style={{ 
+                                padding: '14px 18px', 
+                                textAlign: 'right', 
+                                fontWeight: '700', 
+                                color: (customerPenalties[d.month] || 0) > d.totalAmount ? '#DC2626' : '#2D1A12', 
+                                fontSize: '1.1rem' 
+                              }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                                  <span>
+                                    ${(customerPenalties[d.month] !== undefined ? customerPenalties[d.month] : 0).toLocaleString()}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingMonthData(d);
+                                      setEditValue(customerPenalties[d.month] !== undefined ? customerPenalties[d.month] : 0);
+                                    }}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      cursor: 'pointer',
+                                      padding: '4px',
+                                      color: '#7B5233',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      borderRadius: '4px',
+                                      transition: 'background-color 0.2s',
+                                      outline: 'none'
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FFF8F0'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                    title="Chỉnh sửa tiền phạt Khách hàng"
+                                  >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                      <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                    </svg>
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* MODAL FOOTER */}
+            <div className="exception-modal-footer" style={{ padding: '16px 24px', display: 'flex', justifyContent: 'flex-start' }}>
+              <span style={{ fontSize: '0.85rem', color: '#6B7280', fontWeight: '500' }}>
+                Số liệu tính trên {filteredClaimsToDisplay.length} khiếu nại đang hiển thị
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============ EDIT CUSTOMER PENALTY MODAL ============ */}
+      {editingMonthData && (
+        <div
+          className="filter-modal-backdrop"
+          style={{ zIndex: 3000 }}
+          onClick={() => setEditingMonthData(null)}
+        >
+          <div
+            className="filter-modal"
+            style={{ width: 'min(90vw, 440px)', maxHeight: '85vh', borderRadius: '12px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* MODAL HEADER */}
+            <div className="filter-modal-header" style={{ borderBottom: '1px solid #F0E6D8' }}>
+              <div className="filter-modal-title-area">
+                <h3 className="filter-modal-title" style={{ color: '#7B5233', fontWeight: '800' }}>
+                  Cập nhật phạt Khách hàng
+                </h3>
+              </div>
+              <button
+                className="filter-modal-close"
+                onClick={() => setEditingMonthData(null)}
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* MODAL BODY */}
+            <div style={{ padding: '20px 24px', backgroundColor: '#FCFAF8' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                
+                {/* ROW DETAILS (READ ONLY) */}
+                <div style={{ 
+                  backgroundColor: '#FFFFFF', 
+                  border: '1px solid #F0E6D8', 
+                  borderRadius: '10px', 
+                  padding: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                  fontSize: '0.88rem',
+                  boxShadow: '0 1px 3px rgba(123, 82, 51, 0.05)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#8D6E63', fontWeight: '600' }}>Tháng thống kê:</span>
+                    <span style={{ color: '#2D1A12', fontWeight: '800' }}>{editingMonthData.month}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #F9F7F5', paddingTop: '8px' }}>
+                    <span style={{ color: '#8D6E63', fontWeight: '600' }}>Số lượng khiếu nại:</span>
+                    <span style={{ color: '#2D1A12', fontWeight: '800' }}>{editingMonthData.count} vụ</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #F9F7F5', paddingTop: '8px' }}>
+                    <span style={{ color: '#8D6E63', fontWeight: '600' }}>Tổng tiền phạt G7:</span>
+                    <span style={{ color: '#2D1A12', fontWeight: '800' }}>${editingMonthData.totalAmount.toLocaleString()}</span>
+                  </div>
+                </div>
+
+                 {/* EDIT INPUT */}
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                     <label style={{ fontSize: '0.85rem', fontWeight: '800', color: '#7B5233', margin: 0 }}>
+                       Tổng tiền phạt Khách hàng ($)
+                     </label>
+                     
+                     {/* Upload PDF button */}
+                     <div style={{ position: 'relative' }}>
+                       <input
+                         type="file"
+                         accept=".pdf"
+                         id="credit-note-pdf-upload"
+                         style={{ display: 'none' }}
+                         onChange={handleCreditNotePdfChange}
+                       />
+                       <label
+                         htmlFor="credit-note-pdf-upload"
+                         style={{
+                           display: 'inline-flex',
+                           alignItems: 'center',
+                           gap: '6px',
+                           padding: '5px 10px',
+                           borderRadius: '6px',
+                           border: '1px dashed #7B5233',
+                           backgroundColor: '#FFFFFF',
+                           color: '#7B5233',
+                           fontSize: '0.75rem',
+                           fontWeight: 'bold',
+                           cursor: 'pointer',
+                           transition: 'all 0.2s ease',
+                         }}
+                         onMouseEnter={(e) => {
+                           e.currentTarget.style.backgroundColor = '#FFF8F0';
+                         }}
+                         onMouseLeave={(e) => {
+                           e.currentTarget.style.backgroundColor = '#FFFFFF';
+                         }}
+                       >
+                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                           <polyline points="17 8 12 3 7 8"></polyline>
+                           <line x1="12" y1="3" x2="12" y2="15"></line>
+                         </svg>
+                         {isParsingPdf ? 'Đang đọc PDF...' : 'Nhập từ file PDF'}
+                       </label>
+                     </div>
+                   </div>
+
+                   <input
+                     type="number"
+                     min="0"
+                     value={editValue}
+                     onChange={(e) => {
+                       const val = e.target.value;
+                       if (val === '') {
+                         setEditValue('');
+                         return;
+                       }
+                       const numericVal = Number(val);
+                       if (numericVal >= 0) {
+                         setEditValue(val);
+                       }
+                     }}
+                     onKeyDown={(e) => {
+                       if (e.key === '-' || e.key === '+' || e.key === 'e' || e.key === 'E') {
+                         e.preventDefault();
+                       }
+                     }}
+                     placeholder="Nhập số tiền phạt của Khách hàng..."
+                     style={{
+                       height: '40px',
+                       width: '100%',
+                       backgroundColor: '#FFFFFF',
+                       border: '1px solid #EADCC9',
+                       borderRadius: '8px',
+                       padding: '0 12px',
+                       fontSize: '0.9rem',
+                       color: '#2D1A12',
+                       fontWeight: '700',
+                       outline: 'none',
+                       boxShadow: 'none',
+                       transition: 'all 0.2s ease'
+                     }}
+                     onFocus={(e) => e.target.select()}
+                     autoFocus
+                   />
+                 </div>
+
+              </div>
+            </div>
+
+            {/* MODAL FOOTER */}
+            <div className="filter-modal-footer" style={{ borderTop: '1px solid #F0E6D8' }}>
+              <button
+                type="button"
+                className="btn-modal-reset"
+                onClick={() => setEditingMonthData(null)}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                className="btn-modal-apply"
+                style={{ backgroundColor: '#7B5233' }}
+                onClick={() => {
+                  setCustomerPenalties(prev => ({
+                    ...prev,
+                    [editingMonthData.month]: Number(editValue) || 0
+                  }));
+                  setEditingMonthData(null);
+                  showModal(
+                    'Thành công',
+                    `Đã lưu Tổng tiền phạt Khách hàng cho tháng ${editingMonthData.month} thành công!`,
+                    'success'
+                  );
+                }}
+              >
+                Lưu lại
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ============ EXCEPTION MODAL ============ */}
+      {isExceptionModalOpen && (
+        <div
+          className="exception-modal-backdrop"
+          onClick={() => setIsExceptionModalOpen(false)}
+        >
+          <div
+            className="exception-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* MODAL HEADER */}
+            <div className="exception-modal-header">
+              <div className="exception-modal-title-area">
+                <h3 className="exception-modal-title">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                  </svg>
+                  Danh sách ngoại lệ
+                </h3>
+                <p className="exception-modal-subtitle">
+                  Tổng cộng {exceptionData.totalCount} claim có ngoại lệ cần kiểm tra
+                </p>
+              </div>
+              <button
+                className="exception-modal-close"
+                onClick={() => setIsExceptionModalOpen(false)}
+                title="Đóng"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* TAB BAR */}
+            <div className="exception-tabs-bar">
+              <button
+                type="button"
+                className={`exception-tab-btn ${exceptionActiveTab === 'claim' ? 'active' : ''}`}
+                onClick={() => setExceptionActiveTab('claim')}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                  <line x1="16" y1="13" x2="8" y2="13"></line>
+                  <line x1="16" y1="17" x2="8" y2="17"></line>
+                </svg>
+                Thông tin Claim
+                {exceptionData.claimInfo.length > 0 && (
+                  <span className="exception-tab-count">{exceptionData.claimInfo.length}</span>
+                )}
+              </button>
+              <button
+                type="button"
+                className={`exception-tab-btn ${exceptionActiveTab === 'transport' ? 'active' : ''}`}
+                onClick={() => setExceptionActiveTab('transport')}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <rect x="1" y="3" width="15" height="13"></rect>
+                  <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+                  <circle cx="5.5" cy="18.5" r="2.5"></circle>
+                  <circle cx="18.5" cy="18.5" r="2.5"></circle>
+                </svg>
+                Vận chuyển tham chiếu
+                {exceptionData.transport.length > 0 && (
+                  <span className="exception-tab-count">{exceptionData.transport.length}</span>
+                )}
+              </button>
+            </div>
+
+            {/* TAB CONTENT */}
+            <div className="exception-modal-body" style={{ padding: '0 24px 20px 24px' }}>
+              {/* TAB: THÔNG TIN CLAIM */}
+              {exceptionActiveTab === 'claim' && (
+                <div className="exception-tab-content">
+                  {exceptionData.claimInfo.length === 0 ? (
+                    <div className="exception-empty-state">
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="2">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                      </svg>
+                      <span>Không có ngoại lệ nào về thông tin claim</span>
+                    </div>
+                  ) : (
+                    <div style={{ overflowX: 'auto', marginTop: '16px', border: '1px solid #F0E6D8', borderRadius: '12px' }}>
+                      <table className="report-table exception-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.95rem' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#FCFAF8', borderBottom: '1.5px solid #F0E6D8' }}>
+                            <th style={{ padding: '14px 16px', textAlign: 'left', color: '#7B5233', fontWeight: '800', fontSize: '1.05rem', whiteSpace: 'nowrap' }}>Tên tủ</th>
+                            <th style={{ padding: '14px 16px', textAlign: 'center', color: '#7B5233', fontWeight: '800', fontSize: '1.05rem', width: '180px', whiteSpace: 'nowrap' }}>Thời gian Claim</th>
+                            <th style={{ padding: '14px 16px', textAlign: 'left', color: '#7B5233', fontWeight: '800', fontSize: '1.05rem', width: '320px', whiteSpace: 'nowrap' }}>Nguyên nhân</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {exceptionData.claimInfo.map((item, idx) => {
+                            const expandKey = `claim_${idx}`;
+                            const isExpanded = !!expandedExceptionItems[expandKey];
+                            const displayName = item.claim.product_name || item.claim.sku || 'N/A';
+                            const claimDate = item.claim.date || item.claim.period || 'N/A';
+                            const reasonText = item.exceptions.map(ex => ex.label).join(', ');
+
+                            return (
+                              <React.Fragment key={expandKey}>
+                                <tr
+                                  onClick={() => setExpandedExceptionItems(prev => ({ ...prev, [expandKey]: !prev[expandKey] }))}
+                                  style={{ cursor: 'pointer', borderBottom: '1px solid #F3EAE0', backgroundColor: isExpanded ? '#FFF5F5' : 'transparent' }}
+                                  className="exception-table-row"
+                                >
+                                  <td style={{ padding: '14px 16px', textAlign: 'left', fontWeight: '700', color: '#2D1A12', fontSize: '0.95rem' }}>
+                                    {idx + 1}. {displayName}
+                                  </td>
+                                  <td style={{ padding: '14px 16px', textAlign: 'center', color: '#5D4037', fontWeight: '600', fontSize: '0.95rem' }}>
+                                    {claimDate}
+                                  </td>
+                                  <td style={{ padding: '14px 16px', textAlign: 'left' }}>
+                                    <span className="exception-severity-badge" style={{ fontSize: '0.8rem', padding: '4px 10px' }}>
+                                      {reasonText}
+                                    </span>
+                                  </td>
+                                </tr>
+                                 {isExpanded && (
+                                   <tr style={{ backgroundColor: '#FCFAF8' }}>
+                                     <td colSpan="3" style={{ padding: '16px 24px', borderBottom: '1px solid #F0E6D8' }}>
+                                       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                         {/* Chi tiết bảng */}
+                                         <table className="exception-sub-table" style={{ width: '100%', borderCollapse: 'collapse', border: '1.5px solid #FECACA', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
+                                           <thead>
+                                             <tr style={{ backgroundColor: '#FEF2F2', borderBottom: '1.5px solid #FECACA' }}>
+                                               <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: '800', fontSize: '0.85rem', color: '#991B1B', borderRight: '1px solid #FECACA' }}>Mã tham chiếu</th>
+                                               <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: '800', fontSize: '0.85rem', color: '#991B1B', borderRight: '1px solid #FECACA' }}>Mã lỗi KH</th>
+                                               <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: '800', fontSize: '0.85rem', color: '#991B1B', borderRight: '1px solid #FECACA' }}>Mã lỗi G7</th>
+                                               <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: '800', fontSize: '0.85rem', color: '#991B1B', borderRight: '1px solid #FECACA' }}>Giá trị phạt</th>
+                                               <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: '800', fontSize: '0.85rem', color: '#991B1B' }}>Tổng tiền phạt</th>
+                                             </tr>
+                                           </thead>
+                                           <tbody>
+                                             <tr>
+                                               <td style={{ padding: '10px 14px', textAlign: 'left', fontWeight: '700', color: '#2D1A12', fontSize: '0.85rem', borderRight: '1px solid #FECACA', borderBottom: 'none' }}>{item.claim.claim_code || 'N/A'}</td>
+                                               <td style={{ padding: '10px 14px', textAlign: 'left', color: '#2D1A12', fontSize: '0.85rem', borderRight: '1px solid #FECACA', borderBottom: 'none' }}>{item.claim.order_code || item.claim.defect_code || 'N/A'}</td>
+                                               <td style={{ padding: '10px 14px', textAlign: 'left', color: '#2D1A12', fontSize: '0.85rem', borderRight: '1px solid #FECACA', borderBottom: 'none' }}>{item.claim.company_error_code || 'N/A'}</td>
+                                               <td style={{ padding: '10px 14px', textAlign: 'left', color: '#2D1A12', fontSize: '0.85rem', borderRight: '1px solid #FECACA', borderBottom: 'none' }}>{normalizePenaltyValue(item.claim.penalty || 'Không có')}</td>
+                                               <td style={{ padding: '10px 14px', textAlign: 'left', color: '#2D1A12', fontWeight: '700', fontSize: '0.88rem', borderBottom: 'none' }}>{formatPenaltyValue(calculateTotalPenalty(item.claim))}</td>
+                                             </tr>
+                                           </tbody>
+                                         </table>
+
+                                         {/* Mô tả ngoại lệ */}
+                                         <div style={{ backgroundColor: '#FFF5F5', border: '1px solid #FEE2E2', borderRadius: '6px', padding: '10px 14px', fontSize: '0.82rem', color: '#991B1B' }}>
+                                           <strong style={{ display: 'block', marginBottom: '4px' }}>Chi tiết ngoại lệ phát hiện:</strong>
+                                           <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                                             {item.exceptions.map((ex, i) => (
+                                               <li key={i} style={{ marginBottom: '4px' }}>{ex.detail}</li>
+                                             ))}
+                                           </ul>
+                                         </div>
+
+                                         {/* Khu vực xem ảnh minh chứng đối chiếu */}
+                                         <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginTop: '4px' }}>
+                                           {/* Cột ảnh dòng hiện tại */}
+                                           <div style={{ flex: '1', minWidth: '250px' }}>
+                                             <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#7B5233', display: 'block', marginBottom: '6px' }}>
+                                               🖼️ Ảnh minh chứng (Dòng hiện tại STT {item.claim.stt}):
+                                             </span>
+                                             {item.claim.image_paths && item.claim.image_paths.length > 0 ? (
+                                               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                 {item.claim.image_paths.map((imgUrl, imgIdx) => (
+                                                   <div key={imgIdx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                                     <img
+                                                       src={imgUrl}
+                                                       alt="Dòng hiện tại"
+                                                       style={{ width: '120px', height: '90px', objectFit: 'cover', borderRadius: '6px', border: '1.5px solid #EADCC9', cursor: 'zoom-in' }}
+                                                       onClick={() => setPreviewImage(imgUrl)}
+                                                     />
+                                                     <span style={{ fontSize: '0.7rem', color: '#8D6E63', marginTop: '2px' }}>
+                                                       {item.claim.image_captions?.[imgIdx] || `Ảnh ${imgIdx + 1}`}
+                                                     </span>
+                                                   </div>
+                                                 ))}
+                                               </div>
+                                             ) : (
+                                               <span style={{ fontSize: '0.8rem', color: '#9E9E9E', fontStyle: 'italic' }}>Không có hình ảnh</span>
+                                             )}
+                                           </div>
+
+                                           {/* Cột ảnh dòng đối ứng bị trùng 100% */}
+                                           {item.exceptions.some(ex => ex.type === 'duplicate_claim' && ex.duplicates && ex.duplicates.length > 0) && (
+                                             <div style={{ flex: '1', minWidth: '250px', borderLeft: '1.5px dashed #FECACA', paddingLeft: '20px' }}>
+                                               {item.exceptions.filter(ex => ex.type === 'duplicate_claim').map((ex, exIdx) => (
+                                                 <div key={exIdx}>
+                                                   {ex.duplicates.map((dupClaim, dupIdx) => (
+                                                     <div key={dupIdx} style={{ marginBottom: '10px' }}>
+                                                       <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#DC2626', display: 'block', marginBottom: '6px' }}>
+                                                         ⚠️ Ảnh minh chứng (Dòng đối ứng bị trùng STT {dupClaim.stt}):
+                                                       </span>
+                                                       {dupClaim.image_paths && dupClaim.image_paths.length > 0 ? (
+                                                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                           {dupClaim.image_paths.map((imgUrl, imgIdx) => (
+                                                             <div key={imgIdx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                                               <img
+                                                                 src={imgUrl}
+                                                                 alt="Dòng đối ứng"
+                                                                 style={{ width: '120px', height: '90px', objectFit: 'cover', borderRadius: '6px', border: '1.5px solid #FECACA', cursor: 'zoom-in' }}
+                                                                 onClick={() => setPreviewImage(imgUrl)}
+                                                               />
+                                                               <span style={{ fontSize: '0.7rem', color: '#DC2626', marginTop: '2px' }}>
+                                                                 {dupClaim.image_captions?.[imgIdx] || `Ảnh ${imgIdx + 1}`}
+                                                               </span>
+                                                             </div>
+                                                           ))}
+                                                         </div>
+                                                       ) : (
+                                                         <span style={{ fontSize: '0.8rem', color: '#9E9E9E', fontStyle: 'italic' }}>Không có hình ảnh</span>
+                                                       )}
+                                                     </div>
+                                                   ))}
+                                                 </div>
+                                               ))}
+                                             </div>
+                                           )}
+                                         </div>
+                                       </div>
+                                     </td>
+                                   </tr>
+                                 )}
+                               </React.Fragment>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB: VẬN CHUYỂN THAM CHIẾU */}
+              {exceptionActiveTab === 'transport' && (
+                <div className="exception-tab-content">
+                  {exceptionData.transport.length === 0 ? (
+                    <div className="exception-empty-state">
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="2">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                      </svg>
+                      <span>Không có ngoại lệ nào về vận chuyển</span>
+                    </div>
+                  ) : (
+                    <div style={{ overflowX: 'auto', marginTop: '16px', border: '1px solid #F0E6D8', borderRadius: '12px' }}>
+                      <table className="report-table exception-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.95rem' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#FCFAF8', borderBottom: '1.5px solid #F0E6D8' }}>
+                            <th style={{ padding: '14px 16px', textAlign: 'left', color: '#7B5233', fontWeight: '800', fontSize: '1.05rem', whiteSpace: 'nowrap' }}>Tên tủ</th>
+                            <th style={{ padding: '14px 16px', textAlign: 'center', color: '#7B5233', fontWeight: '800', fontSize: '1.05rem', width: '180px', whiteSpace: 'nowrap' }}>Thời gian Claim</th>
+                            <th style={{ padding: '14px 16px', textAlign: 'left', color: '#7B5233', fontWeight: '800', fontSize: '1.05rem', width: '320px', whiteSpace: 'nowrap' }}>Nguyên nhân</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {exceptionData.transport.map((item, idx) => {
+                            const expandKey = `transport_${idx}`;
+                            const isExpanded = !!expandedExceptionItems[expandKey];
+                            const displayName = item.claim.product_name || item.claim.sku || 'N/A';
+                            const claimDate = item.claim.date || item.claim.period || 'N/A';
+                            const reasonText = item.exceptions.map(ex => ex.label).join(', ');
+
+                            return (
+                              <React.Fragment key={expandKey}>
+                                <tr
+                                  onClick={() => setExpandedExceptionItems(prev => ({ ...prev, [expandKey]: !prev[expandKey] }))}
+                                  style={{ cursor: 'pointer', borderBottom: '1px solid #F3EAE0', backgroundColor: isExpanded ? '#FFF5F5' : 'transparent' }}
+                                  className="exception-table-row"
+                                >
+                                  <td style={{ padding: '14px 16px', textAlign: 'left', fontWeight: '700', color: '#2D1A12', fontSize: '0.95rem' }}>
+                                    {idx + 1}. {displayName}
+                                  </td>
+                                  <td style={{ padding: '14px 16px', textAlign: 'center', color: '#5D4037', fontWeight: '600', fontSize: '0.95rem' }}>
+                                    {claimDate}
+                                  </td>
+                                  <td style={{ padding: '14px 16px', textAlign: 'left' }}>
+                                    <span className="exception-severity-badge" style={{ fontSize: '0.8rem', padding: '4px 10px' }}>
+                                      {reasonText}
+                                    </span>
+                                  </td>
+                                </tr>
+                                {isExpanded && (
+                                  <tr style={{ backgroundColor: '#FCFAF8' }}>
+                                    <td colSpan="3" style={{ padding: '16px 24px', borderBottom: '1px solid #F0E6D8' }}>
+                                      <table className="exception-sub-table" style={{ width: '100%', borderCollapse: 'collapse', border: '1.5px solid #FECACA', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
+                                        <thead>
+                                          <tr style={{ backgroundColor: '#FEF2F2', borderBottom: '1.5px solid #FECACA' }}>
+                                            <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: '800', fontSize: '0.85rem', color: '#991B1B', borderRight: '1px solid #FECACA' }}>Mã tham chiếu</th>
+                                            <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: '800', fontSize: '0.85rem', color: '#991B1B', borderRight: '1px solid #FECACA' }}>LPN</th>
+                                            <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: '800', fontSize: '0.85rem', color: '#991B1B', borderRight: '1px solid #FECACA' }}>Container</th>
+                                            <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: '800', fontSize: '0.85rem', color: '#991B1B' }}>Thời gian</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          <tr>
+                                            <td style={{ padding: '10px 14px', textAlign: 'left', fontWeight: '700', color: '#2D1A12', fontSize: '0.85rem', borderRight: '1px solid #FECACA', borderBottom: 'none' }}>{item.claim.claim_code || 'N/A'}</td>
+                                            <td style={{ padding: '10px 14px', textAlign: 'left', color: '#2D1A12', fontFamily: 'monospace', fontSize: '0.85rem', borderRight: '1px solid #FECACA', borderBottom: 'none' }}>{item.claim.lpn || 'N/A'}</td>
+                                            <td style={{ padding: '10px 14px', textAlign: 'left', color: '#2D1A12', fontFamily: 'monospace', fontSize: '0.85rem', borderRight: '1px solid #FECACA', borderBottom: 'none' }}>{item.claim.cont || item.claim.container_no || 'N/A'}</td>
+                                            <td style={{ padding: '10px 14px', textAlign: 'left', color: '#2D1A12', fontSize: '0.85rem', borderBottom: 'none' }}>{item.claim.date || item.claim.period || 'N/A'}</td>
+                                          </tr>
+                                        </tbody>
+                                      </table>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* MODAL FOOTER */}
+            <div className="exception-modal-footer">
+              <span style={{ fontSize: '0.8rem', color: '#6B7280' }}>
+                Dữ liệu dựa trên {filteredClaimsToDisplay.length} claim đang hiển thị
+              </span>
+              <button
+                className="btn btn-primary"
+                onClick={() => setIsExceptionModalOpen(false)}
+                style={{ height: '38px', padding: '0 24px', borderRadius: '8px' }}
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ============ END EXCEPTION MODAL ============ */}
     </div>
   );
 };

@@ -395,11 +395,25 @@ const FirstArticleInspectionView = () => {
     setIsPoSearching(true);
     setPoNotFound(false);
     try {
-      // 1. Fetch Order Header details
-      const resHeader = await apiClient.get(`orders/code/${searchCode}`);
-      const order = resHeader.data;
+      // A. Fetch Purchase Order Items FIRST
+      let itemsList = [];
+      try {
+        const resItems = await apiClient.get(`purchase-order-items/by-po/${searchCode}`);
+        if (resItems.data && Array.isArray(resItems.data) && resItems.data.length > 0) {
+          itemsList = resItems.data;
+        }
+      } catch (err) {}
 
-      if (!order) {
+      // B. Fetch Order Header details ONLY if not found in Purchase Orders
+      let order = null;
+      if (itemsList.length === 0) {
+        try {
+          const resHeader = await apiClient.get(`orders/code/${searchCode}`);
+          order = resHeader.data;
+        } catch (hErr) {}
+      }
+
+      if (!order && itemsList.length === 0) {
         setPoNotFound(true);
         setPoItems([]);
         setPoHeader(null);
@@ -412,9 +426,11 @@ const FirstArticleInspectionView = () => {
         const key = (name || code || '').trim();
         if (!key) return;
 
-        // Loại bỏ mã sản phẩm cha (như 2-30-BRO, 2-42-BRO)
-        const isProductSku = /^[A-Z0-9\-_]+$/.test(key) && key.includes('-');
-        if (isProductSku) return;
+        // Loại bỏ mã sản phẩm cha (như 2-30-BRO, 2-42-BRO) trừ khi là hàng mua
+        if (!opts.isFromPO) {
+          const isProductSku = /^[A-Z0-9\-_]+$/.test(key) && key.includes('-');
+          if (isProductSku) return;
+        }
 
         // Bỏ các loại ván ghép, ván ép, ván MDF, ván HMR (nguyên vật liệu thô)
         const nameLower = key.toLowerCase();
@@ -438,20 +454,14 @@ const FirstArticleInspectionView = () => {
         }
       };
 
-      // A. Load from PO Items (Excel PurchaseOrderItems)
-      try {
-        const resItems = await apiClient.get(`purchase-order-items/by-po/${searchCode}`);
-        if (resItems.data && Array.isArray(resItems.data)) {
-          resItems.data.forEach(it => {
-            addPart(it.item_code, it.item_name, it.quantity || 0, {
-              is_raw_material: it.is_raw_material,
-              exclude_production: it.exclude_production
-            });
-          });
-        }
-      } catch (err) {
-        console.log('No purchase order items:', err);
-      }
+      // Add Excel items
+      itemsList.forEach(it => {
+        addPart(it.item_code, it.item_name, it.quantity || 0, {
+          is_raw_material: it.is_raw_material,
+          exclude_production: it.exclude_production,
+          isFromPO: true
+        });
+      });
 
       // B. Load from Plan Handover details
       if (order.plan_id) {
@@ -476,28 +486,30 @@ const FirstArticleInspectionView = () => {
       }
 
       // C. Load from PO products BOM elements (including sub-elements)
-      try {
-        const resProducts = await apiClient.get(`orders/by-code/${searchCode}/products`);
-        const productsData = resProducts.data || {};
-        if (Array.isArray(productsData.items)) {
-          productsData.items.forEach(it => {
-            addPart(it.sku, it.name, 0);
-          });
-        }
-        if (Array.isArray(productsData.products)) {
-          productsData.products.forEach(p => {
-            if (Array.isArray(p.elements)) {
-              p.elements.forEach(el => {
-                addPart(el.sku, el.name, el.quantity || 0, {
-                  is_raw_material: el.is_raw_material,
-                  exclude_production: el.exclude_production
+      if (order) {
+        try {
+          const resProducts = await apiClient.get(`orders/by-code/${searchCode}/products`);
+          const productsData = resProducts.data || {};
+          if (Array.isArray(productsData.items)) {
+            productsData.items.forEach(it => {
+              addPart(it.sku, it.name, 0);
+            });
+          }
+          if (Array.isArray(productsData.products)) {
+            productsData.products.forEach(p => {
+              if (Array.isArray(p.elements)) {
+                p.elements.forEach(el => {
+                  addPart(el.sku, el.name, el.quantity || 0, {
+                    is_raw_material: el.is_raw_material,
+                    exclude_production: el.exclude_production
+                  });
                 });
-              });
-            }
-          });
+              }
+            });
+          }
+        } catch (prodErr) {
+          // Ignore
         }
-      } catch (prodErr) {
-        console.error('Lỗi khi tải danh sách sản phẩm BOM:', prodErr);
       }
 
       const items = Object.values(aggregated).map((it, idx) => ({
@@ -1033,7 +1045,7 @@ const FirstArticleInspectionView = () => {
                     <select
                       value={selectedMachineCode}
                       onChange={(e) => handleSelectMachine(e.target.value)}
-                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #7B5233', fontSize: '13px', outline: 'none', backgroundColor: '#fff' }}
+                      style={{ width: '100%', height: '40px', boxSizing: 'border-box', padding: '0 10px', borderRadius: '8px', border: '1px solid #7B5233', fontSize: '13px', outline: 'none', backgroundColor: '#fff' }}
                     >
                       <option value="">-- Chọn mã --</option>
                       {filteredMachines.map(m => (
@@ -1047,8 +1059,8 @@ const FirstArticleInspectionView = () => {
                       type="text"
                       readOnly
                       value={selectedMachineName}
-                      placeholder="Chọn mã máy để hiển thị..."
-                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', fontSize: '13px', outline: 'none', color: '#64748b' }}
+                      placeholder="Chọn mã máy..."
+                      style={{ width: '100%', height: '40px', boxSizing: 'border-box', padding: '0 10px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', fontSize: '13px', outline: 'none', color: '#64748b' }}
                     />
                   </div>
                 </div>

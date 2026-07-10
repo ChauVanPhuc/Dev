@@ -74,6 +74,7 @@ export const FormModal = ({
   leftFooterActions,
   leftSideAction,
   rightSideAction,
+  headerActions,
   children
 }) => {
   if (!isOpen) return null;
@@ -90,7 +91,8 @@ export const FormModal = ({
           {/* Modal Header */}
           <div className="add-claim-header">
             <h2 className="add-claim-title">{title}</h2>
-            <div className="add-claim-header-actions">
+            <div className="add-claim-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {headerActions}
               <button
                 className="add-claim-icon-btn"
                 title="Đóng"

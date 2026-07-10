@@ -49,9 +49,9 @@ const StagePackagingView = () => {
   useEffect(() => {
     const fetchPOs = async () => {
       try {
-        const res = await apiClient.get('purchase-requisitions/?limit=100');
-        if (res.data && Array.isArray(res.data.items)) {
-          setOrders(res.data.items);
+        const res = await apiClient.get('orders/?limit=100');
+        if (res.data && Array.isArray(res.data)) {
+          setOrders(res.data);
         }
       } catch (err) {
         console.error("Lỗi khi tải PO:", err);
@@ -69,22 +69,28 @@ const StagePackagingView = () => {
     const fetchPOProducts = async () => {
       setIsProductLoading(true);
       try {
-        const res = await apiClient.get(`purchase-order-items/by-po/${formData.batch_no}`);
-        if (Array.isArray(res.data)) {
-          const uniqueItems = [];
-          const seen = new Set();
-          res.data.forEach(item => {
-            if (!seen.has(item.item_code)) {
-              seen.add(item.item_code);
-              uniqueItems.push({
-                sku: item.item_code,
-                name: item.item_name,
-                elements: []
-              });
+        const res = await apiClient.get(`orders/by-code/${formData.batch_no}/products`);
+        const productsData = res.data || {};
+        const uniqueItems = [];
+        const seen = new Set();
+        
+        if (Array.isArray(productsData.products)) {
+          productsData.products.forEach(p => {
+            if (!seen.has(p.sku)) {
+              seen.add(p.sku);
+              uniqueItems.push({ sku: p.sku, name: p.name, elements: p.elements || [] });
             }
           });
-          setCurrentProducts(uniqueItems);
         }
+        if (Array.isArray(productsData.items)) {
+          productsData.items.forEach(it => {
+            if (!seen.has(it.sku)) {
+              seen.add(it.sku);
+              uniqueItems.push({ sku: it.sku, name: it.name, elements: [] });
+            }
+          });
+        }
+        setCurrentProducts(uniqueItems);
       } catch (err) {
         console.error("Lỗi tải sản phẩm:", err);
       } finally {
@@ -352,9 +358,9 @@ const StagePackagingView = () => {
               <div style={{ display: 'flex', gap: '12px' }}>
                 <div style={{ flex: 1 }}>
                   <SearchableSelect
-                    label="PO"
+                    label="PO (Lệnh SX)"
                     value={formData.batch_no}
-                    options={orders.map(o => ({ label: o.po_code, value: o.po_code }))}
+                    options={orders.map(o => ({ label: o.order_code, value: o.order_code }))}
                     onChange={(e) => handleFieldChange('batch_no', e.target.value)}
                     placeholder="Tìm mã PO..."
                   />

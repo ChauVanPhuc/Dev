@@ -5,15 +5,6 @@
   transform: translate(-2px, 0);
 }
 
-/* Force layout height and hide scrollbars when claim view is active */
-body:has(.claim-container),
-.admin-layout:has(.claim-container),
-.admin-main:has(.claim-container),
-.dashboard-content:has(.claim-container) {
-  overflow: hidden !important;
-  height: 100vh !important;
-}
-
 :root {
   --primary-color: #7B5233;
   --primary-hover: #5D3D25;
@@ -38,7 +29,9 @@ body:has(.claim-container),
   padding: 18px 24px;
   box-shadow: var(--shadow-sm);
   border: 1px solid #F0E6D8;
-  height: calc(100vh - 100px) !important;
+  flex: 1 !important;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -1001,31 +994,39 @@ body:has(.claim-container),
 /* --- PROGRESS MODAL UX STYLING --- */
 .import-progress-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(45, 26, 18, 0.45);
-  backdrop-filter: blur(4px);
+  top: 80px;
+  right: 24px;
   z-index: 2000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  animation: fadeIn 0.25s ease;
+  width: 380px;
+  pointer-events: none;
+  background: none;
+  backdrop-filter: none;
+  display: block;
+  padding: 0;
+  animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .import-progress-modal {
   background: #FFFFFF;
   border-radius: 12px;
   width: 100%;
-  max-width: 550px;
-  padding: 28px;
-  box-shadow: var(--shadow-lg);
-  border: 1px solid #F0E6D8;
+  padding: 20px;
+  box-shadow: 0 10px 30px rgba(45, 26, 18, 0.15);
+  border: 1px solid #EADCC9;
   display: flex;
   flex-direction: column;
-  animation: modalScaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  pointer-events: auto;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
 @keyframes spin {
@@ -2152,5 +2153,394 @@ body:has(.claim-container),
 
 .chat-message-row:has(.chat-message-bot) .chat-msg-delete-btn {
   right: 2px;
+}
+
+/* =========================================================================
+   EXCEPTION MODAL STYLES (Ngoại lệ)
+   Self-contained styles for the Exception popup in ClaimListView.
+   Follows the Coffee Luxury design system. Tab-based layout.
+   ========================================================================= */
+
+/* Backdrop */
+.exception-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(45, 26, 18, 0.5);
+  backdrop-filter: blur(6px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: fadeIn 0.2s ease;
+}
+
+/* Modal Container */
+.exception-modal {
+  background: #FFFFFF;
+  width: min(95vw, 1100px);
+  max-height: 85vh;
+  border-radius: 16px;
+  box-shadow:
+    0 24px 48px -12px rgba(45, 26, 18, 0.25),
+    0 0 0 1px rgba(234, 220, 201, 0.5);
+  display: flex;
+  flex-direction: column;
+  animation: modalScaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  overflow: hidden;
+}
+
+/* Modal Header */
+.exception-modal-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid #F0E6D8;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, #FEF2F2 0%, #FFFFFF 100%);
+  flex-shrink: 0;
+}
+
+.exception-modal-title-area {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.exception-modal-title {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #2D1A12;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.exception-modal-subtitle {
+  font-size: 0.8rem;
+  color: #8D6E63;
+  margin: 0;
+  font-weight: 500;
+}
+
+.exception-modal-close {
+  background: none;
+  border: none;
+  font-size: 1.6rem;
+  color: #9CA3AF;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  width: 36px;
+  height: 36px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.exception-modal-close:hover {
+  background-color: #FEF2F2;
+  color: #DC2626;
+}
+
+/* ---- TAB BAR ---- */
+.exception-tabs-bar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 24px;
+  background: #FCFAF8;
+  border-bottom: 2px solid #F0E6D8;
+  flex-shrink: 0;
+}
+
+.exception-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 20px;
+  background: none;
+  border: none;
+  border-bottom: 2.5px solid transparent;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #8D6E63;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  margin-bottom: -2px;
+  position: relative;
+}
+
+.exception-tab-btn:hover {
+  color: #A0301B;
+  background: rgba(160, 48, 27, 0.04);
+}
+
+.exception-tab-btn.active {
+  color: #A0301B;
+  border-bottom-color: #A0301B;
+  font-weight: 700;
+}
+
+.exception-tab-btn.active svg {
+  color: #A0301B;
+}
+
+.exception-tab-count {
+  background: #DC2626;
+  color: #FFFFFF;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 8px;
+  min-width: 16px;
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* ---- MODAL BODY (single-column, scrollable) ---- */
+.exception-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.exception-tab-content {
+  min-height: 200px;
+}
+
+/* Empty state */
+.exception-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 24px;
+  color: #9CA3AF;
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
+/* Exception list */
+.exception-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.exception-item {
+  border-bottom: 1px solid #F3EAE0;
+  transition: background-color 0.15s ease;
+}
+
+.exception-item:last-child {
+  border-bottom: none;
+}
+
+.exception-item:hover {
+  background-color: #FEFDFB;
+}
+
+/* Item header (clickable) */
+.exception-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  cursor: pointer;
+  user-select: none;
+  gap: 12px;
+  transition: background-color 0.15s ease;
+}
+
+.exception-item-header:hover {
+  background-color: #FEF2F2;
+}
+
+.exception-item-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.exception-item-index {
+  background: #FEF2F2;
+  color: #DC2626;
+  font-size: 0.72rem;
+  font-weight: 700;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid #FECACA;
+}
+
+.exception-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.exception-item-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #2D1A12;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.exception-item-ref {
+  font-size: 0.75rem;
+  color: #8D6E63;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.exception-item-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  color: #9CA3AF;
+}
+
+.exception-badges {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* Severity badges - ALL RED (ngoại lệ = lỗi cần kiểm tra) */
+.exception-severity-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+  background-color: #FEF2F2;
+  color: #DC2626;
+  border: 1px solid #FECACA;
+}
+
+/* Expanded details */
+.exception-item-details {
+  padding: 0 24px 16px 60px;
+  animation: fadeIn 0.2s ease;
+}
+
+.exception-detail-grid {
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.exception-detail-row {
+  display: flex;
+  gap: 8px;
+  font-size: 0.8rem;
+}
+
+.exception-detail-label {
+  color: #991B1B;
+  font-weight: 700;
+  min-width: 110px;
+  flex-shrink: 0;
+}
+
+.exception-detail-value {
+  color: #2D1A12;
+  word-break: break-all;
+}
+
+/* Issue cards - ALL RED */
+.exception-issues-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.exception-issue-card {
+  display: flex;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  align-items: flex-start;
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+}
+
+.exception-issue-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.exception-issue-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.exception-issue-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #DC2626;
+}
+
+.exception-issue-detail {
+  font-size: 0.76rem;
+  color: #991B1B;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* Modal Footer */
+.exception-modal-footer {
+  border-top: 1px solid #F0E6D8;
+  padding: 14px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #FCFAF8;
+  flex-shrink: 0;
+}
+
+/* Table Row transitions for exceptions */
+.exception-table-row {
+  transition: background-color 0.15s ease;
+}
+
+.exception-table-row:hover {
+  background-color: #FEF2F2 !important;
+}
+
+/* --- HOVER DETAILS EXPANSION FOR MINIMIZED PROGRESS PILL --- */
+.compact-progress-pill-container:hover .floating-progress-details {
+  display: flex !important;
+  animation: fadeIn 0.2s ease-in-out;
 }
 

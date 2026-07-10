@@ -746,7 +746,22 @@ async def check_write_permissions(request: Request, call_next):
                                 if screen_key:
                                     # Phân giải quyền thực tế của User cho screen này
                                     resolved_perms = resolve_user_permissions(user, db)
-                                    user_perm = resolved_perms.get(screen_key, "none")
+                                    
+                                    keys_to_check = [screen_key]
+                                    if screen_key == "mobile_inspection-stage":
+                                        keys_to_check.extend([
+                                            "mobile_inspection-first-article",
+                                            "mobile_inspection-stage-moisture",
+                                            "mobile_inspection-stage-process",
+                                            "mobile_inspection-stage-adhesion"
+                                        ])
+                                    
+                                    user_perm = "none"
+                                    for key in keys_to_check:
+                                        p = resolved_perms.get(key, "none")
+                                        if p != "none":
+                                            user_perm = p
+                                            break
                                     
                                     # Phân tích danh sách các hành động được cho phép
                                     allowed_actions_list = []

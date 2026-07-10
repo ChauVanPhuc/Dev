@@ -25,16 +25,10 @@ const StageAdhesionView = () => {
   const [formData, setFormData] = useState({
     batch_no: '',
     product_sku: '',
-    detail_bam_dinh: '',
-    results: {
-      visual: 'pass',
-      size: 'pass',
-      function: 'pass',
-      conclusion: 'pass'
-    },
     notes: '',
     action: 'luu-kho'
   });
+  const [detailsList, setDetailsList] = useState([]);
 
   const [currentProducts, setCurrentProducts] = useState([]);
   const [isProductLoading, setIsProductLoading] = useState(false);
@@ -45,14 +39,15 @@ const StageAdhesionView = () => {
   const [historyList, setHistoryList] = useState([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState(null);
+  const [recentPOs, setRecentPOs] = useState([]);
 
   // Fetch PO options
   useEffect(() => {
     const fetchPOs = async () => {
       try {
-        const res = await apiClient.get('purchase-requisitions/?limit=100');
-        if (res.data && Array.isArray(res.data.items)) {
-          setOrders(res.data.items);
+        const res = await apiClient.get('orders/?limit=100');
+        if (res.data && Array.isArray(res.data)) {
+          setOrders(res.data);
         }
       } catch (err) {
         console.error("Lỗi khi tải PO:", err);
@@ -70,24 +65,60 @@ const StageAdhesionView = () => {
     const fetchPOProducts = async () => {
       setIsProductLoading(true);
       try {
-        const res = await apiClient.get(`purchase-order-items/by-po/${formData.batch_no}`);
-        if (Array.isArray(res.data)) {
-          const uniqueItems = [];
-          const seen = new Set();
-          res.data.forEach(item => {
-            if (!seen.has(item.item_code)) {
-              seen.add(item.item_code);
-              uniqueItems.push({
-                sku: item.item_code,
-                name: item.item_name,
-                elements: []
-              });
-            }
-          });
-          setCurrentProducts(uniqueItems);
+        const uniqueItems = [];
+        const seen = new Set();
+
+        // 1. Try fetching from Sales Orders endpoint (which returns BOM elements)
+        try {
+          const res1 = await apiClient.get(`orders/by-code/${formData.batch_no}/products`);
+          const productsData = res1.data || {};
+          if (Array.isArray(productsData.products)) {
+            productsData.products.forEach(p => {
+              if (!seen.has(p.sku)) {
+                seen.add(p.sku);
+                uniqueItems.push({ sku: p.sku, name: p.name, elements: p.elements || [] });
+              }
+            });
+          }
+          if (Array.isArray(productsData.items)) {
+            productsData.items.forEach(it => {
+              if (!seen.has(it.sku)) {
+                seen.add(it.sku);
+                uniqueItems.push({ sku: it.sku, name: it.name, elements: [] });
+              }
+            });
+          }
+        } catch (e) {
+          console.log('Not a sales order, skipping SO BOM fetch.');
         }
+
+        // 2. Try fetching from Purchase Orders endpoint
+        try {
+          const res2 = await apiClient.get(`purchase-order-items/by-po/${formData.batch_no}`);
+          if (Array.isArray(res2.data)) {
+            res2.data.forEach(item => {
+              if (!seen.has(item.item_code)) {
+                seen.add(item.item_code);
+                uniqueItems.push({ sku: item.item_code, name: item.item_name, elements: [] });
+              }
+            });
+          }
+        } catch (e) {
+          console.log('Not a purchase order, skipping PO items fetch.');
+        }
+
+        setCurrentProducts(uniqueItems);
+        
+        // Auto select first product if not editing
+        if (!logId && uniqueItems.length > 0) {
+          setFormData(prev => ({
+            ...prev,
+            product_sku: uniqueItems[0].sku
+          }));
+        }
+        
       } catch (err) {
-        console.error("Lỗi tải sản phẩm của PO:", err);
+        console.error("Lỗi tải sản phẩm BOM:", err);
       } finally {
         setIsProductLoading(false);
       }
@@ -112,6 +143,8 @@ const StageAdhesionView = () => {
 
   useEffect(() => {
     fetchHistory();
+    const saved = JSON.parse(localStorage.getItem('recent_stage_po_searches') || '[]');
+    setRecentPOs(saved);
   }, []);
 
   // Load old data if editing
@@ -130,16 +163,10 @@ const StageAdhesionView = () => {
           setFormData({
             batch_no: item.batch_no || '',
             product_sku: item.product_sku || '',
-            detail_bam_dinh: extra.detail_bam_dinh || '',
-            results: {
-              visual: extra.visual || 'pass',
-              size: extra.size || 'pass',
-              function: extra.function || 'pass',
-              conclusion: item.conclusion || 'pass'
-            },
             notes: item.notes || '',
             action: extra.action || 'luu-kho'
           });
+          setDetailsList(extra.detailsList || []);
         }
       } catch (err) {
         console.error("Lỗi tải dữ liệu cũ:", err);
@@ -154,24 +181,77 @@ const StageAdhesionView = () => {
     return currentProducts.map(p => ({ label: p.sku, value: p.sku }));
   }, [currentProducts, isProductLoading]);
 
-  const detailOptions = useMemo(() => {
-    const selectedProd = currentProducts.find(p => p.sku === formData.product_sku);
-    if (!formData.product_sku) {
-      return [{ label: 'Chọn sản phẩm trước', value: '' }];
+  useEffect(() => {
+    if (!logId) {
+      if (formData.product_sku) {
+        // Process elements to remove 'ván ghép' and deduplicate by name
+        const processElements = (rawElements) => {
+          const uniqueNames = new Set();
+          const processedList = [];
+          
+          rawElements.forEach((el) => {
+            const elName = el.name || '';
+            const nameLower = elName.toLowerCase();
+            
+            // Bỏ qua các loại ván
+            if (nameLower.includes('ván ghép') || 
+                nameLower.includes('ván ép') || 
+                nameLower.includes('ván mdf')) return;
+            
+            if (!uniqueNames.has(elName)) { // Gộp chung
+              uniqueNames.add(elName);
+              processedList.push({
+                id: Date.now() + processedList.length,
+                name: elName,
+                conclusion: 'pass',
+                image: null
+              });
+            }
+          });
+          return processedList;
+        };
+
+        const selectedProd = currentProducts.find(p => p.sku === formData.product_sku);
+        if (selectedProd && Array.isArray(selectedProd.elements) && selectedProd.elements.length > 0) {
+          setDetailsList(processElements(selectedProd.elements));
+        } else {
+          // Attempt to fetch from master-products if not in PO elements
+          const fetchMasterBOM = async () => {
+            try {
+              const res = await apiClient.get(`master-products/?q=${formData.product_sku}`);
+              if (res.data && Array.isArray(res.data.items) && res.data.items.length > 0) {
+                const match = res.data.items.find(i => i.sku === formData.product_sku);
+                if (match) {
+                  const detailRes = await apiClient.get(`master-products/${match.id}`);
+                  if (detailRes.data && Array.isArray(detailRes.data.master_bom_details) && detailRes.data.master_bom_details.length > 0) {
+                    setDetailsList(processElements(detailRes.data.master_bom_details));
+                    return;
+                  }
+                }
+              }
+              // Fallback
+              setDetailsList([
+                { id: Date.now(), name: selectedProd ? (selectedProd.name || selectedProd.sku) : formData.product_sku, conclusion: 'pass', image: null }
+              ]);
+            } catch (err) {
+              setDetailsList([
+                { id: Date.now(), name: selectedProd ? (selectedProd.name || selectedProd.sku) : formData.product_sku, conclusion: 'pass', image: null }
+              ]);
+            }
+          };
+          fetchMasterBOM();
+        }
+      } else {
+        setDetailsList([]);
+      }
     }
-    return [{ label: 'Mặt sơn bám dính', value: 'Mặt sơn bám dính' }, { label: 'Góc cạnh liên kết', value: 'Góc cạnh liên kết' }];
-  }, [formData.product_sku, currentProducts]);
+  }, [formData.product_sku, logId, currentProducts]);
 
   const handleFieldChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleResultChange = (key, value) => {
-    setFormData(prev => ({
-      ...prev,
-      results: { ...prev.results, [key]: value }
-    }));
-  };
+
 
   const handleSave = async () => {
     setIsConfirmOpen(false);
@@ -182,11 +262,10 @@ const StageAdhesionView = () => {
         batch_no: formData.batch_no,
         product_sku: formData.product_sku,
         inspector_name: user?.full_name || "Người kiểm tra",
-        conclusion: formData.results.conclusion || 'pass',
+        conclusion: detailsList.some(d => d.conclusion === 'fail') ? 'fail' : 'pass',
         notes: formData.notes,
         data_json: JSON.stringify({
-          ...formData.results,
-          detail_bam_dinh: formData.detail_bam_dinh,
+          detailsList: detailsList,
           action: formData.action
         }),
         images_json: JSON.stringify({})
@@ -226,102 +305,186 @@ const StageAdhesionView = () => {
       <div style={{ backgroundColor: 'var(--bg-cream)', minHeight: '100vh', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '100px' }}>
         <PageHeader title="G7 - Smart Flow" subTitle="MB22 | Kiểm tra bám dính" />
 
+        {/* 1. PO Search Block */}
+        <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '16px', border: '1px solid #cbd5e1', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+          <SearchableSelect
+            label="PO (Lệnh SX)"
+            value={formData.batch_no}
+            options={orders.map(o => ({ label: o.order_code, value: o.order_code }))}
+            onChange={(e) => {
+              const val = e.target.value;
+              handleFieldChange('batch_no', val);
+              if (val) {
+                let list = JSON.parse(localStorage.getItem('recent_stage_po_searches') || '[]');
+                list = [val, ...list.filter(x => x !== val)].slice(0, 5);
+                localStorage.setItem('recent_stage_po_searches', JSON.stringify(list));
+                setRecentPOs(list);
+              }
+            }}
+            placeholder="Tìm mã PO..."
+          />
+          {recentPOs.length > 0 && (
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
+              {recentPOs.map((code) => (
+                <button
+                  key={code}
+                  onClick={() => {
+                    handleFieldChange('batch_no', code);
+                    let list = JSON.parse(localStorage.getItem('recent_stage_po_searches') || '[]');
+                    list = [code, ...list.filter(x => x !== code)].slice(0, 5);
+                    localStorage.setItem('recent_stage_po_searches', JSON.stringify(list));
+                    setRecentPOs(list);
+                  }}
+                  style={{ padding: '4px 10px', borderRadius: '12px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#64748b', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  {code}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 2. Form Thông tin kiểm tra */}
         <div id="stage-form-card">
-          <CollapsibleCard title={`Kiểm tra ngày ${new Date().toLocaleDateString('vi-VN')}`} defaultOpen={true}>
+          <CollapsibleCard title="Thông tin kiểm tra" defaultOpen={true}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <div style={{ flex: 1 }}>
-                  <SearchableSelect
-                    label="PO"
-                    value={formData.batch_no}
-                    options={orders.map(o => ({ label: o.po_code, value: o.po_code }))}
-                    onChange={(e) => handleFieldChange('batch_no', e.target.value)}
-                    placeholder="Tìm mã PO..."
-                  />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <FormInput label="Người nhập" value={user?.full_name || 'Người kiểm tra'} readOnly={true} />
-                </div>
-              </div>
               
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <div style={{ flex: 1 }}>
-                  <FormSelect
-                    label="Sản phẩm"
-                    value={formData.product_sku}
-                    onChange={(e) => handleFieldChange('product_sku', e.target.value)}
-                    options={productOptions}
-                  />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <FormSelect
-                    label="Chi tiết"
-                    value={formData.detail_bam_dinh}
-                    onChange={(e) => handleFieldChange('detail_bam_dinh', e.target.value)}
-                    options={detailOptions}
-                  />
-                </div>
+              {/* <div>
+                <FormInput label="Người nhập" value={user?.full_name || 'Người kiểm tra'} readOnly={true} />
+              </div> */}
+              
+              <div>
+                <FormSelect
+                  label="Tên sản phẩm"
+                  value={formData.product_sku}
+                  onChange={(e) => handleFieldChange('product_sku', e.target.value)}
+                  options={productOptions}
+                />
               </div>
 
+              {/* Chi tiết Table */}
+              {detailsList.length > 0 && (
+                <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '450px', border: '1px solid #cbd5e1', borderRadius: '8px', marginTop: '4px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #cbd5e1', color: '#64748b', fontSize: '11px' }}>
+                        <th style={{ padding: '10px', width: '30px', position: 'sticky', top: 0, backgroundColor: '#f8fafc', zIndex: 1 }}>STT</th>
+                        <th style={{ padding: '10px', width: '80px', position: 'sticky', top: 0, backgroundColor: '#f8fafc', zIndex: 1 }}>Kết quả</th>
+                        <th style={{ padding: '10px', position: 'sticky', top: 0, backgroundColor: '#f8fafc', zIndex: 1 }}>Chi tiết</th>
+                        <th style={{ padding: '10px', textAlign: 'center', width: '50px', position: 'sticky', top: 0, backgroundColor: '#f8fafc', zIndex: 1 }}>Hình ảnh</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detailsList.map((detail, idx) => (
+                        <tr key={detail.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '10px', fontSize: '12px', fontWeight: 'bold' }}>{idx + 1}</td>
+                          <td style={{ padding: '10px' }}>
+                            <button
+                              onClick={() => {
+                                const newConclusion = detail.conclusion === 'pass' ? 'fail' : (detail.conclusion === 'fail' ? 'not_inspected' : 'pass');
+                                const newList = [...detailsList];
+                                newList[idx].conclusion = newConclusion;
+                                setDetailsList(newList);
+                              }}
+                              style={{ 
+                                padding: '4px 6px', borderRadius: '4px', border: 'none', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', width: '100%',
+                                backgroundColor: detail.conclusion === 'pass' ? '#10b981' : (detail.conclusion === 'fail' ? '#ef4444' : '#94a3b8'),
+                                color: '#fff'
+                              }}
+                            >
+                              {detail.conclusion === 'pass' ? 'Đạt' : (detail.conclusion === 'fail' ? 'Không đạt' : 'Chưa KT')}
+                            </button>
+                          </td>
+                          <td style={{ padding: '10px' }}>
+                            <input
+                              type="text"
+                              value={detail.name}
+                              onChange={(e) => {
+                                const newList = [...detailsList];
+                                newList[idx].name = e.target.value;
+                                setDetailsList(newList);
+                              }}
+                              style={{ width: '100%', border: 'none', borderBottom: '1px dashed #cbd5e1', fontSize: '12px', outline: 'none', backgroundColor: 'transparent', padding: '4px 0' }}
+                            />
+                          </td>
+                          <td style={{ padding: '10px', textAlign: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                              <div style={{ width: '28px', height: '28px', backgroundColor: '#f1f5f9', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <Camera size={14} color="#94a3b8" />
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                </div>
+              )}
+
               <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Ghi chú</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#7c6d5e', marginBottom: '4px' }}>Ghi chú</label>
                 <textarea
                   rows="2"
                   value={formData.notes}
                   onChange={(e) => handleFieldChange('notes', e.target.value)}
                   placeholder="Nhập ghi chú"
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem', resize: 'none', outline: 'none' }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', resize: 'none', outline: 'none', boxSizing: 'border-box' }}
                 />
               </div>
 
-              <div style={{ marginTop: '8px' }}>
-                <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#1e293b', marginBottom: '8px' }}>Kết quả bám dính:</div>
-                <PassFailSelector value={formData.results.conclusion} onChange={(val) => handleResultChange('conclusion', val)} variant="button" />
+              {/* Action Buttons inside Card */}
+              <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                <button
+                  onClick={() => setIsConfirmOpen(true)}
+                  style={{ flex: 1, backgroundColor: '#4b301e', color: '#fff', border: 'none', borderRadius: '8px', padding: '12px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  Xác nhận
+                </button>
+                <button
+                  onClick={() => {
+                    setFormData({ batch_no: '', product_sku: '', notes: '', action: 'luu-kho' });
+                    setDetailsList([]);
+                  }}
+                  style={{ flex: 1, backgroundColor: '#fff', color: '#64748b', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '12px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  Hủy
+                </button>
               </div>
             </div>
           </CollapsibleCard>
         </div>
 
-        {/* History */}
-        <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '16px', border: '1px solid #e8e1d5' }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#4b301e', marginBottom: '12px' }}>Lịch sử gần đây</h3>
-          {isHistoryLoading ? (
-            <div style={{ color: '#94a3b8', fontSize: '13px', textAlign: 'center' }}>Đang tải...</div>
-          ) : filteredHistory.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {filteredHistory.map((item) => (
-                <div 
-                  key={item.id}
-                  onClick={() => setSelectedHistoryItem(item)}
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', backgroundColor: '#fdfbf7', borderRadius: '10px', border: '1px solid #f0ede8', cursor: 'pointer' }}
-                >
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: '700', color: '#4b301e' }}>Kiểm tra bám dính ({item.batch_no})</span>
-                    <span style={{ fontSize: '11px', color: '#7c6d5e' }}>SP: {item.product_sku} - Kết quả: <span style={{ fontWeight: '700', color: item.conclusion === 'pass' ? '#10b981' : '#ef4444' }}>{item.conclusion === 'pass' ? 'ĐẠT' : 'KHÔNG ĐẠT'}</span></span>
+        {/* 3. History */}
+        <div id="history-card">
+          <CollapsibleCard title="Lịch sử kiểm tra trong ngày" defaultOpen={false}>
+            {isHistoryLoading ? (
+              <div style={{ color: '#94a3b8', fontSize: '13px', textAlign: 'center', padding: '16px' }}>Đang tải...</div>
+            ) : filteredHistory.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {filteredHistory.map((item) => (
+                  <div 
+                    key={item.id}
+                    onClick={() => setSelectedHistoryItem(item)}
+                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer' }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#1e293b' }}>{item.batch_no}</span>
+                      <span style={{ fontSize: '12px', color: '#64748b' }}>SP: {item.product_sku}</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 'bold', color: item.conclusion === 'pass' ? '#10b981' : '#ef4444' }}>
+                        {item.conclusion === 'pass' ? 'ĐẠT' : 'KHÔNG ĐẠT'}
+                      </span>
+                      <span style={{ fontSize: '11px', color: '#94a3b8' }}>{formatDateTime(item.inspection_date)}</span>
+                    </div>
                   </div>
-                  <span style={{ fontSize: '11px', color: '#a3978b' }}>{formatDateTime(item.inspection_date)}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ color: '#94a3b8', fontSize: '13px', textAlign: 'center', fontStyle: 'italic' }}>Không có lịch sử.</div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="responsive-fixed-footer" style={{ backgroundColor: '#FAF6F0', padding: '16px', display: 'flex', gap: '12px', borderTop: '1px solid #e8e1d5', zIndex: 100 }}>
-          <button
-            onClick={() => setIsConfirmOpen(true)}
-            style={{ flex: 1, backgroundColor: '#4b301e', color: '#fff', border: 'none', borderRadius: '10px', padding: '14px', fontSize: '1rem', fontWeight: '700', cursor: 'pointer' }}
-          >
-            Xác nhận
-          </button>
-          <button
-            onClick={() => setFormData({ batch_no: '', product_sku: '', detail_bam_dinh: '', results: { visual: 'pass', size: 'pass', function: 'pass', conclusion: 'pass' }, notes: '', action: 'luu-kho' })}
-            style={{ flex: 1, backgroundColor: '#fff', color: '#94a3b8', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '14px', fontSize: '1rem', fontWeight: '700', cursor: 'pointer' }}
-          >
-            Hủy
-          </button>
+                ))}
+              </div>
+            ) : (
+              <div style={{ color: '#94a3b8', fontSize: '13px', textAlign: 'center', fontStyle: 'italic', padding: '16px' }}>Không có lịch sử.</div>
+            )}
+          </CollapsibleCard>
         </div>
 
         <ConfirmModal
@@ -340,7 +503,8 @@ const StageAdhesionView = () => {
           onConfirm={() => {
             setIsMessageOpen(false);
             if (messageConfig.type === 'success') {
-              setFormData({ batch_no: '', product_sku: '', detail_bam_dinh: '', results: { visual: 'pass', size: 'pass', function: 'pass', conclusion: 'pass' }, notes: '', action: 'luu-kho' });
+              setFormData({ batch_no: '', product_sku: '', notes: '', action: 'luu-kho' });
+              setDetailsList([]);
             }
           }}
         />

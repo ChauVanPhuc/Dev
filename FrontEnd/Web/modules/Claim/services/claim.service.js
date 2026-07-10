@@ -94,6 +94,14 @@ export const claimService = {
     });
   },
 
+  parseCreditNote: async (formData) => {
+    return await api.post('/claims/claims/parse-credit-note', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+  },
+
   importFolder: async (formData) => {
     return await api.post('/claims/claims/import-folder', formData, {
       headers: {
@@ -182,6 +190,20 @@ export const claimService = {
     return finalResult;
   },
   
+  exportExcel: async (claimsData) => {
+    return await api.post('/claims/claims/export-excel', claimsData, {
+      responseType: 'blob'
+    });
+  },
+
+  getImportedPdfs: async () => {
+    return await api.get('/claims/claims/imported-pdfs');
+  },
+  
+  deleteImportedPdf: async (filename) => {
+    return await api.delete(`/claims/claims/imported-pdfs/${filename}`);
+  },
+
   getImportBatch: async (batchId) => {
     return await api.get(`/claims/claims/imports/${batchId}`);
   },

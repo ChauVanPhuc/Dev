@@ -93,9 +93,15 @@ def export_claims_excel(
                 "image_paths": c.get("image_paths") or []
             })
             
-        # Generate Excel
+        # Generate Excel with images resolved via CLAIM_IMPORTS_DIR
         prices_map = controllers_import.get_cabinet_prices_map(db)
-        controllers_import.save_claims_to_excel(normalized_claims, temp_excel_path, cabinet_prices_map=prices_map)
+        controllers_import.save_claims_to_excel(
+            claims=normalized_claims,
+            excel_path=temp_excel_path,
+            claim_imports_dir=controllers_import.CLAIM_IMPORTS_DIR,
+            resolve_company_func=resolve_company_error_codes,
+            cabinet_prices_map=prices_map
+        )
         
         def remove_file(path: str):
             try:
@@ -116,12 +122,34 @@ def export_claims_excel(
         raise HTTPException(status_code=500, detail=f"Lỗi khi xuất file Excel: {str(e)}")
 
 
+# --- PDF ARCHIVE ENDPOINTS ---
+@router.get("/claims/imported-pdfs", response_model=List[Dict[str, Any]])
+def read_imported_pdfs():
+    try:
+        return controllers_import.get_imported_pdfs_list()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi khi đọc danh sách file PDF: {str(e)}")
+
+@router.delete("/claims/imported-pdfs/{filename}")
+def delete_imported_pdf_file(filename: str):
+    try:
+        success = controllers_import.delete_imported_pdf(filename)
+        if not success:
+            raise HTTPException(status_code=404, detail="Không tìm thấy file PDF yêu cầu.")
+        return {"success": True, "message": "Đã xóa file PDF thành công."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi khi xóa file PDF: {str(e)}")
+
+
 # --- IMPORT PDF CLAIMS ENDPOINTS ---
 @router.post("/claims/import-pdf", status_code=status.HTTP_201_CREATED)
 async def import_claims_from_pdf(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if not file.filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Chỉ chấp nhận các tệp tin định dạng PDF.")
     try:
+        controllers_import.validate_import_files([file], db)
         content = await file.read()
         result = controllers_import.process_pdf_import(content, file.filename, db)
         return result
@@ -137,7 +165,21 @@ async def import_claims_from_folder(files: List[UploadFile] = File(...), db: Ses
         if not file.filename.lower().endswith('.pdf'):
             raise HTTPException(status_code=400, detail=f"Tệp {file.filename} không đúng định dạng PDF.")
     try:
+        controllers_import.validate_import_files(files, db)
         result = await controllers_import.process_folder_import(files, db)
+        return result
+    except ValueError as val_err:
+        raise HTTPException(status_code=400, detail=str(val_err))
+    except Exception as err:
+        raise HTTPException(status_code=500, detail=str(err))
+
+@router.post("/claims/parse-credit-note")
+async def parse_credit_note(file: UploadFile = File(...)):
+    if not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Chỉ chấp nhận tệp tin định dạng PDF.")
+    try:
+        content = await file.read()
+        result = controllers_import.parse_credit_note_pdf_content(content)
         return result
     except ValueError as val_err:
         raise HTTPException(status_code=400, detail=str(val_err))
@@ -155,6 +197,13 @@ async def import_claims_from_folder_stream(files: List[UploadFile] = File(...), 
     for file in files:
         if not file.filename.lower().endswith('.pdf'):
             raise HTTPException(status_code=400, detail=f"Tệp {file.filename} không đúng định dạng PDF.")
+    
+    try:
+        controllers_import.validate_import_files(files, db)
+    except ValueError as val_err:
+        raise HTTPException(status_code=400, detail=str(val_err))
+    except Exception as err:
+        raise HTTPException(status_code=500, detail=str(err))
     
     return StreamingResponse(
         controllers_import.process_folder_import_streaming(files, db),

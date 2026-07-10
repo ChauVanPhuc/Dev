@@ -29,47 +29,13 @@ def get_claims(db: Session, skip: int = 0, limit: int = 10000, search: str = Non
             )
         )
     total = query.count()
-    items = query.order_by(CustomerClaim.id).offset(skip).limit(limit).all()
-    
-    # Post-process items to convert JSON strings back to lists
-    for item in items:
-        if isinstance(item.image_paths, str) and item.image_paths.strip() and item.image_paths.strip() != "[]":
-            try:
-                item.image_paths = json.loads(item.image_paths)
-            except:
-                item.image_paths = []
-        elif not isinstance(item.image_paths, list):
-            item.image_paths = []
-            
-        if isinstance(item.image_captions, str) and item.image_captions.strip() and item.image_captions.strip() != "[]":
-            try:
-                item.image_captions = json.loads(item.image_captions)
-            except:
-                item.image_captions = []
-        elif not isinstance(item.image_captions, list):
-            item.image_captions = []
-                
+    items = query.order_by(desc(CustomerClaim.id)).offset(skip).limit(limit).all()
     return items, total
 
 def get_claim_by_id(db: Session, claim_id: int):
     item = db.query(CustomerClaim).filter(CustomerClaim.id == claim_id).first()
-    if item:
-        if isinstance(item.image_paths, str) and item.image_paths.strip() and item.image_paths.strip() != "[]":
-            try:
-                item.image_paths = json.loads(item.image_paths)
-            except:
-                item.image_paths = []
-        elif not isinstance(item.image_paths, list):
-            item.image_paths = []
-            
-        if isinstance(item.image_captions, str) and item.image_captions.strip() and item.image_captions.strip() != "[]":
-            try:
-                item.image_captions = json.loads(item.image_captions)
-            except:
-                item.image_captions = []
-        elif not isinstance(item.image_captions, list):
-            item.image_captions = []
     return item
+
 
 def create_claim(db: Session, claim: CustomerClaimCreate):
     # Check for duplicate claim_code BEFORE inserting to avoid IntegrityError

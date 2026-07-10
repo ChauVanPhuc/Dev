@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from datetime import datetime
 from typing import Optional, Union
+import json
 
 # --- CUSTOMER CLAIM SCHEMAS ---
 class CustomerClaimBase(BaseModel):
@@ -20,8 +21,23 @@ class CustomerClaimBase(BaseModel):
     image_paths: Optional[Union[str, list]] = None # Union because it might be sent as list or stored as string
     image_captions: Optional[Union[str, list]] = None
 
+    @field_validator('image_paths', 'image_captions', mode='before')
+    @classmethod
+    def parse_json_string(cls, v):
+        if isinstance(v, str) and v.strip():
+            if v.strip() in ("", "[]"):
+                return []
+            try:
+                return json.loads(v)
+            except Exception:
+                return []
+        if v is None:
+            return []
+        return v
+
 class CustomerClaimCreate(CustomerClaimBase):
     pass
+
 
 class CustomerClaimUpdate(BaseModel):
     customer_name: Optional[str] = None

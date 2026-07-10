@@ -210,14 +210,7 @@ const StageInspection = () => {
     setIsPoSearching(true);
     setPoNotFound(false);
     try {
-      // 1. Fetch Order Header details to see if PO exists
-      let order = null;
-      try {
-        const resHeader = await apiClient.get(`orders/code/${searchCode}`);
-        order = resHeader.data;
-      } catch (hErr) {}
-
-      // A. Load from PO Items (Excel PurchaseOrderItems)
+      // A. Fetch Purchase Order Items FIRST
       let itemsList = [];
       let supplierName = 'N/A';
       let supplierCode = '';
@@ -235,6 +228,15 @@ const StageInspection = () => {
         }
       } catch (err) {}
 
+      // B. Fetch Order Header details ONLY if not found in Purchase Orders
+      let order = null;
+      if (itemsList.length === 0) {
+        try {
+          const resHeader = await apiClient.get(`orders/code/${searchCode}`);
+          order = resHeader.data;
+        } catch (hErr) {}
+      }
+
       if (!order && itemsList.length === 0) {
         setPoNotFound(true);
         setPoItems([]);
@@ -249,9 +251,11 @@ const StageInspection = () => {
         const key = (name || code || '').trim();
         if (!key) return;
 
-        // Loại bỏ mã sản phẩm cha (như 2-30-BRO, 2-42-BRO)
-        const isProductSku = /^[A-Z0-9\-_]+$/.test(key) && key.includes('-');
-        if (isProductSku) return;
+        // Loại bỏ mã sản phẩm cha (như 2-30-BRO, 2-42-BRO) trừ khi là hàng mua
+        if (!opts.isFromPO) {
+          const isProductSku = /^[A-Z0-9\-_]+$/.test(key) && key.includes('-');
+          if (isProductSku) return;
+        }
 
         // Bỏ các loại ván ghép, ván ép, ván MDF, ván HMR (nguyên vật liệu thô)
         const nameLower = key.toLowerCase();
@@ -279,7 +283,8 @@ const StageInspection = () => {
       itemsList.forEach(it => {
         addPart(it.item_code, it.item_name, it.quantity || 0, {
           is_raw_material: it.is_raw_material,
-          exclude_production: it.exclude_production
+          exclude_production: it.exclude_production,
+          isFromPO: true
         });
       });
 
@@ -306,28 +311,30 @@ const StageInspection = () => {
       }
 
       // C. Load from PO products BOM elements (including sub-elements)
-      try {
-        const resProducts = await apiClient.get(`orders/by-code/${searchCode}/products`);
-        const productsData = resProducts.data || {};
-        if (Array.isArray(productsData.items)) {
-          productsData.items.forEach(it => {
-            addPart(it.sku, it.name, 0);
-          });
-        }
-        if (Array.isArray(productsData.products)) {
-          productsData.products.forEach(p => {
-            if (Array.isArray(p.elements)) {
-              p.elements.forEach(el => {
-                addPart(el.sku, el.name, el.quantity || 0, {
-                  is_raw_material: el.is_raw_material,
-                  exclude_production: el.exclude_production
+      if (order) {
+        try {
+          const resProducts = await apiClient.get(`orders/by-code/${searchCode}/products`);
+          const productsData = resProducts.data || {};
+          if (Array.isArray(productsData.items)) {
+            productsData.items.forEach(it => {
+              addPart(it.sku, it.name, 0);
+            });
+          }
+          if (Array.isArray(productsData.products)) {
+            productsData.products.forEach(p => {
+              if (Array.isArray(p.elements)) {
+                p.elements.forEach(el => {
+                  addPart(el.sku, el.name, el.quantity || 0, {
+                    is_raw_material: el.is_raw_material,
+                    exclude_production: el.exclude_production
+                  });
                 });
-              });
-            }
-          });
+              }
+            });
+          }
+        } catch (prodErr) {
+          // Ignore
         }
-      } catch (prodErr) {
-        console.error('Lỗi khi tải danh sách sản phẩm BOM:', prodErr);
       }
 
       const mergedItems = Object.values(aggregated).map((it, idx) => ({
@@ -350,7 +357,6 @@ const StageInspection = () => {
         order_date: orderDate || (order ? order.create_date : ''),
         delivery_date: deliveryDate || (order ? order.estimated_date : '')
       };
-
       try {
         const reqRes = await apiClient.get(`purchase-requisitions/?search=${searchCode}`);
         if (reqRes.data && reqRes.data.items && reqRes.data.items.length > 0) {
@@ -361,7 +367,6 @@ const StageInspection = () => {
           headerInfo.supplier_name = matchedReq.supplier_name;
         }
       } catch (err) { }
-
       // Fetch existing inspections for this PO
       const insRes = await apiClient.get(`inspections/stage?batch_no=${searchCode}`);
       const inspections = insRes.data;
