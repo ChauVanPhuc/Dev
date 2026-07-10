@@ -27,3 +27,7 @@ class InputInspection(InputInspectionBase):
 
     class Config:
         from_attributes = True
+
+class InputInspectionRead(InputInspection):
+    inspector_name: Optional[str] = None
+

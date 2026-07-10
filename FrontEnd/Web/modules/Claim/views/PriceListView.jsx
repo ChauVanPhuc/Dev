@@ -143,6 +143,7 @@ const PriceListView = () => {
   const [isImportDropdownOpen, setIsImportDropdownOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(15);
   const [actionMenuId, setActionMenuId] = useState(null);
   const excelInputRef = useRef(null);
   const [duplicateImportData, setDuplicateImportData] = useState(null);
@@ -350,7 +351,7 @@ const PriceListView = () => {
     });
   };
 
-  const rowsPerPage = 13;
+
 
   // Reset page when data, search, or filters change
   useEffect(() => {
@@ -1113,6 +1114,36 @@ const PriceListView = () => {
               <path d="M15 18H3M21 14H3M17 10H3M21 6H3"></path>
             </svg>
           </div>
+
+          {/* PAGE SIZE SELECT */}
+          <select 
+            value={rowsPerPage} 
+            onChange={(e) => { setRowsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
+            className="page-size-select select-minimal"
+            style={{ 
+              height: '36px',
+              padding: '0 28px 0 10px',
+              borderRadius: '8px',
+              border: '1px solid #EADCC9',
+              backgroundColor: '#FAF6F0',
+              color: '#7B5233',
+              fontWeight: 'bold',
+              fontSize: '0.8rem',
+              cursor: 'pointer',
+              outline: 'none',
+              appearance: 'none',
+              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%237B5233'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'right 8px center',
+              backgroundSize: '12px',
+              marginLeft: '8px'
+            }}
+          >
+            <option value={15}>15 dòng</option>
+            <option value={30}>30 dòng</option>
+            <option value={50}>50 dòng</option>
+            <option value={100}>100 dòng</option>
+          </select>
         </div>
 
         <div className="toolbar-right">

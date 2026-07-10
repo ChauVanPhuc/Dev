@@ -2203,7 +2203,7 @@ const DeliveryTracking = () => {
             <div className="admin-list-layout">
                 <div className="mgmt-table card admin-table-card">
                     <div className="table-responsive desktop-only admin-table-scroll">
-                        <table className="manufacture-table data-table">
+                        <table className="manufacture-table data-table" style={{ minWidth: '1300px' }}>
                             <thead>
                                 <tr>
                                     <th style={{ textAlign: 'center' }}>STT</th>

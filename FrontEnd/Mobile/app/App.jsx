@@ -31,6 +31,8 @@ import CtqSosView from '@modules/inspection/Views/CtqSosView'
 import WarningsView from '@modules/inspection/Views/WarningsView'
 import StageAdhesionView from '@modules/inspection/Views/StageAdhesionView'
 import StagePackagingView from '@modules/inspection/Views/StagePackagingView'
+import StageMoistureView from '@modules/inspection/Views/StageMoistureView'
+import StageProcessView from '@modules/inspection/Views/StageProcessView'
 import ShapingInspectionView from '@modules/inspection/Views/ShapingInspectionView'
 import AssemblyInspectionView from '@modules/inspection/Views/AssemblyInspectionView'
 import PaintingInspectionView from '@modules/inspection/Views/PaintingInspectionView'
@@ -102,6 +104,8 @@ function App() {
             <Route path="/ctq-sos" element={<CtqSosView />} />
             <Route path="/warnings" element={<WarningsView />} />
             <Route path="/inspection-stage-adhesion" element={<StageAdhesionView />} />
+            <Route path="/inspection-stage-moisture" element={<StageMoistureView />} />
+            <Route path="/inspection-stage-process" element={<StageProcessView />} />
             <Route path="/inspection-stage-packaging" element={<StagePackagingView />} />
             <Route path="/inspection-daily-shaping" element={<ShapingInspectionView />} />
             <Route path="/inspection-daily-assembly" element={<AssemblyInspectionView />} />

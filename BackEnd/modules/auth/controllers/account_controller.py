@@ -235,7 +235,9 @@ def resolve_user_permissions(user, db: Session) -> dict:
         "mobile_plan", "mobile_inspection-daily", "mobile_inspection-stage", "mobile_quality-detail",
         "mobile_input-inspection", "mobile_logs", "mobile_capa-list", "mobile_capa-report",
         "mobile_capa-detail", "mobile_feedback", "mobile_awards", "mobile_kpi", "mobile_kpi-staff",
-        "mobile_staff-evaluation", "mobile_equipment-list"
+        "mobile_staff-evaluation", "mobile_equipment-list",
+        "mobile_inspection-first-article", "mobile_inspection-stage-moisture",
+        "mobile_inspection-stage-process", "mobile_inspection-stage-adhesion"
     ]
     
     # 2. Quyền mặc định hệ thống ban đầu (Default deny)
@@ -304,7 +306,9 @@ def resolve_user_permissions(user, db: Session) -> dict:
                     "mobile_inspection-daily", "mobile_inspection-stage", "mobile_quality-detail",
                     "mobile_input-inspection", "mobile_logs", "mobile_capa-list", "mobile_capa-report",
                     "mobile_capa-detail", "mobile_feedback", "mobile_kpi", "mobile_kpi-staff",
-                    "mobile_staff-evaluation"
+                    "mobile_staff-evaluation",
+                    "mobile_inspection-first-article", "mobile_inspection-stage-moisture",
+                    "mobile_inspection-stage-process", "mobile_inspection-stage-adhesion"
                 ]
                 
             # Xác định permission_level (Lớp 2)

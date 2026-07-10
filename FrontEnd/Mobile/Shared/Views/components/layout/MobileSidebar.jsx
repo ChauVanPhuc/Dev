@@ -71,6 +71,10 @@ const Sidebar = () => {
     if (path.startsWith('/delivery-receive')) return 'mobile_delivery-receive';
     if (path.startsWith('/plan')) return 'mobile_plan';
     if (path.startsWith('/inspection-daily')) return 'mobile_inspection-daily';
+    if (path.startsWith('/inspection-first-article')) return 'mobile_inspection-first-article';
+    if (path.startsWith('/inspection-stage-moisture')) return 'mobile_inspection-stage-moisture';
+    if (path.startsWith('/inspection-stage-process')) return 'mobile_inspection-stage-process';
+    if (path.startsWith('/inspection-stage-adhesion')) return 'mobile_inspection-stage-adhesion';
     if (path.startsWith('/inspection-stage')) return 'mobile_inspection-stage';
     if (path.startsWith('/logs')) return 'mobile_logs';
     if (path.startsWith('/thermal-print')) return 'mobile_thermal-print';
@@ -118,7 +122,10 @@ const Sidebar = () => {
       hasSub: true,
       items: [
         { label: 'Kiểm tra nhập kho', path: '/inspection-stage' },
+        { label: 'Kiểm tra độ ẩm', path: '/inspection-stage-moisture' },
+        { label: 'Kiểm tra quy trình', path: '/inspection-stage-process' },
         { label: 'Kiểm tra mẫu đầu tiên', path: '/inspection-first-article' },
+        { label: 'Kiểm tra bám dính', path: '/inspection-stage-adhesion' },
         { label: 'Kiểm tra thông số', path: '/input-inspection' },
         { label: 'Nhập lỗi', path: '/inspection-daily' },
         { label: 'Lịch sử kiểm tra', path: '/logs' }

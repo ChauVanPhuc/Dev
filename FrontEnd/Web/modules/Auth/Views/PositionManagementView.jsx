@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { ArrowLeft, Plus, Edit2, Trash2, Check, X, Search, Shield, Layers } from 'lucide-react';
+import { ArrowLeft, Plus, Edit2, Trash2, Check, X, Search, Shield, Layers, FileDown, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import api from '@webShared/Services/api.service';
+import ExcelJS from 'exceljs';
 import '@styles/components.css';
 
 const SCREEN_GROUPS = [
@@ -102,6 +103,84 @@ const PositionManagement = () => {
   const [showExtraMenu, setShowExtraMenu] = useState(false);
   const extraMenuRef = useRef(null);
 
+  // States đồng bộ phân trang & bộ lọc
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Xuất file Excel đồng bộ
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet('Danh sách chức vụ');
+      
+      sheet.mergeCells(1, 1, 1, 4);
+      const titleCell = sheet.getCell(1, 1);
+      titleCell.value = 'DANH SÁCH CHỨC VỤ TRONG HỆ THỐNG';
+      titleCell.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFF' } };
+      titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+      titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '7B5233' } };
+      sheet.getRow(1).height = 40;
+
+      const headers = ['ID', 'Tên chức vụ', 'Mô tả', 'Trạng thái'];
+      sheet.addRow(headers);
+      const headerRow = sheet.getRow(2);
+      headerRow.height = 26;
+      headerRow.eachCell(cell => {
+        cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '7B5233' } };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      });
+
+      filteredPositions.forEach(pos => {
+        sheet.addRow([
+          pos.id,
+          pos.name,
+          pos.description || '',
+          pos.is_active ? 'Đang sử dụng' : 'Dừng hoạt động'
+        ]);
+      });
+
+      sheet.columns = [
+        { width: 10 },
+        { width: 25 },
+        { width: 40 },
+        { width: 18 }
+      ];
+
+      for (let r = 3; r <= filteredPositions.length + 2; r++) {
+        sheet.getRow(r).height = 20;
+        for (let c = 1; c <= 4; c++) {
+          const cell = sheet.getCell(r, c);
+          cell.font = { name: 'Arial', size: 9 };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'EADCC9' } },
+            bottom: { style: 'thin', color: { argb: 'EADCC9' } },
+            left: { style: 'thin', color: { argb: 'EADCC9' } },
+            right: { style: 'thin', color: { argb: 'EADCC9' } }
+          };
+        }
+      }
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `Danh_Sach_Chuc_Vu_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Lỗi khi xuất excel:', err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (extraMenuRef.current && !extraMenuRef.current.contains(e.target)) {
@@ -153,11 +232,17 @@ const PositionManagement = () => {
     fetchData();
   }, []);
 
-  // Tìm kiếm cục bộ
-  const filteredPositions = positions.filter(pos => 
-    pos.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    pos.description?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Lọc và Tìm kiếm cục bộ
+  const filteredPositions = positions.filter(pos => {
+    const matchesSearch = (pos.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          (pos.description || '').toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || 
+                          (statusFilter === 'active' && pos.is_active) || 
+                          (statusFilter === 'inactive' && !pos.is_active);
+    return matchesSearch && matchesStatus;
+  });
+
+  const paginatedPositions = filteredPositions.slice((page - 1) * pageSize, page * pageSize);
 
   // Mở Modal
   const openCreateModal = () => {
@@ -263,22 +348,104 @@ const PositionManagement = () => {
   return (
     <div style={{ width: '100%', paddingBottom: '40px' }}>
       {/* ── Thanh công cụ (Toolbar) ── */}
-      <div className="mgmt-toolbar card" style={{ marginBottom: '20px' }}>
+      <div className="mgmt-toolbar card" style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
         {/* Nhóm bộ lọc bên trái */}
-        <div className="toolbar-left" style={{ flex: 1 }}>
+        <div className="toolbar-left" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <div className="search-wrapper">
             <Search size={18} className="search-icon" />
             <input 
               type="text" 
               placeholder="Tìm kiếm chức vụ..." 
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
             />
           </div>
+
+          {/* Lọc trạng thái hoạt động */}
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <Filter size={14} color="#7B5233" style={{ position: 'absolute', left: '10px', pointerEvents: 'none' }} />
+            <select
+              value={statusFilter}
+              onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+              style={{
+                padding: '0 28px 0 28px',
+                height: '36px',
+                borderRadius: '8px',
+                border: '1px solid #EADCC9',
+                backgroundColor: '#FAF6F0',
+                color: '#7B5233',
+                fontWeight: '700',
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                outline: 'none',
+                appearance: 'none',
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%237B5233'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'right 8px center',
+                backgroundSize: '12px'
+              }}
+            >
+              <option value="all">Trạng thái: Tất cả</option>
+              <option value="active">Đang sử dụng</option>
+              <option value="inactive">Dừng hoạt động</option>
+            </select>
+          </div>
+
+          {/* Chọn số dòng hiển thị */}
+          <select 
+            value={pageSize} 
+            onChange={(e) => { setPageSize(parseInt(e.target.value)); setPage(1); }}
+            className="page-size-select"
+            style={{ 
+              height: '36px',
+              padding: '0 28px 0 10px',
+              borderRadius: '8px',
+              border: '1px solid #EADCC9',
+              backgroundColor: '#FAF6F0',
+              color: '#7B5233',
+              fontWeight: '700',
+              fontSize: '0.8rem',
+              cursor: 'pointer',
+              outline: 'none',
+              appearance: 'none',
+              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%237B5233'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'right 8px center',
+              backgroundSize: '12px'
+            }}
+          >
+            <option value={15}>15 dòng</option>
+            <option value={30}>30 dòng</option>
+            <option value={50}>50 dòng</option>
+            <option value={100}>100 dòng</option>
+          </select>
         </div>
 
         {/* Nhóm hành động bên phải */}
         <div className="toolbar-right" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          {/* Nút xuất dữ liệu Excel */}
+          <button 
+            type="button"
+            onClick={handleExportExcel}
+            disabled={isExporting}
+            style={{
+              height: '36px',
+              padding: '0 12px',
+              borderRadius: '8px',
+              border: '1px solid #EADCC9',
+              backgroundColor: '#fff',
+              color: '#7B5233',
+              fontSize: '0.85rem',
+              fontWeight: '700',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: isExporting ? 'not-allowed' : 'pointer'
+            }}
+          >
+            <FileDown size={16} /> Xuất Excel
+          </button>
+
           <div style={{ position: 'relative' }} ref={extraMenuRef}>
             <button
               onClick={() => setShowExtraMenu(p => !p)}
@@ -372,7 +539,8 @@ const PositionManagement = () => {
         ) : filteredPositions.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px', color: '#9CA3AF' }}>Không tìm thấy chức vụ nào phù hợp.</div>
         ) : (
-          <div className="table-responsive">
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <div className="table-responsive">
             <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid #EADCC9', backgroundColor: '#FAF6F0' }}>
@@ -385,7 +553,7 @@ const PositionManagement = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredPositions.map((pos, index) => (
+                {paginatedPositions.map((pos, index) => (
                   <tr 
                     key={pos.id} 
                     style={{ 
@@ -493,8 +661,57 @@ const PositionManagement = () => {
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+
+          {/* Thanh phân trang đồng bộ */}
+          {(() => {
+            const totalPages = Math.ceil(filteredPositions.length / pageSize);
+            return totalPages > 1 ? (
+              <div className="admin-pagination-desktop" style={{ borderTop: '1px solid #EADCC9', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff' }}>
+                <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
+                  Hiển thị <b>{paginatedPositions.length}</b> trên <b>{filteredPositions.length}</b> chức vụ
+                </div>
+                <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                  <button 
+                    className="page-btn" 
+                    onClick={() => setPage(prev => Math.max(prev - 1, 1))} 
+                    disabled={page === 1}
+                    style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#7B5233', cursor: page === 1 ? 'not-allowed' : 'pointer', opacity: page === 1 ? 0.5 : 1 }}
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p)}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '8px',
+                        border: '1px solid #EADCC9',
+                        backgroundColor: page === p ? '#7B5233' : '#FAF6F0',
+                        color: page === p ? '#fff' : '#7B5233',
+                        fontWeight: '700',
+                        fontSize: '0.8rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                  <button 
+                    className="page-btn" 
+                    onClick={() => setPage(prev => Math.min(prev + 1, totalPages))} 
+                    disabled={page === totalPages}
+                    style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#7B5233', cursor: page === totalPages ? 'not-allowed' : 'pointer', opacity: page === totalPages ? 0.5 : 1 }}
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            ) : null;
+          })()}
+        </div>
+      )}
+    </div>
 
       {/* ── Modal Thêm/Sửa Chức vụ ── */}
       {isModalOpen && (

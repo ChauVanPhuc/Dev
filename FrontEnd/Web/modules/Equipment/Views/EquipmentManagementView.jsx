@@ -35,7 +35,7 @@ const EquipmentManagementView = () => {
   
   // Pagination & Popups
   const [page, setPage] = useState(1);
-  const pageSize = 15;
+  const [pageSize, setPageSize] = useState(15);
   const [showOtherMenu, setShowOtherMenu] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportOptions, setExportOptions] = useState({
@@ -434,13 +434,28 @@ const EquipmentManagementView = () => {
                 ))}
               </div>
 
-              {/* Pagination */}
+              {/* Pagination Controls */}
               {filteredEquipments.length > 0 && (
-                <div className="admin-pagination-desktop" style={{ borderTop: '1px solid #e2e8f0', padding: '16px 24px' }}>
-                  <span className="pagination-info" style={{ fontWeight: '600', color: '#64748b' }}>
-                    Hiển thị {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredEquipments.length)} / {filteredEquipments.length} thiết bị
-                  </span>
-                  <div className="pagination-controls" style={{ display: 'flex', gap: '5px' }}>
+                <div className="pagination-container" style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #EADCC9' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                    <span style={{ fontSize: '13px', color: '#8D6E63' }}>
+                      Hiển thị {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredEquipments.length)} / {filteredEquipments.length} thiết bị
+                    </span>
+                    <select 
+                      value={pageSize}
+                      onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                      style={{ 
+                        padding: '4px 8px', borderRadius: '6px', border: '1px solid #EADCC9', 
+                        fontSize: '13px', color: '#7B5233', outline: 'none', cursor: 'pointer'
+                      }}
+                    >
+                      <option value={15}>15 dòng/trang</option>
+                      <option value={20}>20 dòng/trang</option>
+                      <option value={30}>30 dòng/trang</option>
+                      <option value={50}>50 dòng/trang</option>
+                    </select>
+                  </div>
+                  <div className="pagination-buttons" style={{ display: 'flex', gap: '4px' }}>
                     <button 
                       disabled={page === 1} 
                       onClick={() => setPage(prev => Math.max(prev - 1, 1))} 
@@ -448,15 +463,30 @@ const EquipmentManagementView = () => {
                     >
                       Trước
                     </button>
-                    {[...Array(Math.ceil(filteredEquipments.length / pageSize))].map((_, i) => (
-                      <button
-                        key={i}
-                        className={`page-btn ${page === i + 1 ? 'active' : ''}`}
-                        onClick={() => setPage(i + 1)}
-                      >
-                        {i + 1}
-                      </button>
-                    ))}
+                    {[...Array(Math.ceil(filteredEquipments.length / pageSize))].map((_, i) => {
+                      const totalPages = Math.ceil(filteredEquipments.length / pageSize);
+                      if (
+                        i === 0 || 
+                        i === totalPages - 1 || 
+                        (i >= page - 2 && i <= page)
+                      ) {
+                        return (
+                          <button 
+                            key={i} 
+                            className={`page-btn ${page === i + 1 ? 'active' : ''}`}
+                            onClick={() => setPage(i + 1)}
+                          >
+                            {i + 1}
+                          </button>
+                        );
+                      } else if (
+                        i === page - 3 || 
+                        i === page + 1
+                      ) {
+                        return <span key={i} style={{ padding: '0 8px', color: '#8D6E63' }}>...</span>;
+                      }
+                      return null;
+                    })}
                     <button 
                       disabled={page >= Math.ceil(filteredEquipments.length / pageSize)} 
                       onClick={() => setPage(prev => Math.min(prev + 1, Math.ceil(filteredEquipments.length / pageSize)))} 

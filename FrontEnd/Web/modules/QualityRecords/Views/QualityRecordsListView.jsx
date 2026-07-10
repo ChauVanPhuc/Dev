@@ -543,8 +543,8 @@ const QualityRecordsListView = () => {
                     ) : (
                         <>
                             {/* Bảng Desktop */}
-                            <div className="table-responsive desktop-only admin-table-scroll" style={{ flex: 1, overflowY: 'auto' }}>
-                                <table className="data-table">
+                            <div className="table-responsive desktop-only admin-table-scroll" style={{ flex: 1, overflowY: 'auto', overflowX: 'auto' }}>
+                                <table className="data-table" style={{ minWidth: '1000px' }}>
                                     <thead>
                                         <tr>
                                             <th style={{ width: '80px', textAlign: 'center' }}>STT</th>

@@ -15,6 +15,7 @@ const ManufactureProducts = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [limit, setLimit] = useState(15);
   const [actionMenuId, setActionMenuId] = useState(null);
+  const [filterType, setFilterType] = useState('all');
 
   useEffect(() => {
     const handleOutsideClick = () => {
@@ -26,7 +27,7 @@ const ManufactureProducts = () => {
 
   useEffect(() => {
     fetchProducts();
-  }, [page, searchTerm, limit]); // Reload when page, search, or limit changes
+  }, [page, searchTerm, limit, filterType]); // Reload when page, search, limit, or filterType changes
   
   // Đã gỡ bỏ logic khóa điều hướng cục bộ, Layout sẽ xử lý ngầm
 
@@ -78,6 +79,20 @@ const ManufactureProducts = () => {
     }
   };
 
+  const displayedProducts = products.filter(product => {
+    if (filterType === 'atlas') {
+      return (product.sku || '').toUpperCase().startsWith('A');
+    }
+    if (filterType === 'table') {
+      return (product.sku || '').toUpperCase().startsWith('T');
+    }
+    if (filterType === 'other') {
+      const sku = (product.sku || '').toUpperCase();
+      return !sku.startsWith('A') && !sku.startsWith('T');
+    }
+    return true;
+  });
+
   const handleDelete = async (id) => {
     if (!window.confirm("Bạn có chắc chắn muốn xóa sản phẩm này?")) return;
     try {
@@ -126,6 +141,32 @@ const ManufactureProducts = () => {
                 onKeyDown={(e) => e.key === 'Enter' && fetchProducts(true)}
               />
             </div>
+
+            {/* Bộ lọc phân loại */}
+            <select
+              value={filterType}
+              onChange={(e) => {
+                setFilterType(e.target.value);
+                setPage(0);
+              }}
+              style={{
+                height: '36px',
+                borderRadius: '8px',
+                border: '1px solid #EADCC9',
+                backgroundColor: '#FAF6F0',
+                color: '#7B5233',
+                fontWeight: '700',
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                outline: 'none',
+                padding: '0 10px'
+              }}
+            >
+              <option value="all">Phân loại: Tất cả</option>
+              <option value="atlas">Dòng tủ Atlas (A)</option>
+              <option value="table">Dòng tủ Table (T)</option>
+              <option value="other">Dòng khác</option>
+            </select>
             
             <select 
               value={limit}
@@ -222,14 +263,14 @@ const ManufactureProducts = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {products.length === 0 ? (
+                    {displayedProducts.length === 0 ? (
                       <tr>
                         <td colSpan="5" style={{ textAlign: 'center', color: '#6b7280' }}>
                           Chưa có sản phẩm mẫu nào
                         </td>
                       </tr>
                     ) : (
-                      products.map((product, index) => (
+                      displayedProducts.map((product, index) => (
                         <tr 
                           key={product.id} 
                           className="animate-card-entrance"
@@ -286,7 +327,7 @@ const ManufactureProducts = () => {
               {!loading && (
                 <div className="admin-pagination-desktop desktop-only">
                   <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#111827' }}>
-                    {products.length} of {total}
+                    Hiển thị {displayedProducts.length} trên {total} sản phẩm
                   </div>
                   
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -350,7 +391,7 @@ const ManufactureProducts = () => {
           {/* Mobile view */}
           <div className="mobile-only manufacture-cards-scroll">
             <div className="manufacture-cards-container">
-              {products.map((product, idx) => (
+              {displayedProducts.map((product, idx) => (
                 <div key={product.id} className="plan-mobile-card status-completed card-shadow animate-card-entrance" onClick={() => navigate(`/admin/products/${product.id}`)}>
                   <div className="card-header">
                     <span className="card-khsx">{product.name}</span>
@@ -369,7 +410,7 @@ const ManufactureProducts = () => {
                   <div style={{ marginTop: '8px', fontSize: '0.75rem', color: '#94a3b8', textAlign: 'right' }}>Nhấn để xem chi tiết ›</div>
                 </div>
               ))}
-              {products.length === 0 && (
+              {displayedProducts.length === 0 && (
                 <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
                   Không có sản phẩm nào.
                 </div>

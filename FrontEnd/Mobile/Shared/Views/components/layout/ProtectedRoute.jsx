@@ -13,6 +13,10 @@ const mapPathToPermissionKey = (pathname) => {
   if (path.startsWith('/delivery-receive')) return 'mobile_delivery-receive';
   if (path.startsWith('/plan')) return 'mobile_plan';
   if (path.startsWith('/inspection-daily')) return 'mobile_inspection-daily';
+  if (path.startsWith('/inspection-stage-moisture')) return 'mobile_inspection-stage-moisture';
+  if (path.startsWith('/inspection-stage-adhesion')) return 'mobile_inspection-stage-adhesion';
+  if (path.startsWith('/inspection-stage-process')) return 'mobile_inspection-stage-process';
+  if (path.startsWith('/inspection-first-article')) return 'mobile_inspection-first-article';
   if (path.startsWith('/inspection-stage')) return 'mobile_inspection-stage';
   if (path.startsWith('/logs')) return 'mobile_logs';
   if (path.startsWith('/thermal-print')) return 'mobile_thermal-print';

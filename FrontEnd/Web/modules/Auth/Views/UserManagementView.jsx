@@ -90,6 +90,10 @@ const MOBILE_SCREEN_GROUPS = [
     screens: [
       { key: 'mobile_inspection-daily', name: 'Kiểm tra hàng ngày' },
       { key: 'mobile_inspection-stage', name: 'Kiểm tra sản phẩm' },
+      { key: 'mobile_inspection-first-article', name: 'Kiểm tra mẫu đầu tiên' },
+      { key: 'mobile_inspection-stage-moisture', name: 'Kiểm tra độ ẩm' },
+      { key: 'mobile_inspection-stage-process', name: 'Kiểm tra quy trình' },
+      { key: 'mobile_inspection-stage-adhesion', name: 'Kiểm tra bám dính' },
       { key: 'mobile_quality-detail', name: 'Chi tiết kiểm QC' },
       { key: 'mobile_input-inspection', name: 'Kiểm tra IQC' },
       { key: 'mobile_logs', name: 'Nhật ký kiểm QC' },

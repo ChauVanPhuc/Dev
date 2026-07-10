@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '@webShared/Services/api.service';
 import { useOutletContext, useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Edit, Search, Filter, Upload, FileText, Download, AlertCircle, CheckCircle, ExternalLink, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Edit, Search, Filter, Upload, FileText, Download, AlertCircle, CheckCircle, ExternalLink, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
 import '@styles/components.css';
 
 const ISODocumentListView = ({ mode = 'documents' }) => {
@@ -35,6 +35,13 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
     message: '',
     onConfirm: null
   });
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, statusFilter, mode]);
 
   useEffect(() => {
     setCustomTitle('G7 - Smart Flow');
@@ -210,6 +217,10 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
     });
   }, [documents, searchTerm, statusFilter, mode]);
 
+  const paginatedDocs = useMemo(() => {
+    return filteredDocs.slice((page - 1) * pageSize, page * pageSize);
+  }, [filteredDocs, page, pageSize]);
+
   return (
     <div style={{ fontFamily: 'Inter, sans-serif', display: 'flex', flexDirection: 'column', gap: '20px' }}>
       
@@ -290,6 +301,29 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
               <option value="Dự thảo">Dự thảo</option>
             </select>
           </div>
+
+          {/* PAGE SIZE SELECT */}
+          <select 
+            value={pageSize} 
+            onChange={(e) => { setPageSize(parseInt(e.target.value)); setPage(1); }}
+            className="page-size-select"
+            style={{ 
+              padding: '8px 12px',
+              borderRadius: '8px',
+              border: '1px solid #7B5233',
+              backgroundColor: 'white',
+              color: '#7B5233',
+              fontWeight: 'bold',
+              fontSize: '0.88rem',
+              cursor: 'pointer',
+              outline: 'none',
+            }}
+          >
+            <option value={15}>15 dòng</option>
+            <option value={30}>30 dòng</option>
+            <option value={50}>50 dòng</option>
+            <option value={100}>100 dòng</option>
+          </select>
         </div>
 
         {/* Nút Tạo mới & Upload */}
@@ -375,7 +409,8 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
             <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem' }}>Vui lòng nhấn tải lên file Word hoặc thêm mới để bắt đầu cấu hình</p>
           </div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '900px' }}>
               <thead>
                 <tr style={{ backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9' }}>
@@ -413,7 +448,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                 </tr>
               </thead>
               <tbody>
-                {filteredDocs.map((doc, index) => (
+                {paginatedDocs.map((doc, index) => (
                   <tr
                     key={doc.id}
                     style={{
@@ -519,6 +554,55 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Thanh phân trang đồng bộ */}
+          {(() => {
+            const totalPages = Math.ceil(filteredDocs.length / pageSize);
+            return totalPages > 1 ? (
+              <div className="admin-pagination-desktop" style={{ borderTop: '1px solid #EADCC9', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', borderBottomLeftRadius: '12px', borderBottomRightRadius: '12px' }}>
+                <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
+                  Hiển thị <b>{paginatedDocs.length}</b> trên <b>{filteredDocs.length}</b> tài liệu
+                </div>
+                <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                  <button 
+                    className="page-btn" 
+                    onClick={() => setPage(prev => Math.max(prev - 1, 1))} 
+                    disabled={page === 1}
+                    style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#7B5233', cursor: page === 1 ? 'not-allowed' : 'pointer', opacity: page === 1 ? 0.5 : 1 }}
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p)}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '8px',
+                        border: '1px solid #EADCC9',
+                        backgroundColor: page === p ? '#7B5233' : '#FAF6F0',
+                        color: page === p ? '#fff' : '#7B5233',
+                        fontWeight: '700',
+                        fontSize: '0.8rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                  <button 
+                    className="page-btn" 
+                    onClick={() => setPage(prev => Math.min(prev + 1, totalPages))} 
+                    disabled={page === totalPages}
+                    style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#7B5233', cursor: page === totalPages ? 'not-allowed' : 'pointer', opacity: page === totalPages ? 0.5 : 1 }}
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            ) : null;
+          })()}
           </div>
         )}
       </div>

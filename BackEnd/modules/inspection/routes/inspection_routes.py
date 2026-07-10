@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 from config.database import get_db
 from modules.inspection.models.input_inspection import InputInspection
-from modules.inspection.schemas.input_inspection import InputInspection as InspectionSchema
+from modules.inspection.schemas.input_inspection import InputInspection as InspectionSchema, InputInspectionRead
 from modules.inspection.models.defect_type import DefectType, ClientDefect, DefectGlossary
 from modules.inspection.models.user_defect_tracking import UserDefectTracking
 from modules.inspection.schemas.defect_type import DefectType as DefectTypeSchema, DefectTypeCreate, ClientDefect as ClientDefectSchema
@@ -83,6 +83,29 @@ def get_daily_inspections(
             user = db.query(Account).filter(Account.id == r.inspector_id).first()
             if user:
                 r.inspector_name = user.full_name
+    return records
+
+@router.get("/inbound", response_model=List[InputInspectionRead])
+def get_all_inbound_inspections(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy danh sách toàn bộ phiếu kiểm tra đầu vào.
+    """
+    records = db.query(InputInspection).order_by(InputInspection.inspected_at.desc()).offset(skip).limit(limit).all()
+    
+    # Gắn thêm tên người kiểm tra
+    for r in records:
+        if r.inspector_id:
+            user = db.query(Account).filter(Account.id == r.inspector_id).first()
+            if user:
+                r.inspector_name = user.full_name
+            else:
+                r.inspector_name = "N/A"
+        else:
+            r.inspector_name = "N/A"
     return records
 
 @router.post("/stage", response_model=StageInspectionRead)

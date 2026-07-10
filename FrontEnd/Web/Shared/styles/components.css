@@ -1634,7 +1634,7 @@ tbody tr:nth-child(10) { animation-delay: 0.3s !important; }
 .manufacture-plan-container {
     display: flex;
     flex-direction: column;
-    gap: 15px;
+    gap: 8px;
 }
 
 /* Desktop: manufacture pages with sticky-top-zone need tighter viewport fit */
@@ -1642,6 +1642,7 @@ tbody tr:nth-child(10) { animation-delay: 0.3s !important; }
     .manufacture-plan-container {
         height: calc(100vh - 76px);
         overflow: hidden;
+        gap: 4px;
     }
     .manufacture-plan-container .sticky-top-zone {
         flex-shrink: 0;
@@ -1650,11 +1651,12 @@ tbody tr:nth-child(10) { animation-delay: 0.3s !important; }
         flex: 1;
         height: auto !important;
         min-height: 0;
+        overflow: hidden;
     }
     .manufacture-plan-container .mgmt-toolbar {
         padding: 8px 16px !important;
         gap: 10px !important;
-        margin-bottom: 4px !important;
+        margin-bottom: 0 !important;
     }
 }
 
@@ -2646,6 +2648,7 @@ tbody tr:nth-child(10) { animation-delay: 0.3s !important; }
         flex-direction: column;
         min-width: 0;
         width: 100%;
+        overflow: hidden;
     }
     .admin-table-card {
         flex: 1;
@@ -2658,7 +2661,12 @@ tbody tr:nth-child(10) { animation-delay: 0.3s !important; }
         padding: 0 !important;
         border-radius: 12px;
         overflow: hidden;
+        overflow-x: auto;
         box-shadow: 0 4px 12px rgba(123, 82, 51, 0.08) !important;
+        transform: none !important;
+    }
+    .admin-table-card:hover {
+        transform: none !important;
     }
     .admin-table-scroll {
         flex: 1;
@@ -2672,6 +2680,7 @@ tbody tr:nth-child(10) { animation-delay: 0.3s !important; }
     }
     .admin-table-scroll table {
         margin-bottom: 0 !important;
+        min-width: 900px;
     }
     .admin-table-scroll table thead th {
         position: sticky !important;
