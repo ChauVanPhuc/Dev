@@ -26,6 +26,8 @@ const ISOFormEditorView = () => {
   const location = useLocation();
   const context = useOutletContext();
   const setCustomTitle = context ? context.setCustomTitle : null;
+  const setCustomSubtitle = context ? context.setCustomSubtitle : null;
+  const setCustomScreenCode = context ? context.setCustomScreenCode : null;
   const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
 
   const isProcessMode = false;
@@ -37,10 +39,10 @@ const ISOFormEditorView = () => {
   const [uploadLoading, setUploadLoading] = useState(false);
 
   useEffect(() => {
-    if (setCustomTitle) {
-      setCustomTitle('Cập nhật mẫu tài liệu');
-    }
-  }, [setCustomTitle]);
+    if (setCustomTitle) setCustomTitle('Nhân sự');
+    if (setCustomSubtitle) setCustomSubtitle('Cập nhật mẫu tài liệu');
+    if (setCustomScreenCode) setCustomScreenCode('AD17.1');
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   const [formData, setFormData] = useState({
     id: null,
@@ -70,6 +72,7 @@ const ISOFormEditorView = () => {
   const hasParsedRef = useRef(false);
   const [symbolPlaceholder, setSymbolPlaceholder] = useState("QT: Quy trình");
   const [namePlaceholder, setNamePlaceholder] = useState("Nhập tên tài liệu...");
+  const [contentClassified, setContentClassified] = useState(false);
 
   // Tab management & Tab 3 States
   const [activeFormTab, setActiveFormTab] = useState('config'); // 'config' | 'preview' | 'processes'
@@ -355,6 +358,10 @@ const ISOFormEditorView = () => {
       showFeedback('error', 'Tên tài liệu là bắt buộc');
       return;
     }
+    if (!contentClassified) {
+      showFeedback('error', 'Bạn chưa xác nhận "Đã phân loại nội dung" trước khi lưu');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -507,33 +514,6 @@ const ISOFormEditorView = () => {
         >
           <span style={headerTextStyle}>Thông tin chung</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleWordUpload}
-              style={{ display: 'none' }}
-              accept=".docx"
-            />
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                fileInputRef.current?.click();
-              }}
-              disabled={loading || uploadLoading}
-              style={{
-                padding: '5px 16px',
-                backgroundColor: '#FAF6F0',
-                color: '#7B5233',
-                border: '1px solid #7B5233',
-                borderRadius: '4px',
-                fontSize: '0.75rem',
-                fontWeight: 'bold',
-                cursor: (loading || uploadLoading) ? 'not-allowed' : 'pointer',
-                opacity: (loading || uploadLoading) ? 0.7 : 1
-              }}
-            >
-              {uploadLoading ? 'Đang tải...' : 'Đính kèm file Word mới'}
-            </button>
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -659,6 +639,46 @@ const ISOFormEditorView = () => {
                 rows={3}
                 style={{ width: '100%', padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', resize: 'none', fontFamily: 'inherit', color: '#1F2937', lineHeight: '1.4' }}
               />
+            </div>
+
+            {/* Checkbox: Đã phân loại nội dung */}
+            <div style={{ 
+              marginTop: '16px', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '10px', 
+              padding: '12px 16px', 
+              border: '1.5px solid #EADCC9', 
+              borderRadius: '6px', 
+              backgroundColor: '#FAF8F5',
+              transition: 'all 0.2s ease'
+            }}>
+              <input
+                type="checkbox"
+                id="contentClassifiedCheckbox"
+                checked={contentClassified}
+                onChange={(e) => setContentClassified(e.target.checked)}
+                style={{ 
+                  width: '18px', 
+                  height: '18px', 
+                  cursor: 'pointer',
+                  accentColor: '#7B5233'
+                }}
+              />
+              <label 
+                htmlFor="contentClassifiedCheckbox" 
+                style={{ 
+                  fontSize: '0.82rem', 
+                  fontWeight: '700', 
+                  color: '#7B5233', 
+                  cursor: 'pointer', 
+                  userSelect: 'none',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}
+              >
+                Đã phân loại nội dung
+              </label>
             </div>
           </div>
         )}

@@ -38,35 +38,30 @@ const getTemplateAbbreviation = (templateSymbol) => {
 
 const findApprover = (level, deptAbbr, accountsList) => {
   if (!accountsList || accountsList.length === 0) return '';
-  if (level === 'Cấp công ty') {
-    const boss = accountsList.find(a => 
-      a.permission_name && a.permission_name.toLowerCase().includes('giám đốc')
-    );
-    return boss ? boss.full_name : '';
-  } else {
-    // Cấp phòng
-    let matchKeyword = '';
-    const abbr = (deptAbbr || '').toUpperCase();
-    if (abbr === 'CL' || abbr === 'QC') matchKeyword = 'qc';
-    else if (abbr === 'SX') matchKeyword = 'sx';
-    else if (abbr === 'KT') matchKeyword = 'kỹ thuật';
-    else if (abbr === 'IT') matchKeyword = 'it';
-    
-    if (matchKeyword) {
-      const manager = accountsList.find(a => 
-        a.permission_name && 
-        a.permission_name.toLowerCase().includes('trưởng phòng') && 
-        a.permission_name.toLowerCase().includes(matchKeyword)
+  const isCty = level === 'Cấp công ty';
+  const candidates = accountsList.filter(a => {
+    const roleName = (a.role_name || '').toLowerCase();
+    const permName = (a.permission_name || '').toLowerCase();
+    const levelName = (a.permission_level || '').toLowerCase();
+    if (isCty) {
+      return (
+        roleName.includes('giám đốc') || 
+        roleName.includes('bgd') || 
+        permName.includes('giám đốc') || 
+        permName.includes('tgd') || 
+        permName.includes('phó tổng giám đốc') ||
+        levelName.includes('ban giám đốc') || 
+        levelName.includes('giám đốc')
       );
-      if (manager) return manager.full_name;
+    } else {
+      return (
+        roleName.includes('trưởng phòng') || 
+        permName.includes('trưởng phòng') || 
+        levelName.includes('trưởng phòng')
+      );
     }
-    
-    // Fallback to any Trưởng phòng
-    const anyManager = accountsList.find(a => 
-      a.permission_name && a.permission_name.toLowerCase().includes('trưởng phòng')
-    );
-    return anyManager ? anyManager.full_name : '';
-  }
+  });
+  return candidates.length > 0 ? candidates[0].full_name : '';
 };
 
 const getCurrentFormattedDate = () => {
@@ -86,6 +81,37 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
   const [accounts, setAccounts] = useState([]);
   const [allProcesses, setAllProcesses] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  const getApproverCandidates = (level) => {
+    if (!accounts || accounts.length === 0) return [];
+    if (level === 'Cấp công ty') {
+      return accounts.filter(a => {
+        const roleName = (a.role_name || '').toLowerCase();
+        const permName = (a.permission_name || '').toLowerCase();
+        const levelName = (a.permission_level || '').toLowerCase();
+        return (
+          roleName.includes('giám đốc') || 
+          roleName.includes('bgd') || 
+          permName.includes('giám đốc') || 
+          permName.includes('tgd') || 
+          permName.includes('phó tổng giám đốc') ||
+          levelName.includes('ban giám đốc') || 
+          levelName.includes('giám đốc')
+        );
+      });
+    } else {
+      return accounts.filter(a => {
+        const roleName = (a.role_name || '').toLowerCase();
+        const permName = (a.permission_name || '').toLowerCase();
+        const levelName = (a.permission_level || '').toLowerCase();
+        return (
+          roleName.includes('trưởng phòng') || 
+          permName.includes('trưởng phòng') || 
+          levelName.includes('trưởng phòng')
+        );
+      });
+    }
+  };
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [uploadLoading, setUploadLoading] = useState(false);
@@ -135,12 +161,12 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
   }, [searchTerm, statusFilter, mode]);
 
   useEffect(() => {
-    setCustomTitle('G7 - Smart Flow');
+    setCustomTitle('Nhân sự');
     if (mode === 'processes') {
-      setCustomSubtitle('Quản lý & Thiết lập quy trình ISO');
+      setCustomSubtitle('Quản lý quy trình');
       setCustomScreenCode('AD18');
     } else {
-      setCustomSubtitle('Mẫu ISO');
+      setCustomSubtitle('Quản lý mẫu tài liệu');
       setCustomScreenCode('AD17');
     }
     fetchDocuments();
@@ -208,7 +234,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
       
       setNewProcessData({
         code: generatedCode,
-        name: defaultTemplate ? defaultTemplate.name : '',
+        name: '',
         symbol: initialSymbol,
         iso_document_id: defaultTemplate ? defaultTemplate.id : '',
         document_level: documentLevel,
@@ -519,7 +545,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                       <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '130px' }}>CẤP TÀI LIỆU</th>
                       <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '150px' }}>NGƯỜI BIÊN SOẠN</th>
                       <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '150px' }}>NGƯỜI DUYỆT</th>
-                      <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '130px' }}>VAI TRÒ</th>
+                      <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '160px' }}>THỜI GIAN BAN HÀNH</th>
                       <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '120px', textAlign: 'center' }}>TRẠNG THÁI</th>
                     </>
                   ) : (
@@ -559,8 +585,12 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                         <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1e293b', fontWeight: '600' }}>{doc.name}</td>
                         <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#64748b' }}>{doc.document_level || '---'}</td>
                         <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1e293b' }}>{doc.editor || '---'}</td>
-                        <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1e293b' }}>{doc.approver || '---'}</td>
-                        <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1e293b' }}>{doc.role || '---'}</td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1e293b' }}>
+                          {doc.status === 'Hiệu lực' || doc.status === 'Đang lưu hành' || doc.status === 'Đang hoạt động' || doc.status === 'Đã duyệt' ? (doc.approver || '---') : '---'}
+                        </td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1e293b' }}>
+                          {doc.status === 'Hiệu lực' || doc.status === 'Đang lưu hành' || doc.status === 'Đang hoạt động' || doc.status === 'Đã duyệt' ? (doc.issue_date || '---') : '---'}
+                        </td>
                       </>
                     ) : (
                       <>
@@ -831,7 +861,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                       setNewProcessData(prev => ({
                         ...prev,
                         iso_document_id: selId,
-                        name: selTemplate.name,
+                        name: '',
                         symbol: initialSymbol,
                         code: generatedCode,
                         document_level: documentLevel,
@@ -959,26 +989,32 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#4b301e', marginBottom: '4px' }}>
-                    Người duyệt cuối
+                    Người duyệt cuối <span style={{ color: 'red' }}>*</span>
                   </label>
-                  <input
-                    type="text"
-                    value={newProcessData.approver || '---'}
-                    readOnly
+                  <select
+                    value={newProcessData.approver || ''}
+                    onChange={(e) => setNewProcessData(prev => ({ ...prev, approver: e.target.value }))}
                     style={{
                       width: '100%',
                       padding: '8px 12px',
                       borderRadius: '6px',
-                      border: '1px solid #E5E7EB',
+                      border: '1px solid #EADCC9',
                       outline: 'none',
                       fontSize: '0.88rem',
-                      fontWeight: '600',
-                      backgroundColor: '#F3F4F6',
-                      color: '#4B5563',
-                      cursor: 'not-allowed',
+                      color: '#1F2937',
+                      backgroundColor: 'white',
+                      cursor: 'pointer',
                       boxSizing: 'border-box'
                     }}
-                  />
+                    required
+                  >
+                    <option value="" disabled>-- Chọn người duyệt cuối --</option>
+                    {getApproverCandidates(newProcessData.document_level || 'Cấp phòng').map(acc => (
+                      <option key={acc.id} value={acc.full_name}>
+                        {acc.full_name} ({acc.permission_name || acc.role_name || 'Người duyệt'})
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>

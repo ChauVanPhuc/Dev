@@ -678,11 +678,7 @@ const ISOProcessEditorView = () => {
   const backPath = isProcessMode ? '/admin/iso-processes' : '/admin/iso-documents';
   const isEditMode = id && id !== 'new';
 
-  useEffect(() => {
-    if (setCustomTitle) {
-      setCustomTitle('Cập nhật mẫu tài liệu');
-    }
-  }, [setCustomTitle]);
+
 
   // Screen routing states: 'overview' (Màn hình 1), 'step_instructions' (Ảnh 4)
   const [currentScreen, setCurrentScreen] = useState('overview');
@@ -1072,9 +1068,9 @@ const ISOProcessEditorView = () => {
   };
 
   useEffect(() => {
-    setCustomTitle('G7 - Smart Flow');
+    setCustomTitle('Nhân sự');
     if (isProcessMode) {
-      setCustomSubtitle(isEditMode ? 'Thiết lập & Cấu hình Quy trình ISO' : 'Thêm mới Quy trình & Checklist ISO');
+      setCustomSubtitle('Cập nhật mẫu tài liệu');
       setCustomScreenCode(isEditMode ? 'AD55' : 'AD18');
     } else {
       setCustomSubtitle(isEditMode ? 'Chỉnh sửa Mẫu ISO' : 'Thêm mới Mẫu ISO');
@@ -2398,33 +2394,6 @@ const ISOProcessEditorView = () => {
             >
               <span style={headerTextStyle}>{isProcessMode ? 'Thông tin quy trình' : 'Thông tin Mẫu ISO'}</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleWordUpload}
-                  style={{ display: 'none' }}
-                  accept=".docx"
-                />
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    fileInputRef.current?.click();
-                  }}
-                  disabled={loading || uploadLoading}
-                  style={{
-                    padding: '4px 12px',
-                    backgroundColor: '#FAF6F0',
-                    color: '#7B5233',
-                    border: '1px solid #7B5233',
-                    borderRadius: '4px',
-                    fontSize: '0.75rem',
-                    fontWeight: 'bold',
-                    cursor: (loading || uploadLoading) ? 'not-allowed' : 'pointer',
-                    opacity: (loading || uploadLoading) ? 0.7 : 1
-                  }}
-                >
-                  {uploadLoading ? 'Đang tải...' : 'Đính kèm file Word mới'}
-                </button>
                 <button 
                   onClick={(e) => {
                     e.stopPropagation();
