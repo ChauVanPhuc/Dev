@@ -1,0 +1,350 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   PageToolbar.css - Styles chuẩn cho toolbar dùng chung
+   Thiết kế lấy chuẩn từ ClaimListView toolbar
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Container ─── */
+.page-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  margin-bottom: 12px;
+  height: 52px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  background-color: #FFFFFF;
+  border: 1px solid #EADCC9;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px -1px rgba(123, 82, 51, 0.03);
+}
+
+/* ─── Left Section ─── */
+.page-toolbar__left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+/* ─── Right Section ─── */
+.page-toolbar__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SEARCH
+   ═══════════════════════════════════════════════════════════════════════════ */
+.page-toolbar__search {
+  margin: 0;
+  height: 36px;
+  border-radius: 20px;
+  border: 1px solid #C4B5A5;
+  padding: 0 14px;
+  width: 320px;
+  background-color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.page-toolbar__search:focus-within {
+  border-color: #7B5233;
+  box-shadow: 0 0 0 3px rgba(123, 82, 51, 0.1);
+}
+
+.page-toolbar__search-icon {
+  color: #8D6E63;
+  margin-right: 8px;
+  flex-shrink: 0;
+  transition: color 0.2s ease;
+}
+
+.page-toolbar__search:focus-within .page-toolbar__search-icon {
+  color: #7B5233;
+}
+
+.page-toolbar__search-input {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #2D1A12;
+  background-color: transparent;
+  border: none;
+  outline: none;
+  width: 100%;
+  font-family: inherit;
+}
+
+.page-toolbar__search-input::placeholder {
+  color: #A0A0A0;
+  font-weight: 500;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ICON BUTTONS (Sort & Filter)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.page-toolbar__icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: #8D6E63;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  outline: none;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.page-toolbar__icon-btn:hover {
+  color: #7B5233;
+}
+
+.page-toolbar__icon-btn.active {
+  color: #7B5233;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SORT DROPDOWN
+   ═══════════════════════════════════════════════════════════════════════════ */
+.page-toolbar__sort-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.page-toolbar__sort-dropdown {
+  position: absolute;
+  top: 40px;
+  left: 0;
+  z-index: 100;
+  background: #fff;
+  border: 1px solid #EADCC9;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(123, 82, 51, 0.12);
+  padding: 6px 0;
+  min-width: 190px;
+  animation: ptFadeIn 0.15s ease;
+}
+
+.page-toolbar__sort-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: #5D4037;
+  background-color: transparent;
+  transition: background 0.15s;
+}
+
+.page-toolbar__sort-item:hover {
+  background-color: #FAF6F0;
+}
+
+.page-toolbar__sort-item.active {
+  font-weight: 700;
+  color: #7B5233;
+  background-color: #FAF6F0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FILTER BADGE
+   ═══════════════════════════════════════════════════════════════════════════ */
+.page-toolbar__filter-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.page-toolbar__filter-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  background-color: #7B5233;
+  color: #FFFFFF;
+  border-radius: 50%;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: bold;
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ACTION BUTTONS (Khác, Nhập, Xuất, Tạo mới)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.page-toolbar__action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 0.82rem;
+  cursor: pointer;
+  background-color: #4A2E1B;
+  color: #FFFFFF;
+  border: none;
+  transition: background-color 0.2s;
+  box-shadow: none;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.page-toolbar__action-btn:hover {
+  background-color: #5D3A22;
+}
+
+.page-toolbar__action-btn:active {
+  background-color: #3D2416;
+}
+
+.page-toolbar__action-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DROPDOWN MENUS (Khác & Nhập dữ liệu)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.page-toolbar__dropdown-container {
+  position: relative;
+}
+
+.page-toolbar__dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background-color: #FFFFFF;
+  border: 1px solid #EADCC9;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(123, 82, 51, 0.12);
+  min-width: 200px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  padding: 6px 0;
+  overflow: hidden;
+  animation: ptSlideDown 0.2s ease forwards;
+  transform-origin: top right;
+}
+
+.page-toolbar__dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #2D1A12;
+  font-family: inherit;
+  transition: background-color 0.15s;
+}
+
+.page-toolbar__dropdown-item:hover {
+  background-color: #FAF6F0;
+}
+
+.page-toolbar__dropdown-item-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.page-toolbar__dropdown-badge {
+  background-color: #7B5233;
+  color: #FFFFFF;
+  border-radius: 10px;
+  padding: 2px 6px;
+  font-size: 0.7rem;
+  font-weight: bold;
+  margin-left: 8px;
+}
+
+.page-toolbar__dropdown-divider {
+  height: 1px;
+  background-color: #F0E6D8;
+  margin: 4px 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ANIMATIONS
+   ═══════════════════════════════════════════════════════════════════════════ */
+@keyframes ptFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ptSlideDown {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .page-toolbar {
+    height: auto;
+    min-height: 52px;
+    padding: 8px 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .page-toolbar__left {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .page-toolbar__search {
+    width: 100%;
+    flex: 1;
+  }
+
+  .page-toolbar__right {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .page-toolbar__action-btn {
+    font-size: 0.78rem;
+    padding: 0 10px;
+    height: 32px;
+  }
+
+  .page-toolbar__action-btn span {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .page-toolbar__sort-dropdown {
+    left: auto;
+    right: 0;
+  }
+}

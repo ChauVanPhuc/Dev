@@ -1,0 +1,67 @@
+[
+  {
+    "inspection_type": "bam-dinh",
+    "batch_no": "BOTBA/04-06",
+    "product_sku": "SSW026",
+    "inspector_name": "Mytest",
+    "conclusion": "pass",
+    "notes": "ss",
+    "data_json": "{\"detailsList\":[{\"id\":1783652887483,\"name\":\"UTA1058V-25KG\",\"conclusion\":\"pass\",\"image\":null}],\"action\":\"luu-kho\"}",
+    "images_json": "{}",
+    "id": 36,
+    "inspection_date": "2026-07-10T10:08:18.640000",
+    "created_at": "2026-07-10T10:08:18.640000"
+  },
+  {
+    "inspection_type": "quy-trinh",
+    "batch_no": null,
+    "product_sku": "23 - Định Hình",
+    "inspector_name": null,
+    "conclusion": "pass",
+    "notes": null,
+    "data_json": "{\"process_code\":\"23 - Ð?nh Hình\",\"steps\":{\"step_1783436555797_0\":{\"result\":\"pass\",\"value\":\"\",\"photo\":\"\"},\"step_1783436564810_2\":{\"result\":\"pass\",\"value\":\"\",\"photo\":\"\"},\"step_1783490483612_3\":{\"result\":\"pass\",\"value\":\"\",\"photo\":\"\"},\"step_1783494126182_4\":{\"result\":\"pass\",\"value\":\"\",\"photo\":\"\"},\"step_1783436570681_0\":{\"result\":\"pass\",\"value\":\"\",\"photo\":\"/static/uploads/inspections/38024d04-f1c3-4be6-b0b9-c80428d0c8b1.jpg\"}},\"general_notes\":\"a\",\"general_evidence\":[]}",
+    "images_json": null,
+    "id": 35,
+    "inspection_date": "2026-07-09T15:43:35.023000",
+    "created_at": "2026-07-09T15:43:35.023000"
+  },
+  {
+    "inspection_type": "quy-trinh",
+    "batch_no": null,
+    "product_sku": "23 - Định hình",
+    "inspector_name": null,
+    "conclusion": "pass",
+    "notes": null,
+    "data_json": "{\"steps\":{\"step_1783436555797_0\":{\"result\":\"pass\",\"value\":\"\",\"photo\":\"/static/uploads/inspections/f3c64341-96e1-40b6-9bc3-a0c040989521.jpg\"},\"step_1783436564810_2\":{\"result\":\"pass\",\"value\":\"\",\"photo\":\"\"},\"step_1783490483612_3\":{\"result\":\"pass\",\"value\":\"\",\"photo\":\"\"},\"step_1783494126182_4\":{\"result\":\"pass\",\"value\":\"\",\"photo\":\"\"},\"step_1783436570681_0\":{\"result\":\"pass\",\"value\":\"\",\"photo\":\"\"}},\"general_notes\":\"s\",\"general_evidence\":[]}",
+    "images_json": null,
+    "id": 34,
+    "inspection_date": "2026-07-09T15:30:29.317000",
+    "created_at": "2026-07-09T15:30:29.317000"
+  },
+  {
+    "inspection_type": "quy-trinh",
+    "batch_no": null,
+    "product_sku": "23 - Định hình",
+    "inspector_name": null,
+    "conclusion": "pass",
+    "notes": null,
+    "data_json": "{\"steps\":{\"step_1783436555797_0\":{\"result\":\"pass\",\"value\":\"\",\"photo\":\"/static/uploads/inspections/0c61c299-01ce-4e6d-994f-130a8a5137a5.jpg\"},\"step_1783436564810_2\":{\"result\":\"pass\",\"value\":\"\",\"photo\":\"\"},\"step_1783490483612_3\":{\"result\":\"pass\",\"value\":\"\",\"photo\":\"\"},\"step_1783494126182_4\":{\"result\":\"pass\",\"value\":\"\",\"photo\":\"\"},\"step_1783436570681_0\":{\"result\":\"pass\",\"value\":\"\",\"photo\":\"\"}},\"general_notes\":\"\",\"general_evidence\":[]}",
+    "images_json": null,
+    "id": 33,
+    "inspection_date": "2026-07-09T15:27:52.533000",
+    "created_at": "2026-07-09T15:27:52.533000"
+  },
+  {
+    "inspection_type": "quy-trinh",
+    "batch_no": null,
+    "product_sku": "23 - Định hình",
+    "inspector_name": null,
+    "conclusion": "pass",
+    "notes": null,
+    "data_json": "{\"context\":{\"stage\":\"Ð?nh hình\",\"product\":\"N/A\",\"detail\":\"N/A\"},\"steps\":{\"step_1783436555797_0\":{\"result\":\"pass\",\"value\":\"\",\"photo\":\"/static/uploads/inspections/fb2f4626-8c33-4375-93c1-32e21182c18e.jpg\"},\"step_1783436564810_2\":{\"result\":\"pass\",\"value\":\"\",\"photo\":\"\"},\"step_1783490483612_3\":{\"result\":\"pass\",\"value\":\"\",\"photo\":\"\"},\"step_1783494126182_4\":{\"result\":\"pass\",\"value\":\"\",\"photo\":\"\"},\"step_1783436570681_0\":{\"result\":\"pass\",\"value\":\"\",\"photo\":\"\"}},\"general_notes\":\"a\",\"general_evidence\":[]}",
+    "images_json": null,
+    "id": 32,
+    "inspection_date": "2026-07-09T15:21:21.857000",
+    "created_at": "2026-07-09T15:21:21.857000"
+  }
+]

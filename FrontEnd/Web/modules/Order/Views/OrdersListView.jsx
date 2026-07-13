@@ -21,6 +21,8 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { orderService } from '@modules/Order/Models/order.service';
+import '@styles/components.css';
+import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 
 const Orders = () => {
     const navigate = useNavigate();
@@ -33,6 +35,9 @@ const Orders = () => {
     // State cho phân trang
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(15);
+    const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
+    const [filterCustomer, setFilterCustomer] = useState('all');
+    const [filterDeadline, setFilterDeadline] = useState('all');
 
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -84,7 +89,13 @@ const Orders = () => {
         ];
     }, [orders]);
 
-    // Filter dữ liệu dựa trên Search và Status
+    // Trích xuất danh sách khách hàng duy nhất
+    const uniqueCustomers = useMemo(() => {
+        const list = orders.map(o => o.customer).filter(Boolean);
+        return [...new Set(list)];
+    }, [orders]);
+
+    // Filter dữ liệu dựa trên Search và Status, Khách hàng, Hạn giao
     const filteredOrders = useMemo(() => {
         const term = (searchTerm || '').toLowerCase();
         let result = orders.filter(o => 
@@ -102,8 +113,33 @@ const Orders = () => {
                 return true;
             });
         }
+
+        if (filterCustomer !== 'all') {
+            result = result.filter(o => o.customer === filterCustomer);
+        }
+
+        if (filterDeadline !== 'all') {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            result = result.filter(o => {
+                if (!o.delivery_date) return false;
+                const dDate = new Date(o.delivery_date);
+                dDate.setHours(0, 0, 0, 0);
+
+                if (filterDeadline === 'overdue') {
+                    return dDate < today && getStatusDisplay(o).text !== 'Hoàn thành';
+                }
+                if (filterDeadline === 'this_week') {
+                    const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+                    return dDate >= today && dDate <= nextWeek;
+                }
+                return true;
+            });
+        }
+
         return result;
-    }, [orders, searchTerm, filterStatus]);
+    }, [orders, searchTerm, filterStatus, filterCustomer, filterDeadline]);
 
     // Tính toán dữ liệu cho trang hiện tại
     const indexOfLastItem = currentPage * itemsPerPage;
@@ -182,124 +218,77 @@ const Orders = () => {
                 </div>
 
                 {/* Toolbar */}
-                <div className="mgmt-toolbar card" style={{ marginBottom: 0 }}>
-                    <div className="toolbar-left" style={{ flex: 1 }}>
-                        <div className="search-wrapper">
-                            <Search className="search-icon" size={18} />
-                            <input type="text" placeholder="Tìm khách hàng, mã PO, tên SP..." value={searchTerm} onChange={e => {setSearchTerm(e.target.value); setCurrentPage(1);}} />
-                        </div>
-                        
-                        <select 
-                            value={filterStatus} 
-                            onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}
-                            className="select-minimal"
-                            style={{
-                              height: '36px',
-                              borderRadius: '8px',
-                              border: '1px solid #EADCC9',
-                              backgroundColor: '#FAF6F0',
-                              color: '#7B5233',
-                              padding: '0 8px',
-                              fontWeight: '700',
-                              fontSize: '0.8rem',
-                              cursor: 'pointer'
-                            }}
-                        >
-                            <option value="all">Tất cả trạng thái</option>
-                            <option value="production">Đang sản xuất</option>
-                            <option value="completed">Đã hoàn thành</option>
-                            <option value="overdue">Quá hạn</option>
-                        </select>
+                <PageToolbar
+                    searchValue={searchTerm}
+                    onSearchChange={(val) => { setSearchTerm(val); setCurrentPage(1); }}
+                    searchPlaceholder="Tìm khách hàng, mã PO, tên SP..."
+                    showFilter={true}
+                    isFilterOpen={isFilterBarOpen}
+                    onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
+                    activeFiltersCount={(filterStatus !== 'all' ? 1 : 0) + (filterCustomer !== 'all' ? 1 : 0) + (filterDeadline !== 'all' ? 1 : 0)}
+                    onCreate={() => navigate('/admin/orders/create')}
+                    createLabel="Thêm Đơn hàng"
+                    hasWritePermission={true}
+                />
 
-                        <select 
-                            value={itemsPerPage} 
-                            onChange={(e) => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
-                            className="select-minimal"
-                            style={{
-                              height: '36px',
-                              borderRadius: '8px',
-                              border: '1px solid #EADCC9',
-                              backgroundColor: '#FAF6F0',
-                              color: '#7B5233',
-                              padding: '0 8px',
-                              fontWeight: '700',
-                              fontSize: '0.8rem',
-                              cursor: 'pointer'
-                            }}
-                        >
-                            <option value={15}>15 dòng</option>
-                            <option value={30}>30 dòng</option>
-                            <option value={50}>50 dòng</option>
-                            <option value={100}>100 dòng</option>
-                        </select>
+                {isFilterBarOpen && (
+                    <div className="filter-inline-bar">
+                        {/* Trạng thái */}
+                        <div className="filter-field-group">
+                            <label className="filter-field-label">Trạng thái</label>
+                            <select
+                                value={filterStatus}
+                                onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}
+                            >
+                                <option value="all">Tất cả trạng thái</option>
+                                <option value="production">Đang sản xuất</option>
+                                <option value="completed">Đã hoàn thành</option>
+                                <option value="overdue">Quá hạn</option>
+                            </select>
+                        </div>
+
+                        {/* Khách hàng */}
+                        <div className="filter-field-group">
+                            <label className="filter-field-label">Khách hàng</label>
+                            <select
+                                value={filterCustomer}
+                                onChange={(e) => { setFilterCustomer(e.target.value); setCurrentPage(1); }}
+                            >
+                                <option value="all">Tất cả khách hàng</option>
+                                {uniqueCustomers.map(c => (
+                                    <option key={c} value={c}>{c}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Hạn giao hàng */}
+                        <div className="filter-field-group">
+                            <label className="filter-field-label">Hạn giao hàng</label>
+                            <select
+                                value={filterDeadline}
+                                onChange={(e) => { setFilterDeadline(e.target.value); setCurrentPage(1); }}
+                            >
+                                <option value="all">Tất cả thời hạn</option>
+                                <option value="this_week">Trong vòng 7 ngày tới</option>
+                                <option value="overdue">Quá hạn chưa hoàn thành</option>
+                            </select>
+                        </div>
+
+                        {/* Hiển thị số dòng */}
+                        <div className="filter-field-group">
+                            <label className="filter-field-label">Hiển thị số dòng</label>
+                            <select
+                                value={itemsPerPage}
+                                onChange={(e) => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
+                            >
+                                <option value={15}>15 dòng</option>
+                                <option value={30}>30 dòng</option>
+                                <option value={50}>50 dòng</option>
+                                <option value={100}>100 dòng</option>
+                            </select>
+                        </div>
                     </div>
-                    
-                    <div className="toolbar-right">
-                        <button 
-                            onClick={() => navigate('/admin/orders/create')} 
-                            className="btn btn-primary"
-                            style={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                gap: '8px',
-                                height: '36px',
-                                padding: '0 20px',
-                                borderRadius: '8px',
-                                fontWeight: 'bold',
-                                cursor: 'pointer',
-                                backgroundColor: '#7B5233',
-                                color: '#fff'
-                            }}
-                        >
-                            <Plus size={16} />
-                            <span className="btn-text-desktop">Thêm Đơn hàng</span>
-                            <span className="btn-text-mobile">Thêm</span>
-                        </button>
-                        <div className="desktop-only" style={{ width: '1px', height: '24px', backgroundColor: '#EADCC9' }}></div>
-                        <button 
-                            className="btn btn-outline" 
-                            style={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                gap: '6px',
-                                height: '36px',
-                                padding: '0 12px',
-                                borderRadius: '8px',
-                                border: '1px solid #EADCC9',
-                                backgroundColor: '#fff',
-                                color: '#7B5233',
-                                fontWeight: '700',
-                                fontSize: '0.8rem',
-                                cursor: 'pointer'
-                            }}
-                        >
-                            <FileUp size={14} /> 
-                            <span className="btn-text-desktop">Nhập Excel</span>
-                            <span className="btn-text-mobile">Nhập</span>
-                        </button>
-                        <button 
-                            className="btn btn-outline" 
-                            style={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                gap: '6px',
-                                height: '36px',
-                                padding: '0 12px',
-                                borderRadius: '8px',
-                                border: '1px solid #EADCC9',
-                                backgroundColor: '#fff',
-                                color: '#7B5233',
-                                fontWeight: '700',
-                                fontSize: '0.8rem',
-                                cursor: 'pointer'
-                            }}
-                        >
-                            <FileDown size={14} /> 
-                            <span className="btn-text-desktop">Xuất Excel</span>
-                            <span className="btn-text-mobile">Xuất</span>
-                        </button>
-                    </div>
-                </div>
+                )}
             </div>
 
             <div className="admin-list-layout desktop-only">

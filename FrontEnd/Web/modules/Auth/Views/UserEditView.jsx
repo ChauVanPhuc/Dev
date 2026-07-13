@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useOutletContext } from 'react-router-dom';
 import api from '@webShared/Services/api.service';
 import { authService } from '@modules/Auth/Models/auth.service';
+import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 
 // Icons mapping for screens
 const SCREEN_ICONS = {
@@ -340,15 +341,19 @@ const SCREEN_GROUPS = [
     title: 'Quản lý hệ thống',
     screens: [
       { key: 'users', name: 'Quản lý tài khoản', desc: 'Xem danh sách, phân quyền và thiết lập tài khoản nhân viên.' },
-      { key: 'quality-records', name: 'Quản lý hồ sơ', desc: 'Lưu trữ và tra cứu hồ sơ chất lượng sản xuất.' },
-      { key: 'iso-documents', name: 'Quản lý hồ sơ ISO', desc: 'Xem danh sách và tải lên tệp quy trình ISO.' },
-      { key: 'iso-processes', name: 'Quản lý quy trình', desc: 'Cấu hình chi tiết lưu đồ và QC checklist cho quy trình ISO.' },
       { key: 'screens', name: 'Quản lý màn hình', desc: 'Cấu hình và định nghĩa danh mục các màn hình trên hệ thống.' },
       { key: 'logs', name: 'Quản lý lỗi hệ thống', desc: 'Theo dõi nhật ký sự cố phần mềm và hệ thống.' },
       { key: 'feedback', name: 'Quản lý góp ý', desc: 'Tiếp nhận ý kiến và phản hồi từ người sử dụng.' },
       { key: 'data', name: 'Backup data', desc: 'Sao lưu và đồng bộ cơ sở dữ liệu hệ thống.' },
       { key: 'bugs', name: 'Quản lý Bug', desc: 'Quản lý danh sách lỗi chức năng do người dùng báo cáo.' },
       { key: 'monitor', name: 'Giám sát hệ thống', desc: 'Theo dõi trực tiếp hiệu năng máy chủ và CSDL.' }
+    ]
+  },
+  {
+    title: 'Nhân sự',
+    screens: [
+      { key: 'iso-documents', name: 'Quản lý mẫu tài liệu', desc: 'Xem danh sách, chỉnh sửa cấu trúc và tải lên tệp quy trình ISO mẫu.' },
+      { key: 'iso-processes', name: 'Quản lý quy trình', desc: 'Cấu hình chi tiết lưu đồ, quy trình thực tế và QC checklist.' }
     ]
   },
   {
@@ -364,6 +369,7 @@ const SCREEN_GROUPS = [
   {
     title: 'Module chất lượng',
     screens: [
+      { key: 'quality-records', name: 'Hồ sơ chất lượng', desc: 'Lưu trữ và tra cứu hồ sơ chất lượng sản xuất.' },
       { key: 'defects', name: 'Danh sách lỗi', desc: 'Danh mục các loại lỗi gỗ xưởng sản xuất và AQL.' },
       { key: 'claim', name: 'Claim khách hàng', desc: 'Ghi nhận và đền bù khiếu nại chất lượng sản phẩm.' },
       { key: 'reports', name: 'Báo cáo kiểm tra', desc: 'Thống kê kết quả kiểm định chất lượng (IQC/OQC).' },
@@ -374,8 +380,16 @@ const SCREEN_GROUPS = [
   {
     title: 'Module kỹ thuật',
     screens: [
-      { key: 'products', name: 'BOM sản phẩm', desc: 'Định nghĩa cơ cấu sản phẩm mẫu và định mức nguyên vật liệu.' },
-      { key: 'equipment', name: 'Thiết bị - máy móc', desc: 'Quản lý danh sách máy và lịch bảo trì thiết bị.' }
+      { key: 'products', name: 'BOM sản phẩm', desc: 'Định nghĩa cơ cấu sản phẩm mẫu và định mức nguyên vật liệu.' }
+    ]
+  },
+  {
+    title: 'Module bảo trì - máy móc',
+    screens: [
+      { key: 'equipment', name: 'Quản lý thiết bị', desc: 'Quản lý danh sách máy và lịch bảo trì thiết bị.' },
+      { key: 'machines', name: 'Danh sách thiết bị', desc: 'Quản lý danh sách chi tiết các thiết bị cơ khí và sản xuất.' },
+      { key: 'machine-history', name: 'Lịch sử bảo trì', desc: 'Ghi chép và theo dõi lịch sử bảo trì, sửa chữa máy móc.' },
+      { key: 'machine-training', name: 'Hướng dẫn sử dụng', desc: 'Tài liệu và quy trình đào tạo vận hành máy móc an toàn.' }
     ]
   },
   {
@@ -598,7 +612,12 @@ const UserEdit = ({ isProfile = false }) => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
-  const [toastMessage, setToastMessage] = useState(null);
+  const { toast } = useToast();
+  const setToastMessage = (msg) => {
+    if (msg) {
+      toast('success', msg);
+    }
+  };
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   // Selected factory state for Phạm vi phụ trách
@@ -1892,31 +1911,7 @@ const UserEdit = ({ isProfile = false }) => {
         </form>
       </div>
 
-      {/* Toast thông báo popup đẹp */}
-      {toastMessage && (
-        <div style={{
-          position: 'fixed',
-          top: '24px',
-          right: '24px',
-          backgroundColor: '#047857',
-          color: '#FFFFFF',
-          padding: '14px 24px',
-          borderRadius: '10px',
-          boxShadow: '0 10px 25px rgba(4, 120, 87, 0.2)',
-          fontWeight: '800',
-          fontSize: '0.85rem',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          zIndex: 99999,
-          animation: 'slideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1)'
-        }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-          {toastMessage}
-        </div>
-      )}
+
 
       {showConfirmModal && (
         <div className="modal-backdrop-custom">

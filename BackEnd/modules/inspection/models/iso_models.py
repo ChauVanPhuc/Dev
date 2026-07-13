@@ -21,6 +21,8 @@ class ISODocument(Base):
     folder = Column(NVARCHAR(100), nullable=True)                        # Thư mục quản lý (ví dụ: "3/2/1")
     doc_type = Column(NVARCHAR(100), nullable=True)                      # Loại tài liệu phê duyệt (ví dụ: "Phê duyệt 1 cấp")
     document_level = Column(NVARCHAR(100), nullable=True)                # Cấp tài liệu (1 hoặc nhiều)
+    symbol = Column(NVARCHAR(100), nullable=True)                        # Ký hiệu tài liệu (VD: G7.CL-QT01)
+    notes = Column(NVARCHAR(None), nullable=True)                         # Ghi chú / Lưu ý
     diagram_data = Column(NVARCHAR(None), nullable=True)                 # Lưu trữ JSON của sơ đồ lưu đồ (nodes & links)
     created_at = Column(NVARCHAR(50))
     updated_at = Column(NVARCHAR(50))
@@ -43,6 +45,7 @@ class ISORevisionLog(Base):
     rev_date = Column(NVARCHAR(50))                   # Ngày sửa đổi
     content = Column(NVARCHAR(1000))                  # Nội dung sửa đổi
     page_no = Column(NVARCHAR(50))                    # Trang số sửa đổi
+    modifier = Column(NVARCHAR(100))                  # Người sửa đổi
 
     document = relationship("ISODocument", back_populates="revision_logs")
 
@@ -101,6 +104,8 @@ class ISOProcess(Base):
     display_at = Column(NVARCHAR(250), nullable=True)                   # Hiệu thị tại (ví dụ: máy, công đoạn...)
     notes = Column(NVARCHAR(None), nullable=True)                        # Ghi chú / Lưu ý
     document_level = Column(NVARCHAR(100), nullable=True)                # Cấp tài liệu (1 hoặc nhiều)
+    symbol = Column(NVARCHAR(100), nullable=True)                        # Ký hiệu tài liệu thực tế
+    role = Column(NVARCHAR(100), nullable=True)                          # Vai trò của người phê duyệt
     diagram_data = Column(NVARCHAR(None), nullable=True)                 # JSON sơ đồ lưu đồ tùy chỉnh riêng cho quy trình này
     created_at = Column(NVARCHAR(50))
     updated_at = Column(NVARCHAR(50))

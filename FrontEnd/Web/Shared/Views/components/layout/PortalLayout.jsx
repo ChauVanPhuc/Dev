@@ -11,6 +11,7 @@ import ActivityFeed from '@modules/Dashboard/Views/components/ActivityFeed';
 import { authService } from '@modules/Auth/Models/auth.service';
 import { useScreen } from '@shared/context/ScreenContext';
 import { claimService } from '@modules/Claim/services/claim.service';
+import useUiStore from '@shared/store/uiStore';
 
 const renderChartComponent = (type, title, data, key) => {
   if (!data || data.length === 0) return null;
@@ -370,6 +371,12 @@ const PortalLayout = () => {
   const location = useLocation();
   const { getScreenInfo } = useScreen();
   const isAdmin = location.pathname.startsWith('/admin');
+  const isFormOrEditView = 
+    location.pathname.includes('/edit') || 
+    location.pathname.includes('/create') || 
+    location.pathname.includes('/new') || 
+    location.pathname.includes('/permission') || 
+    location.pathname.includes('/detail');
 
   const [sidebarActive, setSidebarActive] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -449,6 +456,277 @@ const PortalLayout = () => {
   const [sessions, setSessions] = useState([]);
   const [currentSessionId, setCurrentSessionId] = useState('default');
   const [showSessionsPanel, setShowSessionsPanel] = useState(false);
+
+  // --- CLAIM PDF INGESTION STATES (GLOBAL BACKGROUND - ZUSTAND) ---
+  const claimIngestionProgress = useUiStore(state => state.claimIngestionProgress);
+  const claimSuccessSummary = useUiStore(state => state.claimSuccessSummary);
+  const claimImportError = useUiStore(state => state.claimImportError);
+  const setClaimIngestionProgress = useUiStore(state => state.setClaimIngestionProgress);
+  const setClaimSuccessSummary = useUiStore(state => state.setClaimSuccessSummary);
+  const setClaimImportError = useUiStore(state => state.setClaimImportError);
+
+  useEffect(() => {
+    const handleClaimPdfImportError = (e) => {
+      setClaimImportError({
+        isOpen: true,
+        message: e.detail?.message || 'Lỗi không xác định.'
+      });
+    };
+
+    const handleClaimPdfImport = async (e) => {
+      const { files, isMultiple } = e.detail;
+      if (!files || files.length === 0) return;
+
+      if (!isMultiple) {
+        // Single file
+        const file = files[0];
+        setClaimIngestionProgress({
+          isOpen: true,
+          title: 'Đang xử lý PDF...',
+          progress: 10,
+          statusText: 'Đang đọc cấu trúc tệp tin PDF...',
+          filesCount: 1
+        });
+
+        let progressVal = 10;
+        const progressInterval = setInterval(() => {
+          progressVal += 5;
+          if (progressVal > 95) {
+            clearInterval(progressInterval);
+          } else {
+            let statusText = 'Đang đọc cấu trúc tệp tin PDF...';
+            if (progressVal > 30 && progressVal <= 60) {
+              statusText = 'Đang phân tích và trích xuất dữ liệu khiếu nại...';
+            } else if (progressVal > 60 && progressVal <= 85) {
+              statusText = 'Đang định vị và liên kết hình ảnh lỗi...';
+            } else if (progressVal > 85) {
+              statusText = 'Đang lưu trữ dữ liệu...';
+            }
+            setClaimIngestionProgress(prev => ({
+              ...prev,
+              progress: progressVal,
+              statusText
+            }));
+          }
+        }, 150);
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+          const response = await claimService.importPdf(formData);
+          clearInterval(progressInterval);
+
+          const mechanismName = response.mechanism ? response.mechanism.name : 'Cơ chế 1 (Standard)';
+          setClaimIngestionProgress(prev => ({
+            ...prev,
+            progress: 100,
+            statusText: `Thành công! Đã xử lý bằng ${mechanismName}`
+          }));
+
+          setTimeout(() => {
+            setClaimIngestionProgress(prev => ({ ...prev, isOpen: false }));
+
+            if (response.success && response.total_records > 0) {
+              setClaimSuccessSummary({
+                isOpen: true,
+                batchId: response.batch_id,
+                claimsCount: response.db_saved_count || response.total_records,
+                photoCount: 0,
+                warningsCount: response.parse_warnings ? response.parse_warnings.length : 0,
+                warnings: response.parse_warnings || [],
+                fileStats: response.file_stats || []
+              });
+              window.dispatchEvent(new CustomEvent('pdf-import-success-refresh', { detail: response }));
+            } else if (response.success && response.total_records === 0) {
+              setClaimImportError({
+                isOpen: true,
+                message: 'Không tìm thấy dữ liệu khiếu nại nào trong file PDF.'
+              });
+            } else {
+              setClaimImportError({
+                isOpen: true,
+                message: 'Định dạng phản hồi không hợp lệ từ máy chủ.'
+              });
+            }
+          }, 1000);
+
+        } catch (error) {
+          clearInterval(progressInterval);
+          setClaimIngestionProgress(prev => ({ ...prev, isOpen: false }));
+          const errorMsg = error.response?.data?.detail || error.message || 'Lỗi kết nối máy chủ.';
+          setClaimImportError({
+            isOpen: true,
+            message: errorMsg
+          });
+        }
+      } else {
+        // Multiple files
+        setClaimIngestionProgress({
+          isOpen: true,
+          title: `Đang xử lý ${files.length} file PDF...`,
+          progress: 5,
+          statusText: `Đã phát hiện ${files.length} file PDF. Đang tải lên...`,
+          filesCount: files.length
+        });
+
+        const formData = new FormData();
+        files.forEach(f => {
+          formData.append('files', f);
+        });
+
+        try {
+          const response = await claimService.importFolderStream(formData, (event) => {
+            if (event.type === 'start') {
+              setClaimIngestionProgress(prev => ({
+                ...prev,
+                progress: 8,
+                statusText: `Bắt đầu xử lý ${event.total_files} file PDF...`
+              }));
+            } else if (event.type === 'progress') {
+              const percent = Math.min(event.percent || 0, 98);
+              let statusText = '';
+              if (event.status === 'processing') {
+                statusText = `Đang phân tích: ${event.filename} (${event.file_index}/${event.total_files})`;
+              } else if (event.status === 'done') {
+                const mechanismLabel = event.mechanism ? ` [${event.mechanism.name}]` : '';
+                statusText = `✓ Hoàn tất: ${event.filename}${mechanismLabel} — ${event.claims_found || 0} khiếu nại (${event.file_index}/${event.total_files})`;
+              } else if (event.status === 'error') {
+                statusText = `⚠ Lỗi file: ${event.filename} (${event.file_index}/${event.total_files})`;
+              }
+              setClaimIngestionProgress(prev => ({
+                ...prev,
+                progress: percent,
+                statusText
+              }));
+            }
+          });
+
+          setClaimIngestionProgress(prev => ({
+            ...prev,
+            progress: 100,
+            statusText: 'Hoàn tất!'
+          }));
+
+          setTimeout(() => {
+            setClaimIngestionProgress(prev => ({ ...prev, isOpen: false }));
+
+            if (response.success && response.total_records > 0) {
+              setClaimSuccessSummary({
+                isOpen: true,
+                batchId: response.batch_id,
+                claimsCount: response.db_saved_count || response.total_records,
+                photoCount: 0,
+                warningsCount: response.parse_warnings ? response.parse_warnings.length : 0,
+                warnings: response.parse_warnings || [],
+                fileStats: response.file_stats || []
+              });
+              window.dispatchEvent(new CustomEvent('pdf-import-success-refresh', { detail: response }));
+            } else if (response.success && response.total_records === 0) {
+              setClaimImportError({
+                isOpen: true,
+                message: 'Không tìm thấy dữ liệu khiếu nại nào trong các file PDF đã chọn.'
+              });
+            } else {
+              setClaimImportError({
+                isOpen: true,
+                message: 'Định dạng phản hồi không hợp lệ từ máy chủ hoặc thư mục rỗng.'
+              });
+            }
+          }, 1000);
+
+        } catch (streamError) {
+          console.warn('Streaming endpoint failed, falling back to standard folder import...');
+          setClaimIngestionProgress(prev => ({
+            ...prev,
+            progress: 10,
+            statusText: `Đang xử lý ${files.length} file PDF (chế độ tiêu chuẩn)...`
+          }));
+
+          const formData2 = new FormData();
+          files.forEach(f => {
+            formData2.append('files', f);
+          });
+
+          let progressVal = 10;
+          const progressInterval = setInterval(() => {
+            progressVal += 2;
+            if (progressVal > 95) {
+              clearInterval(progressInterval);
+            } else {
+              let statusText = 'Đang tải lên các tệp PDF...';
+              if (progressVal > 25 && progressVal <= 60) {
+                statusText = `Đang trích xuất dữ liệu khiếu nại từ ${files.length} tệp...`;
+              } else if (progressVal > 60 && progressVal <= 80) {
+                statusText = 'Đang cắt và liên kết hình ảnh lỗi...';
+              } else if (progressVal > 80) {
+                statusText = 'Đang hoàn tất lưu trữ dữ liệu...';
+              }
+              setClaimIngestionProgress(prev => ({
+                ...prev,
+                progress: progressVal,
+                statusText
+              }));
+            }
+          }, 200);
+
+          try {
+            const response = await claimService.importFolder(formData2);
+            clearInterval(progressInterval);
+
+            setClaimIngestionProgress(prev => ({
+              ...prev,
+              progress: 100,
+              statusText: 'Hoàn tất!'
+            }));
+
+            setTimeout(() => {
+              setClaimIngestionProgress(prev => ({ ...prev, isOpen: false }));
+
+              if (response.success && response.total_records > 0) {
+                setClaimSuccessSummary({
+                  isOpen: true,
+                  batchId: response.batch_id,
+                  claimsCount: response.db_saved_count || response.total_records,
+                  photoCount: 0,
+                  warningsCount: response.parse_warnings ? response.parse_warnings.length : 0,
+                  warnings: response.parse_warnings || [],
+                  fileStats: response.file_stats || []
+                });
+                window.dispatchEvent(new CustomEvent('pdf-import-success-refresh', { detail: response }));
+              } else if (response.success && response.total_records === 0) {
+                setClaimImportError({
+                  isOpen: true,
+                  message: 'Không tìm thấy dữ liệu khiếu nại nào trong các file PDF đã chọn.'
+                });
+              } else {
+                setClaimImportError({
+                  isOpen: true,
+                  message: 'Định dạng phản hồi không hợp lệ từ máy chủ hoặc thư mục rỗng.'
+                });
+              }
+            }, 1000);
+
+          } catch (error) {
+            clearInterval(progressInterval);
+            setClaimIngestionProgress(prev => ({ ...prev, isOpen: false }));
+            const errorMsg = error.response?.data?.detail || error.message || 'Lỗi kết nối máy chủ.';
+            setClaimImportError({
+              isOpen: true,
+              message: errorMsg
+            });
+          }
+        }
+      }
+    };
+
+    window.addEventListener('start-claim-pdf-import', handleClaimPdfImport);
+    window.addEventListener('start-claim-pdf-import-error', handleClaimPdfImportError);
+    return () => {
+      window.removeEventListener('start-claim-pdf-import', handleClaimPdfImport);
+      window.removeEventListener('start-claim-pdf-import-error', handleClaimPdfImportError);
+    };
+  }, []);
 
   const chatMessagesEndRef = useRef(null);
   const chatbotDrawerRef = useRef(null);
@@ -1085,8 +1363,8 @@ const PortalLayout = () => {
 
   return (
     <div 
-      className={`admin-layout ${layoutMode === 'fit-to-screen' && scaleFactor !== 1 ? 'fit-to-screen-active' : ''}`}
-      style={layoutMode === 'fit-to-screen' && scaleFactor !== 1 ? {
+      className={`admin-layout ${layoutMode === 'fit-to-screen' ? 'fit-to-screen-active' : ''}`}
+      style={layoutMode === 'fit-to-screen' ? {
         transform: `scale(${scaleFactor})`,
         transformOrigin: 'top left',
         width: `${100 / scaleFactor}%`,
@@ -1246,10 +1524,329 @@ const PortalLayout = () => {
         </header>
 
         {/* Core dynamic content template */}
-        <div className="dashboard-content">
+        <div className={`dashboard-content ${isFormOrEditView ? 'allow-y-scroll' : ''}`}>
           <Outlet context={outletContext} />
         </div>
       </div>
+
+      {/* FLOATING STEP-BY-STEP PROGRESS CARD (TOP-RIGHT) */}
+      {claimIngestionProgress.isOpen && (
+        <div className="compact-progress-pill-container" style={{
+          position: 'fixed',
+          top: '80px',
+          right: '24px',
+          zIndex: 2000,
+          pointerEvents: 'auto'
+        }}>
+          {/* Minimized Pill */}
+          <div 
+            className="compact-progress-pill"
+            onClick={() => navigate('/admin/claims')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              backgroundColor: '#7B5233',
+              color: '#FFFFFF',
+              padding: '8px 16px',
+              borderRadius: '20px',
+              fontSize: '0.82rem',
+              fontWeight: '600',
+              boxShadow: '0 4px 12px rgba(45, 26, 18, 0.25)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              border: '1px solid #EADCC9'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#A0301B';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#7B5233';
+            }}
+          >
+            <svg style={{ color: '#FFFFFF', animation: 'spin 1.5s linear infinite' }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+              <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="12"></circle>
+            </svg>
+            <span>Đang xử lý PDF ({claimIngestionProgress.progress}%)</span>
+          </div>
+
+          {/* Hover Details Panel */}
+          <div className="floating-progress-details" style={{
+            position: 'absolute',
+            top: 'calc(100% + 8px)',
+            right: 0,
+            width: '360px',
+            background: '#FFFFFF',
+            borderRadius: '12px',
+            padding: '20px',
+            boxShadow: '0 10px 30px rgba(45, 26, 18, 0.15)',
+            border: '1px solid #EADCC9',
+            display: 'none',
+            flexDirection: 'column',
+            pointerEvents: 'auto'
+          }}>
+            <h2 style={{
+              fontSize: '1.05rem',
+              fontWeight: 800,
+              color: '#2D1A12',
+              marginBottom: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              margin: 0
+            }}>
+              <svg style={{ color: '#7B5233', animation: 'spin 1.5s linear infinite' }} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="12"></circle>
+              </svg>
+              {claimIngestionProgress.title}
+            </h2>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginBottom: '16px' }}>
+              <div className={`import-step-item ${claimIngestionProgress.progress >= 10 ? (claimIngestionProgress.progress > 30 ? 'import-step-done' : 'import-step-active') : 'import-step-pending'}`}>
+                <span style={{ fontSize: '0.95rem', width: '18px', display: 'inline-block' }}>
+                  {claimIngestionProgress.progress > 30 ? '✓' : '●'}
+                </span>
+                <span>Đang đọc cấu trúc PDF...</span>
+              </div>
+
+              <div className={`import-step-item ${claimIngestionProgress.progress >= 30 ? (claimIngestionProgress.progress > 65 ? 'import-step-done' : 'import-step-active') : 'import-step-pending'}`}>
+                <span style={{ fontSize: '0.95rem', width: '18px', display: 'inline-block' }}>
+                  {claimIngestionProgress.progress > 65 ? '✓' : '●'}
+                </span>
+                <span>Đang trích xuất dữ liệu khiếu nại...</span>
+              </div>
+
+              <div className={`import-step-item ${claimIngestionProgress.progress >= 65 ? (claimIngestionProgress.progress > 90 ? 'import-step-done' : 'import-step-active') : 'import-step-pending'}`}>
+                <span style={{ fontSize: '0.95rem', width: '18px', display: 'inline-block' }}>
+                  {claimIngestionProgress.progress > 90 ? '✓' : '●'}
+                </span>
+                <span>Đang liên kết hình ảnh minh chứng...</span>
+              </div>
+
+              <div className={`import-step-item ${claimIngestionProgress.progress >= 90 ? (claimIngestionProgress.progress === 100 ? 'import-step-done' : 'import-step-active') : 'import-step-pending'}`}>
+                <span style={{ fontSize: '0.95rem', width: '18px', display: 'inline-block' }}>
+                  {claimIngestionProgress.progress === 100 ? '✓' : '●'}
+                </span>
+                <span>Đang lưu trữ dữ liệu...</span>
+              </div>
+            </div>
+
+            <div className="progress-container">
+              <div className="progress-bar-bg" style={{
+                width: '100%',
+                height: '6px',
+                backgroundColor: '#E5E7EB',
+                borderRadius: '3px',
+                overflow: 'hidden',
+                position: 'relative'
+              }}>
+                <div className="progress-bar-fill" style={{
+                  width: `${claimIngestionProgress.progress}%`,
+                  height: '100%',
+                  backgroundColor: claimIngestionProgress.progress === 100 ? '#16A34A' : '#7B5233',
+                  borderRadius: '3px',
+                  transition: 'width 0.4s ease, background-color 0.3s ease'
+                }}></div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#8D6E63', marginTop: '6px', fontWeight: '600' }}>
+                <span style={{ flex: 1, wordBreak: 'break-word', paddingRight: '12px' }}>{claimIngestionProgress.statusText}</span>
+                <span style={{ flexShrink: 0 }}>{claimIngestionProgress.progress}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* GLOBAL IMPORT SUCCESS DETAILS MODAL */}
+      {claimSuccessSummary.isOpen && (
+        <div className="filter-modal-backdrop" style={{ zIndex: 2600 }}>
+          <div className="filter-modal" style={{ maxWidth: '960px', width: '90%', maxHeight: '85vh' }}>
+            <div className="filter-modal-header" style={{ borderBottom: '1px solid #E5E7EB', padding: '16px 20px', backgroundColor: '#ECFDF5' }}>
+              <div className="filter-modal-title-area">
+                <h3 className="filter-modal-title" style={{ color: '#065F46', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                  </svg>
+                  Import PDF thành công
+                </h3>
+              </div>
+              <button className="filter-modal-close" onClick={() => setClaimSuccessSummary(prev => ({ ...prev, isOpen: false }))}>&times;</button>
+            </div>
+
+            <div className="filter-modal-body" style={{
+              display: 'grid',
+              gridTemplateColumns: claimSuccessSummary.warningsCount > 0 ? '240px 1fr 1fr' : '240px 1fr',
+              gridTemplateRows: claimSuccessSummary.claimsCount === 0 ? 'auto 1fr' : '1fr',
+              gap: '20px',
+              padding: '20px',
+              backgroundColor: '#FFFFFF',
+              height: '450px',
+              maxHeight: 'calc(85vh - 160px)',
+              overflow: 'hidden'
+            }}>
+              {claimSuccessSummary.claimsCount === 0 && (
+                <div style={{
+                  gridColumn: '1 / -1',
+                  backgroundColor: '#FAF6F0',
+                  border: '1px solid #7B5233',
+                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  color: '#2D1A12',
+                  fontSize: '0.85rem',
+                  fontWeight: '500',
+                  lineHeight: '1.5',
+                  boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
+                }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ flexShrink: 0, color: '#7B5233' }}>
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                  </svg>
+                  <span>
+                    <strong>Thông báo:</strong> File PDF này không có thêm dòng khiếu nại mới nào vì toàn bộ dữ liệu đã được nhập từ trước (hệ thống tự động bỏ qua để tránh ghi đè hoặc tạo dữ liệu trùng lặp).
+                  </span>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', height: '100%' }}>
+                <div style={{ backgroundColor: '#FAF6F0', padding: '12px', borderRadius: '8px', border: '1px solid #EADCC9', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#8D6E63', fontWeight: '600' }}>Mã lô (Batch ID)</div>
+                  <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#2D1A12', marginTop: '2px', wordBreak: 'break-all' }}>{claimSuccessSummary.batchId}</div>
+                </div>
+                <div style={{ backgroundColor: '#FAF6F0', padding: '12px', borderRadius: '8px', border: '1px solid #EADCC9', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#8D6E63', fontWeight: '600' }}>Số dòng đã trích xuất</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#2D1A12', marginTop: '2px' }}>{claimSuccessSummary.claimsCount}</div>
+                </div>
+                <div style={{ backgroundColor: '#FAF6F0', padding: '12px', borderRadius: '8px', border: '1px solid #EADCC9', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#8D6E63', fontWeight: '600' }}>Ảnh minh chứng đã khớp</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#2D1A12', marginTop: '2px' }}>{claimSuccessSummary.photoCount}</div>
+                </div>
+                <div style={{ backgroundColor: '#FAF6F0', padding: '12px', borderRadius: '8px', border: '1px solid #EADCC9', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#8D6E63', fontWeight: '600' }}>Số cảnh báo lỗi cấu trúc</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#DC2626', marginTop: '2px' }}>{claimSuccessSummary.warningsCount}</div>
+                </div>
+              </div>
+
+              {claimSuccessSummary.fileStats && claimSuccessSummary.fileStats.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', height: '100%', overflow: 'hidden' }}>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#1E293B', flexShrink: 0 }}>
+                    Danh sách file PDF đã xử lý ({claimSuccessSummary.fileStats.length} file - {claimSuccessSummary.claimsCount} dòng):
+                  </span>
+                  <div style={{
+                    flex: 1,
+                    overflowY: 'auto',
+                    backgroundColor: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '6px',
+                    padding: '8px 12px',
+                    fontSize: '0.8rem',
+                    color: '#334155',
+                    lineHeight: '1.6'
+                  }}>
+                    {claimSuccessSummary.fileStats.map((file, index) => (
+                      <div key={index} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: index < claimSuccessSummary.fileStats.length - 1 ? '1px solid #F1F5F9' : 'none', padding: '6px 0', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }} title={file.filename}>
+                          📄 {file.filename.replace(/^[a-zA-Z0-9]+_[a-zA-Z0-9]+_/, '')}
+                        </span>
+                        {file.mechanism && (
+                          <span style={{
+                            fontSize: '0.7rem',
+                            fontWeight: '600',
+                            padding: '2px 7px',
+                            borderRadius: '4px',
+                            backgroundColor: file.mechanism.id === 1 ? '#DBEAFE' : '#E0E7FF',
+                            color: file.mechanism.id === 1 ? '#1E40AF' : '#4338CA',
+                            flexShrink: 0,
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {file.mechanism.name}
+                          </span>
+                        )}
+                        <span style={{ color: '#0F172A', fontWeight: '600', flexShrink: 0 }}>
+                          {file.claims_count} dòng ({file.period || 'N/A'})
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '6px', fontSize: '0.8rem', color: '#64748B' }}>
+                  Không có danh sách file
+                </div>
+              )}
+
+              {claimSuccessSummary.warningsCount > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', height: '100%', overflow: 'hidden' }}>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#EA580C', flexShrink: 0 }}>
+                    Danh sách cảnh báo ({claimSuccessSummary.warningsCount}):
+                  </span>
+                  <div style={{
+                    flex: 1,
+                    overflowY: 'auto',
+                    backgroundColor: '#FFF7ED',
+                    border: '1px solid #FFEDD5',
+                    borderRadius: '6px',
+                    padding: '8px 12px',
+                    fontSize: '0.8rem',
+                    color: '#C2410C',
+                    lineHeight: '1.4'
+                  }}>
+                    {claimSuccessSummary.warnings.map((warn, index) => (
+                      <div key={index} style={{ marginBottom: '6px', borderBottom: index < claimSuccessSummary.warnings.length - 1 ? '1px solid #FFEDD5' : 'none', paddingBottom: '4px' }}>
+                        • {warn}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="filter-modal-footer" style={{ borderTop: '1px solid #E5E7EB', padding: '12px 20px', display: 'flex', gap: '8px', justifyContent: 'flex-end', backgroundColor: '#F9FAFB' }}>
+              <button
+                type="button"
+                className="btn-modal-apply"
+                onClick={() => setClaimSuccessSummary(prev => ({ ...prev, isOpen: false }))}
+              >
+                Đồng ý
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* GLOBAL IMPORT ERROR MODAL */}
+      {claimImportError.isOpen && (
+        <div className="filter-modal-backdrop" style={{ zIndex: 2600 }}>
+          <div className="filter-modal" style={{ maxWidth: '450px' }}>
+            <div className="filter-modal-header" style={{ borderBottom: '1px solid #E5E7EB', padding: '14px 20px', backgroundColor: '#FEF2F2' }}>
+              <div className="filter-modal-title-area">
+                <h3 className="filter-modal-title" style={{ color: '#991B1B', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
+                  Lỗi Nhập PDF
+                </h3>
+              </div>
+              <button className="filter-modal-close" onClick={() => setClaimImportError(prev => ({ ...prev, isOpen: false }))}>&times;</button>
+            </div>
+            <div className="filter-modal-body" style={{ display: 'block', padding: '20px', fontSize: '0.85rem', color: '#1F2937', backgroundColor: '#FFFFFF', whiteSpace: 'pre-wrap' }}>
+              {claimImportError.message}
+            </div>
+            <div className="filter-modal-footer" style={{ borderTop: '1px solid #E5E7EB', padding: '12px 20px', display: 'flex', justifyContent: 'flex-end', backgroundColor: '#F9FAFB' }}>
+              <button type="button" className="btn-modal-apply" style={{ backgroundColor: '#DC2626' }} onClick={() => setClaimImportError(prev => ({ ...prev, isOpen: false }))}>
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Global alert modal */}
       {modalConfig.visible && (
         <BeautifulModal
@@ -1511,11 +2108,14 @@ const PortalLayout = () => {
         }
         .admin-layout.fit-to-screen-active .dashboard-content {
           height: calc(100% - 60px) !important;
-          overflow-y: auto !important;
+          overflow-y: hidden !important;
           background-color: #F8FAFC !important;
         }
+        .admin-layout.fit-to-screen-active .dashboard-content.allow-y-scroll {
+          overflow-y: auto !important;
+        }
         .admin-layout.fit-to-screen-active .admin-list-layout {
-          height: calc((100vh / var(--scale-factor, 1)) - 250px) !important;
+          height: calc((100vh / var(--scale-factor, 1)) - 140px) !important;
         }
         .sidebar-backdrop {
           position: fixed;

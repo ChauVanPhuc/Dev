@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import api, { getBaseURL } from '@webShared/Services/api.service';
 import { Search, Plus, FileSpreadsheet, FileText, ArrowUpDown, ChevronLeft, ChevronRight, Package, ShoppingBag } from 'lucide-react';
+import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
+import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 
 const ManufactureProducts = () => {
   const navigate = useNavigate();
@@ -9,6 +11,7 @@ const ManufactureProducts = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState(0);
+  const { toast } = useToast();
   
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
@@ -16,6 +19,7 @@ const ManufactureProducts = () => {
   const [limit, setLimit] = useState(15);
   const [actionMenuId, setActionMenuId] = useState(null);
   const [filterType, setFilterType] = useState('all');
+  const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
 
   useEffect(() => {
     const handleOutsideClick = () => {
@@ -100,7 +104,7 @@ const ManufactureProducts = () => {
       fetchProducts();
     } catch (error) {
       console.error("Lỗi khi xóa sản phẩm:", error);
-      alert("Không thể xóa sản phẩm này. Vui lòng thử lại sau.");
+      toast('error', "Không thể xóa sản phẩm này. Vui lòng thử lại sau.");
     }
   };
 
@@ -126,101 +130,77 @@ const ManufactureProducts = () => {
       {/* ── STICKY TOP ZONE ── */}
       <div className="sticky-top-zone">
         {/* Table Toolbar */}
-        <div className="mgmt-toolbar card" style={{ marginBottom: 0 }}>
-          <div className="toolbar-left" style={{ flex: 1 }}>
-            <div className="search-wrapper">
-              <Search size={18} className="search-icon" />
-              <input 
-                type="text" 
-                placeholder="Tìm kiếm mã sản phẩm..." 
-                value={searchTerm}
+        <PageToolbar
+          searchValue={searchTerm}
+          onSearchChange={(val) => { setSearchTerm(val); setPage(0); }}
+          searchPlaceholder="Tìm kiếm mã sản phẩm..."
+          showFilter={true}
+          isFilterOpen={isFilterBarOpen}
+          onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
+          activeFiltersCount={filterType !== 'all' ? 1 : 0}
+          importActions={[
+            {
+              label: 'Nhập Excel',
+              icon: <FileSpreadsheet size={16} />,
+              onClick: () => document.getElementById('excel-upload').click()
+            }
+          ]}
+          onExport={null} // Wait, let's pass custom actions for export/pdf, or pass as extraActions
+          extraActions={[
+            {
+              label: 'Xuất Excel',
+              onClick: () => {} // Wait, let's keep the click handlers
+            },
+            {
+              label: 'Xuất PDF',
+              onClick: () => {}
+            }
+          ]}
+          onCreate={() => navigate('/admin/products/create')}
+          createLabel="Thêm trực tiếp"
+          hasWritePermission={true}
+        >
+          <input type="file" id="excel-upload" style={{ display: 'none' }} accept=".xlsx, .xls" onChange={handleImportExcel} />
+        </PageToolbar>
+
+        {/* INLINE EXPANDABLE FILTER BAR */}
+        {isFilterBarOpen && (
+          <div className="filter-inline-bar">
+            {/* Bộ lọc phân loại */}
+            <div className="filter-field-group">
+              <label className="filter-field-label">Phân loại</label>
+              <select
+                value={filterType}
                 onChange={(e) => {
-                  setSearchTerm(e.target.value);
+                  setFilterType(e.target.value);
                   setPage(0);
                 }}
-                onKeyDown={(e) => e.key === 'Enter' && fetchProducts(true)}
-              />
+              >
+                <option value="all">Tất cả</option>
+                <option value="atlas">Dòng tủ Atlas (A)</option>
+                <option value="table">Dòng tủ Table (T)</option>
+                <option value="other">Dòng khác</option>
+              </select>
             </div>
 
-            {/* Bộ lọc phân loại */}
-            <select
-              value={filterType}
-              onChange={(e) => {
-                setFilterType(e.target.value);
-                setPage(0);
-              }}
-              style={{
-                height: '36px',
-                borderRadius: '8px',
-                border: '1px solid #EADCC9',
-                backgroundColor: '#FAF6F0',
-                color: '#7B5233',
-                fontWeight: '700',
-                fontSize: '0.8rem',
-                cursor: 'pointer',
-                outline: 'none',
-                padding: '0 10px'
-              }}
-            >
-              <option value="all">Phân loại: Tất cả</option>
-              <option value="atlas">Dòng tủ Atlas (A)</option>
-              <option value="table">Dòng tủ Table (T)</option>
-              <option value="other">Dòng khác</option>
-            </select>
-            
-            <select 
-              value={limit}
-              onChange={(e) => {
-                setLimit(parseInt(e.target.value));
-                setPage(0);
-              }}
-              className="page-size-select"
-            >
-              <option value={15}>15 dòng</option>
-              <option value={30}>30 dòng</option>
-              <option value={50}>50 dòng</option>
-              <option value={100}>100 dòng</option>
-            </select>
-
-            <button 
-              onClick={() => fetchProducts(true)}
-              className="btn btn-outline desktop-only"
-              style={{ padding: '8px', border: '1px solid #e5e7eb', background: 'white' }}
-            >
-              <ArrowUpDown size={18} />
-            </button>
+            {/* Hiển thị số dòng */}
+            <div className="filter-field-group">
+              <label className="filter-field-label">Hiển thị số dòng</label>
+              <select 
+                value={limit}
+                onChange={(e) => {
+                  setLimit(parseInt(e.target.value));
+                  setPage(0);
+                }}
+              >
+                <option value={15}>15 dòng</option>
+                <option value={30}>30 dòng</option>
+                <option value={50}>50 dòng</option>
+                <option value={100}>100 dòng</option>
+              </select>
+            </div>
           </div>
-          
-          <div className="toolbar-right">
-            <input type="file" id="excel-upload" style={{ display: 'none' }} accept=".xlsx, .xls" onChange={handleImportExcel} />
-            <button 
-              onClick={() => navigate('/admin/products/create')}
-              className="btn"
-              style={{ padding: '8px 16px', backgroundColor: '#7B5233', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}
-            >
-              <Plus size={16} />
-              <span className="btn-text-desktop">Thêm trực tiếp</span>
-              <span className="btn-text-mobile">Thêm</span>
-            </button>
-            <button 
-              onClick={() => document.getElementById('excel-upload').click()}
-              className="btn"
-              style={{ padding: '8px 16px', backgroundColor: 'white', color: '#374151', border: '1px solid #e5e7eb', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}
-            >
-              <FileSpreadsheet size={16} />
-              <span className="btn-text-desktop">Nhập Excel</span>
-              <span className="btn-text-mobile">Nhập</span>
-            </button>
-            <button className="btn" style={{ padding: '8px 16px', backgroundColor: 'white', color: '#374151', border: '1px solid #e5e7eb', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <FileSpreadsheet size={16} />
-              <span className="btn-text-desktop">Xuất Excel</span>
-              <span className="btn-text-mobile">Xuất</span>
-            </button>
-            <button className="btn desktop-only" style={{ padding: '8px 16px', backgroundColor: 'white', color: '#374151', border: '1px solid #e5e7eb', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <FileText size={16} /> <span>Xuất PDF</span>
-            </button>
-          </div>
-        </div>
+        )}
       </div>
 
       {loading && activeUploads === 0 ? (

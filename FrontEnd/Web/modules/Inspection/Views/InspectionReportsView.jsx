@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import ExcelJS from 'exceljs';
+import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 
 const getInspectionTypeLabel = (type) => {
   switch (type) {
@@ -43,6 +44,7 @@ const InspectionReports = () => {
   const [stageInspections, setStageInspections] = useState([]);
   const [dailyInspections, setDailyInspections] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
 
   // Detail Modal state
   const [selectedInspection, setSelectedInspection] = useState(null);
@@ -1224,83 +1226,104 @@ const InspectionReports = () => {
       </div>
 
       {/* TOOLBAR: Search & Filters */}
-      <div className="mgmt-toolbar card filter-pagination-toolbar" style={{ padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginBottom: '16px' }}>
-        
-        {/* Nhóm bộ lọc trái */}
-        <div className="toolbar-left" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', flex: 1 }}>
-          
-          {/* Ô tìm kiếm */}
-          <div className="search-wrapper" style={{ position: 'relative', width: '280px', display: 'flex', alignItems: 'center' }}>
-            <Search size={18} className="search-icon" style={{ position: 'absolute', left: '12px', color: '#7B5233', pointerEvents: 'none' }} />
-            <input
-              type="text"
-              placeholder={
-                activeTab === 'stage' || activeTab === 'process'
-                  ? "Tìm kiếm PO, sản phẩm, QC..." 
-                  : activeTab === 'input'
-                    ? "Tìm kiếm chi tiết, cont, QC..."
-                    : "Tìm kiếm công đoạn, QC..."
-              }
-              value={
-                activeTab === 'stage' || activeTab === 'process'
-                  ? stageSearch
-                  : activeTab === 'input'
-                    ? inboundSearch
-                    : dailySearch
-              }
-              onChange={(e) => {
-                if (activeTab === 'stage' || activeTab === 'process') {
-                  setStageSearch(e.target.value);
-                  setStagePage(1);
-                } else if (activeTab === 'input') {
-                  setInboundSearch(e.target.value);
-                  setInboundPage(1);
-                } else {
-                  setDailySearch(e.target.value);
-                  setDailyPage(1);
-                }
-              }}
-              style={{
-                width: '100%',
-                padding: '8px 12px 8px 38px',
-                borderRadius: '8px',
-                border: '1px solid #EADCC9',
-                backgroundColor: '#FAF6F0',
-                color: '#2D1A12',
-                fontSize: '0.85rem',
-                fontWeight: '600',
-                outline: 'none',
-                height: '36px'
-              }}
-            />
-          </div>
+      <PageToolbar
+        searchValue={
+          activeTab === 'stage' || activeTab === 'process'
+            ? stageSearch
+            : activeTab === 'input'
+              ? inboundSearch
+              : dailySearch
+        }
+        onSearchChange={(val) => {
+          if (activeTab === 'stage' || activeTab === 'process') {
+            setStageSearch(val);
+            setStagePage(1);
+          } else if (activeTab === 'input') {
+            setInboundSearch(val);
+            setInboundPage(1);
+          } else {
+            setDailySearch(val);
+            setDailyPage(1);
+          }
+        }}
+        searchPlaceholder={
+          activeTab === 'stage' || activeTab === 'process'
+            ? "Tìm PO, sản phẩm, QC..." 
+            : activeTab === 'input'
+              ? "Tìm chi tiết, cont, QC..."
+              : "Tìm công đoạn, QC..."
+        }
+        showSort={true}
+        sortOptions={
+          activeTab === 'stage' || activeTab === 'process'
+            ? [
+                { value: 'date_desc', label: 'Ngày: Mới nhất' },
+                { value: 'date_asc', label: 'Ngày: Cũ nhất' },
+                { value: 'po_asc', label: 'Mã PO: A-Z' },
+                { value: 'po_desc', label: 'Mã PO: Z-A' }
+              ]
+            : activeTab === 'input'
+              ? [
+                  { value: 'date_desc', label: 'Ngày: Mới nhất' },
+                  { value: 'date_asc', label: 'Ngày: Cũ nhất' },
+                  { value: 'part_asc', label: 'Tên chi tiết: A-Z' },
+                  { value: 'part_desc', label: 'Tên chi tiết: Z-A' }
+                ]
+              : [
+                  { value: 'date_desc', label: 'Ngày: Mới nhất' },
+                  { value: 'date_asc', label: 'Ngày: Cũ nhất' },
+                  { value: 'defects_desc', label: 'Số lỗi: Nhiều nhất' },
+                  { value: 'defects_asc', label: 'Số lỗi: Ít nhất' }
+                ]
+        }
+        sortValue={
+          activeTab === 'stage' || activeTab === 'process'
+            ? stageSort 
+            : activeTab === 'input'
+              ? inboundSort
+              : dailySort
+        }
+        onSortChange={(val) => {
+          if (activeTab === 'stage' || activeTab === 'process') {
+            setStageSort(val);
+            setStagePage(1);
+          } else if (activeTab === 'input') {
+            setInboundSort(val);
+            setInboundPage(1);
+          } else {
+            setDailySort(val);
+            setDailyPage(1);
+          }
+        }}
+        showFilter={true}
+        isFilterOpen={isFilterBarOpen}
+        onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
+        activeFiltersCount={
+          (activeTab === 'stage' && stageTypeFilter !== 'all' ? 1 : 0) +
+          ((activeTab === 'stage' || activeTab === 'process' || activeTab === 'input') &&
+          (activeTab === 'input' ? inboundStatusFilter : stageStatusFilter) !== 'all' ? 1 : 0) +
+          (
+            (activeTab === 'stage' || activeTab === 'process' ? stageStartDate : activeTab === 'input' ? inboundStartDate : dailyStartDate) ? 1 : 0
+          ) +
+          (
+            (activeTab === 'stage' || activeTab === 'process' ? stageEndDate : activeTab === 'input' ? inboundEndDate : dailyEndDate) ? 1 : 0
+          )
+        }
+        onExport={() => setShowExportModal(true)}
+        hasWritePermission={true}
+      />
 
-          {/* Lọc loại phiếu (Chỉ Tab 1) */}
+      {/* INLINE EXPANDABLE FILTER BAR */}
+      {isFilterBarOpen && (
+        <div className="filter-inline-bar">
           {activeTab === 'stage' && (
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <Filter size={14} color="#7B5233" style={{ position: 'absolute', left: '10px', pointerEvents: 'none' }} />
+            <div className="filter-field-group">
+              <label className="filter-field-label">Loại công đoạn</label>
               <select
                 value={stageTypeFilter}
                 onChange={(e) => { setStageTypeFilter(e.target.value); setStagePage(1); }}
-                style={{
-                  padding: '0 28px 0 28px',
-                  height: '36px',
-                  borderRadius: '8px',
-                  border: '1px solid #EADCC9',
-                  backgroundColor: '#FAF6F0',
-                  color: '#7B5233',
-                  fontWeight: '700',
-                  fontSize: '0.8rem',
-                  cursor: 'pointer',
-                  outline: 'none',
-                  appearance: 'none',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%237B5233'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 8px center',
-                  backgroundSize: '12px'
-                }}
               >
-                <option value="all">Loại công đoạn: Tất cả</option>
+                <option value="all">Tất cả</option>
                 <option value="bam-dinh">Bám dính</option>
                 <option value="sau-dong-goi">Sau đóng gói</option>
                 <option value="phu-kien">Phụ kiện</option>
@@ -1308,10 +1331,9 @@ const InspectionReports = () => {
             </div>
           )}
 
-          {/* Lọc kết luận đạt/lỗi (Tab công đoạn, đầu vào, quy trình) */}
           {(activeTab === 'stage' || activeTab === 'process' || activeTab === 'input') && (
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <CheckCircle2 size={14} color="#7B5233" style={{ position: 'absolute', left: '10px', pointerEvents: 'none' }} />
+            <div className="filter-field-group">
+              <label className="filter-field-label">Kết luận</label>
               <select
                 value={activeTab === 'input' ? inboundStatusFilter : stageStatusFilter}
                 onChange={(e) => { 
@@ -1323,34 +1345,16 @@ const InspectionReports = () => {
                     setStagePage(1);
                   }
                 }}
-                style={{
-                  padding: '0 28px 0 28px',
-                  height: '36px',
-                  borderRadius: '8px',
-                  border: '1px solid #EADCC9',
-                  backgroundColor: '#FAF6F0',
-                  color: '#7B5233',
-                  fontWeight: '700',
-                  fontSize: '0.8rem',
-                  cursor: 'pointer',
-                  outline: 'none',
-                  appearance: 'none',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%237B5233'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 8px center',
-                  backgroundSize: '12px'
-                }}
               >
-                <option value="all">Kết luận: Tất cả</option>
+                <option value="all">Tất cả</option>
                 <option value="pass">Đạt (Pass)</option>
                 <option value="fail">Lỗi (Fail)</option>
               </select>
             </div>
           )}
 
-          {/* Lọc thời gian (Từ ngày - Đến ngày) */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: '700', color: '#7B5233' }}>
-            <Calendar size={14} />
+          <div className="filter-field-group">
+            <label className="filter-field-label">Từ ngày</label>
             <input 
               type="date"
               value={
@@ -1372,9 +1376,12 @@ const InspectionReports = () => {
                   setDailyPage(1);
                 }
               }}
-              style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#2D1A12', fontSize: '0.8rem', fontWeight: '600', outline: 'none' }}
+              className="filter-dropdown-input"
             />
-            <span>đến</span>
+          </div>
+
+          <div className="filter-field-group">
+            <label className="filter-field-label">Đến ngày</label>
             <input 
               type="date"
               value={
@@ -1396,175 +1403,64 @@ const InspectionReports = () => {
                   setDailyPage(1);
                 }
               }}
-              style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#2D1A12', fontSize: '0.8rem', fontWeight: '600', outline: 'none' }}
+              className="filter-dropdown-input"
             />
           </div>
 
-          {/* Sắp xếp */}
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7B5233" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: '10px', pointerEvents: 'none' }}>
-              <path d="M11 5h10M11 9h7M11 13h4M3 17l3 3 3-3M6 18V4"></path>
-            </svg>
-            <select
+          <div className="filter-field-group">
+            <label className="filter-field-label">Số dòng hiển thị</label>
+            <select 
               value={
                 activeTab === 'stage' || activeTab === 'process'
-                  ? stageSort 
+                  ? stageLimit 
                   : activeTab === 'input'
-                    ? inboundSort
-                    : dailySort
-              }
+                    ? inboundLimit
+                    : dailyLimit
+              } 
               onChange={(e) => {
+                const val = parseInt(e.target.value);
                 if (activeTab === 'stage' || activeTab === 'process') {
-                  setStageSort(e.target.value);
+                  setStageLimit(val);
                   setStagePage(1);
                 } else if (activeTab === 'input') {
-                  setInboundSort(e.target.value);
+                  setInboundLimit(val);
                   setInboundPage(1);
                 } else {
-                  setDailySort(e.target.value);
+                  setDailyLimit(val);
                   setDailyPage(1);
                 }
               }}
-              style={{
-                padding: '0 28px 0 28px',
-                height: '36px',
-                borderRadius: '8px',
-                border: '1px solid #EADCC9',
-                backgroundColor: '#FAF6F0',
-                color: '#7B5233',
-                fontWeight: '700',
-                fontSize: '0.8rem',
-                cursor: 'pointer',
-                outline: 'none',
-                appearance: 'none',
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%237B5233'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-                backgroundRepeat: 'no-repeat',
-                backgroundPosition: 'right 8px center',
-                backgroundSize: '12px'
-              }}
             >
-              {activeTab === 'stage' || activeTab === 'process' ? (
-                <>
-                  <option value="date_desc">Ngày: Mới nhất</option>
-                  <option value="date_asc">Ngày: Cũ nhất</option>
-                  <option value="po_asc">Mã PO: A-Z</option>
-                  <option value="po_desc">Mã PO: Z-A</option>
-                </>
-              ) : activeTab === 'input' ? (
-                <>
-                  <option value="date_desc">Ngày: Mới nhất</option>
-                  <option value="date_asc">Ngày: Cũ nhất</option>
-                  <option value="part_asc">Tên chi tiết: A-Z</option>
-                  <option value="part_desc">Tên chi tiết: Z-A</option>
-                </>
-              ) : (
-                <>
-                  <option value="date_desc">Ngày: Mới nhất</option>
-                  <option value="date_asc">Ngày: Cũ nhất</option>
-                  <option value="defects_desc">Số lỗi: Nhiều nhất</option>
-                  <option value="defects_asc">Số lỗi: Ít nhất</option>
-                </>
-              )}
+              <option value={15}>15 dòng</option>
+              <option value={30}>30 dòng</option>
+              <option value={50}>50 dòng</option>
+              <option value={100}>100 dòng</option>
             </select>
           </div>
 
-          {/* Số dòng trên trang */}
-          <select 
-            value={
-              activeTab === 'stage' || activeTab === 'process'
-                ? stageLimit 
-                : activeTab === 'input'
-                  ? inboundLimit
-                  : dailyLimit
-            } 
-            onChange={(e) => {
-              const val = parseInt(e.target.value);
-              if (activeTab === 'stage' || activeTab === 'process') {
-                setStageLimit(val);
-                setStagePage(1);
-              } else if (activeTab === 'input') {
-                setInboundLimit(val);
-                setInboundPage(1);
-              } else {
-                setDailyLimit(val);
-                setDailyPage(1);
-              }
-            }}
-            className="page-size-select"
-            style={{ 
-              height: '36px',
-              padding: '0 28px 0 10px',
-              borderRadius: '8px',
-              border: '1px solid #EADCC9',
-              backgroundColor: '#FAF6F0',
-              color: '#7B5233',
-              fontWeight: '700',
-              fontSize: '0.8rem',
-              cursor: 'pointer',
-              outline: 'none',
-              appearance: 'none',
-              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%237B5233'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-              backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'right 8px center',
-              backgroundSize: '12px'
-            }}
-          >
-            <option value={15}>15 dòng</option>
-            <option value={30}>30 dòng</option>
-            <option value={50}>50 dòng</option>
-            <option value={100}>100 dòng</option>
-          </select>
-
-          {/* Reset Filters */}
-          <button 
-            onClick={handleResetFilters}
-            style={{
-              height: '36px',
-              padding: '0 12px',
-              borderRadius: '8px',
-              border: '1px solid #EADCC9',
-              backgroundColor: '#fff',
-              color: '#7B5233',
-              fontSize: '0.8rem',
-              fontWeight: '700',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              cursor: 'pointer'
-            }}
-          >
-            <RotateCcw size={14} /> Xóa lọc
-          </button>
+          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+            <button 
+              onClick={handleResetFilters}
+              style={{
+                height: '36px',
+                padding: '0 12px',
+                borderRadius: '8px',
+                border: '1px solid #EADCC9',
+                backgroundColor: '#fff',
+                color: '#7B5233',
+                fontSize: '0.8rem',
+                fontWeight: '700',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              <RotateCcw size={14} /> Xóa lọc
+            </button>
+          </div>
         </div>
-
-        {/* Nhóm xuất báo cáo bên phải */}
-        <div className="toolbar-right">
-          <button 
-            className="btn qr-export-btn" 
-            onClick={() => setShowExportModal(true)}
-            style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              gap: '6px', 
-              padding: '8px 16px', 
-              borderRadius: '8px', 
-              border: '1px solid #EADCC9', 
-              background: '#fff', 
-              fontSize: '0.85rem',
-              fontWeight: '700', 
-              color: '#7B5233', 
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              height: '36px'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF6F0'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fff'}
-          >
-            <FileDown size={16} /> Xuất dữ liệu
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* MAIN CONTENT AREA */}
       <div className="admin-list-layout" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

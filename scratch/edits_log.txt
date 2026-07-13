@@ -1,0 +1,183 @@
+Found 47 edits to ISOFormEditorView.jsx:
+Step 51: Tool write_to_file
+  Description: Restructured the "Thông tin chung" section to match the mockup: renamed header, added collapsible toggle, moved "Lưu thông tin" button to card header, reorganized fields layout (Mã mẫu, Phân loại, Người ban hành, Ngày ban hành, Cấp duyệt, Trạng thái), fixed corrupted line 298 and duplicate lines 347-350.
+  Target len: 0, Replacement len: 0
+Step 64: Tool multi_replace_file_content
+  Instruction: Change "Người ban hành" to "Người cập nhật" and "Ngày ban hành" to "Ngày cập nhật"
+  Description: Đổi label theo yêu cầu: "Người ban hành" → "Người cập nhật", "Ngày ban hành" → "Ngày cập nhật"
+  Target len: 0, Replacement len: 0
+Step 73: Tool replace_file_content
+  Instruction: Make the "Mã mẫu" input field readOnly with a disabled visual style
+  Description: Mã mẫu tự động sinh, không cho phép chỉnh sửa — thêm readOnly và style nền xám nhạt.
+  Target len: 394, Replacement len: 407
+Step 81: Tool multi_replace_file_content
+  Instruction: Fix generateNextCode to use M01 format, fix save validation to not require name, and restore notes mapping in save payload
+  Description: Fix 3 logic issues: (1) change code format to M01/M02, (2) remove name validation since field is hidden and auto-set name from code, (3) restore notes: formData.doc_type mapping for backward compatibility with DB
+  Target len: 0, Replacement len: 0
+Step 87: Tool replace_file_content
+  Instruction: Remove the redundant action bar div and keep only the message feedback and main content
+  Description: Xóa action bar thừa (Quay lại danh sách + Lưu Mẫu ISO) vì đã có nút tương ứng trên toolbar và trong header card.
+  Target len: 2116, Replacement len: 657
+Step 89: Tool replace_file_content
+  Instruction: Remove ArrowLeft and Save from the lucide-react imports
+  Description: Remove unused imports ArrowLeft and Save since the action bar was removed
+  Target len: 105, Replacement len: 88
+Step 194: Tool replace_file_content
+  Instruction: Update initial and fallback statuses in ISOFormEditorView
+  Description: Update status select options to match user requirements: Nháp, Đang lưu hành, Đang điều chỉnh. Also update default initial status to Nháp and fallback to Đang lưu hành.
+  Target len: 3421, Replacement len: 3428
+Step 200: Tool replace_file_content
+  Instruction: Replace status input with select dropdown containing Nháp, Đang lưu hành, Đang điều chỉnh
+  Description: Change status field from input to select dropdown in ISOFormEditorView with 3 options: Nháp, Đang lưu hành, Đang điều chỉnh.
+  Target len: 458, Replacement len: 805
+Step 355: Tool replace_file_content
+  Instruction: Default parsed status to 'Nháp'
+  Description: Default status to 'Nháp' when creating a new ISO template from file parsing.
+  Target len: 51, Replacement len: 25
+Step 359: Tool replace_file_content
+  Instruction: Replace status select dropdown with read-only text input
+  Description: Change status field to read-only text input with light-gray disabled background styling to match Mã mẫu style.
+  Target len: 805, Replacement len: 591
+Step 435: Tool replace_file_content
+  Instruction: Add Tên quy trình input field and restructure into 12-column grid layout
+  Description: Add 'Tên quy trình' (Process Name) field back to the general info card in the ISO template editor, restructured using a 12-column grid layout for rows.
+  Target len: 3471, Replacement len: 4305
+Step 445: Tool replace_file_content
+  Instruction: Restructure General Info card body to place inputs and Ghi chú side-by-side in a compact layout
+  Description: Compact the General Info form layout by placing the input fields on the left and the Ghi chú textarea on the right, reducing input paddings and gaps.
+  Target len: 4944, Replacement len: 5467
+Step 451: Tool replace_file_content
+  Instruction: Clean up extra characters and properly close the divs at the end of the general info block
+  Description: Fix syntax error in ISOFormEditorView due to incomplete replacement of notes field elements.
+  Target len: 195, Replacement len: 46
+Step 457: Tool replace_file_content
+  Instruction: Fix Chevron toggle rendering and close the header elements correctly
+  Description: Fix truncated jsx structure on line 273 to properly render the ChevronDown toggle and close the header tags.
+  Target len: 215, Replacement len: 317
+Step 468: Tool replace_file_content
+  Instruction: Style the general info form to look premium with a clean white background, consistent input borders, shadow highlights, and a balanced grid
+  Description: Restructure general info fields to be beautiful, clean, and perfectly aligned in a 2-row layout with professional borders and modern font weights.
+  Target len: 5496, Replacement len: 6852
+Step 474: Tool replace_file_content
+  Instruction: Delete duplicate closing brace and format correctly
+  Description: Remove duplicate closing brace on line 371 of ISOFormEditorView to fix JS syntax error.
+  Target len: 103, Replacement len: 90
+Step 482: Tool replace_file_content
+  Instruction: Position Ghi chú in a full-width row at the bottom of the card content
+  Description: Move Ghi chú back to a full-width row below the input fields for cleaner vertical layout.
+  Target len: 6852, Replacement len: 6505
+Step 554: Tool replace_file_content
+  Instruction: Add symbol to initial state and parse handler
+  Description: Initialize symbol state in ISOFormEditorView and populate it when parsing uploaded files.
+  Target len: 1553, Replacement len: 1464
+Step 558: Tool replace_file_content
+  Instruction: Add symbol to fetchDocDetails setFormData
+  Description: Map the symbol column when fetching detailed information of an ISO template.
+  Target len: 702, Replacement len: 737
+Step 562: Tool replace_file_content
+  Instruction: Add Ký hiệu input field to Row 1 of the layout grid
+  Description: Add Ký hiệu input field to General Info card in ISOFormEditorView, adjusted in a 12-column grid.
+  Target len: 2378, Replacement len: 3104
+Step 1361: Tool multi_replace_file_content
+  Instruction: Import useToast, define toast hook, remove message state, map showFeedback to useToast, and remove inline message JSX.
+  Description: Refactor ISOFormEditorView to use the global Toast notification instead of inline messaging.
+  Target len: 0, Replacement len: 0
+Step 1463: Tool replace_file_content
+  Instruction: Import useRef, add hasParsedRef state guard, and clear location state after success.
+  Description: Import useRef, add hasParsedRef to prevent duplicate triggers from location.state.parsedData, and clear the navigation state so it is only parsed once.
+  Target len: 2546, Replacement len: 2830
+Step 1711: Tool multi_replace_file_content
+  Instruction: Add symbolPlaceholder and namePlaceholder states, check for generic parsed values inside useEffect, and map placeholders dynamically in JSX.
+  Description: Modify ISOFormEditorView to treat generic parsed values (Mẫu quy trình, Tên quy trình) as placeholders instead of pre-filled input values.
+  Target len: 0, Replacement len: 0
+Step 1725: Tool multi_replace_file_content
+  Instruction: Add symbolPlaceholder and namePlaceholder states, check for generic parsed values inside useEffect, and map placeholders dynamically in JSX.
+  Description: Modify ISOFormEditorView to treat generic parsed values (Mẫu quy trình, Tên quy trình) as placeholders instead of pre-filled input values.
+  Target len: 0, Replacement len: 0
+Step 1745: Tool multi_replace_file_content
+  Instruction: Update label text to 'Tên tài liệu' and expand includes logic in useEffect check.
+  Description: Change label 'Tên quy trình' to 'Tên tài liệu' and support generic brackets in placeholders.
+  Target len: 0, Replacement len: 0
+Step 1782: Tool multi_replace_file_content
+  Instruction: Retrieve logged-in user, default issuer to user full_name, force it in details fetch, and render as styled read-only input.
+  Description: Set 'Người cập nhật' field in ISOFormEditorView to retrieve logged-in user name and make it read-only.
+  Target len: 0, Replacement len: 0
+Step 1814: Tool multi_replace_file_content
+  Instruction: Add getCurrentFormattedDateTime, update state initialization, generic parser effect, details fetch, and JSX rendering.
+  Description: Update 'Ngày cập nhật' field in ISOFormEditorView to retrieve the current date/time with hour/minute and make it read-only.
+  Target len: 0, Replacement len: 0
+Step 1837: Tool multi_replace_file_content
+  Instruction: Define getCurrentFormattedDate and stripTime helpers, use date-only format in state and fetchDocDetails, and append hour/minute to issue_date in handleSaveForm payload.
+  Description: Modify ISOFormEditorView to format issue_date as date-only in UI, and append current hour/minute only during save.
+  Target len: 0, Replacement len: 0
+Step 2056: Tool multi_replace_file_content
+  Instruction: Update handleSaveForm to map revision_logs with seq_no, and render a new Card for managing revision logs in edit mode.
+  Description: Implement Revision Logs editor in ISOFormEditorView.jsx.
+  Target len: 0, Replacement len: 0
+Step 2086: Tool replace_file_content
+  Instruction: Update the new log creation default value, add a column header, add the input field for modifier, and adjust column widths.
+  Description: Add modifier (Người sửa) field to the Revision Logs editor table in ISOFormEditorView.jsx.
+  Target len: 6674, Replacement len: 7675
+Step 2104: Tool multi_replace_file_content
+  Instruction: Add hasAddedAutoLog ref, update handleInputChange and the section type dropdown change handler to append a default log row automatically when editing.
+  Description: Implement automatic revision log entry generation on form edit.
+  Target len: 0, Replacement len: 0
+Step 2158: Tool multi_replace_file_content
+  Instruction: Replace hasAddedAutoLog with originalDataRef and hasImportedFile refs. Set hasImportedFile to true when parsing Word files. Update fetchDocDetails to store originalDataRef. Revert handleInputChange and section type onChange back to clean handlers, and append the revision log row during handleSaveForm if changes are detected.
+  Description: Implement clean and robust automatic revision logging upon saving edited ISO documents in ISOFormEditorView.jsx.
+  Target len: 0, Replacement len: 0
+Step 2167: Tool replace_file_content
+  Instruction: Restore the dropdown label, layout wrapper, and standard onChange handler cleanly.
+  Description: Fix broken JSX syntax in section format type dropdown in ISOFormEditorView.jsx.
+  Target len: 1097, Replacement len: 1070
+Step 2174: Tool replace_file_content
+  Description: Remove duplication check for auto-generated revision logs to allow every edit session to save a distinct history entry.
+  Target len: 831, Replacement len: 400
+Step 2181: Tool replace_file_content
+  Description: Generate detailed change description lists (from-to values) for auto-generated revision logs in ISOFormEditorView.jsx.
+  Target len: 1191, Replacement len: 2266
+Step 2194: Tool replace_file_content
+  Instruction: Delete the card block from isEditMode render.
+  Description: Remove the Revision Logs (Lịch sử sửa đổi) card from the editing UI as requested.
+  Target len: 7784, Replacement len: 0
+Step 2200: Tool replace_file_content
+  Instruction: Replace the card list markup with a styled table displaying order index, section name, bracket extractor input field, and format type dropdown.
+  Description: Convert card layout of sections into a table with columns STT, Danh Mục, Nội dung (bracket value), and Định dạng.
+  Target len: 4616, Replacement len: 6012
+Step 2225: Tool replace_file_content
+  Instruction: Insert style tag at the beginning of the return statement block.
+  Description: Add dynamic style override in ISOFormEditorView.jsx to enable page scrolling even when fit-to-screen is globally active.
+  Target len: 275, Replacement len: 421
+Step 2408: Tool replace_file_content
+  Description: Wrap the configuration table in a scroll container with max-height corresponding to 5 rows and a sticky table header.
+  Target len: 662, Replacement len: 916
+Step 2441: Tool replace_file_content
+  Description: Update Ký hiệu placeholder to show QT: Quy trình and Tên tài liệu placeholder to say Nhập tên tài liệu...
+  Target len: 258, Replacement len: 273
+Step 2447: Tool replace_file_content
+  Description: Set the Ký hiệu input placeholder to exactly 'QT: Quy trình'.
+  Target len: 95, Replacement len: 78
+Step 3067: Tool replace_file_content
+  Instruction: Add helper functions at the top of the file and update the generic symbol/name check in useEffect using them.
+  Description: Define helpers for robust detection of generic symbols and names, handling composed/decomposed unicode, stripping diacritics, square brackets, casing, and spaces. Replace the naive array includes check in the useEffect with these robust helpers.
+  Target len: 3056, Replacement len: 3633
+Step 3107: Tool replace_file_content
+  Instruction: Remove placeholder-overwriting logic from useEffect in ISOFormEditorView.jsx.
+  Description: Remove the block that overwrites the default placeholders with parsed generic strings, ensuring that the placeholders remain the default 'QT: Quy trình' and 'Nhập tên tài liệu...' just like the edit screen.
+  Target len: 350, Replacement len: 159
+Step 3485: Tool replace_file_content
+  Instruction: Add more icons to lucide-react import.
+  Description: Import additional icons in ISOFormEditorView.jsx
+  Target len: 88, Replacement len: 173
+Step 3489: Tool replace_file_content
+  Instruction: Add states and helpers for tabs and process list filter.
+  Description: Add activeFormTab state and processes state + handlers to ISOFormEditorView.jsx
+  Target len: 337, Replacement len: 2303
+Step 3503: Tool replace_file_content
+  Instruction: Add procPage state below procDateFilter state.
+  Description: Add procPage state in ISOFormEditorView.jsx
+  Target len: 59, Replacement len: 106
+Step 3511: Tool multi_replace_file_content
+  Instruction: Implement Tab Navigation and wrap existing configuration content in config tab block. Add Xem Mẫu (A4 Preview) and Danh Sách Tài Liệu (Process instances list) sections.
+  Description: Introduce 3-tab layout inside ISO Document Template Editor with detailed previews and related document list filters.
+  Target len: 0, Replacement len: 0

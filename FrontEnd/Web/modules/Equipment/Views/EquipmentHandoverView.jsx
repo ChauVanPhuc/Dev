@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import api from '@webShared/Services/api.service';
 import { useOutletContext, useNavigate, useParams } from 'react-router-dom';
 import { X, Upload, Plus } from 'lucide-react';
+import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
 
 const EquipmentHandoverView = ({ id: propId, onClose, onSaved }) => {
@@ -24,7 +25,12 @@ const EquipmentHandoverView = ({ id: propId, onClose, onSaved }) => {
   const fileInputRef = useRef(null);
 
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState({ type: '', text: '' });
+  const { toast } = useToast();
+  const setMessage = (msg) => {
+    if (msg && msg.text) {
+      toast(msg.type, msg.text);
+    }
+  };
   const [activeImageSlot, setActiveImageSlot] = useState(0);
   // Helper: parse images from stored string (JSON array or legacy single string)
   const parseImages = (imagesStr) => {
@@ -215,18 +221,7 @@ const EquipmentHandoverView = ({ id: propId, onClose, onSaved }) => {
   const formContent = (
     <>
 
-        {message.text && (
-          <div style={{
-            padding: '12px 20px', borderRadius: '12px', marginBottom: '15px',
-            backgroundColor: message.type === 'success' ? '#f0fdf4' : '#fef2f2',
-            color: message.type === 'success' ? '#166534' : '#991b1b',
-            border: `1px solid ${message.type === 'success' ? '#bbf7d0' : '#fecaca'}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-          }}>
-            <span style={{ fontWeight: '600' }}>{message.text}</span>
-            <X size={18} onClick={() => setMessage({type:'', text:''})} style={{ cursor: 'pointer', opacity: 0.5 }} />
-          </div>
-        )}
+
 
         <form onSubmit={handleSaveHandover} style={{ display: 'flex', gap: '30px', alignItems: 'flex-start' }}>
           {/* Left Column: Image upload placeholders */}

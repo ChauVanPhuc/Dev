@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import LoginPage from '@modules/Auth/Views/LoginView';
 import PortalLayout from '@webShared/Views/components/layout/PortalLayout';
+import { ToastProvider } from '@webShared/Views/components/feedback/ToastContext';
 
 // Import các trang Admin
 import Dashboard from '@modules/Dashboard/Views/DashboardView';
@@ -523,8 +524,9 @@ function App() {
   console.log("SmartFlow App Loading...");
 
   return (
-    <ScreenProvider>
-      <Router>
+    <ToastProvider>
+      <ScreenProvider>
+        <Router>
         <Routes>
           {/* Route Đăng nhập */}
           <Route path="/login" element={<LoginRoute />} />
@@ -629,8 +631,9 @@ function App() {
           {/* Catch-all route to prevent white screen */}
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
-      </Router>
-    </ScreenProvider>
+        </Router>
+      </ScreenProvider>
+    </ToastProvider>
   );
 }
 

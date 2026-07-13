@@ -7,6 +7,7 @@ import {
     X, ChevronLeft, ChevronRight, Info, Calendar,
     User, Clipboard, Image as ImageIcon, Layers, Undo2
 } from 'lucide-react';
+import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 
 const ExceptionDeliveries = () => {
     const [deliveries, setDeliveries] = useState([]);
@@ -20,6 +21,7 @@ const ExceptionDeliveries = () => {
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(15);
+    const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
 
     // Stats
     const [stats, setStats] = useState({
@@ -228,45 +230,50 @@ const ExceptionDeliveries = () => {
             </div>
 
             {/* Bộ Lọc & Tìm Kiếm */}
-            <div className="mgmt-toolbar card" style={{ marginBottom: '20px' }}>
-                <div className="toolbar-left" style={{ flex: 1 }}>
-                    <div className="search-wrapper">
-                        <Search size={18} className="search-icon" />
-                        <input 
-                            type="text" 
-                            placeholder="Tìm phiếu ngoại lệ, linh kiện..."
-                            value={searchQuery}
-                            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                        />
-                    </div>
+            <PageToolbar
+              searchValue={searchQuery}
+              onSearchChange={(val) => { setSearchQuery(val); setCurrentPage(1); }}
+              searchPlaceholder="Tìm phiếu ngoại lệ, linh kiện..."
+              showFilter={true}
+              isFilterOpen={isFilterBarOpen}
+              onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
+              activeFiltersCount={filterType !== 'ALL' ? 1 : 0}
+              hasWritePermission={true}
+            />
 
-                    <select 
-                        value={itemsPerPage} 
-                        onChange={(e) => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
-                        className="page-size-select"
-                    >
-                        <option value={15}>15 dòng</option>
-                        <option value={30}>30 dòng</option>
-                        <option value={50}>50 dòng</option>
-                        <option value={100}>100 dòng</option>
-                    </select>
+            {/* INLINE EXPANDABLE FILTER BAR */}
+            {isFilterBarOpen && (
+              <div className="filter-inline-bar">
+                {/* Loại ngoại lệ */}
+                <div className="filter-field-group">
+                  <label className="filter-field-label">Loại ngoại lệ</label>
+                  <select 
+                    value={filterType}
+                    onChange={(e) => { setFilterType(e.target.value); setCurrentPage(1); }}
+                  >
+                    <option value="ALL">Tất cả ngoại lệ</option>
+                    <option value="LECH_THIEU">Lệch Thiếu (Nhận &lt; Giao)</option>
+                    <option value="LECH_THUA">Lệch Thừa (Giao &lt; Nhận)</option>
+                    <option value="TRA_HANG">Trả Hàng QC</option>
+                    <option value="LOI_QC">Lỗi Đánh Giá QC</option>
+                  </select>
                 </div>
 
-                <div className="toolbar-right desktop-only">
-                    <span style={{ fontSize: '13px', fontWeight: '700', color: '#8D6E63', whiteSpace: 'nowrap' }}>Loại ngoại lệ:</span>
-                    <select 
-                        value={filterType}
-                        onChange={(e) => { setFilterType(e.target.value); setCurrentPage(1); }}
-                        className="filter-select"
-                    >
-                        <option value="ALL">Tất cả ngoại lệ</option>
-                        <option value="LECH_THIEU">Lệch Thiếu (Nhận &lt; Giao)</option>
-                        <option value="LECH_THUA">Lệch Thừa (Giao &lt; Nhận)</option>
-                        <option value="TRA_HANG">Trả Hàng QC</option>
-                        <option value="LOI_QC">Lỗi Đánh Giá QC</option>
-                    </select>
+                {/* Hiển thị số dòng */}
+                <div className="filter-field-group">
+                  <label className="filter-field-label">Hiển thị số dòng</label>
+                  <select 
+                    value={itemsPerPage} 
+                    onChange={(e) => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
+                  >
+                    <option value={15}>15 dòng</option>
+                    <option value={30}>30 dòng</option>
+                    <option value={50}>50 dòng</option>
+                    <option value={100}>100 dòng</option>
+                  </select>
                 </div>
-            </div>
+              </div>
+            )}
 
             {/* Nội Dung Bảng */}
             <div className="admin-list-layout">

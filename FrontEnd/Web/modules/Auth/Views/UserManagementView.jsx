@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Filter, FileDown, Search, Plus, FolderTree, Briefcase, Settings, Layers } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import ExcelJS from 'exceljs';
-
+import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
+import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
 import '@styles/components.css';
 
 const SCREEN_GROUPS = [
@@ -11,15 +13,19 @@ const SCREEN_GROUPS = [
     title: 'Quản lý hệ thống',
     screens: [
       { key: 'users', name: 'Quản lý tài khoản' },
-      { key: 'quality-records', name: 'Quản lý hồ sơ' },
-      { key: 'iso-documents', name: 'Quản lý hồ sơ ISO' },
-      { key: 'iso-processes', name: 'Quản lý quy trình' },
       { key: 'screens', name: 'Quản lý màn hình' },
       { key: 'logs', name: 'Quản lý lỗi hệ thống' },
       { key: 'feedback', name: 'Quản lý góp ý' },
       { key: 'data', name: 'Backup data' },
       { key: 'bugs', name: 'Quản lý Bug' },
       { key: 'monitor', name: 'Giám sát hệ thống' }
+    ]
+  },
+  {
+    title: 'Nhân sự',
+    screens: [
+      { key: 'iso-documents', name: 'Quản lý mẫu tài liệu' },
+      { key: 'iso-processes', name: 'Quản lý quy trình' }
     ]
   },
   {
@@ -35,6 +41,7 @@ const SCREEN_GROUPS = [
   {
     title: 'Module chất lượng',
     screens: [
+      { key: 'quality-records', name: 'Hồ sơ chất lượng' },
       { key: 'defects', name: 'Danh sách lỗi' },
       { key: 'claim', name: 'Claim khách hàng' },
       { key: 'reports', name: 'Báo cáo kiểm tra' },
@@ -45,8 +52,16 @@ const SCREEN_GROUPS = [
   {
     title: 'Module kỹ thuật',
     screens: [
-      { key: 'products', name: 'BOM sản phẩm' },
-      { key: 'equipment', name: 'Thiết bị - máy móc' }
+      { key: 'products', name: 'BOM sản phẩm' }
+    ]
+  },
+  {
+    title: 'Module bảo trì - máy móc',
+    screens: [
+      { key: 'equipment', name: 'Quản lý thiết bị' },
+      { key: 'machines', name: 'Danh sách thiết bị' },
+      { key: 'machine-history', name: 'Lịch sử bảo trì' },
+      { key: 'machine-training', name: 'Hướng dẫn sử dụng' }
     ]
   },
   {
@@ -59,12 +74,9 @@ const SCREEN_GROUPS = [
     ]
   },
   {
-    title: 'Quản lý KPI',
+    title: 'Khác',
     screens: [
-      { key: 'kpi-checklist', name: 'Checklist công việc' },
-      { key: 'kpi-list', name: 'Danh sách KPI' },
-      { key: 'kpi-rules', name: 'Quy tắc cộng trừ điểm' },
-      { key: 'kpi-feedback', name: 'Phản hồi và nhận xét' }
+      { key: 'kpi', name: 'Quản lý KPI' }
     ]
   }
 ];
@@ -210,6 +222,8 @@ const UserManagement = () => {
   // ─── State menu thao tác ─────────────────────────────────────────────────────
   const [actionMenuId, setActionMenuId] = useState(null); // ID user đang mở menu
   const [showExtraMenu, setShowExtraMenu] = useState(false); // Dropdown "Khác"
+  const { toast } = useToast();
+  const [confirmDeleteModal, setConfirmDeleteModal] = useState({ show: false, user: null });
 
   // ─── State chế độ xem & phân quyền ──────────────────────────────────────────
   const [viewMode, setViewMode] = useState('account_info'); // 'account_info' | 'permissions_web' | 'permissions_mobile'
@@ -356,7 +370,7 @@ const UserManagement = () => {
       }
     } catch (e) {
       console.error(`Lỗi cập nhật quyền cho user ${user.id}:`, e);
-      alert('Đã xảy ra lỗi khi lưu cấu hình phân quyền.');
+      toast('error', 'Đã xảy ra lỗi khi lưu cấu hình phân quyền.');
     }
   };
 
@@ -696,7 +710,7 @@ const UserManagement = () => {
 
     } catch (e) {
       console.error('Lỗi khi xuất dữ liệu excel:', e);
-      alert('Đã xảy ra lỗi khi xuất file Excel.');
+      toast('error', 'Đã xảy ra lỗi khi xuất file Excel.');
     } finally {
       setLoading(false);
     }
@@ -718,16 +732,13 @@ const UserManagement = () => {
     }
   };
 
-  // Xử lý hành động từ menu thao tác
   const handleAction = (action, user) => {
     setActionMenuId(null);
     if (action === 'edit') navigate(`/admin/users/edit/${user.id}`);
     if (action === 'permissions') navigate(`/admin/users/edit/${user.id}`);
-    if (action === 'suspend') alert(`Tính năng "Đình chỉ" cho ${user.full_name} đang được phát triển.`);
+    if (action === 'suspend') toast('info', `Tính năng "Đình chỉ" cho ${user.full_name} đang được phát triển.`);
     if (action === 'delete') {
-      if (window.confirm(`Bạn có chắc muốn xóa tài khoản "${user.full_name}"?`)) {
-        alert('Tính năng xóa đang được phát triển.');
-      }
+      setConfirmDeleteModal({ show: true, user });
     }
   };
 
@@ -739,303 +750,88 @@ const UserManagement = () => {
       <div className="mgmt-main">
 
         {/* ── Thanh công cụ (Toolbar) ── */}
-        <div className="mgmt-toolbar card" style={{ marginBottom: '20px' }}>
+        <PageToolbar
+          searchValue={searchTerm}
+          onSearchChange={setSearchTerm}
+          searchPlaceholder="Nhập tên hoặc mã nhân viên..."
+          showSort={true}
+          sortOptions={[
+            { label: 'Sắp xếp', value: '' },
+            { label: 'Mã nhân viên', value: 'employee_id' },
+            { label: 'Họ tên (A-Z)', value: 'full_name' },
+            { label: 'Số ĐT', value: 'phone' },
+            { label: 'Trạng thái', value: 'status' }
+          ]}
+          sortValue={sortBy}
+          onSortChange={(val) => { setSortBy(val); setSortDir('asc'); setPage(1); }}
+          showFilter={true}
+          isFilterOpen={showFilterPanel}
+          onFilterToggle={() => setShowFilterPanel(!showFilterPanel)}
+          activeFiltersCount={statusFilter ? 1 : 0}
+          extraActions={[
+            {
+              label: 'Bộ phận',
+              icon: <FolderTree size={14} />,
+              onClick: () => navigate('/admin/users/departments')
+            },
+            {
+              label: 'Chức vụ',
+              icon: <Briefcase size={14} />,
+              onClick: () => navigate('/admin/users/positions')
+            }
+          ]}
+          onExport={handleExportExcel}
+          isExporting={loading}
+          onCreate={hasWritePermission ? () => navigate('/admin/users/create') : undefined}
+          createLabel="Tạo mới"
+          hasWritePermission={hasWritePermission}
+        />
 
-          {/* Nhóm bộ lọc bên trái */}
-          <div className="toolbar-left">
-            {/* Ô tìm kiếm */}
-            <div className="search-wrapper">
-              <Search size={18} className="search-icon" />
-              <input
-                type="text"
-                placeholder="Nhập tên hoặc mã nhân viên..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-
-            {/* Nút Lọc + Dropdown Panel */}
-            <div className="dropdown-wrapper" ref={filterRef}>
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <Filter size={14} color="#7B5233" style={{ position: 'absolute', left: '10px', pointerEvents: 'none' }} />
-                <button
-                  className={`icon-btn-minimal ${showFilterPanel || statusFilter ? 'active' : ''}`}
-                  style={{
-                    padding: '0 10px 0 30px',
-                    height: '36px',
-                    borderRadius: '8px',
-                    border: '1px solid #EADCC9',
-                    backgroundColor: '#FAF6F0',
-                    color: '#7B5233',
-                    fontSize: '0.8rem',
-                    fontWeight: '700',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}
-                  onClick={() => { setShowFilterPanel(p => !p); setShowSortPanel(false); }}
-                >
-                  {statusFilter || 'Trạng thái'}
-                  {statusFilter && <span className="filter-indicator" style={{ marginLeft: 'auto' }} />}
-                </button>
-              </div>
-              {showFilterPanel && (
-                <div className="dropdown-panel" style={{ position: 'absolute', top: '100%', left: 0, zIndex: 1000, width: '200px' }}>
-                  <p className="dropdown-title">Lọc theo trạng thái</p>
-                  {['', 'Đang sử dụng', 'Dừng hoạt động', 'Đang chờ xóa'].map(s => (
-                    <button
-                      key={s}
-                      className={`dropdown-item ${statusFilter === s ? 'selected' : ''}`}
-                      onClick={() => { setStatusFilter(s); setPage(1); setShowFilterPanel(false); }}
-                    >
-                      {s || 'Tất cả'}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Nút Sắp xếp + Dropdown Panel */}
-            <div className="dropdown-wrapper" ref={sortRef}>
-              <button
-                className={`icon-btn-minimal ${showSortPanel ? 'active' : ''}`}
-                title="Sắp xếp"
-                style={{
-                  height: '36px',
-                  width: '40px',
-                  padding: 0,
-                  justifyContent: 'center',
-                  borderRadius: '8px',
-                  border: '1px solid #EADCC9',
-                  backgroundColor: '#FAF6F0',
-                  color: '#7B5233',
-                  display: 'flex',
-                  alignItems: 'center'
-                }}
-                onClick={() => { setShowSortPanel(p => !p); setShowFilterPanel(false); }}
+        {/* INLINE EXPANDABLE FILTER BAR */}
+        {showFilterPanel && (
+          <div className="filter-inline-bar">
+            {/* Lọc theo Trạng thái */}
+            <div className="filter-field-group">
+              <label className="filter-field-label">Trạng thái nhân viên</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M11 5h10M11 9h7M11 13h4M3 17l3 3 3-3M6 18V4"></path>
-                </svg>
-              </button>
-              {showSortPanel && (
-                <div className="dropdown-panel" style={{ position: 'absolute', top: '100%', right: 0, zIndex: 1000, width: '200px' }}>
-                  <p className="dropdown-title">Sắp xếp theo</p>
-                  {[
-                    { label: 'Mã nhân viên', value: 'employee_id' },
-                    { label: 'Họ tên (A-Z)', value: 'full_name' },
-                    { label: 'Số ĐT', value: 'phone' },
-                    { label: 'Trạng thái', value: 'status' },
-                  ].map(opt => (
-                    <button
-                      key={opt.value}
-                      className={`dropdown-item ${sortBy === opt.value ? 'selected' : ''}`}
-                      onClick={() => { setSortBy(opt.value); setSortDir('asc'); setPage(1); setShowSortPanel(false); }}
-                    >
-                      {opt.label} {sortBy === opt.value ? (sortDir === 'asc' ? '↑' : '↓') : ''}
-                    </button>
-                  ))}
-                </div>
-              )}
+                <option value="">Tất cả</option>
+                <option value="Đang sử dụng">Đang sử dụng</option>
+                <option value="Dừng hoạt động">Dừng hoạt động</option>
+                <option value="Đang chờ xóa">Đang chờ xóa</option>
+              </select>
             </div>
 
-            {/* Chọn số dòng hiển thị */}
-            <select
-              value={pageSize}
-              onChange={(e) => { setPageSize(parseInt(e.target.value)); setPage(1); }}
-              className="page-size-select"
-              style={{
-                height: '36px',
-                padding: '0 10px',
-                borderRadius: '8px',
-                border: '1px solid #EADCC9',
-                backgroundColor: '#FAF6F0',
-                color: '#7B5233',
-                fontWeight: '700',
-                fontSize: '0.8rem',
-                width: 'auto',
-                maxWidth: '100px'
-              }}
-            >
-              <option value={15}>15 dòng</option>
-              <option value={30}>30 dòng</option>
-              <option value={50}>50 dòng</option>
-              <option value={100}>100 dòng</option>
-            </select>
+            {/* Chế độ xem */}
+            <div className="filter-field-group">
+              <label className="filter-field-label">Chế độ xem phân quyền</label>
+              <select
+                value={viewMode}
+                onChange={(e) => setViewMode(e.target.value)}
+              >
+                <option value="account_info">Thông tin tài khoản</option>
+                <option value="permissions_web">Phân quyền Web</option>
+                <option value="permissions_mobile">Phân quyền Mobile</option>
+              </select>
+            </div>
 
-            {/* Bộ chuyển đổi chế độ xem */}
-            <div className="dropdown-wrapper view-mode-selector-wrapper" ref={viewModeRef}>
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <button
-                  className={`icon-btn-minimal ${showViewModePanel ? 'active' : ''} view-mode-selector-btn`}
-                  style={{
-                    width: '185px',
-                    padding: '0 30px 0 15px',
-                    height: '36px',
-                    borderRadius: '8px',
-                    border: '1px solid #EADCC9',
-                    backgroundColor: '#FAF6F0',
-                    color: '#7B5233',
-                    fontSize: '0.8rem',
-                    fontWeight: '700',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    position: 'relative',
-                    textAlign: 'left'
-                  }}
-                  onClick={() => { setShowViewModePanel(p => !p); setShowFilterPanel(false); setShowSortPanel(false); }}
-                >
-                  {viewMode === 'account_info' ? 'Thông tin tài khoản' : viewMode === 'permissions_web' ? 'Phân quyền Web' : 'Phân quyền Mobile'}
-                  <span style={{
-                    position: 'absolute',
-                    right: '10px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    fontSize: '0.6rem',
-                    color: '#7B5233'
-                  }}>▼</span>
-                </button>
-              </div>
-              {showViewModePanel && (
-                <div className="dropdown-panel" style={{ position: 'absolute', top: '100%', left: 0, zIndex: 1000, width: '185px' }}>
-                  <p className="dropdown-title">Chế độ xem</p>
-                  <button
-                    className={`dropdown-item ${viewMode === 'account_info' ? 'selected' : ''}`}
-                    onClick={() => { setViewMode('account_info'); setShowViewModePanel(false); }}
-                  >
-                    Thông tin tài khoản
-                  </button>
-                  <button
-                    className={`dropdown-item ${viewMode === 'permissions_web' ? 'selected' : ''}`}
-                    onClick={() => { setViewMode('permissions_web'); setShowViewModePanel(false); }}
-                  >
-                    Phân quyền Web
-                  </button>
-                  <button
-                    className={`dropdown-item ${viewMode === 'permissions_mobile' ? 'selected' : ''}`}
-                    onClick={() => { setViewMode('permissions_mobile'); setShowViewModePanel(false); }}
-                  >
-                    Phân quyền Mobile
-                  </button>
-                </div>
-              )}
+            {/* Hiển thị số dòng */}
+            <div className="filter-field-group">
+              <label className="filter-field-label">Hiển thị số dòng</label>
+              <select
+                value={pageSize}
+                onChange={(e) => { setPageSize(parseInt(e.target.value)); setPage(1); }}
+              >
+                <option value={15}>15 dòng</option>
+                <option value={30}>30 dòng</option>
+                <option value={50}>50 dòng</option>
+                <option value={100}>100 dòng</option>
+              </select>
             </div>
           </div>
-
-          {/* Nhóm hành động bên phải */}
-          <div className="toolbar-right">
-            {/* Nút Tạo mới */}
-            {hasWritePermission && (
-              <>
-                <div style={{ position: 'relative' }} ref={extraMenuRef}>
-                  <button
-                    onClick={() => {
-                      setShowExtraMenu(p => !p);
-                      setShowViewModePanel(false);
-                      setShowFilterPanel(false);
-                      setShowSortPanel(false);
-                    }}
-                    style={{
-                      height: '36px',
-                      padding: '0 16px',
-                      whiteSpace: 'nowrap',
-                      borderRadius: '8px',
-                      fontWeight: '700',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      border: 'none',
-                      backgroundColor: '#7B5233',
-                      color: '#fff',
-                      fontSize: '0.85rem',
-                      cursor: 'pointer',
-                      outline: 'none',
-                      boxShadow: '0 2px 5px rgba(123, 82, 51, 0.15)'
-                    }}
-                  >
-                    <Layers size={14} />
-                    <span className="btn-text-desktop">Khác</span>
-                    <span className="btn-text-mobile">Khác</span>
-                  </button>
-                  {showExtraMenu && (
-                    <div className="dropdown-panel" style={{
-                      position: 'absolute',
-                      top: '100%',
-                      right: 0,
-                      zIndex: 1000,
-                      width: '180px',
-                      marginTop: '6px'
-                    }}>
-                      <p className="dropdown-title">Quản lý nâng cao</p>
-                      <button
-                        className="dropdown-item selected"
-                        onClick={() => { navigate('/admin/users'); setShowExtraMenu(false); }}
-                        style={{ fontWeight: '800' }}
-                      >
-                        Tài khoản
-                      </button>
-                      <button
-                        className="dropdown-item"
-                        onClick={() => { navigate('/admin/users/departments'); setShowExtraMenu(false); }}
-                      >
-                        Bộ phận
-                      </button>
-                      <button
-                        className="dropdown-item"
-                        onClick={() => { navigate('/admin/users/positions'); setShowExtraMenu(false); }}
-                      >
-                        Chức vụ
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <button
-                  className="btn btn-primary"
-                  onClick={() => navigate('/admin/users/create')}
-                  style={{
-                    height: '36px',
-                    padding: '0 20px',
-                    whiteSpace: 'nowrap',
-                    borderRadius: '8px',
-                    fontWeight: '700',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}
-                >
-                  <Plus size={16} />
-                  <span className="btn-text-desktop">Tạo mới</span>
-                  <span className="btn-text-mobile">Tạo mới</span>
-                </button>
-              </>
-            )}
-
-            {/* Nút Xuất dữ liệu */}
-            <button
-              className="btn btn-outline"
-              onClick={handleExportExcel}
-              style={{
-                height: '36px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '0 15px',
-                borderRadius: '8px',
-                border: '1px solid #EADCC9',
-                backgroundColor: '#fff',
-                color: '#7B5233',
-                fontWeight: '700',
-                fontSize: '0.85rem'
-              }}
-            >
-              <FileDown size={16} />
-              <span className="btn-text-desktop">Xuất dữ liệu</span>
-              <span className="btn-text-mobile">Xuất</span>
-            </button>
-          </div>
-        </div>
+        )}
 
         {/* ── Bảng dữ liệu ── */}
         <div className="admin-list-layout">
@@ -1456,6 +1252,19 @@ const UserManagement = () => {
           }
         }
       `}</style>
+      <BeautifulConfirmModal
+        visible={confirmDeleteModal.show}
+        title="Xác nhận xóa tài khoản"
+        message={`Bạn có chắc muốn xóa tài khoản "${confirmDeleteModal.user?.full_name}"?`}
+        onConfirm={() => {
+          setConfirmDeleteModal({ show: false, user: null });
+          toast('info', 'Tính năng xóa đang được phát triển.');
+        }}
+        onCancel={() => setConfirmDeleteModal({ show: false, user: null })}
+        confirmText="Xóa tài khoản"
+        cancelText="Hủy"
+        type="error"
+      />
     </div>
   );
 };

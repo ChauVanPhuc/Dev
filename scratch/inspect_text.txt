@@ -1,0 +1,50 @@
+P 0: THEO DÕI SỬA ĐỔI NỘI DUNG TÀI LIỆU
+P 1: 1. Mục đích.
+P 2: Quy trình này đảm bảo rằng:
+P 3: Việc kiểm soát chất lượng vật tư đầu vào được tiến hành và thực hiện.
+P 4: Tất cả các vật tư đều phù hợp với thông số tiêu chuẩn chất lượng của VINA G7.
+P 5: Phát hiện và ngăn chặn kịp thời lỗi phát sinh khi đưa lên chuyền sản xuất
+P 6: Từ đó có các biện pháp đối ứng và phản hồi đến nhà cung cấp để cải thiện chất lượng
+P 7: Theo dõi và cung cấp kết quả thống kê, cũng như kết quả đánh giá chất lượng và hiệu suất dịch vụ của nhà cung cấp để có hành động cải tiến liên tục
+P 8: 2. Phạm vi áp dụng.
+P 9: Áp dụng cho các vật tư, nguyên vật liệu nhập vào nhà máy của Công ty Cổ Phần Vina G7 Đồng Nai.
+P 10: Lưu hành nội bộ.
+P 11: 3. Tài liệu viện dẫn
+P 12: Theo tiêu chuẩn ISO 9001: 2015
+P 13: Theo tiêu chuẩn ISO 14001: 2015
+P 14: Đạo luật Lacey Art
+P 15: Tiêu chuẩn AQL
+P 16: Định nghĩa và Từ viết tắt
+P 17: - IQC: Kiểm soát chất lượng đầu vào
+P 18: - QA:  Đảm bảo chất lượng
+P 19: - NVL: Nguyên vật liệu
+P 20: - QC: Kiểm soát chất lượng
+P 21: - NG: Hàng lỗi trong sản xuất, Nghĩa là sản phẩm không đạt chất lượng, có lỗi, bị trả lại hoặc yêu cầu thu hồi.
+P 22: 5. Nội dung
+P 23: Lưu đồ quy trình
+P 24: (Xem trang sau)
+P 34: Diễn giải
+P 35: Bước 1:  Tiếp nhận nguyên vật liệu
+P 36: Đối với NVL: Phòng mua hàng/Kho thông báo kế hoạch dự kiến hàng về.
+P 37: Bộ phận Kho thông báo thời gian chính thức hàng sẽ về tới kho của nhà máy.
+P 38: Bước 2:  Kiểm tra giấy tờ nhập kho
+P 39: Các giấy tờ xuất xứ của đầu vào, biên bản giao hàng, hóa đơn, các loại giấy tờ đặc biệt khác được yêu cầu.
+P 40: Nhân viên phụ trách kho kiểm tra thông tin nhập kho.
+P 41: Bước 3: Kiểm tra chất lượng đầu vào
+P 42: Nguyên liệu gỗ được kiểm tra theo các nội dung đã được đưa ra trong tiêu chuẩn được ban hành (độ ẩm, kích thước, ngoại quan: mối mọt, nứt tét…). Dụng cụ kiểm tra, máy đo độ ẩm,thước kẹp,thước dây.
+P 43: Vật tư được kiểm tra theo tiêu chuẩn được ban hành (màu sắc, kích thước, chức năng hoạt động, ngoại quan: trầy xước, rỉ sét…)Thước kẹp,thước dây,mẫu đối chứng.
+P 44: Nếu nguyên liệu đạt tiêu chuẩn QC cho nhập kho và ghi chép nhật kí, báo cáo kiểm tra đầu vào IQC, lưu trữ dữ liệu.
+P 45: Nếu nguyên liệu không đạt tiêu chuẩn, báo cáo lại bộ phận thu mua và ghi chép nhật kí hàng lỗi, tuân thủ theo quy trình kiểm soát đầu ra không phù hợp.
+P 46: Bước 4 : Nhập kho NVL
+P 47: Sau khi NVL được kiểm tra đạt được nhập kho.
+P 48: Nhân viên kho cập nhật báo cáo nhập kho NVL.
+P 49: Bước 5 : Quy trình sản xuất
+P 50: Bộ phận sản xuất kiểm tra và nhận NVL đạt chất lượng và tiến hành sản xuất theo kế hoạch
+P 51: Bước 6 :  Lưu hồ sơ và báo cáo
+P 52: Nhân viên QC cập nhật báo cáo hằng ngày cho trưởng bộ phận QC
+P 53: Bộ phận QC theo dõi và kiểm soát và xử lý nguyên vật liệu không phù hợp tại nhà máy, phối hợp để xuất phương án xử lý.
+P 54: 6. Biểu mẫu
+P 55: G7.CL-NKDV-01 _Phiếu kiểm tra vật tư nhập kho (Nguyên liệu và Phụ kiện)
+P 56: G7.CL-NG-01 _Biên bản NG – sản phẩm không phù hợp
+P 57: G7.CL/QD.01_Quy định lấy mẫu kiểm tra chất lượng
+P 58: TCKT-G7-00_Tiêu chuẩn chất lượng đầu vào

@@ -16,6 +16,7 @@ import { useNavigate } from 'react-router-dom';
 import { planService } from '@modules/Plan/Models/plan.service';
 import { orderService } from '@modules/Order/Models/order.service';
 import { bomService } from '@modules/Product/Models/bom.service';
+import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 
 // --- COMPONENT TÌM KIẾM SẢN PHẨM THÔNG MINH (TRÁNH LOAD TẤT CẢ) ---
 const ProductSearchSelect = ({ value, onChange, placeholder, onOpenChange }) => {
@@ -211,6 +212,7 @@ const ProductSearchSelect = ({ value, onChange, placeholder, onOpenChange }) => 
 const AddProductionPlan = () => {
     const navigate = useNavigate();
     const [isLoading, setIsLoading] = useState(false);
+    const { toast } = useToast();
     const [currentTime, setCurrentTime] = useState(new Date());
 
     const [activeSelectId, setActiveSelectId] = useState(null);
@@ -290,7 +292,7 @@ const AddProductionPlan = () => {
     };
 
     const handleSave = async () => {
-        if (!planData.name) return alert("Vui lòng nhập tên kế hoạch");
+        if (!planData.name) return toast('warning', "Vui lòng nhập tên kế hoạch");
         setIsLoading(true);
         try {
             const createdPlan = await planService.createPlan({
@@ -325,11 +327,11 @@ const AddProductionPlan = () => {
                     products_details: productsDetailsPayload 
                 });
             }
-            alert('Đã lưu Kế hoạch Sản xuất thành công!');
+            toast('success', 'Đã lưu Kế hoạch Sản xuất thành công!');
             navigate('/admin/plan');
         } catch (error) {
             console.error(error);
-            alert(`Có lỗi xảy ra khi lưu dữ liệu.`);
+            toast('error', `Có lỗi xảy ra khi lưu dữ liệu.`);
         } finally {
             setIsLoading(false);
         }

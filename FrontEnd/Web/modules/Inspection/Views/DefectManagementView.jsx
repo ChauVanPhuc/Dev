@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 import { Calendar, Filter, ChevronDown, ChevronUp, BarChart3, PieChart as PieChartIcon, TrendingUp, RefreshCw, ChevronLeft, ChevronRight, Search, Edit, Trash2 } from 'lucide-react';
 import '@styles/components.css';
+import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 
 const COLORS = ['#7B5233', '#A67C52', '#D9B99B', '#F2E2CE', '#4b301e', '#8c6a51'];
 
@@ -310,6 +311,7 @@ const DefectAnalytics = ({ stage }) => {
 const DefectManagement = () => {
   const [viewTab, setViewTab] = useState('analytics'); // 'analytics', 'list', 'field', 'complaint', 'capa'
   const [selectedStage, setSelectedStage] = useState('');
+  const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
   const [actionMenuId, setActionMenuId] = useState(null);
 
   useEffect(() => {
@@ -872,83 +874,38 @@ const DefectManagement = () => {
                 }
               }
             `}</style>
-            <div className="defect-toolbar-container card-shadow">
-              {/* Hàng 1: Tìm kiếm + 15 dòng */}
-              <div className="defect-row-1">
-                <div className="qr-search-wrapper" style={{ flex: 1, position: 'relative' }}>
-                  <Search size={16} style={{ position: 'absolute', left: '12px', color: '#7B5233', pointerEvents: 'none', top: '50%', transform: 'translateY(-50%)' }} />
-                  <input
-                    type="text"
-                    placeholder="Tìm theo tên, mã G7, lỗi khách..."
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                    style={{
-                      padding: '8px 12px 8px 36px',
-                      borderRadius: '10px',
-                      border: '1px solid #EADCC9',
-                      backgroundColor: '#FAF6F0',
-                      fontSize: '0.85rem',
-                      width: '100%',
-                      transition: 'all 0.2s ease',
-                      outline: 'none',
-                      color: '#5D3B32',
-                      fontWeight: '700',
-                      height: '38px'
-                    }}
-                  />
-                </div>
-                <select 
-                  value={pageSize} 
-                  onChange={(e) => { setPageSize(parseInt(e.target.value)); setCurrentPage(1); }}
-                  className="page-size-select"
-                  style={{ 
-                      height: '38px',
-                      padding: '0 8px',
-                      borderRadius: '10px',
-                      border: '1px solid #EADCC9',
-                      backgroundColor: '#FAF6F0',
-                      color: '#7B5233',
-                      fontWeight: '700',
-                      fontSize: '0.82rem',
-                      minWidth: '95px'
-                  }}
-                >
-                  <option value={15}>15 dòng</option>
-                  <option value={30}>30 dòng</option>
-                  <option value={50}>50 dòng</option>
-                  <option value={100}>100 dòng</option>
-                </select>
-              </div>
+            <PageToolbar
+              searchValue={searchQuery}
+              onSearchChange={(val) => { setSearchQuery(val); setCurrentPage(1); }}
+              searchPlaceholder="Tìm theo tên, mã G7, lỗi khách..."
+              showFilter={true}
+              isFilterOpen={isFilterBarOpen}
+              onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
+              activeFiltersCount={
+                (activeTab !== 'all' ? 1 : 0) +
+                (selectedAql !== 'all' ? 1 : 0) +
+                (selectedStage ? 1 : 0) +
+                (!showInactive ? 1 : 0)
+              }
+              onCreate={handleOpenCreate}
+              createLabel="Thêm lỗi"
+              hasWritePermission={true}
+            />
 
-              {/* Hàng 2: Danh mục + Mức AQL */}
-              <div className="defect-row-2">
-                {/* 1. Lọc theo Phân nhóm */}
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flex: 1 }}>
-                  <Filter size={12} color="#7B5233" style={{ position: 'absolute', left: '8px', pointerEvents: 'none' }} />
+            {/* INLINE EXPANDABLE FILTER BAR */}
+            {isFilterBarOpen && (
+              <div className="filter-inline-bar">
+                {/* Lọc theo Phân nhóm */}
+                <div className="filter-field-group">
+                  <label className="filter-field-label">Danh mục lỗi</label>
                   <select
                     value={activeTab}
                     onChange={(e) => {
                       setActiveTab(e.target.value);
                       setCurrentPage(1);
                     }}
-                    className="filter-select qr-select-with-icon"
-                    style={{
-                      padding: '6px 6px 6px 24px',
-                      borderRadius: '8px',
-                      border: '1px solid #EADCC9',
-                      backgroundColor: '#FAF6F0',
-                      fontSize: '0.78rem',
-                      fontWeight: '700',
-                      color: '#7B5233',
-                      cursor: 'pointer',
-                      height: '36px',
-                      width: '100%'
-                    }}
                   >
-                    <option value="all">Danh mục</option>
+                    <option value="all">Tất cả danh mục</option>
                     <option value="visual">Ngoại quan (APP)</option>
                     <option value="paint">Sơn (PAI)</option>
                     <option value="structure">Kết cấu (STR)</option>
@@ -957,57 +914,49 @@ const DefectManagement = () => {
                   </select>
                 </div>
 
-                {/* 2. Lọc theo mức AQL */}
-                <select 
-                  value={selectedAql} 
-                  onChange={(e) => { setSelectedAql(e.target.value); setCurrentPage(1); }}
-                  className="filter-select"
-                  style={{ 
-                    padding: '6px 8px', 
-                    borderRadius: '8px', 
-                    border: '1px solid #EADCC9', 
-                    backgroundColor: '#FAF6F0',
-                    fontSize: '0.78rem',
-                    color: '#7B5233',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    height: '36px',
-                    flex: 1
-                  }}
-                >
-                  <option value="all">Mức AQL</option>
-                  <option value="Major">Nặng (Major)</option>
-                  <option value="Minor">Nhẹ (Minor)</option>
-                </select>
-              </div>
+                {/* Lọc theo mức AQL */}
+                <div className="filter-field-group">
+                  <label className="filter-field-label">Mức AQL</label>
+                  <select 
+                    value={selectedAql} 
+                    onChange={(e) => { setSelectedAql(e.target.value); setCurrentPage(1); }}
+                  >
+                    <option value="all">Tất cả mức AQL</option>
+                    <option value="Major">Nặng (Major)</option>
+                    <option value="Minor">Nhẹ (Minor)</option>
+                  </select>
+                </div>
 
-              {/* Hàng 3: Còn lại (Công đoạn + Checkbox + Thêm mới) */}
-              <div className="defect-row-3">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '200px' }}>
-                  {/* Lọc theo Công đoạn */}
+                {/* Lọc theo Công đoạn */}
+                <div className="filter-field-group">
+                  <label className="filter-field-label">Công đoạn</label>
                   <select 
                     value={selectedStage} 
                     onChange={(e) => { setSelectedStage(e.target.value); setCurrentPage(1); }}
-                    className="filter-select"
-                    style={{ 
-                      padding: '6px 8px', 
-                      borderRadius: '8px', 
-                      border: '1px solid #EADCC9', 
-                      backgroundColor: '#FAF6F0',
-                      fontSize: '0.78rem',
-                      color: '#7B5233',
-                      fontWeight: '700',
-                      cursor: 'pointer',
-                      height: '36px',
-                      flex: 1
-                    }}
                   >
-                    <option value="">Công đoạn</option>
+                    <option value="">Tất cả công đoạn</option>
                     {FACTORY_STAGES.map(s => (
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
+                </div>
 
+                {/* Hiển thị số dòng */}
+                <div className="filter-field-group">
+                  <label className="filter-field-label">Hiển thị số dòng</label>
+                  <select 
+                    value={pageSize} 
+                    onChange={(e) => { setPageSize(parseInt(e.target.value)); setCurrentPage(1); }}
+                  >
+                    <option value={15}>15 dòng</option>
+                    <option value={30}>30 dòng</option>
+                    <option value={50}>50 dòng</option>
+                    <option value={100}>100 dòng</option>
+                  </select>
+                </div>
+
+                {/* Trạng thái hoạt động */}
+                <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '4px' }}>
                   <label className="checkbox-filter" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                     <input 
                       type="checkbox" 
@@ -1017,15 +966,11 @@ const DefectManagement = () => {
                         setCurrentPage(1);
                       }} 
                     />
-                    <span className="checkbox-text" style={{ fontSize: '0.75rem', fontWeight: '700', color: '#7B5233', whiteSpace: 'nowrap' }}>Hiện ngưng dùng</span>
+                    <span className="checkbox-text" style={{ fontSize: '0.8rem', fontWeight: '700', color: '#7B5233', whiteSpace: 'nowrap' }}>Hiện ngưng dùng</span>
                   </label>
                 </div>
-
-                <button className="btn btn-primary" onClick={handleOpenCreate} style={{ height: '36px', padding: '0 16px', whiteSpace: 'nowrap', borderRadius: '8px', fontWeight: '700' }}>
-                  + Thêm lỗi
-                </button>
               </div>
-            </div>
+            )}
 
             {/* ── Layout wrapper: table cuộn nội bộ, pagination cố định đáy ── */}
             <div className="defect-list-layout">

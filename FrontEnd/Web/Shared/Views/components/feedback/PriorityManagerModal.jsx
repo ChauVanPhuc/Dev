@@ -1,9 +1,11 @@
 import { useState, useRef } from 'react';
 import { GripVertical, X, Save, Star, Search, CheckCircle2 } from 'lucide-react';
+import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import { planService } from '@modules/Plan/Models/plan.service';
 import { orderService } from '@modules/Order/Models/order.service';
 
 export default function PriorityManagerModal({ orders, onClose, onSaved }) {
+    const { toast } = useToast();
     const [items, setItems] = useState(() =>
         [...(orders || []).filter(o => o.is_priority === 1 && (o.order_progress || 0) < 100)]
             .sort((a, b) => (b.priority_score || 0) - (a.priority_score || 0))
@@ -117,7 +119,7 @@ export default function PriorityManagerModal({ orders, onClose, onSaved }) {
             setSaved(true);
             setTimeout(() => { onSaved(); onClose(); }, 700);
         } catch (err) {
-            alert('Có lỗi xảy ra, vui lòng thử lại!');
+            toast('error', 'Có lỗi xảy ra, vui lòng thử lại!');
         } finally {
             setSaving(false);
         }

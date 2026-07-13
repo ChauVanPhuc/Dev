@@ -225,10 +225,11 @@ def resolve_user_permissions(user, db: Session) -> dict:
     import json
     
     ALL_SCREENS = [
-        "users", "quality-records", "screens", "logs", "feedback", "data", "bugs", "monitor",
+        "users", "quality-records", "iso-documents", "iso-processes", "screens", "logs", "feedback", "data", "bugs", "monitor",
         "plan", "delivery-tracking", "exception-deliveries", "home", "backup-qrs",
-        "defects", "claim", "reports", "handovers", "hotspots",
-        "products", "equipment", "shipments", "prices", "kpi",
+        "defects", "claim", "reports", "handovers", "hotspots", "equipment",
+        "machines", "machine-history", "machine-training",
+        "products", "shipments", "prices", "kpi",
         "purchase-requisitions", "purchase-order-items",
         # Mobile screens
         "mobile_delivery-info", "mobile_delivery-create", "mobile_delivery-receive", "mobile_thermal-print",
@@ -297,12 +298,14 @@ def resolve_user_permissions(user, db: Session) -> dict:
             elif role_name == "Sx":
                 allowed_screens = [
                     "plan", "delivery-tracking", "exception-deliveries", "home", "backup-qrs", "kpi",
+                    "machines", "machine-history", "machine-training", "iso-processes",
                     "mobile_plan", "mobile_delivery-info", "mobile_delivery-create", "mobile_delivery-receive", "mobile_thermal-print",
                     "mobile_kpi"
                 ]
             elif role_name == "QLCL":
                 allowed_screens = [
-                    "defects", "claim", "reports", "handovers", "hotspots", "kpi",
+                    "quality-records", "defects", "claim", "reports", "handovers", "hotspots", "equipment", "kpi",
+                    "iso-documents", "iso-processes",
                     "mobile_inspection-daily", "mobile_inspection-stage", "mobile_quality-detail",
                     "mobile_input-inspection", "mobile_logs", "mobile_capa-list", "mobile_capa-report",
                     "mobile_capa-detail", "mobile_feedback", "mobile_kpi", "mobile_kpi-staff",

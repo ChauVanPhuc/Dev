@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { screenService } from '@modules/System/Models/screen.service';
 import { Search, Filter, ChevronLeft, ChevronRight, FileDown } from 'lucide-react';
 import { useScreen } from '@shared/context/ScreenContext';
+import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
+import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 
 const ScreenManagement = () => {
   const navigate = useNavigate();
@@ -15,7 +17,7 @@ const ScreenManagement = () => {
   const [pageSize, setPageSize] = useState(15);
   const [editingScreen, setEditingScreen] = useState(null);
   const [formData, setEditingFormData] = useState({ current_code: '', title: '', subtitle: '' });
-  const [toast, setToast] = useState(null);
+  const { toast } = useToast();
   const [actionMenuId, setActionMenuId] = useState(null);
   const [sortBy, setSortBy] = useState('current_code');
   const [sortDir, setSortDir] = useState('asc');
@@ -23,6 +25,8 @@ const ScreenManagement = () => {
   const [showSortPanel, setShowSortPanel] = useState(false);
   const filterRef = useRef(null);
   const sortRef = useRef(null);
+  const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
+  const [customizationFilter, setCustomizationFilter] = useState('all');
   const { refreshScreens } = useScreen();
 
   useEffect(() => {
@@ -36,8 +40,7 @@ const ScreenManagement = () => {
   }, []);
 
   const showToast = (message, type = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+    toast(type, message);
   };
 
   const fetchScreens = async () => {
@@ -139,9 +142,20 @@ const ScreenManagement = () => {
         screen.route_path?.toLowerCase().includes(q) ||
         screen.current_code?.toLowerCase().includes(q) ||
         screen.default_code?.toLowerCase().includes(q);
-      const matchesPlatform = !platformFilter || screen.platform === platformFilter;
-      return matchesSearch && matchesPlatform;
+      return matchesSearch;
     });
+
+    if (platformFilter) {
+      result = result.filter(s => s.platform === platformFilter);
+    }
+
+    if (customizationFilter !== 'all') {
+      result = result.filter(s => {
+        const isModified = s.current_code !== s.default_code || s.title !== s.default_title || (s.subtitle !== s.default_subtitle);
+        return customizationFilter === 'modified' ? isModified : !isModified;
+      });
+    }
+
     result = [...result].sort((a, b) => {
       let av = (a[sortBy] || '').toString().toLowerCase();
       let bv = (b[sortBy] || '').toString().toLowerCase();
@@ -162,171 +176,74 @@ const ScreenManagement = () => {
     <>
       <div className="mgmt-container screen-management-container">
       <div className="mgmt-main">
-        {/* Toast Notification */}
-        {toast && (
-          <div className={`toast-notification ${toast.type}`}>
-            <div className="toast-content">
-              <span className="toast-icon">{toast.type === 'success' ? '✅' : '❌'}</span>
-              <span className="toast-text">{toast.message}</span>
+
+
+        {/* Toolbar */}
+        <PageToolbar
+          searchValue={searchQuery}
+          onSearchChange={(val) => { setSearchQuery(val); setCurrentPage(1); }}
+          searchPlaceholder="Tìm theo mã, tiêu đề, đường dẫn..."
+          showSort={true}
+          sortOptions={[
+            { label: 'Sắp xếp: Mặc định', value: 'current_code' },
+            { label: 'Tiêu đề (A-Z)', value: 'title' },
+            { label: 'Nền tảng', value: 'platform' },
+            { label: 'Đường dẫn', value: 'route_path' },
+          ]}
+          sortValue={sortBy}
+          onSortChange={(val) => { setSortBy(val); setCurrentPage(1); }}
+          showFilter={true}
+          isFilterOpen={isFilterBarOpen}
+          onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
+          activeFiltersCount={(platformFilter ? 1 : 0) + (customizationFilter !== 'all' ? 1 : 0)}
+          onExport={handleExportCSV}
+          hasWritePermission={true}
+        />
+
+        {/* INLINE EXPANDABLE FILTER BAR */}
+        {isFilterBarOpen && (
+          <div className="filter-inline-bar">
+            {/* Lọc nền tảng */}
+            <div className="filter-field-group">
+              <label className="filter-field-label">Nền tảng</label>
+              <select
+                value={platformFilter}
+                onChange={(e) => { setPlatformFilter(e.target.value); setCurrentPage(1); }}
+              >
+                <option value="">Tất cả nền tảng</option>
+                <option value="Web">Web</option>
+                <option value="Mobile">Mobile</option>
+              </select>
+            </div>
+
+            {/* Trạng thái tuỳ chỉnh */}
+            <div className="filter-field-group">
+              <label className="filter-field-label">Trạng thái tuỳ chỉnh</label>
+              <select
+                value={customizationFilter}
+                onChange={(e) => { setCustomizationFilter(e.target.value); setCurrentPage(1); }}
+              >
+                <option value="all">Tất cả</option>
+                <option value="modified">Đã sửa đổi</option>
+                <option value="unmodified">Chưa sửa đổi</option>
+              </select>
+            </div>
+
+            {/* Hiển thị số dòng */}
+            <div className="filter-field-group">
+              <label className="filter-field-label">Hiển thị số dòng</label>
+              <select
+                value={pageSize}
+                onChange={(e) => { setPageSize(parseInt(e.target.value)); setCurrentPage(1); }}
+              >
+                <option value={15}>15 dòng</option>
+                <option value={30}>30 dòng</option>
+                <option value={50}>50 dòng</option>
+                <option value={100}>100 dòng</option>
+              </select>
             </div>
           </div>
         )}
-
-        {/* Toolbar */}
-        <div className="mgmt-toolbar card" style={{ marginBottom: '20px' }}>
-          {/* Nhóm bộ lọc bên trái */}
-          <div className="toolbar-left" style={{ flex: 1 }}>
-            {/* Ô tìm kiếm */}
-            <div className="search-wrapper">
-              <Search size={18} className="search-icon" />
-              <input
-                type="text"
-                placeholder="Tìm theo mã, tiêu đề, đường dẫn..."
-                value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-              />
-            </div>
-
-            {/* Nút Lọc + Dropdown Panel */}
-            <div className="dropdown-wrapper" ref={filterRef}>
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <Filter size={14} color="#7B5233" style={{ position: 'absolute', left: '10px', pointerEvents: 'none' }} />
-                <button
-                  className={`icon-btn-minimal ${showFilterPanel || platformFilter ? 'active' : ''}`}
-                  style={{
-                    padding: '0 10px 0 30px',
-                    height: '36px',
-                    borderRadius: '8px',
-                    border: '1px solid #EADCC9',
-                    backgroundColor: '#FAF6F0',
-                    color: '#7B5233',
-                    fontSize: '0.8rem',
-                    fontWeight: '700',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap'
-                  }}
-                  onClick={(e) => { e.stopPropagation(); setShowFilterPanel(p => !p); setShowSortPanel(false); }}
-                >
-                  {platformFilter || 'Nền tảng'}
-                  {platformFilter && <span className="filter-indicator" style={{ marginLeft: 'auto' }} />}
-                </button>
-              </div>
-              {showFilterPanel && (
-                <div className="dropdown-panel" style={{ position: 'absolute', top: '100%', left: 0, zIndex: 1000, width: '180px' }}>
-                  <p className="dropdown-title">Lọc theo nền tảng</p>
-                  {['', 'Web', 'Mobile'].map(p => (
-                    <button
-                      key={p}
-                      className={`dropdown-item ${platformFilter === p ? 'selected' : ''}`}
-                      onClick={() => { setPlatformFilter(p); setCurrentPage(1); setShowFilterPanel(false); }}
-                    >
-                      {p || 'Tất cả'}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Nút Sắp xếp + Dropdown Panel */}
-            <div className="dropdown-wrapper" ref={sortRef}>
-              <button
-                className={`icon-btn-minimal ${showSortPanel ? 'active' : ''}`}
-                title="Sắp xếp"
-                style={{
-                  height: '36px',
-                  width: '40px',
-                  padding: 0,
-                  justifyContent: 'center',
-                  borderRadius: '8px',
-                  border: '1px solid #EADCC9',
-                  backgroundColor: '#FAF6F0',
-                  color: '#7B5233',
-                  display: 'flex',
-                  alignItems: 'center',
-                  cursor: 'pointer'
-                }}
-                onClick={(e) => { e.stopPropagation(); setShowSortPanel(p => !p); setShowFilterPanel(false); }}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M11 5h10M11 9h7M11 13h4M3 17l3 3 3-3M6 18V4"></path>
-                </svg>
-              </button>
-              {showSortPanel && (
-                <div className="dropdown-panel" style={{ position: 'absolute', top: '100%', left: 0, zIndex: 1000, width: '200px' }}>
-                  <p className="dropdown-title">Sắp xếp theo</p>
-                  {[
-                    { label: 'Mã màn hình (A-Z)', value: 'current_code' },
-                    { label: 'Tiêu đề (A-Z)', value: 'title' },
-                    { label: 'Nền tảng', value: 'platform' },
-                    { label: 'Đường dẫn', value: 'route_path' },
-                  ].map(opt => (
-                    <button
-                      key={opt.value}
-                      className={`dropdown-item ${sortBy === opt.value ? 'selected' : ''}`}
-                      onClick={() => { handleSort(opt.value); setShowSortPanel(false); }}
-                    >
-                      {opt.label} {sortBy === opt.value ? (sortDir === 'asc' ? '↑' : '↓') : ''}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Chọn số dòng hiển thị */}
-            <select
-              value={pageSize}
-              onChange={(e) => { setPageSize(parseInt(e.target.value)); setCurrentPage(1); }}
-              className="page-size-select"
-              style={{
-                height: '36px',
-                padding: '0 10px',
-                borderRadius: '8px',
-                border: '1px solid #EADCC9',
-                backgroundColor: '#FAF6F0',
-                color: '#7B5233',
-                fontWeight: '700',
-                fontSize: '0.8rem',
-                cursor: 'pointer'
-              }}
-            >
-              <option value={15}>15 dòng</option>
-              <option value={30}>30 dòng</option>
-              <option value={50}>50 dòng</option>
-              <option value={100}>100 dòng</option>
-            </select>
-          </div>
-
-          {/* Nhóm hành động bên phải */}
-          <div className="toolbar-right">
-            {/* Nút Xuất dữ liệu */}
-            <button
-              className="btn btn-outline"
-              onClick={handleExportCSV}
-              style={{
-                height: '36px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '0 15px',
-                borderRadius: '8px',
-                border: '1px solid #EADCC9',
-                backgroundColor: '#fff',
-                color: '#7B5233',
-                fontWeight: '700',
-                fontSize: '0.85rem',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              <FileDown size={16} />
-              <span className="btn-text-desktop">Xuất dữ liệu</span>
-              <span className="btn-text-mobile">Xuất</span>
-            </button>
-          </div>
-        </div>
 
         {/* Bảng dữ liệu cấu hình */}
         <div className="admin-list-layout">

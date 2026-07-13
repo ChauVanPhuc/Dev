@@ -533,6 +533,13 @@ async def lifespan(app: FastAPI):
                     ALTER TABLE iso_processes ADD document_level NVARCHAR(100) NULL;
                 END
             """))
+            # Check and add notes to iso_documents
+            db.execute(text("""
+                IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('iso_documents') AND name = 'notes')
+                BEGIN
+                    ALTER TABLE iso_documents ADD notes NVARCHAR(MAX) NULL;
+                END
+            """))
             db.commit()
             print("Successfully processed iso_documents & iso_processes schema updates.")
         except Exception as schema_err:
@@ -888,83 +895,50 @@ from fastapi import Request
 
 async def serve_ui(request: Request, full_path: str):
 
+    # Loại bỏ leading slashes để chuẩn hóa đường dẫn tránh bypass (ví dụ: //static/...)
+    full_path_clean = full_path.lstrip("/")
+
     # Loại trừ các đường dẫn hệ thống
-
-    if full_path.startswith(("api/", "static/", "accounts/")):
-
+    if full_path_clean.startswith(("api/", "static/", "accounts/")):
         raise HTTPException(status_code=404)
 
-
-
     # Nhận diện tên miền và nguồn gốc (referer) để phục vụ đúng UI (Dashboard vs Mobile)
-
     host = request.headers.get("host", "").lower()
-
     referer = request.headers.get("referer", "").lower()
-
     
-
     is_dashboard = (
-
         "dashboard" in host or 
-
         "/dashboard" in referer or 
-
-        full_path.startswith("dashboard")
-
+        full_path_clean.startswith("dashboard")
     )
 
-    
-
     # Nếu được xác định là Dashboard
-
     if is_dashboard:
-
         # Xử lý đường dẫn cho Dashboard
-
-        clean_path = full_path.replace("dashboard/", "", 1) if full_path.startswith("dashboard/") else full_path
-
+        clean_path = full_path_clean.replace("dashboard/", "", 1) if full_path_clean.startswith("dashboard/") else full_path_clean
         if clean_path == "dashboard": clean_path = ""
-
         
-
         target_file = os.path.join(DASHBOARD_DIST, clean_path)
-
         if os.path.isfile(target_file):
-
             return FileResponse(target_file)
-
         
-
         # Fallback về index.html của Dashboard
-
         index_dashboard = os.path.join(DASHBOARD_DIST, "index.html")
-
         if os.path.exists(index_dashboard):
-
             return FileResponse(index_dashboard, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
-
     
-
     # Mặc định là Mobile
-
+    target_file = os.path.join(MOBILE_DIST, full_path_clean)
     if os.path.isfile(target_file):
-        if full_path.endswith("index.html"):
+        if full_path_clean.endswith("index.html"):
             return FileResponse(target_file, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
         return FileResponse(target_file)
-
         
-
     # Fallback về index.html của Mobile
-
     index_mobile = os.path.join(MOBILE_DIST, "index.html")
-
     if os.path.exists(index_mobile):
-
         return FileResponse(index_mobile, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
-
         
-
     return {"message": "ERP_G7 API is running. UI builds not found."}
 
 @app.get("/test-direct")

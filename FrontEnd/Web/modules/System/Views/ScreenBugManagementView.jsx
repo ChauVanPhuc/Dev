@@ -3,11 +3,14 @@ import { bugService } from '@modules/System/Models/bug.service';
 import { screenService } from '@modules/System/Models/screen.service';
 import { useWebSocket } from '@shared/hooks/useWebSocket';
 import api, { API_ROOT } from '@webShared/Services/api.service';
-import { 
-  Search, Filter, Plus, Trash2, Edit3, CheckCircle, Clock, AlertCircle, 
-  X, RefreshCw, Layers, ShieldAlert, Monitor, Phone, Clipboard, FolderOpen
+import {
+  Search, Filter, Plus, Trash2, Edit3, CheckCircle, Clock, AlertCircle,
+  X, RefreshCw, Layers, ShieldAlert, Monitor, Phone, Clipboard, FolderOpen,
+  MoreVertical
 } from 'lucide-react';
 import '@styles/components.css';
+import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
+import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 
 const getImageUrl = (path) => {
   if (!path) return '';
@@ -52,7 +55,7 @@ const ScreenBugManagementView = () => {
   const [screens, setScreens] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [platformFilter, setPlatformFilter] = useState('All');
@@ -61,20 +64,29 @@ const ScreenBugManagementView = () => {
   const [expectedDateFilter, setExpectedDateFilter] = useState('');
   const [addScreenSearch, setAddScreenSearch] = useState('');
   const [isAddScreenDropdownOpen, setIsAddScreenDropdownOpen] = useState(false);
-  
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  
+  const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
+
   // Modal state
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [bugToDelete, setBugToDelete] = useState(null);
   const [selectedBug, setSelectedBug] = useState(null);
-  const [toast, setToast] = useState(null);
-  
+  const { toast } = useToast();
+
   // Custom states cho tải ảnh & bình luận cập nhật
-  const [addImages, setAddImages] = useState([]);
+  const [addImages, setAddImages] = useState(() => {
+    try {
+      const saved = localStorage.getItem('smartflow_bug_images_draft');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+    return [];
+  });
   const [commentText, setCommentText] = useState('');
   const [commentImages, setCommentImages] = useState([]);
   const [activeUpdateForProof, setActiveUpdateForProof] = useState(null);
@@ -83,6 +95,7 @@ const ScreenBugManagementView = () => {
   const [activeLightboxUrl, setActiveLightboxUrl] = useState(null);
   const [editModalMode, setEditModalMode] = useState('view'); // 'view' | 'edit'
   const [actionMenuId, setActionMenuId] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     const handleOutsideClick = (e) => {
@@ -93,18 +106,27 @@ const ScreenBugManagementView = () => {
     document.addEventListener('click', handleOutsideClick);
     return () => document.removeEventListener('click', handleOutsideClick);
   }, []);
-  
+
   // Form states
-  const [addForm, setAddForm] = useState({
-    screen_id: '',
-    description: '',
-    severity: 'Medium',
-    status: 'New',
-    assignee: '',
-    requested_at: getTodayString(),
-    notes: ''
+  const [addForm, setAddForm] = useState(() => {
+    try {
+      const saved = localStorage.getItem('smartflow_bug_draft');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+    const lastScreenId = localStorage.getItem('smartflow_last_reported_screen_id') || '';
+    return {
+      screen_id: lastScreenId,
+      description: '',
+      severity: 'Medium',
+      status: 'New',
+      assignee: 'Phucv1',
+      requested_at: getTodayString(),
+      notes: ''
+    };
   });
-  
+
   const [editForm, setEditForm] = useState({
     description: '',
     severity: 'Medium',
@@ -116,8 +138,7 @@ const ScreenBugManagementView = () => {
   });
 
   const showToast = (message, type = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+    toast(type, message);
   };
 
   const handlePasteImage = async (e, setImagesList) => {
@@ -219,7 +240,7 @@ const ScreenBugManagementView = () => {
       showToast('Đăng cập nhật thành công!');
       setCommentText('');
       setCommentImages([]);
-      
+
       // Đồng bộ state selectedBug cục bộ ngay lập tức để hiển thị timeline
       // Không thay đổi status bug — chỉ thêm update vào danh sách
       setSelectedBug(prev => {
@@ -276,6 +297,44 @@ const ScreenBugManagementView = () => {
     fetchUsers();
   }, []);
 
+  useEffect(() => {
+    localStorage.setItem('smartflow_bug_draft', JSON.stringify(addForm));
+  }, [addForm]);
+
+  useEffect(() => {
+    localStorage.setItem('smartflow_bug_images_draft', JSON.stringify(addImages));
+  }, [addImages]);
+
+  // Tự động mặc định chọn màn hình đầu tiên trong danh sách nếu chưa có màn hình nào được chọn
+  useEffect(() => {
+    if (screens.length > 0 && !addForm.screen_id) {
+      setAddForm(prev => {
+        if (prev.screen_id) return prev;
+        return { ...prev, screen_id: screens[0].id.toString() };
+      });
+    }
+  }, [screens, addForm.screen_id]);
+
+  // Tự động chọn màn hình khớp đầu tiên khi gõ tìm kiếm
+  useEffect(() => {
+    if (addScreenSearch.trim() !== '') {
+      const q = addScreenSearch.toLowerCase();
+      const matched = screens
+        .filter(s => s.current_code !== 'OTHER')
+        .find(s =>
+          s.current_code.toLowerCase().includes(q) ||
+          s.title.toLowerCase().includes(q) ||
+          s.platform.toLowerCase().includes(q)
+        );
+      if (matched) {
+        setAddForm(prev => {
+          if (prev.screen_id === matched.id.toString()) return prev;
+          return { ...prev, screen_id: matched.id.toString() };
+        });
+      }
+    }
+  }, [addScreenSearch, screens]);
+
   // Realtime WebSocket integration
   const handleSocketMessage = useCallback((message) => {
     if (message.type === 'SCREEN_BUG_UPDATED') {
@@ -294,10 +353,11 @@ const ScreenBugManagementView = () => {
     }
 
     try {
+      setIsSubmitting(true);
       // Chuẩn hóa định dạng datetime gửi lên API
       const reqDate = new Date(addForm.requested_at).toISOString();
       const finalDescription = addForm.description;
-      
+
       await bugService.createBug({
         screen_id: parseInt(addForm.screen_id),
         description: finalDescription,
@@ -310,13 +370,17 @@ const ScreenBugManagementView = () => {
       });
       showToast('Báo cáo lỗi màn hình thành công!');
       setShowAddModal(false);
-      // Reset form
+      localStorage.setItem('smartflow_last_reported_screen_id', addForm.screen_id);
+      localStorage.removeItem('smartflow_bug_draft');
+      localStorage.removeItem('smartflow_bug_images_draft');
+      // Reset form với người chỉ định mặc định là phucv1
+      const phucUser = itUsers.find(u => u.username && u.username.toLowerCase() === 'phucv1');
       setAddForm({
-        screen_id: '',
+        screen_id: addForm.screen_id,
         description: '',
         severity: 'Medium',
         status: 'New',
-        assignee: '',
+        assignee: phucUser ? (phucUser.full_name || phucUser.username) : 'Phucv1',
         requested_at: getTodayString(),
         notes: ''
       });
@@ -324,6 +388,8 @@ const ScreenBugManagementView = () => {
       fetchBugs();
     } catch (error) {
       showToast('Không thể gửi báo cáo lỗi. Vui lòng thử lại!', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -371,6 +437,7 @@ const ScreenBugManagementView = () => {
     }
 
     try {
+      setIsSubmitting(true);
       const username = getCurrentUserName();
       const { tag } = parseDescription(selectedBug.description || '');
       const finalDescription = tag ? `[${tag}] ${editForm.description}` : editForm.description;
@@ -394,6 +461,8 @@ const ScreenBugManagementView = () => {
       fetchBugs();
     } catch (error) {
       showToast('Cập nhật thất bại!', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -419,11 +488,11 @@ const ScreenBugManagementView = () => {
   const handleQuickStatusChange = async (bug, newStatus) => {
     try {
       const username = getCurrentUserName();
-      const statusLabel = 
+      const statusLabel =
         newStatus === 'New' ? 'Chưa hoàn thành (Mới)' :
-        newStatus === 'In Progress' ? 'Đang xử lý' :
-        newStatus === 'Resolved' ? 'Hoàn thành (Đã sửa)' : 'Đã xác nhận';
-      
+          newStatus === 'In Progress' ? 'Cần kiểm tra' :
+            newStatus === 'Resolved' ? 'Hoàn thành (Đã sửa)' : 'Đã xác nhận';
+
       const payload = {
         description: bug.description || '',
         severity: bug.severity || 'Medium',
@@ -492,23 +561,34 @@ const ScreenBugManagementView = () => {
     });
   }, [users]);
 
+  // Tự động định vị và gán người chỉ định mặc định là phucv1 khi danh sách IT users khả dụng
+  useEffect(() => {
+    if (itUsers.length > 0) {
+      const phucUser = itUsers.find(u => u.username && u.username.toLowerCase() === 'phucv1');
+      setAddForm(prev => ({
+        ...prev,
+        assignee: phucUser ? (phucUser.full_name || phucUser.username) : 'Phucv1'
+      }));
+    }
+  }, [itUsers]);
+
   // Filter & Search logic
   const filteredBugs = useMemo(() => {
     return bugs.filter(bug => {
-      const matchesSearch = 
+      const matchesSearch =
         bug.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (bug.screen_code && bug.screen_code.toLowerCase().includes(searchQuery.toLowerCase())) ||
         (bug.screen_title && bug.screen_title.toLowerCase().includes(searchQuery.toLowerCase())) ||
         (bug.assignee && bug.assignee.toLowerCase().includes(searchQuery.toLowerCase())) ||
         (bug.reporter && bug.reporter.toLowerCase().includes(searchQuery.toLowerCase()));
-      
+
       const matchesPlatform = platformFilter === 'All' || bug.platform === platformFilter;
-      const matchesStatus = 
+      const matchesStatus =
         statusFilter === 'All' ? true :
-        statusFilter === 'Unverified' ? bug.status !== 'Verified' :
-        bug.status === statusFilter;
+          statusFilter === 'Unverified' ? bug.status !== 'Verified' :
+            bug.status === statusFilter;
       const matchesSeverity = severityFilter === 'All' || bug.severity === severityFilter;
-      
+
       let matchesExpectedDate = true;
       if (expectedDateFilter) {
         if (bug.requested_at) {
@@ -518,17 +598,18 @@ const ScreenBugManagementView = () => {
           matchesExpectedDate = false;
         }
       }
-      
+
       return matchesSearch && matchesPlatform && matchesStatus && matchesSeverity && matchesExpectedDate;
     });
   }, [bugs, searchQuery, platformFilter, statusFilter, severityFilter, expectedDateFilter]);
 
-  // Statistics counters
   const stats = useMemo(() => {
     const total = bugs.length;
     const critical = bugs.filter(b => b.severity === 'Critical').length;
-    const inProgress = bugs.filter(b => b.status === 'In Progress').length;
-    const resolvedOrVerified = bugs.filter(b => b.status === 'Resolved' || b.status === 'Verified').length;
+    // Cần kiểm tra = số bug đã sửa (Resolved)
+    const inProgress = bugs.filter(b => b.status === 'Resolved').length;
+    // Đã hoàn thành = số bug đã kiểm tra xong/xác nhận (Verified)
+    const resolvedOrVerified = bugs.filter(b => b.status === 'Verified').length;
     return { total, critical, inProgress, resolvedOrVerified };
   }, [bugs]);
 
@@ -545,7 +626,7 @@ const ScreenBugManagementView = () => {
     let textColor = '#7B5233';
     let border = '1px solid #EADCC9';
     let textVi = severity;
-    
+
     if (severity === 'Critical') {
       bgColor = '#FEF2F2';
       textColor = '#EF4444';
@@ -590,14 +671,14 @@ const ScreenBugManagementView = () => {
     let textColor = '#3B82F6';
     let border = '1px solid #BFDBFE';
     let textVi = status;
-    
+
     if (status === 'New') {
       textVi = 'Mới';
     } else if (status === 'In Progress') {
       bgColor = '#FFFBEB';
       textColor = '#D97706';
       border = '1px solid #FDE68A';
-      textVi = 'Đang xử lý';
+      textVi = 'Cần kiểm tra';
     } else if (status === 'Resolved') {
       bgColor = '#ECFDF5';
       textColor = '#10B981';
@@ -656,7 +737,8 @@ const ScreenBugManagementView = () => {
 
   return (
     <>
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         /* Force page wrapper to be full viewport height and disable page scroll */
         .admin-layout:has(.screen-management-container) {
           height: 100vh !important;
@@ -686,15 +768,6 @@ const ScreenBugManagementView = () => {
         }
       `}} />
       <div className="mgmt-container screen-management-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '8px', maxWidth: '100%', margin: '0', width: '100%', height: '100%', minHeight: 0, overflow: 'hidden' }}>
-        {/* Toast Notification - Moved to top for global layout */}
-        {toast && (
-          <div className={`toast-notification ${toast.type}`}>
-            <div className="toast-content">
-              <span className="toast-icon">{toast.type === 'success' ? '✅' : '❌'}</span>
-              <span className="toast-text">{toast.message}</span>
-            </div>
-          </div>
-        )}
 
         {/* KPI Dashboard Overview Card - Span 100% width at top */}
         <div style={{
@@ -719,7 +792,7 @@ const ScreenBugManagementView = () => {
               <Clock size={18} />
             </div>
             <div>
-              <div style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: '700', letterSpacing: '0.05em' }}>ĐANG XỬ LÝ</div>
+              <div style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: '700', letterSpacing: '0.05em' }}>CẦN KIỂM TRA</div>
               <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0F172A', lineHeight: '1.2' }}>{stats.inProgress}</div>
             </div>
           </div>
@@ -746,247 +819,138 @@ const ScreenBugManagementView = () => {
         </div>
 
         {/* Search and Filters Toolbar - Span 100% width at top */}
-        <div className="mgmt-toolbar card filter-pagination-toolbar" style={{ 
-            display: 'flex', 
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '10px 15px', 
-            marginBottom: '12px',
-            width: '100%',
-            boxSizing: 'border-box',
-            backgroundColor: '#fff',
-            borderRadius: '12px',
-            border: '1px solid #EADCC9'
-        }}>
-          {/* 1. Search input */}
-          <div className="search-wrapper" style={{ flex: 2, minWidth: '220px', position: 'relative' }}>
-            <Search size={16} className="search-icon" style={{ color: '#7B5233', position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }} />
-            <input 
-              type="text" 
-              placeholder="Tìm theo nội dung, mã màn hình, người xử lý..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ 
-                paddingLeft: '36px', 
-                height: '38px', 
-                borderRadius: '8px', 
-                border: '1px solid #EADCC9',
-                backgroundColor: '#FAF6F0',
-                color: '#2D1A12',
-                outline: 'none',
-                fontSize: '0.82rem',
-                width: '100%',
-                boxSizing: 'border-box',
-                transition: 'all 0.2s',
-                fontWeight: '600'
-              }}
-              onFocus={(e) => e.currentTarget.style.borderColor = '#7B5233'}
-              onBlur={(e) => e.currentTarget.style.borderColor = '#EADCC9'}
-            />
-          </div>
+        <PageToolbar
+          searchValue={searchQuery}
+          onSearchChange={(val) => { setSearchQuery(val); setCurrentPage(1); }}
+          searchPlaceholder="Tìm theo nội dung, mã màn hình, người xử lý..."
+          showFilter={true}
+          isFilterOpen={isFilterBarOpen}
+          onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
+          activeFiltersCount={
+            (platformFilter !== 'All' ? 1 : 0) +
+            (statusFilter !== 'Unverified' ? 1 : 0) +
+            (severityFilter !== 'All' ? 1 : 0) +
+            (expectedDateFilter ? 1 : 0)
+          }
+          onCreate={() => setShowAddModal(true)}
+          createLabel="Báo cáo Bug"
+          hasWritePermission={true}
+        />
 
-          {/* 2. Status filter */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <span style={{ fontSize: '0.65rem', color: '#8c6a51', fontWeight: '700', marginLeft: '4px' }}>Trạng thái</span>
-            <select 
-              value={statusFilter} 
-              onChange={(e) => setStatusFilter(e.target.value)}
-              style={{
-                height: '38px',
-                padding: '0 12px',
-                borderRadius: '8px',
-                fontSize: '0.82rem',
-                border: '1px solid #EADCC9',
-                backgroundColor: '#FAF6F0',
-                color: '#7B5233',
-                fontWeight: '600',
-                outline: 'none',
-                cursor: 'pointer',
-                minWidth: '130px'
+        {/* INLINE EXPANDABLE FILTER BAR */}
+        {isFilterBarOpen && (
+          <div className="filter-inline-bar">
+            {/* Trạng thái */}
+            <div className="filter-field-group">
+              <label className="filter-field-label">Trạng thái</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+              >
+                <option value="Unverified">Chưa xác nhận</option>
+                <option value="All">Tất cả trạng thái</option>
+                <option value="New">Mới</option>
+                <option value="In Progress">Cần kiểm tra</option>
+                <option value="Resolved">Đã sửa</option>
+                <option value="Verified">Đã xác nhận</option>
+              </select>
+            </div>
+
+            {/* Mức độ */}
+            <div className="filter-field-group">
+              <label className="filter-field-label">Mức độ</label>
+              <select
+                value={severityFilter}
+                onChange={(e) => { setSeverityFilter(e.target.value); setCurrentPage(1); }}
+              >
+                <option value="All">Tất cả mức độ</option>
+                <option value="Critical">Khẩn cấp</option>
+                <option value="High">Cao</option>
+                <option value="Medium">Trung bình</option>
+                <option value="Low">Thấp</option>
+              </select>
+            </div>
+
+            {/* Nền tảng */}
+            <div className="filter-field-group">
+              <label className="filter-field-label">Nền tảng</label>
+              <select
+                value={platformFilter}
+                onChange={(e) => { setPlatformFilter(e.target.value); setCurrentPage(1); }}
+              >
+                <option value="All">Tất cả</option>
+                <option value="Web">Web</option>
+                <option value="Mobile">Mobile</option>
+              </select>
+            </div>
+
+            {/* Dự kiến */}
+            <div className="filter-field-group">
+              <label className="filter-field-label">Dự kiến</label>
+              <input
+                type="date"
+                value={expectedDateFilter}
+                onChange={(e) => { setExpectedDateFilter(e.target.value); setCurrentPage(1); }}
+              />
+            </div>
+
+            {/* Hiển thị số dòng */}
+            <div className="filter-field-group">
+              <label className="filter-field-label">Hiển thị số dòng</label>
+              <select
+                value={pageSize}
+                onChange={(e) => { setPageSize(parseInt(e.target.value)); setCurrentPage(1); }}
+              >
+                <option value={10}>10 dòng</option>
+                <option value={15}>15 dòng</option>
+                <option value={30}>30 dòng</option>
+                <option value={50}>50 dòng</option>
+              </select>
+            </div>
+
+            {/* Nút Reset */}
+            <button
+              className="reset-filter-btn"
+              onClick={() => {
+                setSearchQuery('');
+                setPlatformFilter('All');
+                setStatusFilter('Unverified');
+                setSeverityFilter('All');
+                setExpectedDateFilter('');
+                setCurrentPage(1);
               }}
+              style={{
+                alignSelf: 'flex-end',
+                height: '38px',
+                border: 'none',
+                background: '#FAF6F0',
+                color: '#7B5233',
+                fontSize: '0.8rem',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                padding: '0 16px',
+                borderRadius: '8px',
+                border: '1px solid #EADCC9',
+                transition: 'all 0.2s'
+              }}
+              title="Đặt lại bộ lọc"
             >
-              <option value="Unverified">Chưa xác nhận</option>
-              <option value="All">Tất cả trạng thái</option>
-              <option value="New">Mới</option>
-              <option value="In Progress">Đang xử lý</option>
-              <option value="Resolved">Đã sửa</option>
-              <option value="Verified">Đã xác nhận</option>
-            </select>
+              <RefreshCw size={14} /> Đặt lại
+            </button>
           </div>
-
-          {/* 3. Severity filter */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <span style={{ fontSize: '0.65rem', color: '#8c6a51', fontWeight: '700', marginLeft: '4px' }}>Mức độ</span>
-            <select 
-              value={severityFilter} 
-              onChange={(e) => setSeverityFilter(e.target.value)}
-              style={{
-                height: '38px',
-                padding: '0 12px',
-                borderRadius: '8px',
-                fontSize: '0.82rem',
-                border: '1px solid #EADCC9',
-                backgroundColor: '#FAF6F0',
-                color: '#7B5233',
-                fontWeight: '600',
-                outline: 'none',
-                cursor: 'pointer',
-                minWidth: '110px'
-              }}
-            >
-              <option value="All">Tất cả mức độ</option>
-              <option value="Critical">Khẩn cấp</option>
-              <option value="High">Cao</option>
-              <option value="Medium">Trung bình</option>
-              <option value="Low">Thấp</option>
-            </select>
-          </div>
-
-          {/* 4. Expected Date filter */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <span style={{ fontSize: '0.65rem', color: '#8c6a51', fontWeight: '700', marginLeft: '4px' }}>Dự kiến</span>
-            <input 
-              type="date"
-              value={expectedDateFilter}
-              onChange={(e) => setExpectedDateFilter(e.target.value)}
-              style={{
-                height: '38px',
-                padding: '0 12px',
-                borderRadius: '8px',
-                fontSize: '0.82rem',
-                border: '1px solid #EADCC9',
-                backgroundColor: '#FAF6F0',
-                color: '#7B5233',
-                fontWeight: '600',
-                outline: 'none',
-                cursor: 'pointer',
-                minWidth: '130px'
-              }}
-            />
-          </div>
-
-          {/* 5. Page size select */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <span style={{ fontSize: '0.65rem', color: '#8c6a51', fontWeight: '700', marginLeft: '4px' }}>Hiển thị dòng</span>
-            <select 
-              value={pageSize} 
-              onChange={(e) => setPageSize(parseInt(e.target.value))}
-              style={{
-                height: '38px',
-                padding: '0 12px',
-                borderRadius: '8px',
-                fontSize: '0.82rem',
-                border: '1px solid #EADCC9',
-                backgroundColor: '#FAF6F0',
-                color: '#7B5233',
-                fontWeight: '600',
-                outline: 'none',
-                cursor: 'pointer',
-                minWidth: '100px'
-              }}
-            >
-              <option value={10}>10 dòng</option>
-              <option value={15}>15 dòng</option>
-              <option value={30}>30 dòng</option>
-              <option value={50}>50 dòng</option>
-            </select>
-          </div>
-
-          {/* 6. Platform select dropdown (converted from tabs) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <span style={{ fontSize: '0.65rem', color: '#8c6a51', fontWeight: '700', marginLeft: '4px' }}>Nền tảng</span>
-            <select
-              value={platformFilter}
-              onChange={(e) => setPlatformFilter(e.target.value)}
-              style={{
-                height: '38px',
-                padding: '0 12px',
-                borderRadius: '8px',
-                fontSize: '0.82rem',
-                border: '1px solid #EADCC9',
-                backgroundColor: '#FAF6F0',
-                color: '#7B5233',
-                fontWeight: '600',
-                outline: 'none',
-                cursor: 'pointer',
-                minWidth: '110px'
-              }}
-            >
-              <option value="All">Tất cả</option>
-              <option value="Web">Web</option>
-              <option value="Mobile">Mobile</option>
-            </select>
-          </div>
-
-          {/* 7. Reset filters */}
-          <button 
-            className="reset-filter-btn"
-            onClick={() => {
-              setSearchQuery('');
-              setPlatformFilter('All');
-              setStatusFilter('Unverified');
-              setSeverityFilter('All');
-              setExpectedDateFilter('');
-            }}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#7B5233',
-              fontSize: '0.8rem',
-              fontWeight: '700',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px',
-              height: '38px',
-              padding: '0 8px',
-              borderRadius: '6px',
-              transition: 'all 0.2s',
-              marginTop: '14px'
-            }}
-            title="Đặt lại bộ lọc"
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF6F0'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-          >
-            <RefreshCw size={14} />
-          </button>
-
-          {/* 8. Bug Report button */}
-          <button 
-            onClick={() => setShowAddModal(true)}
-            style={{
-              backgroundColor: '#7B5233',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '8px',
-              padding: '0 16px',
-              height: '38px',
-              display: 'flex',
-              alignItems: 'center',
-              fontWeight: '700',
-              fontSize: '0.82rem',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              boxShadow: '0 1px 2px rgba(123, 82, 51, 0.15)',
-              marginTop: '14px',
-              marginLeft: 'auto'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#634229'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#7B5233'}
-          >
-            Báo cáo Bug
-          </button>
-        </div>
+        )}
 
         {/* Container Flex chia đôi Master-Detail */}
         <div style={{ display: 'flex', gap: '10px', alignItems: 'stretch', width: '100%', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-          
+
           {/* Master List (Bên trái: Bảng danh sách) */}
-          <div className="admin-list-layout" style={{ 
-            flex: selectedBug ? '0 0 calc(40% - 10px)' : '1 1 100%', 
-            maxWidth: selectedBug ? '40%' : '100%', 
+          <div className="admin-list-layout-bug" style={{
+            flex: selectedBug ? '0 0 calc(40% - 10px)' : '1 1 100%',
+            maxWidth: selectedBug ? '40%' : '100%',
             width: selectedBug ? 'calc(40% - 10px)' : '100%',
             minWidth: '350px',
             transition: 'all 0.3s ease-in-out',
@@ -1014,28 +978,29 @@ const ScreenBugManagementView = () => {
                   <div className="table-responsive admin-table-scroll" style={{ flex: 1, overflowY: 'auto' }}>
                     <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                       <thead>
-                        <tr style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', borderBottom: '2px solid #EADCC9', color: '#7B5233', fontSize: '0.8rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', zIndex: 1 }}>
-                          <th style={{ padding: '12px 16px' }}>Màn hình</th>
-                          <th style={{ padding: '12px 16px' }}>Nội dung bug</th>
-                          <th style={{ padding: '12px 16px', width: selectedBug ? '90px' : '110px' }}>Mức độ</th>
-                          <th style={{ padding: '12px 16px', width: selectedBug ? '100px' : '130px' }}>Tiến độ</th>
-                          {!selectedBug && <th style={{ padding: '12px 16px' }}>Nhân sự (Báo / Sửa)</th>}
-                          {!selectedBug && <th style={{ padding: '12px 16px' }}>Ngày ghi nhận</th>}
-                          {!selectedBug && <th style={{ padding: '12px 16px' }}>Hoàn thành dự kiến</th>}
-                          {!selectedBug && <th style={{ padding: '12px 16px' }}>Ngày hoàn thành</th>}
-                          {!selectedBug && <th style={{ padding: '12px 16px', textAlign: 'center', width: '120px' }}>Thao tác</th>}
+                        <tr style={{ borderBottom: '2px solid #EADCC9', color: '#7B5233', fontSize: '0.8rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px', width: '70px' }}>Mã ID</th>
+                          <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px' }}>Màn hình</th>
+                          <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px' }}>Nội dung bug</th>
+                          <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px', width: selectedBug ? '90px' : '110px' }}>Mức độ</th>
+                          <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px', width: selectedBug ? '100px' : '130px' }}>Tiến độ</th>
+                          {!selectedBug && <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px' }}>Nhân sự (Báo / Sửa)</th>}
+                          {!selectedBug && <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px' }}>Ngày ghi nhận</th>}
+                          {!selectedBug && <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px' }}>Hoàn thành dự kiến</th>}
+                          {!selectedBug && <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px' }}>Ngày hoàn thành</th>}
+                          {!selectedBug && <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px', textAlign: 'center', width: '120px' }}>Thao tác</th>}
                         </tr>
                       </thead>
                       <tbody>
                         {paginatedBugs.map((bug) => (
-                          <tr 
-                            key={bug.id} 
+                          <tr
+                            key={bug.id}
                             onClick={() => handleRowClick(bug)}
                             className="animate-card-entrance"
-                            style={{ 
-                              borderBottom: '1px solid #F1F5F9', 
-                              fontSize: '0.85rem', 
-                              transition: 'all 0.2s', 
+                            style={{
+                              borderBottom: '1px solid #F1F5F9',
+                              fontSize: '0.85rem',
+                              transition: 'all 0.2s',
                               cursor: 'pointer',
                               backgroundColor: selectedBug && selectedBug.id === bug.id ? '#F2ECE4 !important' : 'transparent',
                               borderLeft: selectedBug && selectedBug.id === bug.id ? '4px solid #7B5233 !important' : '4px solid transparent',
@@ -1043,6 +1008,11 @@ const ScreenBugManagementView = () => {
                               zIndex: actionMenuId === bug.id ? 30 : 1
                             }}
                           >
+                            {/* Mã ID */}
+                            <td style={{ padding: selectedBug ? '10px 12px !important' : '16px 20px !important', fontWeight: 'bold', color: '#7B5233', fontFamily: 'monospace' }}>
+                              #{bug.id}
+                            </td>
+                            {/* Màn hình */}
                             <td style={{ padding: selectedBug ? '10px 12px !important' : '16px 20px !important' }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1051,13 +1021,13 @@ const ScreenBugManagementView = () => {
                                     fontWeight: '700',
                                     color: '#7B5233'
                                   }}>
-                                    {bug.platform === 'Web' ? 'Web' : 'Mobile'} · 
+                                    {bug.platform === 'Web' ? 'Web' : 'Mobile'} ·
                                   </span>
                                   <strong style={{ fontFamily: 'monospace', color: '#0F172A' }}>{bug.screen_code}</strong>
                                 </div>
                                 {!selectedBug && (
                                   <span style={{ fontSize: '0.75rem', color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px' }} title={bug.screen_title}>
-                                      {bug.screen_title}
+                                    {bug.screen_title}
                                   </span>
                                 )}
                               </div>
@@ -1121,13 +1091,25 @@ const ScreenBugManagementView = () => {
                                     e.stopPropagation();
                                     setActionMenuId(actionMenuId === bug.id ? null : bug.id);
                                   }}
+                                  style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    padding: '6px',
+                                    cursor: 'pointer',
+                                    borderRadius: '50%',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: '#7B5233',
+                                    transition: 'background-color 0.2s'
+                                  }}
                                 >
-                                  $svgDots
+                                  <MoreVertical size={16} />
                                 </button>
                                 {actionMenuId === bug.id && (
                                   <div className="action-menu">
-                                    <button 
-                                      className="action-menu-item" 
+                                    <button
+                                      className="action-menu-item"
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setActionMenuId(null);
@@ -1136,8 +1118,8 @@ const ScreenBugManagementView = () => {
                                     >
                                       Chỉnh sửa
                                     </button>
-                                    <button 
-                                      className="action-menu-item danger" 
+                                    <button
+                                      className="action-menu-item danger"
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setActionMenuId(null);
@@ -1218,9 +1200,9 @@ const ScreenBugManagementView = () => {
                             );
                           });
                         })()}
-                        <button 
-                          disabled={currentPage >= totalPages} 
-                          onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
+                        <button
+                          disabled={currentPage >= totalPages}
+                          onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                           style={{ border: '1px solid #D1D5DB', padding: '5px 10px', borderRadius: '6px', backgroundColor: '#fff', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', fontSize: '0.75rem' }}
                         >
                           Sau
@@ -1234,15 +1216,15 @@ const ScreenBugManagementView = () => {
           </div>
 
           {/* Detail Pane (Bên phải: Panel thông tin chi tiết thay thế cho popup modal) */}
-          <div style={{ 
-            flex: selectedBug ? '0 0 calc(60% - 10px)' : '0 0 0%', 
-            maxWidth: selectedBug ? '60%' : '0%', 
+          <div style={{
+            flex: selectedBug ? '0 0 calc(60% - 10px)' : '0 0 0%',
+            maxWidth: selectedBug ? '60%' : '0%',
             width: selectedBug ? 'calc(60% - 10px)' : '0%',
-            minWidth: selectedBug ? '400px' : '0px', 
+            minWidth: selectedBug ? '400px' : '0px',
             display: selectedBug ? 'flex' : 'none',
-            background: '#fff', 
-            border: '1px solid #E2E8F0', 
-            borderRadius: '16px', 
+            background: '#fff',
+            border: '1px solid #E2E8F0',
+            borderRadius: '16px',
             boxShadow: '0 10px 15px -3px rgba(0,0,0,0.05), 0 4px 6px -2px rgba(0,0,0,0.02)',
             flexDirection: 'column',
             boxSizing: 'border-box',
@@ -1283,7 +1265,7 @@ const ScreenBugManagementView = () => {
                   </div>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0, marginLeft: '12px' }}>
                     {editModalMode === 'view' ? (
-                      <button 
+                      <button
                         onClick={() => setEditModalMode('edit')}
                         style={{
                           background: '#fff',
@@ -1304,7 +1286,7 @@ const ScreenBugManagementView = () => {
                         <Edit3 size={12} /> Sửa
                       </button>
                     ) : (
-                      <button 
+                      <button
                         onClick={() => setEditModalMode('view')}
                         style={{
                           background: '#F1F5F9',
@@ -1321,7 +1303,7 @@ const ScreenBugManagementView = () => {
                         Hủy sửa
                       </button>
                     )}
-                    <button 
+                    <button
                       onClick={() => setSelectedBug(null)}
                       style={{
                         background: 'transparent',
@@ -1378,7 +1360,7 @@ const ScreenBugManagementView = () => {
                         }}
                       >
                         <option value="New">Mới</option>
-                        <option value="In Progress">Đang xử lý</option>
+                        <option value="In Progress">Cần kiểm tra</option>
                         <option value="Resolved">Đã sửa ✓</option>
                         <option value="Verified">Đã xác nhận ✓✓</option>
                       </select>
@@ -1411,133 +1393,135 @@ const ScreenBugManagementView = () => {
 
                 {/* Panel Body */}
                 <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                  
+
                   {/* Mode: Edit */}
                   {editModalMode === 'edit' && (
                     <form onSubmit={handleEditSubmit} className="modal-form" style={{ margin: 0, display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, overflow: 'hidden' }}>
                       <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      <div className="form-group">
-                        <label style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Màn hình</label>
-                        <input 
-                          type="text" 
-                          className="form-control disabled-input" 
-                          value={`[${selectedBug.platform}] ${selectedBug.screen_code} - ${selectedBug.screen_title}`} 
-                          disabled 
-                          style={{ borderRadius: '6px', padding: '6px 10px', backgroundColor: '#F3F4F6', fontSize: '0.8rem' }}
-                        />
-                      </div>
-
-                      <div className="form-group">
-                        <label className="required" style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Mô tả lỗi</label>
-                        <textarea 
-                          className="form-control"
-                          rows="3"
-                          value={editForm.description}
-                          onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                          required
-                          style={{ borderRadius: '6px', padding: '8px', fontSize: '0.8rem' }}
-                        />
-                      </div>
-
-                      <div className="form-group">
-                        <label className="required" style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Người sửa (Người xử lý)</label>
-                        <select 
-                          className="form-control"
-                          value={editForm.assignee}
-                          onChange={(e) => setEditForm({ ...editForm, assignee: e.target.value })}
-                          required
-                          style={{ borderRadius: '6px', padding: '6px', fontSize: '0.8rem' }}
-                        >
-                          <option value="">-- Chưa chỉ định --</option>
-                          {itUsers.map(u => (
-                            <option key={u.id} value={u.full_name || u.username}>
-                              {u.full_name ? `${u.full_name} (${u.username})` : u.username}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                         <div className="form-group">
-                          <label style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Trạng thái</label>
-                          <select 
-                            className="form-control"
-                            value={editForm.status}
-                            onChange={(e) => {
-                              const newStatus = e.target.value;
-                              const completedVal = (newStatus === 'Resolved' || newStatus === 'Verified') 
-                                ? new Date().toISOString().split('T')[0]
-                                : '';
-                              setEditForm({ ...editForm, status: newStatus, completed_at: completedVal });
-                            }}
-                            style={{ borderRadius: '6px', padding: '6px', fontSize: '0.8rem' }}
-                          >
-                            <option value="New">Mới</option>
-                            <option value="In Progress">Đang xử lý</option>
-                            <option value="Resolved">Đã sửa</option>
-                            <option value="Verified">Đã xác nhận</option>
-                          </select>
+                          <label style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Màn hình</label>
+                          <input
+                            type="text"
+                            className="form-control disabled-input"
+                            value={`[${selectedBug.platform}] ${selectedBug.screen_code} - ${selectedBug.screen_title}`}
+                            disabled
+                            style={{ borderRadius: '6px', padding: '6px 10px', backgroundColor: '#F3F4F6', fontSize: '0.8rem' }}
+                          />
                         </div>
 
                         <div className="form-group">
-                          <label style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Mức độ</label>
-                          <select 
+                          <label className="required" style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Mô tả lỗi</label>
+                          <textarea
                             className="form-control"
-                            value={editForm.severity}
-                            onChange={(e) => setEditForm({ ...editForm, severity: e.target.value })}
-                            style={{ borderRadius: '6px', padding: '6px', fontSize: '0.8rem' }}
-                          >
-                            <option value="Critical">Khẩn cấp</option>
-                            <option value="High">Cao</option>
-                            <option value="Medium">Trung bình</option>
-                            <option value="Low">Thấp</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                        <div className="form-group">
-                          <label className="required" style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Dự kiến hoàn thành</label>
-                          <input 
-                            type="date"
-                            className="form-control"
-                            value={editForm.requested_at}
-                            onChange={(e) => setEditForm({ ...editForm, requested_at: e.target.value })}
+                            rows="3"
+                            value={editForm.description}
+                            onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                             required
-                            min={getTodayString()}
-                            style={{ borderRadius: '6px', padding: '6px', fontSize: '0.8rem' }}
+                            style={{ borderRadius: '6px', padding: '8px', fontSize: '0.8rem' }}
                           />
                         </div>
 
                         <div className="form-group">
-                          <label style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Ngày hoàn thành</label>
-                          <input 
-                            type="date"
+                          <label className="required" style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Người sửa (Người xử lý)</label>
+                          <select
                             className="form-control"
-                            value={editForm.completed_at}
-                            onChange={(e) => setEditForm({ ...editForm, completed_at: e.target.value })}
-                            disabled={editForm.status !== 'Resolved' && editForm.status !== 'Verified'}
-                            style={{ borderRadius: '6px', padding: '6px', fontSize: '0.8rem', backgroundColor: (editForm.status !== 'Resolved' && editForm.status !== 'Verified') ? '#F3F4F6' : '#fff' }}
+                            value={editForm.assignee}
+                            onChange={(e) => setEditForm({ ...editForm, assignee: e.target.value })}
+                            required
+                            style={{ borderRadius: '6px', padding: '6px', fontSize: '0.8rem' }}
+                          >
+                            <option value="">-- Chưa chỉ định --</option>
+                            {itUsers.map(u => (
+                              <option key={u.id} value={u.full_name || u.username}>
+                                {u.full_name ? `${u.full_name} (${u.username})` : u.username}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                          <div className="form-group">
+                            <label style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Trạng thái</label>
+                            <select
+                              className="form-control"
+                              value={editForm.status}
+                              onChange={(e) => {
+                                const newStatus = e.target.value;
+                                const completedVal = (newStatus === 'Resolved' || newStatus === 'Verified')
+                                  ? new Date().toISOString().split('T')[0]
+                                  : '';
+                                setEditForm({ ...editForm, status: newStatus, completed_at: completedVal });
+                              }}
+                              style={{ borderRadius: '6px', padding: '6px', fontSize: '0.8rem' }}
+                            >
+                              <option value="New">Mới</option>
+                              <option value="In Progress">Cần kiểm tra</option>
+                              <option value="Resolved">Đã sửa</option>
+                              <option value="Verified">Đã xác nhận</option>
+                            </select>
+                          </div>
+
+                          <div className="form-group">
+                            <label style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Mức độ</label>
+                            <select
+                              className="form-control"
+                              value={editForm.severity}
+                              onChange={(e) => setEditForm({ ...editForm, severity: e.target.value })}
+                              style={{ borderRadius: '6px', padding: '6px', fontSize: '0.8rem' }}
+                            >
+                              <option value="Critical">Khẩn cấp</option>
+                              <option value="High">Cao</option>
+                              <option value="Medium">Trung bình</option>
+                              <option value="Low">Thấp</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                          <div className="form-group">
+                            <label className="required" style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Dự kiến hoàn thành</label>
+                            <input
+                              type="date"
+                              className="form-control"
+                              value={editForm.requested_at}
+                              onChange={(e) => setEditForm({ ...editForm, requested_at: e.target.value })}
+                              required
+                              min={getTodayString()}
+                              style={{ borderRadius: '6px', padding: '6px', fontSize: '0.8rem' }}
+                            />
+                          </div>
+
+                          <div className="form-group">
+                            <label style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Ngày hoàn thành</label>
+                            <input
+                              type="date"
+                              className="form-control"
+                              value={editForm.completed_at}
+                              onChange={(e) => setEditForm({ ...editForm, completed_at: e.target.value })}
+                              disabled={editForm.status !== 'Resolved' && editForm.status !== 'Verified'}
+                              style={{ borderRadius: '6px', padding: '6px', fontSize: '0.8rem', backgroundColor: (editForm.status !== 'Resolved' && editForm.status !== 'Verified') ? '#F3F4F6' : '#fff' }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="form-group">
+                          <label style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Ghi chú thay đổi</label>
+                          <textarea
+                            className="form-control"
+                            rows="2"
+                            placeholder="Lý do cập nhật thông tin lỗi..."
+                            value={editForm.notes}
+                            onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                            style={{ borderRadius: '6px', padding: '6px 8px', fontSize: '0.8rem' }}
                           />
                         </div>
                       </div>
 
-                      <div className="form-group">
-                        <label style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Ghi chú thay đổi</label>
-                        <textarea 
-                          className="form-control"
-                          rows="2"
-                          placeholder="Lý do cập nhật thông tin lỗi..."
-                          value={editForm.notes}
-                          onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
-                          style={{ borderRadius: '6px', padding: '6px 8px', fontSize: '0.8rem' }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '10px', padding: '16px', borderTop: '1px solid #E5E7EB', backgroundColor: '#fff' }}>
-                        <button type="button" className="btn-secondary" onClick={() => setEditModalMode('view')} style={{ borderRadius: '6px', flex: 1, fontSize: '0.8rem', height: '34px' }}>Hủy</button>
-                        <button type="submit" className="btn-primary" style={{ borderRadius: '6px', backgroundColor: '#7B5233', borderColor: '#7B5233', flex: 1, fontSize: '0.8rem', height: '34px', color: '#fff', fontWeight: 'bold' }}>Lưu</button>
+                      <div style={{ display: 'flex', gap: '10px', padding: '16px', borderTop: '1px solid #E5E7EB', backgroundColor: '#fff' }}>
+                        <button type="button" className="btn-secondary" onClick={() => setEditModalMode('view')} style={{ borderRadius: '6px', flex: 1, fontSize: '0.8rem', height: '34px' }} disabled={isSubmitting}>Hủy</button>
+                        <button type="submit" className="btn-primary" style={{ borderRadius: '6px', backgroundColor: '#7B5233', borderColor: '#7B5233', flex: 1, fontSize: '0.8rem', height: '34px', color: '#fff', fontWeight: 'bold' }} disabled={isSubmitting}>
+                          {isSubmitting ? 'Đang lưu...' : 'Lưu'}
+                        </button>
                       </div>
                     </form>
                   )}
@@ -1546,203 +1530,218 @@ const ScreenBugManagementView = () => {
                   {editModalMode === 'view' && (
                     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
                       <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                      
-                      {/* Báo cáo lỗi ban đầu */}
-                      <div style={{ 
-                        padding: '16px', 
-                        backgroundColor: '#fff', 
-                        borderRadius: '12px', 
-                        border: '1px solid #E2E8F0', 
-                        borderLeft: selectedBug.severity === 'Critical' ? '4px solid #F43F5E' : 
-                                    selectedBug.severity === 'High' ? '4px solid #F59E0B' : 
-                                    selectedBug.severity === 'Medium' ? '4px solid #EAB308' : '4px solid #94A3B8',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.02)' 
-                      }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', color: '#94A3B8', marginBottom: '10px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontWeight: '700', color: '#475569', letterSpacing: '0.05em' }}>BÁO CÁO GỐC</span>
-                          </div>
-                          <span>{formatDateTime(selectedBug.created_at)}</span>
-                        </div>
-                        
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.75rem', color: '#475569', marginBottom: '12px', borderBottom: '1px solid #F1F5F9', paddingBottom: '10px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ color: '#94A3B8' }}>Người báo:</span>
-                            <span style={{ 
-                              display: 'inline-flex', 
-                              alignItems: 'center', 
-                              gap: '4px', 
-                              backgroundColor: '#F1F5F9', 
-                              padding: '2px 8px', 
-                              borderRadius: '12px', 
-                              fontWeight: '600',
-                              color: '#334155' 
-                            }}>
-                              <span style={{ width: '14px', height: '14px', borderRadius: '50%', backgroundColor: '#6366F1', color: '#fff', fontSize: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                {(selectedBug.reporter || 'U').charAt(0).toUpperCase()}
-                              </span>
-                              {selectedBug.reporter || 'Chưa rõ'}
-                            </span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ color: '#94A3B8' }}>Người xử lý:</span>
-                            <span style={{ 
-                              display: 'inline-flex', 
-                              alignItems: 'center', 
-                              gap: '4px', 
-                              backgroundColor: '#EEF2FF', 
-                              padding: '2px 8px', 
-                              borderRadius: '12px', 
-                              fontWeight: '600',
-                              color: '#4F46E5' 
-                            }}>
-                              <span style={{ width: '14px', height: '14px', borderRadius: '50%', backgroundColor: '#4F46E5', color: '#fff', fontSize: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                {(selectedBug.assignee || 'A').charAt(0).toUpperCase()}
-                              </span>
-                              {selectedBug.assignee || 'Chưa phân công'}
-                            </span>
-                          </div>
-                        </div>
 
-                        <div style={{ fontSize: '0.82rem', color: '#1E293B', whiteSpace: 'pre-wrap', lineHeight: '1.5', fontWeight: '500', marginBottom: '10px' }}>
-                          {(() => {
-                            const { tag, text } = parseDescription(selectedBug.description);
-                            return (
-                              <>
-                                {tag && (
-                                  <span style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    padding: '2px 6px',
-                                    borderRadius: '4px',
-                                    fontSize: '0.65rem',
-                                    fontWeight: 'bold',
-                                    color: '#4F46E5',
-                                    backgroundColor: '#EEF2FF',
-                                    border: '1px solid #E0E7FF',
-                                    marginRight: '6px'
-                                  }}>
-                                    {tag}
-                                  </span>
-                                )}
-                                <span>{text}</span>
-                              </>
-                            );
-                          })()}
-                        </div>
-                        {selectedBug.images && selectedBug.images.filter(img => !img.update_id).length > 0 && (
-                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
-                            {selectedBug.images.filter(img => !img.update_id).map(img => (
-                              <img 
-                                key={img.id} 
-                                src={getImageUrl(img.image_path)} 
-                                alt="initial-attachment" 
-                                onClick={() => setActiveLightboxUrl(getImageUrl(img.image_path))}
-                                style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '6px', cursor: 'zoom-in', border: '1px solid #E2E8F0', transition: 'all 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.transform = 'scale(1.05)';
-                                  e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.1)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.transform = 'scale(1)';
-                                  e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
-                                }}
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      <h4 style={{ color: '#475569', margin: '8px 0', fontSize: '0.8rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Layers size={14} /> Lịch sử & Phản hồi
-                        <span style={{ backgroundColor: '#EEF2FF', color: '#4F46E5', padding: '2px 7px', borderRadius: '10px', fontSize: '0.68rem', fontWeight: '700' }}>
-                          {selectedBug.updates ? selectedBug.updates.length : 0}
-                        </span>
-                      </h4>
-                      
-                      {/* Timeline container */}
-                      <div className="timeline-container" style={{ 
-                        paddingRight: '6px', 
-                        display: 'flex', 
-                        flexDirection: 'column', 
-                        gap: '12px',
-                        position: 'relative',
-                        paddingLeft: '14px',
-                        borderLeft: '2px solid #F1F5F9',
-                        marginLeft: '8px'
-                      }}>
-                        {selectedBug.updates && selectedBug.updates.length > 0 ? (
-                          selectedBug.updates.map(up => (
-                            <div key={up.id} style={{ position: 'relative', padding: '12px', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
-                              {/* Circle node marker on line */}
-                              <div style={{ 
-                                position: 'absolute', 
-                                left: '-20px', 
-                                top: '16px', 
-                                width: '10px', 
-                                height: '10px', 
-                                borderRadius: '50%', 
-                                backgroundColor: up.status === 'Resolved' || up.status === 'Verified' ? '#10B981' : '#6366F1',
-                                border: '2px solid #fff',
-                                boxShadow: '0 0 0 2px #E2E8F0'
-                              }} />
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', color: '#64748B', marginBottom: '6px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <span style={{ 
-                                    width: '16px', 
-                                    height: '16px', 
-                                    borderRadius: '50%', 
-                                    backgroundColor: '#475569', 
-                                    color: '#fff', 
-                                    fontSize: '9px', 
-                                    display: 'flex', 
-                                    alignItems: 'center', 
-                                    justifyContent: 'center',
-                                    fontWeight: 'bold' 
-                                  }}>
-                                    {(up.updater || 'H').charAt(0).toUpperCase()}
-                                  </span>
-                                  <span style={{ fontWeight: '700', color: '#334155' }}>{up.updater || 'Hệ thống'}</span>
-                                  {up.status && renderStatusBadge(up.status)}
-                                </div>
-                                <span>{formatDateTime(up.created_at)}</span>
-                              </div>
-                              <div style={{ fontSize: '0.78rem', color: '#334155', whiteSpace: 'pre-wrap', lineHeight: '1.4', fontWeight: '500' }}>
-                                {up.notes}
-                              </div>
-                              {up.images && up.images.length > 0 && (
-                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
-                                  {up.images.map(img => (
-                                    <img 
-                                      key={img.id} 
-                                      src={getImageUrl(img.image_path)} 
-                                      alt="update-attachment" 
-                                      onClick={() => setActiveLightboxUrl(getImageUrl(img.image_path))}
-                                      style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '6px', cursor: 'zoom-in', border: '1px solid #E2E8F0', transition: 'all 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
-                                      onMouseEnter={(e) => {
-                                        e.currentTarget.style.transform = 'scale(1.05)';
-                                        e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.1)';
-                                      }}
-                                      onMouseLeave={(e) => {
-                                        e.currentTarget.style.transform = 'scale(1)';
-                                        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
-                                      }}
-                                    />
-                                  ))}
-                                </div>
-                              )}
+                        {/* Báo cáo lỗi ban đầu */}
+                        <div style={{
+                          padding: '16px',
+                          backgroundColor: '#fff',
+                          borderRadius: '12px',
+                          border: '1px solid #E2E8F0',
+                          borderLeft: selectedBug.severity === 'Critical' ? '4px solid #F43F5E' :
+                            selectedBug.severity === 'High' ? '4px solid #F59E0B' :
+                              selectedBug.severity === 'Medium' ? '4px solid #EAB308' : '4px solid #94A3B8',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', color: '#94A3B8', marginBottom: '10px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontWeight: '700', color: '#475569', letterSpacing: '0.05em' }}>BÁO CÁO GỐC</span>
                             </div>
-                          ))
-                        ) : (
-                          <div style={{ fontSize: '0.75rem', color: '#9CA3AF', fontStyle: 'italic', textAlign: 'center', padding: '15px' }}>
-                            Chưa có lượt cập nhật tiến độ nào.
+                            <span>{formatDateTime(selectedBug.created_at)}</span>
                           </div>
-                        )}
-                      </div>
-                    </div>
 
-                    {/* Form đăng phản hồi/cập nhật mới */}
-                    <div style={{ borderTop: '1px solid #E2E8F0', padding: '16px', backgroundColor: '#F8FAFC', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.75rem', color: '#475569', marginBottom: '12px', borderBottom: '1px solid #F1F5F9', paddingBottom: '10px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ color: '#94A3B8' }}>Người báo:</span>
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                backgroundColor: '#F1F5F9',
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                fontWeight: '600',
+                                color: '#334155'
+                              }}>
+                                <span style={{ width: '14px', height: '14px', borderRadius: '50%', backgroundColor: '#6366F1', color: '#fff', fontSize: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {(selectedBug.reporter || 'U').charAt(0).toUpperCase()}
+                                </span>
+                                {selectedBug.reporter || 'Chưa rõ'}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ color: '#94A3B8' }}>Người xử lý:</span>
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                backgroundColor: '#EEF2FF',
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                fontWeight: '600',
+                                color: '#4F46E5'
+                              }}>
+                                <span style={{ width: '14px', height: '14px', borderRadius: '50%', backgroundColor: '#4F46E5', color: '#fff', fontSize: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {(selectedBug.assignee || 'A').charAt(0).toUpperCase()}
+                                </span>
+                                {selectedBug.assignee || 'Chưa phân công'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div style={{ fontSize: '0.82rem', color: '#1E293B', whiteSpace: 'pre-wrap', lineHeight: '1.5', fontWeight: '500', marginBottom: '10px' }}>
+                            {(() => {
+                              const { tag, text } = parseDescription(selectedBug.description);
+                              return (
+                                <>
+                                  {tag && (
+                                    <span style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      fontSize: '0.65rem',
+                                      fontWeight: 'bold',
+                                      color: '#4F46E5',
+                                      backgroundColor: '#EEF2FF',
+                                      border: '1px solid #E0E7FF',
+                                      marginRight: '6px'
+                                    }}>
+                                      {tag}
+                                    </span>
+                                  )}
+                                  <span>{text}</span>
+                                </>
+                              );
+                            })()}
+                          </div>
+                          {selectedBug.notes && (
+                            <div style={{
+                              marginTop: '10px',
+                              padding: '8px 12px',
+                              backgroundColor: '#FAF5F0',
+                              borderLeft: '3px solid #7B5233',
+                              borderRadius: '4px',
+                              fontSize: '0.78rem',
+                              color: '#5C4033',
+                              fontStyle: 'italic',
+                              whiteSpace: 'pre-wrap'
+                            }}>
+                              <strong>Ghi chú:</strong> {selectedBug.notes}
+                            </div>
+                          )}
+                          {selectedBug.images && selectedBug.images.filter(img => !img.update_id).length > 0 && (
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
+                              {selectedBug.images.filter(img => !img.update_id).map(img => (
+                                <img
+                                  key={img.id}
+                                  src={getImageUrl(img.image_path)}
+                                  alt="initial-attachment"
+                                  onClick={() => setActiveLightboxUrl(getImageUrl(img.image_path))}
+                                  style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '6px', cursor: 'zoom-in', border: '1px solid #E2E8F0', transition: 'all 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.transform = 'scale(1.05)';
+                                    e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.1)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.transform = 'scale(1)';
+                                    e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <h4 style={{ color: '#475569', margin: '8px 0', fontSize: '0.8rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Layers size={14} /> Lịch sử & Phản hồi
+                          <span style={{ backgroundColor: '#EEF2FF', color: '#4F46E5', padding: '2px 7px', borderRadius: '10px', fontSize: '0.68rem', fontWeight: '700' }}>
+                            {selectedBug.updates ? selectedBug.updates.length : 0}
+                          </span>
+                        </h4>
+
+                        {/* Timeline container */}
+                        <div className="timeline-container" style={{
+                          paddingRight: '6px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '12px',
+                          position: 'relative',
+                          paddingLeft: '14px',
+                          borderLeft: '2px solid #F1F5F9',
+                          marginLeft: '8px'
+                        }}>
+                          {selectedBug.updates && selectedBug.updates.length > 0 ? (
+                            selectedBug.updates.map(up => (
+                              <div key={up.id} style={{ position: 'relative', padding: '12px', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+                                {/* Circle node marker on line */}
+                                <div style={{
+                                  position: 'absolute',
+                                  left: '-20px',
+                                  top: '16px',
+                                  width: '10px',
+                                  height: '10px',
+                                  borderRadius: '50%',
+                                  backgroundColor: up.status === 'Resolved' || up.status === 'Verified' ? '#10B981' : '#6366F1',
+                                  border: '2px solid #fff',
+                                  boxShadow: '0 0 0 2px #E2E8F0'
+                                }} />
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', color: '#64748B', marginBottom: '6px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{
+                                      width: '16px',
+                                      height: '16px',
+                                      borderRadius: '50%',
+                                      backgroundColor: '#475569',
+                                      color: '#fff',
+                                      fontSize: '9px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontWeight: 'bold'
+                                    }}>
+                                      {(up.updater || 'H').charAt(0).toUpperCase()}
+                                    </span>
+                                    <span style={{ fontWeight: '700', color: '#334155' }}>{up.updater || 'Hệ thống'}</span>
+                                    {up.status && renderStatusBadge(up.status)}
+                                  </div>
+                                  <span>{formatDateTime(up.created_at)}</span>
+                                </div>
+                                <div style={{ fontSize: '0.78rem', color: '#334155', whiteSpace: 'pre-wrap', lineHeight: '1.4', fontWeight: '500' }}>
+                                  {up.notes}
+                                </div>
+                                {up.images && up.images.length > 0 && (
+                                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
+                                    {up.images.map(img => (
+                                      <img
+                                        key={img.id}
+                                        src={getImageUrl(img.image_path)}
+                                        alt="update-attachment"
+                                        onClick={() => setActiveLightboxUrl(getImageUrl(img.image_path))}
+                                        style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '6px', cursor: 'zoom-in', border: '1px solid #E2E8F0', transition: 'all 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
+                                        onMouseEnter={(e) => {
+                                          e.currentTarget.style.transform = 'scale(1.05)';
+                                          e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.1)';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          e.currentTarget.style.transform = 'scale(1)';
+                                          e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
+                                        }}
+                                      />
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ))
+                          ) : (
+                            <div style={{ fontSize: '0.75rem', color: '#9CA3AF', fontStyle: 'italic', textAlign: 'center', padding: '15px' }}>
+                              Chưa có lượt cập nhật tiến độ nào.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Form đăng phản hồi/cập nhật mới */}
+                      <div style={{ borderTop: '1px solid #E2E8F0', padding: '16px', backgroundColor: '#F8FAFC', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
                           <h5 style={{ color: '#475569', margin: 0, fontSize: '0.78rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Thêm phản hồi nhanh</h5>
                           <span style={{ fontSize: '0.7rem', color: '#64748B', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
@@ -1752,7 +1751,7 @@ const ScreenBugManagementView = () => {
                             Đang nhập: <strong>{getCurrentUserName() || 'User'}</strong>
                           </span>
                         </div>
-                        <textarea 
+                        <textarea
                           className="form-control"
                           rows="2"
                           placeholder="Nhập phản hồi... Nhấn Ctrl+V để dán ảnh chụp màn hình."
@@ -1780,24 +1779,24 @@ const ScreenBugManagementView = () => {
 
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <input 
-                              type="file" 
-                              multiple 
-                              accept="image/*" 
-                              id="comment-file-upload" 
+                            <input
+                              type="file"
+                              multiple
+                              accept="image/*"
+                              id="comment-file-upload"
                               onChange={(e) => handleManualUpload(e, setCommentImages)}
-                              style={{ display: 'none' }} 
+                              style={{ display: 'none' }}
                             />
-                            <label 
-                              htmlFor="comment-file-upload" 
-                              style={{ 
-                                fontSize: '0.72rem', 
-                                color: '#475569', 
-                                fontWeight: '600', 
-                                cursor: 'pointer', 
-                                border: '1px solid #E2E8F0', 
-                                padding: '6px 12px', 
-                                borderRadius: '6px', 
+                            <label
+                              htmlFor="comment-file-upload"
+                              style={{
+                                fontSize: '0.72rem',
+                                color: '#475569',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                border: '1px solid #E2E8F0',
+                                padding: '6px 12px',
+                                borderRadius: '6px',
                                 backgroundColor: '#fff',
                                 boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
                                 transition: 'all 0.2s'
@@ -1836,8 +1835,8 @@ const ScreenBugManagementView = () => {
                             {commentImages.map((path, idx) => (
                               <div key={idx} style={{ position: 'relative', width: '48px', height: '48px' }}>
                                 <img src={getImageUrl(path)} alt="comment-preview" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '6px', border: '1px solid #E2E8F0' }} />
-                                <button 
-                                  type="button" 
+                                <button
+                                  type="button"
                                   onClick={() => setCommentImages(prev => prev.filter((_, i) => i !== idx))}
                                   style={{ position: 'absolute', top: '-4px', right: '-4px', backgroundColor: '#EF4444', color: '#fff', border: 'none', borderRadius: '50%', width: '14px', height: '14px', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontWeight: 'bold' }}
                                 >
@@ -1889,9 +1888,9 @@ const ScreenBugManagementView = () => {
               <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Plus size={18} /> Báo cáo lỗi màn hình
               </h3>
-              <button 
+              <button
                 type="button"
-                className="btn-close" 
+                className="btn-close"
                 onClick={() => setShowAddModal(false)}
               >
                 <X size={18} />
@@ -1900,18 +1899,18 @@ const ScreenBugManagementView = () => {
 
             <form onSubmit={handleAddSubmit} style={{ display: 'flex', flexDirection: 'column', margin: 0 }}>
               <div className="modal-body" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '70vh', overflowY: 'auto' }}>
-                
+
                 {/* Searchable Screen Selector */}
                 <div className="form-group" style={{ position: 'relative' }}>
                   <label className="required">Màn hình lỗi</label>
-                  
+
                   {!isAddScreenDropdownOpen ? (
-                    <div 
-                      style={{ 
-                        border: '1px solid #E5E7EB', 
-                        borderRadius: '8px', 
-                        padding: '10px 14px', 
-                        backgroundColor: '#FAF8F6', 
+                    <div
+                      style={{
+                        border: '1px solid #E5E7EB',
+                        borderRadius: '8px',
+                        padding: '10px 14px',
+                        backgroundColor: '#FAF8F6',
                         cursor: 'pointer',
                         fontSize: '0.9rem',
                         display: 'flex',
@@ -1923,22 +1922,22 @@ const ScreenBugManagementView = () => {
                       onClick={() => setIsAddScreenDropdownOpen(true)}
                     >
                       <span style={{ color: addForm.screen_id ? '#2D1A12' : '#9CA3AF' }}>
-                        {addForm.screen_id 
+                        {addForm.screen_id
                           ? (() => {
-                              const selected = screens.find(s => s.id === parseInt(addForm.screen_id));
-                              return selected ? `[${selected.platform}] ${selected.current_code} - ${selected.title}` : 'Chọn màn hình...';
-                            })()
+                            const selected = screens.find(s => s.id === parseInt(addForm.screen_id));
+                            return selected ? `[${selected.platform}] ${selected.current_code} - ${selected.title}` : 'Chọn màn hình...';
+                          })()
                           : 'Chọn màn hình...'
                         }
                       </span>
                       <span style={{ fontSize: '0.6rem', color: '#8D6E63' }}>▼</span>
                     </div>
                   ) : (
-                    <div 
-                      style={{ 
-                        border: '1px solid #7B5233', 
-                        borderRadius: '8px', 
-                        backgroundColor: '#fff', 
+                    <div
+                      style={{
+                        border: '1px solid #7B5233',
+                        borderRadius: '8px',
+                        backgroundColor: '#fff',
                         fontSize: '0.9rem',
                         display: 'flex',
                         justifyContent: 'space-between',
@@ -1948,26 +1947,32 @@ const ScreenBugManagementView = () => {
                         position: 'relative'
                       }}
                     >
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         autoFocus
-                        placeholder="Tìm theo mã hoặc tên màn hình..." 
+                        placeholder="Tìm theo mã hoặc tên màn hình..."
                         value={addScreenSearch}
                         onChange={(e) => setAddScreenSearch(e.target.value)}
-                        style={{ 
-                          width: '100%', 
-                          boxSizing: 'border-box', 
-                          border: 'none', 
-                          padding: '10px 30px 10px 14px', 
-                          fontSize: '0.9rem', 
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            setIsAddScreenDropdownOpen(false);
+                          }
+                        }}
+                        style={{
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          border: 'none',
+                          padding: '10px 30px 10px 14px',
+                          fontSize: '0.9rem',
                           outline: 'none',
                           backgroundColor: 'transparent',
                           color: '#2D1A12'
                         }}
                       />
-                      <span 
-                        style={{ 
-                          fontSize: '0.6rem', 
+                      <span
+                        style={{
+                          fontSize: '0.6rem',
                           color: '#8D6E63',
                           position: 'absolute',
                           right: '14px',
@@ -1986,18 +1991,18 @@ const ScreenBugManagementView = () => {
                   )}
 
                   {isAddScreenDropdownOpen && (
-                    <div 
-                      style={{ 
-                        position: 'absolute', 
-                        top: '100%', 
-                        left: 0, 
-                        right: 0, 
-                        backgroundColor: '#fff', 
-                        border: '1px solid #E5E7EB', 
-                        borderRadius: '8px', 
-                        boxShadow: '0 10px 25px -5px rgba(45, 26, 18, 0.1)', 
-                        zIndex: 1000, 
-                        maxHeight: '200px', 
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        backgroundColor: '#fff',
+                        border: '1px solid #E5E7EB',
+                        borderRadius: '8px',
+                        boxShadow: '0 10px 25px -5px rgba(45, 26, 18, 0.1)',
+                        zIndex: 1000,
+                        maxHeight: '200px',
                         overflowY: 'auto',
                         marginTop: '4px'
                       }}
@@ -2008,22 +2013,22 @@ const ScreenBugManagementView = () => {
                           if (!addScreenSearch) return true;
                           const q = addScreenSearch.toLowerCase();
                           return (
-                            s.current_code.toLowerCase().includes(q) || 
-                            s.title.toLowerCase().includes(q) || 
+                            s.current_code.toLowerCase().includes(q) ||
+                            s.title.toLowerCase().includes(q) ||
                             s.platform.toLowerCase().includes(q)
                           );
                         })
                         .map(s => (
-                          <div 
-                            key={s.id} 
+                          <div
+                            key={s.id}
                             onClick={() => {
                               setAddForm(prev => ({ ...prev, screen_id: s.id.toString() }));
                               setIsAddScreenDropdownOpen(false);
                               setAddScreenSearch('');
                             }}
-                            style={{ 
-                              padding: '10px 14px', 
-                              cursor: 'pointer', 
+                            style={{
+                              padding: '10px 14px',
+                              cursor: 'pointer',
                               fontSize: '0.9rem',
                               borderBottom: '1px solid #FAF6F0',
                               backgroundColor: addForm.screen_id === s.id.toString() ? '#FAF6F0' : '#fff',
@@ -2036,21 +2041,21 @@ const ScreenBugManagementView = () => {
                           </div>
                         ))
                       }
-                      
+
                       {(() => {
                         const otherScreen = screens.find(s => s.current_code === 'OTHER');
                         if (!otherScreen) return null;
                         return (
-                          <div 
-                            key={otherScreen.id} 
+                          <div
+                            key={otherScreen.id}
                             onClick={() => {
                               setAddForm(prev => ({ ...prev, screen_id: otherScreen.id.toString() }));
                               setIsAddScreenDropdownOpen(false);
                               setAddScreenSearch('');
                             }}
-                            style={{ 
-                              padding: '10px 14px', 
-                              cursor: 'pointer', 
+                            style={{
+                              padding: '10px 14px',
+                              cursor: 'pointer',
                               fontSize: '0.9rem',
                               borderTop: '2px solid #EADCC9',
                               backgroundColor: addForm.screen_id === otherScreen.id.toString() ? '#FAF6F0' : '#fff',
@@ -2069,15 +2074,15 @@ const ScreenBugManagementView = () => {
                         if (!addScreenSearch) return true;
                         const q = addScreenSearch.toLowerCase();
                         return (
-                          s.current_code.toLowerCase().includes(q) || 
-                          s.title.toLowerCase().includes(q) || 
+                          s.current_code.toLowerCase().includes(q) ||
+                          s.title.toLowerCase().includes(q) ||
                           s.platform.toLowerCase().includes(q)
                         );
                       }).length === 0 && (
-                        <div style={{ padding: '10px 14px', color: '#8D6E63', fontSize: '0.9rem', textAlign: 'center' }}>
-                          Không tìm thấy màn hình phù hợp
-                        </div>
-                      )}
+                          <div style={{ padding: '10px 14px', color: '#8D6E63', fontSize: '0.9rem', textAlign: 'center' }}>
+                            Không tìm thấy màn hình phù hợp
+                          </div>
+                        )}
                     </div>
                   )}
                 </div>
@@ -2085,7 +2090,7 @@ const ScreenBugManagementView = () => {
                 {/* Description */}
                 <div className="form-group">
                   <label className="required">Mô tả chi tiết lỗi</label>
-                  <textarea 
+                  <textarea
                     className="form-control"
                     rows="3"
                     value={addForm.description}
@@ -2113,7 +2118,7 @@ const ScreenBugManagementView = () => {
                 {/* Image Attachments (Moved directly below Description and styled to show previews inside) */}
                 <div className="form-group">
                   <label>Hình ảnh minh họa</label>
-                  <div 
+                  <div
                     onPaste={(e) => handlePasteImage(e, setAddImages)}
                     tabIndex={0}
                     style={{
@@ -2137,54 +2142,54 @@ const ScreenBugManagementView = () => {
                     {addImages.length > 0 ? (
                       <>
                         {/* Previews inside the upload dropzone */}
-                        <div 
-                          style={{ 
-                            display: 'flex', 
-                            gap: '8px', 
-                            flexWrap: 'wrap', 
+                        <div
+                          style={{
+                            display: 'flex',
+                            gap: '8px',
+                            flexWrap: 'wrap',
                             justifyContent: 'center',
-                            width: '100%' 
+                            width: '100%'
                           }}
                           onClick={(e) => e.stopPropagation()} // Prevent opening file selection dialog
                         >
                           {addImages.map((path, idx) => (
                             <div key={idx} style={{ position: 'relative', width: '60px', height: '60px' }}>
-                              <img 
-                                src={getImageUrl(path)} 
-                                alt="preview" 
-                                style={{ 
-                                  width: '100%', 
-                                  height: '100%', 
-                                  objectFit: 'cover', 
-                                  borderRadius: '6px', 
-                                  border: '1px solid #EADCC9' 
-                                }} 
+                              <img
+                                src={getImageUrl(path)}
+                                alt="preview"
+                                style={{
+                                  width: '100%',
+                                  height: '100%',
+                                  objectFit: 'cover',
+                                  borderRadius: '6px',
+                                  border: '1px solid #EADCC9'
+                                }}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setActiveLightboxUrl(getImageUrl(path));
                                 }}
                               />
-                              <button 
-                                type="button" 
+                              <button
+                                type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setAddImages(prev => prev.filter((_, i) => i !== idx));
                                 }}
-                                style={{ 
-                                  position: 'absolute', 
-                                  top: '-6px', 
-                                  right: '-6px', 
-                                  backgroundColor: '#EF4444', 
-                                  color: '#fff', 
-                                  border: 'none', 
-                                  borderRadius: '50%', 
-                                  width: '18px', 
-                                  height: '18px', 
-                                  fontSize: '11px', 
-                                  display: 'flex', 
-                                  alignItems: 'center', 
-                                  justifyContent: 'center', 
-                                  cursor: 'pointer', 
+                                style={{
+                                  position: 'absolute',
+                                  top: '-6px',
+                                  right: '-6px',
+                                  backgroundColor: '#EF4444',
+                                  color: '#fff',
+                                  border: 'none',
+                                  borderRadius: '50%',
+                                  width: '18px',
+                                  height: '18px',
+                                  fontSize: '11px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: 'pointer',
                                   fontWeight: 'bold',
                                   boxShadow: '0 1px 3px rgba(0,0,0,0.15)'
                                 }}
@@ -2252,13 +2257,13 @@ const ScreenBugManagementView = () => {
                         </div>
                       </>
                     )}
-                    <input 
-                      type="file" 
+                    <input
+                      type="file"
                       id="add-bug-file-input"
-                      multiple 
-                      accept="image/*" 
-                      onChange={(e) => handleManualUpload(e, setAddImages)} 
-                      style={{ display: 'none' }} 
+                      multiple
+                      accept="image/*"
+                      onChange={(e) => handleManualUpload(e, setAddImages)}
+                      style={{ display: 'none' }}
                     />
                   </div>
                 </div>
@@ -2266,7 +2271,7 @@ const ScreenBugManagementView = () => {
                 {/* Assignee */}
                 <div className="form-group">
                   <label className="required">Người xử lý (IT)</label>
-                  <select 
+                  <select
                     className="form-control"
                     value={addForm.assignee}
                     onChange={(e) => setAddForm({ ...addForm, assignee: e.target.value })}
@@ -2285,7 +2290,7 @@ const ScreenBugManagementView = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div className="form-group">
                     <label>Mức độ lỗi</label>
-                    <select 
+                    <select
                       className="form-control"
                       value={addForm.severity}
                       onChange={(e) => setAddForm({ ...addForm, severity: e.target.value })}
@@ -2299,7 +2304,7 @@ const ScreenBugManagementView = () => {
 
                   <div className="form-group">
                     <label className="required">Ngày báo cáo</label>
-                    <input 
+                    <input
                       type="date"
                       className="form-control"
                       value={addForm.requested_at}
@@ -2312,7 +2317,7 @@ const ScreenBugManagementView = () => {
                 {/* Notes */}
                 <div className="form-group">
                   <label>Ghi chú thêm</label>
-                  <textarea 
+                  <textarea
                     className="form-control"
                     rows="2"
                     value={addForm.notes}
@@ -2323,20 +2328,22 @@ const ScreenBugManagementView = () => {
 
               </div>
               <div className="modal-footer">
-                <button 
-                  type="button" 
-                  className="btn-secondary" 
+                <button
+                  type="button"
+                  className="btn-secondary"
                   onClick={() => setShowAddModal(false)}
                   style={{ borderRadius: '8px', padding: '8px 16px' }}
+                  disabled={isSubmitting}
                 >
                   Hủy
                 </button>
-                <button 
-                  type="submit" 
-                  className="btn-primary" 
+                <button
+                  type="submit"
+                  className="btn-primary"
                   style={{ borderRadius: '8px', padding: '8px 16px', fontWeight: 'bold' }}
+                  disabled={isSubmitting}
                 >
-                  Gửi báo cáo
+                  {isSubmitting ? 'Đang gửi...' : 'Gửi báo cáo'}
                 </button>
               </div>
             </form>
@@ -2356,16 +2363,16 @@ const ScreenBugManagementView = () => {
             </div>
             <div className="modal-body" style={{ padding: '24px' }}>
               <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-start', marginBottom: '18px' }}>
-                <div style={{ 
-                  backgroundColor: '#FEE2E2', 
-                  color: '#DC2626', 
-                  width: '44px', 
-                  height: '44px', 
-                  borderRadius: '50%', 
-                  display: 'flex', 
-                  alignItems: 'center', 
+                <div style={{
+                  backgroundColor: '#FEE2E2',
+                  color: '#DC2626',
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
                   justifyContent: 'center',
-                  flexShrink: 0 
+                  flexShrink: 0
                 }}>
                   <AlertCircle size={22} />
                 </div>
@@ -2377,14 +2384,14 @@ const ScreenBugManagementView = () => {
                 </div>
               </div>
 
-              <div style={{ 
-                background: '#FAF8F6', 
-                borderLeft: '4px solid #7B5233', 
-                borderRadius: '8px', 
-                padding: '12px 16px', 
+              <div style={{
+                background: '#FAF8F6',
+                borderLeft: '4px solid #7B5233',
+                borderRadius: '8px',
+                padding: '12px 16px',
                 maxHeight: '120px',
                 overflowY: 'auto',
-                fontSize: '0.88rem', 
+                fontSize: '0.88rem',
                 color: '#4B5563',
                 fontStyle: 'italic',
                 lineHeight: '1.6',
@@ -2409,8 +2416,8 @@ const ScreenBugManagementView = () => {
               <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 'bold' }}>
                 Đính kèm bằng chứng hoàn thành
               </h4>
-              <button 
-                className="btn-close" 
+              <button
+                className="btn-close"
                 onClick={() => {
                   setShowProofModal(false);
                   setActiveUpdateForProof(null);
@@ -2421,9 +2428,9 @@ const ScreenBugManagementView = () => {
                 <X size={16} />
               </button>
             </div>
-            
+
             <div className="modal-body" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div 
+              <div
                 onPaste={(e) => handlePasteImage(e, setProofImages)}
                 tabIndex={0}
                 style={{
@@ -2494,13 +2501,13 @@ const ScreenBugManagementView = () => {
                     <Clipboard size={14} /> Dán từ bộ nhớ tạm
                   </button>
                 </div>
-                
-                <input 
-                  type="file" 
-                  id="proof-file-input-manual" 
-                  multiple 
-                  accept="image/*" 
-                  style={{ display: 'none' }} 
+
+                <input
+                  type="file"
+                  id="proof-file-input-manual"
+                  multiple
+                  accept="image/*"
+                  style={{ display: 'none' }}
                   onChange={async (e) => {
                     const files = e.target.files;
                     if (!files || files.length === 0) return;
@@ -2531,31 +2538,31 @@ const ScreenBugManagementView = () => {
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', backgroundColor: '#FAF6F0', padding: '8px', borderRadius: '8px', border: '1px solid #EADCC9' }}>
                     {proofImages.map((path, idx) => (
                       <div key={idx} style={{ position: 'relative', width: '55px', height: '55px' }}>
-                        <img 
-                          src={getImageUrl(path)} 
-                          alt="proof-preview" 
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '6px', border: '1px solid #D3C1B4' }} 
+                        <img
+                          src={getImageUrl(path)}
+                          alt="proof-preview"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '6px', border: '1px solid #D3C1B4' }}
                         />
-                        <button 
-                          type="button" 
+                        <button
+                          type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             setProofImages(prev => prev.filter((_, i) => i !== idx));
                           }}
-                          style={{ 
-                            position: 'absolute', 
-                            top: '-4px', 
-                            right: '-4px', 
-                            backgroundColor: '#EF4444', 
-                            color: '#fff', 
-                            border: 'none', 
-                            borderRadius: '50%', 
-                            width: '16px', 
-                            height: '16px', 
-                            fontSize: '11px', 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            justifyContent: 'center', 
+                          style={{
+                            position: 'absolute',
+                            top: '-4px',
+                            right: '-4px',
+                            backgroundColor: '#EF4444',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '16px',
+                            height: '16px',
+                            fontSize: '11px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
                             cursor: 'pointer',
                             fontWeight: 'bold',
                             boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
@@ -2571,9 +2578,9 @@ const ScreenBugManagementView = () => {
             </div>
 
             <div className="modal-footer" style={{ borderTop: '1px solid #E5E7EB', padding: '12px 18px', display: 'flex', justifyContent: 'flex-end', gap: '10px', backgroundColor: '#FAF9F6' }}>
-              <button 
-                type="button" 
-                className="btn-secondary" 
+              <button
+                type="button"
+                className="btn-secondary"
                 onClick={() => {
                   setShowProofModal(false);
                   setActiveUpdateForProof(null);
@@ -2583,9 +2590,9 @@ const ScreenBugManagementView = () => {
               >
                 Hủy
               </button>
-              <button 
-                type="button" 
-                className="btn-primary" 
+              <button
+                type="button"
+                className="btn-primary"
                 onClick={async () => {
                   const { id, status, isInitial } = activeUpdateForProof;
                   try {
@@ -2599,7 +2606,7 @@ const ScreenBugManagementView = () => {
                       };
                       const res = await bugService.addBugUpdate(selectedBug.id, payload);
                       showToast('Đã cập nhật trạng thái lỗi thành công!');
-                      
+
                       setSelectedBug(prev => {
                         if (!prev) return null;
                         return {
@@ -2612,7 +2619,7 @@ const ScreenBugManagementView = () => {
                     } else {
                       await bugService.updateCommentStatus(id, status, proofImages);
                       showToast('Đã cập nhật trạng thái phản hồi và đính kèm ảnh chứng minh!');
-                      
+
                       setSelectedBug(prev => {
                         if (!prev) return null;
                         const updatedUpdates = prev.updates.map(u => {
@@ -2640,7 +2647,7 @@ const ScreenBugManagementView = () => {
                       });
                       setEditForm(prev => ({ ...prev, status: status }));
                     }
-                    
+
                     fetchBugs();
                     setShowProofModal(false);
                     setActiveUpdateForProof(null);
@@ -2649,11 +2656,11 @@ const ScreenBugManagementView = () => {
                     showToast('Cập nhật trạng thái lỗi thất bại!', 'error');
                   }
                 }}
-                style={{ 
-                  borderRadius: '6px', 
-                  backgroundColor: '#7B5233', 
-                  borderColor: '#7B5233', 
-                  fontSize: '0.75rem', 
+                style={{
+                  borderRadius: '6px',
+                  backgroundColor: '#7B5233',
+                  borderColor: '#7B5233',
+                  fontSize: '0.75rem',
                   padding: '6px 12px',
                   color: '#fff',
                   fontWeight: 'bold'
@@ -2668,7 +2675,7 @@ const ScreenBugManagementView = () => {
 
       {/* Lightbox Modal để phóng to hình ảnh */}
       {activeLightboxUrl && (
-        <div 
+        <div
           onClick={() => setActiveLightboxUrl(null)}
           style={{
             position: 'fixed',
@@ -2684,18 +2691,18 @@ const ScreenBugManagementView = () => {
             cursor: 'zoom-out'
           }}
         >
-          <img 
-            src={activeLightboxUrl} 
-            alt="Enlarged screenshot" 
+          <img
+            src={activeLightboxUrl}
+            alt="Enlarged screenshot"
             style={{
               maxWidth: '90%',
               maxHeight: '90%',
               objectFit: 'contain',
               borderRadius: '8px',
               boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)'
-            }} 
+            }}
           />
-          <button 
+          <button
             onClick={() => setActiveLightboxUrl(null)}
             style={{
               position: 'absolute',
@@ -2721,7 +2728,8 @@ const ScreenBugManagementView = () => {
       )}
 
       {/* Embedded CSS for animations and custom styles */}
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .spin-icon {
           animation: mgmtSpin 1.2s linear infinite;
         }

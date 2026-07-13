@@ -2,7 +2,9 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import api from '@webShared/Services/api.service';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronUp, Plus, Trash2, Edit, Search, Filter, Layers, FileUp, FileDown, X, Save, AlertTriangle, HelpCircle, CheckCircle, Upload } from 'lucide-react';
+import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
+import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 
 const EquipmentCategoriesView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
@@ -17,7 +19,12 @@ const EquipmentCategoriesView = () => {
   const [showOtherMenu, setShowOtherMenu] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingEquipment, setEditingEquipment] = useState(null);
-  const [message, setMessage] = useState({ type: '', text: '' });
+  const { toast } = useToast();
+  const setMessage = (msg) => {
+    if (msg && msg.text) {
+      toast(msg.type, msg.text);
+    }
+  };
   
   const [infoCollapsed, setInfoCollapsed] = useState(false);
   const [listCollapsed, setListCollapsed] = useState(false);
@@ -444,44 +451,34 @@ const EquipmentCategoriesView = () => {
   return (
     <div style={{ padding: '5px 20px 20px' }}>
       {/* Toolbar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #EADCC9', width: '100%', marginBottom: '10px', gap: '15px', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flex: 1, minWidth: '300px' }}>
-          <div style={{ position: 'relative', width: '320px' }}>
-            <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#7B5233' }} size={16} />
-            <input type="text" placeholder="Nhập Họ và tên hoặc Mã NV" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-              style={{ width: '100%', padding: '8px 12px 8px 38px', border: '1.5px solid #EADCC9', borderRadius: '8px', outline: 'none', fontSize: '13px', backgroundColor: '#fff', color: '#7B5233' }} />
-          </div>
-          <button style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '34px', height: '34px', border: 'none', background: 'none', cursor: 'pointer', color: '#7B5233' }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5h10M11 9h7M11 13h4M3 17l3 3 3-3M6 18V4"></path></svg>
-          </button>
-          <button style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '34px', height: '34px', border: 'none', background: 'none', cursor: 'pointer', color: '#7B5233' }}>
-            <Filter size={20} strokeWidth={2.5} />
-          </button>
-        </div>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ position: 'relative' }}>
-            <button onClick={() => setShowOtherMenu(!showOtherMenu)} style={btnStyle}><Layers size={14} /> Khác</button>
-            {showOtherMenu && (
-              <div style={{ position: 'absolute', top: '100%', right: '0', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', zIndex: 100, minWidth: '220px', padding: '8px 0', marginTop: '5px' }}>
-                <div onClick={() => { navigate('/admin/equipment'); setShowOtherMenu(false); }} style={{ padding: '10px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: '#334155' }} className="dropdown-hover">Quản lý thiết bị</div>
-                <div onClick={() => { navigate('/admin/equipment/history'); setShowOtherMenu(false); }} style={{ padding: '10px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: '#334155' }} className="dropdown-hover">Lịch sử kiểm tra, hiệu chuẩn</div>
-                <div onClick={() => { navigate('/admin/equipment/training'); setShowOtherMenu(false); }} style={{ padding: '10px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: '#334155' }} className="dropdown-hover">Thông tin đào tạo</div>
-              </div>
-            )}
-          </div>
-          <button style={btnStyle}><FileUp size={14} /> Nhập dữ liệu</button>
-          <button style={btnStyle}><FileDown size={14} /> Xuất dữ liệu</button>
-          <button onClick={() => navigate('/admin/equipment/handover')} style={btnStyle}><Plus size={14} /> Bàn giao</button>
-        </div>
-      </div>
+      <PageToolbar
+        searchValue={searchTerm}
+        onSearchChange={setSearchTerm}
+        searchPlaceholder="Nhập Họ và tên hoặc Mã NV"
+        extraActions={[
+          {
+            label: 'Quản lý thiết bị',
+            icon: <Layers size={14} />,
+            onClick: () => navigate('/admin/equipment')
+          },
+          {
+            label: 'Lịch sử kiểm tra, hiệu chuẩn',
+            icon: <Layers size={14} />,
+            onClick: () => navigate('/admin/equipment/history')
+          },
+          {
+            label: 'Thông tin đào tạo',
+            icon: <Layers size={14} />,
+            onClick: () => navigate('/admin/equipment/training')
+          }
+        ]}
+        onExport={() => {}} // Placeholder or export handler if exists
+        onCreate={() => navigate('/admin/equipment/handover')}
+        createLabel="Bàn giao"
+        hasWritePermission={true}
+      />
 
-      {/* Message */}
-      {message.text && (
-        <div style={{ padding: '12px 20px', borderRadius: '12px', marginBottom: '15px', backgroundColor: message.type === 'success' ? '#f0fdf4' : '#fef2f2', color: message.type === 'success' ? '#166534' : '#991b1b', border: `1px solid ${message.type === 'success' ? '#bbf7d0' : '#fecaca'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontWeight: '600' }}>{message.text}</span>
-          <X size={18} onClick={() => setMessage({type:'', text:''})} style={{ cursor: 'pointer', opacity: 0.5 }} />
-        </div>
-      )}
+
 
       <div style={{ display: 'flex', gap: '20px', alignItems: 'stretch' }}>
         {/* Left panel: tree view */}

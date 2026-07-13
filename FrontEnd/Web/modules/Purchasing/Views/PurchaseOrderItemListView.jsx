@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { purchasingService } from '@modules/Purchasing/Models/purchasing.service';
 import '@styles/components.css';
+import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 
 const formatCurrency = (value) => {
   if (!value && value !== 0) return '---';
@@ -50,8 +51,11 @@ const PurchaseOrderItemList = () => {
   const [stats, setStats] = useState(null);
   const [importLoading, setImportLoading] = useState(false);
   const [notification, setNotification] = useState(null);
+  const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
   const [expandedPO, setExpandedPO] = useState({});
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [filterSupplier, setFilterSupplier] = useState('');
+  const [filterPOCode, setFilterPOCode] = useState('');
 
   useEffect(() => {
     const handleResize = () => {
@@ -74,6 +78,8 @@ const PurchaseOrderItemList = () => {
         limit: itemsPerPage,
         search: searchTerm || undefined,
         status: filterStatus !== 'all' ? filterStatus : undefined,
+        po_code: filterPOCode || undefined,
+        supplier_code: filterSupplier || undefined,
       };
       const result = await purchasingService.getOrderItems(params);
       setData(result.items || []);
@@ -95,7 +101,17 @@ const PurchaseOrderItemList = () => {
   };
 
   useEffect(() => { fetchStats(); }, []);
-  useEffect(() => { fetchData(); }, [currentPage, itemsPerPage, searchTerm, filterStatus]);
+  useEffect(() => { fetchData(); }, [currentPage, itemsPerPage, searchTerm, filterStatus, filterPOCode, filterSupplier]);
+
+  const uniqueSuppliers = useMemo(() => {
+    const list = data.map(item => item.supplier_code || item.supplier).filter(Boolean);
+    return [...new Set(list)];
+  }, [data]);
+
+  const uniquePOCodes = useMemo(() => {
+    const list = data.map(item => item.po_code).filter(Boolean);
+    return [...new Set(list)];
+  }, [data]);
 
   const totalPages = Math.ceil(total / itemsPerPage) || 1;
 
@@ -287,164 +303,83 @@ const PurchaseOrderItemList = () => {
         </div>
 
         {/* Compact Toolbar */}
-        {isMobile ? (
-          <div className="qr-toolbar" style={{
-            display: 'flex', flexDirection: 'column', gap: '8px',
-            padding: '8px 12px', background: '#fff', borderRadius: '10px',
-            border: '1px solid #E2E8F0', marginBottom: '4px',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.01)', width: '100%', boxSizing: 'border-box'
-          }}>
-            {/* Row 1: Search, Status filter, Page Limit */}
-            <div style={{ display: 'flex', gap: '6px', width: '100%' }}>
-              <div style={{ flex: 1, position: 'relative' }}>
-                <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8', display: 'flex', alignItems: 'center' }}>
-                  <Search size={12} />
-                </span>
-                <input
-                  type="text" placeholder="Tìm mã PO, NCC..."
-                  value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                  style={{
-                    paddingLeft: '26px', height: '32px', borderRadius: '8px',
-                    border: '1px solid #E2E8F0', outline: 'none', fontSize: '0.74rem',
-                    width: '100%', boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-              <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setCurrentPage(1); }}
-                style={{ height: '32px', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '0.74rem', padding: '0 4px', cursor: 'pointer', color: '#334155', width: '90px', flexShrink: 0 }}>
-                <option value="all">Tất cả TT</option>
-                <option value="Đã duyệt">Đã duyệt</option>
-                <option value="Đã kiểm tra">Đã K.tra</option>
-                <option value="Chưa duyệt">Chưa duyệt</option>
-              </select>
-              <select value={itemsPerPage} onChange={e => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
-                style={{ height: '32px', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '0.74rem', padding: '0 6px', cursor: 'pointer', color: '#334155', width: '75px', flexShrink: 0 }}>
-                <option value={30}>30 dòng</option>
-                <option value={50}>50 dòng</option>
-                <option value={100}>100 dòng</option>
-                <option value={200}>200 dòng</option>
-              </select>
-            </div>
+        {/* Unified, responsive Toolbar using PageToolbar */}
+        <PageToolbar
+          searchValue={searchTerm}
+          onSearchChange={(val) => { setSearchTerm(val); setCurrentPage(1); }}
+          searchPlaceholder="Tìm mã PO, mã MH, NCC..."
+          showFilter={true}
+          isFilterOpen={isFilterBarOpen}
+          onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
+          activeFiltersCount={(filterStatus !== 'all' ? 1 : 0) + (filterPOCode ? 1 : 0) + (filterSupplier ? 1 : 0)}
+          importActions={[
+            {
+              label: 'Nhập Excel',
+              icon: <FileUp size={14} />,
+              onClick: () => fileInputRef.current?.click()
+            }
+          ]}
+          onExport={handleExport}
+          hasWritePermission={true}
+        />
 
-            {/* Row 2: Excel Import/Export Buttons */}
-            <div style={{ display: 'flex', gap: '6px', width: '100%' }}>
-              <button onClick={() => fileInputRef.current?.click()} disabled={importLoading} style={{
-                flex: 1, height: '32px', borderRadius: '8px',
-                border: '1px solid #E2E8F0', background: '#fff', cursor: 'pointer',
-                fontSize: '0.74rem', fontWeight: '600', color: '#334155',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'
-              }}>
-                <FileUp size={13} /> {importLoading ? 'Đang nhập...' : 'Nhập Excel'}
-              </button>
-              <button onClick={handleExport} style={{
-                flex: 1, height: '32px', borderRadius: '8px',
-                border: '1px solid #E2E8F0', background: '#fff', cursor: 'pointer',
-                fontSize: '0.74rem', fontWeight: '600', color: '#334155',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'
-              }}>
-                <FileDown size={13} /> Xuất Excel
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="mgmt-toolbar card" style={{ marginBottom: '4px' }}>
-            <div className="toolbar-left" style={{ flex: 1 }}>
-              <div className="search-wrapper">
-                <Search size={18} className="search-icon" />
-                <input
-                  type="text" 
-                  placeholder="Tìm mã PO, mã MH, tên MH, NCC..."
-                  value={searchTerm} 
-                  onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                />
-              </div>
-
+        {/* INLINE EXPANDABLE FILTER BAR */}
+        {isFilterBarOpen && (
+          <div className="filter-inline-bar">
+            {/* Lọc trạng thái */}
+            <div className="filter-field-group">
+              <label className="filter-field-label">Trạng thái</label>
               <select 
                 value={filterStatus} 
                 onChange={e => { setFilterStatus(e.target.value); setCurrentPage(1); }}
-                className="select-minimal"
-                style={{
-                  height: '36px',
-                  borderRadius: '8px',
-                  border: '1px solid #EADCC9',
-                  backgroundColor: '#FAF6F0',
-                  color: '#7B5233',
-                  padding: '0 8px',
-                  fontWeight: '700',
-                  fontSize: '0.8rem',
-                  cursor: 'pointer'
-                }}
               >
                 <option value="all">Tất cả trạng thái</option>
                 <option value="Đã duyệt">Đã duyệt</option>
                 <option value="Đã kiểm tra">Đã kiểm tra</option>
                 <option value="Chưa duyệt">Chưa duyệt</option>
               </select>
+            </div>
 
+            {/* Mã PO */}
+            <div className="filter-field-group">
+              <label className="filter-field-label">Mã PO</label>
+              <select
+                value={filterPOCode}
+                onChange={e => { setFilterPOCode(e.target.value); setCurrentPage(1); }}
+              >
+                <option value="">Tất cả mã PO</option>
+                {uniquePOCodes.map(code => (
+                  <option key={code} value={code}>{code}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Nhà cung cấp */}
+            <div className="filter-field-group">
+              <label className="filter-field-label">Nhà cung cấp</label>
+              <select
+                value={filterSupplier}
+                onChange={e => { setFilterSupplier(e.target.value); setCurrentPage(1); }}
+              >
+                <option value="">Tất cả nhà cung cấp</option>
+                {uniqueSuppliers.map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Hiển thị số dòng */}
+            <div className="filter-field-group">
+              <label className="filter-field-label">Hiển thị số dòng</label>
               <select 
                 value={itemsPerPage} 
                 onChange={e => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
-                className="select-minimal"
-                style={{
-                  height: '36px',
-                  borderRadius: '8px',
-                  border: '1px solid #EADCC9',
-                  backgroundColor: '#FAF6F0',
-                  color: '#7B5233',
-                  padding: '0 8px',
-                  fontWeight: '700',
-                  fontSize: '0.8rem',
-                  cursor: 'pointer'
-                }}
               >
                 <option value={30}>30 dòng</option>
                 <option value={50}>50 dòng</option>
                 <option value={100}>100 dòng</option>
                 <option value={200}>200 dòng</option>
               </select>
-            </div>
-
-            <div className="toolbar-right">
-              <button 
-                className="btn btn-outline" 
-                onClick={() => fileInputRef.current?.click()} 
-                disabled={importLoading}
-                style={{
-                  height: '36px',
-                  padding: '0 12px',
-                  borderRadius: '8px',
-                  border: '1px solid #EADCC9',
-                  backgroundColor: '#fff',
-                  color: '#7B5233',
-                  fontWeight: '700',
-                  fontSize: '0.8rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <FileUp size={14} /> {importLoading ? 'Đang nhập...' : 'Nhập Excel'}
-              </button>
-
-              <button 
-                className="btn btn-outline" 
-                onClick={handleExport}
-                style={{
-                  height: '36px',
-                  padding: '0 12px',
-                  borderRadius: '8px',
-                  border: '1px solid #EADCC9',
-                  backgroundColor: '#fff',
-                  color: '#7B5233',
-                  fontWeight: '700',
-                  fontSize: '0.8rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <FileDown size={14} /> Xuất Excel
-              </button>
             </div>
           </div>
         )}

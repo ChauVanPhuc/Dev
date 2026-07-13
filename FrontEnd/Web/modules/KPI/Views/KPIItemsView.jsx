@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Search, Plus, Trash2, Edit2, AlertTriangle, HelpCircle } from 'lucide-react';
 import api from '@webShared/Services/api.service';
+import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
 
 const KPIItemsView = () => {
@@ -18,7 +19,12 @@ const KPIItemsView = () => {
   
   // Loaders & Alerts
   const [loadingPool, setLoadingPool] = useState(false);
-  const [message, setMessage] = useState(null);
+  const { toast } = useToast();
+  const setMessage = (msg) => {
+    if (msg) {
+      toast(msg.type, msg.text);
+    }
+  };
   const [showKhacDropdown, setShowKhacDropdown] = useState(false);
   
   // Modals & Confirmations
@@ -142,20 +148,6 @@ const KPIItemsView = () => {
 
   return (
     <div style={{ padding: '15px 20px', fontFamily: 'Inter, sans-serif', display: 'flex', flexDirection: 'column' }}>
-      
-      {/* Toast Alert */}
-      {message && (
-        <div style={{
-          position: 'fixed', top: '20px', right: '20px', zIndex: 3000,
-          padding: '12px 24px', borderRadius: '8px', color: '#fff',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)', fontWeight: 'bold', fontSize: '13px',
-          backgroundColor: message.type === 'error' ? '#ef4444' : '#22c55e',
-          transition: 'all 0.3s ease'
-        }}>
-          {message.text}
-          <button onClick={() => setMessage(null)} style={{ marginLeft: '12px', background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 'bold' }}>×</button>
-        </div>
-      )}
         
 
 

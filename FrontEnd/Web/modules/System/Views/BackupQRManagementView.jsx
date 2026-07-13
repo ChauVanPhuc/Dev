@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import api from '@webShared/Services/api.service';
 import { useOutletContext } from 'react-router-dom';
 import { Unlock, Plus, Printer, Search, X, CheckSquare, Square, Files, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+import '@styles/components.css';
+import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 
 const BackupQRManagement = () => {
     const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = useOutletContext();
@@ -11,7 +14,14 @@ const BackupQRManagement = () => {
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(15);
     const [selectedIds, setSelectedIds] = useState([]);
-    const [message, setMessage] = useState({ type: '', text: '' });
+    const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
+    const [statusFilter, setStatusFilter] = useState('all');
+    const { toast } = useToast();
+    const setMessage = (msg) => {
+      if (msg && msg.text) {
+        toast(msg.type, msg.text);
+      }
+    };
     
     const [showAddModal, setShowAddModal] = useState(false);
     const [quantity, setQuantity] = useState(10);
@@ -39,7 +49,7 @@ const BackupQRManagement = () => {
 
 
     const printQRsA4 = (items) => {
-        if (items.length === 0) return alert('Không có mã nào để in.');
+        if (items.length === 0) return toast('warning', 'Không có mã nào để in.');
         
         // Chia các mã QR thành nhóm tối đa 4 mã trên 1 trang A4
         const chunks = [];
@@ -189,83 +199,67 @@ const BackupQRManagement = () => {
         }
     };
 
-    const filteredQRs = qrCodes.filter(qr => qr.code.toLowerCase().includes(searchTerm.toLowerCase()));
+    const filteredQRs = qrCodes.filter(qr => {
+        const matchesSearch = qr.code.toLowerCase().includes(searchTerm.toLowerCase());
+        if (statusFilter === 'ready') return matchesSearch && qr.status === 'Trống';
+        if (statusFilter === 'in_use') return matchesSearch && qr.status !== 'Trống';
+        return matchesSearch;
+    });
 
     return (
         <div className="manufacture-plan-container">
             <div className="sticky-top-zone">
                 {/* Thanh công cụ lọc và in - Đã đồng bộ style */}
-                <div className="mgmt-toolbar card" style={{ 
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
-                    backgroundColor: '#fff', padding: '16px 20px', borderRadius: '16px',
-                    marginBottom: 0, boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                    border: '1px solid #e2e8f0', width: '100%'
-                }}>
-                    <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flex: 1 }}>
-                        <div style={{ position: 'relative', maxWidth: '400px', flex: 1 }}>
-                            <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} size={18} />
-                            <input 
-                                type="text" 
-                                placeholder="Tìm kiếm mã thẻ..." 
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                style={{ 
-                                    width: '100%', padding: '10px 15px 10px 42px', border: '1px solid #e2e8f0', 
-                                    borderRadius: '10px', outline: 'none', fontSize: '14px',
-                                    backgroundColor: '#f8fafc', transition: 'all 0.2s'
-                                }}
-                                onFocus={(e) => e.target.style.borderColor = '#A0301B'}
-                                onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
-                            />
-                        </div>
+                <PageToolbar
+                    searchValue={searchTerm}
+                    onSearchChange={(val) => { setSearchTerm(val); setPage(1); }}
+                    searchPlaceholder="Tìm kiếm mã thẻ..."
+                    showFilter={true}
+                    isFilterOpen={isFilterBarOpen}
+                    onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
+                    activeFiltersCount={statusFilter !== 'all' ? 1 : 0}
+                    extraActions={selectedIds.length > 0 ? [
+                      {
+                        label: `In thẻ đã chọn (${selectedIds.length})`,
+                        icon: <Printer size={14} />,
+                        onClick: () => printQRsA4(qrCodes.filter(qr => selectedIds.includes(qr.id)))
+                      }
+                    ] : []}
+                    hasWritePermission={true}
+                />
 
-                        <select 
-                            value={pageSize} 
-                            onChange={(e) => { setPageSize(parseInt(e.target.value)); setPage(1); }}
-                            className="page-size-select"
-                        >
-                            <option value={15}>15 dòng</option>
-                            <option value={30}>30 dòng</option>
-                            <option value={50}>50 dòng</option>
-                            <option value={100}>100 dòng</option>
-                        </select>
-
-                        {selectedIds.length > 0 && (
-                            <button 
-                                onClick={() => printQRsA4(qrCodes.filter(qr => selectedIds.includes(qr.id)))}
-                                style={{ 
-                                    display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', 
-                                    backgroundColor: '#1e293b', color: '#fff', border: 'none', borderRadius: '10px',
-                                    cursor: 'pointer', fontWeight: '700', fontSize: '13px',
-                                    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
-                                }}
+                {isFilterBarOpen && (
+                    <div className="filter-inline-bar">
+                        {/* Trạng thái sử dụng */}
+                        <div className="filter-field-group">
+                            <label className="filter-field-label">Trạng thái sử dụng</label>
+                            <select
+                                value={statusFilter}
+                                onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
                             >
-                                <Printer size={18} /> In thẻ đã chọn ({selectedIds.length})
-                            </button>
-                        )}
-                    </div>
-                    <div style={{ color: '#64748b', fontSize: '13px', fontWeight: '600', marginLeft: '20px' }}>
-                        {filteredQRs.length} / {qrCodes.length} mã QR
-                    </div>
-                </div>
-
-                {/* Thông báo */}
-                {message.text && (
-                    <div style={{ 
-                        padding: '12px 20px', borderRadius: '12px', marginTop: '10px', marginBottom: 0,
-                        backgroundColor: message.type === 'success' ? '#f0fdf4' : '#fef2f2',
-                        color: message.type === 'success' ? '#166534' : '#991b1b',
-                        border: `1px solid ${message.type === 'success' ? '#bbf7d0' : '#fecaca'}`,
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        animation: 'slideDown 0.3s ease'
-                    }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            {message.type === 'success' ? <CheckSquare size={18} /> : <X size={18} />}
-                            <span style={{ fontWeight: '500' }}>{message.text}</span>
+                                <option value="all">Tất cả trạng thái</option>
+                                <option value="ready">SẴN SÀNG (Trống)</option>
+                                <option value="in_use">ĐANG DÙNG (Đang sử dụng)</option>
+                            </select>
                         </div>
-                        <X size={18} onClick={() => setMessage({type:'', text:''})} style={{ cursor: 'pointer', opacity: 0.5 }} />
+
+                        {/* Hiển thị số dòng */}
+                        <div className="filter-field-group">
+                            <label className="filter-field-label">Hiển thị số dòng</label>
+                            <select
+                                value={pageSize}
+                                onChange={(e) => { setPageSize(parseInt(e.target.value)); setPage(1); }}
+                            >
+                                <option value={15}>15 dòng</option>
+                                <option value={30}>30 dòng</option>
+                                <option value={50}>50 dòng</option>
+                                <option value={100}>100 dòng</option>
+                            </select>
+                        </div>
                     </div>
                 )}
+
+
             </div>
 
             {/* Bảng dữ liệu - Sử dụng admin-list-layout chuẩn */}

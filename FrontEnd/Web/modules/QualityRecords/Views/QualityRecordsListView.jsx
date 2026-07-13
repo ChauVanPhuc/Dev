@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { planService } from '@modules/Plan/Models/plan.service';
 import { qualityService } from '@modules/QualityRecords/Models/quality.service';
+import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 
 const QualityRecordsListView = () => {
     const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
@@ -28,6 +29,8 @@ const QualityRecordsListView = () => {
     // State cho phân trang
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(15);   
+    const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
+    const [filterProduct, setFilterProduct] = useState('all');
 
     const [showFilterPanel, setShowFilterPanel] = useState(false);
     const [showSortPanel, setShowSortPanel] = useState(false);
@@ -104,7 +107,20 @@ const QualityRecordsListView = () => {
         fetchPlanDetails();
     }, [selectedPlanId, plans]);
 
-    // Filter dữ liệu dựa trên Search và Trạng thái dữ liệu
+    // Trích xuất danh sách sản phẩm duy nhất
+    const uniqueProductNames = useMemo(() => {
+        const list = [];
+        orders.forEach(o => {
+            const items = o.products || o.items || [];
+            items.forEach(item => {
+                const name = item.name || item.product_name || item.product_code;
+                if (name) list.push(name);
+            });
+        });
+        return [...new Set(list)];
+    }, [orders]);
+
+    // Filter dữ liệu dựa trên Search và Trạng thái dữ liệu, Sản phẩm
     const filteredOrders = useMemo(() => {
         const term = (searchTerm || '').toLowerCase();
         return orders.filter(o => {
@@ -114,11 +130,17 @@ const QualityRecordsListView = () => {
             // Giả sử o.has_data hoặc o.order_status > 0 là có dữ liệu
             const hasData = o.has_data || o.order_status > 0;
             
-            if (statusFilter === 'has_data') return matchesSearch && hasData;
-            if (statusFilter === 'no_data') return matchesSearch && !hasData;
+            if (statusFilter === 'has_data' && !hasData) return false;
+            if (statusFilter === 'no_data' && hasData) return false;
+            
+            if (filterProduct !== 'all') {
+                const hasProd = (o.products || o.items || []).some(p => (p.name || p.product_name || p.product_code) === filterProduct);
+                if (!hasProd) return false;
+            }
+
             return matchesSearch;
         });
-    }, [orders, searchTerm, statusFilter]);
+    }, [orders, searchTerm, statusFilter, filterProduct]);
 
     // Sắp xếp dữ liệu
     const sortedOrders = useMemo(() => {
@@ -329,199 +351,88 @@ const QualityRecordsListView = () => {
                 }
             `}} />
 
-            {/* Toolbar & Filters */}
-            <div className="mgmt-toolbar card filter-pagination-toolbar" style={{ padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
-                
-                {/* Nhóm bộ lọc bên trái */}
-                <div className="toolbar-left" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', flex: 1 }}>
-                    
-                    {/* Ô tìm kiếm */}
-                    <div className="search-wrapper" style={{ position: 'relative', width: '280px', display: 'flex', alignItems: 'center' }}>
-                        <Search size={18} className="search-icon" style={{ position: 'absolute', left: '12px', color: '#7B5233', pointerEvents: 'none' }} />
-                        <input
-                            type="text"
-                            placeholder="Tìm kiếm theo Mã PO..."
-                            value={searchTerm}
-                            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                            style={{
-                                width: '100%',
-                                padding: '8px 12px 8px 38px',
-                                borderRadius: '8px',
-                                border: '1px solid #EADCC9',
-                                backgroundColor: '#FAF6F0',
-                                color: '#2D1A12',
-                                fontSize: '0.85rem',
-                                fontWeight: '600',
-                                outline: 'none',
-                                height: '36px',
-                                transition: 'all 0.2s'
-                            }}
-                            onFocus={(e) => {
-                                e.target.style.backgroundColor = '#fff';
-                                e.target.style.borderColor = '#7B5233';
-                                e.target.style.boxShadow = '0 0 0 3px rgba(123, 82, 51, 0.1)';
-                            }}
-                            onBlur={(e) => {
-                                e.target.style.backgroundColor = '#FAF6F0';
-                                e.target.style.borderColor = '#EADCC9';
-                                e.target.style.boxShadow = 'none';
-                            }}
-                        />
-                    </div>
+            <PageToolbar
+                searchValue={searchTerm}
+                onSearchChange={(val) => { setSearchTerm(val); setCurrentPage(1); }}
+                searchPlaceholder="Tìm kiếm theo Mã PO..."
+                showSort={true}
+                sortOptions={[
+                  { value: 'none', label: 'Sắp xếp: Mặc định' },
+                  { value: 'po_asc', label: 'Mã PO (A-Z)' },
+                  { value: 'po_desc', label: 'Mã PO (Z-A)' },
+                  { value: 'qty_asc', label: 'Sản lượng (Tăng dần)' },
+                  { value: 'qty_desc', label: 'Sản lượng (Giảm dần)' }
+                ]}
+                sortValue={sortBy}
+                onSortChange={(val) => { setSortBy(val); setCurrentPage(1); }}
+                showFilter={true}
+                isFilterOpen={isFilterBarOpen}
+                onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
+                activeFiltersCount={(statusFilter !== 'all' ? 1 : 0) + (selectedPlanId ? 1 : 0) + (filterProduct !== 'all' ? 1 : 0)}
+                onExport={() => {}}
+                hasWritePermission={true}
+            />
 
-                    {/* Lọc Trạng thái (Standard Select) */}
-                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                        <Filter size={14} color="#7B5233" style={{ position: 'absolute', left: '10px', pointerEvents: 'none' }} />
-                        <select
-                            value={statusFilter}
-                            onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
-                            style={{
-                                padding: '0 28px 0 28px',
-                                height: '36px',
-                                borderRadius: '8px',
-                                border: '1px solid #EADCC9',
-                                backgroundColor: '#FAF6F0',
-                                color: '#7B5233',
-                                fontWeight: '700',
-                                fontSize: '0.8rem',
-                                cursor: 'pointer',
-                                outline: 'none',
-                                appearance: 'none',
-                                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%237B5233'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-                                backgroundRepeat: 'no-repeat',
-                                backgroundPosition: 'right 8px center',
-                                backgroundSize: '12px'
-                            }}
-                        >
-                            <option value="all">Trạng thái: Tất cả</option>
-                            <option value="has_data">Đã có dữ liệu</option>
-                            <option value="no_data">Chưa có dữ liệu</option>
-                        </select>
-                    </div>
-
-                    {/* Sắp xếp (Standard Select) */}
-                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7B5233" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: '10px', pointerEvents: 'none' }}>
-                            <path d="M11 5h10M11 9h7M11 13h4M3 17l3 3 3-3M6 18V4"></path>
-                        </svg>
-                        <select
-                            value={sortBy}
-                            onChange={(e) => { setSortBy(e.target.value); setCurrentPage(1); }}
-                            style={{
-                                padding: '0 28px 0 28px',
-                                height: '36px',
-                                borderRadius: '8px',
-                                border: '1px solid #EADCC9',
-                                backgroundColor: '#FAF6F0',
-                                color: '#7B5233',
-                                fontWeight: '700',
-                                fontSize: '0.8rem',
-                                cursor: 'pointer',
-                                outline: 'none',
-                                appearance: 'none',
-                                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%237B5233'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-                                backgroundRepeat: 'no-repeat',
-                                backgroundPosition: 'right 8px center',
-                                backgroundSize: '12px'
-                            }}
-                        >
-                            <option value="none">Sắp xếp: Mặc định</option>
-                            <option value="po_asc">Mã PO (A-Z)</option>
-                            <option value="po_desc">Mã PO (Z-A)</option>
-                            <option value="qty_asc">Sản lượng (Tăng dần)</option>
-                            <option value="qty_desc">Sản lượng (Giảm dần)</option>
-                        </select>
-                    </div>
-
-                    {/* Số dòng */}
-                    <select 
-                        value={itemsPerPage} 
-                        onChange={(e) => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
-                        className="page-size-select"
-                        style={{ 
-                            height: '36px',
-                            padding: '0 28px 0 10px',
-                            borderRadius: '8px',
-                            border: '1px solid #EADCC9',
-                            backgroundColor: '#FAF6F0',
-                            color: '#7B5233',
-                            fontWeight: '700',
-                            fontSize: '0.8rem',
-                            cursor: 'pointer',
-                            outline: 'none',
-                            appearance: 'none',
-                            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%237B5233'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-                            backgroundRepeat: 'no-repeat',
-                            backgroundPosition: 'right 8px center',
-                            backgroundSize: '12px'
-                        }}
-                    >
-                        <option value={15}>15 dòng</option>
-                        <option value={30}>30 dòng</option>
-                        <option value={50}>50 dòng</option>
-                        <option value={100}>100 dòng</option>
-                    </select>
-
-                    {/* Chọn KHSX */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#7B5233', whiteSpace: 'nowrap' }}>Chọn KHSX tháng</span>
-                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                            <select
-                                className="qr-khsx-select"
-                                value={selectedPlanId}
-                                onChange={handlePlanChange}
-                                style={{
-                                    padding: '6px 28px 6px 10px',
-                                    borderRadius: '8px',
-                                    border: '1px solid #EADCC9',
-                                    backgroundColor: '#FAF6F0',
-                                    fontSize: '0.8rem',
-                                    color: '#7B5233',
-                                    fontWeight: '700',
-                                    cursor: 'pointer',
-                                    appearance: 'none',
-                                    height: '36px',
-                                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%237B5233'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-                                    backgroundRepeat: 'no-repeat',
-                                    backgroundPosition: 'right 8px center',
-                                    backgroundSize: '14px'
-                                }}
-                            >
-                                {plans.length > 0 ? plans.map(p => (
-                                    <option key={p.id} value={p.id}>
-                                        {p.name || `KHSX T${p.month} - ${p.year}`}
-                                    </option>
-                                )) : <option value="">Đang tải kế hoạch...</option>}
-                            </select>
-                        </div>
-                    </div>
+            {/* INLINE EXPANDABLE FILTER BAR */}
+            {isFilterBarOpen && (
+              <div className="filter-inline-bar">
+                {/* Lọc Trạng thái */}
+                <div className="filter-field-group">
+                  <label className="filter-field-label">Trạng thái dữ liệu</label>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+                  >
+                    <option value="all">Tất cả trạng thái</option>
+                    <option value="has_data">Đã có dữ liệu</option>
+                    <option value="no_data">Chưa có dữ liệu</option>
+                  </select>
                 </div>
 
-                {/* Nhóm hành động bên phải */}
-                <div className="toolbar-right">
-                    <button className="btn qr-export-btn" style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'center',
-                        gap: '6px', 
-                        padding: '8px 16px', 
-                        borderRadius: '8px', 
-                        border: '1px solid #EADCC9', 
-                        background: '#fff', 
-                        fontSize: '0.85rem',
-                        fontWeight: '700', 
-                        color: '#7B5233', 
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        height: '36px'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF6F0'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fff'}
-                    >
-                        <FileDown size={16} /> Xuất dữ liệu
-                    </button>
+                {/* Chọn KHSX */}
+                <div className="filter-field-group">
+                  <label className="filter-field-label">Chọn KHSX tháng</label>
+                  <select
+                    value={selectedPlanId}
+                    onChange={handlePlanChange}
+                  >
+                    {plans.length > 0 ? plans.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name || `KHSX T${p.month} - ${p.year}`}
+                      </option>
+                    )) : <option value="">Đang tải kế hoạch...</option>}
+                  </select>
                 </div>
-            </div>
+
+                {/* Sản phẩm */}
+                <div className="filter-field-group">
+                  <label className="filter-field-label">Sản phẩm</label>
+                  <select
+                    value={filterProduct}
+                    onChange={(e) => { setFilterProduct(e.target.value); setCurrentPage(1); }}
+                  >
+                    <option value="all">Tất cả sản phẩm</option>
+                    {uniqueProductNames.map(name => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Hiển thị số dòng */}
+                <div className="filter-field-group">
+                  <label className="filter-field-label">Hiển thị số dòng</label>
+                  <select 
+                    value={itemsPerPage} 
+                    onChange={(e) => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
+                  >
+                    <option value={15}>15 dòng</option>
+                    <option value={30}>30 dòng</option>
+                    <option value={50}>50 dòng</option>
+                    <option value={100}>100 dòng</option>
+                  </select>
+                </div>
+              </div>
+            )}
 
             {/* Bảng dữ liệu */}
             <div className="admin-list-layout" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

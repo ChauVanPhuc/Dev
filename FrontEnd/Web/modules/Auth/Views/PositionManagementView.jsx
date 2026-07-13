@@ -3,6 +3,7 @@ import { useNavigate, useOutletContext } from 'react-router-dom';
 import { ArrowLeft, Plus, Edit2, Trash2, Check, X, Search, Shield, Layers, FileDown, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import ExcelJS from 'exceljs';
+import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import '@styles/components.css';
 
 const SCREEN_GROUPS = [
@@ -10,15 +11,19 @@ const SCREEN_GROUPS = [
     title: 'Quản lý hệ thống',
     screens: [
       { key: 'users', name: 'Quản lý tài khoản' },
-      { key: 'quality-records', name: 'Quản lý hồ sơ' },
-      { key: 'iso-documents', name: 'Quản lý hồ sơ ISO' },
-      { key: 'iso-processes', name: 'Quản lý quy trình' },
       { key: 'screens', name: 'Quản lý màn hình' },
       { key: 'logs', name: 'Quản lý lỗi hệ thống' },
       { key: 'feedback', name: 'Quản lý góp ý' },
       { key: 'data', name: 'Backup data' },
       { key: 'bugs', name: 'Quản lý Bug' },
       { key: 'monitor', name: 'Giám sát hệ thống' }
+    ]
+  },
+  {
+    title: 'Nhân sự',
+    screens: [
+      { key: 'iso-documents', name: 'Quản lý mẫu tài liệu' },
+      { key: 'iso-processes', name: 'Quản lý quy trình' }
     ]
   },
   {
@@ -34,6 +39,7 @@ const SCREEN_GROUPS = [
   {
     title: 'Module chất lượng',
     screens: [
+      { key: 'quality-records', name: 'Hồ sơ chất lượng' },
       { key: 'defects', name: 'Danh sách lỗi' },
       { key: 'claim', name: 'Claim khách hàng' },
       { key: 'reports', name: 'Báo cáo kiểm tra' },
@@ -44,8 +50,16 @@ const SCREEN_GROUPS = [
   {
     title: 'Module kỹ thuật',
     screens: [
-      { key: 'products', name: 'BOM sản phẩm' },
-      { key: 'equipment', name: 'Thiết bị - máy móc' }
+      { key: 'products', name: 'BOM sản phẩm' }
+    ]
+  },
+  {
+    title: 'Module bảo trì - máy móc',
+    screens: [
+      { key: 'equipment', name: 'Quản lý thiết bị' },
+      { key: 'machines', name: 'Danh sách thiết bị' },
+      { key: 'machine-history', name: 'Lịch sử bảo trì' },
+      { key: 'machine-training', name: 'Hướng dẫn sử dụng' }
     ]
   },
   {
@@ -108,6 +122,7 @@ const PositionManagement = () => {
   const [pageSize, setPageSize] = useState(15);
   const [statusFilter, setStatusFilter] = useState('all');
   const [isExporting, setIsExporting] = useState(false);
+  const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
 
   // Xuất file Excel đồng bộ
   const handleExportExcel = async () => {
@@ -348,183 +363,64 @@ const PositionManagement = () => {
   return (
     <div style={{ width: '100%', paddingBottom: '40px' }}>
       {/* ── Thanh công cụ (Toolbar) ── */}
-      <div className="mgmt-toolbar card" style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
-        {/* Nhóm bộ lọc bên trái */}
-        <div className="toolbar-left" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          <div className="search-wrapper">
-            <Search size={18} className="search-icon" />
-            <input 
-              type="text" 
-              placeholder="Tìm kiếm chức vụ..." 
-              value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
-            />
-          </div>
+      <PageToolbar
+        searchValue={searchQuery}
+        onSearchChange={(val) => { setSearchQuery(val); setPage(1); }}
+        searchPlaceholder="Tìm kiếm chức vụ..."
+        showFilter={true}
+        isFilterOpen={isFilterBarOpen}
+        onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
+        activeFiltersCount={statusFilter !== 'all' ? 1 : 0}
+        extraActions={[
+          {
+            label: 'Tài khoản',
+            icon: <FolderTree size={14} />, // FolderTree or similar as placeholder
+            onClick: () => navigate('/admin/users')
+          },
+          {
+            label: 'Bộ phận',
+            icon: <FolderTree size={14} />,
+            onClick: () => navigate('/admin/users/departments')
+          }
+        ]}
+        onExport={handleExportExcel}
+        isExporting={isExporting}
+        onCreate={hasWritePermission ? openCreateModal : undefined}
+        createLabel="Tạo chức vụ mới"
+        hasWritePermission={hasWritePermission}
+      />
 
-          {/* Lọc trạng thái hoạt động */}
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-            <Filter size={14} color="#7B5233" style={{ position: 'absolute', left: '10px', pointerEvents: 'none' }} />
+      {/* INLINE EXPANDABLE FILTER BAR */}
+      {isFilterBarOpen && (
+        <div className="filter-inline-bar">
+          {/* Lọc Trạng thái */}
+          <div className="filter-field-group">
+            <label className="filter-field-label">Trạng thái hoạt động</label>
             <select
               value={statusFilter}
               onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-              style={{
-                padding: '0 28px 0 28px',
-                height: '36px',
-                borderRadius: '8px',
-                border: '1px solid #EADCC9',
-                backgroundColor: '#FAF6F0',
-                color: '#7B5233',
-                fontWeight: '700',
-                fontSize: '0.8rem',
-                cursor: 'pointer',
-                outline: 'none',
-                appearance: 'none',
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%237B5233'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-                backgroundRepeat: 'no-repeat',
-                backgroundPosition: 'right 8px center',
-                backgroundSize: '12px'
-              }}
             >
-              <option value="all">Trạng thái: Tất cả</option>
+              <option value="all">Tất cả</option>
               <option value="active">Đang sử dụng</option>
               <option value="inactive">Dừng hoạt động</option>
             </select>
           </div>
 
-          {/* Chọn số dòng hiển thị */}
-          <select 
-            value={pageSize} 
-            onChange={(e) => { setPageSize(parseInt(e.target.value)); setPage(1); }}
-            className="page-size-select"
-            style={{ 
-              height: '36px',
-              padding: '0 28px 0 10px',
-              borderRadius: '8px',
-              border: '1px solid #EADCC9',
-              backgroundColor: '#FAF6F0',
-              color: '#7B5233',
-              fontWeight: '700',
-              fontSize: '0.8rem',
-              cursor: 'pointer',
-              outline: 'none',
-              appearance: 'none',
-              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%237B5233'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-              backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'right 8px center',
-              backgroundSize: '12px'
-            }}
-          >
-            <option value={15}>15 dòng</option>
-            <option value={30}>30 dòng</option>
-            <option value={50}>50 dòng</option>
-            <option value={100}>100 dòng</option>
-          </select>
-        </div>
-
-        {/* Nhóm hành động bên phải */}
-        <div className="toolbar-right" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          {/* Nút xuất dữ liệu Excel */}
-          <button 
-            type="button"
-            onClick={handleExportExcel}
-            disabled={isExporting}
-            style={{
-              height: '36px',
-              padding: '0 12px',
-              borderRadius: '8px',
-              border: '1px solid #EADCC9',
-              backgroundColor: '#fff',
-              color: '#7B5233',
-              fontSize: '0.85rem',
-              fontWeight: '700',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              cursor: isExporting ? 'not-allowed' : 'pointer'
-            }}
-          >
-            <FileDown size={16} /> Xuất Excel
-          </button>
-
-          <div style={{ position: 'relative' }} ref={extraMenuRef}>
-            <button
-              onClick={() => setShowExtraMenu(p => !p)}
-              style={{
-                height: '36px',
-                padding: '0 16px',
-                whiteSpace: 'nowrap',
-                borderRadius: '8px',
-                fontWeight: '700',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                border: 'none',
-                backgroundColor: '#7B5233',
-                color: '#fff',
-                fontSize: '0.85rem',
-                cursor: 'pointer',
-                outline: 'none',
-                boxShadow: '0 2px 5px rgba(123, 82, 51, 0.15)'
-              }}
+          {/* Hiển thị số dòng */}
+          <div className="filter-field-group">
+            <label className="filter-field-label">Hiển thị số dòng</label>
+            <select
+              value={pageSize}
+              onChange={(e) => { setPageSize(parseInt(e.target.value)); setPage(1); }}
             >
-              <Layers size={14} />
-              <span className="btn-text-desktop">Khác</span>
-              <span className="btn-text-mobile">Khác</span>
-            </button>
-            {showExtraMenu && (
-              <div className="dropdown-panel" style={{
-                position: 'absolute',
-                top: '100%',
-                right: 0,
-                zIndex: 1000,
-                width: '180px',
-                marginTop: '6px'
-              }}>
-                <p className="dropdown-title">Quản lý nâng cao</p>
-                <button
-                  className="dropdown-item"
-                  onClick={() => { navigate('/admin/users'); setShowExtraMenu(false); }}
-                >
-                  Tài khoản
-                </button>
-                <button
-                  className="dropdown-item"
-                  onClick={() => { navigate('/admin/users/departments'); setShowExtraMenu(false); }}
-                >
-                  Bộ phận
-                </button>
-                <button
-                  className="dropdown-item selected"
-                  onClick={() => { navigate('/admin/users/positions'); setShowExtraMenu(false); }}
-                  style={{ fontWeight: '800' }}
-                >
-                  Chức vụ
-                </button>
-              </div>
-            )}
+              <option value={15}>15 dòng</option>
+              <option value={30}>30 dòng</option>
+              <option value={50}>50 dòng</option>
+              <option value={100}>100 dòng</option>
+            </select>
           </div>
-
-          {hasWritePermission && (
-            <button 
-              className="btn btn-primary"
-              onClick={openCreateModal}
-              style={{
-                height: '36px',
-                padding: '0 15px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                borderRadius: '8px',
-                fontWeight: '700',
-                fontSize: '0.85rem',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              <Plus size={16} /> Tạo chức vụ mới
-            </button>
-          )}
         </div>
-      </div>
+      )}
 
       {error && (
         <div style={{ padding: '12px 20px', backgroundColor: '#FEE2E2', borderLeft: '4px solid #EF4444', color: '#B91C1C', borderRadius: '8px', marginBottom: '20px', fontWeight: '500', fontSize: '0.85rem' }}>

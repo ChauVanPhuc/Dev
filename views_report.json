@@ -1,0 +1,801 @@
+[
+  {
+    "file": "DepartmentManagementView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Auth\\Views\\DepartmentManagementView.jsx",
+    "title": "Quản lý bộ phận",
+    "headers": [
+      "ID",
+      "Tên bộ phận",
+      "Mô tả",
+      "Chức vụ trực thuộc",
+      "Trạng thái",
+      "Thao tác"
+    ]
+  },
+  {
+    "file": "LoginView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Auth\\Views\\LoginView.jsx",
+    "title": "SmartFlow",
+    "headers": []
+  },
+  {
+    "file": "PositionManagementView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Auth\\Views\\PositionManagementView.jsx",
+    "title": "Quản lý chức vụ",
+    "headers": [
+      "ID",
+      "Tên chức vụ",
+      "Bộ phận trực thuộc",
+      "Mô tả",
+      "Trạng thái",
+      "Thao tác"
+    ]
+  },
+  {
+    "file": "UserCreateView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Auth\\Views\\UserCreateView.jsx",
+    "title": "Tạo người dùng mới",
+    "headers": []
+  },
+  {
+    "file": "UserEditView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Auth\\Views\\UserEditView.jsx",
+    "title": "Thông tin người dùng",
+    "headers": []
+  },
+  {
+    "file": "UserManagementView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Auth\\Views\\UserManagementView.jsx",
+    "title": "Unknown",
+    "headers": [
+      "Phân loại",
+      "Bộ phận",
+      "Chức vụ",
+      "Công đoạn / Quyền hạn",
+      "Username",
+      "Thao tác",
+      "Thao tác"
+    ]
+  },
+  {
+    "file": "UserPermissionView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Auth\\Views\\UserPermissionView.jsx",
+    "title": "Phân quyền tài khoản",
+    "headers": []
+  },
+  {
+    "file": "ImprovementsView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\CAPA\\Views\\ImprovementsView.jsx",
+    "title": "{title}",
+    "headers": []
+  },
+  {
+    "file": "ClaimListView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Claim\\views\\ClaimListView.jsx",
+    "title": "Quản lý khiếu nại",
+    "headers": [
+      "Tên file gốc",
+      "Dung lượng",
+      "Thời gian import",
+      "Thao tác",
+      "Tháng",
+      "Số lượng khiếu nại (vụ)",
+      "Tổng tiền phạt G7",
+      "Tổng tiền phạt Khách hàng",
+      "Tên tủ",
+      "Thời gian Claim",
+      "Nguyên nhân",
+      "Mã tham chiếu",
+      "Mã lỗi KH",
+      "Mã lỗi G7",
+      "Giá trị phạt",
+      "Tổng tiền phạt",
+      "Tên tủ",
+      "Thời gian Claim",
+      "Nguyên nhân",
+      "Mã tham chiếu",
+      "LPN",
+      "Container",
+      "Thời gian"
+    ]
+  },
+  {
+    "file": "PriceListView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Claim\\views\\PriceListView.jsx",
+    "title": "Bảng giá tủ gỗ",
+    "headers": [
+      "STT",
+      "Đơn giá",
+      "Mốc thời gian cập nhật"
+    ]
+  },
+  {
+    "file": "ShipmentListView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Claim\\views\\ShipmentListView.jsx",
+    "title": "Lịch trình xuất cont",
+    "headers": []
+  },
+  {
+    "file": "DashboardView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Dashboard\\Views\\DashboardView.jsx",
+    "title": "Hoạt động hệ thống",
+    "headers": []
+  },
+  {
+    "file": "ManufactureDashboardView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Dashboard\\Views\\ManufactureDashboardView.jsx",
+    "title": "Biểu đồ Sản lượng hàng tháng",
+    "headers": []
+  },
+  {
+    "file": "DeliveryHandoverView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Delivery\\Views\\DeliveryHandoverView.jsx",
+    "title": "Unknown",
+    "headers": [
+      "Mã bàn giao",
+      "Sản phẩm",
+      "Số lượng",
+      "Ngày dự kiến",
+      "Trạng thái",
+      "Thao tác"
+    ]
+  },
+  {
+    "file": "DeliveryReceiveView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Delivery\\Views\\DeliveryReceiveView.jsx",
+    "title": "Unknown",
+    "headers": [
+      "Mã tiếp nhận",
+      "Nhà cung cấp",
+      "Vật tư",
+      "Số lượng",
+      "Ngày nhập",
+      "Trạng thái"
+    ]
+  },
+  {
+    "file": "DeliveryTrackingView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Delivery\\Views\\DeliveryTrackingView.jsx",
+    "title": "THÔNG TIN CHI TIẾT PHIẾU BÀN GIAO BG-${deliveryDetail.id}",
+    "headers": [
+      "STT",
+      "Hạng mục lỗi",
+      "Mức độ",
+      "Số lượng lỗi",
+      "Ghi chú",
+      "STT",
+      "Số PO đối tác",
+      "Mã đơn hàng",
+      "Khách hàng",
+      "Sản phẩm đơn hàng",
+      "Số lượng",
+      "STT",
+      "Mã phiếu",
+      "Tên chi tiết",
+      "Công đoạn vào",
+      "Công đoạn ra",
+      "SL Giao",
+      "SL Nhận",
+      "SL Trả",
+      "Trạng thái",
+      "Thời gian",
+      "Người giao",
+      "Người nhận",
+      "Thao tác",
+      "STT",
+      "Số PO đối tác",
+      "Mã đơn hàng",
+      "Khách hàng",
+      "Sản phẩm đơn hàng",
+      "Số lượng"
+    ]
+  },
+  {
+    "file": "HandoverListView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Delivery\\Views\\HandoverListView.jsx",
+    "title": "Unknown",
+    "headers": []
+  },
+  {
+    "file": "EquipmentCategoriesView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Equipment\\Views\\EquipmentCategoriesView.jsx",
+    "title": "Danh sách thiết bị",
+    "headers": [
+      "Mã",
+      "Tên",
+      "Trạng thái",
+      "Người sở hữu",
+      "Ảnh",
+      "Thao tác"
+    ]
+  },
+  {
+    "file": "EquipmentDetailView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Equipment\\Views\\EquipmentDetailView.jsx",
+    "title": "Chi tiết thiết bị máy móc",
+    "headers": [
+      "Ngày kiểm tra",
+      "Người thực hiện",
+      "Người kiểm chứng",
+      "Trạng thái",
+      "Ghi chú"
+    ]
+  },
+  {
+    "file": "EquipmentHandoverView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Equipment\\Views\\EquipmentHandoverView.jsx",
+    "title": "Unknown",
+    "headers": []
+  },
+  {
+    "file": "EquipmentHistoryView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Equipment\\Views\\EquipmentHistoryView.jsx",
+    "title": "Nhật ký kiểm tra & Hiệu chuẩn thiết bị",
+    "headers": [
+      "Mã TB",
+      "Tên Thiết Bị",
+      "Người thực hiện",
+      "Người kiểm tra",
+      "Ngày kiểm tra",
+      "Ngày hiệu chuẩn",
+      "Trạng thái",
+      "Ghi chú"
+    ]
+  },
+  {
+    "file": "EquipmentManagementView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Equipment\\Views\\EquipmentManagementView.jsx",
+    "title": "Quản lý thiết bị",
+    "headers": [
+      "Mã TB",
+      "Tên Thiết Bị",
+      "Loại TB",
+      "Bộ phận",
+      "Người sở hữu",
+      "Ngày bàn giao",
+      "Ngày kiểm tra",
+      "Trạng thái",
+      "Thao tác",
+      "Nội dung cần xuất",
+      "Xuất toàn bộ"
+    ]
+  },
+  {
+    "file": "EquipmentTrainingDetailView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Equipment\\Views\\EquipmentTrainingDetailView.jsx",
+    "title": "Chi tiết đào tạo vận hành",
+    "headers": []
+  },
+  {
+    "file": "EquipmentTrainingView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Equipment\\Views\\EquipmentTrainingView.jsx",
+    "title": "Đào tạo vận hành thiết bị",
+    "headers": [
+      "Mã TB",
+      "Tên Thiết Bị",
+      "Người đào tạo",
+      "Nội dung tóm tắt",
+      "Ngày đào tạo",
+      "Ngày đánh giá",
+      "File tài liệu",
+      "Thao tác"
+    ]
+  },
+  {
+    "file": "MachineDetailView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Equipment\\Views\\MachineDetailView.jsx",
+    "title": "Thông tin thiết bị máy móc",
+    "headers": [
+      "Tên File",
+      "Ngày cập nhật",
+      "Thao tác"
+    ]
+  },
+  {
+    "file": "MachineHistoryView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Equipment\\Views\\MachineHistoryView.jsx",
+    "title": "Nhật ký & Lịch sử bảo trì máy móc",
+    "headers": [
+      "Mã máy",
+      "Tên máy",
+      "Người thực hiện",
+      "Người kiểm tra",
+      "Ngày kiểm tra",
+      "Ngày bảo trì",
+      "Kết quả",
+      "Nội dung bảo trì"
+    ]
+  },
+  {
+    "file": "MachineManagementView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Equipment\\Views\\MachineManagementView.jsx",
+    "title": "Danh sách thiết bị máy móc",
+    "headers": [
+      "Mã",
+      "Tên máy",
+      "Nhà máy",
+      "Bộ phận",
+      "Tình trạng",
+      "Ngày Bảo Trì gần nhất",
+      "Ngày bảo trì tiếp theo",
+      "Thao tác"
+    ]
+  },
+  {
+    "file": "MachineTrainingView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Equipment\\Views\\MachineTrainingView.jsx",
+    "title": "Hướng dẫn sử dụng máy móc",
+    "headers": []
+  },
+  {
+    "file": "DefectManagementView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Inspection\\Views\\DefectManagementView.jsx",
+    "title": "Lỗi hiện trường",
+    "headers": [
+      "Mã G7 / ID",
+      "Tên lỗi / Mô tả",
+      "Phân nhóm",
+      "Mức AQL",
+      "Công đoạn",
+      "Lỗi Khách",
+      "QA Track",
+      "Trạng thái",
+      "Thao tác",
+      "Mã lỗi khách",
+      "Tên tiếng Việt / Anh",
+      "Tiêu chuẩn lỗi nhẹ (Minor)",
+      "Tiêu chuẩn lỗi nặng (Major)",
+      "Tiêu chuẩn nghiêm trọng (Critical)",
+      "Phương pháp"
+    ]
+  },
+  {
+    "file": "InspectionReportsView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Inspection\\Views\\InspectionReportsView.jsx",
+    "title": "Báo cáo & Phiếu kiểm tra",
+    "headers": [
+      "STT",
+      "Ngày kiểm tra",
+      "Mã PO",
+      "Mã sản phẩm / Công đoạn",
+      "Loại công đoạn",
+      "Người kiểm QC",
+      "Kết luận",
+      "Thao tác",
+      "STT",
+      "Ngày ghi nhận",
+      "Tên công đoạn",
+      "Người ghi QC",
+      "Tổng SP kiểm",
+      "Tổng số lỗi",
+      "Tỉ lệ lỗi (%)",
+      "Thao tác",
+      "Tên linh kiện/phụ kiện",
+      "Kết quả",
+      "Minh chứng",
+      "Mẫu",
+      "Kết quả đo độ ẩm (%)",
+      "Kích thước (Dày x Rộng x Dài mm)",
+      "Kết quả"
+    ]
+  },
+  {
+    "file": "ISODocumentListView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\ISO\\Views\\ISODocumentListView.jsx",
+    "title": "G7 - Smart Flow",
+    "headers": [
+      "STT",
+      "MÃ",
+      "TÊN QUY TRÌNH",
+      "CẤP TÀI LIỆU",
+      "NGƯỜI PHỤ TRÁCH",
+      "NGƯỜI BIÊN SOẠN",
+      "NGƯỜI DUYỆT",
+      "NGÀY BAN HÀNH",
+      "NGÀY KT GẦN NHẤT",
+      "KẾT QUẢ GẦN NHẤT",
+      "TRẠNG THÁI",
+      "MÃ",
+      "TÊN TÀI LIỆU",
+      "THƯ MỤC",
+      "PHIÊN BẢN",
+      "LOẠI TÀI LIỆU",
+      "CẤP TÀI LIỆU",
+      "NGƯỜI TẠO",
+      "NGƯỜI DUYỆT",
+      "NGÀY BAN HÀNH",
+      "NGÀY CẬP NHẬT",
+      "ĐÍNH KÈM",
+      "TRẠNG THÁI",
+      "THAO TÁC"
+    ]
+  },
+  {
+    "file": "ISOFormEditorView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\ISO\\Views\\ISOFormEditorView.jsx",
+    "title": "Unknown",
+    "headers": []
+  },
+  {
+    "file": "ISOProcessEditorView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\ISO\\Views\\ISOProcessEditorView.jsx",
+    "title": "G7 - Smart Flow",
+    "headers": [
+      "Tiêu đề 1",
+      "Tiêu đề 2",
+      "Tiêu đề 3",
+      "STT",
+      "Ngày kiểm tra",
+      "Người đánh giá",
+      "Kết quả",
+      "Ghi chú",
+      "Bước số",
+      "Tên công việc",
+      "Trách nhiệm",
+      "Tên Biểu mẫu đính kèm",
+      "TRÁCH NHIỆM",
+      "HỌ TÊN",
+      "CHỨC VỤ",
+      "KÝ TÊN",
+      "Số TT",
+      "Ngày Sửa",
+      "Nội Dung Sửa Đổi",
+      "Trang Số"
+    ]
+  },
+  {
+    "file": "KPIChecklistView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\KPI\\Views\\KPIChecklistView.jsx",
+    "title": "Danh mục Checklist mẫu",
+    "headers": [
+      "Mã CV",
+      "Nội dung công việc",
+      "Tần suất",
+      "Thao tác"
+    ]
+  },
+  {
+    "file": "KPIFeedbackView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\KPI\\Views\\KPIFeedbackView.jsx",
+    "title": "Ý kiến đóng góp & Nhận xét KPI",
+    "headers": [
+      "Mã NX",
+      "Phân loại nhận xét",
+      "Nội dung nhận xét chi tiết",
+      "Thời gian gửi",
+      "Người nhận xét (Manager)",
+      "Thao tác"
+    ]
+  },
+  {
+    "file": "KPIItemsView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\KPI\\Views\\KPIItemsView.jsx",
+    "title": "Danh mục chỉ số KPI mẫu",
+    "headers": [
+      "Mã KPI",
+      "Chỉ số KPI mẫu",
+      "Cách tính / Công thức đo lường",
+      "Mục tiêu",
+      "Thao tác"
+    ]
+  },
+  {
+    "file": "KPIReportsView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\KPI\\Views\\KPIReportsView.jsx",
+    "title": "Báo cáo KPI",
+    "headers": [
+      "",
+      "Mã NV",
+      "Họ và tên",
+      "Bộ phận",
+      "Chức vụ",
+      "Ngày tạo",
+      "Trạng thái",
+      "Mã",
+      "Nội dung",
+      "Tần suất",
+      "Trạng thái hôm nay",
+      "Số lần thực hiện",
+      "Ngày thực hiện gần nhất",
+      "Kết quả",
+      "Điểm",
+      "Icon",
+      "Mã KPI",
+      "Nội dung KPI",
+      "Điểm",
+      "Công thức đo lường",
+      "Mục tiêu",
+      "Kết quả đạt",
+      "Trạng thái",
+      "Icon",
+      "Thao tác",
+      "Mã VP",
+      "Nội dung sự việc / Hành vi",
+      "Ảnh hưởng",
+      "Điểm cộng / trừ",
+      "Thời gian",
+      "Người thực hiện",
+      "Bằng chứng QC",
+      "Ghi chú",
+      "Mã NX",
+      "Phân loại nhận xét",
+      "Nội dung nhận xét chi tiết",
+      "Thời gian gửi",
+      "Người nhận xét (Manager)"
+    ]
+  },
+  {
+    "file": "KPIRulesView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\KPI\\Views\\KPIRulesView.jsx",
+    "title": "Quy tắc cộng trừ điểm KPI",
+    "headers": [
+      "Mã luật",
+      "Tên điều luật (Khen thưởng / Kỷ luật)",
+      "Mức độ ảnh hưởng",
+      "Điểm cộng / trừ",
+      "Ghi chú mô tả",
+      "Thao tác"
+    ]
+  },
+  {
+    "file": "OrderCreateView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Order\\Views\\OrderCreateView.jsx",
+    "title": "Unknown",
+    "headers": [
+      "Cấu phần",
+      "Định mức",
+      "Tổng dự kiến"
+    ]
+  },
+  {
+    "file": "OrdersListView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Order\\Views\\OrdersListView.jsx",
+    "title": "Unknown",
+    "headers": [
+      "Tên sản phẩm",
+      "Mã SKU",
+      "Số lượng"
+    ]
+  },
+  {
+    "file": "PalletCardView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Pallet\\Views\\PalletCardView.jsx",
+    "title": "QUẢN LÝ PHIẾU NGOẠI LỆ",
+    "headers": [
+      "ID",
+      "Mã phiếu",
+      "Linh kiện / Quy cách",
+      "Hành trình",
+      "Giao / Nhận",
+      "Tỷ lệ",
+      "Loại ngoại lệ",
+      "Thao tác",
+      "Tên chi tiết/Linh kiện",
+      "Số lượng",
+      "Liên kết Đơn hàng (PO)"
+    ]
+  },
+  {
+    "file": "AddProductionPlanView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Plan\\Views\\AddProductionPlanView.jsx",
+    "title": "<Activity size={24} color=\"#5D4037\" /> Đơn hàng",
+    "headers": [
+      "CẤU TRÚC BOM",
+      "ĐỊNH MỨC",
+      "TỔNG"
+    ]
+  },
+  {
+    "file": "PlanDetailView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Plan\\Views\\PlanDetailView.jsx",
+    "title": "Không tìm thấy kế hoạch",
+    "headers": [
+      "STT",
+      "Mã SKU",
+      "Tên sản phẩm",
+      "SLKH",
+      "SLHT",
+      "Tiến độ",
+      "Trạng thái",
+      "Thời gian HT",
+      "STT",
+      "MÃ SẢN PHẨM",
+      "TÊN SẢN PHẨM",
+      "SLKH",
+      "SLHT",
+      "TIẾN ĐỘ",
+      "TRẠNG THÁI",
+      "THỜI GIAN",
+      "THAO TÁC"
+    ]
+  },
+  {
+    "file": "PlanListView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Plan\\Views\\PlanListView.jsx",
+    "title": "{popupPlan.name}",
+    "headers": [
+      "{header}"
+    ]
+  },
+  {
+    "file": "ProductionProgressView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Plan\\Views\\ProductionProgressView.jsx",
+    "title": "{productData?.error || \"Không tìm thấy dữ liệu\"}",
+    "headers": []
+  },
+  {
+    "file": "ProductCreateView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Product\\Views\\ProductCreateView.jsx",
+    "title": "Thêm BOM Sản Phẩm Mới",
+    "headers": [
+      "STT",
+      "Bậc",
+      "Mã chi tiết",
+      "Tên linh kiện *",
+      "SL",
+      "ĐVT",
+      "Kích thước (D-R-C)",
+      "Hao hụt",
+      "CĐ Vào",
+      "CĐ Ra",
+      "NVL?",
+      ""
+    ]
+  },
+  {
+    "file": "ProductDetailView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Product\\Views\\ProductDetailView.jsx",
+    "title": "{product.name} <span className=\"sku-tag\">{product.sku}</span>",
+    "headers": [
+      "STT",
+      "Cấp",
+      "Tên linh kiện / Vật tư",
+      "Mã SKU",
+      "Quy cách",
+      "Số lượng",
+      "Cổng công đoạn"
+    ]
+  },
+  {
+    "file": "ProductsListView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Product\\Views\\ProductsListView.jsx",
+    "title": "Unknown",
+    "headers": [
+      "STT",
+      "Mã SKU",
+      "Tên Sản Phẩm",
+      "Kích Thước (L-W-H)",
+      "Thao Tác"
+    ]
+  },
+  {
+    "file": "PurchaseOrderItemListView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Purchasing\\Views\\PurchaseOrderItemListView.jsx",
+    "title": "Unknown",
+    "headers": []
+  },
+  {
+    "file": "PurchaseRequisitionDetailView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Purchasing\\Views\\PurchaseRequisitionDetailView.jsx",
+    "title": "Không tìm thấy đơn đặt mua",
+    "headers": [
+      "#",
+      "Mã MH",
+      "Tên mặt hàng",
+      "ĐVT",
+      "Số lượng"
+    ]
+  },
+  {
+    "file": "PurchaseRequisitionListView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\Purchasing\\Views\\PurchaseRequisitionListView.jsx",
+    "title": "Unknown",
+    "headers": [
+      "STT",
+      "Mã đơn mua",
+      "Ngày đặt",
+      "Ngày giao",
+      "Tên NCC",
+      "Trạng thái",
+      "Nhập kho",
+      "Người tạo"
+    ]
+  },
+  {
+    "file": "QualityRecordsDetailView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\QualityRecords\\Views\\QualityRecordsDetailView.jsx",
+    "title": "Chi tiết hồ sơ",
+    "headers": []
+  },
+  {
+    "file": "QualityRecordsListView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\QualityRecords\\Views\\QualityRecordsListView.jsx",
+    "title": "Hồ sơ chất lượng (PO)",
+    "headers": [
+      "STT",
+      "Mã PO",
+      "Số lượng sản phẩm",
+      "Trạng thái",
+      "Thao tác"
+    ]
+  },
+  {
+    "file": "BackupQRManagementView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\System\\Views\\BackupQRManagementView.jsx",
+    "title": "Quản lý mã QR Dự Phòng",
+    "headers": [
+      "Mã QR",
+      "Trạng thái",
+      "Phiếu đang gán",
+      "Thao tác"
+    ]
+  },
+  {
+    "file": "DataPackagingView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\System\\Views\\DataPackagingView.jsx",
+    "title": "DataPackaging",
+    "headers": []
+  },
+  {
+    "file": "HotspotsView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\System\\Views\\HotspotsView.jsx",
+    "title": "Hotspots",
+    "headers": []
+  },
+  {
+    "file": "IncidentLogsView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\System\\Views\\IncidentLogsView.jsx",
+    "title": "IncidentLogs",
+    "headers": []
+  },
+  {
+    "file": "ScreenBugManagementView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\System\\Views\\ScreenBugManagementView.jsx",
+    "title": "Unknown",
+    "headers": [
+      "Màn hình",
+      "Nội dung bug",
+      "Mức độ",
+      "Tiến độ",
+      "Nhân sự (Báo / Sửa)",
+      "Ngày ghi nhận",
+      "Hoàn thành dự kiến",
+      "Ngày hoàn thành",
+      "Thao tác"
+    ]
+  },
+  {
+    "file": "ScreenDetailView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\System\\Views\\ScreenDetailView.jsx",
+    "title": "{comp.name}",
+    "headers": [
+      "Bảng dữ liệu",
+      "Thao tác",
+      "Mô tả tác động",
+      "Tham số",
+      "Kiểu dữ liệu",
+      "Bắt buộc",
+      "Mô tả"
+    ]
+  },
+  {
+    "file": "ScreenManagementView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\System\\Views\\ScreenManagementView.jsx",
+    "title": "Chỉnh sửa màn hình: {editingScreen.title}",
+    "headers": [
+      "Nền tảng",
+      "Mã mặc định",
+      "Mã hiện tại",
+      "Tiêu đề hiển thị",
+      "Phụ đề mô tả",
+      "Đường dẫn Route",
+      "Hành động"
+    ]
+  },
+  {
+    "file": "SystemMonitorView.jsx",
+    "path": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\System\\Views\\SystemMonitorView.jsx",
+    "title": "Giám sát hệ thống & CSDL",
+    "headers": []
+  }
+]

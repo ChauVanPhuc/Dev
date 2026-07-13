@@ -5,6 +5,7 @@ import {
   ArrowLeft, Edit, FileText, X, Plus, Download, Trash2, ChevronDown, ChevronRight, Settings, Eye, Check
 } from 'lucide-react';
 import axios from 'axios';
+import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
 
 const MachineDetailView = () => {
@@ -14,7 +15,12 @@ const MachineDetailView = () => {
 
   const [machine, setMachine] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState({ type: '', text: '' });
+  const { toast } = useToast();
+  const setMessage = (msg) => {
+    if (msg && msg.text) {
+      toast(msg.type, msg.text);
+    }
+  };
 
   // Accordion Expand/Collapse States
   const [expandedSection, setExpandedSection] = useState({
@@ -172,7 +178,7 @@ const MachineDetailView = () => {
     const selectedCatDocs = catDocs.filter(d => selectedDocs[d.id]);
     
     if (selectedCatDocs.length === 0) {
-      alert("Vui lòng chọn ít nhất một tệp để tải xuống.");
+      toast('warning', 'Vui lòng chọn ít nhất một tệp để tải xuống.');
       return;
     }
 
@@ -343,19 +349,7 @@ const MachineDetailView = () => {
   return (
     <div style={{ padding: '20px', fontFamily: 'Inter, sans-serif', width: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>
       
-      {/* Alert Banner */}
-      {message.text && (
-        <div style={{
-          padding: '12px 20px', borderRadius: '12px',
-          backgroundColor: message.type === 'success' ? '#f0fdf4' : '#fef2f2',
-          color: message.type === 'success' ? '#166534' : '#991b1b',
-          border: `1px solid ${message.type === 'success' ? '#bbf7d0' : '#fecaca'}`,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-        }}>
-          <span style={{ fontWeight: '600' }}>{message.text}</span>
-          <X size={18} onClick={() => setMessage({type:'', text:''})} style={{ cursor: 'pointer', opacity: 0.5 }} />
-        </div>
-      )}
+
 
       {/* Section 1: Main Machinery Info */}
       <div className="card" style={{ padding: '24px', borderRadius: '16px', border: '2.5px solid #7B5233', backgroundColor: '#fff' }}>

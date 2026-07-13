@@ -39,7 +39,7 @@ def parse_iso_docx(file_path: str) -> dict:
         is_list_paragraph = p.style.name and ("list" in p.style.name.lower() or "bullet" in p.style.name.lower())
         if is_list_paragraph:
             if not re.match(r"^[-\*\u2022\u2714\u2713\u2013\u2014\d+\.]", text_val):
-                text_val = "✔ " + text_val
+                text_val = "- " + text_val
         return text_val
 
     # 1. Trích xuất thông tin chung và tiêu đề từ các đoạn văn bản (paragraphs)
@@ -255,7 +255,10 @@ def parse_iso_docx(file_path: str) -> dict:
             "diễn giải" in line_lower or 
             "lưu đồ" in line_lower or
             "(xem trang" in line_lower or 
-            "xem trang sau" in line_lower
+            "xem trang sau" in line_lower or
+            "[" in line or
+            "]" in line or
+            "✓" in line
         )
         
         if not is_step and not is_exclude and len(line) <= 80:
@@ -297,7 +300,7 @@ def parse_iso_docx(file_path: str) -> dict:
             if current_step:
                 # Nếu bắt gặp đầu dòng là mục lớn hoặc chữ số phần lớn, ngắt lưu trữ bước
                 is_major_section = False
-                if not is_step and len(line) <= 80:
+                if not is_step and len(line) <= 80 and "[" not in line and "]" not in line and "✓" not in line:
                     if re.match(r'^\s*(?:\d+|[IVXLCDM]+)\s*[\.\-\:\s]\s*[a-zA-ZÀ-ỹ]', line):
                         is_major_section = True
                     else:
@@ -431,13 +434,13 @@ def parse_iso_docx(file_path: str) -> dict:
         result["diagram_data"] = json.dumps({"nodes": nodes, "links": links})
 
     # Xoá nội dung bên trong của các mục chính, chỉ giữ lại khung sườn (mục chính)
-    if "sections" in result:
-        for key in list(result["sections"].keys()):
-            result["sections"][key] = ""
+    # if "sections" in result:
+    #     for key in list(result["sections"].keys()):
+    #         result["sections"][key] = ""
 
     # Xoá hướng dẫn chi tiết của các bước lưu đồ
-    if "steps" in result:
-        for step in result["steps"]:
-            step["instructions"] = ""
+    # if "steps" in result:
+    #     for step in result["steps"]:
+    #         step["instructions"] = ""
 
     return result

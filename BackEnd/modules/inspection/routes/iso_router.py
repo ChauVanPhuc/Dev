@@ -12,7 +12,7 @@ from modules.inspection.services.iso_parser import parse_iso_docx
 router = APIRouter()
 
 # Đảm bảo thư mục lưu trữ file upload tồn tại
-UPLOAD_DIR = os.path.join("uploads", "iso_documents")
+UPLOAD_DIR = os.path.join("static", "uploads", "iso_documents")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @router.post("/upload")
@@ -23,8 +23,12 @@ async def upload_iso_document(
     """
     [POST] Tải lên file .docx tài liệu ISO và phân tích trích xuất dữ liệu thô.
     """
-    if not file.filename.endswith(".docx"):
-        raise HTTPException(status_code=400, detail="Chỉ hỗ trợ định dạng file Word (.docx)")
+    filename_lower = file.filename.lower()
+    if not (filename_lower.endswith(".docx") or filename_lower.endswith(".doc")):
+        raise HTTPException(status_code=400, detail="Chỉ hỗ trợ định dạng file Word (.doc, .docx)")
+        
+    if filename_lower.endswith(".doc"):
+        raise HTTPException(status_code=400, detail="Hệ thống chỉ hỗ trợ phân tích tự động định dạng Word (.docx). Vui lòng chuyển đổi tệp (.doc) sang (.docx) trước khi tải lên.")
 
     # Lưu file tạm thời
     file_ext = os.path.splitext(file.filename)[1]
@@ -97,6 +101,8 @@ def save_iso_document(
             folder=payload.get("folder", ""),
             doc_type=payload.get("doc_type", ""),
             document_level=payload.get("document_level", ""),
+            symbol=payload.get("symbol", ""),
+            notes=payload.get("notes", ""),
             diagram_data=payload.get("diagram_data", ""),
             created_at=now_str,
             updated_at=now_str
@@ -120,6 +126,8 @@ def save_iso_document(
         doc.folder = payload.get("folder", doc.folder)
         doc.doc_type = payload.get("doc_type", doc.doc_type)
         doc.document_level = payload.get("document_level", doc.document_level)
+        doc.symbol = payload.get("symbol", doc.symbol)
+        doc.notes = payload.get("notes", doc.notes)
         doc.diagram_data = payload.get("diagram_data", doc.diagram_data)
         doc.updated_at = now_str
 
@@ -136,7 +144,8 @@ def save_iso_document(
             seq_no=idx + 1,
             rev_date=log.get("rev_date", ""),
             content=log.get("content", ""),
-            page_no=log.get("page_no", "")
+            page_no=log.get("page_no", ""),
+            modifier=log.get("modifier", "")
         )
         db.add(db_log)
 
@@ -205,6 +214,8 @@ def get_iso_documents(db: Session = Depends(get_db)):
             "folder": d.folder,
             "doc_type": d.doc_type,
             "document_level": d.document_level,
+            "symbol": d.symbol,
+            "notes": d.notes,
             "created_at": d.created_at,
             "updated_at": d.updated_at
         })
@@ -226,7 +237,8 @@ def get_iso_document_details(id: int, db: Session = Depends(get_db)):
             "seq_no": l.seq_no,
             "rev_date": l.rev_date,
             "content": l.content,
-            "page_no": l.page_no
+            "page_no": l.page_no,
+            "modifier": l.modifier
         }
         for l in sorted(doc.revision_logs, key=lambda x: x.seq_no)
     ]
@@ -277,6 +289,8 @@ def get_iso_document_details(id: int, db: Session = Depends(get_db)):
         "folder": doc.folder,
         "doc_type": doc.doc_type,
         "document_level": doc.document_level,
+        "symbol": doc.symbol,
+        "notes": doc.notes,
         "diagram_data": doc.diagram_data,
         "revision_logs": revision_logs,
         "sections": sections,
@@ -293,20 +307,38 @@ def delete_iso_document(id: int, db: Session = Depends(get_db)):
     if not doc:
         raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu quy trình")
 
+    # Tìm đường dẫn file vật lý thực tế trên đĩa (hỗ trợ cả chạy từ / hoặc /BackEnd)
+    resolved_path = doc.file_path
+    if resolved_path:
+        if not os.path.exists(resolved_path):
+            alt_path = os.path.join("BackEnd", resolved_path)
+            if os.path.exists(alt_path):
+                resolved_path = alt_path
+            else:
+                alt_path2 = os.path.join("..", resolved_path)
+                if os.path.exists(alt_path2):
+                    resolved_path = alt_path2
+
     # Xóa file vật lý nếu có
-    if doc.file_path and os.path.exists(doc.file_path):
+    if resolved_path and os.path.exists(resolved_path):
         try:
-            os.remove(doc.file_path)
+            os.remove(resolved_path)
         except:
             pass
 
     try:
+        # Xóa toàn bộ các Quy trình thực tế (ISOProcess) kế thừa từ mẫu này
+        processes = db.query(ISOProcess).filter(ISOProcess.iso_document_id == id).all()
+        for proc in processes:
+            db.delete(proc)
+
+        # Xóa tài liệu quy trình mẫu (ISODocument)
         db.delete(doc)
         db.commit()
-        return {"message": "Đã xóa quy trình thành công!"}
+        return {"message": "Đã xóa tài liệu quy trình mẫu và toàn bộ dữ liệu liên quan thành công!"}
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Lỗi khi xóa: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Lỗi khi xóa tài liệu quy trình: {str(e)}")
 
 
 # -----------------------------------------------------------------------------
@@ -338,6 +370,8 @@ def get_iso_processes(db: Session = Depends(get_db)):
             "display_at": p.display_at,
             "notes": p.notes,
             "document_level": p.document_level or (p.iso_document.document_level if p.iso_document else ""),
+            "symbol": p.symbol,
+            "role": p.role,
             "created_at": p.created_at,
             "updated_at": p.updated_at
         })
@@ -387,6 +421,8 @@ def save_iso_process(
             status=payload.get("status", "Dự thảo"),
             display_at=payload.get("display_at", ""),
             notes=payload.get("notes", ""),
+            symbol=payload.get("symbol") or iso_doc.symbol or "",
+            role=payload.get("role", ""),
             document_level=payload.get("document_level") or iso_doc.document_level or "",
             diagram_data=payload.get("diagram_data", iso_doc.diagram_data or ""), # Clone diagram mẫu từ ISO nếu ko truyền
             created_at=now_str,
@@ -447,6 +483,8 @@ def save_iso_process(
         proc.display_at = payload.get("display_at", proc.display_at)
         proc.notes = payload.get("notes", proc.notes)
         proc.document_level = payload.get("document_level", proc.document_level)
+        proc.symbol = payload.get("symbol", proc.symbol)
+        proc.role = payload.get("role", proc.role)
         proc.diagram_data = payload.get("diagram_data", proc.diagram_data)
         proc.updated_at = now_str
 
@@ -509,6 +547,20 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
     if not proc:
         raise HTTPException(status_code=404, detail="Không tìm thấy quy trình thực tế")
 
+    # Nhật ký sửa đổi lấy từ tài liệu ISO gốc
+    revision_logs = []
+    if proc.iso_document:
+        revision_logs = [
+            {
+                "seq_no": l.seq_no,
+                "rev_date": l.rev_date,
+                "content": l.content,
+                "page_no": l.page_no,
+                "modifier": l.modifier
+            }
+            for l in sorted(proc.iso_document.revision_logs, key=lambda x: x.seq_no)
+        ]
+
     # Các phần văn bản
     sections = {}
     for s in proc.sections:
@@ -523,8 +575,6 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
     steps = []
     steps_db = sorted(proc.steps, key=lambda x: x.step_number)
     
-    # Do not fallback to template steps. Process flowchart starts empty by default.
-        
     for st in steps_db:
         checklist = []
         if st.checklist_json:
@@ -539,7 +589,7 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
                 transition = json.loads(st.transition_json)
             except:
                 pass
-
+ 
         steps.append({
             "id": st.id,
             "step_number": st.step_number,
@@ -568,7 +618,10 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
         "display_at": proc.display_at,
         "notes": proc.notes,
         "document_level": proc.document_level or (proc.iso_document.document_level if proc.iso_document else ""),
+        "symbol": proc.symbol,
+        "role": proc.role,
         "diagram_data": proc.diagram_data or (proc.iso_document.diagram_data if proc.iso_document else ""),
+        "revision_logs": revision_logs,
         "sections": sections,
         "steps": steps
     }
@@ -590,4 +643,153 @@ def delete_iso_process(id: int, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Lỗi khi xóa quy trình thực tế: {str(e)}")
+
+
+@router.get("/{id}/download-docx")
+def download_compiled_iso_document(id: int, db: Session = Depends(get_db)):
+    """
+    [GET] Tải file Word (.docx) mẫu ISO, tự động điền các thông tin metadata và nhật ký sửa đổi từ DB.
+    """
+    import docx
+    import re
+    from fastapi.responses import StreamingResponse
+    from io import BytesIO
+
+    doc_obj = db.query(ISODocument).filter(ISODocument.id == id).first()
+    if not doc_obj:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu quy trình")
+
+    # Tìm đường dẫn file thực tế trên đĩa (hỗ trợ cả chạy từ / hoặc /BackEnd)
+    resolved_path = doc_obj.file_path
+    if resolved_path:
+        if not os.path.exists(resolved_path):
+            alt_path = os.path.join("BackEnd", resolved_path)
+            if os.path.exists(alt_path):
+                resolved_path = alt_path
+            else:
+                alt_path2 = os.path.join("..", resolved_path)
+                if os.path.exists(alt_path2):
+                    resolved_path = alt_path2
+
+    if not resolved_path or not os.path.exists(resolved_path):
+        raise HTTPException(status_code=404, detail="Không tìm thấy file đính kèm gốc trên hệ thống")
+
+    try:
+        docx_file = docx.Document(resolved_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi khi đọc file Word: {str(e)}")
+
+    def replace_text(text_val):
+        if not text_val:
+            return text_val
+        mapping = {
+            "[mã hiệu]": getattr(doc_obj, 'symbol', '') or "",
+            "[lần ban hành]": getattr(doc_obj, 'version', '') or "01",
+            "[lân ban hành]": getattr(doc_obj, 'version', '') or "01",
+            "[ngày ban hành]": getattr(doc_obj, 'issue_date', '') or "",
+            "[phòng ban/ bộ phận]": getattr(doc_obj, 'folder', '') or "",
+            "[Họ tên người biên soạn]": getattr(doc_obj, 'issuer', '') or "",
+            "[CV NBS]": "TP. QLCL",
+            "[Họ tên người phê duyệt]": getattr(doc_obj, 'approver', '') or "",
+            "[CV NPD]": "PHÓ TGĐ",
+            "[Tên quy trình]": getattr(doc_obj, 'name', '') or "",
+            "[Tên tài liệu]": getattr(doc_obj, 'name', '') or "",
+        }
+        res_txt = text_val
+        for k, v in mapping.items():
+            res_txt = res_txt.replace(k, v)
+        return res_txt
+
+    def process_paragraph(p):
+        old_text = p.text
+        new_text = replace_text(old_text)
+        
+        # Cập nhật thông tin footer nếu có
+        if "Mã hiệu:" in new_text and doc_obj.symbol:
+            new_text = re.sub(r"Mã hiệu:\s*[^\s]+", lambda m: f"Mã hiệu: {doc_obj.symbol}", new_text)
+        if "Ngày ban hành:" in new_text and doc_obj.issue_date:
+            new_text = re.sub(r"Ngày ban hành:\s*[\d/]+", lambda m: f"Ngày ban hành: {doc_obj.issue_date}", new_text)
+        if "Lần ban hành:" in new_text and doc_obj.version:
+            new_text = re.sub(r"Lần ban hành:\s*\d+", lambda m: f"Lần ban hành: {doc_obj.version}", new_text)
+            
+        if old_text != new_text:
+            if len(p.runs) == 1:
+                p.runs[0].text = new_text
+            elif len(p.runs) > 1:
+                p.runs[0].text = new_text
+                for r in p.runs[1:]:
+                    r.text = ""
+            else:
+                p.text = new_text
+
+    def process_table(table):
+        for row in table.rows:
+            for cell in row.cells:
+                for p in cell.paragraphs:
+                    process_paragraph(p)
+                for nt in cell.tables:
+                    process_table(nt)
+
+    # 1. Quét paragraph ngoài
+    for p in docx_file.paragraphs:
+        process_paragraph(p)
+        
+    # 2. Quét tables
+    for table in docx_file.tables:
+        process_table(table)
+        
+    # 3. Quét header / footer
+    for sec in docx_file.sections:
+        for h_type in ['header', 'footer']:
+            header_footer = getattr(sec, h_type, None)
+            if header_footer:
+                for p in header_footer.paragraphs:
+                    process_paragraph(p)
+                for t in header_footer.tables:
+                    process_table(t)
+
+    # 4. Điền bảng nhật ký sửa đổi (Revision logs)
+    for table in docx_file.tables:
+        if len(table.rows) < 2:
+            continue
+        headers = [cell.text.strip().lower() for cell in table.rows[0].cells]
+        is_rev_table = any("sửa đổi" in h or "ngày sửa" in h or "nội dung" in h or "trang số" in h for h in headers)
+        if is_rev_table:
+            logs = sorted(doc_obj.revision_logs, key=lambda x: x.seq_no)
+            for idx, log in enumerate(logs):
+                row_idx = idx + 1
+                if row_idx < len(table.rows):
+                    row = table.rows[row_idx]
+                else:
+                    row = table.add_row()
+                
+                if len(row.cells) >= 4:
+                    row.cells[0].text = str(log.seq_no)
+                    row.cells[1].text = log.rev_date or ""
+                    row.cells[2].text = log.content or ""
+                    row.cells[3].text = log.page_no or ""
+            
+            # Xóa các dòng mẫu còn thừa
+            for empty_idx in range(len(logs) + 1, len(table.rows)):
+                row = table.rows[empty_idx]
+                for cell in row.cells:
+                    cell.text = ""
+
+    # Lưu file ra buffer
+    try:
+        out_buf = BytesIO()
+        docx_file.save(out_buf)
+        out_buf.seek(0)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi khi xuất file Word: {str(e)}")
+
+    safe_filename = re.sub(r'[^\w\-_.]', '_', doc_obj.name)
+    headers = {
+        'Content-Disposition': f'attachment; filename="{safe_filename}.docx"'
+    }
+    return StreamingResponse(
+        out_buf,
+        media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        headers=headers
+    )
 

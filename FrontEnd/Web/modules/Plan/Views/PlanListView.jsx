@@ -18,6 +18,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { planService } from '@modules/Plan/Models/plan.service';
 import { getBaseURL } from '@webShared/Services/api.service';
 
@@ -28,6 +29,7 @@ const ManufacturePlan = () => {
     const [plans, setPlans] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filterStatus, setFilterStatus] = useState('all');
+    const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
     const [showFilterDropdown, setShowFilterDropdown] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -294,159 +296,75 @@ const ManufacturePlan = () => {
 
 
             {/* Toolbar */}
-            <div className="mgmt-toolbar card" style={{ marginBottom: 0 }}>
-                <div className="toolbar-left" style={{ flex: 1 }}>
-                    <div className="search-wrapper">
-                        <Search className="search-icon" size={18} />
-                        <input 
-                            type="text" 
-                            placeholder="Tìm kiếm lệnh, đơn, sản phẩm..." 
-                            value={searchTerm}
-                            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                        />
-                    </div>
+            {/* Toolbar */}
+            <PageToolbar
+              searchValue={searchTerm}
+              onSearchChange={(val) => { setSearchTerm(val); setCurrentPage(1); }}
+              searchPlaceholder="Tìm kiếm lệnh, đơn, sản phẩm..."
+              showSort={true}
+              sortOptions={[
+                { value: 'desc', label: 'Thời gian: Mới nhất' },
+                { value: 'asc', label: 'Thời gian: Cũ nhất' }
+              ]}
+              sortValue={sortDirection}
+              onSortChange={setSortDirection}
+              showFilter={true}
+              isFilterOpen={isFilterBarOpen}
+              onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
+              activeFiltersCount={filterStatus !== 'all' ? 1 : 0}
+              importActions={[
+                {
+                  label: 'Nhập Excel',
+                  icon: <FileUp size={14} />,
+                  onClick: () => fileInputRef.current?.click()
+                }
+              ]}
+              onExport={handleExportExcel}
+              onCreate={() => navigate('/admin/plan/create')}
+              createLabel="Thêm Kế hoạch"
+              hasWritePermission={true}
+            >
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                style={{ display: 'none' }} 
+                accept=".xlsx, .xls"
+                onChange={handleImportExcel}
+              />
+            </PageToolbar>
 
-                    <select 
-                        value={filterStatus} 
-                        onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}
-                        className="select-minimal"
-                        style={{
-                          height: '36px',
-                          borderRadius: '8px',
-                          border: '1px solid #EADCC9',
-                          backgroundColor: '#FAF6F0',
-                          color: '#7B5233',
-                          padding: '0 8px',
-                          fontWeight: '700',
-                          fontSize: '0.8rem',
-                          cursor: 'pointer'
-                        }}
-                    >
-                        <option value="all">Tất cả trạng thái</option>
-                        <option value="production">Đang sản xuất</option>
-                        <option value="completed">Đã hoàn thành</option>
-                        <option value="overdue">Quá hạn</option>
-                    </select>
-
-                    <select 
-                        value={itemsPerPage} 
-                        onChange={(e) => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
-                        className="select-minimal"
-                        style={{
-                          height: '36px',
-                          borderRadius: '8px',
-                          border: '1px solid #EADCC9',
-                          backgroundColor: '#FAF6F0',
-                          color: '#7B5233',
-                          padding: '0 8px',
-                          fontWeight: '700',
-                          fontSize: '0.8rem',
-                          cursor: 'pointer'
-                        }}
-                    >
-                        <option value={15}>15 dòng</option>
-                        <option value={30}>30 dòng</option>
-                        <option value={50}>50 dòng</option>
-                        <option value={100}>100 dòng</option>
-                    </select>
-                    
-                    <button 
-                        className="btn-border-action"
-                        title="Đổi chiều sắp xếp"
-                        style={{ 
-                            height: '36px',
-                            width: '36px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            border: '1px solid #EADCC9',
-                            backgroundColor: '#FAF6F0',
-                            color: '#7B5233',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            padding: 0
-                        }}
-                        onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
-                    >
-                        <ArrowUpDown size={16} />
-                    </button>
+            {/* INLINE EXPANDABLE FILTER BAR */}
+            {isFilterBarOpen && (
+              <div className="filter-inline-bar">
+                {/* Trạng thái */}
+                <div className="filter-field-group">
+                  <label className="filter-field-label">Trạng thái</label>
+                  <select 
+                    value={filterStatus} 
+                    onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}
+                  >
+                    <option value="all">Tất cả trạng thái</option>
+                    <option value="production">Đang sản xuất</option>
+                    <option value="completed">Đã hoàn thành</option>
+                    <option value="overdue">Quá hạn</option>
+                  </select>
                 </div>
 
-                <div className="toolbar-right">
-                    <button 
-                        onClick={() => navigate('/admin/plan/create')}
-                        className="btn btn-primary"
-                        style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '8px',
-                            height: '36px',
-                            padding: '0 20px',
-                            borderRadius: '8px',
-                            fontWeight: 'bold',
-                            cursor: 'pointer',
-                            backgroundColor: '#7B5233',
-                            color: '#fff'
-                        }}
-                    >
-                        <Plus size={16} />
-                        <span className="btn-text-desktop">Thêm Kế hoạch</span>
-                        <span className="btn-text-mobile">Thêm</span>
-                    </button>
-                    <div className="desktop-only" style={{ width: '1px', height: '24px', backgroundColor: '#EADCC9' }}></div>
-                    <input 
-                        type="file" 
-                        ref={fileInputRef} 
-                        style={{ display: 'none' }} 
-                        accept=".xlsx, .xls"
-                        onChange={handleImportExcel}
-                    />
-                    <button 
-                        className="btn btn-outline" 
-                        style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '6px',
-                            height: '36px',
-                            padding: '0 12px',
-                            borderRadius: '8px',
-                            border: '1px solid #EADCC9',
-                            backgroundColor: '#fff',
-                            color: '#7B5233',
-                            fontWeight: '700',
-                            fontSize: '0.8rem',
-                            cursor: 'pointer'
-                        }}
-                        onClick={() => fileInputRef.current?.click()}
-                    >
-                        <FileUp size={14} /> 
-                        <span className="btn-text-desktop">Nhập Excel</span>
-                        <span className="btn-text-mobile">Nhập</span>
-                    </button>
-                    <button 
-                        onClick={handleExportExcel}
-                        className="btn btn-outline" 
-                        style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '6px',
-                            height: '36px',
-                            padding: '0 12px',
-                            borderRadius: '8px',
-                            border: '1px solid #EADCC9',
-                            backgroundColor: '#fff',
-                            color: '#7B5233',
-                            fontWeight: '700',
-                            fontSize: '0.8rem',
-                            cursor: 'pointer'
-                        }}
-                    >
-                        <FileDown size={14} />
-                        <span className="btn-text-desktop">Xuất Excel</span>
-                        <span className="btn-text-mobile">Xuất</span>
-                    </button>
+                {/* Hiển thị số dòng */}
+                <div className="filter-field-group">
+                  <label className="filter-field-label">Hiển thị số dòng</label>
+                  <select 
+                    value={itemsPerPage} 
+                    onChange={(e) => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
+                  >
+                    <option value={15}>15 dòng</option>
+                    <option value={30}>30 dòng</option>
+                    <option value={50}>50 dòng</option>
+                    <option value={100}>100 dòng</option>
+                  </select>
                 </div>
-            </div>
+              </div>
+            )}
             </div> {/* end sticky-top-zone */}
 
             {/* Data View: Desktop Table */}

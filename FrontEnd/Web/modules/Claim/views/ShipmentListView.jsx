@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Search, Filter, Plus } from 'lucide-react';
 import { claimService } from '../services/claim.service';
+import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import * as XLSX from 'xlsx';
 import '../styles/claim.css';
 import '@styles/components.css';
@@ -411,200 +412,39 @@ const ShipmentListView = () => {
   return (
     <div className="claim-container">
       {/* FILTER & ACTIONS BAR */}
-      <div className="mgmt-toolbar card" style={{ marginBottom: '20px' }}>
-        <div className="toolbar-left" style={{ flex: 1 }}>
-          <div className="search-wrapper">
-            <Search size={18} className="search-icon" />
-            <input 
-              type="text" 
-              placeholder="Tìm Cont, Seal, Cảng..." 
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          
-          <button
-            type="button"
-            className={`icon-btn-minimal ${isFilterBarOpen ? 'active' : ''}`}
-            onClick={() => setIsFilterBarOpen(!isFilterBarOpen)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              height: '36px',
-              border: '1px solid #EADCC9',
-              backgroundColor: isFilterBarOpen ? '#7B5233' : '#FAF6F0',
-              color: isFilterBarOpen ? '#FFFFFF' : '#7B5233',
-              fontWeight: 'bold',
-              borderRadius: '8px',
-              padding: '0 16px',
-              cursor: 'pointer',
-              fontSize: '0.8rem'
-            }}
-          >
-            <Filter size={14} />
-            Bộ lọc
-            {Object.keys(appliedFilters).length > 0 && (
-              <span style={{
-                backgroundColor: isFilterBarOpen ? '#FFFFFF' : '#7B5233',
-                color: isFilterBarOpen ? '#7B5233' : '#FFFFFF',
-                borderRadius: '50%',
-                width: '18px',
-                height: '18px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.7rem',
-                fontWeight: 'bold',
-                marginLeft: '4px'
-              }}>
-                {Object.keys(appliedFilters).length}
-              </span>
-            )}
-          </button>
-
-          {/* SORT DROPDOWN */}
-          <div style={{ position: 'relative', display: 'inline-block' }}>
-            <select
-              value={sortOption}
-              onChange={(e) => setSortOption(e.target.value)}
-              className="select-minimal"
-              style={{
-                height: '36px',
-                borderColor: '#EADCC9',
-                color: '#7B5233',
-                fontWeight: 'bold',
-                borderRadius: '8px',
-                padding: '0 12px 0 28px',
-                cursor: 'pointer',
-                backgroundColor: '#FAF6F0',
-                outline: 'none',
-                fontSize: '0.8rem'
-              }}
-            >
-              <option value="">Sắp xếp</option>
-              <option value="code-asc">Mã lô: A-Z</option>
-              <option value="code-desc">Mã lô: Z-A</option>
-              <option value="value-asc">Trị giá: Thấp-Cao</option>
-              <option value="value-desc">Trị giá: Cao-Thấp</option>
-              <option value="etd-asc">ETD: Sớm nhất</option>
-              <option value="etd-desc">ETD: Trễ nhất</option>
-            </select>
-            <svg 
-              style={{ position: 'absolute', left: '8px', top: '11px', pointerEvents: 'none', color: '#7B5233' }} 
-              width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-            >
-              <path d="M15 18H3M21 14H3M17 10H3M21 6H3"></path>
-            </svg>
-          </div>
-
-          {/* PAGE SIZE SELECT */}
-          <select 
-            value={rowsPerPage} 
-            onChange={(e) => { setRowsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
-            className="page-size-select select-minimal"
-            style={{ 
-              height: '36px',
-              padding: '0 28px 0 10px',
-              borderRadius: '8px',
-              border: '1px solid #EADCC9',
-              backgroundColor: '#FAF6F0',
-              color: '#7B5233',
-              fontWeight: 'bold',
-              fontSize: '0.8rem',
-              cursor: 'pointer',
-              outline: 'none',
-              appearance: 'none',
-              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%237B5233'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-              backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'right 8px center',
-              backgroundSize: '12px',
-              marginLeft: '8px'
-            }}
-          >
-            <option value={15}>15 dòng</option>
-            <option value={30}>30 dòng</option>
-            <option value={50}>50 dòng</option>
-            <option value={100}>100 dòng</option>
-          </select>
-        </div>
-
-        <div className="toolbar-right">
-          {hasWritePermission && (
-            <button 
-              className="btn btn-primary" 
-              onClick={handleOpenAddModal}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                height: '36px',
-                padding: '0 20px',
-                borderRadius: '8px',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                backgroundColor: '#7B5233',
-                color: '#fff'
-              }}
-            >
-              <Plus size={16} />
-              Thêm mới
-            </button>
-          )}
-
-          <button 
-            className="btn btn-outline" 
-            onClick={handleExportExcel}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              height: '36px',
-              padding: '0 16px',
-              borderRadius: '8px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              border: '1px solid #EADCC9',
-              backgroundColor: '#fff',
-              color: '#7B5233'
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="17 8 12 3 7 8"></polyline>
-              <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
-            Export
-          </button>
-
-          {hasWritePermission && (
-            <button
-              className="btn btn-outline"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                height: '36px',
-                borderColor: selectedShipmentIds.length === 0 ? '#CBD5E1' : '#A0301B',
-                color: selectedShipmentIds.length === 0 ? '#94A3B8' : '#A0301B',
-                cursor: selectedShipmentIds.length === 0 ? 'not-allowed' : 'pointer',
-                fontWeight: 'bold',
-                borderRadius: '8px',
-                padding: '0 16px',
-                backgroundColor: '#fff'
-              }}
-              disabled={selectedShipmentIds.length === 0}
-              onClick={handleDeleteSelected}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-              </svg>
-              Xóa đã chọn
-            </button>
-          )}
-        </div>
-      </div>
+      <PageToolbar
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Tìm Cont, Seal, Cảng..."
+        showSort={true}
+        sortOptions={[
+          { value: '', label: 'Sắp xếp' },
+          { value: 'code-asc', label: 'Mã lô: A-Z' },
+          { value: 'code-desc', label: 'Mã lô: Z-A' },
+          { value: 'value-asc', label: 'Trị giá: Thấp-Cao' },
+          { value: 'value-desc', label: 'Trị giá: Cao-Thấp' },
+          { value: 'etd-asc', label: 'ETD: Sớm nhất' },
+          { value: 'etd-desc', label: 'ETD: Trễ nhất' }
+        ]}
+        sortValue={sortOption}
+        onSortChange={setSortOption}
+        showFilter={true}
+        isFilterOpen={isFilterBarOpen}
+        onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
+        activeFiltersCount={Object.keys(appliedFilters).length}
+        extraActions={hasWritePermission && selectedShipmentIds.length > 0 ? [
+          {
+            label: 'Xóa đã chọn',
+            icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>,
+            onClick: handleDeleteSelected,
+            color: '#DC2626'
+          }
+        ] : []}
+        onExport={handleExportExcel}
+        onCreate={hasWritePermission ? handleOpenAddModal : undefined}
+        createLabel="Thêm mới"
+        hasWritePermission={hasWritePermission}
+      />
 
       {/* INLINE EXPANDABLE FILTER BAR */}
       {isFilterBarOpen && (

@@ -3,6 +3,7 @@ import api from '@webShared/Services/api.service';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { Search, Filter, Layers, FileUp, FileDown, Plus } from 'lucide-react';
 import '@styles/components.css';
+import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 
 const EquipmentHistoryView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
@@ -16,6 +17,7 @@ const EquipmentHistoryView = () => {
   // Pagination state
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
+  const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
 
   const fetchInspections = async () => {
     setLoading(true);
@@ -68,67 +70,51 @@ const EquipmentHistoryView = () => {
       `}} />
 
       {/* Toolbar - chuẩn hóa */}
-      <div className="mgmt-toolbar card filter-pagination-toolbar" style={{ padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
-        <div className="toolbar-left" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', flex: 1 }}>
-          {/* Ô tìm kiếm */}
-          <div className="search-wrapper" style={{ position: 'relative', width: '280px', display: 'flex', alignItems: 'center' }}>
-            <Search size={18} className="search-icon" style={{ position: 'absolute', left: '12px', color: '#7B5233', pointerEvents: 'none' }} />
-            <input
-              type="text"
-              placeholder="Tìm kiếm mã TB, tên, người thực hiện..."
-              value={searchTerm}
-              onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
-              style={{
-                width: '100%', padding: '8px 12px 8px 38px', borderRadius: '8px',
-                border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#2D1A12',
-                fontSize: '0.85rem', fontWeight: '600', outline: 'none', height: '36px', transition: 'all 0.2s'
-              }}
-              onFocus={(e) => { e.target.style.backgroundColor = '#fff'; e.target.style.borderColor = '#7B5233'; e.target.style.boxShadow = '0 0 0 3px rgba(123, 82, 51, 0.1)'; }}
-              onBlur={(e) => { e.target.style.backgroundColor = '#FAF6F0'; e.target.style.borderColor = '#EADCC9'; e.target.style.boxShadow = 'none'; }}
-            />
-          </div>
+      <PageToolbar
+        searchValue={searchTerm}
+        onSearchChange={(val) => { setSearchTerm(val); setPage(1); }}
+        searchPlaceholder="Tìm kiếm mã TB, tên, người thực hiện..."
+        showFilter={true}
+        isFilterOpen={isFilterBarOpen}
+        onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
+        extraActions={[
+          {
+            label: 'Quản lý thiết bị',
+            icon: <Layers size={14} />,
+            onClick: () => navigate('/admin/equipment')
+          },
+          {
+            label: 'Danh sách thiết bị',
+            icon: <Layers size={14} />,
+            onClick: () => navigate('/admin/equipment/categories')
+          },
+          {
+            label: 'Thông tin đào tạo',
+            icon: <Layers size={14} />,
+            onClick: () => navigate('/admin/equipment/training')
+          }
+        ]}
+        hasWritePermission={true}
+      />
 
-          {/* Số dòng/trang */}
-          <select
-            value={pageSize}
-            onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-            style={{
-              height: '36px', padding: '0 28px 0 10px', borderRadius: '8px',
-              border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#7B5233',
-              fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer', outline: 'none',
-              appearance: 'none',
-              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%237B5233'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-              backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center', backgroundSize: '12px'
-            }}
-          >
-            <option value={15}>15 dòng</option>
-            <option value={30}>30 dòng</option>
-            <option value={50}>50 dòng</option>
-            <option value={100}>100 dòng</option>
-          </select>
-        </div>
-
-        <div className="toolbar-right" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ position: 'relative' }}>
-            <button 
-              onClick={() => setShowOtherMenu(!showOtherMenu)}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', backgroundColor: '#7B5233', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '700', fontSize: '13px' }}
+      {/* INLINE EXPANDABLE FILTER BAR */}
+      {isFilterBarOpen && (
+        <div className="filter-inline-bar">
+          {/* Hiển thị số dòng */}
+          <div className="filter-field-group">
+            <label className="filter-field-label">Hiển thị số dòng</label>
+            <select
+              value={pageSize}
+              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
             >
-              <Layers size={14} /> Khác
-            </button>
-            {showOtherMenu && (
-              <div style={{ position: 'absolute', top: '100%', right: '0', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', zIndex: 100, minWidth: '220px', padding: '8px 0', marginTop: '5px' }}>
-                <div onClick={() => { navigate('/admin/equipment'); setShowOtherMenu(false); }} style={{ padding: '10px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: '#334155' }} className="dropdown-hover">Quản lý thiết bị</div>
-                <div onClick={() => { navigate('/admin/equipment/categories'); setShowOtherMenu(false); }} style={{ padding: '10px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: '#334155' }} className="dropdown-hover">Danh sách thiết bị</div>
-                <div onClick={() => { navigate('/admin/equipment/training'); setShowOtherMenu(false); }} style={{ padding: '10px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: '#334155' }} className="dropdown-hover">Thông tin đào tạo</div>
-              </div>
-            )}
+              <option value={15}>15 dòng</option>
+              <option value={30}>30 dòng</option>
+              <option value={50}>50 dòng</option>
+              <option value={100}>100 dòng</option>
+            </select>
           </div>
-          <button style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', backgroundColor: '#7B5233', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '700', fontSize: '13px' }}>
-            <FileDown size={14} /> Xuất dữ liệu
-          </button>
         </div>
-      </div>
+      )}
 
       {/* Bảng dữ liệu - chuẩn hóa */}
       <div className="admin-list-layout" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

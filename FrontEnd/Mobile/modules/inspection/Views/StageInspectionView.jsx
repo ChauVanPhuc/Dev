@@ -248,17 +248,18 @@ const StageInspection = () => {
       // Aggregate all elements/items
       const aggregated = {};
       const addPart = (code, name, qty, opts = {}) => {
-        const key = (name || code || '').trim();
-        if (!key) return;
+        const displayName = (name || code || '').trim();
+        const actualCode = (code || name || '').trim();
+        if (!displayName) return;
 
         // Loại bỏ mã sản phẩm cha (như 2-30-BRO, 2-42-BRO) trừ khi là hàng mua
         if (!opts.isFromPO) {
-          const isProductSku = /^[A-Z0-9\-_]+$/.test(key) && key.includes('-');
+          const isProductSku = /^[A-Z0-9\-_]+$/.test(displayName) && displayName.includes('-');
           if (isProductSku) return;
         }
 
         // Bỏ các loại ván ghép, ván ép, ván MDF, ván HMR (nguyên vật liệu thô)
-        const nameLower = key.toLowerCase();
+        const nameLower = displayName.toLowerCase();
         if (opts.is_raw_material || 
             opts.exclude_production || 
             nameLower.startsWith('ván') || 
@@ -268,14 +269,19 @@ const StageInspection = () => {
           return;
         }
 
+        const key = displayName;
         if (!aggregated[key]) {
           aggregated[key] = {
-            item_code: key,
-            item_name: key,
+            item_code: actualCode,
+            item_name: displayName,
             quantity: qty || 0
           };
         } else {
           aggregated[key].quantity = Math.max(aggregated[key].quantity, qty || 0);
+          // Cập nhật item_code nếu entry cũ chưa có code thực (code === name)
+          if (aggregated[key].item_code === aggregated[key].item_name && actualCode !== displayName) {
+            aggregated[key].item_code = actualCode;
+          }
         }
       };
 
@@ -822,19 +828,6 @@ const StageInspection = () => {
   const handleToggleSampleValue = (idx, field, val) => {
     const next = [...samples];
     next[idx] = { ...next[idx], [field]: val };
-
-    // Tự động sinh thêm mẫu tiếp theo nếu vừa toggle mẫu cuối cùng
-    if (idx === next.length - 1) {
-      next.push({
-        stt: next.length + 1,
-        dimensions: { values: [], photo: null },
-        moisture: { values: [], photo: null },
-        function: 'pass',
-        visual: 'pass'
-      });
-      setSampleQty(next.length);
-    }
-
     setSamples(next);
     autoSuggestConclusion(next, activeDefects);
   };
@@ -1055,7 +1048,7 @@ const StageInspection = () => {
             </div>
 
             {/* Khối 2: Bảng mẫu kiểm tra */}
-            <div style={{ backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #e8e1d5', overflow: 'hidden' }}>
+            <div style={{ backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #e8e1d5', overflow: 'visible' }}>
               <div
                 onClick={() => setIsTableExpanded(!isTableExpanded)}
                 style={{
@@ -1066,22 +1059,26 @@ const StageInspection = () => {
                   backgroundColor: '#f8f5f0',
                   borderBottom: isTableExpanded ? '1px solid #e8e1d5' : 'none',
                   cursor: 'pointer',
-                  userSelect: 'none'
+                  userSelect: 'none',
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 10,
+                  borderRadius: isTableExpanded ? '16px 16px 0 0' : '16px'
                 }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: '800', color: '#4b301e' }}>Bảng mẫu kiểm tra ({samples.length} mẫu)</span>
-                  {samples.length > 5 && isTableExpanded && (
-                    <span style={{ fontSize: '10px', color: '#8d6e63', backgroundColor: '#efebe9', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>Cuộn để xem</span>
-                  )}
-                </div>
-                {isTableExpanded ? <ChevronUp size={16} color="#7c6d5e" /> : <ChevronDown size={16} color="#7c6d5e" />}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '13px', fontWeight: '800', color: '#4b301e' }}>Bảng mẫu kiểm tra ({samples.length} mẫu)</span>
+                {samples.length > 5 && isTableExpanded && (
+                  <span style={{ fontSize: '10px', color: '#8d6e63', backgroundColor: '#efebe9', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>Cuộn để xem</span>
+                )}
               </div>
+              {isTableExpanded ? <ChevronUp size={16} color="#7c6d5e" /> : <ChevronDown size={16} color="#7c6d5e" />}
+            </div>
 
               {isTableExpanded && (
-                <div style={{ maxHeight: '280px', overflowY: 'auto', overflowX: 'auto' }}>
+                <div style={{ overflowX: 'auto', borderTop: '1px solid #e8e1d5' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
-                    <thead style={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#f8f5f0', boxShadow: '0 1px 0 #e8e1d5' }}>
+                    <thead style={{ backgroundColor: '#f8f5f0', boxShadow: '0 1px 0 #e8e1d5' }}>
                       <tr style={{ color: '#7c6d5e', fontSize: '12px', fontWeight: 'bold' }}>
                         <th style={{ padding: '12px 6px' }}>STT</th>
                         <th style={{ padding: '12px 6px' }}>Kích thước</th>
@@ -1278,7 +1275,7 @@ const StageInspection = () => {
 
             {/* Khối 3: Phân hệ Ghi nhận lỗi phát hiện */}
             {itemConclusion === 'fail' && (
-              <div style={{ backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #e8e1d5', overflow: 'hidden' }}>
+              <div style={{ backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #e8e1d5', overflow: 'visible' }}>
                 <div
                   onClick={() => setIsDefectsExpanded(!isDefectsExpanded)}
                   style={{
@@ -1289,7 +1286,11 @@ const StageInspection = () => {
                     backgroundColor: '#f8f5f0',
                     borderBottom: isDefectsExpanded ? '1px solid #e8e1d5' : 'none',
                     cursor: 'pointer',
-                    userSelect: 'none'
+                    userSelect: 'none',
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 10,
+                    borderRadius: isDefectsExpanded ? '16px 16px 0 0' : '16px'
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

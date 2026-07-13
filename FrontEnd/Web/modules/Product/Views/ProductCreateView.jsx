@@ -2,11 +2,13 @@ import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '@webShared/Services/api.service';
 import { ArrowLeft, Save, Plus, Trash2, Copy, FileSpreadsheet, AlertCircle } from 'lucide-react';
+import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 
 const ProductCreate = () => {
   const navigate = useNavigate();
   const pasteAreaRef = useRef(null);
   const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [pasteText, setPasteText] = useState('');
 
@@ -169,7 +171,7 @@ const ProductCreate = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!productData.name || !productData.sku) {
-      alert("Vui lòng nhập tên và mã SKU sản phẩm chính");
+      toast('warning', "Vui lòng nhập tên và mã SKU sản phẩm chính");
       return;
     }
 
@@ -184,11 +186,11 @@ const ProductCreate = () => {
       };
 
       await api.post('/master-products/', payload);
-      alert('Tạo sản phẩm mẫu thành công!');
+      toast('success', 'Tạo sản phẩm mẫu thành công!');
       navigate('/admin/products');
     } catch (err) {
       console.error(err);
-      alert('Có lỗi xảy ra khi lưu dữ liệu. Vui lòng kiểm tra lại.');
+      toast('error', 'Có lỗi xảy ra khi lưu dữ liệu. Vui lòng kiểm tra lại.');
     } finally {
       setLoading(false);
     }

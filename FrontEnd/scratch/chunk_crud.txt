@@ -1,0 +1,197 @@
+  // Work Instructions CRUD & Image Helpers
+  const handleAddWorkInstruction = () => {
+    const processCode = formData.code || 'G7.SX.QT01';
+    const prefix = `${processCode}-HD`;
+    let maxAa = 0;
+    if (formData.work_instructions && formData.work_instructions.length > 0) {
+      formData.work_instructions.forEach(inst => {
+        const c = inst.code || '';
+        if (c.toUpperCase().startsWith(prefix.toUpperCase())) {
+          const suffix = c.slice(prefix.length);
+          const num = parseInt(suffix, 10);
+          if (!isNaN(num) && num > maxAa) {
+            maxAa = num;
+          }
+        }
+      });
+    }
+    const aa = String(maxAa + 1).padStart(2, '0');
+    const generatedCode = `${prefix}${aa}`;
+
+    const newInst = {
+      id: `inst_${Date.now()}`,
+      code: generatedCode,
+      title: `hướng dẫn ${maxAa + 1}`,
+      scope: 'Tất cả',
+      note: '',
+      steps: []
+    };
+    
+    setFormData(prev => ({
+      ...prev,
+      work_instructions: [...(prev.work_instructions || []), newInst]
+    }));
+    setSelectedInstructionId(newInst.id);
+    setCurrentScreen('step_instructions');
+  };
+
+  const handleUpdateWorkInstructionTitle = (id, newTitle) => {
+    setFormData(prev => {
+      const nextInstructions = (prev.work_instructions || []).map(inst => {
+        if (inst.id === id) {
+          return { ...inst, title: newTitle };
+        }
+        return inst;
+      });
+      return { ...prev, work_instructions: nextInstructions };
+    });
+  };
+
+  const handleUpdateWorkInstructionScope = (id, newScope) => {
+    setFormData(prev => {
+      const nextInstructions = (prev.work_instructions || []).map(inst => {
+        if (inst.id === id) {
+          return { ...inst, scope: newScope };
+        }
+        return inst;
+      });
+      return { ...prev, work_instructions: nextInstructions };
+    });
+  };
+
+  const handleUpdateWorkInstructionNote = (id, newNote) => {
+    setFormData(prev => {
+      const nextInstructions = (prev.work_instructions || []).map(inst => {
+        if (inst.id === id) {
+          return { ...inst, note: newNote };
+        }
+        return inst;
+      });
+      return { ...prev, work_instructions: nextInstructions };
+    });
+  };
+
+  const handleRemoveWorkInstruction = (id) => {
+    if (window.confirm("Bạn có chắc chắn muốn xóa hướng dẫn này cùng toàn bộ các bước và hình ảnh?")) {
+      setFormData(prev => {
+        const nextInstructions = (prev.work_instructions || []).filter(inst => inst.id !== id);
+        return { ...prev, work_instructions: nextInstructions };
+      });
+      if (selectedInstructionId === id) {
+        setSelectedInstructionId(null);
+        setCurrentScreen('overview');
+      }
+    }
+  };
+
+  const handleOpenAddStepPopup = (activeInst) => {
+    const nextNum = (activeInst.steps || []).length + 1;
+    setStepForm({
+      id: `step_${Date.now()}_${nextNum}`,
+      step_number: nextNum,
+      name: '',
+      note: '',
+      standard: '',
+      image_url: ''
+    });
+    setIsEditingStep(false);
+    setEditingStepIdx(-1);
+    setShowStepPopup(true);
+  };
+
+  const handleOpenEditStepPopup = (activeInst, idx) => {
+    const step = activeInst.steps[idx];
+    if (step) {
+      setStepForm({
+        id: step.id || `step_${Date.now()}_${step.step_number}`,
+        step_number: step.step_number,
+        name: step.name || '',
+        note: step.note || '',
+        standard: step.standard || '',
+        image_url: step.image_url || ''
+      });
+      setIsEditingStep(true);
+      setEditingStepIdx(idx);
+      setShowStepPopup(true);
+    }
+  };
+
+  const handleSaveStep = (e) => {
+    e.preventDefault();
+    if (!selectedInstructionId) return;
+    
+    setFormData(prev => {
+      const nextInstructions = (prev.work_instructions || []).map(inst => {
+        if (inst.id === selectedInstructionId) {
+          let nextSteps = [...(inst.steps || [])];
+          if (isEditingStep && editingStepIdx >= 0) {
+            nextSteps[editingStepIdx] = { ...stepForm };
+          } else {
+            const insertIdx = stepForm.step_number - 1;
+            nextSteps.splice(insertIdx, 0, { ...stepForm });
+          }
+          nextSteps = nextSteps.map((s, idx) => ({ ...s, step_number: idx + 1 }));
+          return { ...inst, steps: nextSteps };
+        }
+        return inst;
+      });
+      return { ...prev, work_instructions: nextInstructions };
+    });
+    
+    setShowStepPopup(false);
+  };
+
+  const handleRemoveWorkInstructionStep = (instId, stepIdx) => {
+    if (window.confirm("Bạn có chắc chắn muốn xóa bước này?")) {
+      setFormData(prev => {
+        const nextInstructions = (prev.work_instructions || []).map(inst => {
+          if (inst.id === instId) {
+            const nextSteps = (inst.steps || []).filter((_, idx) => idx !== stepIdx)
+              .map((step, idx) => ({ ...step, step_number: idx + 1 }));
+            return { ...inst, steps: nextSteps };
+          }
+          return inst;
+        });
+        return { ...prev, work_instructions: nextInstructions };
+      });
+    }
+  };
+
+  const handleReorderStepInPopup = (targetStepNo) => {
+    const targetIdx = parseInt(targetStepNo, 10) - 1;
+    if (isNaN(targetIdx) || targetIdx < 0) return;
+    
+    setFormData(prev => {
+      const nextInstructions = (prev.work_instructions || []).map(inst => {
+        if (inst.id === selectedInstructionId) {
+          let nextSteps = [...(inst.steps || [])];
+          
+          if (isEditingStep && editingStepIdx >= 0) {
+            const currentIdx = editingStepIdx;
+            if (currentIdx === targetIdx) return inst;
+            
+            const [movedStep] = nextSteps.splice(currentIdx, 1);
+            nextSteps.splice(targetIdx, 0, movedStep);
+            nextSteps = nextSteps.map((s, i) => ({ ...s, step_number: i + 1 }));
+            
+            setEditingStepIdx(targetIdx);
+            setStepForm(prevForm => ({ ...prevForm, step_number: targetStepNo }));
+          } else {
+            setStepForm(prevForm => ({ ...prevForm, step_number: targetStepNo }));
+          }
+          return { ...inst, steps: nextSteps };
+        }
+        return inst;
+      });
+      return { ...prev, work_instructions: nextInstructions };
+    });
+  };
+
+  const handlePopupImageUpload = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setStepForm(prev => ({ ...prev, image_url: reader.result }));
+    };
+    reader.readAsDataURL(file);
+  };

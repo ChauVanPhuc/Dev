@@ -1,0 +1,114 @@
+ID: 1, Platform: Web, DefaultCode: AD1, CurrentCode: AD1, Title: Đăng nhập, RoutePath: /login
+ID: 2, Platform: Web, DefaultCode: AD2, CurrentCode: AD2, Title: Trang chủ, RoutePath: /admin/dashboard
+ID: 3, Platform: Web, DefaultCode: AD3, CurrentCode: AD3, Title: Quản lý người dùng, RoutePath: /admin/users
+ID: 4, Platform: Web, DefaultCode: AD3.1, CurrentCode: AD3.1, Title: Tạo người dùng mới, RoutePath: /admin/users/create
+ID: 5, Platform: Web, DefaultCode: AD4, CurrentCode: AD4, Title: Danh sách bàn giao, RoutePath: /admin/handovers
+ID: 6, Platform: Web, DefaultCode: AD5, CurrentCode: AD5, Title: Nhật ký sự cố, RoutePath: /admin/logs
+ID: 7, Platform: Web, DefaultCode: AD6, CurrentCode: AD6, Title: Báo cáo kiểm tra, RoutePath: /admin/reports
+ID: 8, Platform: Web, DefaultCode: AD7, CurrentCode: AD7, Title: Báo cáo KPI, RoutePath: /admin/kpi
+ID: 9, Platform: Web, DefaultCode: AD8, CurrentCode: AD8, Title: Góp ý cải tiến, RoutePath: /admin/feedback
+ID: 10, Platform: Web, DefaultCode: AD9, CurrentCode: AD9, Title: Điểm nóng cần chú ý, RoutePath: /admin/hotspots
+ID: 11, Platform: Web, DefaultCode: AD10, CurrentCode: AD10, Title: Dữ liệu đóng gói, RoutePath: /admin/data
+ID: 12, Platform: Web, DefaultCode: AD11, CurrentCode: AD11, Title: Quản lý QR dự phòng, RoutePath: /manufacture/backup-qrs
+ID: 13, Platform: Web, DefaultCode: MA1, CurrentCode: MA1, Title: Tổng quan sản xuất, RoutePath: /manufacture/dashboard
+ID: 14, Platform: Web, DefaultCode: MA2, CurrentCode: MA2, Title: Kế hoạch sản xuất, RoutePath: /manufacture/plan
+ID: 15, Platform: Web, DefaultCode: MA2.1, CurrentCode: MA2.1, Title: Chi tiết kế hoạch, RoutePath: /manufacture/plan/:id
+ID: 16, Platform: Web, DefaultCode: MA2.2, CurrentCode: MA2.2, Title: Thêm kế hoạch sản xuất, RoutePath: /manufacture/plan/create
+ID: 17, Platform: Web, DefaultCode: MA3, CurrentCode: MA3, Title: Đơn hàng sản xuất, RoutePath: /manufacture/orders
+ID: 18, Platform: Web, DefaultCode: MA3.1, CurrentCode: MA3.1, Title: Tạo đơn hàng, RoutePath: /manufacture/orders/create
+ID: 19, Platform: Web, DefaultCode: MA4, CurrentCode: MA4, Title: Danh mục sản phẩm, RoutePath: /manufacture/products
+ID: 20, Platform: Web, DefaultCode: MA4.1, CurrentCode: MA4.1, Title: Chi tiết sản phẩm, RoutePath: /manufacture/products/:id
+ID: 21, Platform: Web, DefaultCode: MA4.2, CurrentCode: MA4.2, Title: Thêm sản phẩm, RoutePath: /manufacture/products/create
+ID: 22, Platform: Web, DefaultCode: MA5, CurrentCode: MA5, Title: Tiến độ sản xuất, RoutePath: /manufacture/progress/:id
+ID: 23, Platform: Web, DefaultCode: MA6, CurrentCode: MA6, Title: Theo dõi giao hàng, RoutePath: /manufacture/delivery-tracking
+ID: 24, Platform: Web, DefaultCode: MA7, CurrentCode: MA7, Title: Thẻ Pallet ngoại lệ, RoutePath: /manufacture/exception-deliveries
+ID: 25, Platform: Mobile, DefaultCode: MB1, CurrentCode: MB1, Title: Đăng nhập, RoutePath: /login
+ID: 26, Platform: Mobile, DefaultCode: MB2, CurrentCode: MB2, Title: Thông tin giao hàng, RoutePath: /delivery-info
+ID: 27, Platform: Mobile, DefaultCode: MB2.1, CurrentCode: MB2.1, Title: Tạo phiếu giao hàng, RoutePath: /delivery-create
+ID: 28, Platform: Mobile, DefaultCode: MB2.2, CurrentCode: MB2.2, Title: Nhận hàng, RoutePath: /delivery-receive/:id
+ID: 29, Platform: Mobile, DefaultCode: MB2.4, CurrentCode: MB2.4, Title: Kiểm tra đầu vào, RoutePath: /input-inspection
+ID: 30, Platform: Mobile, DefaultCode: MB4, CurrentCode: MB4, Title: Theo dõi kế hoạch, RoutePath: /plan
+ID: 31, Platform: Mobile, DefaultCode: MB5, CurrentCode: MB5, Title: Kiểm tra hàng ngày, RoutePath: /inspection-daily
+ID: 32, Platform: Mobile, DefaultCode: MB6, CurrentCode: MB6, Title: Kiểm tra nhập kho, RoutePath: /inspection-stage
+ID: 33, Platform: Mobile, DefaultCode: MB7, CurrentCode: MB7, Title: Lịch sử kiểm tra, RoutePath: /logs
+ID: 34, Platform: Mobile, DefaultCode: MB8, CurrentCode: MB8, Title: Theo dõi KPI, RoutePath: /kpi
+ID: 35, Platform: Mobile, DefaultCode: MB8.1, CurrentCode: MB8.1, Title: Đánh giá nhân viên, RoutePath: /staff-evaluation/:id
+ID: 36, Platform: Mobile, DefaultCode: MB8.2, CurrentCode: MB8.2, Title: Danh sách KPI nhân viên, RoutePath: /kpi-staff
+ID: 37, Platform: Mobile, DefaultCode: MB9, CurrentCode: MB9, Title: Khen thưởng & Kỷ luật, RoutePath: /awards
+ID: 38, Platform: Mobile, DefaultCode: MB10, CurrentCode: MB10, Title: Danh sách thiết bị, RoutePath: /equipment-list
+ID: 39, Platform: Mobile, DefaultCode: MB11, CurrentCode: MB11, Title: Chi tiết kiểm tra chất lượng, RoutePath: /quality-detail/:id/:category
+ID: 40, Platform: Mobile, DefaultCode: MB12, CurrentCode: MB12, Title: In nhiệt, RoutePath: /thermal-print
+ID: 41, Platform: Mobile, DefaultCode: MB13, CurrentCode: MB13, Title: Danh sách CAPA, RoutePath: /capa-list
+ID: 42, Platform: Mobile, DefaultCode: MB14, CurrentCode: MB14, Title: Báo cáo CAPA, RoutePath: /capa-report/:id
+ID: 43, Platform: Mobile, DefaultCode: MB15, CurrentCode: MB15, Title: Chi tiết CAPA, RoutePath: /capa-detail/:capaId/:occurrenceId
+ID: 44, Platform: Web, DefaultCode: AD3.2, CurrentCode: AD3.2, Title: Chỉnh sửa người dùng, RoutePath: /admin/users/edit/:id
+ID: 45, Platform: Web, DefaultCode: AD12, CurrentCode: AD12, Title: Quản lý danh mục lỗi, RoutePath: /admin/defects
+ID: 46, Platform: Web, DefaultCode: AD13, CurrentCode: AD13, Title: Hồ sơ chất lượng, RoutePath: /admin/quality-records
+ID: 47, Platform: Web, DefaultCode: AD13.1, CurrentCode: AD13.1, Title: Chi tiết hồ sơ chất lượng, RoutePath: /admin/quality-records/:id
+ID: 48, Platform: Web, DefaultCode: AD14, CurrentCode: AD14, Title: Quản lý Màn hình, RoutePath: /admin/screens
+ID: 49, Platform: Web, DefaultCode: AD14.1, CurrentCode: AD14.1, Title: Chi tiết thiết kế màn hình, RoutePath: /admin/screens/:id
+ID: 50, Platform: Web, DefaultCode: AD15, CurrentCode: AD15, Title: Giám sát hệ thống & CSDL, RoutePath: /admin/monitor
+ID: 51, Platform: Web, DefaultCode: CL1, CurrentCode: CL1, Title: Khiếu nại khách hàng (Claim), RoutePath: /admin/claims
+ID: 52, Platform: Web, DefaultCode: CL2, CurrentCode: CL2, Title: Quản lý đơn giá, RoutePath: /admin/prices
+ID: 53, Platform: Web, DefaultCode: CL3, CurrentCode: CL3, Title: Thông tin giao hàng (Claim), RoutePath: /admin/shipments
+ID: 54, Platform: Web, DefaultCode: AD16, CurrentCode: AD16, Title: Quản lý Bug, RoutePath: /admin/bugs
+ID: 55, Platform: Shared, DefaultCode: COMMON, CurrentCode: COMMON, Title: Toolbar / Thanh công cụ, RoutePath: /common/toolbar
+ID: 56, Platform: Web, DefaultCode: AD17, CurrentCode: AD17, Title: Admin Admin, RoutePath: /admin
+ID: 78, Platform: Web, DefaultCode: AD37, CurrentCode: AD37, Title: Quản lý thiết bị, RoutePath: /admin/equipment
+ID: 79, Platform: Web, DefaultCode: MA8, CurrentCode: MA8, Title: Manufacture Manufacture Dashboard, RoutePath: /manufacture-dashboard
+ID: 95, Platform: Web, DefaultCode: CL4, CurrentCode: CL4, Title: Admin Chatbot, RoutePath: /admin/chatbot
+ID: 96, Platform: Mobile, DefaultCode: MB16, CurrentCode: MB16, Title: Lịch sử bàn giao, RoutePath: /delivery-history
+ID: 97, Platform: Mobile, DefaultCode: MB17, CurrentCode: MB17, Title: Chi tiết bàn giao, RoutePath: /delivery-detail/:id
+ID: 98, Platform: Mobile, DefaultCode: MB18, CurrentCode: MB18, Title: Trang chủ, RoutePath: /dashboard
+ID: 99, Platform: Mobile, DefaultCode: MB19, CurrentCode: MB19, Title: Góp ý cải tiến, RoutePath: /feedback
+ID: 100, Platform: Mobile, DefaultCode: MB20, CurrentCode: MB20, Title: Báo cáo CTQ / SOS, RoutePath: /ctq-sos
+ID: 101, Platform: Mobile, DefaultCode: MB21, CurrentCode: MB21, Title: Cảnh báo lỗi, RoutePath: /warnings
+ID: 102, Platform: Mobile, DefaultCode: MB22, CurrentCode: MB22, Title: Kiểm tra bám dính, RoutePath: /inspection-stage-adhesion
+ID: 103, Platform: Mobile, DefaultCode: MB23, CurrentCode: MB23, Title: Kiểm tra sau đóng gói, RoutePath: /inspection-stage-packaging
+ID: 104, Platform: Mobile, DefaultCode: MB24, CurrentCode: MB24, Title: Kiểm tra định hình, RoutePath: /inspection-daily-shaping
+ID: 105, Platform: Mobile, DefaultCode: MB25, CurrentCode: MB25, Title: Kiểm tra lắp ráp, RoutePath: /inspection-daily-assembly
+ID: 106, Platform: Mobile, DefaultCode: MB26, CurrentCode: MB26, Title: Kiểm tra sơn, RoutePath: /inspection-daily-painting
+ID: 107, Platform: Mobile, DefaultCode: MB27, CurrentCode: MB27, Title: Kiểm tra đóng gói, RoutePath: /inspection-daily-packaging
+ID: 1056, Platform: Mobile, DefaultCode: MB28, CurrentCode: MB28, Title: Xem kế hoạch sản xuất, RoutePath: /plan-calendar
+ID: 1057, Platform: Mobile, DefaultCode: MB29, CurrentCode: MB29, Title: Tạo kế hoạch sản xuất, RoutePath: /plan-create
+ID: 1060, Platform: Web, DefaultCode: AD37.1, CurrentCode: AD37.1, Title: Danh sách thiết bị (Nhóm cây), RoutePath: /admin/equipment/categories
+ID: 1061, Platform: Web, DefaultCode: AD37.2, CurrentCode: AD37.2, Title: Nhật ký kiểm tra & Hiệu chuẩn, RoutePath: /admin/equipment/history
+ID: 1062, Platform: Web, DefaultCode: AD37.3, CurrentCode: AD37.3, Title: Đào tạo vận hành thiết bị, RoutePath: /admin/equipment/training
+ID: 1063, Platform: Web, DefaultCode: AD37.4, CurrentCode: AD37.4, Title: Form Bàn giao & Khai báo thiết bị, RoutePath: /admin/equipment/handover
+ID: 1064, Platform: Web, DefaultCode: AD37.41, CurrentCode: AD37.41, Title: Cập nhật bàn giao thiết bị, RoutePath: /admin/equipment/handover/:id
+ID: 1065, Platform: Web, DefaultCode: AD37.5, CurrentCode: AD37.5, Title: Chi tiết thiết bị máy móc, RoutePath: /admin/equipment/detail/:id
+ID: 1066, Platform: Web, DefaultCode: AD37.6, CurrentCode: AD37.6, Title: Chi tiết đào tạo vận hành, RoutePath: /admin/equipment/training/detail/:id
+ID: 1074, Platform: Web, DefaultCode: AD7.1, CurrentCode: AD7.1, Title: Checklist công việc, RoutePath: /admin/kpi/checklist
+ID: 1075, Platform: Web, DefaultCode: AD7.2, CurrentCode: AD7.2, Title: Danh sách KPI, RoutePath: /admin/kpi/list
+ID: 1076, Platform: Web, DefaultCode: AD7.3, CurrentCode: AD7.3, Title: Quy tắc cộng trừ điểm, RoutePath: /admin/kpi/rules
+ID: 1077, Platform: Web, DefaultCode: AD7.4, CurrentCode: AD7.4, Title: Phản hồi và nhận xét, RoutePath: /admin/kpi/feedback
+ID: 1083, Platform: Web, DefaultCode: AD3.3, CurrentCode: AD3.3, Title: Chi tiết phân quyền người dùng, RoutePath: /admin/users/permissions/:id
+ID: 1084, Platform: Web, DefaultCode: AD3.4, CurrentCode: AD3.4, Title: Quản lý bộ phận, RoutePath: /admin/users/departments
+ID: 1085, Platform: Web, DefaultCode: AD3.5, CurrentCode: AD3.5, Title: Quản lý chức vụ, RoutePath: /admin/users/positions
+ID: 1086, Platform: Web, DefaultCode: AD3.2-P, CurrentCode: AD38, Title: Thông tin cá nhân, RoutePath: /admin/profile
+ID: 1087, Platform: Web, DefaultCode: MA9, CurrentCode: MA9, Title: Admin Manufacture Dashboard, RoutePath: /admin/manufacture-dashboard
+ID: 1088, Platform: Web, DefaultCode: AD39, CurrentCode: AD39, Title: Admin Plan, RoutePath: /admin/plan
+ID: 1089, Platform: Web, DefaultCode: AD39.1, CurrentCode: AD39.1, Title: Admin Plan Detail, RoutePath: /admin/plan/:id
+ID: 1090, Platform: Web, DefaultCode: AD40, CurrentCode: AD40, Title: Admin Create, RoutePath: /admin/plan/create
+ID: 1091, Platform: Web, DefaultCode: AD41, CurrentCode: AD41, Title: Admin Delivery Tracking, RoutePath: /admin/delivery-tracking
+ID: 1092, Platform: Web, DefaultCode: AD42, CurrentCode: AD42, Title: Admin Products, RoutePath: /admin/products
+ID: 1093, Platform: Web, DefaultCode: AD42.1, CurrentCode: AD42.1, Title: Admin Products Detail, RoutePath: /admin/products/:id
+ID: 1094, Platform: Web, DefaultCode: AD43, CurrentCode: AD43, Title: Admin Create, RoutePath: /admin/products/create
+ID: 1095, Platform: Web, DefaultCode: AD44, CurrentCode: AD44, Title: Admin Progress Detail, RoutePath: /admin/progress/:id
+ID: 1096, Platform: Web, DefaultCode: AD45, CurrentCode: AD45, Title: Admin Orders, RoutePath: /admin/orders
+ID: 1097, Platform: Web, DefaultCode: AD46, CurrentCode: AD46, Title: Admin Create, RoutePath: /admin/orders/create
+ID: 1098, Platform: Web, DefaultCode: AD47, CurrentCode: AD47, Title: Admin Backup Qrs, RoutePath: /admin/backup-qrs
+ID: 1099, Platform: Web, DefaultCode: AD48, CurrentCode: AD48, Title: Admin Exception Deliveries, RoutePath: /admin/exception-deliveries
+ID: 1100, Platform: Web, DefaultCode: AD49, CurrentCode: AD49, Title: Admin Purchase Requisitions, RoutePath: /admin/purchase-requisitions
+ID: 1101, Platform: Web, DefaultCode: AD49.1, CurrentCode: AD49.1, Title: Admin Purchase Requisitions Detail, RoutePath: /admin/purchase-requisitions/:id
+ID: 1102, Platform: Web, DefaultCode: AD50, CurrentCode: AD50, Title: Admin Purchase Order Items, RoutePath: /admin/purchase-order-items
+ID: 1103, Platform: Shared, DefaultCode: OTHER, CurrentCode: OTHER, Title: Khác, RoutePath: /common/other
+ID: 1104, Platform: Web, DefaultCode: AD17, CurrentCode: AD17, Title: Quản lý hồ sơ ISO, RoutePath: /admin/iso-documents
+ID: 1105, Platform: Web, DefaultCode: AD18, CurrentCode: AD18, Title: Quản lý quy trình, RoutePath: /admin/iso-processes
+ID: 1106, Platform: Web, DefaultCode: AD17.1, CurrentCode: AD17.1, Title: Biểu mẫu chỉnh sửa tài liệu ISO & Quy trình, RoutePath: /admin/iso-documents/edit/:id
+ID: 1107, Platform: Web, DefaultCode: AD51, CurrentCode: AD51, Title: Admin Machines, RoutePath: /admin/machines
+ID: 1108, Platform: Web, DefaultCode: AD52, CurrentCode: AD52, Title: Admin History, RoutePath: /admin/machines/history
+ID: 1109, Platform: Web, DefaultCode: AD53, CurrentCode: AD53, Title: Admin Training, RoutePath: /admin/machines/training
+ID: 1110, Platform: Web, DefaultCode: AD54, CurrentCode: AD54, Title: Admin Detail Detail, RoutePath: /admin/machines/detail/:id
+ID: 1111, Platform: Mobile, DefaultCode: MB30, CurrentCode: MB30, Title: Inspection First Article, RoutePath: /inspection-first-article
+ID: 1112, Platform: Web, DefaultCode: AD55, CurrentCode: AD55, Title: Admin Edit Detail, RoutePath: /admin/iso-processes/edit/:id

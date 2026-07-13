@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
+import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 
 import { screenService } from '@modules/System/Models/screen.service';
 
@@ -953,6 +954,7 @@ const ScreenDetail = () => {
   const { id } = useParams();
 
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   const outletContext = useOutletContext() || {};
 
@@ -1944,7 +1946,7 @@ const ScreenDetail = () => {
 
                           <span className="file-path font-mono" title={comp.file_path}>{comp.file_path}</span>
 
-                          <button className="btn-copy-path" onClick={() => { navigator.clipboard.writeText(comp.file_path); alert('Đã sao chép!'); }}>📋 Copy</button>
+                          <button className="btn-copy-path" onClick={() => { navigator.clipboard.writeText(comp.file_path); toast('success', 'Đã sao chép!'); }}>📋 Copy</button>
 
                         </div>
 

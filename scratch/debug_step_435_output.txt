@@ -1,0 +1,31 @@
+Target lines count: 41
+First few target lines (cleaned):
+T0: "<divstyle={{display:'grid',gridTemplateColumns:'1fr1fr1.2fr1.2fr1.2fr1fr',gap:'16px'}}>"
+T1: '<div>'
+T2: "<labelstyle={{fontSize:'0.75rem',fontWeight:'bold',color:'#64748b',display:'block',marginBottom:'4px'}}>Mãmẫu:</label>"
+T3: '<input'
+T4: 'type="text"'
+
+Searching in content for lines starting with gridTemplateColumns...
+Line 282: "              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr 1.2fr 1.2fr 1fr', gap: '16px' }}>"
+Subsequent 5 lines:
+  +1: '                <div>'
+  +2: "                  <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>Mã mẫu:</label>"
+  +3: '                  <input '
+  +4: '                    type="text" '
+  +5: '                    value={formData.code} '
+  +6: '                    readOnly'
+  +7: '                    placeholder="M01"'
+  +8: "                    style={{ width: '100%', padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.82rem', outline: 'none', fontWeight: '500', backgroundColor: '#f1f5f9', cursor: 'default', color: '#64748b' }}"
+  +9: '                  />'
+Line 352: "              gridTemplateColumns: 'repeat(3, 1fr)',"
+Subsequent 5 lines:
+  +1: "              gap: '16px'"
+  +2: '            }}>'
+  +3: '              {Object.keys(formData.sections || {})'
+  +4: "                .filter(key => !key.startsWith('__'))"
+  +5: '                .map((sectionId, sIdx) => {'
+  +6: "                  const currentType = formData.section_types?.[sectionId] || 'text';"
+  +7: '                  return ('
+  +8: '                    <div'
+  +9: '                      key={sIdx}'

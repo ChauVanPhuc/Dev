@@ -75,6 +75,7 @@ import { planService } from '@modules/Plan/Models/plan.service';
 import { orderService } from '@modules/Order/Models/order.service';
 
 import PriorityManagerModal from '@webShared/Views/components/feedback/PriorityManagerModal';
+import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 
 
 const PlanDetail = () => {
@@ -88,6 +89,7 @@ const PlanDetail = () => {
     const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra, startGlobalUpload } = outletContext;
 
     const fileInputRef = useRef(null);
+    const { toast } = useToast();
 
     const [plan, setPlan] = useState(null);
 
@@ -239,7 +241,7 @@ const PlanDetail = () => {
 
         if (!plan || !plan.orders || plan.orders.length === 0) {
 
-            alert("Không có dữ liệu đơn hàng trong kế hoạch để xuất.");
+            toast('warning', "Không có dữ liệu đơn hàng trong kế hoạch để xuất.");
 
             return;
 
@@ -765,7 +767,7 @@ const PlanDetail = () => {
 
                         setUploadState({ isUploading: false, file: null, preview: null });
 
-                        alert('Upload file thành công!');
+                        toast('success', 'Upload file thành công!');
 
                         // Refresh data
 
@@ -787,7 +789,7 @@ const PlanDetail = () => {
 
                     setUploadState({ isUploading: false, file: null, preview: null });
 
-                    alert('Upload file thành công (simulation)!');
+                    toast('success', 'Upload file thành công (simulation)!');
 
                 }, 2000);
 
@@ -797,7 +799,7 @@ const PlanDetail = () => {
 
             setUploadState(prev => ({ ...prev, isUploading: false }));
 
-            alert('Upload file thất bại: ' + error.message);
+            toast('error', 'Upload file thất bại: ' + error.message);
 
         }
 
@@ -855,7 +857,7 @@ const PlanDetail = () => {
 
 
 
-            alert('Tạo lệnh sản xuất thành công!');
+            toast('success', 'Tạo lệnh sản xuất thành công!');
 
 
 
@@ -871,7 +873,7 @@ const PlanDetail = () => {
 
             setAddOrderModal(prev => ({ ...prev, isSubmitting: false }));
 
-            alert('Tạo lệnh sản xuất thất bại: ' + error.message);
+            toast('error', 'Tạo lệnh sản xuất thất bại: ' + error.message);
 
         }
 

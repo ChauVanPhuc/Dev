@@ -1,0 +1,57 @@
+{
+  "step_index": 1837,
+  "source": "MODEL",
+  "type": "PLANNER_RESPONSE",
+  "status": "DONE",
+  "created_at": "2026-07-13T03:47:44Z",
+  "content": " Let's perform `multi_replace_file_content` for `ISOFormEditorView.jsx`. We'll use Chunk 1 to redefine helpers, Chunk 2 to set initial state, Chunk 3 to update useEffect, Chunk 4 to update fetchDocDetails, and Chunk 5 to update handleSaveForm. Aberration: let's proceed.",
+  "tool_calls": [
+    {
+      "name": "multi_replace_file_content",
+      "args": {
+        "Description": "Modify ISOFormEditorView to format issue_date as date-only in UI, and append current hour/minute only during save.",
+        "Instruction": "Define getCurrentFormattedDate and stripTime helpers, use date-only format in state and fetchDocDetails, and append hour/minute to issue_date in handleSaveForm payload.",
+        "ReplacementChunks": [
+          {
+            "AllowMultiple": false,
+            "EndLine": 18,
+            "ReplacementContent": "const getCurrentFormattedDate = () => {\n  const now = new Date();\n  const pad = (num) => String(num).padStart(2, '0');\n  const DD = pad(now.getDate());\n  const MM = pad(now.getMonth() + 1);\n  const YYYY = now.getFullYear();\n  return `${DD}/${MM}/${YYYY}`;\n};\n\nconst stripTime = (dateStr) => {\n  if (!dateStr) return '';\n  const match = dateStr.match(/^\\d{2}:\\d{2}\\s+(.*)$/);\n  return match ? match[1] : dateStr;\n};",
+            "StartLine": 8,
+            "TargetContent": "const getCurrentFormattedDateTime = () => {\n  const now = new Date();\n  const pad = (num) => String(num).padStart(2, '0');\n  const hh = pad(now.getHours());\n  const mm = pad(now.getMinutes());\n  const DD = pad(now.getDate());\n  const MM = pad(now.getMonth() + 1);\n  const YYYY = now.getFullYear();\n  return `${hh}:${mm} ${DD}/${MM}/${YYYY}`;\n};"
+          },
+          {
+            "AllowMultiple": false,
+            "EndLine": 32,
+            "ReplacementContent": "    symbol: '',\n    version: '01',\n    issue_date: getCurrentFormattedDate(),",
+            "StartLine": 29,
+            "TargetContent": "    symbol: '',\n    version: '01',\n    issue_date: getCurrentFormattedDateTime(),"
+          },
+          {
+            "AllowMultiple": false,
+            "EndLine": 87,
+            "ReplacementContent": "          version: parsed.version || '01',\n          issue_date: getCurrentFormattedDate(),",
+            "StartLine": 84,
+            "TargetContent": "          version: parsed.version || '01',\n          issue_date: getCurrentFormattedDateTime(),"
+          },
+          {
+            "AllowMultiple": false,
+            "EndLine": 146,
+            "ReplacementContent": "        version: data.version || '01',\n        issue_date: stripTime(data.issue_date || getCurrentFormattedDate()),",
+            "StartLine": 144,
+            "TargetContent": "        version: data.version || '01',\n        issue_date: getCurrentFormattedDateTime(),"
+          },
+          {
+            "AllowMultiple": false,
+            "EndLine": 194,
+            "ReplacementContent": "    setLoading(true);\n    try {\n      const now = new Date();\n      const pad = (num) => String(num).padStart(2, '0');\n      const hh = pad(now.getHours());\n      const mm = pad(now.getMinutes());\n      const finalIssueDate = `${hh}:${mm} ${stripTime(formData.issue_date || getCurrentFormattedDate())}`;\n\n      const finalPayload = {\n        ...formData,\n        issue_date: finalIssueDate,",
+            "StartLine": 189,
+            "TargetContent": "    setLoading(true);\n    try {\n      const finalPayload = {\n        ...formData,"
+          }
+        ],
+        "TargetFile": "c:\\SmartFlow_v2_Test\\FrontEnd\\Web\\modules\\ISO\\Views\\ISOFormEditorView.jsx",
+        "toolAction": "Refactoring Ngày cập nhật in ISOFormEditorView to date-only on UI and full timestamp on save",
+        "toolSummary": "Refactor Ngày cập nhật in ISOFormEditorView"
+      }
+    }
+  ]
+}

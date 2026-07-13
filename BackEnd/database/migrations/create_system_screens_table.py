@@ -273,7 +273,7 @@ INITIAL_SCREENS = [
         "route_path": "/admin/iso-documents/edit/:id",
         "default_code": "AD17.1",
         "current_code": "AD17.1",
-        "title": "Biểu mẫu chỉnh sửa tài liệu ISO & Quy trình",
+        "title": "Cập nhật mẫu tài liệu",
         "subtitle": "Tùy biến cấu hình chi tiết tài liệu quy trình ISO"
     },
     {

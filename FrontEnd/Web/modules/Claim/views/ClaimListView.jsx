@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Search, Filter, Plus } from 'lucide-react';
+import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { claimService } from '../services/claim.service';
 import { normalizePenaltyValue, parseDate } from '../utils/claimHelpers';
 import { API_ROOT } from '@webShared/Services/api.service';
@@ -2110,506 +2111,120 @@ const ClaimListView = () => {
 
       </div>
 
-      {/* SECTION 3: DETAILED REPORT HEADER */}
-      {/* SECTION 3: DETAILED REPORT HEADER */}
-      <div className="mgmt-toolbar card" style={{ 
-        marginBottom: '12px', 
-        flexShrink: 0, 
-        padding: '8px 16px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        borderRadius: '10px',
-        backgroundColor: '#FFFFFF',
-        border: '1px solid #EADCC9',
-        height: '52px',
-        boxSizing: 'border-box'
-      }}>
-        {/* Left Side: Search + A↓Z + Filter */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
-          {/* Search Input Box */}
-          <div className="search-wrapper" style={{ 
-            margin: 0, 
-            height: '36px', 
-            borderRadius: '20px', 
-            border: '1px solid #C4B5A5', 
-            padding: '0 14px',
-            width: '320px',
-            backgroundColor: '#FFFFFF',
-            display: 'flex',
-            alignItems: 'center'
-          }}>
-            <Search size={16} className="search-icon" style={{ color: '#8D6E63', marginRight: '8px' }} />
-            <input 
-              type="text" 
-              placeholder="Search nhanh SKU, Cont, LPN..." 
-              value={quickSearch}
-              onChange={(e) => setQuickSearch(e.target.value)}
-              style={{
-                fontSize: '0.85rem',
-                fontWeight: '600',
-                color: '#2D1A12',
-                backgroundColor: 'transparent',
-                border: 'none',
-                outline: 'none',
-                width: '100%'
-              }}
-            />
-          </div>
-
-          {/* Sort Button A↓Z */}
-          <div style={{ position: 'relative', display: 'inline-block' }}>
-            <button
-              type="button"
-              onClick={() => { setShowSortDropdown(!showSortDropdown); }}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: '4px',
-                color: sortOption ? '#7B5233' : '#8D6E63',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '36px',
-                outline: 'none',
-                transition: 'all 0.2s ease'
-              }}
-              title="Sắp xếp danh sách"
-              onMouseEnter={(e) => e.currentTarget.style.color = '#7B5233'}
-              onMouseLeave={(e) => e.currentTarget.style.color = sortOption ? '#7B5233' : '#8D6E63'}
-            >
-              {/* Custom A↓Z down arrow SVG */}
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="15" y1="4" x2="15" y2="20" />
-                <polyline points="11 16 15 20 19 16" />
-                <text x="3" y="10" fontFamily="sans-serif" fontSize="10" fontWeight="bold" fill="currentColor">A</text>
-                <text x="3" y="20" fontFamily="sans-serif" fontSize="10" fontWeight="bold" fill="currentColor">Z</text>
-              </svg>
-            </button>
-            {showSortDropdown && (
-              <div style={{
-                position: 'absolute', top: '40px', left: 0, zIndex: 100,
-                background: '#fff', border: '1px solid #EADCC9', borderRadius: '10px',
-                boxShadow: '0 8px 24px rgba(123,82,51,0.12)', padding: '6px 0',
-                minWidth: '190px', animation: 'fadeIn 0.15s ease'
-              }}>
-                {[
-                  { value: '', label: 'Mặc định' },
-                  { value: 'name-asc', label: 'Tên: A → Z' },
-                  { value: 'name-desc', label: 'Tên: Z → A' },
-                  { value: 'time-asc', label: 'Thời gian: Sớm nhất' },
-                  { value: 'time-desc', label: 'Thời gian: Mới nhất' }
-                ].map(item => (
-                  <div
-                    key={item.value}
-                    onClick={() => { setSortOption(item.value); setShowSortDropdown(false); }}
-                    style={{
-                      padding: '8px 16px', cursor: 'pointer', fontSize: '0.82rem',
-                      fontWeight: sortOption === item.value ? '700' : '500',
-                      color: sortOption === item.value ? '#7B5233' : '#5D4037',
-                      backgroundColor: sortOption === item.value ? '#FAF6F0' : 'transparent',
-                      transition: 'background 0.15s'
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#FAF6F0'}
-                    onMouseLeave={e => e.currentTarget.style.backgroundColor = sortOption === item.value ? '#FAF6F0' : 'transparent'}
-                  >
-                    {item.label}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Filter Funnel Icon Button */}
-          <div style={{ position: 'relative', display: 'inline-block' }}>
-            <button
-              type="button"
-              onClick={() => setIsFilterBarOpen(!isFilterBarOpen)}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: '4px',
-                color: isFilterBarOpen || activeFiltersCount > 0 ? '#7B5233' : '#8D6E63',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '36px',
-                outline: 'none',
-                transition: 'all 0.2s ease',
-                position: 'relative'
-              }}
-              title="Bộ lọc nâng cao"
-              onMouseEnter={(e) => e.currentTarget.style.color = '#7B5233'}
-              onMouseLeave={(e) => e.currentTarget.style.color = isFilterBarOpen || activeFiltersCount > 0 ? '#7B5233' : '#8D6E63'}
-            >
-              <Filter size={20} strokeWidth={2.5} />
-              {activeFiltersCount > 0 && (
-                <span style={{
-                  position: 'absolute',
-                  top: '-2px',
-                  right: '-2px',
-                  backgroundColor: '#7B5233',
-                  color: '#FFFFFF',
-                  borderRadius: '50%',
-                  width: '14px',
-                  height: '14px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '0.6rem',
-                  fontWeight: 'bold'
-                }}>
-                  {activeFiltersCount}
-                </span>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Right Side Actions: Khác, Nhập dữ liệu, Xuất dữ liệu, + Tạo mới */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          
-          {/* 1. NÚT KHÁC (Dropdown) */}
-          <div className="other-dropdown-container" style={{ position: 'relative' }}>
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); setIsOtherDropdownOpen(!isOtherDropdownOpen); setIsImportDropdownOpen(false); }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                height: '34px',
-                padding: '0 14px',
-                borderRadius: '6px',
-                fontWeight: 'bold',
-                fontSize: '0.82rem',
-                cursor: 'pointer',
-                backgroundColor: '#4A2E1B',
-                color: '#FFFFFF',
-                border: 'none',
-                transition: 'background-color 0.2s',
-                boxShadow: 'none'
-              }}
-            >
-              {/* Grid 4 square icon */}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <rect x="3" y="3" width="7" height="7" rx="1"></rect>
-                <rect x="14" y="3" width="7" height="7" rx="1"></rect>
-                <rect x="14" y="14" width="7" height="7" rx="1"></rect>
-                <rect x="3" y="14" width="7" height="7" rx="1"></rect>
-              </svg>
-              <span>Khác</span>
-            </button>
-            {isOtherDropdownOpen && (
-              <div 
-                className="actions-dropdown-menu"
-                style={{
-                  position: 'absolute',
-                  top: 'calc(100% + 6px)',
-                  right: 0,
-                  backgroundColor: '#FFFFFF',
-                  border: '1px solid #EADCC9',
-                  borderRadius: '8px',
-                  boxShadow: '0 10px 25px rgba(123, 82, 51, 0.12)',
-                  minWidth: '200px',
-                  zIndex: 1000,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  padding: '6px 0',
-                  overflow: 'hidden',
-                  animation: 'slideDown 0.2s ease forwards',
-                  transformOrigin: 'top right'
-                }}
-              >
-                {hasWritePermission && (
-                  <button
-                    type="button"
-                    className="import-dropdown-item"
-                    onClick={() => { setIsOtherDropdownOpen(false); handleProcessSelectedClaim(); }}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: '600', fontSize: '0.85rem', color: '#2D1A12' }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <polyline points="9 11 12 14 22 4"></polyline>
-                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
-                      </svg>
-                      <span>Xử lý khiếu nại</span>
-                    </div>
-                    {claims.filter(c => c.status === 'Mới' || c.status === 'Đang xử lý').length > 0 && (
-                      <span style={{
-                        backgroundColor: '#7B5233',
-                        color: '#FFFFFF',
-                        borderRadius: '10px',
-                        padding: '2px 6px',
-                        fontSize: '0.7rem',
-                        fontWeight: 'bold',
-                        marginLeft: '8px'
-                      }}>
-                        {claims.filter(c => c.status === 'Mới' || c.status === 'Đang xử lý').length}
-                      </span>
-                    )}
-                  </button>
-                )}
-                
-                <button
-                  type="button"
-                  className="import-dropdown-item"
-                  onClick={() => { setIsOtherDropdownOpen(false); handleOpenPdfFolderModal(); }}
-                  style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: '600', fontSize: '0.85rem', color: '#2D1A12' }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7B5233" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                  </svg>
-                  Thư mục PDF
-                </button>
-
-                {/* NGOẠI LỆ (EXCEPTIONS) BUTTON (MOVED HERE) */}
-                <button
-                  type="button"
-                  className="import-dropdown-item"
-                  onClick={() => { setIsOtherDropdownOpen(false); setIsExceptionModalOpen(true); setExpandedExceptionItems({}); }}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: '600', fontSize: '0.85rem', color: exceptionData.totalCount > 0 ? '#C2410C' : '#2D1A12' }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                      <line x1="12" y1="9" x2="12" y2="13"></line>
-                      <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                    </svg>
-                    <span>Ngoại lệ</span>
-                  </div>
-                  {exceptionData.totalCount > 0 && (
-                    <span style={{
-                      backgroundColor: '#C2410C',
-                      color: '#FFFFFF',
-                      borderRadius: '10px',
-                      padding: '2px 6px',
-                      fontSize: '0.7rem',
-                      fontWeight: 'bold'
-                    }}>
-                      {exceptionData.totalCount}
-                    </span>
-                  )}
-                </button>
-                
-                {hasWritePermission && selectedClaimIds.length > 0 && (
-                  <button
-                    type="button"
-                    className="import-dropdown-item"
-                    onClick={() => {
-                      if (selectedClaimIds.length === 0) return;
-                      setIsOtherDropdownOpen(false);
-                      const selectedClaims = claims.filter(c => selectedClaimIds.includes(c.id));
-                      setExpandedDeleteItems({});
-                      setDeleteConfirmation({
-                        items: selectedClaims,
-                        onConfirm: async () => {
-                          setLoading(true);
-                          const results = [];
-                          for (const claim of selectedClaims) {
-                            try {
-                              await claimService.deleteClaim(claim.id);
-                              results.push({ claim, success: true });
-                            } catch (error) {
-                              console.error(`Error deleting claim ${claim.id}:`, error);
-                              const errMsg = error.response?.data?.detail || error.message || 'Lỗi không xác định';
-                              results.push({ claim, success: false, error: errMsg });
-                            }
-                          }
-                          setLoading(false);
-                          setSelectedClaimIds([]);
-                          fetchClaims();
-                          
-                          const failures = results.filter(r => !r.success);
-                          if (failures.length > 0) {
-                            showModal('Kết quả xóa', `Đã xóa thành công ${results.length - failures.length}/${results.length} khiếu nại. Có ${failures.length} mục lỗi không xóa được.`, 'warning');
-                          }
-                        }
-                      });
-                    }}
-                    style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: '600', fontSize: '0.85rem', color: '#DC2626' }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <polyline points="3 6 5 6 21 6"></polyline>
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                    </svg>
-                    Xóa các mục đã chọn
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* 2. NÚT NHẬP DỮ LIỆU (Dropdown for PDF/Folder Ingestion) */}
-          <div className="import-dropdown-container" style={{ position: 'relative' }}>
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); setIsImportDropdownOpen(!isImportDropdownOpen); setIsOtherDropdownOpen(false); }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                height: '34px',
-                padding: '0 14px',
-                borderRadius: '6px',
-                fontWeight: 'bold',
-                fontSize: '0.82rem',
-                cursor: 'pointer',
-                backgroundColor: '#4A2E1B',
-                color: '#FFFFFF',
-                border: 'none',
-                transition: 'background-color 0.2s',
-                boxShadow: 'none'
-              }}
-            >
-              {/* Import in-box icon */}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="7 10 12 15 17 10"></polyline>
-                <line x1="12" y1="15" x2="12" y2="3"></line>
-              </svg>
-              <span>Nhập dữ liệu</span>
-            </button>
-            {isImportDropdownOpen && (
-              <div 
-                className="actions-dropdown-menu"
-                style={{
-                  position: 'absolute',
-                  top: 'calc(100% + 6px)',
-                  right: 0,
-                  backgroundColor: '#FFFFFF',
-                  border: '1px solid #EADCC9',
-                  borderRadius: '8px',
-                  boxShadow: '0 10px 25px rgba(123, 82, 51, 0.12)',
-                  minWidth: '180px',
-                  zIndex: 1000,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  padding: '6px 0',
-                  overflow: 'hidden',
-                  animation: 'slideDown 0.2s ease forwards',
-                  transformOrigin: 'top right'
-                }}
-              >
-                {hasWritePermission && (
-                  <>
-                    <button
-                      type="button"
-                      className="import-dropdown-item"
-                      onClick={() => { setIsImportDropdownOpen(false); triggerPdfUpload(); }}
-                      style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: '600', fontSize: '0.85rem', color: '#2D1A12' }}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                        <polyline points="14 2 14 8 20 8"></polyline>
-                      </svg>
-                      Nhập file PDF
-                    </button>
-                    <div style={{ height: '1px', backgroundColor: '#F0E6D8', margin: '4px 0' }}></div>
-                    <button
-                      type="button"
-                      className="import-dropdown-item"
-                      onClick={() => { setIsImportDropdownOpen(false); triggerFolderUpload(); }}
-                      style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: '600', fontSize: '0.85rem', color: '#2D1A12' }}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                      </svg>
-                      Nhập thư mục
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* 3. NÚT XUẤT DỮ LIỆU */}
-          <button
-            type="button"
-            onClick={handleExportExcel}
-            disabled={isExporting}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              height: '34px',
-              padding: '0 14px',
-              borderRadius: '6px',
-              fontWeight: 'bold',
-              fontSize: '0.82rem',
-              cursor: isExporting ? 'not-allowed' : 'pointer',
-              backgroundColor: '#4A2E1B',
-              color: '#FFFFFF',
-              border: 'none',
-              transition: 'background-color 0.2s',
-              boxShadow: 'none',
-              opacity: isExporting ? 0.7 : 1
-            }}
-          >
-            {/* Export out-of-box icon */}
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="17 8 12 3 7 8"></polyline>
-              <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
-            <span>{isExporting ? 'Đang xuất...' : 'Xuất dữ liệu'}</span>
-          </button>
-
-          {/* 4. NÚT TẠO MỚI */}
-          {hasWritePermission && (
-            <button
-              type="button"
-              onClick={handleOpenAddNewClaim}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                height: '34px',
-                padding: '0 14px',
-                borderRadius: '6px',
-                fontWeight: 'bold',
-                fontSize: '0.82rem',
-                cursor: 'pointer',
-                backgroundColor: '#4A2E1B',
-                color: '#FFFFFF',
-                border: 'none',
-                transition: 'background-color 0.2s',
-                boxShadow: 'none'
-              }}
-            >
-              <Plus size={14} strokeWidth={3} />
-              <span>Tạo mới</span>
-            </button>
-          )}
-
-        </div>
-
-
-          {hasWritePermission && (
-            <input
-              type="file"
-              ref={pdfInputRef}
-              style={{ display: 'none' }}
-              accept=".pdf"
-              multiple
-              onChange={handlePdfFileChange}
-            />
-          )}
-          {hasWritePermission && (
-            <input
-              type="file"
-              ref={folderInputRef}
-              style={{ display: 'none' }}
-              webkitdirectory=""
-              directory=""
-              multiple
-              onChange={handleFolderFileChange}
-            />
-          )}
-      </div>
-
+      {/* SECTION 3: TOOLBAR */}
+      <PageToolbar
+        searchValue={quickSearch}
+        onSearchChange={setQuickSearch}
+        searchPlaceholder="Search nhanh SKU, Cont, LPN..."
+        showSort={true}
+        sortOptions={[
+          { value: '', label: 'Mặc định' },
+          { value: 'name-asc', label: 'Tên: A → Z' },
+          { value: 'name-desc', label: 'Tên: Z → A' },
+          { value: 'time-asc', label: 'Thời gian: Sớm nhất' },
+          { value: 'time-desc', label: 'Thời gian: Mới nhất' }
+        ]}
+        sortValue={sortOption}
+        onSortChange={setSortOption}
+        showFilter={true}
+        isFilterOpen={isFilterBarOpen}
+        onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
+        activeFiltersCount={activeFiltersCount}
+        extraActions={[
+          ...(hasWritePermission ? [{
+            label: 'Xử lý khiếu nại',
+            icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>,
+            onClick: handleProcessSelectedClaim,
+            badge: claims.filter(c => c.status === 'Mới' || c.status === 'Đang xử lý').length
+          }] : []),
+          {
+            label: 'Thư mục PDF',
+            icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7B5233" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>,
+            onClick: handleOpenPdfFolderModal
+          },
+          {
+            label: 'Ngoại lệ',
+            icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>,
+            onClick: () => { setIsExceptionModalOpen(true); setExpandedExceptionItems({}); },
+            badge: exceptionData.totalCount,
+            badgeColor: '#C2410C',
+            color: exceptionData.totalCount > 0 ? '#C2410C' : '#2D1A12'
+          },
+          ...(hasWritePermission && selectedClaimIds.length > 0 ? [{
+            label: 'Xóa các mục đã chọn',
+            icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>,
+            onClick: () => {
+              if (selectedClaimIds.length === 0) return;
+              const selectedClaims = claims.filter(c => selectedClaimIds.includes(c.id));
+              setExpandedDeleteItems({});
+              setDeleteConfirmation({
+                items: selectedClaims,
+                onConfirm: async () => {
+                  setLoading(true);
+                  const results = [];
+                  for (const claim of selectedClaims) {
+                    try {
+                      await claimService.deleteClaim(claim.id);
+                      results.push({ claim, success: true });
+                    } catch (error) {
+                      console.error(`Error deleting claim ${claim.id}:`, error);
+                      const errMsg = error.response?.data?.detail || error.message || 'Lỗi không xác định';
+                      results.push({ claim, success: false, error: errMsg });
+                    }
+                  }
+                  setLoading(false);
+                  setSelectedClaimIds([]);
+                  fetchClaims();
+                  const failures = results.filter(r => !r.success);
+                  if (failures.length > 0) {
+                    showModal('Kết quả xóa', `Đã xóa thành công ${results.length - failures.length}/${results.length} khiếu nại. Có ${failures.length} mục lỗi không xóa được.`, 'warning');
+                  }
+                }
+              });
+            },
+            color: '#DC2626',
+            divider: true
+          }] : [])
+        ]}
+        importActions={hasWritePermission ? [
+          {
+            label: 'Nhập file PDF',
+            icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>,
+            onClick: triggerPdfUpload
+          },
+          {
+            label: 'Nhập thư mục',
+            icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>,
+            onClick: triggerFolderUpload
+          }
+        ] : []}
+        onExport={handleExportExcel}
+        isExporting={isExporting}
+        onCreate={hasWritePermission ? handleOpenAddNewClaim : undefined}
+        hasWritePermission={hasWritePermission}
+      >
+        {hasWritePermission && (
+          <input
+            type="file"
+            ref={pdfInputRef}
+            style={{ display: 'none' }}
+            accept=".pdf"
+            multiple
+            onChange={handlePdfFileChange}
+          />
+        )}
+        {hasWritePermission && (
+          <input
+            type="file"
+            ref={folderInputRef}
+            style={{ display: 'none' }}
+            webkitdirectory=""
+            directory=""
+            multiple
+            onChange={handleFolderFileChange}
+          />
+        )}
+      </PageToolbar>
       {/* INLINE EXPANDABLE FILTER BAR */}
       {isFilterBarOpen && (
         <div className="filter-inline-bar">

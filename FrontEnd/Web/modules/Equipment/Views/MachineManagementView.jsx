@@ -6,7 +6,9 @@ import axios from 'axios';
 import { 
   Search, Filter, Plus, Edit, FileUp, FileDown, X, Layers, Settings, Eye, CheckCircle2, AlertTriangle, Hammer
 } from 'lucide-react';
+import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
+import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 
 const MachineManagementView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = useOutletContext();
@@ -17,7 +19,12 @@ const MachineManagementView = () => {
   const [machines, setMachines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [message, setMessage] = useState({ type: '', text: '' });
+  const { toast } = useToast();
+  const setMessage = (msg) => {
+    if (msg && msg.text) {
+      toast(msg.type, msg.text);
+    }
+  };
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
 
@@ -307,226 +314,128 @@ const MachineManagementView = () => {
   return (
     <div style={{ padding: '5px 20px 20px', fontFamily: 'Inter, sans-serif' }}>
       
-      {/* Hidden File Input for Excel Import */}
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        style={{ display: 'none' }} 
-        accept=".xlsx, .xls"
-        onChange={handleImportExcel}
-      />
-
       {/* Toolbar */}
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '12px 20px', backgroundColor: '#fff', borderRadius: '12px',
-        border: '1px solid #EADCC9', width: '100%', marginBottom: '10px',
-        gap: '15px', flexWrap: 'wrap', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)'
-      }}>
-        <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flex: 1, minWidth: '300px' }}>
-          <div style={{ position: 'relative', width: '320px' }}>
-            <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#7B5233' }} size={16} />
-            <input 
-              type="text" 
-              placeholder="Nhập mã hoặc tên máy..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{ 
-                width: '100%', padding: '8px 12px 8px 38px', border: '1.5px solid #EADCC9', 
-                borderRadius: '8px', outline: 'none', fontSize: '13px',
-                backgroundColor: '#fff', color: '#7B5233'
-              }}
-            />
+      <PageToolbar
+        searchValue={searchTerm}
+        onSearchChange={setSearchTerm}
+        searchPlaceholder="Nhập mã hoặc tên máy..."
+        showSort={true}
+        sortOptions={[
+          { value: 'code-asc', label: 'Mã máy: Tăng dần' },
+          { value: 'code-desc', label: 'Mã máy: Giảm dần' },
+          { value: 'name-asc', label: 'Tên máy: Tăng dần' },
+          { value: 'name-desc', label: 'Tên máy: Giảm dần' },
+          { value: 'next_maintenance_date-asc', label: 'Bảo trì: Sớm nhất' },
+          { value: 'next_maintenance_date-desc', label: 'Bảo trì: Trễ nhất' }
+        ]}
+        sortValue={`${sortField}-${sortOrder}`}
+        onSortChange={(val) => {
+          if (!val) return;
+          const parts = val.split('-');
+          const order = parts.pop();
+          const field = parts.join('-');
+          setSortField(field);
+          setSortOrder(order);
+        }}
+        showFilter={true}
+        isFilterOpen={showFilterDropdown}
+        onFilterToggle={() => setShowFilterDropdown(!showFilterDropdown)}
+        activeFiltersCount={(selectedFactory !== 'All' ? 1 : 0) + (selectedDepartment !== 'All' ? 1 : 0) + (selectedStatus !== 'All' ? 1 : 0)}
+        importActions={[
+          {
+            label: 'Nhập file Excel',
+            icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>,
+            onClick: () => fileInputRef.current.click()
+          }
+        ]}
+        onExport={handleExportExcel}
+        onCreate={handleAddNewClick}
+        createLabel="Thêm mới"
+        hasWritePermission={true}
+      >
+        {/* Hidden File Input for Excel Import */}
+        <input 
+          type="file" 
+          ref={fileInputRef} 
+          style={{ display: 'none' }} 
+          accept=".xlsx, .xls"
+          onChange={handleImportExcel}
+        />
+      </PageToolbar>
+
+      {/* INLINE EXPANDABLE FILTER BAR */}
+      {showFilterDropdown && (
+        <div className="filter-inline-bar">
+          {/* Nhà máy */}
+          <div className="filter-field-group">
+            <label className="filter-field-label">Nhà máy</label>
+            <select 
+              value={selectedFactory}
+              onChange={(e) => { setSelectedFactory(e.target.value); setPage(1); }}
+            >
+              {uniqueFactories.map(f => (
+                <option key={f} value={f}>{f === 'All' ? 'Tất cả nhà máy' : f}</option>
+              ))}
+            </select>
           </div>
-          
-          <div style={{ position: 'relative' }}>
+
+          {/* Bộ phận */}
+          <div className="filter-field-group">
+            <label className="filter-field-label">Bộ phận</label>
+            <select 
+              value={selectedDepartment}
+              onChange={(e) => { setSelectedDepartment(e.target.value); setPage(1); }}
+            >
+              {uniqueDepartments.map(d => (
+                <option key={d} value={d}>{d === 'All' ? 'Tất cả bộ phận' : d}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Tình trạng */}
+          <div className="filter-field-group">
+            <label className="filter-field-label">Tình trạng</label>
+            <select 
+              value={selectedStatus}
+              onChange={(e) => { setSelectedStatus(e.target.value); setPage(1); }}
+            >
+              {uniqueStatuses.map(s => (
+                <option key={s} value={s}>{s === 'All' ? 'Tất cả trạng thái' : s}</option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
             <button 
               onClick={() => {
-                setShowSortDropdown(!showSortDropdown);
-                setShowFilterDropdown(false);
+                setSelectedFactory('All');
+                setSelectedDepartment('All');
+                setSelectedStatus('All');
+                setPage(1);
               }}
               style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                width: '34px', height: '34px', border: 'none', background: 'none',
-                cursor: 'pointer', color: '#7B5233',
-                backgroundColor: showSortDropdown ? '#FAF6F0' : 'transparent',
-                borderRadius: '8px'
+                height: '36px',
+                padding: '0 16px',
+                border: '1px solid #cbd5e1',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                color: '#64748b',
+                cursor: 'pointer',
+                backgroundColor: '#f8fafc',
+                transition: 'background 0.2s',
+                textAlign: 'center'
               }}
-              title="Sắp xếp"
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M11 5h10M11 9h7M11 13h4M3 17l3 3 3-3M6 18V4"></path>
-              </svg>
+              Xóa bộ lọc
             </button>
-            {showSortDropdown && (
-              <div style={{
-                position: 'absolute', top: '100%', left: '0', backgroundColor: '#fff',
-                border: '1px solid #cbd5e1', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
-                zIndex: 1100, minWidth: '220px', padding: '12px', marginTop: '5px'
-              }}>
-                <div style={{ fontSize: '12px', fontWeight: '800', color: '#64748b', marginBottom: '8px', textTransform: 'uppercase' }}>Cột sắp xếp</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
-                  {[
-                    { field: 'code', label: 'Mã máy' },
-                    { field: 'name', label: 'Tên máy' },
-                    { field: 'next_maintenance_date', label: 'Ngày bảo trì tiếp theo' }
-                  ].map(opt => (
-                    <label key={opt.field} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer', color: '#334155' }}>
-                      <input 
-                        type="radio" 
-                        name="sortField" 
-                        checked={sortField === opt.field}
-                        onChange={() => setSortField(opt.field)}
-                        style={{ accentColor: '#7B5233' }}
-                      />
-                      {opt.label}
-                    </label>
-                  ))}
-                </div>
-                <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
-                  <div style={{ fontSize: '12px', fontWeight: '800', color: '#64748b', marginBottom: '8px', textTransform: 'uppercase' }}>Thứ tự</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer', color: '#334155' }}>
-                      <input 
-                        type="radio" 
-                        name="sortOrder" 
-                        checked={sortOrder === 'asc'}
-                        onChange={() => setSortOrder('asc')}
-                        style={{ accentColor: '#7B5233' }}
-                      />
-                      Tăng dần
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer', color: '#334155' }}>
-                      <input 
-                        type="radio" 
-                        name="sortOrder" 
-                        checked={sortOrder === 'desc'}
-                        onChange={() => setSortOrder('desc')}
-                        style={{ accentColor: '#7B5233' }}
-                      />
-                      Giảm dần
-                    </label>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
-
-          <div style={{ position: 'relative' }}>
-            <button 
-              onClick={() => {
-                setShowFilterDropdown(!showFilterDropdown);
-                setShowSortDropdown(false);
-              }}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                width: '34px', height: '34px', border: 'none', background: 'none',
-                cursor: 'pointer', color: '#7B5233',
-                backgroundColor: showFilterDropdown ? '#FAF6F0' : 'transparent',
-                borderRadius: '8px'
-              }}
-              title="Bộ lọc nâng cao"
-            >
-              <Filter size={20} strokeWidth={2.5} />
-            </button>
-            {showFilterDropdown && (
-              <div style={{
-                position: 'absolute', top: '100%', left: '0', backgroundColor: '#fff',
-                border: '1px solid #cbd5e1', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
-                zIndex: 1100, minWidth: '260px', padding: '16px', marginTop: '5px',
-                display: 'flex', flexDirection: 'column', gap: '12px'
-              }}>
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>Nhà máy</label>
-                  <select 
-                    value={selectedFactory}
-                    onChange={(e) => { setSelectedFactory(e.target.value); setPage(1); }}
-                    style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none' }}
-                  >
-                    {uniqueFactories.map(f => (
-                      <option key={f} value={f}>{f === 'All' ? 'Tất cả nhà máy' : f}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>Bộ phận</label>
-                  <select 
-                    value={selectedDepartment}
-                    onChange={(e) => { setSelectedDepartment(e.target.value); setPage(1); }}
-                    style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none' }}
-                  >
-                    {uniqueDepartments.map(d => (
-                      <option key={d} value={d}>{d === 'All' ? 'Tất cả bộ phận' : d}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>Tình trạng</label>
-                  <select 
-                    value={selectedStatus}
-                    onChange={(e) => { setSelectedStatus(e.target.value); setPage(1); }}
-                    style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none' }}
-                  >
-                    {uniqueStatuses.map(s => (
-                      <option key={s} value={s}>{s === 'All' ? 'Tất cả trạng thái' : s}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <button 
-                  onClick={() => {
-                    setSelectedFactory('All');
-                    setSelectedDepartment('All');
-                    setSelectedStatus('All');
-                    setPage(1);
-                  }}
-                  style={{
-                    padding: '8px', border: '1px solid #cbd5e1', borderRadius: '6px',
-                    fontSize: '12px', fontWeight: 'bold', color: '#64748b', cursor: 'pointer',
-                    backgroundColor: '#f8fafc', transition: 'background 0.2s', textAlign: 'center'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
-                >
-                  Xóa bộ lọc
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Action Buttons on the Right */}
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <button onClick={() => fileInputRef.current.click()} style={btnStyle}>
-            <FileUp size={14} /> Nhập dữ liệu
-          </button>
-
-          <button onClick={handleExportExcel} style={btnStyle}>
-            <FileDown size={14} /> Xuất dữ liệu
-          </button>
-
-          <button onClick={handleAddNewClick} style={{...btnStyle, backgroundColor: '#5c3924'}}>
-            <Plus size={14} /> Thêm mới
-          </button>
-        </div>
-      </div>
-
-      {/* Alert Message */}
-      {message.text && (
-        <div style={{
-          padding: '12px 20px', borderRadius: '12px', marginBottom: '15px',
-          backgroundColor: message.type === 'success' ? '#f0fdf4' : '#fef2f2',
-          color: message.type === 'success' ? '#166534' : '#991b1b',
-          border: `1px solid ${message.type === 'success' ? '#bbf7d0' : '#fecaca'}`,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
-        }}>
-          <span style={{ fontWeight: '600' }}>{message.text}</span>
-          <X size={18} onClick={() => setMessage({type:'', text:''})} style={{ cursor: 'pointer', opacity: 0.5 }} />
         </div>
       )}
+
+
 
       {/* Bảng Dữ Liệu */}
       <div className="admin-list-layout">
