@@ -60,6 +60,7 @@ const PageToolbar = ({
   // Action buttons
   extraActions = [],
   importActions = [],
+  createActions = [],
   onExport,
   isExporting = false,
   exportLabel = 'Xuất dữ liệu',
@@ -75,10 +76,12 @@ const PageToolbar = ({
   const [showSortDropdown, setShowSortDropdown] = useState(false);
   const [isOtherDropdownOpen, setIsOtherDropdownOpen] = useState(false);
   const [isImportDropdownOpen, setIsImportDropdownOpen] = useState(false);
+  const [isCreateDropdownOpen, setIsCreateDropdownOpen] = useState(false);
 
   const sortDropdownRef = useRef(null);
   const otherDropdownRef = useRef(null);
   const importDropdownRef = useRef(null);
+  const createDropdownRef = useRef(null);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -92,6 +95,9 @@ const PageToolbar = ({
       if (importDropdownRef.current && !importDropdownRef.current.contains(e.target)) {
         setIsImportDropdownOpen(false);
       }
+      if (createDropdownRef.current && !createDropdownRef.current.contains(e.target)) {
+        setIsCreateDropdownOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -103,7 +109,7 @@ const PageToolbar = ({
   const visibleImportActions = importActions.filter(a => !a.requireWrite || hasWritePermission);
   const showImportBtn = visibleImportActions.length > 0;
   const showExportBtn = !!onExport;
-  const showCreateBtn = !!onCreate && hasWritePermission;
+  const showCreateBtn = (!!onCreate || (createActions && createActions.length > 0)) && hasWritePermission;
 
   return (
     <div className="page-toolbar">
@@ -281,14 +287,46 @@ const PageToolbar = ({
 
         {/* 4. NÚT TẠO MỚI */}
         {showCreateBtn && (
-          <button
-            type="button"
-            className="page-toolbar__action-btn"
-            onClick={onCreate}
-          >
-            <Plus size={14} strokeWidth={3} />
-            <span>{createLabel}</span>
-          </button>
+          createActions.length > 0 ? (
+            <div className="page-toolbar__dropdown-container" ref={createDropdownRef}>
+              <button
+                type="button"
+                className="page-toolbar__action-btn"
+                onClick={(e) => { e.stopPropagation(); setIsCreateDropdownOpen(!isCreateDropdownOpen); setIsImportDropdownOpen(false); setIsOtherDropdownOpen(false); }}
+              >
+                <Plus size={14} strokeWidth={3} />
+                <span>{createLabel}</span>
+              </button>
+              {isCreateDropdownOpen && (
+                <div className="page-toolbar__dropdown-menu" style={{ right: 0, left: 'auto' }}>
+                  {createActions.map((action, idx) => (
+                    <React.Fragment key={idx}>
+                      {idx > 0 && <div className="page-toolbar__dropdown-divider" />}
+                      <button
+                        type="button"
+                        className="page-toolbar__dropdown-item"
+                        onClick={() => { setIsCreateDropdownOpen(false); action.onClick(); }}
+                      >
+                        <div className="page-toolbar__dropdown-item-left">
+                          {action.icon}
+                          <span>{action.label}</span>
+                        </div>
+                      </button>
+                    </React.Fragment>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="page-toolbar__action-btn"
+              onClick={onCreate}
+            >
+              <Plus size={14} strokeWidth={3} />
+              <span>{createLabel}</span>
+            </button>
+          )
         )}
       </div>
 

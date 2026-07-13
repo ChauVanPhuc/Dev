@@ -670,10 +670,19 @@ const ISOProcessEditorView = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const location = useLocation();
+  const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
+  const fileInputRef = useRef(null);
+  const [uploadLoading, setUploadLoading] = useState(false);
 
   const isProcessMode = true;
   const backPath = isProcessMode ? '/admin/iso-processes' : '/admin/iso-documents';
   const isEditMode = id && id !== 'new';
+
+  useEffect(() => {
+    if (setCustomTitle) {
+      setCustomTitle('Cập nhật mẫu tài liệu');
+    }
+  }, [setCustomTitle]);
 
   // Screen routing states: 'overview' (Màn hình 1), 'step_instructions' (Ảnh 4)
   const [currentScreen, setCurrentScreen] = useState('overview');
@@ -707,6 +716,7 @@ const ISOProcessEditorView = () => {
     id: null,
     code: '',
     name: '',
+    symbol: '',
     version: '01',
     issue_date: new Date().toISOString().split('T')[0],
     issuer: '',
@@ -716,6 +726,9 @@ const ISOProcessEditorView = () => {
     folder: '', // display_at
     doc_type: '', // note
     document_level: '',
+    iso_document_id: '',
+    iso_document_code: '',
+    iso_document_name: '',
     revision_logs: [
       { seq_no: 1, rev_date: '', content: 'Ban hành lần đầu', page_no: 'Tất cả' }
     ],
@@ -1229,6 +1242,7 @@ const ISOProcessEditorView = () => {
         id: data.id,
         code: data.code || '',
         name: data.name || '',
+        symbol: data.symbol || '',
         version: data.version || '01',
         issue_date: data.issue_date || '',
         issuer: data.issuer || '',
@@ -1240,6 +1254,8 @@ const ISOProcessEditorView = () => {
         document_level: data.document_level || '',
         revision_logs: data.revision_logs || [],
         iso_document_id: data.iso_document_id || '',
+        iso_document_code: data.iso_document_code || '',
+        iso_document_name: data.iso_document_name || '',
         owner: data.owner || '',
         editor: data.editor || '',
         sections: receivedSections,
@@ -1274,6 +1290,99 @@ const ISOProcessEditorView = () => {
       ...prev,
       [field]: val
     }));
+  };
+
+  const handleWordUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const fileNameLower = file.name.toLowerCase();
+    if (!fileNameLower.endsWith('.docx') && !fileNameLower.endsWith('.doc')) {
+      showFeedback('error', 'Chỉ hỗ trợ tải lên tệp định dạng Word (.doc, .docx)');
+      return;
+    }
+
+    if (fileNameLower.endsWith('.doc')) {
+      showFeedback('error', 'Hệ thống chỉ hỗ trợ phân tích tự động định dạng Word (.docx). Vui lòng chuyển đổi tệp (.doc) sang (.docx) trước khi tải lên.');
+      return;
+    }
+
+    const formDataPay = new FormData();
+    formDataPay.append('file', file);
+
+    setUploadLoading(true);
+    showFeedback('info', 'Đang tải lên và phân tích tài liệu quy trình mới...');
+
+    try {
+      const parsedData = await api.post('/iso-documents/upload', formDataPay, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      const newSections = parsedData.sections || {};
+      const newSectionTypes = {};
+      Object.keys(newSections).forEach(key => {
+        newSectionTypes[key] = parsedData.section_types?.[key] || 'text';
+      });
+
+      const nextCode = formData.code || 'QT01';
+
+      const stepsMapped = (parsedData.steps || []).map(step => ({
+        ...step,
+        node_type: step.transition?.node_type || step.node_type || 'task',
+        has_branch: step.transition?.has_branch !== undefined ? step.transition.has_branch : (step.has_branch || false),
+        fail_path: step.transition?.fail_path || step.fail_path || [],
+        image_url: step.transition?.image_url || ''
+      }));
+
+      const instructionStepsMapped = (parsedData.steps || []).map((step, idx) => ({
+        id: `inst_${Date.now()}_${idx}`,
+        step_number: step.step_number || (idx + 1),
+        name: step.name || '',
+        image_url: step.transition?.image_url || step.image_url || ''
+      }));
+
+      const workInstructionsMapped = [{
+        id: `inst_${Date.now()}`,
+        code: `${nextCode}-HD01`,
+        title: 'Hướng dẫn thực hiện quy trình',
+        scope: 'Tất cả',
+        note: '',
+        steps: (parsedData.steps || []).map((step, idx) => ({
+          id: `step_${Date.now()}_${idx}`,
+          step_number: step.step_number || (idx + 1),
+          name: step.name || '',
+          image_urls: (step.transition?.image_url || step.image_url) ? [step.transition?.image_url || step.image_url] : []
+        }))
+      }];
+
+      setFormData(prev => ({
+        ...prev,
+        name: (parsedData.name && parsedData.name.trim() !== '[Tên quy trình]' && parsedData.name.trim() !== 'Tên quy trình' && parsedData.name.trim() !== '[Tên tài liệu]' && parsedData.name.trim() !== 'Tên tài liệu') ? parsedData.name : prev.name,
+        symbol: parsedData.symbol || prev.symbol,
+        version: parsedData.version || prev.version || '01',
+        file_path: parsedData.file_path || prev.file_path,
+        folder: parsedData.folder || prev.folder,
+        doc_type: parsedData.doc_type || prev.doc_type,
+        document_level: parsedData.document_level || prev.document_level,
+        notes: parsedData.notes || prev.notes,
+        sections: newSections,
+        section_types: newSectionTypes,
+        steps: stepsMapped,
+        instruction_steps: instructionStepsMapped,
+        work_instructions: workInstructionsMapped
+      }));
+
+      showFeedback('success', 'Cập nhật cấu trúc tài liệu quy trình từ file Word thành công! Vui lòng ấn "Lưu quy trình" để hoàn tất.');
+    } catch (error) {
+      console.error('Lỗi upload file:', error);
+      const errMsg = error.response?.data?.detail || error.message || 'Lỗi khi upload tệp quy trình mới';
+      showFeedback('error', errMsg);
+    } finally {
+      setUploadLoading(false);
+      e.target.value = '';
+    }
   };
 
   const handleSectionChange = (sectionName, val) => {
@@ -2065,8 +2174,16 @@ const ISOProcessEditorView = () => {
 
   // --- SAVE FORM ---
   const handleSaveForm = async () => {
-    if (!formData.code || !formData.name) {
-      showFeedback('error', 'Vui lòng nhập đầy đủ Mã quy trình và Tên quy trình');
+    if (!formData.code) {
+      showFeedback('error', 'Mã quy trình không được để trống');
+      return;
+    }
+    if (!formData.symbol || !formData.symbol.trim()) {
+      showFeedback('error', 'Ký hiệu quy trình là bắt buộc');
+      return;
+    }
+    if (!formData.name || !formData.name.trim()) {
+      showFeedback('error', 'Tên quy trình là bắt buộc');
       return;
     }
 
@@ -2118,6 +2235,8 @@ const ISOProcessEditorView = () => {
 
       const finalPayload = {
         ...formData,
+        editor: loggedInUser.full_name || loggedInUser.username || formData.editor || '',
+        issuer: loggedInUser.full_name || loggedInUser.username || formData.issuer || '',
         display_at: formData.folder,
         notes: formData.doc_type,
         steps: stepsToSave,
@@ -2279,6 +2398,33 @@ const ISOProcessEditorView = () => {
             >
               <span style={headerTextStyle}>{isProcessMode ? 'Thông tin quy trình' : 'Thông tin Mẫu ISO'}</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleWordUpload}
+                  style={{ display: 'none' }}
+                  accept=".docx"
+                />
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    fileInputRef.current?.click();
+                  }}
+                  disabled={loading || uploadLoading}
+                  style={{
+                    padding: '4px 12px',
+                    backgroundColor: '#FAF6F0',
+                    color: '#7B5233',
+                    border: '1px solid #7B5233',
+                    borderRadius: '4px',
+                    fontSize: '0.75rem',
+                    fontWeight: 'bold',
+                    cursor: (loading || uploadLoading) ? 'not-allowed' : 'pointer',
+                    opacity: (loading || uploadLoading) ? 0.7 : 1
+                  }}
+                >
+                  {uploadLoading ? 'Đang tải...' : 'Đính kèm file Word mới'}
+                </button>
                 <button 
                   onClick={(e) => {
                     e.stopPropagation();
@@ -2300,234 +2446,237 @@ const ISOProcessEditorView = () => {
                 {infoExpanded ? <ChevronUp size={16} style={{color:accentColor}} /> : <ChevronDown size={16} style={{color:accentColor}} />}
               </div>
             </div>
-            
+
             {infoExpanded && (
-              <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid #EADCC9' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr 1fr', gap: '16px' }}>
-                <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>{isProcessMode ? 'Mã QT' : 'Mã Mẫu'}</label>
-                  <input type="text" value={formData.code} readOnly style={{ width: '100%', padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.82rem', outline: 'none', backgroundColor: '#f1f5f9', color: '#64748b', cursor: 'not-allowed', fontWeight: '500' }} />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>{isProcessMode ? 'Tên quy trình' : 'Tên Mẫu ISO'}</label>
-                  <input type="text" value={formData.name} onChange={(e) => handleInputChange('name', e.target.value)} placeholder="Nhập tên quy trình..." style={{ width: '100%', padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.82rem', outline: 'none' }} />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>Ngày ban hành</label>
-                  <input type="date" value={formData.issue_date} onChange={(e) => handleInputChange('issue_date', e.target.value)} style={{ width: '100%', padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.82rem', outline: 'none' }} />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>Trạng thái</label>
-                  <select value={formData.status} onChange={(e) => handleInputChange('status', e.target.value)} style={{ width: '100%', padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.82rem', outline: 'none', backgroundColor: 'white', cursor: 'pointer' }}>
-                    <option value="Hiệu lực">Đang hoạt động</option>
-                    <option value="Hết hiệu lực">Hết hiệu lực</option>
-                    <option value="Dự thảo">Dự thảo</option>
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1.5fr', gap: '16px' }}>
-                <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>Người soạn</label>
-                  <input type="text" value={formData.issuer || formData.editor} onChange={(e) => handleInputChange(isProcessMode ? 'editor' : 'issuer', e.target.value)} style={{ width: '100%', padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.82rem', outline: 'none' }} />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>Người duyệt</label>
-                  <input type="text" value={formData.approver} onChange={(e) => handleInputChange('approver', e.target.value)} style={{ width: '100%', padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.82rem', outline: 'none' }} />
-                </div>
-                <div style={{ position: 'relative' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>Hiển thị tại</label>
-                  <div 
-                    onClick={() => setIsScreenDropdownOpen(!isScreenDropdownOpen)}
-                    style={{ 
-                      width: '100%', 
-                      padding: '6px 10px', 
-                      border: '1px solid #cbd5e1', 
-                      borderRadius: '4px', 
-                      fontSize: '0.82rem', 
-                      minHeight: '32px',
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      gap: '4px',
-                      alignItems: 'center',
-                      backgroundColor: 'white',
-                      cursor: 'pointer',
-                      userSelect: 'none'
-                    }}
-                  >
-                    {(() => {
-                      const selectedScreens = formData.folder ? formData.folder.split(',').map(s => s.trim()).filter(Boolean) : [];
-                      if (selectedScreens.length === 0) {
-                        return <span style={{ color: '#94a3b8' }}>Màn hình hiển thị...</span>;
-                      }
-                      return selectedScreens.map(scrPath => {
-                        const scrObj = systemScreens.find(s => s.route_path === scrPath);
-                        const label = scrObj ? `${scrObj.title} (${scrObj.route_path})` : scrPath;
-                        return (
-                          <span 
-                            key={scrPath}
-                            style={{ 
-                              backgroundColor: '#FAF6F0', 
-                              color: '#7B5233', 
-                              border: '1px solid #7B5233',
-                              padding: '2px 6px',
-                              borderRadius: '12px',
-                              fontSize: '0.7rem',
-                              fontWeight: 'bold',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}
-                          >
-                            {label}
-                            <span 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleToggleScreen(scrPath);
-                              }}
-                              style={{ cursor: 'pointer', fontWeight: '900' }}
-                            >
-                              ×
-                            </span>
-                          </span>
-                        );
-                      });
-                    })()}
+              <div style={{ padding: '20px', borderTop: '1px solid #F0E6D8', backgroundColor: '#FFFFFF' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '14px 16px' }}>
+                  
+                  {/* Row 1 */}
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mã QT</label>
+                    <input
+                      type="text"
+                      value={formData.code}
+                      readOnly
+                      style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', fontWeight: '600', backgroundColor: '#F3F4F6', color: '#4B5563', cursor: 'not-allowed' }}
+                    />
+                  </div>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ký hiệu <span style={{ color: 'red' }}>*</span></label>
+                    <input
+                      type="text"
+                      value={formData.symbol || ''}
+                      onChange={(e) => handleInputChange('symbol', e.target.value)}
+                      placeholder="Nhập ký hiệu..."
+                      style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', color: '#1F2937' }}
+                    />
+                  </div>
+                  <div style={{ gridColumn: 'span 4' }}>
+                    <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tên quy trình <span style={{ color: 'red' }}>*</span></label>
+                    <input
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) => handleInputChange('name', e.target.value)}
+                      placeholder="Nhập tên quy trình..."
+                      style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', color: '#1F2937' }}
+                    />
+                  </div>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ngày cập nhật</label>
+                    <input
+                      type="text"
+                      value={formData.issue_date || ''}
+                      readOnly
+                      style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', fontWeight: '600', backgroundColor: '#F3F4F6', color: '#4B5563', cursor: 'not-allowed' }}
+                    />
+                  </div>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Trạng thái</label>
+                    <select
+                      value={formData.status}
+                      onChange={(e) => handleInputChange('status', e.target.value)}
+                      style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', backgroundColor: 'white', cursor: 'pointer', color: '#1F2937' }}
+                    >
+                      <option value="Nháp">Nháp</option>
+                      <option value="Dự thảo">Dự thảo</option>
+                      <option value="Hiệu lực">Đang hoạt động</option>
+                      <option value="Hết hiệu lực">Hết hiệu lực</option>
+                    </select>
                   </div>
 
-                  {isScreenDropdownOpen && (
-                    <div style={{
-                      position: 'absolute',
-                      top: '100%',
-                      left: 0,
-                      right: 0,
-                      maxHeight: '240px',
-                      overflowY: 'auto',
-                      backgroundColor: 'white',
-                      border: '1.5px solid #EADCC9',
-                      borderRadius: '6px',
-                      boxShadow: '0 4px 12px rgba(45, 26, 18, 0.08)',
-                      zIndex: 1000,
-                      marginTop: '4px',
-                      padding: '6px'
-                    }}>
-                      <div style={{ padding: '4px 8px', fontSize: '0.72rem', color: '#64748b', fontWeight: 'bold', borderBottom: '1px solid #FAF6F0', marginBottom: '4px' }}>
-                        Chọn màn hình:
-                      </div>
-                      {systemScreens.length === 0 ? (
-                        <div style={{ padding: '8px 12px', fontSize: '0.8rem', color: '#94a3b8', fontStyle: 'italic' }}>
-                          Đang tải màn hình...
-                        </div>
-                      ) : (
-                        (() => {
-                          const selectedScreens = formData.folder ? formData.folder.split(',').map(s => s.trim()).filter(Boolean) : [];
-                          const mobileScreens = systemScreens.filter(scr => 
-                            scr.platform && 
-                            scr.platform.toLowerCase() === 'mobile' && 
-                            ((scr.route_path || '').toLowerCase().includes('inspection') || 
-                             (scr.title || '').toLowerCase().includes('kiểm tra'))
-                          );
-                          return mobileScreens.map(scr => {
-                            const isSelected = selectedScreens.includes(scr.route_path);
-                            return (
-                              <div
-                                key={scr.id}
-                                onClick={() => handleToggleScreen(scr.route_path)}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '8px',
-                                  padding: '6px 8px',
-                                  borderRadius: '4px',
-                                  cursor: 'pointer',
-                                  backgroundColor: isSelected ? '#FAF6F0' : 'transparent',
-                                  transition: 'all 0.15s ease'
-                                }}
-                                onMouseEnter={(e) => {
-                                  if (!isSelected) e.currentTarget.style.backgroundColor = '#FAF8F5';
-                                }}
-                                onMouseLeave={(e) => {
-                                  if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
-                                }}
-                              >
-                                <input 
-                                  type="checkbox" 
-                                  checked={isSelected} 
-                                  readOnly
-                                  style={{ accentColor: '#7B5233', cursor: 'pointer' }}
-                                />
-                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                  <span style={{ fontSize: '0.8rem', fontWeight: isSelected ? 'bold' : 'normal', color: isSelected ? '#7B5233' : '#334155' }}>
-                                    {scr.title || 'Màn hình'}
-                                  </span>
-                                  <span style={{ fontSize: '0.68rem', color: '#64748b' }}>
-                                    [{scr.platform}] {scr.route_path}
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          });
-                        })()
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>Cấp tài liệu (Chọn 1 hoặc nhiều)</label>
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', paddingTop: '2px' }}>
-                    {['Cấp 1', 'Cấp 2', 'Cấp 3', 'Cấp 4'].map(lvl => {
-                      const selectedList = formData.document_level ? formData.document_level.split(',').map(s => s.trim()) : [];
-                      const isSelected = selectedList.includes(lvl);
-                      const handleToggle = () => {
-                        let newList;
-                        if (isSelected) {
-                          newList = selectedList.filter(x => x !== lvl);
-                        } else {
-                          newList = [...selectedList, lvl];
+                  {/* Row 2 */}
+                  <div style={{ gridColumn: 'span 4' }}>
+                    <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Người cập nhật</label>
+                    <input
+                      type="text"
+                      value={loggedInUser.full_name || loggedInUser.username || formData.editor || formData.issuer || '---'}
+                      readOnly
+                      style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', fontWeight: '600', backgroundColor: '#F3F4F6', color: '#4B5563', cursor: 'not-allowed' }}
+                    />
+                  </div>
+                  <div style={{ gridColumn: 'span 4' }}>
+                    <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Người duyệt</label>
+                    <input
+                      type="text"
+                      value={formData.approver || ''}
+                      onChange={(e) => handleInputChange('approver', e.target.value)}
+                      placeholder="Nhập người duyệt..."
+                      style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', color: '#1F2937' }}
+                    />
+                  </div>
+                  <div style={{ gridColumn: 'span 4', position: 'relative' }}>
+                    <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Phạm vi</label>
+                    <div 
+                      onClick={() => setIsScreenDropdownOpen(!isScreenDropdownOpen)}
+                      style={{ 
+                        width: '100%', 
+                        minHeight: '36px', 
+                        padding: '6px 12px', 
+                        border: '1px solid #D1D5DB', 
+                        borderRadius: '6px', 
+                        fontSize: '0.82rem', 
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: '4px',
+                        alignItems: 'center',
+                        backgroundColor: 'white',
+                        cursor: 'pointer',
+                        userSelect: 'none'
+                      }}
+                    >
+                      {(() => {
+                        const selectedScreens = formData.folder ? formData.folder.split(',').map(s => s.trim()).filter(Boolean) : [];
+                        if (selectedScreens.length === 0) {
+                          return <span style={{ color: '#94a3b8' }}>Chọn phạm vi màn hình...</span>;
                         }
-                        handleInputChange('document_level', newList.filter(Boolean).join(', '));
-                      };
-                      return (
-                        <button
-                          key={lvl}
-                          type="button"
-                          onClick={handleToggle}
-                          style={{
-                            padding: '4px 8px',
-                            borderRadius: '16px',
-                            border: isSelected ? '1.5px solid #7B5233' : '1.5px solid #cbd5e1',
-                            backgroundColor: isSelected ? '#FAF6F0' : 'white',
-                            color: isSelected ? '#7B5233' : '#64748b',
-                            fontSize: '0.74rem',
-                            fontWeight: 'bold',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease',
-                            outline: 'none',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '2px'
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!isSelected) e.currentTarget.style.borderColor = '#7B5233';
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!isSelected) e.currentTarget.style.borderColor = '#cbd5e1';
-                          }}
-                        >
-                          {lvl} {isSelected && '✓'}
-                        </button>
-                      );
-                    })}
+                        return selectedScreens.map(scrPath => {
+                          const scrObj = systemScreens.find(s => s.route_path === scrPath);
+                          const label = scrObj ? `${scrObj.title} (${scrObj.route_path})` : scrPath;
+                          return (
+                            <span 
+                              key={scrPath}
+                              style={{ 
+                                backgroundColor: '#FAF6F0', 
+                                color: '#7B5233', 
+                                border: '1px solid #7B5233',
+                                padding: '2px 6px',
+                                borderRadius: '12px',
+                                fontSize: '0.7rem',
+                                fontWeight: 'bold',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                            >
+                              {label}
+                              <span 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleScreen(scrPath);
+                                }}
+                                style={{ cursor: 'pointer', fontWeight: '900' }}
+                              >
+                                ×
+                              </span>
+                            </span>
+                          );
+                        });
+                      })()}
+                    </div>
+
+                    {isScreenDropdownOpen && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        maxHeight: '240px',
+                        overflowY: 'auto',
+                        backgroundColor: 'white',
+                        border: '1.5px solid #EADCC9',
+                        borderRadius: '6px',
+                        boxShadow: '0 4px 12px rgba(45, 26, 18, 0.08)',
+                        zIndex: 1000,
+                        marginTop: '4px',
+                        padding: '6px'
+                      }}>
+                        <div style={{ padding: '4px 8px', fontSize: '0.72rem', color: '#64748b', fontWeight: 'bold', borderBottom: '1px solid #FAF6F0', marginBottom: '4px' }}>
+                          Chọn màn hình:
+                        </div>
+                        {systemScreens.length === 0 ? (
+                          <div style={{ padding: '8px 12px', fontSize: '0.8rem', color: '#94a3b8', fontStyle: 'italic' }}>
+                            Đang tải màn hình...
+                          </div>
+                        ) : (
+                          (() => {
+                            const selectedScreens = formData.folder ? formData.folder.split(',').map(s => s.trim()).filter(Boolean) : [];
+                            const mobileScreens = systemScreens.filter(scr => 
+                              scr.platform && 
+                              scr.platform.toLowerCase() === 'mobile' && 
+                              ((scr.route_path || '').toLowerCase().includes('inspection') || 
+                               (scr.title || '').toLowerCase().includes('kiểm tra'))
+                            );
+                            return mobileScreens.map(scr => {
+                              const isSelected = selectedScreens.includes(scr.route_path);
+                              return (
+                                <div
+                                  key={scr.id}
+                                  onClick={() => handleToggleScreen(scr.route_path)}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    padding: '6px 8px',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    backgroundColor: isSelected ? '#FAF6F0' : 'transparent',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (!isSelected) e.currentTarget.style.backgroundColor = '#FAF8F5';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
+                                  }}
+                                >
+                                  <input 
+                                    type="checkbox" 
+                                    checked={isSelected} 
+                                    readOnly
+                                    style={{ accentColor: '#7B5233', cursor: 'pointer' }}
+                                  />
+                                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <span style={{ fontSize: '0.8rem', fontWeight: isSelected ? 'bold' : 'normal', color: isSelected ? '#7B5233' : '#334155' }}>
+                                      {scr.title || 'Màn hình'}
+                                    </span>
+                                    <span style={{ fontSize: '0.68rem', color: '#64748b' }}>
+                                      [{scr.platform}] {scr.route_path}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            });
+                          })()
+                        )}
+                      </div>
+                    )}
                   </div>
+
+                  {/* Row 3: Ghi chú */}
+                  <div style={{ gridColumn: 'span 12' }}>
+                    <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ghi chú</label>
+                    <textarea
+                      value={formData.notes || ''}
+                      onChange={(e) => handleInputChange('notes', e.target.value)}
+                      placeholder="Nhập ghi chú hoặc mô tả ngắn cho quy trình..."
+                      rows={3}
+                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', resize: 'none', fontFamily: 'inherit', color: '#1F2937', lineHeight: '1.4' }}
+                    />
+                  </div>
+
                 </div>
               </div>
-
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>Ghi chú</label>
-                <textarea value={formData.doc_type} onChange={(e) => handleInputChange('doc_type', e.target.value)} rows={3} style={{ width: '100%', padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.82rem', outline: 'none', resize: 'none', fontFamily: 'inherit' }} />
-              </div>
-            </div>
-          )}
+            )}
         </div>
 
           {/* Tab Bar Navigation */}
@@ -4699,7 +4848,7 @@ const ISOProcessEditorView = () => {
                               </h3>
                               {html ? (
                                 <div 
-                                  dangerouslySetInnerHTML={{ __html: html }} 
+                                  dangerouslySetInnerHTML={{ __html: html.replace(/✔\s*/g, '- ').replace(/✓\s*/g, '- ') }} 
                                   style={{ paddingLeft: '8px', fontSize: '11.5pt' }}
                                 />
                               ) : (

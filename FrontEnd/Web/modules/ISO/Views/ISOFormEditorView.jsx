@@ -33,6 +33,8 @@ const ISOFormEditorView = () => {
   const isEditMode = id && id !== 'new';
   const originalDataRef = useRef(null);
   const hasImportedFile = useRef(false);
+  const fileInputRef = useRef(null);
+  const [uploadLoading, setUploadLoading] = useState(false);
 
   useEffect(() => {
     if (setCustomTitle) {
@@ -279,6 +281,67 @@ const ISOFormEditorView = () => {
     }));
   };
 
+  const handleWordUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const fileNameLower = file.name.toLowerCase();
+    if (!fileNameLower.endsWith('.docx') && !fileNameLower.endsWith('.doc')) {
+      showFeedback('error', 'Chỉ hỗ trợ tải lên tệp định dạng Word (.doc, .docx)');
+      return;
+    }
+
+    if (fileNameLower.endsWith('.doc')) {
+      showFeedback('error', 'Hệ thống chỉ hỗ trợ phân tích tự động định dạng Word (.docx). Vui lòng chuyển đổi tệp (.doc) sang (.docx) trước khi tải lên.');
+      return;
+    }
+
+    const formDataPay = new FormData();
+    formDataPay.append('file', file);
+
+    setUploadLoading(true);
+    showFeedback('info', 'Đang tải lên và phân tích tài liệu quy trình mới...');
+
+    try {
+      const parsedData = await api.post('/iso-documents/upload', formDataPay, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      const newSections = parsedData.sections || {};
+      const newSectionTypes = {};
+      Object.keys(newSections).forEach(key => {
+        newSectionTypes[key] = parsedData.section_types?.[key] || 'text';
+      });
+
+      setFormData(prev => ({
+        ...prev,
+        code: (parsedData.code && !parsedData.code.toLowerCase().includes('mẫu') && !/\s/.test(parsedData.code)) ? parsedData.code : prev.code,
+        name: (parsedData.name && parsedData.name.trim() !== '[Tên quy trình]' && parsedData.name.trim() !== 'Tên quy trình' && parsedData.name.trim() !== '[Tên tài liệu]' && parsedData.name.trim() !== 'Tên tài liệu') ? parsedData.name : prev.name,
+        symbol: parsedData.symbol || prev.symbol,
+        version: parsedData.version || prev.version || '01',
+        file_path: parsedData.file_path || prev.file_path,
+        folder: parsedData.folder || prev.folder,
+        doc_type: parsedData.doc_type || prev.doc_type,
+        document_level: parsedData.document_level || prev.document_level,
+        notes: parsedData.notes || prev.notes,
+        sections: newSections,
+        section_types: newSectionTypes
+      }));
+
+      hasImportedFile.current = true;
+      showFeedback('success', 'Cập nhật cấu trúc tài liệu từ file Word thành công! Vui lòng ấn "Lưu thông tin" để hoàn tất.');
+    } catch (error) {
+      console.error('Lỗi upload file:', error);
+      const errMsg = error.response?.data?.detail || error.message || 'Lỗi khi upload tệp quy trình mới';
+      showFeedback('error', errMsg);
+    } finally {
+      setUploadLoading(false);
+      e.target.value = '';
+    }
+  };
+
   const handleSaveForm = async () => {
     if (!formData.code) {
       showFeedback('error', 'Mã mẫu không được để trống');
@@ -444,6 +507,33 @@ const ISOFormEditorView = () => {
         >
           <span style={headerTextStyle}>Thông tin chung</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleWordUpload}
+              style={{ display: 'none' }}
+              accept=".docx"
+            />
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                fileInputRef.current?.click();
+              }}
+              disabled={loading || uploadLoading}
+              style={{
+                padding: '5px 16px',
+                backgroundColor: '#FAF6F0',
+                color: '#7B5233',
+                border: '1px solid #7B5233',
+                borderRadius: '4px',
+                fontSize: '0.75rem',
+                fontWeight: 'bold',
+                cursor: (loading || uploadLoading) ? 'not-allowed' : 'pointer',
+                opacity: (loading || uploadLoading) ? 0.7 : 1
+              }}
+            >
+              {uploadLoading ? 'Đang tải...' : 'Đính kèm file Word mới'}
+            </button>
             <button
               onClick={(e) => {
                 e.stopPropagation();

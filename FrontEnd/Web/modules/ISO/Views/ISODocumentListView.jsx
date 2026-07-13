@@ -393,8 +393,20 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
         isFilterOpen={isFilterBarOpen}
         onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
         activeFiltersCount={(statusFilter ? 1 : 0) + (filterFolder ? 1 : 0) + (filterOwner ? 1 : 0)}
-        onCreate={mode === 'processes' ? () => openCreateModal() : () => !uploadLoading && fileInputRef.current?.click()}
+        onCreate={mode === 'processes' ? undefined : () => !uploadLoading && fileInputRef.current?.click()}
         createLabel={mode === 'processes' ? 'Thêm mới' : (uploadLoading ? 'Đang phân tích...' : 'Nhập dữ liệu')}
+        createActions={mode === 'processes' ? [
+          {
+            label: 'Tạo từ mẫu ISO',
+            icon: <Plus size={14} />,
+            onClick: () => openCreateModal()
+          },
+          {
+            label: 'Tải lên từ file Word (.docx)',
+            icon: <Upload size={14} />,
+            onClick: () => !uploadLoading && fileInputRef.current?.click()
+          }
+        ] : []}
         hasWritePermission={true}
       />
 
