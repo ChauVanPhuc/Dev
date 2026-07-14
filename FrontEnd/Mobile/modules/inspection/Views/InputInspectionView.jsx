@@ -181,6 +181,10 @@ const InputInspection = () => {
   }
 
   const triggerSubmitConfirm = () => {
+    if (!planId || !partName) {
+      setError('Thiếu thông tin Kế hoạch sản xuất hoặc Chi tiết linh kiện.')
+      return
+    }
     if (specList.length > 0 && !selectedSpec) {
       setError('Vui lòng chọn Quy cách cần kiểm tra.')
       return
@@ -617,7 +621,7 @@ const InputInspection = () => {
         onConfirm={() => {
           setMessageModal(prev => ({ ...prev, isOpen: false }))
           if (messageModal.type === 'success') {
-            navigate('/input-inspection')
+            navigate(-1)
           }
         }}
       />

@@ -238,7 +238,8 @@ def resolve_user_permissions(user, db: Session) -> dict:
         "mobile_capa-detail", "mobile_feedback", "mobile_awards", "mobile_kpi", "mobile_kpi-staff",
         "mobile_staff-evaluation", "mobile_equipment-list",
         "mobile_inspection-first-article", "mobile_inspection-stage-moisture",
-        "mobile_inspection-stage-process", "mobile_inspection-stage-adhesion"
+        "mobile_inspection-stage-process", "mobile_inspection-stage-adhesion",
+        "mobile_ctq-sos", "mobile_warnings"
     ]
     
     # 2. Quyền mặc định hệ thống ban đầu (Default deny)
@@ -300,7 +301,7 @@ def resolve_user_permissions(user, db: Session) -> dict:
                     "plan", "delivery-tracking", "exception-deliveries", "home", "backup-qrs", "kpi",
                     "machines", "machine-history", "machine-training", "iso-processes",
                     "mobile_plan", "mobile_delivery-info", "mobile_delivery-create", "mobile_delivery-receive", "mobile_thermal-print",
-                    "mobile_kpi"
+                    "mobile_kpi", "mobile_ctq-sos", "mobile_warnings"
                 ]
             elif role_name == "QLCL":
                 allowed_screens = [
@@ -311,7 +312,8 @@ def resolve_user_permissions(user, db: Session) -> dict:
                     "mobile_capa-detail", "mobile_feedback", "mobile_kpi", "mobile_kpi-staff",
                     "mobile_staff-evaluation",
                     "mobile_inspection-first-article", "mobile_inspection-stage-moisture",
-                    "mobile_inspection-stage-process", "mobile_inspection-stage-adhesion"
+                    "mobile_inspection-stage-process", "mobile_inspection-stage-adhesion",
+                    "mobile_ctq-sos", "mobile_warnings"
                 ]
                 
             # Xác định permission_level (Lớp 2)

@@ -21,6 +21,10 @@ def resolve_company_error_codes(order_code: str, db: Session = None) -> str:
     return controllers_import.resolve_company_error_codes(order_code, db)
 
 
+def resolve_company_error_names(order_code: str, db: Session = None) -> str:
+    return controllers_import.resolve_company_error_names(order_code, db)
+
+
 # --- CUSTOMER CLAIMS ENDPOINTS ---
 @router.get("/claims", response_model=Dict[str, Any])
 def read_claims(
@@ -90,7 +94,10 @@ def export_claims_excel(
                 "lpn": c.get("lpn") or "",
                 "container_no": c.get("cont") or c.get("container_no") or "",
                 "period": c.get("date") or c.get("period") or "",
-                "image_paths": c.get("image_paths") or []
+                "image_paths": c.get("image_paths") or [],
+                "customer_name": c.get("customer_name") or "",
+                "severity": c.get("severity") or "",
+                "status": c.get("status") or ""
             })
             
         # Generate Excel with images resolved via CLAIM_IMPORTS_DIR
@@ -100,7 +107,8 @@ def export_claims_excel(
             excel_path=temp_excel_path,
             claim_imports_dir=controllers_import.CLAIM_IMPORTS_DIR,
             resolve_company_func=resolve_company_error_codes,
-            cabinet_prices_map=prices_map
+            cabinet_prices_map=prices_map,
+            resolve_company_name_func=resolve_company_error_names
         )
         
         def remove_file(path: str):
@@ -264,7 +272,7 @@ def patch_claim_status(claim_id: int, body: Dict[str, Any], db: Session = Depend
     # Map Vietnamese status to backend status for DB
     status_map = {
         "Mới": "Received",
-        "Đang xử lý": "Processing",
+        "Đang xem xét": "Processing",
         "Đã xử lý": "Resolved",
         "Chấp nhận": "Resolved"
     }

@@ -750,6 +750,26 @@ async def check_write_permissions(request: Request, call_next):
                                         screen_key = key
                                         break
                                 
+                                # Override base inspections write actions to use mobile_inspection-stage screen permission
+                                if path.startswith("/api/v1/inspections"):
+                                    if path in ("/api/v1/inspections", "/api/v1/inspections/"):
+                                        if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+                                            screen_key = "mobile_input-inspection"
+                                    elif screen_key == "reports":
+                                        if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+                                            screen_key = "mobile_inspection-stage"
+                                
+                                # Override deliveries actions to use mobile screen permissions
+                                if path.startswith("/api/v1/deliveries"):
+                                    if path.endswith("/confirm"):
+                                        screen_key = "mobile_delivery-receive"
+                                    else:
+                                        screen_key = "mobile_delivery-create"
+                                
+                                # Override QC actions to use mobile screen permissions
+                                if path.startswith("/api/v1/qc"):
+                                    screen_key = "mobile_inspection-stage"
+                                
                                 if screen_key:
                                     # Phân giải quyền thực tế của User cho screen này
                                     resolved_perms = resolve_user_permissions(user, db)
@@ -760,8 +780,13 @@ async def check_write_permissions(request: Request, call_next):
                                             "mobile_inspection-first-article",
                                             "mobile_inspection-stage-moisture",
                                             "mobile_inspection-stage-process",
-                                            "mobile_inspection-stage-adhesion"
+                                            "mobile_inspection-stage-adhesion",
+                                            "defects"
                                         ])
+                                    elif screen_key == "mobile_input-inspection":
+                                        keys_to_check.extend(["reports"])
+                                    elif screen_key in ("mobile_delivery-create", "mobile_delivery-receive"):
+                                        keys_to_check = ["mobile_delivery-create", "mobile_delivery-receive", "delivery-tracking"]
                                     
                                     user_perm = "none"
                                     for key in keys_to_check:

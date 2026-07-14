@@ -1348,12 +1348,13 @@ const ISOProcessEditorView = () => {
   };
 
   useEffect(() => {
-    setCustomTitle('Nhân sự');
     if (isProcessMode) {
-      setCustomSubtitle('Cập nhật mẫu tài liệu');
+      setCustomTitle('Quản lý quy trình');
+      setCustomSubtitle(isEditMode ? 'Nhân sự - Chỉnh sửa Quy trình' : 'Nhân sự - Thêm mới Quy trình');
       setCustomScreenCode(isEditMode ? 'AD55' : 'AD18');
     } else {
-      setCustomSubtitle(isEditMode ? 'Chỉnh sửa Mẫu ISO' : 'Thêm mới Mẫu ISO');
+      setCustomTitle('Quản lý mẫu tài liệu');
+      setCustomSubtitle(isEditMode ? 'Nhân sự - Chỉnh sửa Mẫu ISO' : 'Nhân sự - Thêm mới Mẫu ISO');
       setCustomScreenCode(isEditMode ? 'AD17.1' : 'AD17');
     }
 
@@ -2576,10 +2577,6 @@ const ISOProcessEditorView = () => {
       showFeedback('error', 'Mã quy trình không được để trống');
       return;
     }
-    if (!formData.symbol || !formData.symbol.trim()) {
-      showFeedback('error', 'Ký hiệu quy trình là bắt buộc');
-      return;
-    }
     if (!formData.name || !formData.name.trim()) {
       showFeedback('error', 'Tên quy trình là bắt buộc');
       return;
@@ -2832,17 +2829,7 @@ const ISOProcessEditorView = () => {
                       style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', fontWeight: '600', backgroundColor: '#F3F4F6', color: '#4B5563', cursor: 'not-allowed' }}
                     />
                   </div>
-                  <div style={{ gridColumn: 'span 2' }}>
-                    <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ký hiệu <span style={{ color: 'red' }}>*</span></label>
-                    <input
-                      type="text"
-                      value={formData.symbol || ''}
-                      onChange={(e) => handleInputChange('symbol', e.target.value)}
-                      placeholder="Nhập ký hiệu..."
-                      style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', color: '#1F2937' }}
-                    />
-                  </div>
-                  <div style={{ gridColumn: 'span 4' }}>
+                  <div style={{ gridColumn: 'span 6' }}>
                     <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tên quy trình <span style={{ color: 'red' }}>*</span></label>
                     <input
                       type="text"

@@ -70,6 +70,61 @@ const initializeDefaultSamples = (qty) => {
   }));
 };
 
+// Danh sách đơn vị đếm được (số nguyên, dùng để đếm mẫu kiểm tra)
+const COUNTABLE_UNITS = ['tấm', 'thanh', 'cái', 'con', 'cây', 'sợi', 'hộp',
+  'bộ', 'cuộn', 'thùng', 'vỉ', 'tờ', 'đôi', 'mũi', 'chai', 'bình', 'ống', 'lọ', 'hủ', 'can', 'bịch', 'gói'];
+
+const isCountableUnit = (unit) => {
+  if (!unit) return false;
+  return COUNTABLE_UNITS.includes(unit.toLowerCase().trim());
+};
+
+/**
+ * Lấy quantity và unit phù hợp nhất để hiển thị và giới hạn mẫu.
+ * Ưu tiên converted_quantity nếu converted_unit là đơn vị đếm được.
+ * VD: ROA002 có quantity=0.112455 m³ nhưng converted_quantity=170 Tấm → hiển thị 170 Tấm.
+ */
+const getDisplayQuantity = (item) => {
+  if (!item) return { displayQty: 0, displayUnit: '', isCountable: false, maxSamples: 9999 };
+  const convUnit = (item.converted_unit || '').trim();
+  const mainUnit = (item.unit || '').trim();
+
+  // Ưu tiên dùng converted nếu đơn vị chuyển đổi đếm được
+  if (item.converted_quantity > 0 && isCountableUnit(convUnit)) {
+    return {
+      displayQty: Math.round(item.converted_quantity),
+      displayUnit: convUnit,
+      isCountable: true,
+      maxSamples: Math.max(1, Math.round(item.converted_quantity))
+    };
+  }
+
+  // Nếu đơn vị gốc đếm được
+  if (item.quantity > 0 && isCountableUnit(mainUnit)) {
+    return {
+      displayQty: Math.round(item.quantity),
+      displayUnit: mainUnit,
+      isCountable: true,
+      maxSamples: Math.max(1, Math.round(item.quantity))
+    };
+  }
+
+  // Đơn vị không đếm được (m³, Kg, m²...) → không giới hạn số mẫu
+  const rawQty = Number(item.quantity || 0);
+  return {
+    displayQty: Number.isInteger(rawQty) ? rawQty : Number(rawQty.toFixed(4).replace(/0+$/, '').replace(/\.$/, '')),
+    displayUnit: mainUnit,
+    isCountable: false,
+    maxSamples: 9999
+  };
+};
+
+/** Format số lượng hiển thị đẹp */
+const formatDisplayQty = (item) => {
+  const info = getDisplayQuantity(item);
+  return `${info.displayQty} ${info.displayUnit}`.trim();
+};
+
 const StageInspection = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -274,13 +329,23 @@ const StageInspection = () => {
           aggregated[key] = {
             item_code: actualCode,
             item_name: displayName,
-            quantity: qty || 0
+            quantity: qty || 0,
+            unit: opts.unit || '',
+            converted_quantity: opts.converted_quantity || null,
+            converted_unit: opts.converted_unit || ''
           };
         } else {
           aggregated[key].quantity = Math.max(aggregated[key].quantity, qty || 0);
           // Cập nhật item_code nếu entry cũ chưa có code thực (code === name)
           if (aggregated[key].item_code === aggregated[key].item_name && actualCode !== displayName) {
             aggregated[key].item_code = actualCode;
+          }
+          if (opts.unit && !aggregated[key].unit) aggregated[key].unit = opts.unit;
+          if (opts.converted_quantity && !aggregated[key].converted_quantity) {
+            aggregated[key].converted_quantity = opts.converted_quantity;
+          }
+          if (opts.converted_unit && !aggregated[key].converted_unit) {
+            aggregated[key].converted_unit = opts.converted_unit;
           }
         }
       };
@@ -290,7 +355,10 @@ const StageInspection = () => {
         addPart(it.item_code, it.item_name, it.quantity || 0, {
           is_raw_material: it.is_raw_material,
           exclude_production: it.exclude_production,
-          isFromPO: true
+          isFromPO: true,
+          unit: it.unit || '',
+          converted_quantity: it.converted_quantity || null,
+          converted_unit: it.converted_unit || ''
         });
       });
 
@@ -444,7 +512,7 @@ const StageInspection = () => {
     setSelectedItem(item);
     const draft = item.item_code ? inspectedDrafts[item.item_code.toLowerCase()] : null;
     const existing = item.item_code ? existingInspectionsMap[item.item_code.toLowerCase()] : null;
-    const maxQty = item.quantity || 9999;
+    const maxQty = getDisplayQuantity(item).maxSamples;
 
     if (draft) {
       const normalizedSamples = ensureTrailingEmptySample(draft.samples);
@@ -571,9 +639,10 @@ const StageInspection = () => {
   };
 
   const handleUpdateSampleQty = (newQty) => {
-    if (newQty < 1) return;
-    const maxQty = selectedItem?.quantity || 9999;
-    const cappedQty = Math.min(newQty, maxQty);
+    const intQty = Math.round(newQty);
+    if (intQty < 1) return;
+    const maxQty = getDisplayQuantity(selectedItem).maxSamples;
+    const cappedQty = Math.min(intQty, maxQty);
     setSampleQty(cappedQty);
     setSamples(prev => {
       if (cappedQty > prev.length) {
@@ -983,7 +1052,7 @@ const StageInspection = () => {
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                 <div style={{ flex: 1 }}>
                   <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Số lượng cần kiểm tra</label>
-                  <div style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', fontSize: '14px', fontWeight: 'bold', textAlign: 'center' }}>{selectedItem.quantity} {selectedItem.unit}</div>
+                  <div style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', fontSize: '14px', fontWeight: 'bold', textAlign: 'center' }}>{formatDisplayQty(selectedItem)}</div>
                 </div>
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                   <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Số lượng mẫu KT</label>
@@ -1787,7 +1856,7 @@ const StageInspection = () => {
                       return (
                         <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                           <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 'bold', color: '#4b301e' }}>{item.item_name}</td>
-                          <td style={{ padding: '12px 8px', fontSize: '12px', color: '#7c6d5e', textAlign: 'center' }}>{item.quantity} {item.unit}</td>
+                          <td style={{ padding: '12px 8px', fontSize: '12px', color: '#7c6d5e', textAlign: 'center' }}>{formatDisplayQty(item)}</td>
                           <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                             {status ? (
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>

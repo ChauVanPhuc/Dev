@@ -2110,6 +2110,8 @@ const PortalLayout = () => {
           height: calc(100% - 60px) !important;
           overflow-y: hidden !important;
           background-color: #F8FAFC !important;
+          display: flex !important;
+          flex-direction: column !important;
         }
         .admin-layout.fit-to-screen-active .dashboard-content.allow-y-scroll {
           overflow-y: auto !important;
@@ -2206,6 +2208,8 @@ const PortalLayout = () => {
           flex: 1;
           background-color: #F8FAFC;
           min-height: auto;
+          display: flex;
+          flex-direction: column;
         }
         .toggle-sidebar-btn {
           background: #FAF6F0;

@@ -415,9 +415,11 @@ const DeliveryReceive = () => {
         try {
           const stageParam = data.delivery_stage || '';
           const inspData = await fetchInspectionsByPlan(data.plan_id, stageParam);
-          const hasInsp = inspData.some(i =>
-            (i.part_name === data.part_name || (i.part_name && i.part_name.startsWith(data.part_name + " - ")))
-          );
+          const hasInsp = inspData.some(i => {
+            const iName = (i.part_name || '').trim().toLowerCase().normalize('NFC').replace(/\s+/g, ' ');
+            const dName = (data.part_name || '').trim().toLowerCase().normalize('NFC').replace(/\s+/g, ' ');
+            return iName === dName || iName.startsWith(dName + " - ");
+          });
           setDelivery(prev => ({ ...prev, qc_status: hasInsp ? 'Đã kiểm tra' : 'Chưa test' }));
         } catch (e) {
           console.error("Lỗi fetch inspections:", e);

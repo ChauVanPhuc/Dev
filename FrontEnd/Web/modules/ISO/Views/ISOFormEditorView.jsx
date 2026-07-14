@@ -39,8 +39,8 @@ const ISOFormEditorView = () => {
   const [uploadLoading, setUploadLoading] = useState(false);
 
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle('Nhân sự');
-    if (setCustomSubtitle) setCustomSubtitle('Cập nhật mẫu tài liệu');
+    if (setCustomTitle) setCustomTitle('Quản lý mẫu tài liệu');
+    if (setCustomSubtitle) setCustomSubtitle('Nhân sự - Cập nhật mẫu tài liệu');
     if (setCustomScreenCode) setCustomScreenCode('AD17.1');
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 

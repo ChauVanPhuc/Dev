@@ -332,6 +332,20 @@ const SCREEN_ICONS = {
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
     </svg>
   ),
+  'mobile_ctq-sos': (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2" />
+      <line x1="12" y1="8" x2="12" y2="12" />
+      <line x1="12" y1="16" x2="12.01" y2="16" />
+    </svg>
+  ),
+  'mobile_warnings': (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  ),
 };
 
 const SCREEN_GROUPS = [
@@ -438,7 +452,9 @@ const MOBILE_SCREEN_GROUPS = [
       { key: 'mobile_capa-list', name: 'Danh sách cải tiến CAPA', desc: 'Xem danh sách các yêu cầu hành động khắc phục CAPA.' },
       { key: 'mobile_capa-report', name: 'Báo cáo sự cố CAPA', desc: 'Báo cáo sự cố chất lượng và đề xuất CAPA mới.' },
       { key: 'mobile_capa-detail', name: 'Chi tiết hành động khắc phục CAPA', desc: 'Xem chi tiết tiến trình thực hiện hành động CAPA.' },
-      { key: 'mobile_feedback', name: 'Góp ý cải tiến', desc: 'Góp ý và phản hồi từ người sử dụng di động.' }
+      { key: 'mobile_feedback', name: 'Góp ý cải tiến', desc: 'Góp ý và phản hồi từ người sử dụng di động.' },
+      { key: 'mobile_ctq-sos', name: 'Báo cáo CTQ / SOS', desc: 'Khai báo sự cố khẩn cấp (SOS) hoặc thông số kiểm soát chất lượng trọng yếu (CTQ).' },
+      { key: 'mobile_warnings', name: 'Cảnh báo lỗi', desc: 'Theo dõi các cảnh báo và sự cố lỗi chất lượng trên thiết bị di động.' }
     ]
   },
   {

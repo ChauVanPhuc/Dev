@@ -89,6 +89,8 @@ const Sidebar = () => {
     if (path.startsWith('/capa-report')) return 'mobile_capa-report';
     if (path.startsWith('/capa-detail')) return 'mobile_capa-detail';
     if (path.startsWith('/feedback')) return 'mobile_feedback';
+    if (path.startsWith('/ctq-sos')) return 'mobile_ctq-sos';
+    if (path.startsWith('/warnings')) return 'mobile_warnings';
     
     return null;
   };

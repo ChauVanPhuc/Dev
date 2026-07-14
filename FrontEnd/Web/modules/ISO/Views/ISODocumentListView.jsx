@@ -161,12 +161,13 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
   }, [searchTerm, statusFilter, mode]);
 
   useEffect(() => {
-    setCustomTitle('Nhân sự');
     if (mode === 'processes') {
-      setCustomSubtitle('Quản lý quy trình');
+      setCustomTitle('Quản lý quy trình');
+      setCustomSubtitle('Nhân sự');
       setCustomScreenCode('AD18');
     } else {
-      setCustomSubtitle('Quản lý mẫu tài liệu');
+      setCustomTitle('Quản lý mẫu tài liệu');
+      setCustomSubtitle('Nhân sự');
       setCustomScreenCode('AD17');
     }
     fetchDocuments();

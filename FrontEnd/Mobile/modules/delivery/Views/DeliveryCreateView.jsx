@@ -469,9 +469,12 @@ const DeliveryCreate = () => {
 
         // Lọc đúng chi tiết và quy cách đang chọn
         const partInsps = allInsps.filter(i => {
-          const nameMatches = (i.part_name || '').trim().toLowerCase() === selectedPartKey.trim().toLowerCase()
-          const spec1 = (i.specification || 'Không có').trim().toLowerCase()
-          const spec2 = (selectedSpecification || 'Không có').trim().toLowerCase()
+          const iName = (i.part_name || '').trim().toLowerCase().normalize('NFC').replace(/\s+/g, ' ')
+          const pName = (selectedPartKey || '').trim().toLowerCase().normalize('NFC').replace(/\s+/g, ' ')
+          const nameMatches = iName === pName
+
+          const spec1 = (i.specification || '').trim().toLowerCase().normalize('NFC').replace(/\s+/g, ' ') || 'không có'
+          const spec2 = (selectedSpecification || '').trim().toLowerCase().normalize('NFC').replace(/\s+/g, ' ') || 'không có'
           return nameMatches && spec1 === spec2
         })
         setInspections(partInsps)

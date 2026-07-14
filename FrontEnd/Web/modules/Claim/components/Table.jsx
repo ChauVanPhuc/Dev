@@ -33,7 +33,7 @@ export const Table = ({
   }
 
   return (
-    <div className="table-responsive desktop-only admin-table-scroll" style={{ flex: 1, overflowY: 'auto' }}>
+    <div className="table-responsive desktop-only admin-table-scroll" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
       <table className="data-table">
         <thead>
           <tr>

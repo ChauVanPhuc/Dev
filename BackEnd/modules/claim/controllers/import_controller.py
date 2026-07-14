@@ -218,6 +218,46 @@ def get_existing_claims_keys(db=None):
     return keys
 
 
+def generate_unique_claim_code(c, period, db, local_seen_codes):
+    """
+    Generates a unique claim code in the format: Cabinet#<no>_<month_year>[_suffix]
+    e.g., Cabinet#1_052026
+    """
+    from modules.claim.models.claim_models import CustomerClaim
+    
+    cabinet_no = c.get("cabinet_no")
+    if cabinet_no is None:
+        cabinet_no = "Unknown"
+        
+    period_str = c.get("period") or period or ""
+    month_year = re.sub(r'[^0-9]', '', period_str)
+    if not month_year:
+        month_year = datetime.now().strftime("%m%Y")
+        
+    base_code = f"Cabinet#{cabinet_no}_{month_year}"
+    
+    candidate = base_code
+    suffix = 1
+    
+    while True:
+        if candidate in local_seen_codes:
+            candidate = f"{base_code}_{suffix}"
+            suffix += 1
+            continue
+            
+        if db:
+            exists = db.query(CustomerClaim).filter(CustomerClaim.claim_code == candidate).first()
+            if exists:
+                candidate = f"{base_code}_{suffix}"
+                suffix += 1
+                continue
+                
+        break
+        
+    local_seen_codes.add(candidate)
+    return candidate
+
+
 def process_pdf_import(file_bytes: bytes, filename: str, db=None):
     """
     Main ingestion orchestrator. Saves PDF, extracts claims/photos, writes outputs,
@@ -245,6 +285,12 @@ def process_pdf_import(file_bytes: bytes, filename: str, db=None):
         seen_keys = get_existing_claims_keys(db)
         claims, period, parse_warnings, mechanism_info = parse_pdf_claims(pdf_path, batch_id, images_batch_dir, seen_keys, normalize_penalty_value)
         logger.info(f"File {filename}: Sử dụng {mechanism_info['name']} — {len(claims)} claims, period={period}")
+        
+        # Generate unique claim_code for each parsed claim
+        local_seen_codes = set()
+        for c in claims:
+            if not c.get("claim_code") and c.get("cabinet_no") is not None:
+                c["claim_code"] = generate_unique_claim_code(c, period, db, local_seen_codes)
     except Exception as parse_err:
         logger.exception("PDF parsing process failed critically.")
         # Cleanup PDF and images
@@ -335,6 +381,7 @@ async def process_folder_import(files, db=None):
     
     stt_counter = 1
     seen_keys = get_existing_claims_keys(db)
+    local_seen_codes = set()
     logger.info(f"Starting folder import with {len(files)} files. Existing claims in DB: {len(seen_keys)}")
     
     db_saved_count = 0
@@ -357,6 +404,11 @@ async def process_folder_import(files, db=None):
             claims, period, parse_warnings, mechanism_info = parse_pdf_claims(pdf_path, batch_id, images_batch_dir, seen_keys, normalize_penalty_value)
             total_parsed_count += len(claims)
             logger.info(f"File {filename}: Sử dụng {mechanism_info['name']} — {len(claims)} claims, period={period}")
+            
+            # Generate unique claim_code for each parsed claim
+            for c in claims:
+                if not c.get("claim_code") and c.get("cabinet_no") is not None:
+                    c["claim_code"] = generate_unique_claim_code(c, period, db, local_seen_codes)
             
             # Record individual file statistics
             file_stats.append({
@@ -458,6 +510,7 @@ async def process_folder_import_streaming(files, db=None):
     stt_counter = 1
     total_files = len(files)
     seen_keys = get_existing_claims_keys(db)
+    local_seen_codes = set()
     db_saved_count = 0
     
     # Pre-read all file bytes first (before streaming begins)
@@ -502,6 +555,11 @@ async def process_folder_import_streaming(files, db=None):
         try:
             claims, period, parse_warnings, mechanism_info = parse_pdf_claims(pdf_path, batch_id, images_batch_dir, seen_keys, normalize_penalty_value)
             logger.info(f"File {filename}: Sử dụng {mechanism_info['name']} — {len(claims)} claims, period={period}")
+            
+            # Generate unique claim_code for each parsed claim
+            for c in claims:
+                if not c.get("claim_code") and c.get("cabinet_no") is not None:
+                    c["claim_code"] = generate_unique_claim_code(c, period, db, local_seen_codes)
             
             # Record individual file statistics
             file_stats.append({
@@ -756,6 +814,78 @@ def resolve_company_error_codes(order_code: str, db = None) -> str:
                 
     if mapped_g7s:
         return ", ".join(mapped_g7s)
+        
+    return ""
+
+_defect_name_cache = None
+_defect_name_cache_time = 0
+
+def resolve_company_error_names(order_code: str, db = None) -> str:
+    global _defect_name_cache, _defect_name_cache_time
+    if not order_code:
+        return ""
+    
+    now = time.time()
+    if _defect_name_cache is None or (now - _defect_name_cache_time > 10.0):
+        name_map = {}
+        
+        # 1. Load temp defect catalog from json
+        temp_defects = load_temp_defect_catalog()
+        if temp_defects:
+            for d in temp_defects:
+                code = d.get("defect_code")
+                name = d.get("name")
+                if code and name:
+                    name_map[str(code).strip().upper()] = str(name).strip()
+                    
+        # 2. Load DB defects from inspection module
+        close_db = False
+        if not db:
+            try:
+                from config.database import SessionLocal
+                db = SessionLocal()
+                close_db = True
+            except Exception:
+                db = None
+                close_db = False
+
+        try:
+            if db:
+                from modules.inspection.models.defect_type import ClientDefect
+                db_defects = db.query(ClientDefect).all()
+                for d in db_defects:
+                    code = d.code
+                    name = d.name
+                    if code and name:
+                        clean_code = str(code).strip().upper()
+                        if clean_code not in name_map:
+                            name_map[clean_code] = str(name).strip()
+        except Exception as e:
+            logger.warning(f"Error querying DB defects in resolve_company_error_names: {e}")
+        finally:
+            if close_db and db:
+                db.close()
+                
+        _defect_name_cache = name_map
+        _defect_name_cache_time = now
+    else:
+        name_map = _defect_name_cache
+            
+    # 3. Parse order_code and map tokens
+    tokens = re.split(r'[\\,\/;]|\s+', order_code)
+    tokens = [t.strip().upper() for t in tokens if t.strip()]
+    
+    mapped_names = []
+    for token in tokens:
+        if token in name_map:
+            mapped_names.append(name_map[token])
+        else:
+            normalized_token = token.replace('-', '_')
+            if normalized_token in name_map:
+                mapped_names.append(name_map[normalized_token])
+                
+    if mapped_names:
+        return ", ".join(mapped_names)
         
     return ""
 

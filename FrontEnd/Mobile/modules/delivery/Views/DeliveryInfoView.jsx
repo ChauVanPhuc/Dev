@@ -42,6 +42,9 @@ const formatInspectedAt = (dateStr) => {
     return dateStr;
   }
 };
+// Global memory cache to implement Stale-While-Revalidate pattern and speed up navigation back
+const deliveryInfoCache = {};
+
 /**
  * MH2 - Thông tin bàn giao
  * DeliveryInfo Screen
@@ -54,7 +57,7 @@ const DeliveryInfo = () => {
   const location = useLocation()
   const { user, permissions } = useAuthStore()
   const [activeTab, setActiveTab] = useState('plan')
-  const [selectedPlanId, setSelectedPlanId] = useState('')
+  const [selectedPlanId, setSelectedPlanId] = useState(() => location.state?.planId || '')
   const [selectedCont, setSelectedCont] = useState('ALL')
   const [currentPlan, setCurrentPlan] = useState(null)
   
@@ -212,7 +215,20 @@ const DeliveryInfo = () => {
   useEffect(() => {
     const loadDeliveries = async () => {
       if (selectedPlanId) {
-        setLoading(true)
+        const cacheKey = `${selectedPlanId}_${selectedOrderIdsString || 'all'}`
+        const cached = deliveryInfoCache[cacheKey]
+
+        if (cached) {
+          // Render cached data immediately to avoid loading spinner
+          setCurrentPlan(cached.currentPlan)
+          setDeliveries(cached.deliveries)
+          setReturns(cached.returns)
+          setInspectionMap(cached.inspectionMap)
+          setLoading(false)
+        } else {
+          setLoading(true)
+        }
+
         const rawStage = userStageDesc || userStageName || ''
         const stageToFilter = rawStage.toLowerCase().includes('đóng gói') ? null : rawStage
 
@@ -220,29 +236,39 @@ const DeliveryInfo = () => {
           console.log('[DEBUG Frontend] Calling fetchPlanDetail with selectedOrderIdsString:', selectedOrderIdsString);
           const detail = await fetchPlanDetail(selectedPlanId, stageToFilter, null, false, selectedOrderIdsString)
           console.log('[DEBUG Frontend] fetchPlanDetail returned detail:', detail);
-          setCurrentPlan(detail)
 
           const deliveryList = await fetchDeliveriesByPlan(selectedPlanId)
-          setDeliveries(deliveryList || [])
 
           // Load danh sách phiếu trả hàng
+          let returnsData = []
           try {
-            const returnsData = await fetchReturnsByPlan(selectedPlanId)
-            setReturns(returnsData || [])
+            returnsData = await fetchReturnsByPlan(selectedPlanId)
           } catch (err) {
             console.error('Lỗi tải danh sách trả hàng:', err)
-            setReturns([])
           }
 
           // Load kết quả kiểm tra (nhẹ, giữ lại)
           const inspectionsData = await fetchInspectionsByPlan(selectedPlanId, stageToFilter || '')
           const map = {}
           ;(inspectionsData || []).forEach(insp => {
-            const key = (insp.part_name || '').trim().toLowerCase()
+            const key = (insp.part_name || '').trim().toLowerCase().normalize('NFC').replace(/\s+/g, ' ')
             if (!map[key]) map[key] = []
             map[key].push(insp)
           })
+
+          // Update state
+          setCurrentPlan(detail)
+          setDeliveries(deliveryList || [])
+          setReturns(returnsData || [])
           setInspectionMap(map)
+
+          // Save cache
+          deliveryInfoCache[cacheKey] = {
+            currentPlan: detail,
+            deliveries: deliveryList || [],
+            returns: returnsData || [],
+            inspectionMap: map
+          }
         } catch (err) {
           console.error('[Load Error]:', err)
         } finally {
@@ -345,7 +371,7 @@ const DeliveryInfo = () => {
       const inspectionsData = await fetchInspectionsByPlan(targetId, stageToFilter || '');
       const map = {};
       (inspectionsData || []).forEach(insp => {
-        const key = (insp.part_name || '').trim().toLowerCase();
+        const key = (insp.part_name || '').trim().toLowerCase().normalize('NFC').replace(/\s+/g, ' ');
         if (!map[key]) map[key] = [];
         map[key].push(insp);
       });
@@ -897,7 +923,7 @@ const DeliveryInfo = () => {
       key: 'kt',
       nowrap: true,
       render: (row) => {
-        const key = (row.displayName || row.name || '').trim().toLowerCase();
+        const key = (row.displayName || row.name || '').trim().toLowerCase().normalize('NFC').replace(/\s+/g, ' ');
         const allInsps = inspectionMap[key] || [];
         const partName = row.displayName || row.name;
         const stageToFilter = userStageDesc || userStageName;
@@ -1160,7 +1186,7 @@ const DeliveryInfo = () => {
       key: 'kt',
       nowrap: true,
       render: (row) => {
-        const key = (row.name || row.sku || '').trim().toLowerCase();
+        const key = (row.name || row.sku || '').trim().toLowerCase().normalize('NFC').replace(/\s+/g, ' ');
         const allInsps = inspectionMap[key] || [];
         const partName = row.name || row.sku;
         const stageToFilter = userStageDesc || userStageName;

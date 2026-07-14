@@ -112,7 +112,9 @@ const MOBILE_SCREEN_GROUPS = [
       { key: 'mobile_capa-list', name: 'Danh sách CAPA' },
       { key: 'mobile_capa-report', name: 'Báo cáo sự cố' },
       { key: 'mobile_capa-detail', name: 'Chi tiết CAPA' },
-      { key: 'mobile_feedback', name: 'Góp ý di động' }
+      { key: 'mobile_feedback', name: 'Góp ý di động' },
+      { key: 'mobile_ctq-sos', name: 'Báo cáo CTQ / SOS' },
+      { key: 'mobile_warnings', name: 'Cảnh báo lỗi' }
     ]
   },
   {
@@ -326,7 +328,16 @@ const UserManagement = () => {
 
   const normalizePermission = (val) => {
     if (!val || val === 'none') return 'none';
-    if (val.includes('write')) return 'write';
+    if (
+      val.includes('write') ||
+      val.includes('create') ||
+      val.includes('edit') ||
+      val.includes('delete') ||
+      val.includes('approve') ||
+      val.includes('export_import')
+    ) {
+      return 'write';
+    }
     if (val.includes('read')) return 'read';
     return 'none';
   };

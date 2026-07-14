@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Search, Filter, Plus } from 'lucide-react';
 import { claimService } from '../services/claim.service';
-import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import * as XLSX from 'xlsx';
 import { API_ROOT } from '@webShared/Services/api.service';
 import '../styles/claim.css';
@@ -144,7 +143,6 @@ const PriceListView = () => {
   const [isImportDropdownOpen, setIsImportDropdownOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(15);
   const [actionMenuId, setActionMenuId] = useState(null);
   const excelInputRef = useRef(null);
   const [duplicateImportData, setDuplicateImportData] = useState(null);
@@ -352,7 +350,7 @@ const PriceListView = () => {
     });
   };
 
-
+  const rowsPerPage = 13;
 
   // Reset page when data, search, or filters change
   useEffect(() => {
@@ -1031,59 +1029,229 @@ const PriceListView = () => {
   return (
     <div className="claim-container">
       {/* FILTER & ACTIONS BAR */}
-      <PageToolbar
-        searchValue={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Search nhanh tên sản phẩm..."
-        showSort={true}
-        sortOptions={[
-          { value: '', label: 'Sắp xếp' },
-          { value: 'name-asc', label: 'Tên: A-Z' },
-          { value: 'name-desc', label: 'Tên: Z-A' },
-          { value: 'time-asc', label: 'Thời gian: Sớm nhất' },
-          { value: 'time-desc', label: 'Thời gian: Trễ nhất' }
-        ]}
-        sortValue={sortOption}
-        onSortChange={setSortOption}
-        showFilter={true}
-        isFilterOpen={isFilterBarOpen}
-        onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
-        activeFiltersCount={Object.keys(appliedFilters).length}
-        extraActions={hasWritePermission && selectedPriceIds.length > 0 ? [
-          {
-            label: 'Xóa đã chọn',
-            icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>,
-            onClick: handleDeleteSelected,
-            color: '#DC2626'
-          }
-        ] : []}
-        importActions={hasWritePermission ? [
-          {
-            label: 'File Excel (.xlsx)',
-            icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>,
-            onClick: () => excelInputRef.current.click()
-          },
-          {
-            label: 'File CSV (.csv)',
-            icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>,
-            onClick: () => excelInputRef.current.click()
-          }
-        ] : []}
-        onExport={handleExportExcel}
-        onCreate={hasWritePermission ? handleOpenAddModal : undefined}
-        createLabel="Thêm mới"
-        hasWritePermission={hasWritePermission}
-      >
-        {hasWritePermission && (
-          <input
-            type="file"
-            ref={excelInputRef}
-            style={{ display: 'none' }}
-            accept=".xlsx,.xls,.csv"
-            onChange={handleImportFile}
-          />
-        )}
-      </PageToolbar>
+      <div className="mgmt-toolbar card" style={{ marginBottom: '20px' }}>
+        <div className="toolbar-left" style={{ flex: 1 }}>
+          <div className="search-wrapper">
+            <Search size={18} className="search-icon" />
+            <input 
+              type="text" 
+              placeholder="Search nhanh tên sản phẩm..." 
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          
+          <button
+            type="button"
+            className={`icon-btn-minimal ${isFilterBarOpen ? 'active' : ''}`}
+            onClick={() => setIsFilterBarOpen(!isFilterBarOpen)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              height: '36px',
+              border: '1px solid #EADCC9',
+              backgroundColor: isFilterBarOpen ? '#7B5233' : '#FAF6F0',
+              color: isFilterBarOpen ? '#FFFFFF' : '#7B5233',
+              fontWeight: 'bold',
+              borderRadius: '8px',
+              padding: '0 16px',
+              cursor: 'pointer',
+              fontSize: '0.8rem'
+            }}
+          >
+            <Filter size={14} />
+            Bộ lọc
+            {Object.keys(appliedFilters).length > 0 && (
+              <span style={{
+                backgroundColor: isFilterBarOpen ? '#FFFFFF' : '#7B5233',
+                color: isFilterBarOpen ? '#7B5233' : '#FFFFFF',
+                borderRadius: '50%',
+                width: '18px',
+                height: '18px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.7rem',
+                fontWeight: 'bold',
+                marginLeft: '4px'
+              }}>
+                {Object.keys(appliedFilters).length}
+              </span>
+            )}
+          </button>
+
+          {/* SORT DROPDOWN */}
+          <div style={{ position: 'relative', display: 'inline-block' }}>
+            <select
+              value={sortOption}
+              onChange={(e) => setSortOption(e.target.value)}
+              className="select-minimal"
+              style={{
+                height: '36px',
+                borderColor: '#EADCC9',
+                color: '#7B5233',
+                fontWeight: 'bold',
+                borderRadius: '8px',
+                padding: '0 12px 0 28px',
+                cursor: 'pointer',
+                backgroundColor: '#FAF6F0',
+                outline: 'none',
+                fontSize: '0.8rem'
+              }}
+            >
+              <option value="">Sắp xếp</option>
+              <option value="name-asc">Tên: A-Z</option>
+              <option value="name-desc">Tên: Z-A</option>
+              <option value="time-asc">Thời gian: Sớm nhất</option>
+              <option value="time-desc">Thời gian: Trễ nhất</option>
+            </select>
+            <svg 
+              style={{ position: 'absolute', left: '8px', top: '11px', pointerEvents: 'none', color: '#7B5233' }} 
+              width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+            >
+              <path d="M15 18H3M21 14H3M17 10H3M21 6H3"></path>
+            </svg>
+          </div>
+        </div>
+
+        <div className="toolbar-right">
+          {hasWritePermission && (
+            <button 
+              className="btn btn-primary" 
+              onClick={handleOpenAddModal}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                height: '36px',
+                padding: '0 20px',
+                borderRadius: '8px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                backgroundColor: '#7B5233',
+                color: '#fff'
+              }}
+            >
+              <Plus size={16} />
+              Thêm mới
+            </button>
+          )}
+
+          {hasWritePermission && (
+            <div className="import-dropdown-container" style={{ position: 'relative' }}>
+              <button 
+                className="btn btn-outline" 
+                onClick={() => setIsImportDropdownOpen(!isImportDropdownOpen)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  height: '36px',
+                  borderColor: '#EADCC9',
+                  color: '#7B5233',
+                  fontWeight: 'bold',
+                  borderRadius: '8px',
+                  padding: '0 16px',
+                  cursor: 'pointer',
+                  backgroundColor: '#fff'
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                Import
+                <svg style={{ marginLeft: '6px', transform: isImportDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+              {isImportDropdownOpen && (
+                <div className="import-dropdown-menu" style={{ minWidth: '160px', position: 'absolute', top: '100%', right: 0, zIndex: 1000 }}>
+                  <button className="import-dropdown-item" onClick={() => { setIsImportDropdownOpen(false); excelInputRef.current.click(); }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                      <polyline points="14 2 14 8 20 8"></polyline>
+                      <line x1="16" y1="13" x2="8" y2="13"></line>
+                      <line x1="16" y1="17" x2="8" y2="17"></line>
+                    </svg>
+                    File Excel (.xlsx)
+                  </button>
+                  <button className="import-dropdown-item" onClick={() => { setIsImportDropdownOpen(false); excelInputRef.current.click(); }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    File CSV (.csv)
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {hasWritePermission && (
+            <input
+              type="file"
+              ref={excelInputRef}
+              style={{ display: 'none' }}
+              accept=".xlsx,.xls,.csv"
+              onChange={handleImportFile}
+            />
+          )}
+
+          <button 
+            className="btn btn-outline" 
+            onClick={handleExportExcel}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              height: '36px',
+              padding: '0 16px',
+              borderRadius: '8px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              border: '1px solid #EADCC9',
+              backgroundColor: '#fff',
+              color: '#7B5233'
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            Export
+          </button>
+
+          {hasWritePermission && (
+            <button
+              className="btn btn-outline"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                height: '36px',
+                borderColor: selectedPriceIds.length === 0 ? '#CBD5E1' : '#A0301B',
+                color: selectedPriceIds.length === 0 ? '#94A3B8' : '#A0301B',
+                cursor: selectedPriceIds.length === 0 ? 'not-allowed' : 'pointer',
+                fontWeight: 'bold',
+                borderRadius: '8px',
+                padding: '0 16px',
+                backgroundColor: '#fff'
+              }}
+              disabled={selectedPriceIds.length === 0}
+              onClick={handleDeleteSelected}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+              Xóa đã chọn
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* INLINE EXPANDABLE FILTER BAR */}
       {isFilterBarOpen && (
@@ -1317,7 +1485,7 @@ const PriceListView = () => {
       )}
 
       {/* TABLE VIEW */}
-      <div className="admin-list-layout" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div className="admin-list-layout" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
         <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0 }}>
           <Table
             loading={loading}
