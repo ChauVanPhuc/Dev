@@ -859,13 +859,184 @@ const ISOProcessEditorView = () => {
     section_types: {},
     steps: [],
     instruction_steps: [],
-    work_instructions: []
+    work_instructions: [],
+    related_templates: []
   });
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [systemScreens, setSystemScreens] = useState([]);
   const [isScreenDropdownOpen, setIsScreenDropdownOpen] = useState(false);
+
+  // States for Related Templates
+  const [selectedTemplateId, setSelectedTemplateId] = useState(null);
+  const [showSystemTemplatesModal, setShowSystemTemplatesModal] = useState(false);
+  const [systemTemplates, setSystemTemplates] = useState([]);
+  const [searchTemplateQuery, setSearchTemplateQuery] = useState('');
+  const [systemTemplatesFilterOpen, setSystemTemplatesFilterOpen] = useState(false);
+  const [systemTemplatesDepartmentFilter, setSystemTemplatesDepartmentFilter] = useState('');
+
+  useEffect(() => {
+    if (showSystemTemplatesModal) {
+      const fetchSystemTemplates = async () => {
+        try {
+          const data = await api.get('/iso-documents');
+          setSystemTemplates(Array.isArray(data) ? data : []);
+        } catch (err) {
+          console.error('Lỗi khi tải danh sách tài liệu hệ thống:', err);
+        }
+      };
+      fetchSystemTemplates();
+    }
+  }, [showSystemTemplatesModal]);
+
+  const [tempCheckedIds, setTempCheckedIds] = useState([]);
+
+  const handleUploadAttachment = async (e, templateId) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const formDataPay = new FormData();
+    formDataPay.append('file', file);
+    
+    showFeedback('info', 'Đang tải lên tài liệu đính kèm...');
+    try {
+      const res = await api.post('/iso-documents/upload-attachment', formDataPay, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      setFormData(prev => ({
+        ...prev,
+        related_templates: (prev.related_templates || []).map(t => {
+          if (t.id === templateId) {
+            return {
+              ...t,
+              file_name: res.file_name,
+              file_path: res.file_path
+            };
+          }
+          return t;
+        })
+      }));
+      showFeedback('success', 'Tải lên tài liệu đính kèm thành công!');
+    } catch (err) {
+      console.error('Lỗi khi upload tài liệu đính kèm:', err);
+      showFeedback('error', err.response?.data?.detail || 'Không thể tải lên tài liệu đính kèm');
+    }
+  };
+
+  const handleDeleteAttachment = (templateId) => {
+    setFormData(prev => ({
+      ...prev,
+      related_templates: (prev.related_templates || []).map(t => {
+        if (t.id === templateId) {
+          return {
+            ...t,
+            file_name: '',
+            file_path: ''
+          };
+        }
+        return t;
+      })
+    }));
+    showFeedback('success', 'Đã xóa file đính kèm!');
+  };
+
+  const handleAddRelatedTemplate = () => {
+    const newId = `template_${Date.now()}`;
+    const newT = {
+      id: newId,
+      code: `BM${String((formData.related_templates || []).length + 1).padStart(2, '0')}`,
+      title: 'Tài liệu mới',
+      scope: 'Tất cả',
+      note: '',
+      file_name: '',
+      file_path: ''
+    };
+    setFormData(prev => ({
+      ...prev,
+      related_templates: [...(prev.related_templates || []), newT]
+    }));
+    setSelectedTemplateId(newId);
+  };
+
+  const handleDeleteRelatedTemplate = (templateId) => {
+    setFormData(prev => ({
+      ...prev,
+      related_templates: (prev.related_templates || []).filter(t => t.id !== templateId)
+    }));
+    if (selectedTemplateId === templateId) {
+      setSelectedTemplateId(null);
+    }
+    showFeedback('success', 'Đã xóa tài liệu liên quan!');
+  };
+
+  const handleUpdateRelatedTemplate = (templateId, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      related_templates: (prev.related_templates || []).map(t => {
+        if (t.id === templateId) {
+          return {
+            ...t,
+            [field]: value
+          };
+        }
+        return t;
+      })
+    }));
+  };
+
+  const handleOpenSystemTemplatesModal = () => {
+    const checkedIds = systemTemplates
+      .filter(st => (formData.related_templates || []).some(rt => rt.code === st.code))
+      .map(st => st.id);
+    
+    setTempCheckedIds(checkedIds);
+    setSearchTemplateQuery('');
+    setSystemTemplatesDepartmentFilter('');
+    setShowSystemTemplatesModal(true);
+  };
+
+  const handleUpdateSystemTemplates = () => {
+    const checkedDocs = systemTemplates.filter(st => tempCheckedIds.includes(st.id));
+    const currentList = [...(formData.related_templates || [])];
+    const newList = [];
+    
+    checkedDocs.forEach(st => {
+      const existing = currentList.find(rt => rt.code === st.code);
+      if (existing) {
+        newList.push(existing);
+      } else {
+        newList.push({
+          id: `template_${Date.now()}_${st.id}`,
+          code: st.code,
+          title: st.name,
+          scope: st.folder || 'Tất cả',
+          note: st.notes || '',
+          file_name: st.file_path ? st.file_path.split('/').pop() : '',
+          file_path: st.file_path || ''
+        });
+      }
+    });
+
+    setFormData(prev => ({
+      ...prev,
+      related_templates: newList
+    }));
+
+    if (newList.length > 0) {
+      if (!newList.some(t => t.id === selectedTemplateId)) {
+        setSelectedTemplateId(newList[0].id);
+      }
+    } else {
+      setSelectedTemplateId(null);
+    }
+
+    setShowSystemTemplatesModal(false);
+    showFeedback('success', 'Đã cập nhật danh sách tài liệu liên quan!');
+  };
 
   useEffect(() => {
     const fetchScreens = async () => {
@@ -1517,6 +1688,16 @@ const ISOProcessEditorView = () => {
         }];
       }
 
+      let relatedTemplates = [];
+      if (receivedSections['__metadata_related_templates__']) {
+        try {
+          relatedTemplates = JSON.parse(receivedSections['__metadata_related_templates__']);
+        } catch (e) {
+          console.error('Error parsing related templates metadata:', e);
+        }
+        delete receivedSections['__metadata_related_templates__'];
+      }
+
       // Sections được lấy nguyên từ DB – không merge thêm key cố định
 
       Object.keys(receivedSections).forEach(key => {
@@ -1556,8 +1737,12 @@ const ISOProcessEditorView = () => {
           image_url: step.transition?.image_url || ''
         })),
         instruction_steps: instructionSteps,
-        work_instructions: workInstructions
+        work_instructions: workInstructions,
+        related_templates: relatedTemplates
       });
+      if (relatedTemplates && relatedTemplates.length > 0) {
+        setSelectedTemplateId(relatedTemplates[0].id);
+      }
     } catch (error) {
       console.error('Lỗi khi tải chi tiết quy trình:', error);
       showFeedback('error', 'Không thể tải chi tiết quy trình từ hệ thống');
@@ -2663,7 +2848,8 @@ const ISOProcessEditorView = () => {
           ...(formData.sections || {}),
           '__metadata_section_types__': JSON.stringify(formData.section_types || {}),
           '__metadata_instruction_steps__': JSON.stringify(flattenedInstructionSteps),
-          '__metadata_work_instructions__': JSON.stringify(formData.work_instructions || [])
+          '__metadata_work_instructions__': JSON.stringify(formData.work_instructions || []),
+          '__metadata_related_templates__': JSON.stringify(formData.related_templates || [])
         }
       };
 
@@ -4797,97 +4983,350 @@ const ISOProcessEditorView = () => {
             </div>
           )}
 
-          {/* Tab 4: Biểu mẫu đính kèm */}
+          {/* Tab 4: Tài liệu liên quan */}
           {activeTab === 'templates' && (
-            <div style={cardStyle}>
-              <div style={{ ...headerStyle, cursor: 'default' }}>
-                <span style={headerTextStyle}>Danh sách Biểu mẫu & Tài liệu đi kèm</span>
-              </div>
-              <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '20px', borderTop: '1px solid #EADCC9' }}>
+            <div style={{ display: 'flex', gap: '20px', minHeight: '520px', width: '100%' }}>
+              
+              {/* CỘT TRÁI: DANH SÁCH TÀI LIỆU LIÊN QUAN (RỘNG 22%) */}
+              <div style={{
+                width: '22%',
+                backgroundColor: 'white',
+                border: '1px solid #EADCC9',
+                borderRadius: '8px',
+                padding: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                boxShadow: '0 2px 8px rgba(45, 26, 18, 0.02)'
+              }}>
+                <h4 style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#7B5233', margin: '0 0 8px 0' }}>
+                  Danh sách tài liệu liên quan
+                </h4>
                 
-                {/* 4.1 Word template file download */}
-                <div style={{ backgroundColor: '#FAF6F0', padding: '16px', borderRadius: '6px', border: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                    <div style={{ width: '40px', height: '40px', backgroundColor: '#e2e8f0', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #cbd5e1' }}>
-                      <FileText size={20} style={{ color: '#7B5233' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, overflowY: 'auto', maxHeight: '420px' }}>
+                  {(formData.related_templates || []).map((t) => {
+                    const isSelected = selectedTemplateId === t.id;
+                    return (
+                      <div
+                        key={t.id}
+                        onClick={() => setSelectedTemplateId(t.id)}
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          backgroundColor: isSelected ? '#FAF6F0' : 'transparent',
+                          color: isSelected ? '#7B5233' : '#64748b',
+                          fontWeight: isSelected ? '700' : '500',
+                          fontSize: '0.82rem',
+                          border: isSelected ? '1px solid #EADCC9' : '1px solid transparent',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '85%' }}>
+                          {t.code} - {t.title}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm(`Bạn có chắc muốn xóa tài liệu liên quan "${t.code} - ${t.title}"?`)) {
+                              handleDeleteRelatedTemplate(t.id);
+                            }
+                          }}
+                          style={{
+                            border: 'none',
+                            backgroundColor: 'transparent',
+                            color: '#ef4444',
+                            cursor: 'pointer',
+                            fontSize: '0.8rem',
+                            padding: '2px'
+                          }}
+                          title="Xóa tài liệu"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    );
+                  })}
+                  
+                  {(formData.related_templates || []).length === 0 && (
+                    <div style={{ fontSize: '0.78rem', color: '#94a3b8', fontStyle: 'italic', textAlign: 'center', padding: '20px 0' }}>
+                      Chưa có tài liệu liên quan.
                     </div>
-                    <div>
-                      <span style={{ fontSize: '0.88rem', fontWeight: 'bold', color: '#2d1a12', display: 'block' }}>
-                        Tài liệu quy trình gốc (Word Template)
-                      </span>
-                      <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                        Mã gốc: {formData.iso_document_code || '---'} | File đính kèm: {formData.file_path ? formData.file_path.split('/').pop() : 'Chưa có file Word đính kèm'}
-                      </span>
-                    </div>
-                  </div>
-                  {formData.file_path && (
-                    <a
-                      href={`${api.defaults.baseURL.replace('/api/v1', '')}/${formData.file_path}`}
-                      download
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{
-                        padding: '8px 16px',
-                        backgroundColor: '#7B5233',
-                        color: 'white',
-                        borderRadius: '6px',
-                        fontSize: '0.8rem',
-                        fontWeight: 'bold',
-                        textDecoration: 'none',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        boxShadow: '0 2px 4px rgba(123, 82, 51, 0.1)'
-                      }}
-                    >
-                      <Download size={14} /> Tải tài liệu gốc
-                    </a>
                   )}
                 </div>
 
-                {/* 4.2 Step templates checklist */}
-                <div>
-                  <h4 style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#7B5233', marginBottom: '8px' }}>
-                    Biểu mẫu / Tài liệu phát sinh theo các bước công việc
-                  </h4>
-                  <div style={{ border: '1px solid #cbd5e1', borderRadius: '6px', overflow: 'hidden' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                      <thead>
-                        <tr style={{ backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
-                          <th style={{ padding: '10px 12px', fontWeight: 'bold', color: '#7B5233', width: '80px' }}>Bước số</th>
-                          <th style={{ padding: '10px 12px', fontWeight: 'bold', color: '#7B5233' }}>Tên công việc</th>
-                          <th style={{ padding: '10px 12px', fontWeight: 'bold', color: '#7B5233', width: '150px' }}>Trách nhiệm</th>
-                          <th style={{ padding: '10px 12px', fontWeight: 'bold', color: '#7B5233' }}>Tên Biểu mẫu đính kèm</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {formData.steps && formData.steps.filter(s => s.template_files).length > 0 ? (
-                          formData.steps.filter(s => s.template_files).map((step, idx) => (
-                            <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                              <td style={{ padding: '10px 12px', fontWeight: 'bold', color: '#7B5233' }}>Bước {step.step_number}</td>
-                              <td style={{ padding: '10px 12px', fontWeight: '500', color: '#1e293b' }}>{step.name}</td>
-                              <td style={{ padding: '10px 12px', color: '#475569' }}>{step.assignee_role || '---'}</td>
-                              <td style={{ padding: '10px 12px', color: '#1e293b', fontWeight: '600' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  <FileText size={14} style={{ color: '#64748b' }} />
-                                  <span>{step.template_files}</span>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan="4" style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>
-                              Không có biểu mẫu đính kèm nào ở các bước trong quy trình này.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
+                <button
+                  type="button"
+                  onClick={handleAddRelatedTemplate}
+                  style={{
+                    padding: '8px 12px',
+                    backgroundColor: 'transparent',
+                    border: '1px dashed #7B5233',
+                    color: '#7B5233',
+                    borderRadius: '6px',
+                    fontSize: '0.8rem',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    marginTop: '8px',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <Plus size={14} /> Thêm tài liệu mới
+                </button>
               </div>
+
+              {/* CỘT PHẢI: CHI TIẾT CẤU HÌNH TÀI LIỆU ĐANG CHỌN (RỘNG 78%) */}
+              <div style={{
+                flex: 1,
+                backgroundColor: 'white',
+                border: '1px solid #EADCC9',
+                borderRadius: '8px',
+                padding: '20px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px',
+                boxShadow: '0 2px 8px rgba(45, 26, 18, 0.02)'
+              }}>
+                {(() => {
+                  const selectedT = (formData.related_templates || []).find(t => t.id === selectedTemplateId);
+                  if (!selectedT) {
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8', fontSize: '0.85rem', fontStyle: 'italic' }}>
+                        Vui lòng chọn hoặc thêm một tài liệu liên quan từ cột bên trái để bắt đầu cấu hình.
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      {/* Grid form inputs */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 'bold', color: '#64748b', marginBottom: '6px' }}>
+                            Mã biểu mẫu
+                          </label>
+                          <input
+                            type="text"
+                            value={selectedT.code || ''}
+                            onChange={(e) => handleUpdateRelatedTemplate(selectedT.id, 'code', e.target.value)}
+                            placeholder="Nhập mã biểu mẫu..."
+                            style={{
+                              width: '100%',
+                              padding: '8px 12px',
+                              border: '1px solid #cbd5e1',
+                              borderRadius: '6px',
+                              fontSize: '0.85rem',
+                              color: '#1e293b',
+                              outline: 'none'
+                            }}
+                          />
+                        </div>
+
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                            <label style={{ fontSize: '0.78rem', fontWeight: 'bold', color: '#64748b' }}>
+                              Tên biểu mẫu
+                            </label>
+                            <span
+                              onClick={handleOpenSystemTemplatesModal}
+                              style={{
+                                fontSize: '0.78rem',
+                                color: '#7B5233',
+                                cursor: 'pointer',
+                                textDecoration: 'underline',
+                                fontWeight: 'bold'
+                              }}
+                            >
+                              Chọn tài liệu từ hệ thống
+                            </span>
+                          </div>
+                          <input
+                            type="text"
+                            value={selectedT.title || ''}
+                            onChange={(e) => handleUpdateRelatedTemplate(selectedT.id, 'title', e.target.value)}
+                            placeholder="Nhập tên biểu mẫu..."
+                            style={{
+                              width: '100%',
+                              padding: '8px 12px',
+                              border: '1px solid #cbd5e1',
+                              borderRadius: '6px',
+                              fontSize: '0.85rem',
+                              color: '#1e293b',
+                              outline: 'none'
+                            }}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 'bold', color: '#64748b', marginBottom: '6px' }}>
+                            Phạm vi áp dụng
+                          </label>
+                          <select
+                            value={selectedT.scope || 'Tất cả'}
+                            onChange={(e) => handleUpdateRelatedTemplate(selectedT.id, 'scope', e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '8px 12px',
+                              border: '1px solid #cbd5e1',
+                              borderRadius: '6px',
+                              fontSize: '0.85rem',
+                              color: '#1e293b',
+                              backgroundColor: 'white',
+                              outline: 'none',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <option value="Tất cả">Tất cả</option>
+                            {systemScreens.map(s => (
+                              <option key={s.route_path} value={s.screen_name}>
+                                {s.screen_name} ({s.route_path})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Ghi chú */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 'bold', color: '#64748b', marginBottom: '6px' }}>
+                          Ghi chú
+                        </label>
+                        <textarea
+                          value={selectedT.note || ''}
+                          onChange={(e) => handleUpdateRelatedTemplate(selectedT.id, 'note', e.target.value)}
+                          placeholder="Nhập ghi chú thêm..."
+                          rows={3}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            border: '1px solid #cbd5e1',
+                            borderRadius: '6px',
+                            fontSize: '0.85rem',
+                            color: '#1e293b',
+                            outline: 'none',
+                            resize: 'vertical',
+                            fontFamily: 'inherit'
+                          }}
+                        />
+                      </div>
+
+                      {/* File attachment upload area */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 'bold', color: '#64748b', marginBottom: '6px' }}>
+                          Tài liệu đính kèm
+                        </label>
+                        
+                        {selectedT.file_path ? (
+                          /* If file is attached */
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '12px 16px',
+                            border: '1px solid #EADCC9',
+                            borderRadius: '8px',
+                            backgroundColor: '#FAF6F0'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <FileText size={20} style={{ color: '#7B5233' }} />
+                              <div>
+                                <span style={{ fontSize: '0.82rem', fontWeight: 'bold', color: '#2d1a12', display: 'block' }}>
+                                  {selectedT.file_name || selectedT.file_path.split('/').pop()}
+                                </span>
+                                <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                                  Đã tải lên hệ thống
+                                </span>
+                              </div>
+                            </div>
+                            
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                              <a
+                                href={`${api.defaults.baseURL.replace('/api/v1', '')}/${selectedT.file_path}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                download
+                                style={{
+                                  padding: '6px 12px',
+                                  backgroundColor: '#7B5233',
+                                  color: 'white',
+                                  borderRadius: '6px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 'bold',
+                                  textDecoration: 'none',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <Download size={12} /> Tải xuống
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteAttachment(selectedT.id)}
+                                style={{
+                                  padding: '6px 12px',
+                                  backgroundColor: '#fee2e2',
+                                  color: '#ef4444',
+                                  border: '1px solid #fee2e2',
+                                  borderRadius: '6px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 'bold',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                ✕ Xóa file
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          /* If NO file is attached - Upload Area */
+                          <div
+                            onClick={() => document.getElementById(`file-upload-input-${selectedT.id}`).click()}
+                            style={{
+                              border: '2px dashed #cbd5e1',
+                              borderRadius: '8px',
+                              padding: '24px',
+                              textAlign: 'center',
+                              cursor: 'pointer',
+                              backgroundColor: '#f8fafc',
+                              transition: 'all 0.15s ease'
+                            }}
+                            onMouseOver={(e) => { e.currentTarget.style.borderColor = '#7B5233'; e.currentTarget.style.backgroundColor = '#FAF6F0'; }}
+                            onMouseOut={(e) => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.backgroundColor = '#f8fafc'; }}
+                          >
+                            <input
+                              type="file"
+                              id={`file-upload-input-${selectedT.id}`}
+                              style={{ display: 'none' }}
+                              accept=".pdf,.doc,.docx"
+                              onChange={(e) => handleUploadAttachment(e, selectedT.id)}
+                            />
+                            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '500' }}>
+                                Tải file từ máy (chấp nhận file PDF, doc, docx)
+                              </span>
+                              <Upload size={16} style={{ color: '#64748b' }} />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
             </div>
           )}
 
@@ -5469,6 +5908,314 @@ const ISOProcessEditorView = () => {
         </div>
       )}
 
+      {/* --- MODAL: CHỌN TÀI LIỆU TỪ HỆ THỐNG --- */}
+      {showSystemTemplatesModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.45)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 10000,
+          padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            width: '90%',
+            maxWidth: '900px',
+            borderRadius: '12px',
+            padding: '24px',
+            boxShadow: '0 8px 32px rgba(45, 26, 18, 0.15)',
+            border: '1px solid #EADCC9',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px'
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 'bold', color: '#2d1a12' }}>
+                Thêm tài liệu từ hệ thống
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowSystemTemplatesModal(false)}
+                style={{
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  color: '#64748b',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  fontWeight: '300'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Search and Filters Bar */}
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <div style={{ position: 'relative', flex: 1 }}>
+                <input
+                  type="text"
+                  placeholder="Nhập mã tài liệu"
+                  value={searchTemplateQuery}
+                  onChange={(e) => setSearchTemplateQuery(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 16px 10px 36px',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '8px',
+                    fontSize: '0.88rem',
+                    outline: 'none',
+                    color: '#1e293b'
+                  }}
+                />
+                <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}>
+                  🔍
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSystemTemplatesFilterOpen(!systemTemplatesFilterOpen)}
+                style={{
+                  padding: '10px 14px',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '8px',
+                  backgroundColor: systemTemplatesFilterOpen ? '#FAF6F0' : 'white',
+                  color: '#7B5233',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1rem'
+                }}
+                title="Lọc phòng ban"
+              >
+                🎛️
+              </button>
+            </div>
+
+            {/* Department dropdown (if filter is open) */}
+            {systemTemplatesFilterOpen && (
+              <div style={{ padding: '12px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 'bold', color: '#64748b' }}>Phòng ban / Thư mục:</span>
+                <select
+                  value={systemTemplatesDepartmentFilter}
+                  onChange={(e) => setSystemTemplatesDepartmentFilter(e.target.value)}
+                  style={{
+                    padding: '6px 12px',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '6px',
+                    fontSize: '0.8rem',
+                    backgroundColor: 'white',
+                    color: '#1e293b',
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="">Tất cả phòng ban</option>
+                  {Array.from(new Set(systemTemplates.map(st => st.folder).filter(Boolean))).map(dept => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Table */}
+            <div style={{ maxHeight: '350px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', textAlign: 'left', position: 'sticky', top: 0 }}>
+                    <th style={{ padding: '10px 12px', width: '60px', textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={(() => {
+                          const isSearchActive = searchTemplateQuery.trim() !== '' || systemTemplatesDepartmentFilter !== '';
+                          const listToCompare = isSearchActive 
+                            ? systemTemplates.filter(st => {
+                                const matchSearch = (st.code && st.code.toLowerCase().includes(searchTemplateQuery.toLowerCase())) ||
+                                  (st.name && st.name.toLowerCase().includes(searchTemplateQuery.toLowerCase()));
+                                const matchDept = systemTemplatesDepartmentFilter === '' || st.folder === systemTemplatesDepartmentFilter;
+                                return matchSearch && matchDept;
+                              })
+                            : systemTemplates.filter(st => tempCheckedIds.includes(st.id));
+
+                          return listToCompare.length > 0 && listToCompare.every(st => tempCheckedIds.includes(st.id));
+                        })()}
+                        onChange={() => {
+                          const isSearchActive = searchTemplateQuery.trim() !== '' || systemTemplatesDepartmentFilter !== '';
+                          const listToCompare = isSearchActive 
+                            ? systemTemplates.filter(st => {
+                                const matchSearch = (st.code && st.code.toLowerCase().includes(searchTemplateQuery.toLowerCase())) ||
+                                  (st.name && st.name.toLowerCase().includes(searchTemplateQuery.toLowerCase()));
+                                const matchDept = systemTemplatesDepartmentFilter === '' || st.folder === systemTemplatesDepartmentFilter;
+                                return matchSearch && matchDept;
+                              })
+                            : systemTemplates.filter(st => tempCheckedIds.includes(st.id));
+
+                          const allChecked = listToCompare.length > 0 && listToCompare.every(st => tempCheckedIds.includes(st.id));
+                          if (allChecked) {
+                            const idsToRemove = listToCompare.map(st => st.id);
+                            setTempCheckedIds(prev => prev.filter(id => !idsToRemove.includes(id)));
+                          } else {
+                            const newIds = [...tempCheckedIds];
+                            listToCompare.forEach(st => {
+                              if (!newIds.includes(st.id)) {
+                                newIds.push(st.id);
+                              }
+                            });
+                            setTempCheckedIds(newIds);
+                          }
+                        }}
+                      />
+                    </th>
+                    <th style={{ padding: '10px 12px', width: '120px', color: '#7B5233', fontWeight: 'bold' }}>Mã</th>
+                    <th style={{ padding: '10px 12px', color: '#7B5233', fontWeight: 'bold' }}>Tên tài liệu</th>
+                    <th style={{ padding: '10px 12px', width: '150px', color: '#7B5233', fontWeight: 'bold' }}>phòng ban</th>
+                    <th style={{ padding: '10px 12px', width: '100px', color: '#7B5233', fontWeight: 'bold' }}>trạng thái</th>
+                    <th style={{ padding: '10px 12px', width: '120px', color: '#7B5233', fontWeight: 'bold' }}>ngày ban hành</th>
+                    <th style={{ padding: '10px 12px', width: '60px', textAlign: 'center' }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const isSearchActive = searchTemplateQuery.trim() !== '' || systemTemplatesDepartmentFilter !== '';
+                    const listToShow = systemTemplates.filter(st => {
+                      if (!isSearchActive) {
+                        return tempCheckedIds.includes(st.id);
+                      }
+                      const matchSearch = (st.code && st.code.toLowerCase().includes(searchTemplateQuery.toLowerCase())) ||
+                        (st.name && st.name.toLowerCase().includes(searchTemplateQuery.toLowerCase()));
+                      const matchDept = systemTemplatesDepartmentFilter === '' || st.folder === systemTemplatesDepartmentFilter;
+                      return matchSearch && matchDept;
+                    });
+
+                    if (listToShow.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan="7" style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>
+                            {!isSearchActive 
+                              ? "Chưa có tài liệu nào được chọn. Vui lòng nhập mã tài liệu tìm kiếm để chọn thêm."
+                              : "Không tìm thấy tài liệu phù hợp."
+                            }
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return listToShow.map(st => (
+                      <tr key={st.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                          <input
+                            type="checkbox"
+                            checked={tempCheckedIds.includes(st.id)}
+                            onChange={() => {
+                              if (tempCheckedIds.includes(st.id)) {
+                                setTempCheckedIds(prev => prev.filter(id => id !== st.id));
+                              } else {
+                                setTempCheckedIds(prev => [...prev, st.id]);
+                              }
+                            }}
+                          />
+                        </td>
+                        <td style={{ padding: '10px 12px', fontWeight: 'bold', color: '#1e293b' }}>
+                          {st.code}
+                        </td>
+                        <td style={{ padding: '10px 12px', color: '#334155' }}>
+                          {st.name}
+                        </td>
+                        <td style={{ padding: '10px 12px', color: '#475569' }}>
+                          {st.folder || '---'}
+                        </td>
+                        <td style={{ padding: '10px 12px' }}>
+                          <span style={{
+                            padding: '2px 8px',
+                            borderRadius: '12px',
+                            fontSize: '0.72rem',
+                            fontWeight: 'bold',
+                            backgroundColor: st.status === 'Hiệu lực' || st.status === 'Đang lưu hành' ? '#dcfce7' : '#fee2e2',
+                            color: st.status === 'Hiệu lực' || st.status === 'Đang lưu hành' ? '#15803d' : '#b91c1c'
+                          }}>
+                            {st.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px 12px', color: '#475569' }}>
+                          {st.issue_date || '---'}
+                        </td>
+                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (st.file_path) {
+                                window.open(api.defaults.baseURL.replace('/api/v1', '') + '/' + st.file_path, '_blank');
+                              } else {
+                                alert("Tài liệu này chưa đính kèm file gốc.");
+                              }
+                            }}
+                            style={{
+                              border: 'none',
+                              backgroundColor: 'transparent',
+                              color: '#7B5233',
+                              cursor: 'pointer',
+                              fontSize: '1.05rem',
+                              padding: '2px'
+                            }}
+                            title="Xem file gốc"
+                          >
+                            👁️
+                          </button>
+                        </td>
+                      </tr>
+                    ));
+                  })()}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer buttons */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setShowSystemTemplatesModal(false)}
+                style={{
+                  padding: '8px 20px',
+                  border: '1.5px solid #7B5233',
+                  borderRadius: '6px',
+                  backgroundColor: 'white',
+                  color: '#7B5233',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  fontSize: '0.82rem'
+                }}
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleUpdateSystemTemplates}
+                style={{
+                  padding: '8px 24px',
+                  border: 'none',
+                  borderRadius: '6px',
+                  backgroundColor: '#4A301C',
+                  color: 'white',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  fontSize: '0.82rem',
+                  boxShadow: '0 2px 4px rgba(74, 48, 28, 0.15)'
+                }}
+              >
+                Cập nhật
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

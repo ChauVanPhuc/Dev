@@ -15,6 +15,34 @@ router = APIRouter()
 UPLOAD_DIR = os.path.join("static", "uploads", "iso_documents")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+@router.post("/upload-attachment")
+async def upload_attachment(
+    file: UploadFile = File(...)
+):
+    """
+    [POST] Tải lên tài liệu đính kèm (PDF, doc, docx) liên quan đến quy trình.
+    """
+    filename_lower = file.filename.lower()
+    if not (filename_lower.endswith(".docx") or filename_lower.endswith(".doc") or filename_lower.endswith(".pdf")):
+        raise HTTPException(status_code=400, detail="Chỉ hỗ trợ định dạng file PDF hoặc Word (.doc, .docx)")
+
+    file_ext = os.path.splitext(file.filename)[1]
+    unique_filename = f"{uuid.uuid4()}{file_ext}"
+    file_path = os.path.join(UPLOAD_DIR, unique_filename)
+    
+    try:
+        content = await file.read()
+        with open(file_path, "wb") as f:
+            f.write(content)
+        relative_path = f"static/uploads/iso_documents/{unique_filename}"
+        return {
+            "file_name": file.filename,
+            "file_path": relative_path
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi khi lưu file đính kèm: {str(e)}")
+
+
 @router.post("/upload")
 async def upload_iso_document(
     file: UploadFile = File(...),
