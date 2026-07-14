@@ -13,9 +13,12 @@ const getBaseURL = () => {
     const hostname = window.location.hostname
     const port = window.location.port
     
-    // Nếu đang vào thẳng bằng tên miền dashboard hoặc chính chủ
+    // Nếu là môi trường Cloudflare với tách biệt subdomain
     if (hostname.includes('smartflowg7.cloud')) {
-      return window.location.origin
+      if (hostname === 'smartflowg7.cloud') {
+        return window.location.origin;
+      }
+      return 'https://api.smartflowg7.cloud';
     } 
     
     // Nếu là môi trường phát triển trên máy tính (Web browser localhost hoặc IP cục bộ)
