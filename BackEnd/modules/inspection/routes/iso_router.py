@@ -431,15 +431,14 @@ def save_iso_process(
         db.add(proc)
         db.flush() # Lấy proc.id
         
-        # Clone sections mẫu từ ISODocument
+        # Clone sections mẫu từ ISODocument nhưng để rỗng nội dung (chỉ hiển thị dạng hint, giữ lại metadata cấu hình)
         sections = payload.get("sections")
         if sections is None:
-            # Tự động clone từ ISO template
             for sec in iso_doc.sections:
                 db_sec = ISOProcessSection(
                     process_id=proc.id,
                     section_name=sec.section_name,
-                    content_html=sec.content_html
+                    content_html=sec.content_html if sec.section_name.startswith("__") else ""
                 )
                 db.add(db_sec)
         
@@ -491,6 +490,7 @@ def save_iso_process(
         # Xóa các chi tiết cũ của quy trình để ghi đè cập nhật mới
         db.query(ISOProcessSection).filter(ISOProcessSection.process_id == proc.id).delete()
         db.query(ISOProcessStepInstance).filter(ISOProcessStepInstance.process_id == proc.id).delete()
+        db.query(ISORevisionLog).filter(ISORevisionLog.process_id == proc.id).delete()
 
     # Nếu có truyền payload cập nhật sections chi tiết
     if payload.get("sections") is not None:
@@ -525,6 +525,58 @@ def save_iso_process(
             )
             db.add(db_step)
 
+    # Ghi nhận nhật ký sửa đổi (Revision Logs) của quy trình
+    revision_logs = payload.get("revision_logs", [])
+    
+    # Nếu là cập nhật, tự động tạo thêm một dòng nhật ký sửa đổi đại diện cho lượt chỉnh sửa này
+    if proc_id:
+        now_date = now_str[:10]  # YYYY-MM-DD
+        editor_name = payload.get("editor") or "Hệ thống"
+        
+        # Chỉ append nếu dòng cuối cùng không trùng lặp (modifier, date)
+        should_append = True
+        if revision_logs:
+            last_log = revision_logs[-1]
+            if (last_log.get("rev_date") == now_date and 
+                last_log.get("modifier") == editor_name and 
+                "Cập nhật" in last_log.get("content", "")):
+                should_append = False
+                
+        if should_append:
+            next_seq = len(revision_logs) + 1
+            revision_logs.append({
+                "seq_no": next_seq,
+                "rev_date": now_date,
+                "content": "Cập nhật quy trình",
+                "page_no": "Tất cả",
+                "modifier": editor_name
+            })
+            
+    # Nếu là tạo mới và không truyền revision_logs, sao chép lịch sử từ mẫu gốc
+    elif not revision_logs and iso_doc:
+        revision_logs = [
+            {
+                "seq_no": l.seq_no,
+                "rev_date": l.rev_date,
+                "content": l.content,
+                "page_no": l.page_no,
+                "modifier": l.modifier or "Hệ thống"
+            }
+            for l in sorted(iso_doc.revision_logs, key=lambda x: x.seq_no or 0)
+        ]
+
+    # Lưu lại toàn bộ revision logs vào bảng
+    for idx, log in enumerate(revision_logs):
+        db_log = ISORevisionLog(
+            process_id=proc.id,
+            seq_no=idx + 1,
+            rev_date=log.get("rev_date", ""),
+            content=log.get("content", ""),
+            page_no=log.get("page_no", ""),
+            modifier=log.get("modifier", "")
+        )
+        db.add(db_log)
+
     try:
         db.commit()
         return {
@@ -547,29 +599,38 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
     if not proc:
         raise HTTPException(status_code=404, detail="Không tìm thấy quy trình thực tế")
 
-    # Nhật ký sửa đổi lấy từ tài liệu ISO gốc
+    # Nhật ký sửa đổi
     revision_logs = []
-    if proc.iso_document:
-        revision_logs = [
-            {
-                "seq_no": l.seq_no,
-                "rev_date": l.rev_date,
-                "content": l.content,
-                "page_no": l.page_no,
-                "modifier": l.modifier
-            }
-            for l in sorted(proc.iso_document.revision_logs, key=lambda x: x.seq_no)
-        ]
+    logs_to_use = proc.revision_logs if proc.revision_logs else (proc.iso_document.revision_logs if proc.iso_document else [])
+    revision_logs = [
+        {
+            "seq_no": l.seq_no,
+            "rev_date": l.rev_date,
+            "content": l.content,
+            "page_no": l.page_no,
+            "modifier": l.modifier or "Hệ thống"
+        }
+        for l in sorted(logs_to_use, key=lambda x: x.seq_no or 0)
+    ]
 
     # Các phần văn bản
     sections = {}
     for s in proc.sections:
         sections[s.section_name] = s.content_html
 
-    # Nếu rỗng, nạp từ ISO Document mẫu
+    # Nếu rỗng, khởi tạo các phần văn bản từ template nhưng để rỗng nội dung (chỉ hiển thị dạng hint, giữ lại metadata cấu hình)
     if not sections and proc.iso_document:
         for s in proc.iso_document.sections:
-            sections[s.section_name] = s.content_html
+            if s.section_name.startswith("__"):
+                sections[s.section_name] = s.content_html
+            else:
+                sections[s.section_name] = ""
+
+    # Các phần văn bản của mẫu gốc để làm gợi ý (hints)
+    template_sections = {}
+    if proc.iso_document:
+        for s in proc.iso_document.sections:
+            template_sections[s.section_name] = s.content_html
 
     # Các bước quy trình thực tế
     steps = []
@@ -623,6 +684,7 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
         "diagram_data": proc.diagram_data or (proc.iso_document.diagram_data if proc.iso_document else ""),
         "revision_logs": revision_logs,
         "sections": sections,
+        "template_sections": template_sections,
         "steps": steps
     }
 

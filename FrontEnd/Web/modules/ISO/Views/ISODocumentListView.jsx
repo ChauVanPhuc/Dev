@@ -124,6 +124,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
     iso_document_id: '',
     document_level: '',
     editor: '',
+    owner: '',
     approver: '',
     role: '',
     status: 'Nháp'
@@ -240,6 +241,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
         iso_document_id: defaultTemplate ? defaultTemplate.id : '',
         document_level: documentLevel,
         editor: editorName,
+        owner: editorName,
         approver: approverName,
         role: '',
         status: 'Nháp'
@@ -866,6 +868,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                         symbol: initialSymbol,
                         code: generatedCode,
                         document_level: documentLevel,
+                        owner: prev.owner,
                         approver: approverName
                       }));
                     }

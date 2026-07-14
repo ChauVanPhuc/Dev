@@ -301,10 +301,19 @@ const RichTextEditor = ({ value, onChange, placeholder, style = {} }) => {
       </div>
 
       {/* Editor Canvas */}
+      <style>{`
+        .rich-editor-canvas:empty:before {
+          content: attr(placeholder);
+          color: #94a3b8;
+          font-style: italic;
+          pointer-events: none;
+        }
+      `}</style>
       <div
         ref={editorRef}
         contentEditable
         onInput={handleInput}
+        className="rich-editor-canvas"
         style={{
           minHeight: '260px',
           padding: '16px 20px',
@@ -1377,10 +1386,10 @@ const ISOProcessEditorView = () => {
           name: isGenericName ? '' : parsedName,
           version: parsed.version || '01',
           issue_date: parsed.issue_date || new Date().toISOString().split('T')[0],
-          issuer: '',
-          editor: '',
-          approver: '',
-          owner: '',
+          issuer: parsed.issuer || '',
+          editor: loggedInUser.full_name || loggedInUser.username || '',
+          approver: parsed.approver || '',
+          owner: parsed.issuer || parsed.owner || '',
           file_path: parsed.file_path || '',
           status: parsed.status || 'Hiệu lực',
           folder: parsed.folder || '',
@@ -1390,6 +1399,7 @@ const ISOProcessEditorView = () => {
             { seq_no: 1, rev_date: '', content: 'Ban hành lần đầu', page_no: 'Tất cả' }
           ],
           sections: newSections,
+          template_sections: newSections,
           section_types: newSectionTypes,
           steps: (parsed.steps || []).map(step => ({
             ...step,
@@ -1536,6 +1546,7 @@ const ISOProcessEditorView = () => {
         owner: data.owner || '',
         editor: data.editor || '',
         sections: receivedSections,
+        template_sections: data.template_sections || {},
         section_types: sectionTypes,
         steps: (data.steps || []).map(step => ({
           ...step,
@@ -1644,7 +1655,10 @@ const ISOProcessEditorView = () => {
         doc_type: parsedData.doc_type || prev.doc_type,
         document_level: parsedData.document_level || prev.document_level,
         notes: parsedData.notes || prev.notes,
+        owner: parsedData.issuer || parsedData.owner || prev.owner,
+        approver: parsedData.approver || prev.approver,
         sections: newSections,
+        template_sections: newSections,
         section_types: newSectionTypes,
         steps: stepsMapped,
         instruction_steps: instructionStepsMapped,
@@ -1670,6 +1684,15 @@ const ISOProcessEditorView = () => {
         [sectionName]: val
       }
     }));
+  };
+
+  const getSectionHint = (sectionKey) => {
+    const templateHtml = formData.template_sections?.[sectionKey] || '';
+    if (!templateHtml) return null;
+    const cleanText = templateHtml.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+    if (!cleanText) return null;
+    const match = cleanText.match(/\[([^\]]*)\]/);
+    return match ? match[1].trim() : cleanText;
   };
 
   // --- QC STEPS CONFIGURATION ---
@@ -2792,25 +2815,50 @@ const ISOProcessEditorView = () => {
               onClick={() => setInfoExpanded(!infoExpanded)}
             >
               <span style={headerTextStyle}>{isProcessMode ? 'Thông tin quy trình' : 'Thông tin Mẫu ISO'}</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <button 
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    triggerDownload();
+                    setShowPdfPreview(true);
                   }}
                   style={{
-                    padding: '4px 12px',
-                    backgroundColor: '#7B5233',
+                    padding: '6px 14px',
+                    backgroundColor: '#4A301C',
                     color: 'white',
                     border: 'none',
                     borderRadius: '4px',
-                    fontSize: '0.75rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <Download size={13} />
+                  Xuất tài liệu
+                </button>
+                <button 
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSaveForm();
+                  }}
+                  style={{
+                    padding: '6px 14px',
+                    backgroundColor: '#4A301C',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    fontSize: '0.8rem',
                     fontWeight: 'bold',
                     cursor: 'pointer'
                   }}
                 >
-                  Tải xuống
+                  Lưu hồ sơ
                 </button>
+                <div style={{ width: '1px', height: '18px', backgroundColor: '#EADCC9', margin: '0 4px' }} />
                 {infoExpanded ? <ChevronUp size={16} style={{color:accentColor}} /> : <ChevronDown size={16} style={{color:accentColor}} />}
               </div>
             </div>
@@ -2829,7 +2877,7 @@ const ISOProcessEditorView = () => {
                       style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', fontWeight: '600', backgroundColor: '#F3F4F6', color: '#4B5563', cursor: 'not-allowed' }}
                     />
                   </div>
-                  <div style={{ gridColumn: 'span 6' }}>
+                  <div style={{ gridColumn: 'span 5' }}>
                     <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tên quy trình <span style={{ color: 'red' }}>*</span></label>
                     <input
                       type="text"
@@ -2837,15 +2885,6 @@ const ISOProcessEditorView = () => {
                       onChange={(e) => handleInputChange('name', e.target.value)}
                       placeholder="Nhập tên quy trình..."
                       style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', color: '#1F2937' }}
-                    />
-                  </div>
-                  <div style={{ gridColumn: 'span 2' }}>
-                    <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ngày cập nhật</label>
-                    <input
-                      type="text"
-                      value={formData.issue_date || ''}
-                      readOnly
-                      style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', fontWeight: '600', backgroundColor: '#F3F4F6', color: '#4B5563', cursor: 'not-allowed' }}
                     />
                   </div>
                   <div style={{ gridColumn: 'span 2' }}>
@@ -2861,28 +2900,7 @@ const ISOProcessEditorView = () => {
                       <option value="Hết hiệu lực">Hết hiệu lực</option>
                     </select>
                   </div>
-
-                  {/* Row 2 */}
-                  <div style={{ gridColumn: 'span 4' }}>
-                    <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Người cập nhật</label>
-                    <input
-                      type="text"
-                      value={loggedInUser.full_name || loggedInUser.username || formData.editor || formData.issuer || '---'}
-                      readOnly
-                      style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', fontWeight: '600', backgroundColor: '#F3F4F6', color: '#4B5563', cursor: 'not-allowed' }}
-                    />
-                  </div>
-                  <div style={{ gridColumn: 'span 4' }}>
-                    <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Người duyệt</label>
-                    <input
-                      type="text"
-                      value={formData.approver || ''}
-                      onChange={(e) => handleInputChange('approver', e.target.value)}
-                      placeholder="Nhập người duyệt..."
-                      style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', color: '#1F2937' }}
-                    />
-                  </div>
-                  <div style={{ gridColumn: 'span 4', position: 'relative' }}>
+                  <div style={{ gridColumn: 'span 3', position: 'relative' }}>
                     <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Phạm vi</label>
                     <div 
                       onClick={() => setIsScreenDropdownOpen(!isScreenDropdownOpen)}
@@ -2905,7 +2923,7 @@ const ISOProcessEditorView = () => {
                       {(() => {
                         const selectedScreens = formData.folder ? formData.folder.split(',').map(s => s.trim()).filter(Boolean) : [];
                         if (selectedScreens.length === 0) {
-                          return <span style={{ color: '#94a3b8' }}>Chọn phạm vi màn hình...</span>;
+                          return <span style={{ color: '#94a3b8' }}>Chọn phạm vi...</span>;
                         }
                         return selectedScreens.map(scrPath => {
                           const scrObj = systemScreens.find(s => s.route_path === scrPath);
@@ -3020,6 +3038,47 @@ const ISOProcessEditorView = () => {
                     )}
                   </div>
 
+                  {/* Row 2 */}
+                  <div style={{ gridColumn: 'span 3' }}>
+                    <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Người soạn</label>
+                    <input
+                      type="text"
+                      value={formData.owner || loggedInUser.full_name || loggedInUser.username || ''}
+                      readOnly
+                      placeholder="Chưa có người soạn..."
+                      style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', fontWeight: '600', backgroundColor: '#F3F4F6', color: '#4B5563', cursor: 'not-allowed' }}
+                    />
+                  </div>
+                  <div style={{ gridColumn: 'span 3' }}>
+                    <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Người duyệt</label>
+                    <input
+                      type="text"
+                      value={formData.approver || ''}
+                      onChange={(e) => handleInputChange('approver', e.target.value)}
+                      placeholder="Nhập người duyệt..."
+                      style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', color: '#1F2937' }}
+                    />
+                  </div>
+                  <div style={{ gridColumn: 'span 3' }}>
+                    <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cấp tài liệu</label>
+                    <input
+                      type="text"
+                      value={formData.document_level || ''}
+                      onChange={(e) => handleInputChange('document_level', e.target.value)}
+                      placeholder="Nhập cấp tài liệu..."
+                      style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', color: '#1F2937' }}
+                    />
+                  </div>
+                  <div style={{ gridColumn: 'span 3' }}>
+                    <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Người cập nhật cuối cùng</label>
+                    <input
+                      type="text"
+                      value={loggedInUser.full_name || loggedInUser.username || formData.editor || formData.issuer || '---'}
+                      readOnly
+                      style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', fontWeight: '600', backgroundColor: '#F3F4F6', color: '#4B5563', cursor: 'not-allowed' }}
+                    />
+                  </div>
+
                   {/* Row 3: Ghi chú */}
                   <div style={{ gridColumn: 'span 12' }}>
                     <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ghi chú</label>
@@ -3048,8 +3107,8 @@ const ISOProcessEditorView = () => {
             {[
               { id: 'content', label: 'Nội dung Quy trình', icon: FileText },
               { id: 'instructions', label: 'Hướng dẫn thực hiện', icon: Activity },
-              { id: 'history', label: 'Lịch sử kiểm tra', icon: Settings },
-              { id: 'templates', label: 'Biểu mẫu', icon: ListPlus }
+              { id: 'templates', label: 'Tài liệu liên quan', icon: ListPlus },
+              { id: 'history', label: 'Lịch sử kiểm tra', icon: Settings }
             ].map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -4151,12 +4210,37 @@ const ISOProcessEditorView = () => {
                   </div>
                 ) : (
                   /* RENDER RICH TEXT EDITOR */
-                  <RichTextEditor
-                    value={formData.sections[activeMenu] || ''}
-                    onChange={(val) => handleSectionChange(activeMenu, val)}
-                    placeholder={`Nhập nội dung cho phần: ${activeMenu}...`}
-                    style={{ flex: 1, minHeight: '420px' }}
-                  />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
+                    {(() => {
+                      const hint = getSectionHint(activeMenu);
+                      if (!hint) return null;
+                      return (
+                        <div style={{
+                          padding: '10px 14px',
+                          backgroundColor: '#EFF6FF',
+                          border: '1px solid #BFDBFE',
+                          borderRadius: '6px',
+                          color: '#1E40AF',
+                          fontSize: '0.8rem',
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: '6px',
+                          lineHeight: '1.4'
+                        }}>
+                          <span style={{ fontSize: '1rem', lineHeight: '1' }}>💡</span>
+                          <div>
+                            <strong>Gợi ý từ tài liệu mẫu:</strong> {hint}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    <RichTextEditor
+                      value={formData.sections[activeMenu] || ''}
+                      onChange={(val) => handleSectionChange(activeMenu, val)}
+                      placeholder={getSectionHint(activeMenu) || `Nhập nội dung cho phần: ${activeMenu}...`}
+                      style={{ flex: 1, minHeight: '420px' }}
+                    />
+                  </div>
                 )}
               </div>
             </div>
@@ -4313,8 +4397,8 @@ const ISOProcessEditorView = () => {
 
                       {/* Form chi tiết */}
                       <div style={{ backgroundColor: 'white', borderRadius: '10px', padding: '20px', border: '1.5px solid #EADCC9', display: 'flex', flexDirection: 'column', gap: '16px', boxSizing: 'border-box' }}>
-                        {/* Hàng 1: Mã tài liệu, Tên tài liệu */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2.5fr', gap: '14px' }}>
+                        {/* Hàng 1: Mã tài liệu, Tên tài liệu, Phạm vi áp dụng */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1.5fr', gap: '14px' }}>
                           <div>
                             <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 'bold', color: '#4B5563', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                               Mã tài liệu
@@ -4361,6 +4445,38 @@ const ISOProcessEditorView = () => {
                               }}
                             />
                           </div>
+                          <div>
+                            <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 'bold', color: '#4B5563', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              Phạm vi áp dụng
+                            </label>
+                            <select
+                              value={activeInst.scope || 'Tất cả'}
+                              onChange={(e) => handleUpdateWorkInstructionScope(activeInst.id, e.target.value)}
+                              style={{
+                                width: '100%',
+                                height: '36px',
+                                padding: '7px 10px',
+                                borderRadius: '6px',
+                                border: '1px solid #D1D5DB',
+                                outline: 'none',
+                                fontSize: '0.85rem',
+                                backgroundColor: 'white',
+                                color: '#1F2937',
+                                boxSizing: 'border-box',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <option value="Tất cả">Tất cả</option>
+                              {systemScreens
+                                .filter(scr => scr.platform && scr.platform.toLowerCase() === 'mobile')
+                                .map(scr => (
+                                  <option key={scr.id} value={scr.route_path}>
+                                    {scr.title || scr.route_path}
+                                  </option>
+                                ))
+                              }
+                            </select>
+                          </div>
                         </div>
 
                         {/* Ghi chú */}
@@ -4397,7 +4513,7 @@ const ISOProcessEditorView = () => {
                                 <th style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: '700', color: '#374151', textTransform: 'uppercase' }}>Nội dung thực hiện</th>
                                 <th style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: '700', color: '#374151', textTransform: 'uppercase' }}>Lưu ý</th>
                                 <th style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: '700', color: '#374151', textTransform: 'uppercase' }}>Tiêu chuẩn chấp nhận</th>
-                                <th style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: '700', color: '#374151', textTransform: 'uppercase', width: '85px', textAlign: 'center' }}>Thao tác</th>
+                                <th style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: '700', color: '#374151', textTransform: 'uppercase', width: '70px', textAlign: 'center' }}>Icon</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -4408,66 +4524,69 @@ const ISOProcessEditorView = () => {
                                   </td>
                                 </tr>
                               ) : (
-                                activeInst.steps.map((step, idx) => (
-                                  <tr
-                                    key={step.id || idx}
-                                    style={{ borderBottom: '1px solid #F3F4F6', transition: 'background-color 0.15s' }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F9FAFB'}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                  >
-                                    <td style={{ padding: '12px 14px', fontSize: '0.85rem', fontWeight: 'bold', color: '#374151', textAlign: 'center' }}>
-                                      Bước {step.step_number}
-                                    </td>
-                                    <td style={{ padding: '12px 14px' }}>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                        {step.image_url ? (
-                                          <img src={step.image_url} style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover', border: '1px solid #E5E7EB' }} alt="" />
+                                activeInst.steps.map((step, idx) => {
+                                  const imgUrl = step.image_url || (step.image_urls && step.image_urls[0]) || '';
+                                  return (
+                                    <tr
+                                      key={step.id || idx}
+                                      style={{ borderBottom: '1px solid #F3F4F6', transition: 'background-color 0.15s' }}
+                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F9FAFB'}
+                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                    >
+                                      <td style={{ padding: '12px 14px', fontSize: '0.85rem', fontWeight: 'bold', color: '#374151', textAlign: 'center' }}>
+                                        Bước {step.step_number}
+                                      </td>
+                                      <td style={{ padding: '12px 14px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                          {imgUrl ? (
+                                            <img src={imgUrl} style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #E5E7EB' }} alt="" />
+                                          ) : (
+                                            <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#F3F4F6', border: '1px solid #E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF', flexShrink: 0 }}>
+                                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
+                                            </div>
+                                          )}
+                                          <span style={{ fontSize: '0.85rem', color: '#374151', fontWeight: '500' }}>
+                                            {step.name || <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>Chưa nhập nội dung</span>}
+                                          </span>
+                                        </div>
+                                      </td>
+                                      <td style={{ padding: '12px 14px', fontSize: '0.85rem', color: '#6B7280' }}>
+                                        {step.note || <span style={{ color: '#D1D5DB' }}>---</span>}
+                                      </td>
+                                      <td style={{ padding: '12px 14px' }}>
+                                        {step.standard ? (
+                                          <span style={{ 
+                                            display: 'inline-flex', 
+                                            alignItems: 'center',
+                                            backgroundColor: '#FAF6F0', 
+                                            color: '#7B5233', 
+                                            fontSize: '0.75rem', 
+                                            fontWeight: 'bold', 
+                                            padding: '4px 10px', 
+                                            borderRadius: '12px', 
+                                            border: '1px solid #EADCC9' 
+                                          }}>
+                                            {step.standard}
+                                          </span>
                                         ) : (
-                                          <div style={{ width: '40px', height: '40px', borderRadius: '6px', backgroundColor: '#F3F4F6', border: '1px solid #E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF', flexShrink: 0 }}>
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
-                                          </div>
+                                          <span style={{ color: '#D1D5DB' }}>---</span>
                                         )}
-                                        <span style={{ fontSize: '0.85rem', color: '#374151', fontWeight: '500' }}>
-                                          {step.name || <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>Chưa nhập nội dung</span>}
-                                        </span>
-                                      </div>
-                                    </td>
-                                    <td style={{ padding: '12px 14px', fontSize: '0.85rem', color: '#6B7280' }}>
-                                      {step.note || <span style={{ color: '#D1D5DB' }}>---</span>}
-                                    </td>
-                                    <td style={{ padding: '12px 14px' }}>
-                                      {step.standard ? (
-                                        <span style={{ display: 'inline-block', backgroundColor: '#FEF2F2', color: '#991B1B', fontSize: '0.75rem', fontWeight: '600', padding: '3px 7px', borderRadius: '4px', border: '1px solid #FCA5A5' }}>
-                                          {step.standard}
-                                        </span>
-                                      ) : (
-                                        <span style={{ color: '#D1D5DB' }}>---</span>
-                                      )}
-                                    </td>
-                                    <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                                      <div style={{ display: 'flex', justifyContent: 'center', gap: '6px' }}>
+                                      </td>
+                                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                                         <button
                                           type="button"
                                           onClick={() => handleOpenEditStepPopup(activeInst, idx)}
-                                          style={{ border: 'none', background: 'none', color: '#4B5563', cursor: 'pointer', padding: '3px', display: 'flex', alignItems: 'center', transition: 'color 0.2s' }}
+                                          style={{ border: 'none', background: 'none', color: '#4B5563', cursor: 'pointer', padding: '6px', display: 'inline-flex', alignItems: 'center', transition: 'color 0.2s', margin: '0 auto' }}
                                           title="Sửa bước này"
                                           onMouseEnter={(e) => e.currentTarget.style.color = '#7B5233'}
                                           onMouseLeave={(e) => e.currentTarget.style.color = '#4B5563'}
                                         >
                                           <Edit size={15} />
                                         </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleRemoveWorkInstructionStep(activeInst.id, idx)}
-                                          style={{ border: 'none', background: 'none', color: '#EF4444', cursor: 'pointer', padding: '3px', display: 'flex', alignItems: 'center' }}
-                                          title="Xóa bước này"
-                                        >
-                                          <Trash2 size={15} />
-                                        </button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))
+                                      </td>
+                                    </tr>
+                                  );
+                                })
                               )}
                             </tbody>
                           </table>

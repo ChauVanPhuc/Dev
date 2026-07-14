@@ -108,6 +108,31 @@ def run_input_inspection_cont_name_migration():
         print(f"[ERROR] cont_name migration failed: {str(e)}")
         raise
 
+def run_iso_process_revision_logs_migration():
+    """Add process_id column and make document_id nullable in iso_revision_logs table"""
+    db = next(get_db())
+    try:
+        check_sql = text("""
+            SELECT COUNT(*) as count 
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_NAME = 'iso_revision_logs' 
+            AND COLUMN_NAME = 'process_id'
+        """)
+        result = db.execute(check_sql).fetchone()
+        
+        if result[0] == 0:
+            db.execute(text("ALTER TABLE iso_revision_logs ALTER COLUMN document_id INT NULL"))
+            db.execute(text("ALTER TABLE iso_revision_logs ADD process_id INT NULL"))
+            db.commit()
+            print("[OK] Altered iso_revision_logs table (document_id nullable, added process_id)")
+        else:
+            print("[SKIP] process_id column already exists in iso_revision_logs")
+            
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] iso_revision_logs migration failed: {str(e)}")
+        raise
+
 if __name__ == "__main__":
     print("Running database migrations...")
     print("-" * 50)
@@ -119,6 +144,7 @@ if __name__ == "__main__":
         run_input_inspection_cont_name_migration()
         run_account_migration()
         run_screen_bug_reporter_migration()
+        run_iso_process_revision_logs_migration()
         print("-" * 50)
         print("[SUCCESS] All migrations completed successfully!")
     except Exception as e:
