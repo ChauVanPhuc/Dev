@@ -1,322 +1,641 @@
-import React, { useCallback, useMemo, useEffect, useState } from "react";
+import React, { useCallback, useMemo, useEffect, useState, useRef, useImperativeHandle, forwardRef } from "react";
 import {
   ReactFlow, Background, Controls, MiniMap,
   useNodesState, useEdgesState, addEdge,
   Handle, Position, MarkerType,
   useReactFlow, ReactFlowProvider, Panel,
+  BaseEdge, EdgeLabelRenderer, getSmoothStepPath,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
-// ─── Role formatter ────────────────────────────────────────────────────────────
-const formatRole = (role) => {
-  if (!role) return "";
-  const u = role.toUpperCase().replace("BO PHAN", "").replace("BỘ PHẬN", "").trim();
-  if (u.includes("QC") || u.includes("QLCL")) return "QC";
-  if (u.includes("KHO")) return "Kho";
-  if (u.includes("SAN XUAT") || u.includes("SẢN XUẤT") || u === "SX") return "SX";
-  if (u.includes("THU MUA") || u.includes("MUA")) return "Mua";
-  if (u.includes("BAN HANG") || u.includes("BÁN HÀNG") || u === "KD") return "KD";
-  if (u.includes("ADMIN") || u.includes("GIAM DOC") || u.includes("GIÁM ĐỐC")) return "BGĐ";
-  return role;
-};
-
-// ─── Custom Nodes ──────────────────────────────────────────────────────────────
+// ─── Custom Minimal Nodes (Black & White, Sharp Corners) ─────────────────────────
 const nodeBase = (selected) => ({
   boxShadow: selected
-    ? "0 0 0 3px rgba(123,82,51,0.5), 0 4px 12px rgba(0,0,0,0.12)"
-    : "0 2px 6px rgba(0,0,0,0.08)",
-  transition: "box-shadow 0.2s ease",
+    ? "0 0 0 2px #000000, 0 4px 10px rgba(0,0,0,0.15)"
+    : "0 1px 3px rgba(0,0,0,0.05)",
+  transition: "box-shadow 0.2s ease, border-color 0.2s ease",
   cursor: "grab",
 });
 
-const NodeMeta = ({ stepNumber, roleLabel }) => (
-  <div style={{ fontSize: "8.5px", color: "#7B5233", marginBottom: "3px", fontWeight: "600", opacity: 0.85 }}>
-    {stepNumber ? `B${stepNumber}` : ""}{stepNumber && roleLabel ? " · " : ""}{roleLabel}
-  </div>
-);
+// ─── Task Node (Rectangle - Process Step) ──────────────────────────────────────
+const TaskNode = ({ data, selected }) => {
+  const hasOutput = data._hasOutput;
 
-const TaskNode = ({ data, selected }) => (
-  <div style={{ padding: "8px 12px", border: `2px solid ${selected ? "#7B5233" : data.borderColor || "#334155"}`, borderRadius: "6px", backgroundColor: "white", minWidth: "130px", maxWidth: "170px", fontSize: "11px", fontFamily: "Georgia, serif", fontWeight: "bold", textAlign: "center", ...nodeBase(selected) }}>
-    <Handle type="target" position={Position.Top} style={{ background: "#94a3b8", width: 8, height: 8 }} />
-    <NodeMeta stepNumber={data.stepNumber} roleLabel={data.roleLabel} />
-    <div style={{ lineHeight: "1.3" }}>{data.label}</div>
-    <Handle type="source" position={Position.Bottom} style={{ background: "#94a3b8", width: 8, height: 8 }} />
-    <Handle type="source" position={Position.Right} id="right" style={{ background: "#e67e22", width: 8, height: 8 }} />
-  </div>
-);
+  return (
+    <div style={{
+      width: "140px",
+      height: "54px",
+      border: "1.5px solid #000000",
+      backgroundColor: "#ffffff",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontFamily: "Arial, sans-serif",
+      fontSize: "12px",
+      fontWeight: "bold",
+      color: "#000000",
+      textAlign: "center",
+      padding: "6px 10px",
+      boxSizing: "border-box",
+      ...nodeBase(selected)
+    }}>
+      {/* Inputs (Top, Left, Right) */}
+      <Handle type="target" position={Position.Top} id="top" style={{ background: "#000000", width: 6, height: 6 }} />
+      <Handle type="target" position={Position.Left} id="left-target" style={{ background: "#000000", width: 6, height: 6, top: "50%" }} />
+      <Handle type="target" position={Position.Right} id="right-target" style={{ background: "#000000", width: 6, height: 6, top: "50%" }} />
+      
+      <div style={{ wordBreak: "break-word", lineHeight: "1.3" }}>{data.label}</div>
 
-const DiamondNode = ({ data, selected }) => (
-  <div style={{ position: "relative", width: "160px", height: "80px", ...nodeBase(selected) }}>
-    <Handle type="target" position={Position.Top} style={{ background: "#94a3b8", top: "0px", width: 8, height: 8 }} />
-    <svg width="160" height="80" style={{ position: "absolute", top: 0, left: 0 }}>
-      <polygon points="80,4 156,40 80,76 4,40" fill="white" stroke={selected ? "#7B5233" : data.borderColor || "#e67e22"} strokeWidth={selected ? "2.5" : "2"} />
-    </svg>
-    <div style={{ position: "absolute", top: 0, left: 0, width: "160px", height: "80px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "Georgia, serif", fontSize: "10px", fontWeight: "bold", textAlign: "center", padding: "0 24px", pointerEvents: "none" }}>
-      <NodeMeta stepNumber={data.stepNumber} roleLabel={data.roleLabel} />
-      <div style={{ lineHeight: "1.2" }}>{data.label}</div>
+      {/* Output (Bottom, Left, Right) - Only 1 output allowed */}
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        id="bottom"
+        style={{
+          background: hasOutput ? "#ef4444" : "#000000",
+          width: 6,
+          height: 6,
+          opacity: hasOutput ? 0.3 : 1
+        }}
+        isConnectable={!hasOutput}
+      />
+      <Handle
+        type="source"
+        position={Position.Left}
+        id="left"
+        style={{
+          background: hasOutput ? "#ef4444" : "#000000",
+          width: 6,
+          height: 6,
+          top: "50%",
+          opacity: hasOutput ? 0.3 : 1
+        }}
+        isConnectable={!hasOutput}
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="right"
+        style={{
+          background: hasOutput ? "#ef4444" : "#000000",
+          width: 6,
+          height: 6,
+          top: "50%",
+          opacity: hasOutput ? 0.3 : 1
+        }}
+        isConnectable={!hasOutput}
+      />
     </div>
-    <Handle type="source" position={Position.Bottom} style={{ background: "#94a3b8", bottom: "0px", width: 8, height: 8 }} />
-    <Handle type="source" position={Position.Right} id="right" style={{ background: "#e67e22", right: "0px", top: "40px", width: 8, height: 8 }} />
-  </div>
-);
+  );
+};
 
-const OvalNode = ({ data, selected }) => (
-  <div style={{ padding: "8px 16px", border: `2px solid ${selected ? "#7B5233" : data.borderColor || "#1a6b3c"}`, borderRadius: "40px", backgroundColor: "white", minWidth: "130px", maxWidth: "170px", fontSize: "11px", fontFamily: "Georgia, serif", fontWeight: "bold", textAlign: "center", ...nodeBase(selected) }}>
-    <Handle type="target" position={Position.Top} style={{ background: "#94a3b8", width: 8, height: 8 }} />
-    <NodeMeta stepNumber={data.stepNumber} roleLabel={data.roleLabel} />
-    <div style={{ lineHeight: "1.3" }}>{data.label}</div>
-    <Handle type="source" position={Position.Bottom} style={{ background: "#94a3b8", width: 8, height: 8 }} />
-    <Handle type="source" position={Position.Right} id="right" style={{ background: "#e67e22", width: 8, height: 8 }} />
-  </div>
-);
+// ─── Diamond Node (Decision Step) ──────────────────────────────────────────────
+const DiamondNode = ({ data, selected }) => {
+  return (
+    <div style={{
+      position: "relative",
+      width: "86px",
+      height: "86px",
+      ...nodeBase(selected)
+    }}>
+      {/* Inputs (Top, Left, Right) */}
+      <Handle type="target" position={Position.Top} id="top" style={{ background: "#000000", zIndex: 10, width: 6, height: 6 }} />
+      <Handle type="target" position={Position.Left} id="left-target" style={{ background: "#000000", zIndex: 10, width: 6, height: 6, top: "43px" }} />
+      <Handle type="target" position={Position.Right} id="right-target" style={{ background: "#000000", zIndex: 10, width: 6, height: 6, top: "43px" }} />
 
-const BranchOvalNode = ({ data, selected }) => (
-  <div style={{ padding: "6px 14px", border: `1.5px solid ${selected ? "#7B5233" : "#e67e22"}`, borderRadius: "40px", backgroundColor: "#fff9f0", minWidth: "100px", maxWidth: "150px", fontSize: "10px", fontFamily: "Georgia, serif", fontWeight: "bold", textAlign: "center", ...nodeBase(selected) }}>
-    <Handle type="target" position={Position.Left} style={{ background: "#e67e22", width: 8, height: 8 }} />
-    <div style={{ fontSize: "8px", color: "#e67e22", marginBottom: "1px", fontWeight: "600" }}>{data.roleLabel}</div>
-    <div>{data.label}</div>
-  </div>
-);
+      <svg width="86" height="86" style={{ position: "absolute", top: 0, left: 0 }}>
+        <polygon
+          points="43,2 84,43 43,84 2,43"
+          fill="#ffffff"
+          stroke="#000000"
+          strokeWidth="1.5"
+        />
+      </svg>
+      
+      <div style={{
+        position: "absolute", top: 0, left: 0, width: "86px", height: "86px",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontFamily: "Arial, sans-serif", fontSize: "11px", fontWeight: "bold",
+        color: "#000000", textAlign: "center", padding: "10px", boxSizing: "border-box",
+        pointerEvents: "none", wordBreak: "break-word", lineHeight: "1.2"
+      }}>
+        {data.label}
+      </div>
 
-const BranchRectNode = ({ data, selected }) => (
-  <div style={{ padding: "6px 12px", border: `1.5px solid ${selected ? "#7B5233" : "#e67e22"}`, borderRadius: "4px", backgroundColor: "#fff9f0", minWidth: "100px", maxWidth: "150px", fontSize: "10px", fontFamily: "Georgia, serif", fontWeight: "bold", textAlign: "center", ...nodeBase(selected) }}>
-    <Handle type="target" position={Position.Left} style={{ background: "#e67e22", width: 8, height: 8 }} />
-    <Handle type="source" position={Position.Right} style={{ background: "#e67e22", width: 8, height: 8 }} />
-    <div style={{ fontSize: "8px", color: "#e67e22", marginBottom: "1px", fontWeight: "600" }}>{data.roleLabel}</div>
-    <div>{data.label}</div>
-  </div>
-);
+      {/* Outputs (Bottom, Left, Right) */}
+      <Handle type="source" position={Position.Bottom} id="bottom" style={{ background: "#000000", zIndex: 10, width: 6, height: 6 }} />
+      <Handle type="source" position={Position.Left} id="left" style={{ background: "#000000", zIndex: 10, width: 6, height: 6, top: "43px" }} />
+      <Handle type="source" position={Position.Right} id="right" style={{ background: "#000000", zIndex: 10, width: 6, height: 6, top: "43px" }} />
+    </div>
+  );
+};
 
-const nodeTypes = { task: TaskNode, decision: DiamondNode, terminal: OvalNode, branchOval: BranchOvalNode, branchRect: BranchRectNode };
+// ─── Oval Node (Terminal Step) ──────────────────────────────────────────────────
+const OvalNode = ({ data, selected }) => {
+  const hasOutput = data._hasOutput;
 
-// ─── Shape Palette ─────────────────────────────────────────────────────────────
+  return (
+    <div style={{
+      width: "120px",
+      height: "44px",
+      border: "1.5px solid #000000",
+      borderRadius: "24px",
+      backgroundColor: "#ffffff",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontFamily: "Arial, sans-serif",
+      fontSize: "12px",
+      fontWeight: "bold",
+      color: "#000000",
+      textAlign: "center",
+      padding: "6px 12px",
+      boxSizing: "border-box",
+      ...nodeBase(selected)
+    }}>
+      <Handle type="target" position={Position.Top} id="top" style={{ background: "#000000", width: 6, height: 6 }} />
+      <Handle type="target" position={Position.Left} id="left-target" style={{ background: "#000000", width: 6, height: 6, top: "50%" }} />
+      <Handle type="target" position={Position.Right} id="right-target" style={{ background: "#000000", width: 6, height: 6, top: "50%" }} />
+      
+      <div style={{ wordBreak: "break-word", lineHeight: "1.3" }}>{data.label}</div>
+
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        id="bottom"
+        style={{
+          background: hasOutput ? "#ef4444" : "#000000",
+          width: 6,
+          height: 6,
+          opacity: hasOutput ? 0.3 : 1
+        }}
+        isConnectable={!hasOutput}
+      />
+      <Handle
+        type="source"
+        position={Position.Left}
+        id="left"
+        style={{
+          background: hasOutput ? "#ef4444" : "#000000",
+          width: 6,
+          height: 6,
+          top: "50%",
+          opacity: hasOutput ? 0.3 : 1
+        }}
+        isConnectable={!hasOutput}
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="right"
+        style={{
+          background: hasOutput ? "#ef4444" : "#000000",
+          width: 6,
+          height: 6,
+          top: "50%",
+          opacity: hasOutput ? 0.3 : 1
+        }}
+        isConnectable={!hasOutput}
+      />
+    </div>
+  );
+};
+
+const nodeTypes = { task: TaskNode, decision: DiamondNode, terminal: OvalNode };
+
+// ─── Minimal Edge with Double Click Inline Editing ──────────────────────────────
+const MinimalEdge = ({
+  id, sourceX, sourceY, targetX, targetY,
+  sourcePosition, targetPosition,
+  style = {}, markerEnd, label, data,
+}) => {
+  const [editing, setEditing] = useState(false);
+  const [labelText, setLabelText] = useState(label || "");
+  const inputRef = useRef(null);
+
+  useEffect(() => { setLabelText(label || ""); }, [label]);
+  useEffect(() => { if (editing && inputRef.current) inputRef.current.focus(); }, [editing]);
+
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
+    sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition,
+    borderRadius: 0 // Sharp corners like hand-drawn diagram
+  });
+
+  const handleDoubleClick = (e) => {
+    e.stopPropagation();
+    setEditing(true);
+  };
+
+  const handleBlur = () => {
+    setEditing(false);
+    if (data?.onLabelChange) {
+      data.onLabelChange(id, labelText);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") handleBlur();
+    if (e.key === "Escape") { setLabelText(label || ""); setEditing(false); }
+  };
+
+  return (
+    <>
+      <BaseEdge path={edgePath} markerEnd={markerEnd} style={{ ...style, stroke: "#000000", strokeWidth: 1.5 }} />
+      {label !== undefined && (
+        <EdgeLabelRenderer>
+          <div
+            style={{
+              position: "absolute",
+              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+              pointerEvents: "all",
+              zIndex: 10,
+            }}
+            className="nodrag nopan"
+            onDoubleClick={handleDoubleClick}
+          >
+            {editing ? (
+              <input
+                ref={inputRef}
+                value={labelText}
+                onChange={(e) => setLabelText(e.target.value)}
+                onBlur={handleBlur}
+                onKeyDown={handleKeyDown}
+                style={{
+                  width: "70px",
+                  padding: "1px 4px",
+                  fontSize: "10px",
+                  border: "1px solid #000000",
+                  textAlign: "center",
+                  outline: "none",
+                  backgroundColor: "#ffffff",
+                  fontFamily: "Arial, sans-serif"
+                }}
+              />
+            ) : (
+              (labelText || data?.fromDecision) && (
+                <div
+                  style={{
+                    padding: "1px 5px",
+                    fontSize: "9px",
+                    fontWeight: "bold",
+                    backgroundColor: "#ffffff",
+                    border: "1px solid #000000",
+                    color: "#000000",
+                    cursor: "pointer",
+                    userSelect: "none",
+                    whiteSpace: "nowrap",
+                    fontFamily: "Arial, sans-serif"
+                  }}
+                  title="Double-click để sửa nhãn"
+                >
+                  {labelText || (data?.fromDecision ? "Yes/No" : "")}
+                </div>
+              )
+            )}
+          </div>
+        </EdgeLabelRenderer>
+      )}
+    </>
+  );
+};
+
+const edgeTypes = { minimal: MinimalEdge };
+
+// ─── Shape Palette (Clean Black & White) ─────────────────────────────────────────
 const PALETTE = [
-  { type: "task", label: "Công việc", color: "#334155",
-    icon: <div style={{ width: 52, height: 28, border: "2px solid #334155", borderRadius: 4, backgroundColor: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "8px", fontWeight: "bold", color: "#334155" }}>Rect</div> },
-  { type: "decision", label: "Quyết định", color: "#e67e22",
-    icon: <svg width={56} height={32}><polygon points="28,2 54,16 28,30 2,16" fill="white" stroke="#e67e22" strokeWidth="2" /><text x="28" y="20" textAnchor="middle" fontSize="7" fill="#e67e22" fontWeight="bold">KT</text></svg> },
-  { type: "terminal", label: "Oval", color: "#1a6b3c",
-    icon: <div style={{ width: 60, height: 28, border: "2px solid #1a6b3c", borderRadius: 20, backgroundColor: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "8px", fontWeight: "bold", color: "#1a6b3c" }}>Oval</div> },
+  {
+    type: "task", label: "Bước Xử Lý",
+    icon: <div style={{ width: 44, height: 24, border: "1.5px solid #000000", backgroundColor: "#ffffff" }} />
+  },
+  {
+    type: "decision", label: "Quyết Định",
+    icon: <svg width={36} height={36}><polygon points="18,2 34,18 18,34 2,18" fill="#ffffff" stroke="#000000" strokeWidth="1.5" /></svg>
+  },
+  {
+    type: "terminal", label: "Oval",
+    icon: <div style={{ width: 44, height: 24, border: "1.5px solid #000000", borderRadius: 12, backgroundColor: "#ffffff" }} />
+  },
 ];
 
 const ShapePalette = () => {
   const [hovered, setHovered] = useState(null);
   return (
-    <div style={{ width: "90px", flexShrink: 0, backgroundColor: "#FAF6F0", borderRight: "1px solid #EADCC9", padding: "12px 6px", display: "flex", flexDirection: "column", gap: "10px", alignItems: "center" }}>
-      <div style={{ fontSize: "8px", fontWeight: "700", color: "#7B5233", textTransform: "uppercase", letterSpacing: "0.8px", textAlign: "center" }}>Hình khối</div>
+    <div style={{ width: "94px", flexShrink: 0, backgroundColor: "#ffffff", borderRight: "1px solid #e2e8f0", padding: "16px 4px", display: "flex", flexDirection: "column", gap: "16px", alignItems: "center" }}>
+      <div style={{ fontSize: "9px", fontWeight: "bold", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>Hình Khối</div>
+      
       {PALETTE.map((item) => (
-        <div key={item.type} draggable onDragStart={(e) => { e.dataTransfer.setData("application/reactflow-nodetype", item.type); e.dataTransfer.effectAllowed = "move"; }} title={`Kéo để thêm: ${item.label}`}
-          onMouseEnter={() => setHovered(item.type)} onMouseLeave={() => setHovered(null)}
-          style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", cursor: "grab", padding: "8px 4px", borderRadius: "8px", backgroundColor: hovered === item.type ? "#EDE0D5" : "transparent", transition: "background 0.15s", width: "100%", userSelect: "none" }}>
+        <div
+          key={item.type}
+          draggable
+          onDragStart={(e) => {
+            e.dataTransfer.setData("application/reactflow-nodetype", item.type);
+            e.dataTransfer.effectAllowed = "move";
+          }}
+          onMouseEnter={() => setHovered(item.type)}
+          onMouseLeave={() => setHovered(null)}
+          style={{
+            display: "flex", flexDirection: "column", alignItems: "center", gap: "6px",
+            cursor: "grab", padding: "6px 4px", width: "100%", userSelect: "none",
+            backgroundColor: hovered === item.type ? "#f8fafc" : "transparent",
+            borderRadius: "6px", border: "1px dashed transparent",
+            borderColor: hovered === item.type ? "#cbd5e1" : "transparent",
+            transition: "all 0.15s ease"
+          }}
+        >
           {item.icon}
-          <span style={{ fontSize: "8px", color: "#64748b", textAlign: "center", lineHeight: "1.2", marginTop: "2px" }}>{item.label}</span>
+          <span style={{ fontSize: "9px", fontWeight: "bold", color: "#334155", textAlign: "center" }}>{item.label}</span>
         </div>
       ))}
-      <div style={{ width: "100%", borderTop: "1px solid #EADCC9", paddingTop: "8px", marginTop: "4px" }}>
-        <div style={{ fontSize: "7.5px", color: "#94a3b8", textAlign: "center", lineHeight: "1.4" }}>Kéo thả vào canvas</div>
+      
+      <div style={{ borderTop: "1px solid #f1f5f9", width: "80%", marginTop: "8px", paddingTop: "8px", textAlign: "center" }}>
+        <span style={{ fontSize: "8px", color: "#94a3b8" }}>Kéo thả vào canvas</span>
       </div>
     </div>
   );
 };
 
 // ─── Properties Panel ──────────────────────────────────────────────────────────
-const ROLES = [
-  { value: "Kho", label: "Bộ phận Kho" },
-  { value: "QC", label: "Bộ phận QC / QLCL" },
-  { value: "Sản xuất", label: "Bộ phận Sản xuất" },
-  { value: "Thu mua", label: "Bộ phận Thu mua" },
-  { value: "Bán hàng", label: "Bộ phận Bán hàng" },
-  { value: "Admin", label: "Ban Giám Đốc" },
-];
-
-const fieldStyle = { width: "100%", padding: "6px 8px", border: "1px solid #EADCC9", borderRadius: "6px", fontSize: "12px", backgroundColor: "white", outline: "none", boxSizing: "border-box" };
-const labelStyle = { fontSize: "10px", fontWeight: "700", color: "#7B5233", textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: "4px" };
-const sectionStyle = { borderBottom: "1px solid #f1f5f9", paddingBottom: "14px", marginBottom: "14px" };
-
-const getFailPath = (step) => {
-  if (!step) return [];
-  if (step.fail_path && step.fail_path.length > 0) return step.fail_path;
-  if (step.has_branch) {
-    const r = step.assignee_role || "QC";
-    return [
-      { name: step.fail_node_name_1 || "Xử lý không phù hợp", assignee_role: r },
-      { name: step.fail_node_name_3 || "Trả hàng nhà cung cấp", assignee_role: r },
-    ];
-  }
-  return [];
-};
-
 const PropertiesPanel = ({ step, stepIndex, onUpdate, onDelete, onClose }) => {
   if (!step) return null;
-  const failPath = getFailPath(step);
-
-  const updateFailPath = (newPath) => onUpdate(stepIndex, "fail_path", newPath);
 
   return (
-    <div style={{ width: "286px", flexShrink: 0, backgroundColor: "white", borderLeft: "1px solid #EADCC9", display: "flex", flexDirection: "column", overflowY: "auto" }}>
+    <div style={{ width: "240px", flexShrink: 0, backgroundColor: "#ffffff", borderLeft: "1px solid #cbd5e1", display: "flex", flexDirection: "column" }}>
       {/* Header */}
-      <div style={{ backgroundColor: "#7B5233", padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div>
-          <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.7)", marginBottom: "4px" }}>Bước {step.step_number} · Thuộc tính</div>
-          <input value={step.name || ""} onChange={(e) => onUpdate(stepIndex, "name", e.target.value)}
-            style={{ background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.3)", borderRadius: "6px", padding: "5px 8px", color: "white", fontWeight: "700", fontSize: "13px", width: "100%", outline: "none", boxSizing: "border-box" }} />
-        </div>
-        <button onClick={onClose} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.7)", cursor: "pointer", fontSize: "16px", lineHeight: 1, padding: "2px", flexShrink: 0, marginLeft: "8px" }}>✕</button>
+      <div style={{ padding: "12px 14px", borderBottom: "1px solid #cbd5e1", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: "11px", fontWeight: "bold", color: "#000000" }}>
+          Sửa tên khối
+        </span>
+        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "14px", fontWeight: "bold", color: "#94a3b8" }}>✕</button>
       </div>
 
       {/* Body */}
-      <div style={{ padding: "14px", flex: 1 }}>
-        <div style={sectionStyle}>
-          <label style={labelStyle}>Bộ phận chịu trách nhiệm</label>
-          <select value={step.assignee_role || ""} onChange={(e) => onUpdate(stepIndex, "assignee_role", e.target.value)} style={fieldStyle}>
-            {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+      <div style={{ padding: "14px", flex: 1, display: "flex", flexDirection: "column", gap: "12px" }}>
+        <div>
+          <label style={{ fontSize: "9px", fontWeight: "bold", color: "#64748b", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
+            Tên hiển thị:
+          </label>
+          <input
+            value={step.name || ""}
+            onChange={(e) => onUpdate(stepIndex, "name", e.target.value)}
+            style={{ width: "100%", padding: "6px 8px", border: "1px solid #cbd5e1", fontSize: "11px", outline: "none", fontFamily: "Arial, sans-serif" }}
+          />
+        </div>
+
+        <div>
+          <label style={{ fontSize: "9px", fontWeight: "bold", color: "#64748b", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
+            Loại hình khối:
+          </label>
+          <select
+            value={step.node_type || "task"}
+            onChange={(e) => onUpdate(stepIndex, "node_type", e.target.value)}
+            style={{ width: "100%", padding: "5px 6px", border: "1px solid #cbd5e1", fontSize: "11px", backgroundColor: "white", outline: "none" }}
+          >
+            <option value="task">▭ Bước Xử Lý</option>
+            <option value="decision">◇ Quyết Định (Yes/No)</option>
+            <option value="terminal">⬭ Oval (Bắt đầu/Kết thúc)</option>
           </select>
         </div>
-
-        <div style={sectionStyle}>
-          <label style={labelStyle}>Loại hình khối</label>
-          <select value={step.node_type || "task"} onChange={(e) => onUpdate(stepIndex, "node_type", e.target.value)} style={fieldStyle}>
-            <option value="task">▭ Hình chữ nhật (Công việc)</option>
-            <option value="decision">◇ Hình thoi (Kiểm tra)</option>
-            <option value="terminal">⬭ Hình Oval (Đầu / Cuối)</option>
-          </select>
-        </div>
-
-        <div style={sectionStyle}>
-          <label style={labelStyle}>Biểu mẫu đính kèm</label>
-          <input type="text" value={step.template_files || ""} onChange={(e) => onUpdate(stepIndex, "template_files", e.target.value)} placeholder="VD: G7.CL-01, Phiếu nhập kho..." style={fieldStyle} />
-        </div>
-
-        {step.node_type === "decision" && (
-          <div style={sectionStyle}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-              <label style={{ ...labelStyle, marginBottom: 0 }}>Nhánh rẽ phụ</label>
-              <label style={{ display: "flex", alignItems: "center", gap: "5px", cursor: "pointer", fontSize: "11px", color: "#64748b" }}>
-                <input type="checkbox" checked={step.has_branch === true} onChange={(e) => onUpdate(stepIndex, "has_branch", e.target.checked)} style={{ accentColor: "#7B5233" }} />
-                Bật
-              </label>
-            </div>
-
-            {step.has_branch === true && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                {/* Arrow legend */}
-                <div style={{ fontSize: "10px", color: "#64748b", backgroundColor: "#f8fafc", borderRadius: "6px", padding: "6px 8px", lineHeight: "1.5" }}>
-                  <b>⬇ Mũi tên xuống</b>: Đồng ý → Bước tiếp theo<br/>
-                  <b>➡ Mũi tên phải</b>: Các nhánh rẽ phụ dưới đây
-                </div>
-
-                {failPath.map((node, ni) => (
-                  <div key={ni} style={{ backgroundColor: "#FDF8F4", border: "1px solid #e67e22", borderRadius: "6px", padding: "8px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "4px", marginBottom: "6px" }}>
-                      <span style={{ fontSize: "9px", fontWeight: "700", color: "#e67e22", minWidth: "20px" }}>#{ni + 1}</span>
-                      <input value={node.name} onChange={(e) => { const p = [...failPath]; p[ni] = { ...p[ni], name: e.target.value }; updateFailPath(p); }} placeholder="Tên hộp..." style={{ ...fieldStyle, fontSize: "11px", padding: "4px 6px", flex: 1 }} />
-                      <button onClick={() => { const p = failPath.filter((_, i) => i !== ni); updateFailPath(p); }} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: "14px", padding: "0 2px", flexShrink: 0 }}>✕</button>
-                    </div>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px", marginBottom: "4px" }}>
-                      <div>
-                        <label style={{ ...labelStyle, fontSize: "8px", marginBottom: "2px" }}>Nhãn mũi tên</label>
-                        <input value={node.edge_label || ""} onChange={(e) => { const p = [...failPath]; p[ni] = { ...p[ni], edge_label: e.target.value }; updateFailPath(p); }} placeholder="VD: Không đạt" style={{ ...fieldStyle, fontSize: "10px", padding: "3px 5px" }} />
-                      </div>
-                      <div>
-                        <label style={{ ...labelStyle, fontSize: "8px", marginBottom: "2px" }}>Bộ phận</label>
-                        <select value={node.assignee_role || ""} onChange={(e) => { const p = [...failPath]; p[ni] = { ...p[ni], assignee_role: e.target.value }; updateFailPath(p); }} style={{ ...fieldStyle, fontSize: "10px", padding: "3px 5px" }}>
-                          {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                        </select>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label style={{ ...labelStyle, fontSize: "8px", marginBottom: "2px" }}>Sau nhánh này → Về bước</label>
-                      <select value={node.return_to_step || ""} onChange={(e) => { const p = [...failPath]; p[ni] = { ...p[ni], return_to_step: e.target.value ? parseInt(e.target.value) : null }; updateFailPath(p); }} style={{ ...fieldStyle, fontSize: "10px", padding: "3px 5px" }}>
-                        <option value="">— Không kết nối lại —</option>
-                        {(step._allSteps || []).map(s => (
-                          <option key={s.step_number} value={s.step_number}>Bước {s.step_number}: {s.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                ))}
-
-                <button onClick={() => updateFailPath([...failPath, { name: "Nhánh mới", assignee_role: step.assignee_role || "QC", edge_label: "Không đạt", return_to_step: null }])} style={{ padding: "7px 0", backgroundColor: "#7B5233", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "11px", fontWeight: "700" }}>
-                  + Thêm mũi tên / nhánh rẽ
-                </button>
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Footer */}
-      <div style={{ padding: "12px 14px", borderTop: "1px solid #EADCC9" }}>
-        <button onClick={() => { onDelete(stepIndex); onClose(); }} style={{ width: "100%", padding: "8px", backgroundColor: "#fff5f5", border: "1px solid #fecaca", borderRadius: "6px", cursor: "pointer", fontSize: "12px", color: "#dc2626", fontWeight: "700", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
-          🗑 Xóa bước này
+      <div style={{ padding: "10px 14px", borderTop: "1px solid #cbd5e1" }}>
+        <button
+          onClick={() => { onDelete(stepIndex); onClose(); }}
+          style={{ width: "100%", padding: "6px", backgroundColor: "#fff5f5", border: "1px solid #fecaca", color: "#dc2626", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}
+        >
+          Xóa khối này
         </button>
       </div>
     </div>
   );
 };
 
-// ─── Inner Canvas ──────────────────────────────────────────────────────────────
-const STEP_X = 200; const STEP_Y_START = 60; const STEP_Y_GAP = 140;
-const BRANCH_X_START = 420; const BRANCH_X_GAP = 180;
-
-const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDeleteStep, onNodeSelect, selectedStepNumber, setSelectedStepNumber }) => {
+// ─── Flowchart Canvas Component ─────────────────────────────────────────────────
+const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDeleteStep, onNodeSelect, selectedStepNumber, setSelectedStepNumber, canvasRef }) => {
   const { screenToFlowPosition, fitView } = useReactFlow();
+  const edgeLabelMapRef = useRef({});
 
-  const buildGraph = useCallback(() => {
-    const nodes = []; const edges = [];
+  useImperativeHandle(canvasRef, () => ({
+    triggerAutoLayout: () => {
+      handleAutoLayout();
+    }
+  }));
+
+  // Helper to calculate dimensions based on node type
+  const getNodeDimensions = (nodeType) => {
+    if (nodeType === "decision") return { width: 86, height: 86 };
+    if (nodeType === "terminal") return { width: 120, height: 44 };
+    return { width: 140, height: 54 }; // task
+  };
+
+  // Helper to calculate center coordinates for a step
+  const getStepCenter = useCallback((step) => {
+    const x = step.x_pos !== undefined ? step.x_pos : 200;
+    const y = step.y_pos !== undefined ? step.y_pos : 100;
+    const { width, height } = getNodeDimensions(step.node_type);
+    return { x: x + width / 2, y: y + height / 2 };
+  }, []);
+
+  // Helper to select best handles between two steps
+  const getBestHandles = useCallback((srcStep, tgtStep) => {
+    if (!srcStep || !tgtStep) return { sourceHandle: "bottom", targetHandle: "top" };
+    const srcCent = getStepCenter(srcStep);
+    const tgtCent = getStepCenter(tgtStep);
+    
+    const dx = tgtCent.x - srcCent.x;
+    const dy = tgtCent.y - srcCent.y;
+
+    // If target is above source (loop back)
+    if (dy < -20) {
+      return { sourceHandle: "left", targetHandle: "left-target" };
+    }
+
+    // If target is significantly to the left
+    if (dx < -40) {
+      return { sourceHandle: "left", targetHandle: "right-target" };
+    }
+
+    // If target is significantly to the right
+    if (dx > 40) {
+      return { sourceHandle: "right", targetHandle: "left-target" };
+    }
+
+    // Vertically aligned
+    return { sourceHandle: "bottom", targetHandle: "top" };
+  }, [getStepCenter]);
+
+  // ─── Build Graph ─────────────────────────────────────────────────────────────
+  const buildGraph = useCallback((currentEdgeLabels) => {
+    const nodes = [];
+    const edges = [];
+    const sourceOutputCount = {};
+
+    // 1. Calculate edge connections
     steps.forEach((step, idx) => {
       const stepId = `step-${step.step_number}`;
-      const isFirst = idx === 0; const isLast = idx === steps.length - 1;
-      const isDecision = step.node_type === "decision";
-      let nodeType = step.node_type || "task";
-      if (isFirst || isLast) nodeType = "terminal";
-      if (isDecision) nodeType = "decision";
-      const xPos = step.x_pos !== undefined ? step.x_pos : STEP_X;
-      const yPos = step.y_pos !== undefined ? step.y_pos : STEP_Y_START + idx * STEP_Y_GAP;
-      nodes.push({ id: stepId, type: nodeType, position: { x: xPos, y: yPos }, data: { label: step.name || `Bước ${step.step_number}`, stepNumber: step.step_number, roleLabel: formatRole(step.assignee_role), borderColor: isDecision ? "#e67e22" : (isFirst || isLast) ? "#1a6b3c" : "#334155" }, draggable: true });
-      if (!isLast) {
-        const next = steps[idx + 1];
-        edges.push({ id: `e-${step.step_number}-${next.step_number}`, source: stepId, target: `step-${next.step_number}`, type: "smoothstep", label: isDecision ? "Đồng ý" : "", labelStyle: { fontSize: "9px", fontWeight: "bold", fill: "#334155" }, labelBgStyle: { fill: "white", fillOpacity: 0.85 }, markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 }, style: { stroke: "#334155", strokeWidth: 1.5 } });
+      if (!sourceOutputCount[stepId]) sourceOutputCount[stepId] = 0;
+
+      // Regular next step connection
+      const nextStepNum = step.transition?.next_step;
+      if (nextStepNum) {
+        sourceOutputCount[stepId]++;
       }
+
+      // Decision branch connections
+      if (step.node_type === "decision" && step.has_branch === true) {
+        const fp = step.fail_path || [];
+        sourceOutputCount[stepId] += fp.length;
+      }
+    });
+
+    // 2. Build Nodes
+    steps.forEach((step, idx) => {
+      const stepId = `step-${step.step_number}`;
+      const isDecision = step.node_type === "decision";
+      const isTerminal = step.node_type === "terminal";
+      let nodeType = step.node_type || "task";
+      
+      const xPos = step.x_pos !== undefined ? step.x_pos : 200;
+      const yPos = step.y_pos !== undefined ? step.y_pos : 60 + idx * 110;
+
+      nodes.push({
+        id: stepId,
+        type: nodeType,
+        position: { x: xPos, y: yPos },
+        data: {
+          label: step.name || `Bước ${step.step_number}`,
+          stepNumber: step.step_number,
+          _hasOutput: (sourceOutputCount[stepId] || 0) > 0,
+        },
+        draggable: true,
+      });
+
+      // 3. Build Edges (transitions)
+      const next = step.transition?.next_step;
+      if (next) {
+        const nextStep = steps.find(s => s.step_number === next);
+        const { sourceHandle, targetHandle } = getBestHandles(step, nextStep);
+        const edgeId = `e-${step.step_number}-${next}`;
+        const savedLabel = currentEdgeLabels[edgeId] || (isDecision ? "Đúng" : "");
+        
+        edges.push({
+          id: edgeId,
+          source: stepId,
+          sourceHandle: sourceHandle,
+          target: `step-${next}`,
+          targetHandle: targetHandle,
+          type: "minimal",
+          data: {
+            fromDecision: isDecision,
+            onLabelChange: null, // Set later
+          },
+          label: savedLabel,
+          markerEnd: { type: MarkerType.ArrowClosed, color: "#000000" },
+        });
+      }
+
+      // 4. Build Decision Fail branch Edges
       if (isDecision && step.has_branch === true) {
-        const fp = (step.fail_path && step.fail_path.length > 0) ? step.fail_path : [{ name: step.fail_node_name_1 || "Xử lý không phù hợp", assignee_role: step.assignee_role || "QC" }, { name: step.fail_node_name_3 || "Trả hàng", assignee_role: step.assignee_role || "QC" }];
+        const fp = step.fail_path || [];
         fp.forEach((pn, pi) => {
-          const bid = `branch-${step.step_number}-${pi}`;
-          const bx = pn.x_pos !== undefined ? pn.x_pos : BRANCH_X_START + pi * BRANCH_X_GAP;
-          const by = pn.y_pos !== undefined ? pn.y_pos : yPos;
-          nodes.push({ id: bid, type: pi === fp.length - 1 ? "branchOval" : "branchRect", position: { x: bx, y: by }, data: { label: pn.name, roleLabel: formatRole(pn.assignee_role) }, draggable: true });
-
-          const edgeLabel = pn.edge_label || (pi === 0 ? "Không" : "");
-          if (pi === 0) {
-            edges.push({ id: `e-br-${step.step_number}-0`, source: stepId, sourceHandle: "right", target: bid, type: "smoothstep", label: edgeLabel, labelStyle: { fontSize: "9px", fontWeight: "bold", fill: "#e67e22" }, labelBgStyle: { fill: "white", fillOpacity: 0.85 }, markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: "#e67e22" }, style: { stroke: "#e67e22", strokeWidth: 1.5 } });
-          } else {
-            edges.push({ id: `e-br-${step.step_number}-${pi}`, source: `branch-${step.step_number}-${pi - 1}`, target: bid, type: "smoothstep", label: edgeLabel, labelStyle: { fontSize: "9px", fontWeight: "bold", fill: "#e67e22" }, labelBgStyle: { fill: "white", fillOpacity: 0.85 }, markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: "#e67e22" }, style: { stroke: "#e67e22", strokeWidth: 1.5 } });
-          }
-
-          // Mũi tên kết nối lại về bước cụ thể (return_to_step)
           if (pn.return_to_step) {
-            edges.push({ id: `e-ret-${step.step_number}-${pi}`, source: bid, target: `step-${pn.return_to_step}`, type: "smoothstep", label: "→", labelStyle: { fontSize: "9px", fill: "#64748b" }, markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12, color: "#64748b" }, style: { stroke: "#64748b", strokeWidth: 1.2, strokeDasharray: "5,3" } });
+            const nextStep = steps.find(s => s.step_number === pn.return_to_step);
+            const { sourceHandle, targetHandle } = getBestHandles(step, nextStep);
+            const edgeId = `e-fail-${step.step_number}-${pn.return_to_step}`;
+            const savedLabel = currentEdgeLabels[edgeId] || pn.edge_label || "Sai";
+            
+            edges.push({
+              id: edgeId,
+              source: stepId,
+              sourceHandle: sourceHandle,
+              target: `step-${pn.return_to_step}`,
+              targetHandle: targetHandle,
+              type: "minimal",
+              data: {
+                fromDecision: true,
+                onLabelChange: null,
+              },
+              label: savedLabel,
+              markerEnd: { type: MarkerType.ArrowClosed, color: "#000000" },
+            });
           }
         });
       }
     });
-    return { nodes, edges };
-  }, [steps]);
 
-  const { nodes: iN, edges: iE } = useMemo(() => buildGraph(), [buildGraph]);
+    return { nodes, edges };
+  }, [steps, getBestHandles]);
+
+  const { nodes: iN, edges: iE } = useMemo(() => buildGraph(edgeLabelMapRef.current), [buildGraph]);
   const [nodes, setNodes, onNodesChange] = useNodesState(iN);
   const [edges, setEdges, onEdgesChange] = useEdgesState(iE);
 
-  const stepsKey = steps.map(s => `${s.step_number}|${s.node_type}|${s.has_branch}|${s.name}|${JSON.stringify(s.fail_path || [])}`).join(";");
-  useEffect(() => { const { nodes: n, edges: e } = buildGraph(); setNodes(n); setEdges(e); }, [stepsKey]);
+  // Label editing handler
+  const handleEdgeLabelChange = useCallback((edgeId, newLabel) => {
+    edgeLabelMapRef.current[edgeId] = newLabel;
+    
+    // Also sync label back to fail_path list if it's a decision fail edge
+    const match = edgeId.match(/^e-fail-(\d+)-(\d+)$/);
+    if (match && onUpdateStep) {
+      const sourceStepNum = parseInt(match[1]);
+      const targetStepNum = parseInt(match[2]);
+      const sourceStepIdx = steps.findIndex(s => s.step_number === sourceStepNum);
+      if (sourceStepIdx >= 0) {
+        const fp = steps[sourceStepIdx].fail_path || [];
+        const updatedFp = fp.map(item => 
+          item.return_to_step === targetStepNum ? { ...item, edge_label: newLabel } : item
+        );
+        onUpdateStep(sourceStepIdx, "fail_path", updatedFp);
+      }
+    }
+    
+    setEdges(eds => eds.map(e => e.id === edgeId ? { ...e, label: newLabel } : e));
+  }, [setEdges, steps, onUpdateStep]);
 
+  // Inject label callback
+  useEffect(() => {
+    setEdges(eds => eds.map(e => ({
+      ...e,
+      data: { ...e.data, onLabelChange: handleEdgeLabelChange }
+    })));
+  }, [handleEdgeLabelChange, setEdges]);
+
+  // Sync state
+  const stepsKey = steps.map(s => `${s.step_number}|${s.node_type}|${s.name}|${s.x_pos}|${s.y_pos}|${JSON.stringify(s.transition || {})}|${JSON.stringify(s.fail_path || [])}`).join(";");
+  useEffect(() => {
+    const { nodes: n, edges: e } = buildGraph(edgeLabelMapRef.current);
+    const edgesWithHandler = e.map(edge => ({
+      ...edge,
+      data: { ...edge.data, onLabelChange: handleEdgeLabelChange }
+    }));
+    setNodes(n);
+    setEdges(edgesWithHandler);
+  }, [stepsKey]);
+
+  // ─── Connection Validation (Rules) ──────────────────────────────────────────
+  const isValidConnection = useCallback((connection) => {
+    if (connection.source === connection.target) return false;
+    
+    const sourceNode = nodes.find(n => n.id === connection.source);
+    if (!sourceNode) return false;
+
+    // Rectangle (Task) and Oval (Terminal) -> Exactly 1 output allowed
+    if (sourceNode.type === "task" || sourceNode.type === "terminal") {
+      const existing = edges.filter(e => e.source === connection.source);
+      if (existing.length >= 1) return false;
+    }
+
+    return true;
+  }, [nodes, edges]);
+
+  // Sync position drag
   const onNodeDragStop = useCallback((_, node) => {
     if (!onPositionsChange) return;
     const { x, y } = node.position;
-    if (node.id.startsWith("step-")) onPositionsChange({ type: "step", stepNumber: parseInt(node.id.replace("step-", "")), x, y });
-    else if (node.id.startsWith("branch-")) { const p = node.id.split("-"); onPositionsChange({ type: "branch", stepNumber: parseInt(p[1]), branchIdx: parseInt(p[2]), x, y }); }
+    if (node.id.startsWith("step-")) {
+      const stepNumber = parseInt(node.id.replace("step-", ""));
+      onPositionsChange({ type: "step", stepNumber, x, y });
+    }
   }, [onPositionsChange]);
 
   const onNodeClick = useCallback((_, node) => {
@@ -329,16 +648,37 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
 
   const onPaneClick = useCallback(() => setSelectedStepNumber(null), [setSelectedStepNumber]);
 
-  const onNodesDelete = useCallback((deleted) => {
-    deleted.forEach(node => {
-      if (node.id.startsWith("step-") && onDeleteStep) {
-        const idx = steps.findIndex(s => s.step_number === parseInt(node.id.replace("step-", "")));
-        if (idx >= 0) onDeleteStep(idx);
-      }
-    });
-  }, [onDeleteStep, steps]);
+  // Connect handler
+  const onConnect = useCallback((conn) => {
+    const sourceStepNum = parseInt(conn.source.replace("step-", ""));
+    const targetStepNum = parseInt(conn.target.replace("step-", ""));
+    const sourceStepIdx = steps.findIndex(s => s.step_number === sourceStepNum);
+    const sourceStep = steps[sourceStepIdx];
 
-  const onConnect = useCallback((conn) => { setEdges((eds) => addEdge({ ...conn, type: "smoothstep", markerEnd: { type: MarkerType.ArrowClosed } }, eds)); }, [setEdges]);
+    if (!sourceStep) return;
+
+    // Save connection into state
+    if (sourceStep.node_type === "decision") {
+      // If it's a decision node and we connected to a target:
+      // If it's the bottom handle, set the Yes path (transition.next_step).
+      // Otherwise, set a No/Fail path branch.
+      if (conn.sourceHandle === "bottom") {
+        onUpdateStep(sourceStepIdx, "transition", { ...(sourceStep.transition || {}), next_step: targetStepNum });
+      } else {
+        const fp = sourceStep.fail_path || [];
+        const isRight = conn.sourceHandle === "right";
+        const label = isRight ? "Sai" : "Không đạt";
+        
+        // Append or update fail path branch
+        const updatedFp = [...fp, { name: "Xử lý lỗi", assignee_role: sourceStep.assignee_role || "QC", edge_label: label, return_to_step: targetStepNum }];
+        onUpdateStep(sourceStepIdx, "fail_path", updatedFp);
+        onUpdateStep(sourceStepIdx, "has_branch", true);
+      }
+    } else {
+      // Normal node: update transition next step
+      onUpdateStep(sourceStepIdx, "transition", { ...(sourceStep.transition || {}), next_step: targetStepNum });
+    }
+  }, [steps, onUpdateStep]);
 
   const onDragOver = useCallback((e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }, []);
   const onDrop = useCallback((e) => {
@@ -349,68 +689,184 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
   }, [screenToFlowPosition, onAddStep]);
 
   const handleAutoLayout = useCallback(() => {
-    const updated = nodes.map(node => {
-      if (node.id.startsWith("step-")) {
-        const sn = parseInt(node.id.replace("step-", ""));
-        const si = steps.findIndex(s => s.step_number === sn);
-        return { ...node, position: { x: STEP_X, y: STEP_Y_START + si * STEP_Y_GAP } };
+    // 1. Get unique roles in order of appearance
+    const uniqueRoles = [];
+    (steps || []).forEach(s => {
+      const role = s.assignee_role || "";
+      if (role && !uniqueRoles.includes(role)) {
+        uniqueRoles.push(role);
       }
-      if (node.id.startsWith("branch-")) {
-        const p = node.id.split("-");
-        const si = steps.findIndex(s => s.step_number === parseInt(p[1]));
-        return { ...node, position: { x: BRANCH_X_START + parseInt(p[2]) * BRANCH_X_GAP, y: STEP_Y_START + si * STEP_Y_GAP } };
+    });
+    // If no roles are defined, default to a single empty string role
+    if (uniqueRoles.length === 0) {
+      uniqueRoles.push("");
+    }
+
+    // 2. Identify sidesteps (fail paths)
+    const getSidesteps = () => {
+      const sidesteps = new Set();
+      (steps || []).forEach(s => {
+        if (s.node_type === 'decision') {
+          const failPath = s.fail_path || [];
+          const noStepNum = failPath[0]?.return_to_step;
+          if (noStepNum) {
+            sidesteps.add(noStepNum);
+            let current = noStepNum;
+            while (current) {
+              const currStep = steps.find(st => String(st.step_number) === String(current));
+              const next = currStep?.transition?.next_step || currStep?.next_step;
+              if (next && String(next) !== String(current) && !steps.some(st => String(st.step_number) === String(next) && st.node_type === 'decision')) {
+                sidesteps.add(next);
+                current = next;
+              } else break;
+            }
+          }
+        }
+      });
+      return sidesteps;
+    };
+
+    const sidesteps = getSidesteps();
+    const mainSteps = steps.filter(s => !sidesteps.has(s.step_number));
+    const positions = {};
+
+    // 3. Lay out main steps vertically
+    mainSteps.forEach((step, idx) => {
+      const role = step.assignee_role || "";
+      const roleIdx = uniqueRoles.indexOf(role);
+      const colCenter = 300 + (roleIdx >= 0 ? roleIdx : 0) * 280;
+
+      const { width } = getNodeDimensions(step.node_type);
+      positions[step.step_number] = {
+        x: colCenter - width / 2,
+        y: 60 + idx * 140
+      };
+    });
+
+    // 4. Lay out sidesteps to the left column relative to their parent decision step
+    mainSteps.forEach((step, idx) => {
+      if (step.node_type === 'decision') {
+        const failPath = step.fail_path || [];
+        const noStepNum = failPath[0]?.return_to_step;
+        if (noStepNum && sidesteps.has(noStepNum)) {
+          const parentY = positions[step.step_number]?.y || (60 + idx * 140);
+          const parentRole = step.assignee_role || "";
+          const parentRoleIdx = uniqueRoles.indexOf(parentRole);
+          const colCenter = 300 + (parentRoleIdx >= 0 ? parentRoleIdx : 0) * 280;
+          const sideCenter = colCenter - 180; // place to the left of the parent column
+          
+          const firstStep = steps.find(st => st.step_number === noStepNum);
+          let startY = parentY;
+          if (firstStep) {
+            const { height: childHeight } = getNodeDimensions(firstStep.node_type);
+            startY = parentY + 43 - childHeight / 2;
+          }
+
+          let current = noStepNum;
+          let chainIdx = 0;
+          const visited = new Set();
+          
+          while (current && !visited.has(current)) {
+            visited.add(current);
+            const currStep = steps.find(st => st.step_number === current);
+            if (currStep) {
+              const { width } = getNodeDimensions(currStep.node_type);
+              positions[current] = {
+                x: sideCenter - width / 2,
+                y: startY + chainIdx * 130
+              };
+            }
+            
+            const next = currStep?.transition?.next_step || currStep?.next_step;
+            if (next && sidesteps.has(next)) {
+              current = next;
+              chainIdx++;
+            } else {
+              break;
+            }
+          }
+        }
+      }
+    });
+
+    // 5. Update ReactFlow nodes state and parent coordinates state
+    const updatedNodes = nodes.map(node => {
+      if (node.id.startsWith("step-")) {
+        const stepNum = parseInt(node.id.replace("step-", ""));
+        const pos = positions[stepNum];
+        if (pos) {
+          if (onPositionsChange) {
+            onPositionsChange({ type: "step", stepNumber: stepNum, x: pos.x, y: pos.y });
+          }
+          return { ...node, position: { x: pos.x, y: pos.y } };
+        }
       }
       return node;
     });
-    setNodes(updated);
-    setTimeout(() => fitView({ padding: 0.3, duration: 400 }), 50);
-  }, [nodes, steps, setNodes, fitView]);
+
+    setNodes(updatedNodes);
+    setTimeout(() => fitView({ padding: 0.2, duration: 400 }), 100);
+  }, [nodes, steps, onPositionsChange, fitView, setNodes]);
 
   return (
-    <div style={{ flex: 1, height: "100%", position: "relative" }}>
-      <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onNodeDragStop={onNodeDragStop} onNodeClick={onNodeClick} onPaneClick={onPaneClick} onNodesDelete={onNodesDelete} onConnect={onConnect} nodeTypes={nodeTypes} onDrop={onDrop} onDragOver={onDragOver} deleteKeyCode="Delete" fitView fitViewOptions={{ padding: 0.3 }} minZoom={0.25} maxZoom={2.5} proOptions={{ hideAttribution: true }}>
-        <Background color="#e2d5c8" gap={20} size={1} />
+    <div style={{ flex: 1, height: "100%", position: "relative", backgroundColor: "#ffffff" }}>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onNodeDragStop={onNodeDragStop}
+        onNodeClick={onNodeClick}
+        onPaneClick={onPaneClick}
+        onConnect={onConnect}
+        isValidConnection={isValidConnection}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        onDrop={onDrop}
+        onDragOver={onDragOver}
+        deleteKeyCode="Delete"
+        fitView
+        fitViewOptions={{ padding: 0.2 }}
+        minZoom={0.2}
+        maxZoom={2.0}
+        proOptions={{ hideAttribution: true }}
+      >
+        <Background color="#f1f5f9" gap={16} size={1} />
         <Controls showInteractive={false} />
-        <MiniMap nodeColor={(n) => n.type === "decision" ? "#fff3e0" : n.type === "terminal" ? "#e8f5e9" : "#f0f0f0"} maskColor="rgba(250,246,240,0.6)" style={{ border: "1px solid #EADCC9" }} />
-        <Panel position="top-right">
-          <button onClick={handleAutoLayout} style={{ padding: "5px 12px", backgroundColor: "#7B5233", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "11px", fontWeight: "700", boxShadow: "0 2px 6px rgba(0,0,0,0.15)", display: "flex", alignItems: "center", gap: "5px" }}>
-            ⊞ Sắp xếp tự động
-          </button>
-        </Panel>
       </ReactFlow>
     </div>
   );
 };
 
-// ─── Main Wrapper ──────────────────────────────────────────────────────────────
-const FlowchartCanvasInner = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDeleteStep, onNodeSelect }) => {
-  const [selectedStepNumber, setSelectedStepNumber] = useState(null);
-  const selectedStep = useMemo(() => steps.find(s => s.step_number === selectedStepNumber) || null, [steps, selectedStepNumber]);
-  const selectedStepIndex = useMemo(() => steps.findIndex(s => s.step_number === selectedStepNumber), [steps, selectedStepNumber]);
+// ─── Flowchart Canvas Inner Wrapper ──────────────────────────────────────────────
+const FlowchartCanvasInner = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDeleteStep, onNodeSelect, selectedStepIdx, canvasRef }) => {
+  const selectedStepNumber = selectedStepIdx !== -1 && steps[selectedStepIdx] ? steps[selectedStepIdx].step_number : null;
 
   return (
-    <div style={{ display: "flex", width: "100%", height: "100%" }}>
+    <div style={{ display: "flex", width: "100%", height: "100%", backgroundColor: "#ffffff" }}>
       <ShapePalette />
-      <FlowCanvas steps={steps} onPositionsChange={onPositionsChange} onAddStep={onAddStep} onUpdateStep={onUpdateStep} onDeleteStep={onDeleteStep} onNodeSelect={onNodeSelect} selectedStepNumber={selectedStepNumber} setSelectedStepNumber={setSelectedStepNumber} />
-      {selectedStep && (
-        <PropertiesPanel
-          step={{ ...selectedStep, _allSteps: steps.filter(s => s.step_number !== selectedStepNumber) }}
-          stepIndex={selectedStepIndex}
-          onUpdate={onUpdateStep}
-          onDelete={onDeleteStep}
-          onClose={() => setSelectedStepNumber(null)}
-        />
-      )}
+      <FlowCanvas
+        steps={steps}
+        onPositionsChange={onPositionsChange}
+        onAddStep={onAddStep}
+        onUpdateStep={onUpdateStep}
+        onDeleteStep={onDeleteStep}
+        onNodeSelect={onNodeSelect}
+        selectedStepNumber={selectedStepNumber}
+        setSelectedStepNumber={() => {}}
+        canvasRef={canvasRef}
+      />
     </div>
   );
 };
 
-const FlowchartCanvas = (props) => (
-  <div style={{ width: "100%", height: "580px", borderRadius: "8px", border: "1px solid #EADCC9", overflow: "hidden" }}>
+// ─── Main Exportable FlowchartCanvas ─────────────────────────────────────────────
+const FlowchartCanvas = forwardRef((props, ref) => (
+  <div style={{ width: "100%", height: "640px", border: "1px solid #000000", boxSizing: "border-box" }}>
     <ReactFlowProvider>
-      <FlowchartCanvasInner {...props} />
+      <FlowchartCanvasInner {...props} canvasRef={ref} />
     </ReactFlowProvider>
   </div>
-);
+));
 
 export default FlowchartCanvas;

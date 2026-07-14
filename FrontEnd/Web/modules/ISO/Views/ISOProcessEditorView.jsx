@@ -14,6 +14,7 @@ const isGenericNameText = (text) => {
 
 const logoCty = "data:image/png;base64,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"
 import FlowchartTable from './FlowchartTable';
+import FlowchartCanvas from './FlowchartCanvas';
 import { useOutletContext, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { 
   ArrowLeft, Save, Plus, Trash2, Edit, ChevronUp, ChevronDown, CheckCircle, AlertCircle, 
@@ -424,26 +425,53 @@ const FlowchartConnectors = ({ steps, zoomScale }) => {
 
     const containerRect = container.getBoundingClientRect();
     const newPaths = [];
+    
+    // Get current sidestep list to verify sequential steps
+    const getSidestepsList = () => {
+      const sidesteps = new Set();
+      (steps || []).forEach(s => {
+        if (s.node_type === 'decision') {
+          const failPath = s.fail_path || [];
+          const noStepNum = failPath[0]?.return_to_step;
+          if (noStepNum) {
+            sidesteps.add(noStepNum);
+            let current = noStepNum;
+            while (current) {
+              const currStep = steps.find(st => String(st.step_number) === String(current));
+              const next = currStep?.transition?.next_step || currStep?.next_step;
+              if (next && String(next) !== String(current) && !steps.some(st => String(st.step_number) === String(next) && st.node_type === 'decision')) {
+                sidesteps.add(next);
+                current = next;
+              } else break;
+            }
+          }
+        }
+      });
+      return sidesteps;
+    };
+    
+    const currentSidesteps = getSidestepsList();
+    const mainSteps = steps.filter(s => !currentSidesteps.has(s.step_number));
 
     steps.forEach((step, idx) => {
-      if (step.node_type === 'decision') {
-        const sourceEl = document.getElementById(`step-card-${step.step_number}`);
-        if (!sourceEl) return;
+      const sourceEl = document.getElementById(`step-card-${step.step_number}`);
+      if (!sourceEl) return;
 
-        const sourceRect = sourceEl.getBoundingClientRect();
-        const scale = zoomScale || 1.0;
-        
-        const getRelativeRect = (rect) => {
-          return {
-            left: (rect.left - containerRect.left) / scale,
-            top: (rect.top - containerRect.top) / scale,
-            width: rect.width / scale,
-            height: rect.height / scale
-          };
+      const sourceRect = sourceEl.getBoundingClientRect();
+      const scale = zoomScale || 1.0;
+      
+      const getRelativeRect = (rect) => {
+        return {
+          left: (rect.left - containerRect.left) / scale,
+          top: (rect.top - containerRect.top) / scale,
+          width: rect.width / scale,
+          height: rect.height / scale
         };
+      };
 
-        const source = getRelativeRect(sourceRect);
+      const source = getRelativeRect(sourceRect);
 
+      if (step.node_type === 'decision') {
         // A. No Path (Fail Path) - skip SVG for horizontal inline chains
         const failPath = step.fail_path || [];
         const noStepNum = failPath[0]?.return_to_step;
@@ -568,6 +596,86 @@ const FlowchartConnectors = ({ steps, zoomScale }) => {
             });
           }
         }
+      } else {
+        // Draw lines for custom transitions on regular steps
+        const nextStepNum = step.transition?.next_step;
+        if (nextStepNum) {
+          const targetEl = document.getElementById(`step-card-${nextStepNum}`);
+          if (targetEl) {
+            const targetRect = targetEl.getBoundingClientRect();
+            const target = getRelativeRect(targetRect);
+
+            const sourceCenterX = source.left + source.width / 2;
+            const targetCenterX = target.left + target.width / 2;
+            const sourceCenterY = source.top + source.height / 2;
+            const targetCenterY = target.top + target.height / 2;
+
+            // Check if target is directly below source (sequential main flow)
+            const isDirectlyBelow = target.top > source.top + source.height && Math.abs(sourceCenterX - targetCenterX) < 40;
+            
+            // Check if it's the sequential next main step
+            const currentMainIdx = mainSteps.findIndex(ms => ms.step_number === step.step_number);
+            const isNextMainStep = currentMainIdx !== -1 && mainSteps[currentMainIdx + 1]?.step_number === nextStepNum;
+            const isSequential = isNextMainStep && isDirectlyBelow;
+
+            if (!isSequential) {
+              let startX, startY, endX, endY, pathD, arrowDirection;
+              
+              // Target is to the left (e.g. sidestep)
+              if (targetCenterX < sourceCenterX - 50) {
+                startX = source.left;
+                startY = sourceCenterY;
+                endX = target.left + target.width;
+                endY = targetCenterY;
+                
+                const isHorizontal = Math.abs(startY - endY) < 40;
+                if (isHorizontal) {
+                  pathD = `M ${startX} ${startY} H ${endX}`;
+                } else {
+                  pathD = `M ${startX} ${startY} H ${startX - 30} V ${endY} H ${endX}`;
+                }
+                arrowDirection = 'left';
+              }
+              // Target is to the right
+              else if (targetCenterX > sourceCenterX + 50) {
+                startX = source.left + source.width;
+                startY = sourceCenterY;
+                endX = target.left;
+                endY = targetCenterY;
+                
+                const isHorizontal = Math.abs(startY - endY) < 40;
+                if (isHorizontal) {
+                  pathD = `M ${startX} ${startY} H ${endX}`;
+                } else {
+                  pathD = `M ${startX} ${startY} H ${startX + 30} V ${endY} H ${endX}`;
+                }
+                arrowDirection = 'right';
+              }
+              // Target is directly above (loop back) or below but offset
+              else {
+                startX = source.left + source.width;
+                startY = sourceCenterY;
+                endX = target.left + target.width;
+                endY = targetCenterY;
+                
+                pathD = `M ${startX} ${startY} H ${startX + 40} V ${endY} H ${endX}`;
+                arrowDirection = 'left';
+              }
+
+              newPaths.push({
+                key: `task-link-${step.step_number}-${nextStepNum}`,
+                d: pathD,
+                color: '#64748b', // Slate gray for custom task transitions
+                label: '➔',
+                startX,
+                startY,
+                arrowX: endX,
+                arrowY: endY,
+                arrowDirection
+              });
+            }
+          }
+        }
       }
     });
 
@@ -686,6 +794,16 @@ const ISOProcessEditorView = () => {
   const [zoomScale, setZoomScale] = useState(1.0);
   const [activeMenu, setActiveMenu] = useState('Mục đích'); 
   const [selectedStepIdx, setSelectedStepIdx] = useState(-1);
+  const [flowchartMode, setFlowchartMode] = useState(() => {
+    return localStorage.getItem('iso_flowchart_mode') || 'classic';
+  });
+
+  const flowchartCanvasRef = useRef(null);
+
+  const handleSetFlowchartMode = (mode) => {
+    setFlowchartMode(mode);
+    localStorage.setItem('iso_flowchart_mode', mode);
+  };
 
   const [infoExpanded, setInfoExpanded] = useState(true);
   const [selectedInstructionId, setSelectedInstructionId] = useState(null);
@@ -916,6 +1034,89 @@ const ISOProcessEditorView = () => {
     }
   }, [formData.steps, stepDisplayLabels]);
 
+  const handleQuickTransitionChange = (index, val) => {
+    setFormData(prev => {
+      const steps = prev.steps.map(s => ({ ...s }));
+      if (!steps[index]) return prev;
+      if (val === 'new_step') {
+        const nextStepNum = steps.length + 1;
+        const newStep = {
+          step_number: nextStepNum,
+          name: `Bước mới ${nextStepNum}`,
+          node_type: 'task',
+          assignee_role: 'QC',
+          transition: null,
+          fail_path: []
+        };
+        steps.push(newStep);
+        steps[index] = { ...steps[index], transition: { next_step: nextStepNum } };
+        setTimeout(() => setSelectedStepIdx(steps.length - 1), 0);
+        return { ...prev, steps };
+      } else if (val === 'custom') {
+        steps[index] = { ...steps[index], transition: { next_step: null, name: "Hoàn tất", node_type: "terminal" } };
+        return { ...prev, steps };
+      } else if (val === '') {
+        steps[index] = { ...steps[index], transition: null };
+        return { ...prev, steps };
+      } else {
+        steps[index] = { ...steps[index], transition: { next_step: parseInt(val) } };
+        return { ...prev, steps };
+      }
+    });
+  };
+
+  const handleQuickFailPathChange = (index, val) => {
+    setFormData(prev => {
+      const steps = prev.steps.map(s => ({ ...s }));
+      if (!steps[index]) return prev;
+      const currentStep = steps[index];
+      const failPath = [...getStepFailPath(currentStep)];
+      if (val === 'new_step') {
+        const nextStepNum = steps.length + 1;
+        const newStep = {
+          step_number: nextStepNum,
+          name: `Bước mới ${nextStepNum}`,
+          node_type: 'task',
+          assignee_role: 'QC',
+          transition: null,
+          fail_path: []
+        };
+        steps.push(newStep);
+        let newFailPath;
+        if (failPath.length === 0) {
+          newFailPath = [{ name: "Không đồng ý", assignee_role: currentStep.assignee_role || 'QC', edge_label: "Không", return_to_step: nextStepNum }];
+        } else {
+          newFailPath = failPath.map((fp, i) => i === 0 ? { ...fp, return_to_step: nextStepNum } : { ...fp });
+        }
+        steps[index] = { ...currentStep, fail_path: newFailPath, has_branch: true };
+        setTimeout(() => setSelectedStepIdx(steps.length - 1), 0);
+        return { ...prev, steps };
+      } else if (val === 'custom') {
+        let newFailPath;
+        if (failPath.length === 0) {
+          newFailPath = [{ name: "Hủy bỏ / Trả hàng", assignee_role: currentStep.assignee_role || 'QC', edge_label: "Không", return_to_step: null, node_type: "terminal" }];
+        } else {
+          newFailPath = failPath.map((fp, i) => i === 0 ? { ...fp, return_to_step: null, node_type: "terminal", name: fp.name || "Hủy bỏ / Trả hàng" } : { ...fp });
+        }
+        steps[index] = { ...currentStep, has_branch: true, fail_path: newFailPath };
+        return { ...prev, steps };
+      } else if (val === '') {
+        steps[index] = { ...currentStep, fail_path: [], has_branch: false };
+        return { ...prev, steps };
+      } else {
+        const stepNum = parseInt(val);
+        let newFailPath;
+        if (failPath.length === 0) {
+          newFailPath = [{ name: "Xử lý lỗi", assignee_role: currentStep.assignee_role || 'QC', edge_label: "Không", return_to_step: stepNum }];
+        } else {
+          newFailPath = failPath.map((fp, i) => i === 0 ? { ...fp, return_to_step: stepNum } : { ...fp });
+        }
+        steps[index] = { ...currentStep, fail_path: newFailPath, has_branch: true };
+        return { ...prev, steps };
+      }
+    });
+  };
+
   // Helper to render a single step card UI cleanly
   const renderSingleStepCard = (step, idx) => {
     const isSelected = selectedStepIdx === idx;
@@ -947,6 +1148,9 @@ const ISOProcessEditorView = () => {
     }
 
     if (isDecision || isCondition) {
+      const hasYes = step.transition && (step.transition.next_step !== null || step.transition.name);
+      const hasNo = getStepFailPath(step)[0] && (getStepFailPath(step)[0].return_to_step !== null || getStepFailPath(step)[0].name);
+
       return (
         <div id={`step-card-${step.step_number}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', position: 'relative' }}>
           {/* Custom Outcome Cards (beside the diamond) */}
@@ -1006,6 +1210,14 @@ const ISOProcessEditorView = () => {
                 {step.name}
               </div>
 
+              {/* Validation Badges inside diamond */}
+              {isDecision && !hasYes && (
+                <span style={{ fontSize: '0.55rem', backgroundColor: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', padding: '1px 3px', borderRadius: '3px', fontWeight: 'bold', marginTop: '2px' }}>⚠️ Thiếu Yes</span>
+              )}
+              {isDecision && !hasNo && (
+                <span style={{ fontSize: '0.55rem', backgroundColor: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', padding: '1px 3px', borderRadius: '3px', fontWeight: 'bold', marginTop: '2px' }}>⚠️ Thiếu No</span>
+              )}
+
               <button
                 onClick={(e) => { e.stopPropagation(); handleRemoveStep(idx); }}
                 style={{ border: 'none', backgroundColor: 'transparent', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', marginTop: '2px' }}
@@ -1014,6 +1226,47 @@ const ISOProcessEditorView = () => {
               </button>
             </div>
           </div>
+
+          {/* Quick Connection Controls for Decision */}
+          {isDecision && (
+            <div style={{ display: 'flex', gap: '8px', zIndex: 20, marginTop: '2px' }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '3px', backgroundColor: '#F0FDF4', border: '1px solid #b7ebc6', borderRadius: '4px', padding: '2px 4px', fontSize: '0.65rem' }}>
+                <span style={{ color: '#16a34a', fontWeight: 'bold' }}>Đúng:</span>
+                <select
+                  value={step.transition?.next_step === null ? 'custom' : (step.transition?.next_step || '')}
+                  onChange={(e) => handleQuickTransitionChange(idx, e.target.value)}
+                  style={{ padding: '1px', border: '1px solid #b7ebc6', borderRadius: '3px', fontSize: '0.65rem', backgroundColor: 'white', maxWidth: '90px' }}
+                >
+                  <option value="">-- Hết --</option>
+                  <option value="new_step">➕ Bước mới...</option>
+                  <option value="custom">✍️ Tùy chỉnh...</option>
+                  {formData.steps.map((s, sidx) => (
+                    s.step_number !== step.step_number && (
+                      <option key={sidx} value={s.step_number}>{stepDisplayLabels[s.step_number] || `B${s.step_number}`}: {s.name}</option>
+                    )
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '3px', backgroundColor: '#FFF5F5', border: '1px solid #f8d7da', borderRadius: '4px', padding: '2px 4px', fontSize: '0.65rem' }}>
+                <span style={{ color: '#dc2626', fontWeight: 'bold' }}>Sai:</span>
+                <select
+                  value={getStepFailPath(step)[0]?.return_to_step === null && getStepFailPath(step)[0]?.name ? 'custom' : (getStepFailPath(step)[0]?.return_to_step || '')}
+                  onChange={(e) => handleQuickFailPathChange(idx, e.target.value)}
+                  style={{ padding: '1px', border: '1px solid #f8d7da', borderRadius: '3px', fontSize: '0.65rem', backgroundColor: 'white', maxWidth: '90px' }}
+                >
+                  <option value="">-- Hết --</option>
+                  <option value="new_step">➕ Bước mới...</option>
+                  <option value="custom">✍️ Tùy chỉnh...</option>
+                  {formData.steps.map((s, sidx) => (
+                    s.step_number !== step.step_number && (
+                      <option key={sidx} value={s.step_number}>{stepDisplayLabels[s.step_number] || `B${s.step_number}`}: {s.name}</option>
+                    )
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
 
           {isCondition && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.68rem', color: '#7c3aed', fontWeight: 'bold', textAlign: 'center', marginTop: '-4px', marginBottom: '4px' }}>
@@ -1024,6 +1277,9 @@ const ISOProcessEditorView = () => {
         </div>
       );
     } else {
+      const hasNext = step.transition && (step.transition.next_step !== null || step.transition.name);
+      const isLastStep = idx === formData.steps.length - 1;
+
       return (
         <div
           id={`step-card-${step.step_number}`}
@@ -1051,6 +1307,12 @@ const ISOProcessEditorView = () => {
                 <span style={{ fontSize: '0.62rem', backgroundColor: '#e2e8f0', color: '#475569', padding: '1px 4px', borderRadius: '3px', fontWeight: 'bold' }}>{step.assignee_role}</span>
               )}
             </div>
+            
+            {/* Validation Badge for Task */}
+            {!hasNext && !isLastStep && (
+              <span style={{ fontSize: '0.62rem', backgroundColor: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', padding: '1px 4px', borderRadius: '3px', fontWeight: 'bold' }}>⚠️ Thiếu bước tiếp theo</span>
+            )}
+
             <button
               onClick={(e) => { e.stopPropagation(); handleRemoveStep(idx); }}
               style={{ border: 'none', backgroundColor: 'transparent', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
@@ -1061,6 +1323,24 @@ const ISOProcessEditorView = () => {
 
           <div style={{ fontSize: '0.78rem', fontWeight: 'bold', color: '#1e293b' }}>
             {step.name}
+          </div>
+
+          <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '6px', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem' }} onClick={(e) => e.stopPropagation()}>
+            <span style={{ color: '#7B5233', fontWeight: 'bold' }}>➔ Bước tiếp:</span>
+            <select
+              value={step.transition?.next_step === null ? 'custom' : (step.transition?.next_step || '')}
+              onChange={(e) => handleQuickTransitionChange(idx, e.target.value)}
+              style={{ flex: 1, padding: '2px 4px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.68rem', backgroundColor: 'white' }}
+            >
+              <option value="">-- Mặc định --</option>
+              <option value="new_step">➕ Tạo bước mới...</option>
+              <option value="custom">✍️ Tùy chỉnh...</option>
+              {formData.steps.map((s, sidx) => (
+                s.step_number !== step.step_number && (
+                  <option key={sidx} value={s.step_number}>{stepDisplayLabels[s.step_number] || `B${s.step_number}`}: {s.name}</option>
+                )
+              ))}
+            </select>
           </div>
         </div>
       );
@@ -2106,6 +2386,128 @@ const ISOProcessEditorView = () => {
     URL.revokeObjectURL(url);
   };
 
+  const handleAutoLayoutClassic = useCallback(() => {
+    const steps = formData.steps || [];
+    if (steps.length === 0) return;
+
+    // 1. Get unique roles in order of appearance
+    const uniqueRoles = [];
+    steps.forEach(s => {
+      const role = s.assignee_role || "";
+      if (role && !uniqueRoles.includes(role)) {
+        uniqueRoles.push(role);
+      }
+    });
+    if (uniqueRoles.length === 0) {
+      uniqueRoles.push("");
+    }
+
+    // 2. Identify sidesteps (fail paths)
+    const getSidesteps = () => {
+      const sidesteps = new Set();
+      steps.forEach(s => {
+        if (s.node_type === 'decision') {
+          const failPath = s.fail_path || [];
+          const noStepNum = failPath[0]?.return_to_step;
+          if (noStepNum) {
+            sidesteps.add(noStepNum);
+            let current = noStepNum;
+            while (current) {
+              const currStep = steps.find(st => String(st.step_number) === String(current));
+              const next = currStep?.transition?.next_step || currStep?.next_step;
+              if (next && String(next) !== String(current) && !steps.some(st => String(st.step_number) === String(next) && st.node_type === 'decision')) {
+                sidesteps.add(next);
+                current = next;
+              } else break;
+            }
+          }
+        }
+      });
+      return sidesteps;
+    };
+
+    const sidesteps = getSidesteps();
+    const mainSteps = steps.filter(s => !sidesteps.has(s.step_number));
+    const positions = {};
+
+    const getNodeDimensions = (nodeType) => {
+      if (nodeType === "decision") return { width: 86, height: 86 };
+      if (nodeType === "terminal") return { width: 120, height: 44 };
+      return { width: 140, height: 54 }; // task
+    };
+
+    // 3. Lay out main steps vertically
+    mainSteps.forEach((step, idx) => {
+      const role = step.assignee_role || "";
+      const roleIdx = uniqueRoles.indexOf(role);
+      const colCenter = 300 + (roleIdx >= 0 ? roleIdx : 0) * 280;
+
+      const { width } = getNodeDimensions(step.node_type);
+      positions[step.step_number] = {
+        x: colCenter - width / 2,
+        y: 60 + idx * 140
+      };
+    });
+
+    // 4. Lay out sidesteps to the left column relative to their parent decision step
+    mainSteps.forEach((step, idx) => {
+      if (step.node_type === 'decision') {
+        const failPath = step.fail_path || [];
+        const noStepNum = failPath[0]?.return_to_step;
+        if (noStepNum && sidesteps.has(noStepNum)) {
+          const parentY = positions[step.step_number]?.y || (60 + idx * 140);
+          const parentRole = step.assignee_role || "";
+          const parentRoleIdx = uniqueRoles.indexOf(parentRole);
+          const colCenter = 300 + (parentRoleIdx >= 0 ? parentRoleIdx : 0) * 280;
+          const sideCenter = colCenter - 180;
+          
+          const firstStep = steps.find(st => st.step_number === noStepNum);
+          let startY = parentY;
+          if (firstStep) {
+            const { height: childHeight } = getNodeDimensions(firstStep.node_type);
+            startY = parentY + 43 - childHeight / 2;
+          }
+
+          let current = noStepNum;
+          let chainIdx = 0;
+          const visited = new Set();
+          
+          while (current && !visited.has(current)) {
+            visited.add(current);
+            const currStep = steps.find(st => st.step_number === current);
+            if (currStep) {
+              const { width } = getNodeDimensions(currStep.node_type);
+              positions[current] = {
+                x: sideCenter - width / 2,
+                y: startY + chainIdx * 130
+              };
+            }
+            
+            const next = currStep?.transition?.next_step || currStep?.next_step;
+            if (next && sidesteps.has(next)) {
+              current = next;
+              chainIdx++;
+            } else {
+              break;
+            }
+          }
+        }
+      }
+    });
+
+    // 5. Update steps
+    setFormData(prev => {
+      const nextSteps = prev.steps.map(s => {
+        const pos = positions[s.step_number];
+        if (pos) {
+          return { ...s, x_pos: pos.x, y_pos: pos.y };
+        }
+        return s;
+      });
+      return { ...prev, steps: nextSteps };
+    });
+  }, [formData.steps]);
+
   const handlePositionsChange = useCallback(({ type, stepNumber, branchIdx, x, y }) => {
     setFormData(prev => {
       const nextSteps = [...prev.steps];
@@ -2806,267 +3208,364 @@ const ISOProcessEditorView = () => {
                         gridTemplateColumns: isStepSelected ? 'minmax(0, 1.2fr) minmax(0, 1fr)' : '1fr',
                         alignItems: 'stretch'
                       }}>
-{/* Left Side: Flowchart Canvas column */}
+{/* Left Side: ReactFlow Flowchart Canvas column */}
                         <div style={{
                           borderRight: isStepSelected ? `1.5px solid ${cardBorderColor}` : 'none',
-                          padding: '16px',
                           display: 'flex',
                           flexDirection: 'column',
-                          gap: '12px',
                           minHeight: '700px',
-                          alignItems: 'center',
                           minWidth: 0,
                           overflow: 'hidden'
                         }}>
-                          {/* Visual Flowchart Canvas Wrapper to support fixed floating controls */}
+                          {/* Segmented Control Mode Toggle */}
                           <div style={{
-                            width: '100%',
-                            flex: 1,
-                            border: '1px solid #cbd5e1',
-                            borderRadius: '6px',
-                            backgroundColor: '#F8FAFC',
-                            maxHeight: '660px',
-                            position: 'relative',
                             display: 'flex',
-                            flexDirection: 'column',
-                            overflow: 'hidden'
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '12px 16px',
+                            backgroundColor: '#F8FAFC',
+                            borderBottom: '1px solid #cbd5e1',
+                            flexShrink: 0
                           }}>
-                            {/* Visual Flowchart Canvas (Scrollable) */}
+                            <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#475569', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <Activity size={14} style={{ color: '#7B5233' }} /> Chế độ thiết kế lưu trình
+                            </span>
+
+                            {/* Auto Layout Button inside header */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (flowchartMode === 'canvas') {
+                                  flowchartCanvasRef.current?.triggerAutoLayout();
+                                } else {
+                                  handleAutoLayoutClassic();
+                                }
+                              }}
+                              style={{
+                                padding: '6px 12px',
+                                fontSize: '0.75rem',
+                                fontWeight: 'bold',
+                                borderRadius: '6px',
+                                border: '1.5px solid #7B5233',
+                                backgroundColor: 'white',
+                                color: '#7B5233',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                              }}
+                              onMouseOver={(e) => {
+                                e.currentTarget.style.backgroundColor = '#FAF6F0';
+                              }}
+                              onMouseOut={(e) => {
+                                e.currentTarget.style.backgroundColor = 'white';
+                              }}
+                            >
+                              ✨ Sắp xếp tự động
+                            </button>
+
+                            <div style={{ display: 'flex', gap: '4px', backgroundColor: '#e2e8f0', padding: '3px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleSetFlowchartMode('canvas')}
+                                style={{
+                                  padding: '6px 12px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 'bold',
+                                  borderRadius: '6px',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s ease',
+                                  backgroundColor: flowchartMode === 'canvas' ? 'white' : 'transparent',
+                                  color: flowchartMode === 'canvas' ? '#7B5233' : '#64748b',
+                                  boxShadow: flowchartMode === 'canvas' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                                }}
+                              >
+                                🗺️ Kéo thả
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSetFlowchartMode('classic')}
+                                style={{
+                                  padding: '6px 12px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 'bold',
+                                  borderRadius: '6px',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s ease',
+                                  backgroundColor: flowchartMode === 'classic' ? 'white' : 'transparent',
+                                  color: flowchartMode === 'classic' ? '#7B5233' : '#64748b',
+                                  boxShadow: flowchartMode === 'classic' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                                }}
+                              >
+                                🗂️ Dạng danh sách
+                              </button>
+                            </div>
+                          </div>
+
+                          {flowchartMode === 'canvas' ? (
+                            <FlowchartCanvas
+                              ref={flowchartCanvasRef}
+                              steps={formData.steps}
+                              selectedStepIdx={selectedStepIdx}
+                              onPositionsChange={handlePositionsChange}
+                              onAddStep={handleAddStepFromCanvas}
+                              onUpdateStep={handleUpdateStep}
+                              onDeleteStep={handleRemoveStep}
+                              onNodeSelect={handleNodeSelect}
+                            />
+                          ) : (
                             <div style={{
                               width: '100%',
                               flex: 1,
-                              padding: '24px 16px',
+                              border: 'none',
+                              backgroundColor: '#F8FAFC',
+                              maxHeight: '700px',
+                              position: 'relative',
                               display: 'flex',
                               flexDirection: 'column',
-                              overflow: 'auto'
+                              overflow: 'hidden'
                             }}>
-                              <div 
-                                id="flowchart-canvas-container"
-                                style={{
-                                  transform: `scale(${zoomScale})`,
-                                  transformOrigin: 'top center',
-                                  width: 'max-content',
-                                  minWidth: '100%',
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  alignItems: 'center',
-                                  gap: '20px',
-                                  transition: 'transform 0.15s ease-out',
-                                  paddingBottom: '40px',
-                                  position: 'relative',
-                                  paddingLeft: `${(maxLeftChainLength * 270) + 40}px`,
-                                  paddingRight: `${(maxLeftChainLength * 270) + 40}px`,
-                                  margin: '0 auto'
-                                }}
-                              >
-                                <FlowchartConnectors steps={formData.steps} zoomScale={zoomScale} />
-                                {formData.steps.length === 0 ? (
-                                  <div style={{ color: '#94a3b8', textAlign: 'center', marginTop: '100px', fontSize: '0.82rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-                                    <span>Chưa có bước nào. Click nút "Thêm bước mới" để bắt đầu thiết lập.</span>
-                                    <button
-                                      type="button"
-                                      onClick={handleAddStep}
-                                      style={{
-                                        padding: '8px 20px',
-                                        backgroundColor: '#7B5233',
-                                        color: 'white',
-                                        border: 'none',
-                                        borderRadius: '6px',
-                                        fontSize: '0.8rem',
-                                        fontWeight: 'bold',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '6px',
-                                        boxShadow: '0 2px 8px rgba(123, 82, 51, 0.2)'
-                                      }}
-                                    >
-                                      <Plus size={14} /> Thêm bước mới
-                                    </button>
-                                  </div>
-                                ) : (
-                                  (() => {
-                                    // Filter main steps to render vertically
-                                    const mainSteps = formData.steps.filter(s => !sidestepSet.has(s.step_number));
-                                    
-                                    return mainSteps.map((step, mainIdx) => {
-                                      const idx = formData.steps.findIndex(s => s.step_number === step.step_number);
-                                      const isDecision = step.node_type === 'decision';
-                                      const leftColumnWidth = maxLeftChainLength * 270;
+                              {/* Visual Flowchart Canvas (Scrollable) */}
+                              <div style={{
+                                width: '100%',
+                                flex: 1,
+                                padding: '24px 16px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                overflow: 'auto'
+                              }}>
+                                <div 
+                                  id="flowchart-canvas-container"
+                                  style={{
+                                    transform: `scale(${zoomScale})`,
+                                    transformOrigin: 'top center',
+                                    width: 'max-content',
+                                    minWidth: '100%',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    gap: '20px',
+                                    transition: 'transform 0.15s ease-out',
+                                    paddingBottom: '40px',
+                                    position: 'relative',
+                                    paddingLeft: `${(maxLeftChainLength * 270) + 40}px`,
+                                    paddingRight: `${(maxLeftChainLength * 270) + 40}px`,
+                                    margin: '0 auto'
+                                  }}
+                                >
+                                  <FlowchartConnectors steps={formData.steps} zoomScale={zoomScale} />
+                                  {formData.steps.length === 0 ? (
+                                    <div style={{ color: '#94a3b8', textAlign: 'center', marginTop: '100px', fontSize: '0.82rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+                                      <span>Chưa có bước nào. Click nút "Thêm bước mới" để bắt đầu thiết lập.</span>
+                                      <button
+                                        type="button"
+                                        onClick={handleAddStep}
+                                        style={{
+                                          padding: '8px 20px',
+                                          backgroundColor: '#7B5233',
+                                          color: 'white',
+                                          border: 'none',
+                                          borderRadius: '6px',
+                                          fontSize: '0.8rem',
+                                          fontWeight: 'bold',
+                                          cursor: 'pointer',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '6px',
+                                          boxShadow: '0 2px 8px rgba(123, 82, 51, 0.2)'
+                                        }}
+                                      >
+                                        <Plus size={14} /> Thêm bước mới
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    (() => {
+                                      // Filter main steps to render vertically
+                                      const mainSteps = formData.steps.filter(s => !sidestepSet.has(s.step_number));
                                       
-                                      const chain = [];
-                                      if (isDecision) {
-                                        const failPath = step.fail_path || [];
-                                        let current = failPath[0]?.return_to_step;
-                                        const visited = new Set();
-                                        while (current && !visited.has(current)) {
-                                          visited.add(current);
-                                          const currStep = formData.steps.find(s => String(s.step_number) === String(current));
-                                          if (currStep) {
-                                            chain.push(currStep);
-                                            current = currStep.transition?.next_step || currStep.next_step;
-                                            if (mainSteps.some(ms => ms.step_number === current)) break;
-                                          } else break;
+                                      return mainSteps.map((step, mainIdx) => {
+                                        const idx = formData.steps.findIndex(s => s.step_number === step.step_number);
+                                        const isDecision = step.node_type === 'decision';
+                                        const leftColumnWidth = maxLeftChainLength * 270;
+                                        
+                                        const chain = [];
+                                        if (isDecision) {
+                                          const failPath = step.fail_path || [];
+                                          let current = failPath[0]?.return_to_step;
+                                          const visited = new Set();
+                                          while (current && !visited.has(current)) {
+                                            visited.add(current);
+                                            const currStep = formData.steps.find(s => String(s.step_number) === String(current));
+                                            if (currStep) {
+                                              chain.push(currStep);
+                                              current = currStep.transition?.next_step || currStep.next_step;
+                                              if (mainSteps.some(ms => ms.step_number === current)) break;
+                                            } else break;
+                                          }
                                         }
-                                      }
-                                      return (
-                                        <React.Fragment key={step.step_number}>
-                                          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', width: 'max-content', justifyContent: 'center' }}>
-                                            <div style={{ 
-                                              width: `${leftColumnWidth}px`, 
-                                              marginRight: isDecision ? '-50px' : '0px',
-                                              display: 'flex', 
-                                              justifyContent: 'flex-end', 
-                                              alignItems: 'center',
-                                              flexShrink: 0
-                                            }}>
-                                              {chain.length > 0 && (
-                                                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '0px' }}>
-                                                  {[...chain].reverse().map((cStep, rIdx) => {
-                                                    const cStepIdx = formData.steps.findIndex(s => s.step_number === cStep.step_number);
-                                                    return (
-                                                      <React.Fragment key={cStep.step_number}>
-                                                        <div style={{ flexShrink: 0 }}>
-                                                          {renderSingleStepCard(cStep, cStepIdx)}
-                                                        </div>
-                                                        <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0, margin: '0 6px', gap: '2px', zIndex: 6 }}>
-                                                          <div style={{
-                                                            width: 0,
-                                                            height: 0,
-                                                            borderTop: '5px solid transparent',
-                                                            borderBottom: '5px solid transparent',
-                                                            borderRight: '7px solid #ef4444'
-                                                          }} />
-                                                          <div style={{ width: '20px', height: '2.5px', backgroundColor: '#ef4444' }} />
-                                                        </div>
-                                                      </React.Fragment>
-                                                    );
-                                                  })}
-                                                </div>
-                                              )}
-                                            </div>
-                                            <div style={{ 
-                                              width: '240px', 
-                                              display: 'flex', 
-                                              justifyContent: 'center', 
-                                              alignItems: 'center',
-                                              flexShrink: 0,
-                                              zIndex: 2,
-                                              position: 'relative'
-                                            }}>
-                                              {renderSingleStepCard(step, idx)}
-                                            </div>
-                                            <div style={{ 
-                                              width: `${leftColumnWidth}px`, 
-                                              marginLeft: isDecision ? '-50px' : '0px',
-                                              flexShrink: 0 
-                                            }} />
-                                          </div>
-                                          {mainIdx < mainSteps.length - 1 && (
+                                        return (
+                                          <React.Fragment key={step.step_number}>
                                             <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', width: 'max-content', justifyContent: 'center' }}>
-                                              <div style={{ width: `${leftColumnWidth}px`, marginRight: isDecision ? '-50px' : '0px', flexShrink: 0 }} />
-                                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '240px', height: '24px', margin: '-10px 0', flexShrink: 0 }}>
-                                                <div style={{ width: '2px', height: '16px', backgroundColor: '#cbd5e1' }} />
-                                                <div style={{
-                                                  width: 0,
-                                                  height: 0,
-                                                  borderLeft: '4px solid transparent',
-                                                  borderRight: '4px solid transparent',
-                                                  borderTop: '6px solid #cbd5e1'
-                                                }} />
+                                              <div style={{ 
+                                                width: `${leftColumnWidth}px`, 
+                                                marginRight: isDecision ? '-50px' : '0px',
+                                                display: 'flex', 
+                                                justifyContent: 'flex-end', 
+                                                alignItems: 'center',
+                                                flexShrink: 0
+                                              }}>
+                                                {chain.length > 0 && (
+                                                  <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '0px' }}>
+                                                    {[...chain].reverse().map((cStep, rIdx) => {
+                                                      const cStepIdx = formData.steps.findIndex(s => s.step_number === cStep.step_number);
+                                                      return (
+                                                        <React.Fragment key={cStep.step_number}>
+                                                          <div style={{ flexShrink: 0 }}>
+                                                            {renderSingleStepCard(cStep, cStepIdx)}
+                                                          </div>
+                                                          <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0, margin: '0 6px', gap: '2px', zIndex: 6 }}>
+                                                            <div style={{
+                                                              width: 0,
+                                                              height: 0,
+                                                              borderTop: '5px solid transparent',
+                                                              borderBottom: '5px solid transparent',
+                                                              borderRight: '7px solid #ef4444'
+                                                            }} />
+                                                            <div style={{ width: '20px', height: '2.5px', backgroundColor: '#ef4444' }} />
+                                                          </div>
+                                                        </React.Fragment>
+                                                      );
+                                                    })}
+                                                  </div>
+                                                )}
                                               </div>
-                                              <div style={{ width: `${leftColumnWidth}px`, marginLeft: isDecision ? '-50px' : '0px', flexShrink: 0 }} />
+                                              <div style={{ 
+                                                width: '240px', 
+                                                display: 'flex', 
+                                                justifyContent: 'center', 
+                                                alignItems: 'center',
+                                                flexShrink: 0,
+                                                zIndex: 2,
+                                                position: 'relative'
+                                              }}>
+                                                {renderSingleStepCard(step, idx)}
+                                              </div>
+                                              <div style={{ 
+                                                width: `${leftColumnWidth}px`, 
+                                                marginLeft: isDecision ? '-50px' : '0px',
+                                                flexShrink: 0 
+                                              }} />
                                             </div>
-                                          )}
-                                        </React.Fragment>
-                                      );
-                                    });
-                                  })()
-                                )}
+                                            {mainIdx < mainSteps.length - 1 && (
+                                              <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', width: 'max-content', justifyContent: 'center' }}>
+                                                <div style={{ width: `${leftColumnWidth}px`, marginRight: isDecision ? '-50px' : '0px', flexShrink: 0 }} />
+                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '240px', height: '24px', margin: '-10px 0', flexShrink: 0 }}>
+                                                  <div style={{ width: '2px', height: '16px', backgroundColor: '#cbd5e1' }} />
+                                                  <div style={{
+                                                    width: 0,
+                                                    height: 0,
+                                                    borderLeft: '4px solid transparent',
+                                                    borderRight: '4px solid transparent',
+                                                    borderTop: '6px solid #cbd5e1'
+                                                  }} />
+                                                </div>
+                                                <div style={{ width: `${leftColumnWidth}px`, marginLeft: isDecision ? '-50px' : '0px', flexShrink: 0 }} />
+                                              </div>
+                                            )}
+                                          </React.Fragment>
+                                        );
+                                      });
+                                    })()
+                                  )}
+                                </div>
                               </div>
-                            </div>
 
-                            {/* Floating Glassmorphic Zoom Toolbar */}
-                            <div style={{
-                              position: 'absolute',
-                              top: '8px',
-                              right: '8px',
-                              display: 'flex',
-                              gap: '4px',
-                              backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                              border: '1px solid #cbd5e1',
-                              borderRadius: '20px',
-                              padding: '2px 8px',
-                              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                              zIndex: 30,
-                              alignItems: 'center'
-                            }}>
-                              <button
-                                type="button"
-                                onClick={() => setZoomScale(prev => Math.max(0.6, prev - 0.1))}
-                                style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', display: 'flex', padding: '4px', color: '#475569' }}
-                                title="Thu nhỏ (Zoom Out)"
-                              >
-                                <ZoomOut size={14} />
-                              </button>
-                              <span style={{ fontSize: '0.65rem', fontWeight: 'bold', minWidth: '32px', textAlign: 'center', color: '#475569', userSelect: 'none' }}>
-                                {Math.round(zoomScale * 100)}%
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => setZoomScale(prev => Math.min(1.4, prev + 0.1))}
-                                style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', display: 'flex', padding: '4px', color: '#475569' }}
-                                title="Phóng to (Zoom In)"
-                              >
-                                <ZoomIn size={14} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setZoomScale(1.0)}
-                                style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', display: 'flex', padding: '4px', color: '#475569', borderLeft: '1px solid #cbd5e1', marginLeft: '2px', paddingLeft: '6px' }}
-                                title="Mặc định (100%)"
-                              >
-                                <Maximize2 size={12} />
-                              </button>
-                            </div>
+                              {/* Floating Glassmorphic Zoom Toolbar */}
+                              <div style={{
+                                position: 'absolute',
+                                top: '8px',
+                                right: '8px',
+                                display: 'flex',
+                                gap: '4px',
+                                backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                                border: '1px solid #cbd5e1',
+                                borderRadius: '20px',
+                                padding: '2px 8px',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                                zIndex: 30,
+                                alignItems: 'center'
+                              }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setZoomScale(prev => Math.max(0.6, prev - 0.1))}
+                                  style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', display: 'flex', padding: '4px', color: '#475569' }}
+                                  title="Thu nhỏ (Zoom Out)"
+                                >
+                                  <ZoomOut size={14} />
+                                </button>
+                                <span style={{ fontSize: '0.65rem', fontWeight: 'bold', minWidth: '32px', textAlign: 'center', color: '#475569', userSelect: 'none' }}>
+                                  {Math.round(zoomScale * 100)}%
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setZoomScale(prev => Math.min(1.4, prev + 0.1))}
+                                  style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', display: 'flex', padding: '4px', color: '#475569' }}
+                                  title="Phóng to (Zoom In)"
+                                >
+                                  <ZoomIn size={14} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setZoomScale(1.0)}
+                                  style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', display: 'flex', padding: '4px', color: '#475569', borderLeft: '1px solid #cbd5e1', marginLeft: '2px', paddingLeft: '6px' }}
+                                  title="Mặc định (100%)"
+                                >
+                                  <Maximize2 size={12} />
+                                </button>
+                              </div>
 
-                            {/* Floating "Thêm bước mới" Button - Always fixed in the bottom-left corner of the workspace area */}
-                            {formData.steps.length > 0 && (
-                              <button
-                                type="button"
-                                onClick={handleAddStep}
-                                style={{
-                                  position: 'absolute',
-                                  bottom: '12px',
-                                  left: '12px',
-                                  padding: '8px 16px',
-                                  backgroundColor: '#7B5233',
-                                  color: 'white',
-                                  border: 'none',
-                                  borderRadius: '20px',
-                                  fontSize: '0.78rem',
-                                  fontWeight: 'bold',
-                                  cursor: 'pointer',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '6px',
-                                  boxShadow: '0 4px 12px rgba(123, 82, 51, 0.3)',
-                                  zIndex: 30,
-                                  transition: 'all 0.2s ease',
-                                }}
-                                onMouseOver={(e) => {
-                                  e.currentTarget.style.backgroundColor = '#623f25';
-                                  e.currentTarget.style.transform = 'translateY(-2px)';
-                                }}
-                                onMouseOut={(e) => {
-                                  e.currentTarget.style.backgroundColor = '#7B5233';
-                                  e.currentTarget.style.transform = 'translateY(0)';
-                                }}
-                              >
-                                <Plus size={14} /> Thêm bước mới
-                              </button>
-                            )}
-                          </div>
+                              {/* Floating "Thêm bước mới" Button - Always fixed in the bottom-left corner of the workspace area */}
+                              {formData.steps.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={handleAddStep}
+                                  style={{
+                                    position: 'absolute',
+                                    bottom: '12px',
+                                    left: '12px',
+                                    padding: '8px 16px',
+                                    backgroundColor: '#7B5233',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '20px',
+                                    fontSize: '0.78rem',
+                                    fontWeight: 'bold',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    boxShadow: '0 4px 12px rgba(123, 82, 51, 0.3)',
+                                    zIndex: 30,
+                                    transition: 'all 0.2s ease',
+                                  }}
+                                  onMouseOver={(e) => {
+                                    e.currentTarget.style.backgroundColor = '#623f25';
+                                    e.currentTarget.style.transform = 'translateY(-2px)';
+                                  }}
+                                  onMouseOut={(e) => {
+                                    e.currentTarget.style.backgroundColor = '#7B5233';
+                                    e.currentTarget.style.transform = 'translateY(0)';
+                                  }}
+                                >
+                                  <Plus size={14} /> Thêm bước mới
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
 
                         {/* Right Side: Step Details Editor */}
@@ -3110,7 +3609,7 @@ const ISOProcessEditorView = () => {
                                     style={{ width: '100%', padding: '6px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.76rem', backgroundColor:'white' }}
                                   >
                                     {formData.steps.map((s, idx) => (
-                                      <option key={idx} value={idx}>Bước {s.step_number}</option>
+                                      <option key={idx} value={idx}>{(stepDisplayLabels[s.step_number] || ('B' + s.step_number)).replace(/^B/, 'Bước ')}: {s.name}</option>
                                     ))}
                                   </select>
                                 </div>
@@ -3506,7 +4005,7 @@ const ISOProcessEditorView = () => {
                                     <option value="new_step">➕ Tạo bước mới...</option>
                                     <option value="custom">✍️ Kết quả tùy chỉnh...</option>
                                     {formData.steps.map((s, idx) => (
-                                      <option key={idx} value={s.step_number}>B{s.step_number}: {s.name}</option>
+                                      <option key={idx} value={s.step_number}>{stepDisplayLabels[s.step_number] || `B${s.step_number}`}: {s.name}</option>
                                     ))}
                                   </select>
                                   

@@ -358,10 +358,6 @@ const ISOFormEditorView = () => {
       showFeedback('error', 'Tên tài liệu là bắt buộc');
       return;
     }
-    if (!contentClassified) {
-      showFeedback('error', 'Bạn chưa xác nhận "Đã phân loại nội dung" trước khi lưu');
-      return;
-    }
 
     setLoading(true);
     try {
