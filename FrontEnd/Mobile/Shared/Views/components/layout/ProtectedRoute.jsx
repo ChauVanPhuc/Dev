@@ -68,8 +68,7 @@ const ProtectedRoute = () => {
 
   if (!isAuthenticated) {
     // Lưu lại trang hiện tại để có thể quay lại sau khi đăng nhập (nếu cần)
-    // Ở đây đơn giản là chuyển hướng về /login
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   // Kiểm tra vai trò Admin để bỏ qua kiểm tra quyền (IT, BGD, admin)
