@@ -70,44 +70,34 @@
 
 ### Kiến trúc hệ thống (System Architecture)
 
-```mermaid
-%%{init: {'flowchart': {'curve': 'ortho'}}}%%
-flowchart TD
-    %% Styling Classes
-    classDef cloud fill:#FAF6F0,stroke:#7B5233,stroke-width:1.5px,color:#7B5233;
-    classDef server fill:#EFF6FF,stroke:#3B82F6,stroke-width:1.5px,color:#1E3A8A;
-    classDef client fill:#ECFDF5,stroke:#10B981,stroke-width:1.5px,color:#064E3B;
-    classDef db fill:#FEF2F2,stroke:#EF4444,stroke-width:1.5px,color:#991B1B;
-
-    Web["💻 Web Dashboard (React 18)<br>• Dashboard KPI & Báo cáo<br>• Quản lý Đơn hàng & KHSX<br>• Hồ sơ Chất lượng & ISO"]
-    Mobile["📱 Mobile App (Capacitor 6)<br>• Tạo/Nhận Phiếu Giao & QR Code<br>• Kiểm QC & Chụp ảnh minh chứng<br>• Multi-stage Account & OTA Update"]
-    
-    CF["🌐 Cloudflare Tunnel (smartflowg7.cloud)<br>• SSL/HTTPS & DDoS Protection<br>• Zero-Trust Secure Access"]
-    
-    API["📡 RESTful API (FastAPI)<br>• JWT Auth & RBAC Phân quyền"]
-    WS["🔌 WebSocket Server<br>• Truyền dữ liệu thời gian thực"]
-    Cache["💾 SWR Cache Layer<br>• In-Memory Stage Cache"]
-    AI["🧠 AI Chatbot Engine<br>• Gemini API Integration"]
-    
-    DB["🛢️ SQL Server Database<br>• Connection Pool (100 + 400)<br>• 30+ Performance Indexes & NOLOCK"]
-
-    %% Apply Classes
-    class CF cloud;
-    class API,WS,Cache,AI server;
-    class DB db;
-    class Web,Mobile client;
-
-    %% Relations (strictly Top-to-Bottom)
-    Web -->|HTTPS/WSS| CF
-    Mobile -->|HTTPS/WSS| CF
-    
-    CF --> API
-    CF --> WS
-    
-    API --> DB
-    WS --> DB
-    Cache --> DB
-    AI --> DB
+```
+           ┌────────────────────────┐     ┌────────────────────────┐
+           │     Web Dashboard      │     │       Mobile App       │
+           │       (React 18)       │     │     (Capacitor 6)      │
+           └───────────┬────────────┘     └───────────┬────────────┘
+                       │                              │
+                       └──────────────┬───────────────┘
+                                      │ HTTPS/WSS
+                                      ▼
+                        ┌──────────────────────────┐
+                        │    Cloudflare Tunnel     │
+                        │ (smartflowg7.cloud SSL)  │
+                        └─────────────┬────────────┘
+                                      │
+         ┌────────────────────────────┼────────────────────────────┐
+         ▼                            ▼                            ▼
+┌──────────────────────────┐ ┌──────────────────────────┐ ┌──────────────────────────┐
+│       RESTful API        │ │     WebSocket Server     │ │    Gemini AI Chatbot     │
+│   (FastAPI + JWT Auth)   │ │  (Real-time Broadcast)   │ │  (NLP Production Query)  │
+└────────────┬─────────────┘ └────────────┬─────────────┘ └────────────┬─────────────┘
+             │                            │                            │
+             └────────────────────────────┼────────────────────────────┘
+                                          │
+                                          ▼
+                        ┌──────────────────────────┐
+                        │   SQL Server Database    │
+                        │  (SQLAlchemy + Indexes)  │
+                        └──────────────────────────┘
 ```
 
 ### Luồng dữ liệu chính (Production Data Flow)
