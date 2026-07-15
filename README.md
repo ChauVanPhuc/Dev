@@ -71,30 +71,28 @@
 ### Kiến trúc hệ thống (System Architecture)
 
 ```mermaid
-flowchart LR
+flowchart TD
     %% Styling Classes
     classDef cloud fill:#FAF6F0,stroke:#7B5233,stroke-width:2px,color:#7B5233;
     classDef server fill:#EFF6FF,stroke:#3B82F6,stroke-width:2px,color:#1E3A8A;
     classDef client fill:#ECFDF5,stroke:#10B981,stroke-width:2px,color:#064E3B;
     classDef db fill:#FEF2F2,stroke:#EF4444,stroke-width:2px,color:#991B1B;
 
-    %% Client Subgraph (Left)
+    %% Clients at the Top
     subgraph Clients ["📱 CLIENT APPLICATIONS"]
-        direction TB
         Web["💻 WEB DASHBOARD (React 18)<br>• Dashboard KPI & Báo cáo<br>• Quản lý Đơn hàng & KHSX<br>• Hồ sơ Chất lượng & ISO"]
         Mobile["📱 MOBILE APP (Capacitor 6)<br>• Tạo/Nhận Phiếu Giao & QR Code<br>• Kiểm QC & Chụp ảnh minh chứng<br>• Multi-stage Account & OTA Update"]
     end
     class Clients,Web,Mobile client;
 
-    %% Cloud/Gateway Subgraph (Center-Left)
+    %% Gateway in the Middle-Top
     subgraph Gateway ["☁️ GATEWAY & SECURITY"]
         CF["🌐 Cloudflare Tunnel (smartflowg7.cloud)<br>• SSL/HTTPS & DDoS Protection<br>• Zero-Trust Secure Access"]
     end
     class Gateway,CF cloud;
 
-    %% Backend Subgraph (Center-Right)
+    %% Backend in the Middle-Bottom
     subgraph Backend ["⚙️ BACKEND API SERVER (FastAPI)"]
-        direction TB
         API["📡 RESTful API (JWT Auth & RBAC)"]
         WS["🔌 WebSocket (Real-time Broadcast)"]
         Cache["💾 SWR Cache (In-Memory Stage Cache)"]
@@ -102,15 +100,15 @@ flowchart LR
     end
     class Backend,API,WS,Cache,AI server;
 
-    %% Database Subgraph (Right)
+    %% Database at the Bottom
     subgraph Database ["🗄️ DATABASE LAYER"]
         DB["🛢️ SQL Server 2019+ (SQLAlchemy)<br>• Connection Pool (100 + 400)<br>• 30+ Performance Indexes<br>• NOLOCK Hints & Query Tuning"]
     end
     class Database,DB db;
 
-    %% Horizontal Flow Relations
-    Web -- HTTPS/WSS --> CF
-    Mobile -- HTTPS/WSS --> CF
+    %% Relations (strictly Top-to-Bottom)
+    Web -->|HTTPS/WSS| CF
+    Mobile -->|HTTPS/WSS| CF
     
     CF --> API
     CF --> WS
