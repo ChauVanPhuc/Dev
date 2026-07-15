@@ -154,3 +154,9 @@ button {
   }
 }
 
+/* Disable all transitions and animations globally */
+*, *::before, *::after {
+  transition: none !important;
+  animation: none !important;
+}
+

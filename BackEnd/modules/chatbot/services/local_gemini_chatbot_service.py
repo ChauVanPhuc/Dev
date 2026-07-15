@@ -172,6 +172,95 @@ Table: client_defects (Danh mục mã lỗi QC)
 - g7_code: NVARCHAR(50) — Mã G7 tương ứng
 - is_active: BIT
 
+Table: defect_types (Danh mục lỗi chuẩn của nhà máy)
+- id: INT PK
+- code: NVARCHAR(50) — Mã lỗi chuẩn G7
+- name: NVARCHAR(250) — Tên lỗi tiếng Việt (ví dụ: Bề mặt xước, Lệch màu, Bọt khí...)
+- category: NVARCHAR(50) — Phân loại ('visual', 'paint', 'structure', 'material')
+- needs_tracking: BIT — Có cần theo dõi đặc biệt (1: Có, 0: Không)
+- is_active: BIT — Trạng thái hoạt động (1: Hoạt động, 0: Ngừng dùng)
+- qc_tracking: BIT — Có theo dõi QC
+- stage: NVARCHAR(500) — Các công đoạn áp dụng
+- description: NVARCHAR(1000) — Mô tả lỗi
+- aql_class: NVARCHAR(50) — Mức AQL ('Major', 'Minor', 'Critical')
+
+════════════ MODULE SYSTEM & AUTH (Tài khoản & Phân quyền) ════════════
+
+Table: accounts (Tài khoản người dùng)
+- id: INT PK
+- username: NVARCHAR(50) — Tên đăng nhập
+- email: NVARCHAR(100)
+- full_name: NVARCHAR(100) — Họ tên đầy đủ
+- employee_id: NVARCHAR(20) — Mã nhân viên
+- is_active: BIT — Trạng thái hoạt động (1: Hoạt động, 0: Khóa)
+- status: NVARCHAR(50) — Trạng thái, ví dụ 'Đang sử dụng'
+- permission_level: NVARCHAR(50) — Cấp quyền (ví dụ 'admin', 'user')
+
+Table: roles (Bộ phận)
+- id: INT PK
+- name: NVARCHAR(50) — Tên bộ phận (ví dụ 'IT', 'BGD', 'Sx', 'QLCL')
+- description: NVARCHAR(255) — Mô tả bộ phận
+
+Table: permissions (Chức vụ)
+- id: INT PK
+- name: NVARCHAR(100) — Tên chức vụ (ví dụ 'Admin', 'NV QC', 'QC Lead', 'NV SX'...)
+- description: NVARCHAR(255) — Mô tả chức vụ
+
+Table: departments (Bộ phận - Chức vụ nhân viên)
+- id: INT PK
+- account_id: INT FK → accounts.id — ID tài khoản nhân viên
+- role_id: INT FK → roles.id — ID bộ phận
+- permission_id: INT FK → permissions.id — ID chức vụ
+- stage_id: INT FK → stages.id — Công đoạn sản xuất trực thuộc (nếu có)
+
+════════════ MODULE MACHINERY & EQUIPMENT (Thiết bị & Máy móc) ════════════
+
+Table: equipments (Danh sách máy móc / thiết bị)
+- id: INT PK
+- name: NVARCHAR(255) — Tên thiết bị
+- code: NVARCHAR(100) — Mã thiết bị
+- type: NVARCHAR(100) — Phân loại
+- status: NVARCHAR(50) — Trạng thái ('Đang sử dụng', 'Bảo trì', v.v.)
+- purchase_date: DATE — Ngày mua
+- maintenance_cycle: INT — Chu kỳ bảo trì (ngày)
+
+Table: equipment_inspections (Lịch sử kiểm tra máy móc)
+- id: INT PK
+- equipment_id: INT FK → equipments.id
+- performed_by: NVARCHAR(255) — Người thực hiện kiểm tra
+- verified_by: NVARCHAR(255) — Người xác nhận kiểm tra
+- check_date: DATE — Ngày kiểm tra
+- calibration_date: DATE — Ngày hiệu chuẩn
+- status: NVARCHAR(50) — Trạng thái kết quả ('Đạt', 'Không đạt')
+- notes: NVARCHAR(500) — Ghi chú
+
+════════════ MODULE BUG REPORTING (Báo cáo lỗi ứng dụng) ════════════
+
+Table: screen_bugs (Danh sách lỗi ứng dụng)
+- id: INT PK
+- screen_id: INT FK → system_screens.id — Màn hình xảy ra lỗi
+- description: NVARCHAR(MAX) — Mô tả chi tiết lỗi phần mềm
+- severity: NVARCHAR(20) — Mức độ nghiêm trọng ('Low', 'Medium', 'High')
+- status: NVARCHAR(30) — Trạng thái ('Mới', 'Đang xử lý', 'Đã sửa', 'Đã đóng')
+- assignee: NVARCHAR(50) — Người được phân công sửa lỗi
+- reporter: NVARCHAR(100) — Người báo lỗi
+- created_at: DATETIME — Ngày báo lỗi
+
+Table: system_screens (Danh mục màn hình)
+- id: INT PK
+- platform: NVARCHAR(50) — Nền tảng ('Web', 'Mobile')
+- route_path: NVARCHAR(255) — Đường dẫn / Route
+- default_code: NVARCHAR(50) — Mã mặc định (ví dụ 'AD3', 'MB5')
+- title: NVARCHAR(255) — Tiêu đề màn hình
+- subtitle: NVARCHAR(255) — Mô tả phụ
+
+Table: system_components (Các nút/hợp phần màn hình)
+- id: INT PK
+- screen_id: INT FK → system_screens.id
+- name: NVARCHAR(255) — Tên nút / hợp phần
+- type: NVARCHAR(100) — Phân loại ('UI Component', 'Service', v.v.)
+- description: NVARCHAR(500) — Mô tả chức năng
+
 ════════════ MODULE KPI ════════════
 
 Table: kpis (Chỉ số KPI)
@@ -195,6 +284,12 @@ delivery_details.order_id   → orders.id
 input_inspections.plan_id   → product_plans.id
 daily_inspection_defects.record_id → daily_inspection_records.id
 daily_inspection_defects.defect_id → defect_types.id
+departments.account_id      → accounts.id
+departments.role_id         → roles.id
+departments.permission_id   → permissions.id
+screen_bugs.screen_id       → system_screens.id
+system_components.screen_id → system_screens.id
+equipment_inspections.equipment_id → equipments.id
 
 -- LIÊN KẾT NGẦM (JOIN bằng text):
 customer_claims.product_name  ≈ products.sku ≈ cabinet_prices.cabinet_name (hoặc cabinet_prices.cabinet_code)
@@ -202,16 +297,19 @@ customer_claims.container_no  ≈ container_shipments.container_number
 customer_claims.order_code    ≈ client_defects.code
 """
 
-SYSTEM_PROMPT_TEMPLATE = """Bạn là trợ lý AI SmartFlow chuyên về quản lý khiếu nại (claims) và dữ liệu hệ thống ERP của doanh nghiệp sản xuất đồ gỗ.
+SYSTEM_PROMPT_TEMPLATE = """Bạn là trợ lý AI SmartFlow chuyên về quản trị dữ liệu hệ thống ERP của doanh nghiệp sản xuất đồ gỗ.
 
 Nhiệm vụ của bạn:
 1. Trả lời câu hỏi về toàn bộ dữ liệu hệ thống SmartFlow, bao gồm:
    - Khiếu nại (customer_claims, cabinet_prices, container_shipments, client_defects)
    - Sản xuất (product_plans, orders, products, master_products)
    - Bàn giao nội bộ (deliveries, delivery_details)
-   - Kiểm tra chất lượng (daily_inspection_records, daily_inspection_defects, input_inspections)
+   - Kiểm tra chất lượng & lỗi QC mẫu (daily_inspection_records, daily_inspection_defects, input_inspections, defect_types)
+   - Tài khoản & phân quyền (accounts, roles, permissions, departments)
+   - Thiết bị & máy móc (equipments, equipment_inspections)
+   - Lỗi ứng dụng (screen_bugs, system_screens, system_components)
    - KPI (kpis)
-2. Sử dụng công cụ execute_read_only_query để truy vấn dữ liệu, kể cả JOIN nhiều bảng khi cần.
+2. Sử dụng công cụ execute_read_only_query để tự động tạo và thực thi câu lệnh SQL Server (T-SQL) SELECT chỉ đọc truy vấn dữ liệu từ cơ sở dữ liệu để đưa ra kết quả chính xác nhất cho người dùng. Bạn được toàn quyền JOIN nhiều bảng khi cần.
 3. Trả lời bằng tiếng Việt một cách tự nhiên, chuyên nghiệp, ngắn gọn.
 4. Khi người dùng yêu cầu xem danh sách claim cụ thể, BẮT BUỘC dùng SELECT * FROM customer_claims để hệ thống hiển thị dạng thẻ (card).
 5. Nhận biết trang hiện tại qua giá trị `current_page` trong phần Ngữ cảnh hiện tại (ví dụ: `/admin/claims`, `/admin/prices`, `/admin/shipments`, `/admin/dashboard`, `/manufacture`...). Hãy ưu tiên trả lời và đưa ra thông tin hoặc gợi ý phù hợp với phân hệ người dùng đang xem nếu câu hỏi của họ chung chung hoặc liên quan đến màn hình đó.
@@ -350,7 +448,7 @@ class LocalGeminiChatbotService:
         # Configure endpoints from environment variables or use defaults
         self.api_url = os.getenv("LOCAL_GEMINI_URL", "http://localhost:8081/v1/chat/completions")
         self.model_name = os.getenv("LOCAL_GEMINI_MODEL", "gemini-3.5-flash-thinking")
-        self.api_key = os.getenv("LOCAL_GEMINI_API_KEY", "")
+        self.api_key = os.getenv("LOCAL_GEMINI_API_KEY", "sk-gemini")
         self.max_retries = 2
         self.retry_delay = 1
         self.active_model = self.model_name
@@ -364,6 +462,11 @@ class LocalGeminiChatbotService:
         """
         Check if local Gemini proxy is active and scan for available models.
         """
+        # Dynamically refresh configurations from env to handle hot reloading / old singletons in memory
+        self.api_url = os.getenv("LOCAL_GEMINI_URL", "http://localhost:8081/v1/chat/completions")
+        self.model_name = os.getenv("LOCAL_GEMINI_MODEL", "gemini-3.5-flash-thinking")
+        self.api_key = os.getenv("LOCAL_GEMINI_API_KEY", "sk-gemini")
+
         base_url = self.get_base_url()
         headers = {}
         if self.api_key:

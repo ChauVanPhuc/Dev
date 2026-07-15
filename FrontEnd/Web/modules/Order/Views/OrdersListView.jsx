@@ -35,6 +35,9 @@ const Orders = () => {
     // State cho phân trang
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(15);
+    const [totalCount, setTotalCount] = useState(0);
+    const [statsData, setStatsData] = useState({ all: 0, production: 0, completed: 0, overdue: 0 });
+    const [uniqueCustomers, setUniqueCustomers] = useState([]);
     const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
     const [filterCustomer, setFilterCustomer] = useState('all');
     const [filterDeadline, setFilterDeadline] = useState('all');
@@ -47,8 +50,28 @@ const Orders = () => {
     const fetchOrders = async () => {
         try {
             setLoading(true);
-            const data = await orderService.getAll();
-            setOrders(Array.isArray(data) ? data : []);
+            const res = await orderService.getAll(
+                currentPage,
+                itemsPerPage,
+                searchTerm,
+                filterStatus,
+                filterCustomer,
+                filterDeadline,
+                'desc'
+            );
+            if (res && res.items) {
+                setOrders(res.items || []);
+                setTotalCount(res.total_count || 0);
+                if (res.stats) {
+                    setStatsData(res.stats);
+                }
+                if (res.unique_customers) {
+                    setUniqueCustomers(res.unique_customers);
+                }
+            } else {
+                setOrders(Array.isArray(res) ? res : []);
+                setTotalCount(Array.isArray(res) ? res.length : 0);
+            }
         } catch (error) {
             console.error("Lỗi khi tải đơn hàng:", error);
         } finally {
@@ -58,7 +81,7 @@ const Orders = () => {
 
     useEffect(() => {
         fetchOrders();
-    }, []);
+    }, [currentPage, itemsPerPage, searchTerm, filterStatus, filterCustomer, filterDeadline]);
 
     const getStatusDisplay = (order) => {
         const statusNum = order.order_status;
@@ -76,76 +99,18 @@ const Orders = () => {
     };
 
     const stats = useMemo(() => {
-        const total = orders.length;
-        const production = orders.filter(o => getStatusDisplay(o).text === 'Đang sản xuất').length;
-        const completed = orders.filter(o => getStatusDisplay(o).text === 'Hoàn thành').length;
-        const overdue = orders.filter(o => getStatusDisplay(o).text === 'Quá hạn').length;
-
         return [
-            { id: 'all', label: 'TỔNG ĐƠN HÀNG', value: total, bg: '#F5F5F5', color: '#424242', iconBg: '#FAF6F0', iconColor: '#7B5233', Icon: Layers, themeColor: '#7B5233', activeBg: '#FAF6F0' },
-            { id: 'production', label: 'ĐANG SẢN XUẤT', value: production, bg: '#eff6ff', color: '#3b82f6', iconBg: '#FFFBEB', iconColor: '#F59E0B', Icon: Clock, themeColor: '#F59E0B', activeBg: '#FFFBEB' },
-            { id: 'completed', label: 'ĐÃ HOÀN THÀNH', value: completed, bg: '#ecfdf5', color: '#10b981', iconBg: '#ECFDF4', iconColor: '#10B981', Icon: CheckCircle, themeColor: '#10B981', activeBg: '#ECFDF4' },
-            { id: 'overdue', label: 'QUÁ HẠN', value: overdue, bg: '#fef2f2', color: '#ef4444', iconBg: '#FEF2F2', iconColor: '#EF4444', Icon: AlertCircle, themeColor: '#EF4444', activeBg: '#FEF2F2' },
+            { id: 'all', label: 'TỔNG ĐƠN HÀNG', value: statsData.all, bg: '#F5F5F5', color: '#424242', iconBg: '#FAF6F0', iconColor: '#7B5233', Icon: Layers, themeColor: '#7B5233', activeBg: '#FAF6F0' },
+            { id: 'production', label: 'ĐANG SẢN XUẤT', value: statsData.production, bg: '#eff6ff', color: '#3b82f6', iconBg: '#FFFBEB', iconColor: '#F59E0B', Icon: Clock, themeColor: '#F59E0B', activeBg: '#FFFBEB' },
+            { id: 'completed', label: 'ĐÃ HOÀN THÀNH', value: statsData.completed, bg: '#ecfdf5', color: '#10b981', iconBg: '#ECFDF4', iconColor: '#10B981', Icon: CheckCircle, themeColor: '#10B981', activeBg: '#ECFDF4' },
+            { id: 'overdue', label: 'QUÁ HẠN', value: statsData.overdue, bg: '#fef2f2', color: '#ef4444', iconBg: '#FEF2F2', iconColor: '#EF4444', Icon: AlertCircle, themeColor: '#EF4444', activeBg: '#FEF2F2' },
         ];
-    }, [orders]);
+    }, [statsData]);
 
-    // Trích xuất danh sách khách hàng duy nhất
-    const uniqueCustomers = useMemo(() => {
-        const list = orders.map(o => o.customer).filter(Boolean);
-        return [...new Set(list)];
-    }, [orders]);
-
-    // Filter dữ liệu dựa trên Search và Status, Khách hàng, Hạn giao
-    const filteredOrders = useMemo(() => {
-        const term = (searchTerm || '').toLowerCase();
-        let result = orders.filter(o => 
-            (o.customer || '').toLowerCase().includes(term) || 
-            (o.order_code || '').toLowerCase().includes(term) ||
-            ((o.products || o.items || []).some(p => (p.name || '').toLowerCase().includes(term)))
-        );
-
-        if (filterStatus !== 'all') {
-            result = result.filter(o => {
-                const s = getStatusDisplay(o);
-                if (filterStatus === 'production') return s.text === 'Đang sản xuất';
-                if (filterStatus === 'completed') return s.text === 'Hoàn thành';
-                if (filterStatus === 'overdue') return s.text === 'Quá hạn';
-                return true;
-            });
-        }
-
-        if (filterCustomer !== 'all') {
-            result = result.filter(o => o.customer === filterCustomer);
-        }
-
-        if (filterDeadline !== 'all') {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-
-            result = result.filter(o => {
-                if (!o.delivery_date) return false;
-                const dDate = new Date(o.delivery_date);
-                dDate.setHours(0, 0, 0, 0);
-
-                if (filterDeadline === 'overdue') {
-                    return dDate < today && getStatusDisplay(o).text !== 'Hoàn thành';
-                }
-                if (filterDeadline === 'this_week') {
-                    const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-                    return dDate >= today && dDate <= nextWeek;
-                }
-                return true;
-            });
-        }
-
-        return result;
-    }, [orders, searchTerm, filterStatus, filterCustomer, filterDeadline]);
-
-    // Tính toán dữ liệu cho trang hiện tại
     const indexOfLastItem = currentPage * itemsPerPage;
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-    const currentOrders = filteredOrders.slice(indexOfFirstItem, indexOfLastItem);
-    const totalPages = Math.ceil(filteredOrders.length / itemsPerPage) || 1;
+    const currentOrders = orders;
+    const totalPages = Math.ceil(totalCount / itemsPerPage) || 1;
 
     return (
         <div className="manufacture-plan-container">
@@ -367,7 +332,7 @@ const Orders = () => {
                 {/* Footer với Phân trang */}
                 <div className="admin-pagination-desktop">
                     <div style={{ color: '#1e293b', fontWeight: '600', fontSize: '0.9rem' }}>
-                        Hiển thị <b>{indexOfFirstItem + 1}–{Math.min(indexOfLastItem, filteredOrders.length)}</b> trên <b>{filteredOrders.length}</b> Đơn hàng
+                        Hiển thị <b>{indexOfFirstItem + 1}–{Math.min(indexOfLastItem, totalCount)}</b> trên <b>{totalCount}</b> Đơn hàng
                     </div>
                     
                     {/* Nút bấm Phân trang */}

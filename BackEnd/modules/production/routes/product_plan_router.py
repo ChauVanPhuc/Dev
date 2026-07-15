@@ -10,6 +10,7 @@ from modules.production.models.bom_detail import BOMDetail
 from modules.production.schemas.product_plan import ProductPlanCreate, ProductPlan as PlanResponse, MobileDailyPlanCreate, MobileDailyPlanResponse
 from modules.production.models.mobile_daily_plan import MobileDailyPlan
 from typing import List, Optional
+from datetime import datetime
 from sqlalchemy import text
 import re
 import traceback
@@ -165,12 +166,18 @@ def get_daily_plans(
 
 @router.get("/")
 @_plans_swr_cache
-def get_plans(user_stage: Optional[str] = None, db: Session = Depends(get_db)):
+def get_plans(
+    page: Optional[int] = None,
+    pageSize: Optional[int] = 20,
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+    user_stage: Optional[str] = None,
+    sortDirection: Optional[str] = 'desc',
+    db: Session = Depends(get_db)
+):
     from sqlalchemy.orm import selectinload
-    plans = db.query(ProductPlan).options(
-        selectinload(ProductPlan.orders).selectinload(Order.products)
-    ).order_by(ProductPlan.id.desc()).all()
-    
+    import datetime
+
     # Lọc theo nhà máy (factory) từ user_stage
     factory = None
     if user_stage:
@@ -184,23 +191,110 @@ def get_plans(user_stage: Optional[str] = None, db: Session = Depends(get_db)):
     if factory:
         factory_sql = """
             SELECT DISTINCT p.order_id 
-            FROM products p
-            JOIN bom_details b ON b.product_id = p.id
+            FROM products p WITH (NOLOCK)
+            JOIN bom_details b WITH (NOLOCK) ON b.product_id = p.id
             WHERE b.input_stage LIKE :factory_like OR b.output_stage LIKE :factory_like
         """
         rows = db.execute(text(factory_sql), {"factory_like": f"%{factory}%"}).fetchall()
         allowed_order_ids = {r[0] for r in rows if r[0] is not None}
-            
+
+    # Base query
+    query = db.query(ProductPlan).with_hint(ProductPlan, 'WITH (NOLOCK)')
+    
+    # Filter by user_stage (factory) if applicable
+    if factory:
+        from modules.production.models.order import Order
+        query = query.join(Order).filter(Order.id.in_(allowed_order_ids))
+
+    # Nếu có tham số search (áp dụng khi phân trang)
+    if search:
+        search_like = f"%{search}%"
+        query = query.filter((ProductPlan.name.like(search_like)) | (ProductPlan.code.like(search_like)))
+
+    # Nếu KHÔNG phân trang (tương thích ngược cho Mobile)
+    if page is None:
+        plans = query.options(
+            selectinload(ProductPlan.orders).selectinload(Order.products)
+        ).order_by(ProductPlan.id.desc()).all()
+
+        result = []
+        for plan in plans:
+            order_list = []
+            sorted_orders = sorted(plan.orders, key=lambda x: (getattr(x, 'is_priority', 0) or 0, x.id), reverse=True)
+            for order in sorted_orders:
+                if factory and order.id not in allowed_order_ids:
+                    continue
+                products = []
+                for product in order.products:
+                    products.append({
+                        "id": product.id,
+                        "sku": product.sku,
+                        "name": product.name,
+                        "quantity": int(product.total_qty or product.quantity or 0)
+                    })
+                order_list.append({
+                    "id": order.id,
+                    "name": order.order_code,
+                    "customer": order.customer,
+                    "is_priority": getattr(order, 'is_priority', 0),
+                    "products": products
+                })
+            result.append({
+                "id": plan.id,
+                "name": plan.name,
+                "status": "Hoàn thành" if plan.status == 2 else ("Đang sản xuất" if plan.status == 1 else "Chờ sản xuất"),
+                "estimated_date": plan.estimated_date,
+                "finished_date": plan.finished_date,
+                "month": plan.month,
+                "year": plan.year,
+                "orders": order_list
+            })
+        return result
+
+    # Nếu CÓ phân trang (dùng cho Web Dashboard mới)
+    # 1. Tính toán thống kê (stats) trên toàn bộ danh mục khớp tìm kiếm và bộ lọc nhà máy (chưa phân trang)
+    all_matching = query.all()
+    now = datetime.datetime.now()
+    stats = {"all": 0, "production": 0, "completed": 0, "overdue": 0}
+    for p in all_matching:
+        stats["all"] += 1
+        # Trạng thái chi tiết:
+        if p.status != 2 and p.finished_date and p.finished_date < now:
+            stats["overdue"] += 1
+        elif p.status == 2:
+            stats["completed"] += 1
+        elif p.status == 1:
+            stats["production"] += 1
+
+    # 2. Áp dụng bộ lọc trạng thái (status)
+    if status and status != 'all':
+        if status == 'overdue':
+            query = query.filter(ProductPlan.status != 2, ProductPlan.finished_date != None, ProductPlan.finished_date < now)
+        elif status == 'completed':
+            query = query.filter(ProductPlan.status == 2)
+        elif status == 'production':
+            query = query.filter(ProductPlan.status == 1)
+
+    # 3. Sắp xếp
+    if sortDirection == 'asc':
+        query = query.order_by(ProductPlan.year.asc(), ProductPlan.month.asc(), ProductPlan.id.asc())
+    else:
+        query = query.order_by(ProductPlan.year.desc(), ProductPlan.month.desc(), ProductPlan.id.desc())
+
+    # 4. Phân trang
+    total_count = query.count()
+    from modules.production.models.order import Order
+    paginated_plans = query.options(
+        selectinload(ProductPlan.orders).selectinload(Order.products)
+    ).offset((page - 1) * pageSize).limit(pageSize).all()
+
     result = []
-    for plan in plans:
+    for plan in paginated_plans:
         order_list = []
-        # Sắp xếp đơn hàng: Ưu tiên lên đầu, sau đó đến ID mới nhất
         sorted_orders = sorted(plan.orders, key=lambda x: (getattr(x, 'is_priority', 0) or 0, x.id), reverse=True)
         for order in sorted_orders:
-            # Lọc theo nhà máy nếu có
             if factory and order.id not in allowed_order_ids:
                 continue
-
             products = []
             for product in order.products:
                 products.append({
@@ -219,14 +313,19 @@ def get_plans(user_stage: Optional[str] = None, db: Session = Depends(get_db)):
         result.append({
             "id": plan.id,
             "name": plan.name,
-            "status": "Đang sản xuất" if plan.status == 1 else "Chờ sản xuất",
+            "status": "Hoàn thành" if plan.status == 2 else ("Đang sản xuất" if plan.status == 1 else "Chờ sản xuất"),
             "estimated_date": plan.estimated_date,
             "finished_date": plan.finished_date,
             "month": plan.month,
             "year": plan.year,
             "orders": order_list
         })
-    return result
+
+    return {
+        "items": result,
+        "total_count": total_count,
+        "stats": stats
+    }
 
 @router.post("/swap-order-priority")
 async def swap_order_priority(order_id_1: int, order_id_2: int, db: Session = Depends(get_db)):
@@ -451,15 +550,29 @@ async def get_product_progress(product_id: int, db: Session = Depends(get_db)):
         
         delivered_store = {}  # (prod_id, bom_id) -> quantity
         
-        for p_info in all_prods:
-            p_bom_sql = text("SELECT id, name, quantity, parent_id FROM bom_details WHERE product_id = :pid AND name NOT LIKE 'Ván ghép%'")
-            p_bom = db.execute(p_bom_sql, {"pid": p_info.id}).fetchall()
-            if not p_bom:
-                delivered_store[(p_info.id, 0)] = consume(p_info.name, float(p_info.qty or 0))
-            else:
-                for b in p_bom:
-                    needed = float(b.quantity or 0) * float(p_info.qty or 1)
-                    delivered_store[(p_info.id, b.id)] = consume(b.name, needed)
+        if all_prods:
+            all_prod_ids = [p.id for p in all_prods]
+            # Tải hàng loạt BOM chi tiết của tất cả các sản phẩm để tránh N+1 queries
+            pids_placeholder = ", ".join(f":pid{i}" for i in range(len(all_prod_ids)))
+            bind_params = {f"pid{i}": pid for i, pid in enumerate(all_prod_ids)}
+            p_bom_sql = text(f"SELECT id, name, quantity, parent_id, product_id FROM bom_details WHERE product_id IN ({pids_placeholder}) AND name NOT LIKE 'Ván ghép%'")
+            all_boms = db.execute(p_bom_sql, bind_params).fetchall()
+            
+            # Phân loại BOM theo product_id
+            bom_by_prod = {}
+            for b in all_boms:
+                if b.product_id not in bom_by_prod:
+                    bom_by_prod[b.product_id] = []
+                bom_by_prod[b.product_id].append(b)
+                
+            for p_info in all_prods:
+                p_bom = bom_by_prod.get(p_info.id, [])
+                if not p_bom:
+                    delivered_store[(p_info.id, 0)] = consume(p_info.name, float(p_info.qty or 0))
+                else:
+                    for b in p_bom:
+                        needed = float(b.quantity or 0) * float(p_info.qty or 1)
+                        delivered_store[(p_info.id, b.id)] = consume(b.name, needed)
 
         # 4. Dựng cây BOM cho sản phẩm hiện tại dựa trên delivered_store đã tính
         sql_bom = text("""
@@ -563,6 +676,11 @@ def get_plan_detail(
     user_stage: Optional[str] = None,
     simple: Optional[bool] = None,
     order_ids: Optional[str] = None,
+    page: Optional[int] = None,
+    pageSize: Optional[int] = 15,
+    statusFilter: Optional[str] = None,
+    filterProduct: Optional[str] = None,
+    sortBy: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     # Tự động kích hoạt simple=True nếu limit == 0 và stage is None (luồng xem nhanh từ di động)
@@ -637,11 +755,13 @@ def get_plan_detail(
             # Tối ưu hóa: Chỉ lọc theo danh sách ID đơn hàng thuộc kế hoạch này thay vị quét toàn bộ bảng
             order_ids_list = [o.id for o in orders]
             if order_ids_list:
-                # 1. Trực tiếp từ deliveries.order_id
-                has_data_ids = {r[0] for r in db.query(Delivery.order_id).filter(Delivery.order_id.in_(order_ids_list)).distinct().all()}
-                # 2. Từ delivery_details.order_id
-                has_data_details = {r[0] for r in db.query(DeliveryDetails.order_id).filter(DeliveryDetails.order_id.in_(order_ids_list)).distinct().all()}
-                has_data_ids.update(has_data_details)
+                # [PERF] Sử dụng UNION SQL để lấy các order_id có dữ liệu từ cả deliveries và delivery_details trong 1 câu SQL
+                union_sql = text("""
+                    SELECT DISTINCT order_id FROM deliveries WITH (NOLOCK) WHERE order_id IN :ids AND order_id IS NOT NULL
+                    UNION
+                    SELECT DISTINCT order_id FROM delivery_details WITH (NOLOCK) WHERE order_id IN :ids AND order_id IS NOT NULL
+                """)
+                has_data_ids = {r[0] for r in db.execute(union_sql, {"ids": tuple(order_ids_list)}).fetchall() if r[0] is not None}
             else:
                 has_data_ids = set()
 
@@ -685,6 +805,68 @@ def get_plan_detail(
                     "products": products_list
                 })
             
+            # Nếu KHÔNG phân trang (tương thích ngược)
+            if page is None:
+                return {
+                    "id": plan_info.id,
+                    "name": plan_info.name,
+                    "plan_code": plan_info.code,
+                    "status": "Đang sản xuất" if plan_info.status == 1 else "Chờ sản xuất",
+                    "estimated_date": plan_info.estimated_date,
+                    "finished_date": plan_info.finished_date,
+                    "month": getattr(plan_info, 'month', None),
+                    "year": getattr(plan_info, 'year', None),
+                    "total_main_quantity": total_plan_qty,
+                    "total_orders": len(result_orders),
+                    "prefixes": all_prefixes,
+                    "orders": result_orders
+                }
+
+            # Nếu CÓ phân trang (Server-side cho Hồ sơ chất lượng)
+            # Lọc theo Tìm kiếm (q)
+            if q:
+                q_lower = q.lower()
+                result_orders = [o for o in result_orders if q_lower in (o["name"] or "").lower()]
+
+            # Lọc theo Sản phẩm (filterProduct)
+            if filterProduct and filterProduct != 'all':
+                result_orders = [o for o in result_orders if any((p["name"] == filterProduct) for p in o["products"])]
+
+            # Lọc theo Trạng thái dữ liệu (statusFilter)
+            if statusFilter and statusFilter != 'all':
+                if statusFilter == 'has_data':
+                    result_orders = [o for o in result_orders if o["has_data"]]
+                elif statusFilter == 'no_data':
+                    result_orders = [o for o in result_orders if not o["has_data"]]
+
+            # Sắp xếp
+            if sortBy == 'po_asc':
+                result_orders.sort(key=lambda x: (x["name"] or ""))
+            elif sortBy == 'po_desc':
+                result_orders.sort(key=lambda x: (x["name"] or ""), reverse=True)
+            elif sortBy == 'qty_asc':
+                result_orders.sort(key=lambda x: sum(p["quantity"] for p in x["products"]))
+            elif sortBy == 'qty_desc':
+                result_orders.sort(key=lambda x: sum(p["quantity"] for p in x["products"]), reverse=True)
+
+            # Phân trang
+            total_count = len(result_orders)
+            start_idx = (page - 1) * pageSize
+            end_idx = start_idx + pageSize
+            paginated_orders = result_orders[start_idx:end_idx]
+
+            # Thống kê stats của tập kết quả khớp lọc trước khi cắt trang
+            stats = {"all": 0, "has_data": 0, "no_data": 0}
+            for o in result_orders:
+                stats["all"] += 1
+                if o["has_data"]:
+                    stats["has_data"] += 1
+                else:
+                    stats["no_data"] += 1
+
+            # Thu thập danh sách sản phẩm duy nhất thuộc các orders hợp lệ (để hiển thị select filter)
+            unique_products = list(set([p["name"] for o in result_orders for p in o["products"] if p["name"]]))
+
             return {
                 "id": plan_info.id,
                 "name": plan_info.name,
@@ -695,9 +877,12 @@ def get_plan_detail(
                 "month": getattr(plan_info, 'month', None),
                 "year": getattr(plan_info, 'year', None),
                 "total_main_quantity": total_plan_qty,
-                "total_orders": len(result_orders),
+                "total_orders": total_count,
                 "prefixes": all_prefixes,
-                "orders": result_orders
+                "items": paginated_orders,
+                "total_count": total_count,
+                "stats": stats,
+                "unique_products": unique_products
             }
         except Exception as e:
             traceback.print_exc()
@@ -733,9 +918,9 @@ def get_plan_detail(
                             END as name_clean,
                             b.input_stage, b.output_stage, b.specification,
                             SUM(COALESCE(b.quantity, 0) * COALESCE(p.total_qty, p.quantity, 0)) as total_plan_qty
-                        FROM bom_details b
-                        JOIN products p ON b.product_id = p.id
-                        JOIN orders o ON p.order_id = o.id
+                        FROM bom_details b WITH (NOLOCK)
+                        JOIN products p WITH (NOLOCK) ON b.product_id = p.id
+                        JOIN orders o WITH (NOLOCK) ON p.order_id = o.id
                         WHERE o.plan_id = :pid {order_ids_filter_plan}
                         GROUP BY 
                             CASE 
@@ -753,7 +938,7 @@ def get_plan_detail(
                                 CAST(COALESCE(d.quantity_returned, 0) AS INT)
                             ) as total_delivered_qty,
                             SUM(COALESCE(d.residual, 0)) as total_residual_qty
-                        FROM deliveries d
+                        FROM deliveries d WITH (NOLOCK)
                         WHERE d.plan_id = :pid AND d.status IN (N'Đã nhận', N'Hoàn thành', N'Đã Nhận', N'Hoàn Thành', N'Hoàn thảnh', N'Đã nhận hàng', N'Trả Hàng', N'Trả hàng', N'Đã trả hàng', N'Trả một phần')
                           {order_ids_filter_deliv}
                         GROUP BY d.part_name, d.specification
@@ -779,9 +964,9 @@ def get_plan_detail(
                         END as name_clean,
                         COALESCE(b.specification, '') as specification,
                         o.order_code as order_name
-                    FROM bom_details b
-                    JOIN products p ON b.product_id = p.id
-                    JOIN orders o ON p.order_id = o.id
+                    FROM bom_details b WITH (NOLOCK)
+                    JOIN products p WITH (NOLOCK) ON b.product_id = p.id
+                    JOIN orders o WITH (NOLOCK) ON p.order_id = o.id
                     WHERE o.plan_id = :pid {order_ids_filter_plan}
                 """)
                 spec_order_rows = db.execute(spec_order_sql, {"pid": plan_info.id}).fetchall()

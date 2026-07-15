@@ -77,12 +77,16 @@ def get_daily_inspections(
     """
     records = db.query(DailyInspectionRecord).order_by(DailyInspectionRecord.inspection_date.desc()).offset(skip).limit(limit).all()
     
-    # Gắn thêm tên người kiểm tra
+    # [PERF] Batch load tên người kiểm tra — 1 query thay vì N queries
+    inspector_ids = list({r.inspector_id for r in records if r.inspector_id})
+    if inspector_ids:
+        accounts = db.query(Account.id, Account.full_name).filter(Account.id.in_(inspector_ids)).all()
+        name_map = {a.id: a.full_name for a in accounts}
+    else:
+        name_map = {}
     for r in records:
         if r.inspector_id:
-            user = db.query(Account).filter(Account.id == r.inspector_id).first()
-            if user:
-                r.inspector_name = user.full_name
+            r.inspector_name = name_map.get(r.inspector_id)
     return records
 
 @router.get("/inbound", response_model=List[InputInspectionRead])
@@ -96,14 +100,16 @@ def get_all_inbound_inspections(
     """
     records = db.query(InputInspection).order_by(InputInspection.inspected_at.desc()).offset(skip).limit(limit).all()
     
-    # Gắn thêm tên người kiểm tra
+    # [PERF] Batch load tên người kiểm tra — 1 query thay vì N queries
+    inspector_ids = list({r.inspector_id for r in records if r.inspector_id})
+    if inspector_ids:
+        accounts = db.query(Account.id, Account.full_name).filter(Account.id.in_(inspector_ids)).all()
+        name_map = {a.id: a.full_name for a in accounts}
+    else:
+        name_map = {}
     for r in records:
         if r.inspector_id:
-            user = db.query(Account).filter(Account.id == r.inspector_id).first()
-            if user:
-                r.inspector_name = user.full_name
-            else:
-                r.inspector_name = "N/A"
+            r.inspector_name = name_map.get(r.inspector_id, "N/A")
         else:
             r.inspector_name = "N/A"
     return records
@@ -663,7 +669,7 @@ def get_inspections_by_plan(plan_id: int, stage: Optional[str] = None, db: Sessi
     """
     [GET] Lấy tất cả kết quả KT đầu vào theo KHSX. Có thể lọc theo công đoạn.
     """
-    query = db.query(InputInspection).filter(InputInspection.plan_id == plan_id)
+    query = db.query(InputInspection).with_hint(InputInspection, 'WITH (NOLOCK)').filter(InputInspection.plan_id == plan_id)
     if stage:
         query = query.filter(InputInspection.stage == stage)
     return query.order_by(InputInspection.inspected_at.desc()).all()

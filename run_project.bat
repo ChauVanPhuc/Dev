@@ -95,6 +95,10 @@ if not exist node_modules (
 :: Open specialized window for Mobile
 start "Mobile - ERP G7" cmd /k "cd /d %~dp0FrontEnd\Mobile && npm run dev -- --port 3000 --host 0.0.0.0"
 
+:: --- 4. GEMINI WEB2API AI SERVER ---
+echo [4/4] Starting Gemini Web2API AI Server...
+start "Gemini Web2API - AI Server" cmd /k "cd /d %~dp0AI\gemini-web2api && call run.bat"
+
 echo.
 echo ======================================================
 echo  SUCCESS: All systems have been signaled to start.
@@ -170,6 +174,9 @@ start "Mobile Frontend (Cloud) - ERP G7" cmd /k "cd /d %~dp0FrontEnd\Mobile && n
 
 echo  [3/3] Starting Dashboard (Vite)...
 start "Dashboard (Cloud) - ERP G7" cmd /k "cd /d %~dp0FrontEnd && npm run dev -- --host 0.0.0.0 --no-open"
+
+echo  [4/4] Starting Gemini Web2API AI Server...
+start "Gemini Web2API - AI Server" cmd /k "cd /d %~dp0AI\gemini-web2api && call run.bat"
 
 echo.
 echo ======================================================
@@ -249,6 +256,10 @@ echo.
 cd /d %~dp0BackEnd
 :: Start Backend without reload, serving static dist folders
 start "ERP G7 PRODUCTION SERVER" cmd /k "uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+:: Start Gemini Web2API AI Server
+echo Starting Gemini Web2API AI Server...
+start "Gemini Web2API - AI Server" cmd /k "cd /d %~dp0AI\gemini-web2api && call run.bat"
 
 echo.
 echo ======================================================

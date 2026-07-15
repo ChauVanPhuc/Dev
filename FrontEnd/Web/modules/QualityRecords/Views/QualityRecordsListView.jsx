@@ -29,6 +29,9 @@ const QualityRecordsListView = () => {
     // State cho phân trang
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(15);   
+    const [totalCount, setTotalCount] = useState(0);
+    const [statsData, setStatsData] = useState({ all: 0, has_data: 0, no_data: 0 });
+    const [uniqueProductNames, setUniqueProductNames] = useState([]);
     const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
     const [filterProduct, setFilterProduct] = useState('all');
 
@@ -73,7 +76,6 @@ const QualityRecordsListView = () => {
                 setPlans(plansData);
                 
                 if (plansData.length > 0) {
-                    // Mặc định chọn KHSX mới nhất
                     const latestPlan = plansData[0];
                     setSelectedPlanId(latestPlan.id.toString());
                 }
@@ -86,82 +88,54 @@ const QualityRecordsListView = () => {
         fetchPlans();
     }, []);
 
-    // Lấy chi tiết PO của KHSX đã chọn
-    useEffect(() => {
-        const fetchPlanDetails = async () => {
-            if (!selectedPlanId) return;
-            
-            setLoading(true);
-            try {
-                const data = await qualityService.getPlanDetails(selectedPlanId); 
-                setOrders(data.orders || []);
-                const currentPlan = plans.find(p => p.id === parseInt(selectedPlanId));
-                setSelectedPlan(currentPlan);
-            } catch (error) {
-                console.error("Lỗi khi tải chi tiết đơn hàng:", error);
-                setOrders([]);
-            } finally {
-                setLoading(false);
+    // Lấy chi tiết PO của KHSX đã chọn (Phân trang Server-side)
+    const fetchPlanDetails = async () => {
+        if (!selectedPlanId) return;
+        
+        setLoading(true);
+        try {
+            const res = await qualityService.getPlanDetails(
+                selectedPlanId, 
+                currentPage, 
+                itemsPerPage, 
+                searchTerm, 
+                statusFilter, 
+                filterProduct, 
+                sortBy
+            ); 
+            if (res && res.items) {
+                setOrders(res.items || []);
+                setTotalCount(res.total_count || 0);
+                if (res.stats) {
+                    setStatsData(res.stats);
+                }
+                if (res.unique_products) {
+                    setUniqueProductNames(res.unique_products);
+                }
+            } else {
+                setOrders(res.orders || []);
+                setTotalCount(res.orders ? res.orders.length : 0);
             }
-        };
-        fetchPlanDetails();
-    }, [selectedPlanId, plans]);
-
-    // Trích xuất danh sách sản phẩm duy nhất
-    const uniqueProductNames = useMemo(() => {
-        const list = [];
-        orders.forEach(o => {
-            const items = o.products || o.items || [];
-            items.forEach(item => {
-                const name = item.name || item.product_name || item.product_code;
-                if (name) list.push(name);
-            });
-        });
-        return [...new Set(list)];
-    }, [orders]);
-
-    // Filter dữ liệu dựa trên Search và Trạng thái dữ liệu, Sản phẩm
-    const filteredOrders = useMemo(() => {
-        const term = (searchTerm || '').toLowerCase();
-        return orders.filter(o => {
-            const code = (o.name || o.order_code || '').toLowerCase();
-            const matchesSearch = code.includes(term);
-            
-            // Giả sử o.has_data hoặc o.order_status > 0 là có dữ liệu
-            const hasData = o.has_data || o.order_status > 0;
-            
-            if (statusFilter === 'has_data' && !hasData) return false;
-            if (statusFilter === 'no_data' && hasData) return false;
-            
-            if (filterProduct !== 'all') {
-                const hasProd = (o.products || o.items || []).some(p => (p.name || p.product_name || p.product_code) === filterProduct);
-                if (!hasProd) return false;
-            }
-
-            return matchesSearch;
-        });
-    }, [orders, searchTerm, statusFilter, filterProduct]);
-
-    // Sắp xếp dữ liệu
-    const sortedOrders = useMemo(() => {
-        let result = [...filteredOrders];
-        if (sortBy === 'po_asc') {
-            result.sort((a, b) => (a.name || a.order_code || '').localeCompare(b.name || b.order_code || ''));
-        } else if (sortBy === 'po_desc') {
-            result.sort((a, b) => (b.name || b.order_code || '').localeCompare(a.name || a.order_code || ''));
-        } else if (sortBy === 'qty_asc') {
-            result.sort((a, b) => (a.product_count || 0) - (b.product_count || 0));
-        } else if (sortBy === 'qty_desc') {
-            result.sort((a, b) => (b.product_count || 0) - (a.product_count || 0));
+            const currentPlan = plans.find(p => p.id === parseInt(selectedPlanId));
+            setSelectedPlan(currentPlan);
+        } catch (error) {
+            console.error("Lỗi khi tải chi tiết đơn hàng:", error);
+            setOrders([]);
+            setTotalCount(0);
+        } finally {
+            setLoading(false);
         }
-        return result;
-    }, [filteredOrders, sortBy]);
+    };
+
+    useEffect(() => {
+        fetchPlanDetails();
+    }, [selectedPlanId, currentPage, itemsPerPage, searchTerm, statusFilter, filterProduct, sortBy, plans]);
 
     // Tính toán phân trang
     const indexOfLastItem = currentPage * itemsPerPage;
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-    const currentOrders = sortedOrders.slice(indexOfFirstItem, indexOfLastItem);
-    const totalPages = Math.ceil(sortedOrders.length / itemsPerPage);
+    const currentOrders = orders;
+    const totalPages = Math.ceil(totalCount / itemsPerPage) || 1;
 
     const handlePlanChange = (e) => {
         setSelectedPlanId(e.target.value);
@@ -580,7 +554,7 @@ const QualityRecordsListView = () => {
                             {/* Phân trang - Desktop */}
                             <div className="admin-pagination-desktop desktop-only">
                                     <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600', textAlign: 'center' }}>
-                                        Hiển thị <b>{currentOrders.length}</b> trên <b>{filteredOrders.length}</b> hồ sơ
+                                        Hiển thị <b>{currentOrders.length}</b> trên <b>{totalCount}</b> hồ sơ
                                     </div>
                                     
                                     {totalPages > 1 && (

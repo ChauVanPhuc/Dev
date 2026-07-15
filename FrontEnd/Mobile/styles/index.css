@@ -245,3 +245,9 @@ button:active {
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */
 }
+
+/* Disable all transitions and animations globally */
+*, *::before, *::after {
+  transition: none !important;
+  animation: none !important;
+}

@@ -84,6 +84,8 @@ def allocate_delivery_fifo(db: Session, delivery_id: int, plan_id: int, part_nam
     needed_query = db.query(
         ProductModel.order_id,
         func.sum(BomDetailModel.quantity * func.coalesce(ProductModel.total_qty, ProductModel.quantity, 0)).label("total_needed")
+    ).with_hint(ProductModel, 'WITH (NOLOCK)'
+    ).with_hint(BomDetailModel, 'WITH (NOLOCK)'
     ).join(BomDetailModel, BomDetailModel.product_id == ProductModel.id).filter(
         ProductModel.order_id.in_(order_ids),
         or_(
@@ -101,6 +103,8 @@ def allocate_delivery_fifo(db: Session, delivery_id: int, plan_id: int, part_nam
     already_query = db.query(
         DeliveryDetailsModel.order_id,
         func.sum(DeliveryDetailsModel.quantity).label("total_already")
+    ).with_hint(DeliveryDetailsModel, 'WITH (NOLOCK)'
+    ).with_hint(DeliveryModel, 'WITH (NOLOCK)'
     ).join(DeliveryModel, DeliveryDetailsModel.delivery_id == DeliveryModel.id).filter(
         DeliveryModel.plan_id == plan_id,
         DeliveryDetailsModel.order_id.in_(order_ids),
@@ -342,8 +346,18 @@ async def create_delivery(
         from sqlalchemy import or_
         
         # Lấy tất cả thông tin cần thiết trong ít truy vấn nhất
-        user_info = db.query(AccountModel).filter(AccountModel.id == user_id).first()
-        user_name = user_info.full_name if user_info else "Một nhân viên"
+        from modules.auth.models.departments import Department as DeptModel
+        user_data = db.query(
+            AccountModel.full_name,
+            StageModel.description
+        ).outerjoin(
+            DeptModel, DeptModel.account_id == AccountModel.id
+        ).outerjoin(
+            StageModel, StageModel.id == DeptModel.stage_id
+        ).filter(AccountModel.id == user_id).first()
+        
+        user_name = user_data.full_name if user_data and user_data.full_name else "Một nhân viên"
+        sender_stage_desc = f" ({user_data.description})" if user_data and user_data.description else ""
         
         stages = db.query(StageModel).filter(or_(
             StageModel.name == delivery_stage, 
@@ -418,13 +432,6 @@ async def create_delivery(
             db.add(new_image)
 
         # 6. Tạo thông báo (Database)
-        from modules.auth.models.departments import Department as DeptModel
-        sender_dept = db.query(DeptModel).filter(DeptModel.account_id == user_id).first()
-        sender_stage_desc = ""
-        if sender_dept and sender_dept.stage_id:
-            s_stage = db.query(StageModel).filter(StageModel.id == sender_dept.stage_id).first()
-            if s_stage: sender_stage_desc = f" ({s_stage.description})"
-
         display_sender = f"{user_name}{sender_stage_desc}"
         notif_content = f"{display_sender} đã giao '{part_name}' (SL: {quantity}). Mời bộ phận Sản xuất công đoạn {receiving_stage} tiếp nhận."
         
@@ -829,7 +836,7 @@ def get_deliveries_by_plan(plan_id: int, skip: int = 0, limit: int = 100, db: Se
     from sqlalchemy import text
     try:
         # Thử truy vấn bình thường
-        return db.query(Delivery).filter(Delivery.plan_id == plan_id).order_by(Delivery.id.desc()).offset(skip).limit(limit).all()
+        return db.query(Delivery).with_hint(Delivery, 'WITH (NOLOCK)').filter(Delivery.plan_id == plan_id).order_by(Delivery.id.desc()).offset(skip).limit(limit).all()
     except Exception as e:
         # Nếu lỗi (có thể do thiếu cột), thử chạy migration
         if "moisture_min" in str(e) or "moisture_max" in str(e) or "Invalid column name" in str(e):
@@ -839,7 +846,7 @@ def get_deliveries_by_plan(plan_id: int, skip: int = 0, limit: int = 100, db: Se
                 db.execute(text("ALTER TABLE deliveries ADD moisture_max FLOAT NULL"))
                 db.commit()
                 # Sau khi sửa xong, thử truy vấn lại
-                return db.query(Delivery).filter(Delivery.plan_id == plan_id).order_by(Delivery.id.desc()).offset(skip).limit(limit).all()
+                return db.query(Delivery).with_hint(Delivery, 'WITH (NOLOCK)').filter(Delivery.plan_id == plan_id).order_by(Delivery.id.desc()).offset(skip).limit(limit).all()
             except Exception as inner_e:
                 db.rollback()
                 raise HTTPException(status_code=500, detail=f"Lỗi truy vấn và không thể tự động cập nhật DB: {str(inner_e)}")
@@ -856,20 +863,22 @@ def get_delivery_detail(delivery_id: int, db: Session = Depends(get_db)):
     from sqlalchemy import text
     try:
         from modules.delivery.models.order import Order as OrderModel
-        delivery = db.query(Delivery).options(
+        delivery = db.query(Delivery).with_hint(Delivery, 'WITH (NOLOCK)').options(
             joinedload(Delivery.details).joinedload(DeliveryDetailsModel.order).joinedload(OrderModel.products)
         ).filter(Delivery.id == delivery_id).first()
         if not delivery:
             raise HTTPException(status_code=404, detail="Không tìm thấy phiếu bàn giao này.")
             
-        # Gán tên người thực hiện giao, nhận và kiểm QC
-        sender = db.query(AccountModel).filter(AccountModel.id == delivery.sx_delivery).first() if delivery.sx_delivery else None
-        receiver = db.query(AccountModel).filter(AccountModel.id == delivery.sx_receipt).first() if delivery.sx_receipt else None
-        qc = db.query(AccountModel).filter(AccountModel.id == delivery.qc_receipt).first() if delivery.qc_receipt else None
+        # Gán tên người thực hiện giao, nhận và kiểm QC (Tối ưu: Gộp 3 query thành 1 query IN)
+        user_ids = list({uid for uid in [delivery.sx_delivery, delivery.sx_receipt, delivery.qc_receipt] if uid})
+        name_map = {}
+        if user_ids:
+            accounts = db.query(AccountModel.id, AccountModel.full_name).with_hint(AccountModel, 'WITH (NOLOCK)').filter(AccountModel.id.in_(user_ids)).all()
+            name_map = {a.id: a.full_name for a in accounts}
         
-        delivery.sx_delivery_name = sender.full_name if sender else "N/A"
-        delivery.sx_receipt_name = receiver.full_name if receiver else "---"
-        delivery.qc_receipt_name = qc.full_name if qc else "---"
+        delivery.sx_delivery_name = name_map.get(delivery.sx_delivery, "N/A") if delivery.sx_delivery else "N/A"
+        delivery.sx_receipt_name = name_map.get(delivery.sx_receipt, "---") if delivery.sx_receipt else "---"
+        delivery.qc_receipt_name = name_map.get(delivery.qc_receipt, "---") if delivery.qc_receipt else "---"
         
         return delivery
     except Exception as e:

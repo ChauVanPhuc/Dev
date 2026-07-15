@@ -8,10 +8,11 @@ from config.settings import settings
 # Sử dụng chuỗi kết nối (connection string) được cấu hình trong file .env
 engine = create_engine(
     settings.SQLALCHEMY_DATABASE_URL,
-    pool_size=50,
-    max_overflow=100,
-    pool_recycle=1800,
-    pool_pre_ping=True
+    pool_size=100,          # Tăng pool sẵn sàng: 50 → 100
+    max_overflow=400,       # Cho phép burst tối đa 500 connections (100 + 400)
+    pool_recycle=1800,      # Tái tạo connection sau 30 phút
+    pool_pre_ping=True,     # Kiểm tra connection còn sống trước khi dùng
+    pool_timeout=30,        # Timeout chờ lấy connection từ pool (giây)
 )
 
 # Tạo SessionLocal class, bản thân nó không phải là database session thực sự

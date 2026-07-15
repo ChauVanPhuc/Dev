@@ -33,10 +33,11 @@ const ManufacturePlan = () => {
     const [showFilterDropdown, setShowFilterDropdown] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [currentTime, setCurrentTime] = useState(new Date());
-    // Mobile pagination
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(15);
-    // Mobile popup detail
+    const [totalCount, setTotalCount] = useState(0);
+    const [sortDirection, setSortDirection] = useState('desc');
+    const [statsData, setStatsData] = useState({ all: 0, production: 0, completed: 0, overdue: 0 });
     const [popupPlan, setPopupPlan] = useState(null);
 
     // Cập nhật đồng hồ mỗi giây
@@ -45,12 +46,21 @@ const ManufacturePlan = () => {
         return () => clearInterval(timer);
     }, []);
 
-    // Lấy dữ liệu từ API
-    const fetchPlans = async () => {
+    // Lấy dữ liệu từ API (Phân trang Server-side)
+    const fetchPlans = async (page = currentPage, statusVal = filterStatus, searchVal = searchTerm, sortVal = sortDirection) => {
         setLoading(true);
         try {
-            const data = await planService.getPlans();
-            setPlans(data || []);
+            const res = await planService.getPlans(page, itemsPerPage, searchVal, statusVal, sortVal);
+            if (res && res.items) {
+                setPlans(res.items || []);
+                setTotalCount(res.total_count || 0);
+                if (res.stats) {
+                    setStatsData(res.stats);
+                }
+            } else {
+                setPlans(res || []);
+                setTotalCount(res ? res.length : 0);
+            }
         } catch (error) {
             console.error("Lỗi khi tải kế hoạch sản xuất:", error);
         } finally {
@@ -59,8 +69,8 @@ const ManufacturePlan = () => {
     };
 
     useEffect(() => {
-        fetchPlans();
-    }, []);
+        fetchPlans(currentPage, filterStatus, searchTerm, sortDirection);
+    }, [currentPage, filterStatus, searchTerm, sortDirection, itemsPerPage]);
 
     // Đã gỡ bỏ logic khóa điều hướng cục bộ, Layout sẽ xử lý ngầm
 
@@ -72,58 +82,13 @@ const ManufacturePlan = () => {
             await startGlobalUpload(
                 file, 
                 '/production-plans/import', 
-                () => fetchPlans()
+                () => fetchPlans(currentPage, filterStatus, searchTerm, sortDirection)
             );
         } catch (error) {
             console.error("Lỗi chuẩn bị import:", error);
         } finally {
             if (fileInputRef.current) fileInputRef.current.value = '';
         }
-    };
-
-    const handleExportExcel = () => {
-        if (filteredPlans.length === 0) {
-            alert("Không có dữ liệu kế hoạch sản xuất để xuất.");
-            return;
-        }
-
-        const exportData = filteredPlans.map((plan, index) => {
-            const totalProducts = plan.orders?.reduce((acc, o) => acc + (o.products?.length || 0), 0) || 0;
-            const totalQty = plan.orders?.reduce((acc, o) => acc + o.products?.reduce((pAcc, p) => pAcc + (p.quantity || 0), 0), 0) || 0;
-            const statusStyle = getStatusStyle(plan);
-            const finishedDate = plan.finished_date ? new Date(plan.finished_date).toLocaleDateString('vi-VN') : 'Chưa định';
-
-            return {
-                "STT": index + 1,
-                "Mã KHSX": plan.id || '',
-                "Tên Kế Hoạch Sản Xuất": plan.name || '',
-                "Số Lượng Đơn Hàng": plan.orders?.length || 0,
-                "Số Lượng Sản Phẩm": totalProducts,
-                "Tổng Sản Lượng": totalQty,
-                "Trạng Thái": statusStyle.text,
-                "Ngày Hoàn Thành Dự Kiến": finishedDate
-            };
-        });
-
-        const worksheet = XLSX.utils.json_to_sheet(exportData);
-
-        const colWidths = [
-            { wch: 6 },   // STT
-            { wch: 12 },  // Mã KHSX
-            { wch: 30 },  // Tên Kế Hoạch Sản Xuất
-            { wch: 20 },  // Số Lượng Đơn Hàng
-            { wch: 20 },  // Số Lượng Sản Phẩm
-            { wch: 18 },  // Tổng Sản Lượng
-            { wch: 18 },  // Trạng Thái
-            { wch: 25 }   // Ngày Hoàn Thành Dự Kiến
-        ];
-        worksheet['!cols'] = colWidths;
-
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Danh Sách KHSX");
-        
-        const dateStr = new Date().toLocaleDateString('vi-VN').replace(/\//g, '-');
-        XLSX.writeFile(workbook, `KeHoachSanXuat_${dateStr}.xlsx`);
     };
 
     const getDetailedStatus = (plan) => {
@@ -161,48 +126,70 @@ const ManufacturePlan = () => {
         };
     };
 
+    const handleExportExcel = async () => {
+        setLoading(true);
+        try {
+            const res = await planService.getPlans(1, 1000000, searchTerm, filterStatus, sortDirection);
+            const exportItems = res.items || [];
+            if (exportItems.length === 0) {
+                alert("Không có dữ liệu kế hoạch sản xuất để xuất.");
+                return;
+            }
+
+            const exportData = exportItems.map((plan, index) => {
+                const totalProducts = plan.orders?.reduce((acc, o) => acc + (o.products?.length || 0), 0) || 0;
+                const totalQty = plan.orders?.reduce((acc, o) => acc + o.products?.reduce((pAcc, p) => pAcc + (p.quantity || 0), 0), 0) || 0;
+                const statusStyle = getStatusStyle(plan);
+                const finishedDate = plan.finished_date ? new Date(plan.finished_date).toLocaleDateString('vi-VN') : 'Chưa định';
+
+                return {
+                    "STT": index + 1,
+                    "Mã KHSX": plan.id || '',
+                    "Tên Kế Hoạch Sản Xuất": plan.name || '',
+                    "Số Lượng Đơn Hàng": plan.orders?.length || 0,
+                    "Số Lượng Sản Phẩm": totalProducts,
+                    "Tổng Sản Lượng": totalQty,
+                    "Trạng Thái": statusStyle.text,
+                    "Ngày Hoàn Thành Dự Kiến": finishedDate
+                };
+            });
+
+            const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+            const colWidths = [
+                { wch: 6 },   // STT
+                { wch: 12 },  // Mã KHSX
+                { wch: 30 },  // Tên Kế Hoạch Sản Xuất
+                { wch: 20 },  // Số Lượng Đơn Hàng
+                { wch: 20 },  // Số Lượng Sản Phẩm
+                { wch: 18 },  // Tổng Sản Lượng
+                { wch: 18 },  // Trạng Thái
+                { wch: 25 }   // Ngày Hoàn Thành Dự Kiến
+            ];
+            worksheet['!cols'] = colWidths;
+
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Danh Sách KHSX");
+            
+            const dateStr = new Date().toLocaleDateString('vi-VN').replace(/\//g, '-');
+            XLSX.writeFile(workbook, `KeHoachSanXuat_${dateStr}.xlsx`);
+        } catch (err) {
+            console.error("Lỗi xuất excel:", err);
+            alert("Đã xảy ra lỗi khi xuất file Excel.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const stats = [
-        { id: 'all', label: 'TỔNG SỐ KẾ HOẠCH', value: plans.length, bg: '#F5F5F5', color: '#424242', iconBg: '#FAF6F0', iconColor: '#7B5233', Icon: Layers, themeColor: '#7B5233', activeBg: '#FAF6F0' },
-        { id: 'production', label: 'ĐANG SẢN XUẤT', value: plans.filter(p => getDetailedStatus(p) === 'production').length, bg: '#FFF3E0', color: '#E65100', iconBg: '#FFFBEB', iconColor: '#F59E0B', Icon: Clock, themeColor: '#F59E0B', activeBg: '#FFFBEB' },
-        { id: 'completed', label: 'ĐÃ HOÀN THÀNH', value: plans.filter(p => getDetailedStatus(p) === 'completed').length, bg: '#E8F5E9', color: '#2E7D32', iconBg: '#ECFDF4', iconColor: '#10B981', Icon: CheckCircle, themeColor: '#10B981', activeBg: '#ECFDF4' },
-        { id: 'overdue', label: 'QUÁ HẠN', value: plans.filter(p => getDetailedStatus(p) === 'overdue').length, bg: '#FFEBEE', color: '#C62828', iconBg: '#FEF2F2', iconColor: '#EF4444', Icon: AlertCircle, themeColor: '#EF4444', activeBg: '#FEF2F2' },
+        { id: 'all', label: 'TỔNG SỐ KẾ HOẠCH', value: statsData.all, bg: '#F5F5F5', color: '#424242', iconBg: '#FAF6F0', iconColor: '#7B5233', Icon: Layers, themeColor: '#7B5233', activeBg: '#FAF6F0' },
+        { id: 'production', label: 'ĐANG SẢN XUẤT', value: statsData.production, bg: '#FFF3E0', color: '#E65100', iconBg: '#FFFBEB', iconColor: '#F59E0B', Icon: Clock, themeColor: '#F59E0B', activeBg: '#FFFBEB' },
+        { id: 'completed', label: 'ĐÃ HOÀN THÀNH', value: statsData.completed, bg: '#E8F5E9', color: '#2E7D32', iconBg: '#ECFDF4', iconColor: '#10B981', Icon: CheckCircle, themeColor: '#10B981', activeBg: '#ECFDF4' },
+        { id: 'overdue', label: 'QUÁ HẠN', value: statsData.overdue, bg: '#FFEBEE', color: '#C62828', iconBg: '#FEF2F2', iconColor: '#EF4444', Icon: AlertCircle, themeColor: '#EF4444', activeBg: '#FEF2F2' },
     ];
 
-    const [sortDirection, setSortDirection] = useState('desc'); // 'desc' là mặc định (Mới nhất lên đầu)
-
-    const filteredPlans = useMemo(() => {
-        const lowerSearch = searchTerm.toLowerCase();
-        let result = Array.isArray(plans) ? [...plans] : [];
-
-        if (lowerSearch) {
-            result = result.filter(plan => 
-                (plan.name || '').toLowerCase().includes(lowerSearch) ||
-                (plan.code || '').toLowerCase().includes(lowerSearch)
-            );
-        }
-
-        if (filterStatus !== 'all') {
-            result = result.filter(plan => getDetailedStatus(plan) === filterStatus);
-        }
-
-        // Sắp xếp theo Năm và Tháng cùng chiều
-        result.sort((a, b) => {
-            const yearA = a.year || 0;
-            const yearB = b.year || 0;
-            const monthA = a.month || 0;
-            const monthB = b.month || 0;
-            
-            if (yearA !== yearB) {
-                return sortDirection === 'asc' ? yearA - yearB : yearB - yearA;
-            }
-            return sortDirection === 'asc' ? monthA - monthB : monthB - monthA;
-        });
-
-        return result;
-    }, [plans, searchTerm, filterStatus, sortDirection]);
-
-    const totalPages = Math.ceil(filteredPlans.length / itemsPerPage);
-    const paginatedPlans = filteredPlans.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+    const totalPages = Math.ceil(totalCount / itemsPerPage);
+    const paginatedPlans = plans;
 
     return (
         <div className="manufacture-plan-container">
@@ -380,8 +367,9 @@ const ManufacturePlan = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {filteredPlans.map((plan, index) => {
+                        {paginatedPlans.map((plan, index) => {
                             const totalProducts = plan.orders?.reduce((acc, o) => acc + (o.products?.length || 0), 0) || 0;
+                            const itemIndex = (currentPage - 1) * itemsPerPage + index + 1;
                             
                             return (
                                 <tr 
@@ -390,7 +378,7 @@ const ManufacturePlan = () => {
                                     onClick={() => navigate(`/admin/plan/${plan.id}`)}
                                 >
                                     <td style={{ textAlign: 'center', color: '#94a3b8' }}>
-                                        {index + 1}
+                                        {itemIndex}
                                     </td>
                                     <td>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -415,7 +403,7 @@ const ManufacturePlan = () => {
                                 </tr>
                             );
                         })}
-                        {filteredPlans.length === 0 && (
+                        {paginatedPlans.length === 0 && (
                             <tr>
                                 <td colSpan={6} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
                                     {loading ? 'Đang tải dữ liệu...' : 'Không có dữ liệu hiển thị.'}
@@ -429,22 +417,24 @@ const ManufacturePlan = () => {
                 {/* Footer Section */}
                 <div className="admin-pagination-desktop">
                     <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
-                        Tổng cộng <b>{filteredPlans.length}</b> Kế hoạch
+                        Tổng cộng <b>{totalCount}</b> Kế hoạch
                     </div>
 
                     <div style={{ display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
                         <button 
                             className="page-btn"
-                            disabled={true}
+                            onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                            disabled={currentPage === 1}
                         >
                             &lt; Trước
                         </button>
-                        <button className="page-btn active">
-                            1
-                        </button>
+                        <span style={{ margin: '0 10px', fontSize: '0.85rem', fontWeight: '700', color: '#7B5233' }}>
+                            Trang {currentPage} / {totalPages || 1}
+                        </span>
                         <button 
                             className="page-btn"
-                            disabled={true}
+                            onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+                            disabled={currentPage === totalPages || totalPages <= 1}
                         >
                             Sau &gt;
                         </button>
@@ -481,7 +471,7 @@ const ManufacturePlan = () => {
                             </div>
                         );
                     })}
-                    {filteredPlans.length === 0 && (
+                    {plans.length === 0 && (
                         <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>Không có kế hoạch nào.</div>
                     )}
                 </div>

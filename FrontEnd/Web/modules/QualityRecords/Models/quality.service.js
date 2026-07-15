@@ -1,9 +1,11 @@
 import api from '@webShared/Services/api.service';
 
 export const qualityService = {
-    // Lấy danh sách PO của một kế hoạch kèm trạng thái dữ liệu
-    getPlanDetails: async (planId) => {
-        return await api.get(`/plans/${planId}?simple=true`);
+    getPlanDetails: async (planId, page = null, pageSize = 15, search = '', statusFilter = 'all', filterProduct = 'all', sortBy = 'none') => {
+        if (page === null) {
+            return await api.get(`/plans/${planId}?simple=true`);
+        }
+        return await api.get(`/plans/${planId}?simple=true&page=${page}&pageSize=${pageSize}&q=${encodeURIComponent(search)}&statusFilter=${statusFilter}&filterProduct=${encodeURIComponent(filterProduct)}&sortBy=${sortBy}`);
     },
 
     // Lấy thông tin chi tiết PO

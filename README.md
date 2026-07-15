@@ -1,624 +1,696 @@
-# 🏭 ERP G7 - Hệ thống Điều hành Sản xuất Thông minh
+<p align="center">
+  <img src="FrontEnd/Web/assets/images/logo-no-bg.png" alt="SmartFlow Logo" width="120" />
+</p>
 
-ERP G7 là hệ thống quản lý sản xuất toàn diện, kết nối từ đơn hàng đến từng công đoạn tại xưởng (Shopfloor) thông qua nền tảng Web và Mobile.
+<h1 align="center">🏭 SmartFlow ERP — Hệ thống Điều hành Sản xuất Thông minh</h1>
+
+<p align="center">
+  <strong>Nền tảng quản lý sản xuất toàn diện dành cho nhà máy nội thất G7</strong><br/>
+  Kết nối liền mạch từ Đơn hàng → Kế hoạch → Sản xuất → Bàn giao → Kiểm tra chất lượng → Kho → Giao hàng<br/>
+  thông qua ứng dụng Web Dashboard và Mobile App (Android).
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Backend-FastAPI%20(Python%203.13+)-009688?style=for-the-badge&logo=fastapi&logoColor=white" />
+  <img src="https://img.shields.io/badge/Database-SQL%20Server%202019+-CC2927?style=for-the-badge&logo=microsoftsqlserver&logoColor=white" />
+  <img src="https://img.shields.io/badge/Web-React%2018%20+%20Vite-61DAFB?style=for-the-badge&logo=react&logoColor=black" />
+  <img src="https://img.shields.io/badge/Mobile-Capacitor%206-119EFF?style=for-the-badge&logo=capacitor&logoColor=white" />
+  <img src="https://img.shields.io/badge/Cloud-Cloudflare%20Tunnel-F38020?style=for-the-badge&logo=cloudflare&logoColor=white" />
+</p>
 
 ---
 
-## 📋 Mục lục (Table of Contents)
+## 📋 Mục lục
 
-1. [Tổng quan dự án](#-tổng-quánự án)
-2. [Kiến trúc hệ thống](#-kiến-trúc-hệ-thống)
-3. [Tính năng nổi bật](#-tính-năng-nổi-bật)
-4. [Hướng dẫn cài đặt](#-hướng-dẫn-cài-ặt)
-5. [Hướng dẫn sử dụng](#-hướng-dẫn-sử-dụng)
-6. [Cấu trúc thư mục](#-cấu-trúc-thư-mục)
-7. [Quy tắc phát triển](#-quy-tắc-phát-triển)
-8. [Triển khai sản xuất](#-triển-khai-sản-xuất)
-9. [Giải quyết sự cố](#-giải-quyết-sự-cố)
-10. [Nhật ký thay đổi](#-nhật-ký-thay-đổi)
+| # | Mục | Mô tả |
+|---|-----|-------|
+| 1 | [Tổng quan dự án](#-1-tổng-quan-dự-án) | Giới thiệu, Tech Stack, Kiến trúc hệ thống |
+| 2 | [Tính năng nổi bật](#-2-tính-năng-nổi-bật) | 20+ tính năng cấp doanh nghiệp |
+| 3 | [Tối ưu hóa hiệu suất](#-3-tối-ưu-hóa-hiệu-suất) | Các cải tiến performance cấp hệ thống |
+| 4 | [Cấu trúc thư mục](#-4-cấu-trúc-thư-mục) | Sơ đồ cây thư mục chi tiết |
+| 5 | [Hướng dẫn cài đặt](#-5-hướng-dẫn-cài-đặt) | Từng bước cài đặt Backend, FrontEnd, Database |
+| 6 | [Hướng dẫn sử dụng](#-6-hướng-dẫn-sử-dụng) | Cách sử dụng từng module chức năng |
+| 7 | [Quy tắc phát triển](#-7-quy-tắc-phát-triển) | Naming convention, commit, code standards |
+| 8 | [Triển khai sản xuất](#-8-triển-khai-sản-xuất) | Quy trình deploy production |
+| 9 | [Giải quyết sự cố](#-9-giải-quyết-sự-cố) | FAQ & Troubleshooting |
+| 10 | [Nhật ký thay đổi](#-10-nhật-ký-thay-đổi) | Changelog theo phiên bản |
+| 11 | [Hỗ trợ kỹ thuật](#-11-hỗ-trợ-kỹ-thuật) | Thông tin liên hệ & hỗ trợ |
 
 ---
 
-## 🎯 Tổng quan dự án (Project Overview)
+## 🎯 1. Tổng quan dự án
 
-ERP G7 là hệ thống ERP (Enterprise Resource Planning) được thiết kế đặc biệt cho nhà máy sản xuất nội thất G7, giúp:
+### Giới thiệu
 
-- **Quản lý đơn hàng**: Từ khi nhận đơn đến khi giao hàng thành công
-- **Theo dõi sản xuất**: Theo dõi tiến độ từng công đoạn (Định hình → Lắp ráp → Sơn → Đóng gói)
-- **Bàn giao nội bộ**: Quản lý quá trình bàn giao giữa các công đoạn sản xuất
-- **Kiểm tra chất lượng (QC)**: Tích hợp quy trình kiểm tra chất lượng tại từng bước
-- **Thông báo thời gian thực**: Cập nhật tức thời cho công nhân và quản lý
-- **Quản lý kho**: Theo dõi tồn kho và vị trí hàng hóa
+**SmartFlow ERP** là hệ thống hoạch định nguồn lực doanh nghiệp (Enterprise Resource Planning) được thiết kế và phát triển riêng biệt cho nhà máy sản xuất nội thất **G7**, hướng đến mục tiêu:
+
+- 🏭 **Số hóa toàn bộ quy trình sản xuất** — từ nhận đơn hàng đến giao hàng cho khách
+- 📊 **Dashboard thời gian thực** — theo dõi tiến độ sản xuất tức thì, chính xác đến từng chi tiết linh kiện
+- 📱 **Mobile-first cho Shopfloor** — công nhân tại xưởng sử dụng app di động để tạo phiếu giao, nhận hàng, quét QR, kiểm tra chất lượng
+- 🔔 **Thông báo đa kênh** — WebSocket + Firebase Cloud Messaging (FCM) đẩy thông báo tức thì
+- 🤖 **Tích hợp AI Chatbot** — hỗ trợ tra cứu thông tin sản xuất bằng ngôn ngữ tự nhiên (Gemini API)
+- 📋 **Tuân thủ ISO** — quản lý tài liệu, quy trình, biểu mẫu theo tiêu chuẩn ISO 9001
 
 ### Công nghệ sử dụng (Tech Stack)
 
-| Phần | Công nghệ | Phiên bản | Mô tả |
-|------|-----------|----------|-------|
-| **Backend** | Python (FastAPI) | 3.13+ | API RESTful, WebSocket, Authentication |
-| **Database** | SQL Server | 2019+ | Lưu trữ dữ liệu sản xuất, đơn hàng, QC |
-| **Web Admin** | React + Vite | 18+ | Dashboard quản lý cho khối văn phòng |
-| **Mobile App** | React Native + Capacitor | 6+ | Ứng dụng cho công nhân tại xưởng |
-| **Authentication** | JWT (HS256) | - | Token-based authentication |
-| **Real-time** | WebSocket + FCM | - | Thông báo thời gian thực |
-| **Deployment** | Cloudflare Tunnel | - | Truy cập từ xa an toàn |
+| Lớp | Công nghệ | Phiên bản | Mô tả chi tiết |
+|-----|-----------|-----------|-----------------|
+| **Backend API** | Python + FastAPI | 3.13+ | RESTful API, WebSocket, JWT Auth, Auto-docs (Swagger UI) |
+| **Database** | Microsoft SQL Server | 2019+ | RDBMS chính, Connection Pooling (SQLAlchemy), Performance Indexes |
+| **ORM** | SQLAlchemy | 2.0+ | Object-Relational Mapping, Session Management, Query Builder |
+| **Web Dashboard** | React + Vite | React 18 / Vite 6 | SPA Admin Portal cho khối văn phòng, hỗ trợ Responsive |
+| **Mobile App** | React + Capacitor | Capacitor 6 | Ứng dụng Hybrid cho Android, truy cập camera/GPS/notification |
+| **Authentication** | JWT (HS256) | — | Token-based auth, Role-based access control (RBAC) |
+| **Real-time** | WebSocket + FCM | — | Thông báo tức thì cho Mobile & Web |
+| **AI/Chatbot** | Google Gemini API | — | Chatbot hỗ trợ tra cứu dữ liệu sản xuất bằng ngôn ngữ tự nhiên |
+| **Caching** | In-Memory (SWR Pattern) | — | Stale-While-Revalidate cache cho các API hot, giảm tải Database |
+| **Cloud** | Cloudflare Tunnel | — | SSL/HTTPS, DDoS Protection, truy cập global không cần mở port |
+| **Build Tool** | Vite | 6.4+ | HMR cực nhanh, Tree-shaking, Code-splitting tự động |
+| **Mobile Build** | Gradle + Capacitor CLI | — | Build APK Android tự động, tích hợp OTA Update |
 
----
-
-## 🏗️ Kiến trúc hệ thống (System Architecture)
-
-### 1. Mô hình Client-Server
-
-```
-+-------------------------------------------------------------+
-|                     CLOUD INFRASTRUCTURE                    |
-|  +-------------------------------------------------------+  |
-|  |  Cloudflare Tunnel (smartflowg7.cloud)                |  |
-|  |  - SSL/HTTPS                                          |  |
-|  |  - DDoS Protection                                    |  |
-|  |  - Global Access                                      |  |
-|  +-------------------------------------------------------+  |
-+-------------------------------------------------------------+
-                              |
-                              v
-+-------------------------------------------------------------+
-|                    BACKEND SERVER (FastAPI)                 |
-|  +-------------------------------------------------------+  |
-|  |  API Layer (/api/v1)                                  |  |
-|  |  - Authentication (JWT)                               |  |
-|  |  - Business Logic                                     |  |
-|  |  - Data Validation                                    |  |
-|  +-------------------------------------------------------+  |
-|  +-------------------------------------------------------+  |
-|  |  WebSocket Server (/ws/{user_id})                     |  |
-|  |  - Real-time Notifications                            |  |
-|  |  - Live Updates                                       |  |
-|  +-------------------------------------------------------+  |
-|  +-------------------------------------------------------+  |
-|  |  Database Layer (SQL Server)                          |  |
-|  |  - SQLAlchemy ORM                                     |  |
-|  |  - Connection Pooling                                 |  |
-|  +-------------------------------------------------------+  |
-+-------------------------------------------------------------+
-         │                              │
-         ▼                              ▼
-+------------------+         +------------------+
-|   WEB ADMIN      |         |   MOBILE APP     |
-|  (React + Vite)  |         | (React + Capac.) |
-|                  |         |                  |
-|  - Dashboard     |         |  - Login         |
-|  - Orders        |         |  - Plan Tracking |
-|  - Production    |         |  - Delivery      |
-|  - QC Reports    |         |  - Inspection    |
-|  - Reports       |         |  - QR Scan       |
-+------------------+         +------------------+
-```
-
-### 2. Luồng dữ liệu chính (Data Flow)
+### Kiến trúc hệ thống (System Architecture)
 
 ```
-Đơn Hàng (Order)
+╔═══════════════════════════════════════════════════════════════╗
+║                    CLOUD INFRASTRUCTURE                       ║
+║  ┌───────────────────────────────────────────────────────┐    ║
+║  │  Cloudflare Tunnel (smartflowg7.cloud)                │    ║
+║  │  ✓ SSL/HTTPS          ✓ DDoS Protection               │    ║
+║  │  ✓ Global CDN         ✓ Zero-Trust Access              │    ║
+║  └───────────────────────────────────────────────────────┘    ║
+╚═══════════════════════════════════════════════════════════════╝
+                              │
+                              ▼
+╔═══════════════════════════════════════════════════════════════╗
+║               BACKEND SERVER (FastAPI + Python 3.13)         ║
+║  ┌─────────────────────┐  ┌─────────────────────────────┐    ║
+║  │  RESTful API Layer  │  │  WebSocket Server            │    ║
+║  │  /api/v1/*          │  │  /ws/{user_id}               │    ║
+║  │  ✓ JWT Auth         │  │  ✓ Real-time Notifications   │    ║
+║  │  ✓ RBAC             │  │  ✓ Live Dashboard Updates    │    ║
+║  │  ✓ Rate Limiting    │  │  ✓ Auto-reconnect            │    ║
+║  └─────────────────────┘  └─────────────────────────────┘    ║
+║  ┌─────────────────────┐  ┌─────────────────────────────┐    ║
+║  │  SWR Cache Layer    │  │  AI Chatbot Engine           │    ║
+║  │  ✓ In-Memory Cache  │  │  ✓ Google Gemini API         │    ║
+║  │  ✓ Auto-invalidate  │  │  ✓ Natural Language Query    │    ║
+║  └─────────────────────┘  └─────────────────────────────┘    ║
+║  ┌───────────────────────────────────────────────────────┐    ║
+║  │  Database Layer (SQL Server 2019+ / SQLAlchemy ORM)   │    ║
+║  │  ✓ Connection Pool (100 + 400 overflow)               │    ║
+║  │  ✓ Performance Indexes       ✓ NOLOCK Hints           │    ║
+║  │  ✓ Server-side Pagination    ✓ Pool Pre-ping          │    ║
+║  └───────────────────────────────────────────────────────┘    ║
+╚═══════════════════════════════════════════════════════════════╝
+          │                                │
+          ▼                                ▼
+┌──────────────────────┐    ┌──────────────────────────┐
+│    WEB DASHBOARD     │    │      MOBILE APP           │
+│   (React 18 + Vite)  │    │  (React + Capacitor 6)    │
+│                      │    │                           │
+│  ✓ Dashboard KPI     │    │  ✓ Tạo/Nhận Phiếu Giao   │
+│  ✓ Quản lý Đơn hàng  │    │  ✓ Quét mã QR            │
+│  ✓ Kế hoạch SX       │    │  ✓ Kiểm tra QC           │
+│  ✓ Hồ sơ Chất lượng  │    │  ✓ Push Notification     │
+│  ✓ Quản lý ISO       │    │  ✓ OTA Auto-Update       │
+│  ✓ KPI & Báo cáo     │    │  ✓ Offline-ready UI      │
+│  ✓ Claim & Mua hàng  │    │  ✓ Camera Native         │
+│  ✓ Thiết bị & Máy    │    │  ✓ Multi-stage Selector  │
+└──────────────────────┘    └──────────────────────────┘
+```
+
+### Luồng dữ liệu chính (Production Data Flow)
+
+```
+Đơn Hàng (PO - Purchase Order)
     │
     ▼
-Kế Hoạch Sản Xuất (Product Plan)
+Kế Hoạch Sản Xuất (KHSX - Product Plan)
     │
     ▼
-Lệnh Sản Xuất (Production Order)
+Lệnh Sản Xuất (Production Order) ──► Gán BOM (Bill of Materials)
     │
-    ├─► Công đoạn Định hình (Stage 1)
-    │       │
-    │       ├─► Tạo Phiếu Giao (Delivery)
+    ├─► Công đoạn 1: Định hình (NM1)
+    │       ├─► Tạo Phiếu Giao (Delivery) ──► Chụp ảnh minh chứng
     │       │       │
-    │       │       ├─► Công đoạn Lắp ráp (Stage 2) nhận hàng
-    │       │       │       │
-    │       │       │       ├─► QC Kiểm tra chất lượng
-    │       │       │       │       │
-    │       │       │       │       ├─► Đạt: Tiếp tục
-    │       │       │       │       └─► Lỗi: Trả hàng (Return)
-    │       │       │       │
-    │       │       │       └─► Tạo Phiếu Giao tiếp theo
+    │       │       ▼
+    │       ├─► Công đoạn 2: Lắp ráp (NM2) nhận hàng
+    │       │       ├─► QC Kiểm tra đầu vào (Input Inspection)
+    │       │       │       ├─► ✅ Đạt: Tiếp tục sản xuất
+    │       │       │       └─► ❌ Lỗi: Tạo Phiếu Trả hàng (Return)
     │       │       │
-    │       │       └─► Công đoạn Sơn (Stage 3)
-    │       │               │
-    │       │               └─► Công đoạn Đóng gói (Stage 4)
-    │       │
-    │       └─► Hoàn thành sản phẩm
+    │       │       ▼
+    │       ├─► Công đoạn 3: Sơn phủ (NM3)
+    │       │       │
+    │       │       ▼
+    │       └─► Công đoạn 4: Đóng gói (NM4) ──► QC Kiểm tra cuối
     │
-    └─► Kho (Warehouse)
-            │
-            └─► Giao hàng cho khách hàng
+    ├─► Kho (Warehouse) ──► Quản lý Pallet & Vị trí
+    │
+    └─► Giao hàng cho Khách hàng ──► Hoàn thành ĐH
 ```
 
 ---
 
-## ⚡ Tính năng nổi bật (Key Features)
+## ⚡ 2. Tính năng nổi bật
 
-### 1. Tối ưu hóa Hiệu suất Dashboard (High Performance)
+### 📊 Nhóm 1: Dashboard & Báo cáo
 
-**Thuật toán FIFO 2-Pass:**
-- Xử lý logic tính toán tiến độ sản xuất phức tạp
-- Giảm độ trễ từ >10 giây xuống <0.1 giây cho 53k+ bản ghi
-- Tối ưu hóa truy vấn SQL Server với proper indexing
+| # | Tính năng | Chi tiết | Mức độ |
+|---|-----------|----------|--------|
+| 1.1 | **Dashboard Sản xuất Thời gian thực** | Hiển thị tiến độ sản xuất tổng quan, biểu đồ theo tuần/công đoạn, tỷ lệ hoàn thành theo PO. Dữ liệu cập nhật real-time qua WebSocket. | 🔥 Cao cấp |
+| 1.2 | **Thuật toán FIFO 2-Pass** | Xử lý logic tính toán tiến độ sản xuất phức tạp trên 53,000+ bản ghi. Giảm thời gian phản hồi từ >10s xuống <0.1s. | 🔥 Cải tiến |
+| 1.3 | **SKU Deduplication** | Gộp nhóm BOM (Bill of Materials) theo SKU thay vì ID sản phẩm đơn lẻ, giảm tải dữ liệu xử lý lên đến 80%. | 🔥 Cải tiến |
+| 1.4 | **Báo cáo KPI đa chiều** | Báo cáo KPI theo nhân viên, phòng ban, khoảng thời gian. Hỗ trợ xuất Excel, biểu đồ trực quan. | ⭐ Xịn |
 
-**SKU Deduplication:**
-- Gộp nhóm BOM theo SKU thay vì ID sản phẩm đơn lẻ
-- Giảm tải dữ liệu xử lý lên đến 80%
-- Tăng tốc độ load Dashboard đáng kể
+### 📦 Nhóm 2: Quản lý Đơn hàng & Kế hoạch Sản xuất
 
-### 2. Thông báo thời gian thực (Real-time Notifications)
+| # | Tính năng | Chi tiết | Mức độ |
+|---|-----------|----------|--------|
+| 2.1 | **Quản lý Đơn hàng (PO)** | CRUD đơn hàng, theo dõi trạng thái (Chờ → Đang SX → Hoàn thành → Quá hạn), lọc theo khách hàng/hạn giao. | ⭐ Cốt lõi |
+| 2.2 | **Kế hoạch Sản xuất (KHSX)** | Tạo kế hoạch theo tháng/năm, gán danh sách PO vào kế hoạch, theo dõi tiến độ tổng thể. | ⭐ Cốt lõi |
+| 2.3 | **Quản lý Sản phẩm & BOM** | Tạo sản phẩm với mã SKU, quản lý cấu trúc BOM (Bill of Materials) đa cấp, gán công đoạn cho từng chi tiết. | ⭐ Cốt lõi |
+| 2.4 | **Import đơn hàng hàng loạt** | Upload file Excel để import hàng loạt đơn hàng, sản phẩm, chi tiết BOM. Hỗ trợ drag-and-drop, hiển thị progress. | 🔥 Cao cấp |
+| 2.5 | **Phân trang Server-side** | Tất cả danh sách lớn (PO, KHSX, Hồ sơ CL) đều phân trang từ Backend SQL, chỉ tải 15 dòng/trang, giảm tải FE tối đa. | 🔥 Cải tiến |
 
-**Push Notifications:**
-- Firebase Cloud Messaging (FCM) cho Mobile App
-- WebSocket cho Web Admin
-- Tự động thông báo khi:
-  - Có phiếu giao mới
-  - QC hoàn thành kiểm tra
-  - Có hàng trả về
-  - Cập nhật tiến độ
+### 🚚 Nhóm 3: Bàn giao & Giao nhận
 
-**Tương tác đa kênh:**
-- Công nhân nhận lệnh sản xuất ngay lập tức
-- QC nhận thông báo kết quả kiểm tra
-- Quản lý theo dõi tiến độ real-time
+| # | Tính năng | Chi tiết | Mức độ |
+|---|-----------|----------|--------|
+| 3.1 | **Tạo Phiếu Giao (Mobile)** | Chọn chi tiết cần giao, nhập số lượng, chụp tối đa 3 ảnh minh chứng, gửi phiếu và nhận mã QR Giao Nhận. | ⭐ Cốt lõi |
+| 3.2 | **Nhận Phiếu Giao (Mobile)** | Quét mã QR hoặc chọn phiếu từ danh sách, xác nhận nhận hàng, kiểm tra số lượng và ảnh. | ⭐ Cốt lõi |
+| 3.3 | **Theo dõi Lịch sử Bàn giao** | Xem toàn bộ lịch sử giao-nhận giữa các công đoạn, lọc theo ngày/PO/công đoạn, xuất báo cáo Excel. | ⭐ Xịn |
+| 3.4 | **Phiếu Ngoại lệ Nâng cao** | Hiển thị tỷ lệ % lệch/trả, phân loại ngoại lệ rõ ràng, nút xác minh cho quản lý. | 🔥 Cải tiến |
+| 3.5 | **Kế hoạch Bàn giao (Delivery Plan)** | Hiển thị danh sách chi tiết cần giao, so sánh kế hoạch vs thực tế, trạng thái giao/nhận, xuất Excel/PDF. | ⭐ Xịn |
 
-### 3. Hệ thống Định danh & Quét mã (QR Code System)
+### 🔍 Nhóm 4: Kiểm tra Chất lượng (QC)
 
-**Truy xuất nhanh:**
-- Quét mã QR để nhận diện:
-  - Lệnh sản xuất (PO)
-  - Kiện hàng (Pallet)
-  - Vị trí kho
-- Tốc độ quét: <1 giây
+| # | Tính năng | Chi tiết | Mức độ |
+|---|-----------|----------|--------|
+| 4.1 | **Kiểm tra Đầu vào (Input Inspection)** | QC kiểm tra số lượng nhận/lỗi, chụp ảnh lỗi, đánh dấu Đạt/Không đạt. Tự động tính SL thực nhận. | ⭐ Cốt lõi |
+| 4.2 | **Kiểm tra theo Công đoạn** | Kiểm tra chất lượng tại từng công đoạn sản xuất, theo dõi tỷ lệ lỗi. | ⭐ Cốt lõi |
+| 4.3 | **Hồ sơ Chất lượng (PO)** | Tổng hợp toàn bộ dữ liệu kiểm tra, bàn giao, trả hàng theo từng PO. Phân trang server-side. | ⭐ Xịn |
+| 4.4 | **Quản lý Danh mục Lỗi (Defect)** | CRUD danh mục lỗi theo nhóm, cho phép tùy chỉnh checklist kiểm tra cho từng công đoạn. | ⭐ Xịn |
+| 4.5 | **Báo cáo Kiểm tra Chất lượng** | Thống kê lỗi theo loại/công đoạn/thời gian, biểu đồ Pareto, xuất báo cáo. | 🔥 Cao cấp |
 
-**Dữ liệu chuẩn xác:**
-- Loại bỏ sai sót nhập liệu thủ công
-- Tích hợp camera native của thiết bị
-- Hỗ trợ nhiều loại mã: QR, Barcode
+### 📱 Nhóm 5: Hệ thống QR Code & Mobile
 
-### 4. Hạ tầng & Tên miền (Cloud Infrastructure)
+| # | Tính năng | Chi tiết | Mức độ |
+|---|-----------|----------|--------|
+| 5.1 | **Quét mã QR đa năng** | Quét QR để nhận diện PO, kiện hàng, pallet, vị trí kho. Tốc độ quét <1 giây, dùng camera native. | ⭐ Cốt lõi |
+| 5.2 | **Mã QR Dự phòng Thông minh** | Tự động gán QR dự phòng khi QR chính bị hư. Chỉ giải phóng sau khi QC hoàn tất xác nhận. | 🔥 Cao cấp |
+| 5.3 | **Tài khoản Đa Công đoạn** | Gán nhiều công đoạn cho 1 tài khoản (VD: Lắp ráp + Chà nhám). Selector chuyển đổi nhanh. | 🔥 Cao cấp |
+| 5.4 | **Lọc Đơn hàng Chính xác (Mobile)** | Chọn chính xác 1 PO, chỉ hiển thị đơn đó thay vì toàn bộ kế hoạch, giảm tải dữ liệu Mobile. | 🔥 Cải tiến |
+| 5.5 | **Cập nhật OTA tự động** | App tự động kiểm tra phiên bản, thông báo có bản mới, tải và cài đặt APK trực tiếp không qua trình duyệt. | 🔥 Cao cấp |
 
-**Global Access:**
-- Tên miền riêng: `smartflowg7.cloud`
-- Bảo mật SSL/HTTPS
-- Truy cập từ bất kỳ đâu
+### 🏢 Nhóm 6: Quản trị Hệ thống & ISO
 
-**Cloudflare Tunnel:**
-- Kết nối ổn định
-- Tốc độ cao
-- Bảo mật tuyệt đối
-- Không cần mở port public
+| # | Tính năng | Chi tiết | Mức độ |
+|---|-----------|----------|--------|
+| 6.1 | **Quản lý Người dùng & Phân quyền (RBAC)** | CRUD tài khoản, gán vai trò (Admin/Manager/QC/Worker), phân quyền chi tiết theo từng màn hình. | ⭐ Cốt lõi |
+| 6.2 | **Quản lý Phòng ban & Chức vụ** | CRUD phòng ban, chức vụ, gán nhân viên. | ⭐ Cốt lõi |
+| 6.3 | **Quản lý Tài liệu ISO** | Tạo/sửa/xóa tài liệu ISO, quản lý phiên bản, phân loại theo danh mục. | 🔥 Cao cấp |
+| 6.4 | **Biên tập Biểu mẫu ISO (Form Editor)** | Trình soạn thảo biểu mẫu ISO dạng WYSIWYG, kéo-thả trường, xuất PDF. | 🔥 Cao cấp |
+| 6.5 | **Biên tập Quy trình ISO (Process Flowchart)** | Trình vẽ sơ đồ quy trình ISO với canvas drag-and-drop, tự động nối các bước, xuất hình ảnh. | 🔥🔥 Rất cao cấp |
+| 6.6 | **Quản lý Màn hình hệ thống (Screens)** | Đăng ký, cấu hình, phân quyền truy cập cho từng màn hình chức năng. Auto-sync khi khởi động. | ⭐ Xịn |
+| 6.7 | **Quản lý Bug & Phản hồi** | Hệ thống báo lỗi tích hợp, theo dõi trạng thái xử lý, đính kèm ảnh chụp màn hình. | ⭐ Xịn |
+| 6.8 | **System Monitor** | Giám sát trạng thái hệ thống, thống kê API calls, database connections. | 🔥 Cao cấp |
 
-### 5. Hệ thống Cập nhật Tự động (OTA Update)
+### 🏗️ Nhóm 7: Thiết bị, Máy móc & KPI
 
-**Cơ chế hoạt động:**
-- Tự động kiểm tra phiên bản
-- Thông báo cập nhật trong app
-- Tải và cài đặt APK trực tiếp
-- Không cần qua trình duyệt
+| # | Tính năng | Chi tiết | Mức độ |
+|---|-----------|----------|--------|
+| 7.1 | **Quản lý Thiết bị (Equipment)** | CRUD thiết bị, phân loại theo nhóm, theo dõi lịch sử bảo trì, bàn giao thiết bị. | ⭐ Xịn |
+| 7.2 | **Quản lý Máy móc (Machine)** | CRUD máy sản xuất, theo dõi tình trạng hoạt động, lịch sử sửa chữa, tài liệu kỹ thuật. | ⭐ Xịn |
+| 7.3 | **Đào tạo Thiết bị & Máy** | Quản lý chương trình đào tạo vận hành thiết bị/máy, theo dõi nhân viên đã đào tạo. | ⭐ Xịn |
+| 7.4 | **KPI Nhân viên** | Cấu hình quy tắc chấm điểm, checklist đánh giá, vi phạm, phản hồi. Báo cáo KPI đa chiều. | 🔥 Cao cấp |
 
-**Lợi ích:**
-- Đảm bảo tất cả user dùng phiên bản mới nhất
-- Giảm thời gian triển khai
-- Tăng trải nghiệm người dùng
+### 💰 Nhóm 8: Mua hàng & Claim
 
-### 6. Quản lý Mã QR Dự phòng (Backup QR System)
+| # | Tính năng | Chi tiết | Mức độ |
+|---|-----------|----------|--------|
+| 8.1 | **Quản lý Đơn mua hàng (Purchasing)** | Tạo yêu cầu mua hàng, duyệt đơn, theo dõi danh sách mặt hàng, đối soát với đơn đặt mua. | ⭐ Xịn |
+| 8.2 | **Quản lý Claim & Bảng giá** | Theo dõi claim khách hàng, quản lý bảng giá, lô hàng giao, đối soát chi phí. | 🔥 Cao cấp |
 
-**Cấp phát thông minh:**
-- Tự động gán mã QR dự phòng khi QR chính bị hư
-- Mỗi kiện hàng có 1 QR chính + 1 QR dự phòng
+### 🤖 Nhóm 9: AI & Thông minh
 
-**Giải phóng đúng thời điểm:**
-- Chỉ giải phóng sau khi QC hoàn tất xác nhận
-- Đảm bảo truy xuất nguồn gốc liên tục
-- Tránh mất dữ liệu trong quá trình kiểm tra
-
-### 7. Lọc Đơn hàng Chính xác trên Mobile (Exact Order Filter)
-
-**Lọc theo PO:**
-- Chọn chính xác 1 đơn hàng (PO)
-- Chỉ hiển thị đơn đó thay vì toàn bộ kế hoạch
-- Giảm tải dữ liệu cho Mobile App
-
-**Anti-stale closure:**
-- Khắc phục React closure cũ
-- Đảm bảo bộ lọc luôn truyền giá trị mới nhất
-- Fix 3 bug: stale closure, dropdown mất dữ liệu, reset PO
-
-### 8. Màn hình Phiếu Ngoại lệ Nâng cao (Exception Delivery Enhancement)
-
-**Hiển thị Tỷ lệ %:**
-- Cột Lệch/Trả → Tỷ lệ phần trăm
-- Dễ dàng đánh giá mức độ ngoại lệ
-
-**Phân loại ngoại lệ:**
-- "Đặc trưng ngoại lệ" → "Loại ngoại lệ"
-- Rõ ràng, dễ hiểu hơn
-
-### 9. Tài khoản Đa Công đoạn (Multi-Stage Account)
-
-**Gộp công đoạn:**
-- Gán nhiều công đoạn cho 1 tài khoản
-- Ví dụ: Lắp ráp + Chà nhám dùng chung 1 tài khoản
-- Giảm số lượng tài khoản cần quản lý
-
-**Selector công đoạn:**
-- Hiển thị thanh chọn công đoạn
-- Chuyển đổi nhanh giữa các công đoạn
-- Tự động lọc dữ liệu theo công đoạn đang chọn
-
-### 10. Màn hình Kế hoạch Bàn giao (Delivery Plan)
-
-**Tính năng:**
-- Hiển thị danh sách chi tiết cần giao
-- Số lượng kế hoạch vs thực tế
-- Trạng thái giao/nhận
-- Lọc theo công đoạn
-- Xuất Excel/PDF báo cáo
+| # | Tính năng | Chi tiết | Mức độ |
+|---|-----------|----------|--------|
+| 9.1 | **AI Chatbot sản xuất** | Tra cứu thông tin sản xuất bằng ngôn ngữ tự nhiên, tích hợp Google Gemini API. | 🔥🔥 Rất cao cấp |
+| 9.2 | **PDF Parser thông minh** | Trích xuất dữ liệu từ file PDF tài liệu ISO, tự động chuyển đổi sang định dạng hệ thống. | 🔥 Cao cấp |
+| 9.3 | **Thông báo đa kênh Real-time** | WebSocket cho Web, FCM cho Mobile. Tự động thông báo khi có phiếu giao mới, QC hoàn thành, hàng trả về. | ⭐ Xịn |
 
 ---
 
-## 🚀 Hướng dẫn cài đặt (Installation Guide)
+## 🚀 3. Tối ưu hóa hiệu suất
 
-### Yêu cầu hệ thống (Prerequisites)
+SmartFlow ERP đã trải qua nhiều vòng tối ưu hóa hiệu suất ở cả 3 tầng (Database → Backend → FrontEnd), đảm bảo đáp ứng **500+ người dùng đồng thời** mà không bị nghẽn:
+
+### 3.1. Tầng Database (SQL Server)
+
+| Tối ưu | Chi tiết | Hiệu quả |
+|--------|----------|-----------|
+| **Performance Indexes** | 30+ chỉ mục (Index) được thiết kế riêng cho các truy vấn nặng nhất: `deliveries`, `delivery_details`, `products`, `orders`, `bom_details`, `daily_inspections`. | Giảm 70-90% thời gian query |
+| **NOLOCK Hints** | Thêm hint `WITH (NOLOCK)` cho tất cả truy vấn read-only trên Dashboard để tránh lock conflict. | Loại bỏ deadlock khi đọc song song |
+| **Connection Pooling** | Cấu hình `pool_size=100`, `max_overflow=400`, `pool_pre_ping=True` hỗ trợ 500 connections đồng thời. | Giảm 95% chi phí kết nối mới |
+| **Server-side Pagination** | Toàn bộ danh sách lớn (Orders, Plans, Quality Records) sử dụng `OFFSET/FETCH` SQL thay vì `.slice()` JS. | FE chỉ tải 15 dòng/trang |
+
+### 3.2. Tầng Backend (FastAPI)
+
+| Tối ưu | Chi tiết | Hiệu quả |
+|--------|----------|-----------|
+| **SWR Cache (Stale-While-Revalidate)** | Cache in-memory cho các API hot (Dashboard, Plan Detail). Trả dữ liệu cũ ngay lập tức, cập nhật mới ở background. | Response <50ms cho cache hit |
+| **In-Memory Stage Cache** | Cache danh sách công đoạn sản xuất (stages) trong RAM, tự động invalidate khi có thay đổi. | Loại bỏ 100% query lặp lại |
+| **AnyIO Thread Pool Tuning** | Tăng giới hạn thread pool lên 800 tokens để tránh nghẽn hàng đợi dưới tải cao. | Hỗ trợ 500+ concurrent requests |
+| **Startup Optimization** | Chỉ chạy duy nhất task đồng bộ screens khi khởi động, loại bỏ 6 task không cần thiết. | Thời gian boot giảm 80% |
+| **FIFO 2-Pass Algorithm** | Thuật toán tối ưu tính tiến độ sản xuất, xử lý 53k+ bản ghi trong <100ms. | Giảm 99% thời gian xử lý |
+
+### 3.3. Tầng FrontEnd (React + Vite)
+
+| Tối ưu | Chi tiết | Hiệu quả |
+|--------|----------|-----------|
+| **Server-side Filtering & Sorting** | Toàn bộ logic lọc, tìm kiếm, sắp xếp chuyển về Backend SQL thay vì xử lý trên trình duyệt. | Không lag UI với 10,000+ bản ghi |
+| **Stats từ Backend** | Thẻ thống kê (Tổng/Đang SX/Hoàn thành/Quá hạn) được tính trực tiếp trên DB, không dùng `useMemo`. | Chính xác 100% với dữ liệu thực |
+| **Lazy Excel Export** | Chỉ tải toàn bộ dữ liệu khi người dùng bấm "Xuất Excel", không tải sẵn vào RAM. | Tiết kiệm 95% băng thông thường xuyên |
+| **Loại bỏ Animation nặng** | Xóa các CSS animation phức tạp (gradient shimmer, card entrance) gây lag trên thiết bị yếu. | Mượt mà trên mọi thiết bị |
+
+### 3.4. Công cụ tối ưu 1-Click
+
+```bash
+# Chạy tối ưu toàn bộ hệ thống (Database Indexes + Config check)
+OPTIMIZE_SYSTEM.bat
+```
+
+---
+
+## 📁 4. Cấu trúc thư mục
+
+```
+SmartFlow/
+│
+├── BackEnd/                              # ═══ BACKEND API (FastAPI + Python) ═══
+│   ├── app/                              # Ứng dụng chính
+│   │   ├── main.py                       # Entry point, Lifespan, Middleware, CORS
+│   │   ├── routes.py                     # Đăng ký tất cả API routers
+│   │   ├── models.py                     # Import tập trung tất cả ORM Models
+│   │   └── dependencies.py               # Shared dependencies (Auth, DB session)
+│   │
+│   ├── modules/                          # ═══ MODULES NGHIỆP VỤ (13 modules) ═══
+│   │   ├── auth/                         # Xác thực & Phân quyền (JWT, RBAC)
+│   │   │   ├── models/                   #   Account, Role, Permission
+│   │   │   ├── routes/                   #   Login, Register, Token refresh
+│   │   │   └── services/                 #   Auth logic, Password hashing
+│   │   │
+│   │   ├── production/                   # Quản lý Sản xuất
+│   │   │   ├── models/                   #   ProductPlan, Product, BOM
+│   │   │   └── routes/                   #   product_plan_router, stage_router
+│   │   │
+│   │   ├── delivery/                     # Bàn giao & Giao nhận
+│   │   │   ├── models/                   #   Order, Delivery, DeliveryDetail, Return
+│   │   │   └── routes/                   #   delivery_router, order_router, return_router, pallet_router
+│   │   │
+│   │   ├── inspection/                   # Kiểm tra Chất lượng (QC)
+│   │   │   ├── models/                   #   InputInspection, DailyInspection, Defect
+│   │   │   └── routes/                   #   inspection_routes, qc_routes, iso_router
+│   │   │
+│   │   ├── equipment/                    # Quản lý Thiết bị & Máy móc
+│   │   │   ├── models/                   #   Equipment, Machine, Maintenance
+│   │   │   └── routes/                   #   equipment_router, machine_router
+│   │   │
+│   │   ├── kpi/                          # Quản lý KPI Nhân viên
+│   │   │   ├── models/                   #   KPIChecklist, KPIRule, KPIFeedback
+│   │   │   └── routes/                   #   kpi_router
+│   │   │
+│   │   ├── claim/                        # Claim & Bảng giá
+│   │   │   ├── models/                   #   Claim, PriceList, Shipment
+│   │   │   └── routes/                   #   claim_router
+│   │   │
+│   │   ├── purchasing/                   # Mua hàng & Đơn đặt mua
+│   │   │   ├── models/                   #   PurchaseRequisition, PurchaseOrder
+│   │   │   └── routes/                   #   purchasing_router
+│   │   │
+│   │   ├── chatbot/                      # AI Chatbot (Gemini API)
+│   │   │   ├── models/                   #   ChatHistory, ChatContext
+│   │   │   ├── services/                 #   Gemini integration, NLP processing
+│   │   │   └── controllers/              #   Chat flow logic
+│   │   │
+│   │   ├── notification/                 # Thông báo (FCM + WebSocket)
+│   │   │   ├── models/                   #   Notification, DeviceToken
+│   │   │   └── routes/                   #   notification_router
+│   │   │
+│   │   ├── master/                       # Dữ liệu Master (Danh mục dùng chung)
+│   │   ├── capa/                         # CAPA (Corrective & Preventive Action)
+│   │   └── system/                       # Hệ thống (Screens, Settings, Bugs)
+│   │
+│   ├── shared/                           # ═══ SHARED SERVICES ═══
+│   │   ├── services/
+│   │   │   ├── cache_service.py          # SWR Cache (Stale-While-Revalidate)
+│   │   │   ├── notification_service.py   # FCM Push Notification
+│   │   │   ├── websocket_service.py      # WebSocket Connection Manager
+│   │   │   └── pdf_parser_service.py     # PDF Parser (trích xuất tài liệu ISO)
+│   │   └── utils/                        # Tiện ích chung (banner, helpers)
+│   │
+│   ├── config/                           # Cấu hình
+│   │   ├── database.py                   # SQLAlchemy Engine, Session, Pool config
+│   │   └── settings.py                   # Environment settings (.env)
+│   │
+│   ├── database/                         # Database Scripts
+│   │   ├── migrations/                   # Migration scripts (tạo bảng, thêm cột)
+│   │   └── seeders/                      # Seed data (dữ liệu mẫu)
+│   │
+│   ├── scripts/                          # ═══ TIỆN ÍCH & SCRIPTS ═══
+│   │   ├── add_performance_indexes.sql   # 30+ Performance Indexes cho SQL Server
+│   │   ├── run_indexes.py                # Script chạy indexes tự động
+│   │   ├── bump_version.py               # Tự động tăng version trong code
+│   │   └── import_bugs.py                # Import dữ liệu bugs vào DB
+│   │
+│   ├── static/                           # Static files (uploads, APK, images)
+│   ├── tests/                            # Unit tests
+│   └── requirements.txt                  # Python dependencies
+│
+├── FrontEnd/                             # ═══ FRONTEND APPLICATIONS ═══
+│   │
+│   ├── Web/                              # ═══ WEB DASHBOARD (React 18 + Vite) ═══
+│   │   ├── Shared/                       # Component & Service dùng chung
+│   │   │   ├── Views/components/
+│   │   │   │   ├── layout/
+│   │   │   │   │   ├── PortalLayout.jsx  # Layout chính (Header, Sidebar, Content)
+│   │   │   │   │   ├── Sidebar.jsx       # Thanh điều hướng bên trái
+│   │   │   │   │   ├── PageToolbar.jsx   # Thanh công cụ (Search, Filter, Create)
+│   │   │   │   │   └── WebLayout.jsx     # Layout wrapper cho Web
+│   │   │   │   └── feedback/             # Toast, Modal, Loading components
+│   │   │   ├── Services/
+│   │   │   │   └── api.service.js        # Axios instance, JWT interceptor
+│   │   │   ├── styles/
+│   │   │   │   └── index.css             # Design System CSS (tokens, utilities)
+│   │   │   └── app/
+│   │   │       └── bootstrap.jsx         # React Router, Lazy loading
+│   │   │
+│   │   └── modules/                      # ═══ 16 MODULES NGHIỆP VỤ WEB ═══
+│   │       ├── Auth/                     # Đăng nhập, Quản lý User, Phân quyền
+│   │       │   └── Views/
+│   │       │       ├── LoginView.jsx
+│   │       │       ├── UserManagementView.jsx
+│   │       │       ├── UserCreateView.jsx
+│   │       │       ├── UserEditView.jsx
+│   │       │       ├── UserPermissionView.jsx
+│   │       │       ├── DepartmentManagementView.jsx
+│   │       │       └── PositionManagementView.jsx
+│   │       │
+│   │       ├── Dashboard/                # Dashboard & Báo cáo Sản xuất
+│   │       ├── Plan/                     # Kế hoạch Sản xuất (Server-side Pagination)
+│   │       ├── Order/                    # Đơn hàng Sản xuất (Server-side Pagination)
+│   │       ├── Product/                  # Sản phẩm & BOM
+│   │       ├── Delivery/                 # Theo dõi Bàn giao
+│   │       ├── Pallet/                   # Quản lý Pallet
+│   │       ├── Inspection/               # Báo cáo Kiểm tra QC & Quản lý Lỗi
+│   │       ├── QualityRecords/           # Hồ sơ Chất lượng (Server-side Pagination)
+│   │       ├── Equipment/                # Thiết bị & Máy móc (11 views)
+│   │       ├── KPI/                      # KPI Nhân viên (5 views)
+│   │       ├── ISO/                      # Tài liệu & Quy trình ISO (5 views)
+│   │       ├── Claim/                    # Claim & Bảng giá
+│   │       ├── Purchasing/               # Mua hàng & Đơn đặt mua
+│   │       ├── CAPA/                     # Hành động Khắc phục/Phòng ngừa
+│   │       └── System/                   # Quản lý Hệ thống, Bug, Monitor
+│   │
+│   ├── Mobile/                           # ═══ MOBILE APP (React + Capacitor 6) ═══
+│   │   ├── Shared/                       # Component & Service dùng chung Mobile
+│   │   ├── modules/                      # 8 Modules nghiệp vụ Mobile
+│   │   │   ├── auth/                     # Đăng nhập, chọn công đoạn
+│   │   │   ├── production/               # Theo dõi kế hoạch, PO, tiến độ
+│   │   │   ├── delivery/                 # Tạo/Nhận phiếu giao, quét QR
+│   │   │   ├── inspection/               # Kiểm tra QC, chụp ảnh lỗi
+│   │   │   ├── equipment/                # Thiết bị tại xưởng
+│   │   │   ├── kpi/                      # Chấm KPI tại xưởng
+│   │   │   ├── capa/                     # CAPA tại xưởng
+│   │   │   └── notification/             # Thông báo & Push
+│   │   │
+│   │   ├── capacitor.config.json         # Capacitor configuration (Android)
+│   │   ├── package.json                  # Mobile dependencies
+│   │   └── vite.config.js                # Vite config cho Mobile
+│   │
+│   ├── shared/                           # Tài nguyên chung Web & Mobile
+│   │   ├── hooks/                        # Shared React Hooks (useAuth, useSocket)
+│   │   ├── services/                     # Shared Services (api.js)
+│   │   ├── store/                        # Shared State Stores (uiStore)
+│   │   └── constants/                    # Shared Constants (appConfig.js)
+│   │
+│   ├── package.json                      # Root package.json
+│   ├── vite.config.js                    # Root Vite config
+│   └── index.html                        # Entry HTML
+│
+├── AI/                                   # ═══ AI MODULE ═══
+│   └── gemini-web2api/                   # Gemini API integration layer
+│
+├── docs/                                 # Tài liệu hướng dẫn sử dụng
+│
+├── run_project.bat                       # 🖥️ Script chạy dự án (menu lựa chọn)
+├── start_server.bat                      # 🖥️ Script khởi động Backend
+├── ONE_CLICK_PUBLISH.bat                 # 🚀 Tự động: Version → Build → APK → Deploy
+├── OPTIMIZE_SYSTEM.bat                   # ⚡ Tối ưu Database Indexes 1-click
+├── SETUP_GUIDE.md                        # 📖 Hướng dẫn cài đặt chi tiết
+├── MIGRATION_GUIDE.md                    # 📖 Hướng dẫn migration database
+├── CHANGELOG.md                          # 📋 Nhật ký thay đổi
+├── .gitignore                            # Git ignore rules
+└── README.md                             # 📄 Tệp này
+```
+
+---
+
+## 🛠️ 5. Hướng dẫn cài đặt
+
+### Yêu cầu hệ thống
 
 | Yêu cầu | Phiên bản tối thiểu | Ghi chú |
-|---------|-------------------|---------|
-| Python | 3.13+ | Backend |
-| Node.js | 18+ | Frontend |
-| SQL Server | 2019+ | Database |
-| Git | Latest | Version control |
-| Capacitor CLI | 6+ | Mobile build |
+|----------|---------------------|---------|
+| **Python** | 3.13+ | Backend API |
+| **Node.js** | 18+ | FrontEnd build & dev server |
+| **SQL Server** | 2019+ | Database chính (Express hoặc Developer Edition) |
+| **Git** | Latest | Quản lý mã nguồn |
+| **Capacitor CLI** | 6+ | Build Mobile APK (chỉ khi cần build Android) |
+| **Android Studio** | Latest | Build APK (chỉ khi cần build Android) |
 
-### 1. Clone Repository
+### Bước 1: Clone Repository
 
 ```bash
 git clone https://github.com/mynd02work-bit/SmartFlow.git
 cd SmartFlow
-git checkout test_v1
 ```
 
-### 2. Cài đặt Backend
+### Bước 2: Cài đặt Backend
 
 ```bash
-# Tạo virtual environment
+# 1. Di chuyển vào thư mục BackEnd
 cd BackEnd
+
+# 2. Tạo môi trường ảo Python
 python -m venv venv
 
-# Kích hoạt virtual environment
+# 3. Kích hoạt môi trường ảo
 # Windows:
 venv\Scripts\activate
 # Linux/Mac:
 source venv/bin/activate
 
-# Cài đặt dependencies
+# 4. Cài đặt thư viện
 pip install -r requirements.txt
 
-# Cấu hình database
-# Mở file config/database.py và cập nhật:
-# - DATABASE_URL: Chuỗi kết nối SQL Server
-# - SECRET_KEY: Key cho JWT
+# 5. Tạo file .env (copy từ .env.example)
+# Cấu hình các biến:
+#   DATABASE_URL=mssql+pyodbc://sa:YourPassword@localhost/ERP_DB?driver=ODBC+Driver+17+for+SQL+Server
+#   SECRET_KEY=your-secret-key-here
+#   FCM_SERVER_KEY=your-fcm-key (nếu cần push notification)
 
-# Chạy migration (nếu có)
-python database/migrations/run_migrations.py
-
-# Khởi động server
+# 6. Khởi động server
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 3. Cài đặt Web Admin
+> **Lưu ý:** Lần đầu chạy, SQLAlchemy sẽ tự động tạo tất cả bảng trong Database thông qua `Base.metadata.create_all()`.
+
+### Bước 3: Cài đặt Web Dashboard
 
 ```bash
-# Di chuyển đến thư mục FrontEnd
-cd ../FrontEnd
+# 1. Di chuyển vào thư mục FrontEnd
+cd FrontEnd
 
-# Cài đặt dependencies
+# 2. Cài đặt dependencies
 npm install
 
-# Cấu hình API URL (nếu cần)
-# Mở file shared/services/api.js và cập nhật getBaseURL()
-
-# Chạy development server
+# 3. Chạy development server
 npm run dev
+# → Truy cập: http://localhost:3000
 
-# Hoặc build cho production
+# 4. Build cho production
 npm run build
+# → Kết quả: thư mục dist/
 ```
 
-### 4. Cài đặt Mobile App
+### Bước 4: Cài đặt Mobile App
 
 ```bash
-# Di chuyển đến thư mục Mobile
-cd Mobile
+# 1. Di chuyển vào thư mục Mobile
+cd FrontEnd/Mobile
 
-# Cài đặt dependencies
+# 2. Cài đặt dependencies
 npm install
 
-# Cấu hình API URL (nếu cần)
-# Mở file shared/services/api.js và cập nhật getBaseURL()
-
-# Chạy development server
+# 3. Chạy development server (trình duyệt)
 npm run dev
 
-# Build cho Android
-npm run build:android
-
-# Build cho iOS
-npm run build:ios
+# 4. Build cho Android
+npm run build
+npx cap sync android
+cd android && gradlew.bat assembleDebug
+# → APK: android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-### 5. Cấu hình SQL Server
+### Bước 5: Cấu hình SQL Server
 
 ```sql
 -- Tạo database
-CREATE DATABASE SmartFlowDB;
+CREATE DATABASE ERP_G7_v4;
 
--- Tạo user (nếu cần)
-CREATE LOGIN smartflow_user WITH PASSWORD = 'your_password';
+-- Tạo user (khuyến nghị)
+CREATE LOGIN smartflow_user WITH PASSWORD = 'StrongPassword@123';
+USE ERP_G7_v4;
 CREATE USER smartflow_user FOR LOGIN smartflow_user;
 ALTER ROLE db_owner ADD MEMBER smartflow_user;
-
--- Chạy script tạo bảng (nếu có)
--- Xem file BackEnd/docs/DATABASE.md
 ```
 
-### 6. Chạy toàn bộ hệ thống
+### Bước 6: Tối ưu Database (Quan trọng!)
 
-Sử dụng script `run_project.bat` (Windows):
+```bash
+# Chạy script tối ưu indexes 1-click
+OPTIMIZE_SYSTEM.bat
 
-```batch
-@echo off
-echo Chọn chế độ chạy:
-echo 1. Chạy Backend Server
-echo 2. Chạy Web Admin
-echo 3. Chạy Mobile App
-echo 4. Chạy tất cả
-echo 5. Build tất cả cho production
+# Hoặc chạy thủ công
+python BackEnd/scripts/run_indexes.py
+```
 
-set /p choice="Nhập lựa chọn (1-5): "
+### Bước 7: Chạy toàn bộ hệ thống
 
-if "%choice%"=="1" (
-    cd BackEnd
-    uvicorn app.main:app --host 0.0.0.0 --port 8000
-)
-if "%choice%"=="2" (
-    cd FrontEnd
-    npm run dev
-)
-if "%choice%"=="3" (
-    cd FrontEnd/Mobile
-    npm run dev
-)
-if "%choice%"=="4" (
-    start cmd /k "cd BackEnd && uvicorn app.main:app --host 0.0.0.0 --port 8000"
-    start cmd /k "cd FrontEnd && npm run dev"
-    start cmd /k "cd FrontEnd/Mobile && npm run dev"
-)
-if "%choice%"=="5" (
-    cd FrontEnd && npm run build
-    cd FrontEnd/Mobile && npm run build
-)
+```bash
+# Sử dụng script tiện ích (Windows)
+run_project.bat
+
+# Menu sẽ hiển thị:
+# 1. Chạy Backend Server
+# 2. Chạy Web Dashboard
+# 3. Chạy Mobile App (Dev)
+# 4. Chạy tất cả
+# 5. Build tất cả cho production
 ```
 
 ---
 
-## 📖 Hướng dẫn sử dụng (User Guide)
+## 📖 6. Hướng dẫn sử dụng
 
-### 1. Đăng nhập (Login)
+### 6.1. Đăng nhập
 
-**Web Admin:**
-- Truy cập: `http://localhost:3000/login`
-- Nhập username và password
-- Chọn vai trò (Admin, Manager, QC)
+**Web Dashboard:**
+1. Truy cập `http://localhost:3000/login` (dev) hoặc `https://smartflowg7.cloud` (production)
+2. Nhập tên đăng nhập và mật khẩu
+3. Hệ thống tự động chuyển hướng dựa trên vai trò (Admin → Dashboard, Worker → Mobile)
 
 **Mobile App:**
-- Mở app trên điện thoại
-- Nhập username và password
-- Chọn công đoạn (nếu có nhiều)
+1. Mở ứng dụng SmartFlow trên điện thoại Android
+2. Nhập tên đăng nhập và mật khẩu
+3. Nếu tài khoản có nhiều công đoạn → Chọn công đoạn muốn làm việc
 
-### 2. Quản lý Đơn hàng (Order Management)
+### 6.2. Quản lý Đơn hàng
 
-**Tạo đơn hàng mới:**
-1. Vào menu "Đơn hàng"
-2. Nhấn "Tạo đơn hàng mới"
-3. Nhập thông tin:
-   - Mã đơn hàng (PO)
-   - Tên khách hàng
-   - Số lượng
-   - Ngày giao hàng
-4. Nhấn "Lưu"
+| Thao tác | Hướng dẫn |
+|----------|-----------|
+| **Tạo đơn mới** | Menu "Đơn hàng" → "Thêm Đơn hàng" → Nhập mã PO, khách hàng, sản phẩm, số lượng, hạn giao → Lưu |
+| **Theo dõi** | Xem danh sách đơn hàng với phân trang, lọc theo trạng thái/khách hàng/hạn giao |
+| **Tìm kiếm** | Thanh tìm kiếm hỗ trợ search theo mã PO, tên khách hàng, tên sản phẩm |
+| **Xuất Excel** | Bấm nút "Xuất Excel" → Hệ thống tải toàn bộ dữ liệu khớp bộ lọc và xuất file |
 
-**Theo dõi đơn hàng:**
-- Xem danh sách tất cả đơn hàng
-- Lọc theo trạng thái
-- Xem chi tiết từng đơn
+### 6.3. Kế hoạch Sản xuất
 
-### 3. Quản lý Kế hoạch Sản xuất (Production Plan)
+| Thao tác | Hướng dẫn |
+|----------|-----------|
+| **Tạo kế hoạch** | Menu "Kế hoạch SX" → "Tạo KHSX mới" → Chọn tháng/năm, thêm danh sách PO → Lưu |
+| **Theo dõi tiến độ** | Xem Dashboard tổng quan với 4 thẻ KPI (Tổng/Đang SX/Hoàn thành/Quá hạn) |
+| **Import Excel** | Upload file Excel chứa danh sách đơn hàng + sản phẩm + BOM |
 
-**Tạo kế hoạch:**
-1. Vào menu "Kế hoạch sản xuất"
-2. Nhấn "Tạo kế hoạch mới"
-3. Chọn đơn hàng liên quan
-4. Chia nhỏ thành các lệnh sản xuất
-5. Gán cho từng công đoạn
+### 6.4. Bàn giao Sản xuất (Mobile)
 
-**Theo dõi tiến độ:**
-- Xem Dashboard tổng quan
-- Biểu đồ tiến độ theo tuần
-- Biểu đồ tiến độ theo công đoạn
-- Danh sách lệnh sản xuất
+| Thao tác | Hướng dẫn |
+|----------|-----------|
+| **Tạo phiếu giao** | Chọn PO → Chọn chi tiết cần giao → Nhập số lượng → Chụp ảnh (tối đa 3) → Xác nhận → Nhận mã QR |
+| **Nhận phiếu giao** | Quét mã QR hoặc chọn từ danh sách → Kiểm tra thông tin → Bấm "Nhận hàng" |
+| **Trả hàng lỗi** | QC đánh dấu lỗi → Tạo phiếu trả hàng → Công đoạn gửi nhận thông báo |
 
-### 4. Tạo Phiếu Giao (Delivery Create)
+### 6.5. Kiểm tra Chất lượng (QC)
 
-**Trên Mobile App:**
-1. Vào màn hình "Thông tin kế hoạch"
-2. Chọn lệnh sản xuất đang thực hiện
-3. Nhấn "Tạo phiếu giao"
-4. Chọn linh kiện/chi tiết cần giao
-5. Nhập số lượng giao
-6. Chụp ảnh minh chứng (tối đa 3 ảnh)
-7. Nhập ghi chú (nếu có)
-8. Nhấn "Xác nhận"
-9. Nhận mã QR Giao Nhận
+| Thao tác | Hướng dẫn |
+|----------|-----------|
+| **Kiểm tra đầu vào** | Chọn phiếu giao → Kiểm tra SL nhận/lỗi → Chụp ảnh lỗi → Đánh giá Đạt/Không đạt |
+| **Xem hồ sơ CL** | Menu "Hồ sơ Chất lượng" → Chọn KHSX → Xem danh sách PO với trạng thái dữ liệu |
+| **Báo cáo** | Menu "Báo cáo QC" → Thống kê lỗi theo loại/công đoạn/thời gian |
 
-**Chi tiết:** Xem file [docs/delivery_create_guide.md](./docs/delivery_create_guide.md)
+### 6.6. Quản lý ISO
 
-### 5. Nhận Phiếu Giao (Delivery Receive)
-
-**Trên Mobile App:**
-1. Quét mã QR Giao Nhận
-2. Hoặc vào menu "Phiếu giao"
-3. Chọn phiếu cần nhận
-4. Kiểm tra thông tin:
-   - Tên chi tiết
-   - Số lượng
-   - Ảnh minh chứng
-5. Nhấn "Nhận hàng"
-6. QC sẽ kiểm tra chất lượng
-
-### 6. Kiểm tra Chất lượng (QC Inspection)
-
-**Kiểm tra đầu vào:**
-1. Vào menu "Kiểm tra đầu vào"
-2. Chọn phiếu giao cần kiểm
-3. Kiểm tra:
-   - Số lượng nhận
-   - Số lượng lỗi
-   - Ảnh lỗi (nếu có)
-4. Nhập kết quả:
-   - Đạt: Tiếp tục
-   - Lỗi: Trả hàng
-
-**Kiểm tra theo công đoạn:**
-1. Vào menu "Kiểm tra công đoạn"
-2. Chọn công đoạn
-3. Kiểm tra từng chi tiết
-4. Đánh giá chất lượng
-
-**Chi tiết:** Xem file [docs/qc_inspection_guide.md](./docs/qc_inspection_guide.md)
-
-### 7. Quét mã QR (QR Scan)
-
-**Sử dụng:**
-1. Mở camera trong app
-2. Quét mã QR trên kiện hàng
-3. Hiển thị thông tin:
-   - Lệnh sản xuất
-   - Chi tiết
-   - Số lượng
-   - Vị trí
-
-**Chi tiết:** Xem file [docs/qr_scan_guide.md](./docs/qr_scan_guide.md)
+| Thao tác | Hướng dẫn |
+|----------|-----------|
+| **Tạo tài liệu** | Menu "ISO" → "Tài liệu" → "Thêm mới" → Nhập tiêu đề, nội dung, phân loại |
+| **Biên tập biểu mẫu** | Menu "ISO" → "Biểu mẫu" → Chọn biểu mẫu → Mở Form Editor WYSIWYG |
+| **Vẽ sơ đồ quy trình** | Menu "ISO" → "Quy trình" → Mở Process Flowchart Editor → Kéo-thả các bước |
 
 ---
 
-## 📁 Cấu trúc thư mục (Directory Structure)
+## 📏 7. Quy tắc phát triển
 
-```
-SmartFlow_v2/
-├── BackEnd/                          # Backend API (FastAPI)
-│   ├── app/                          # Main application
-│   │   ├── main.py                   # Entry point
-│   │   ├── routes.py                 # API routes
-│   │   └── dependencies.py           # Dependencies
-│   ├── modules/                      # Business logic modules
-│   │   ├── auth/                     # Authentication
-│   │   ├── production/               # Production management
-│   │   ├── delivery/                 # Delivery management
-│   │   ├── inspection/               # QC inspection
-│   │   ├── notification/             # Notifications
-│   │   ├── equipment/                # Equipment management
-│   │   ├── kpi/                      # KPI tracking
-│   │   ├── capa/                     # CAPA management
-│   │   └── system/                   # System settings
-│   ├── config/                       # Configuration
-│   │   └── database.py               # Database connection
-│   ├── database/                     # Database scripts
-│   │   ├── migrations/               # Migration scripts
-│   │   └── seeders/                  # Seed data
-│   ├── docs/                         # Documentation
-│   │   ├── DATABASE.md               # Database schema
-│   │   ├── AUTH_SYSTEM.md            # Auth system
-│   │   └── API_FLOWS.md              # API flows
-│   ├── tests/                        # Unit tests
-│   └── requirements.txt              # Python dependencies
-│
-├── FrontEnd/                         # Frontend Applications
-│   ├── Web/                          # Web Portal Admin (React)
-│   │   ├── app/                      # Khởi chạy ứng dụng (App.jsx, bootstrap.jsx)
-│   │   ├── assets/                   # Static assets (images, icons)
-│   │   ├── styles/                   # Style CSS
-│   │   ├── Shared/                   # Component dùng chung (Views, Services, Models)
-│   │   ├── modules/                  # Các Module MVC Nghiệp vụ Web
-│   │   │   ├── Auth/                 # Đăng nhập & Đăng ký
-│   │   │   ├── Dashboard/            # Dashboard & Báo cáo
-│   │   │   ├── Delivery/             # Bàn giao & Giao nhận
-│   │   │   ├── Pallet/               # Quản lý Pallet
-│   │   │   ├── Plan/                 # Lập kế hoạch sản xuất
-│   │   │   ├── System/               # Quản lý cấu hình, người dùng
-│   │   │   └── ...                   # Các module nghiệp vụ khác
-│   │   ├── package.json              # Node dependencies cho Web
-│   │   └── vite.config.js            # Cấu hình Vite Web
-│   │
-│   ├── Mobile/                       # Mobile App (React + Capacitor)
-│   │   ├── app/                      # Khởi chạy ứng dụng (App.jsx, bootstrap.jsx)
-│   │   ├── assets/                   # Static assets cho Mobile
-│   │   ├── styles/                   # Style CSS cho Mobile
-│   │   ├── Shared/                   # Component dùng chung cho Mobile
-│   │   ├── modules/                  # Các Module MVC Nghiệp vụ Mobile
-│   │   │   ├── auth/                 # Xác thực trên Mobile
-│   │   │   ├── delivery/             # Giao nhận & Quét mã QR trên Mobile
-│   │   │   ├── production/           # Theo dõi kế hoạch & PO
-│   │   │   └── ...                   # Các module nghiệp vụ khác
-│   │   ├── package.json              # Node dependencies cho Mobile
-│   │   └── vite.config.js            # Cấu hình Vite Mobile
-│   │
-│   ├── shared/                       # Tài nguyên dùng chung Web & Mobile
-│   │   ├── hooks/                    # Shared React Hooks (useAuth...)
-│   │   ├── services/                 # Shared Services (api.js...)
-│   │   ├── store/                    # Shared State Stores (uiStore...)
-│   │   └── constants/                # Shared Constants (appConfig.js...)
-│   │
-│   ├── package.json                  # Root package.json
-│   ├── vite.config.js                # Root Vite config
-│   └── index.html                    # Entry HTML
-│
-├── docs/                             # Documentation
-│   ├── delivery_create_guide.md      # Delivery create guide
-│   ├── delivery_info_guide.md        # Delivery info guide
-│   ├── handover_tracking_guide.md    # Handover tracking guide
-│   ├── login_guide.md                # Login guide
-│   ├── plan_tracking_guide.md         # Plan tracking guide
-│   ├── qc_inspection_guide.md        # QC inspection guide
-│   ├── qc_return_guide.md            # QC return guide
-│   └── qr_scan_guide.md              # QR scan guide
-│
-├── run_project.bat                   # Run script
-├── start_server.bat                  # Start backend server
-├── README.md                         # This file
-├── SETUP_GUIDE.md                    # Setup guide
-└── MIGRATION_GUIDE.md                # Migration guide
-```
-
----
-
-## 🛠️ Quy tắc phát triển (Development Standards)
-
-### 1. Quy tắc đặt tên (Naming Conventions)
+### 7.1. Đặt tên (Naming Conventions)
 
 **Python (Backend):**
-- Biến/Hàm: `snake_case` (ví dụ: `get_user_by_id`)
-- Class: `PascalCase` (ví dụ: `UserService`)
-- Constant: `UPPER_SNAKE_CASE` (ví dụ: `MAX_RETRY_COUNT`)
-- File: `snake_case.py` (ví dụ: `user_service.py`)
+```python
+# Biến & Hàm: snake_case
+def get_user_by_id(user_id: int): ...
 
-**JavaScript/React (Frontend):**
-- Biến/Hàm: `camelCase` (ví dụ: `getUserById`)
-- Component: `PascalCase` (ví dụ: `UserProfileCard`)
-- Constant: `UPPER_SNAKE_CASE` (ví dụ: `MAX_RETRY_COUNT`)
-- File: `PascalCase.jsx` (component), `camelCase.js` (utility)
+# Class: PascalCase
+class UserService: ...
 
-### 2. Quy tắc commit (Commit Messages)
+# Constant: UPPER_SNAKE_CASE
+MAX_RETRY_COUNT = 3
 
-**Format:**
+# File: snake_case.py
+# VD: user_service.py, order_router.py
+```
+
+**JavaScript/React (FrontEnd):**
+```javascript
+// Biến & Hàm: camelCase
+const getUserById = (userId) => { ... }
+
+// Component: PascalCase
+const UserProfileCard = () => { ... }
+
+// Service: camelCase.service.js
+// VD: order.service.js, plan.service.js
+
+// View: PascalCase + View.jsx
+// VD: OrdersListView.jsx, PlanListView.jsx
+```
+
+### 7.2. Kiến trúc Module (MVC Pattern)
+
+Mỗi module nghiệp vụ tuân theo cấu trúc **MVC** (Model-View-Controller):
+
+```
+modules/
+└── ModuleName/
+    ├── Models/           # Service layer (API calls)
+    │   └── module.service.js
+    └── Views/            # React Components (UI)
+        ├── ModuleListView.jsx
+        ├── ModuleDetailView.jsx
+        └── ModuleCreateView.jsx
+```
+
+### 7.3. Quy tắc Commit
+
 ```
 <type>: <subject>
 
@@ -627,255 +699,263 @@ SmartFlow_v2/
 <footer>
 ```
 
-**Types:**
-- `feat`: Thêm tính năng mới
-- `fix`: Sửa lỗi
-- `docs`: Thêm/sửa tài liệu
-- `style`: Đổi format code (không ảnh hưởng logic)
-- `refactor`: Refactor code
-- `test`: Thêm/sửa test
-- `chore`: Thay đổi cấu hình, tool
+| Type | Mô tả | Ví dụ |
+|------|--------|-------|
+| `feat` | Thêm tính năng mới | `feat: thêm phân trang server-side cho trang Đơn hàng` |
+| `fix` | Sửa lỗi | `fix: sửa lỗi stale closure khi đổi PO trên Mobile` |
+| `perf` | Tối ưu hiệu suất | `perf: thêm NOLOCK hint cho Dashboard queries` |
+| `refactor` | Cải tiến code | `refactor: tách fetchOrders thành custom hook` |
+| `docs` | Cập nhật tài liệu | `docs: viết lại README.md` |
+| `style` | Thay đổi giao diện | `style: cải thiện responsive cho mobile cards` |
+| `chore` | Cấu hình, build | `chore: cập nhật .gitignore` |
 
-**Ví dụ:**
+### 7.4. Quy trình Review
+
 ```
-feat: thêm chức năng lọc đơn hàng theo PO
+1. Tạo branch mới từ dev_v1
+   git checkout -b feature/ten-tinh-nang
 
-- Thêm dropdown chọn PO trên màn hình Plan Tracking
-- Fix bug stale closure khi đổi PO
-- Cập nhật API endpoint hỗ trợ filter by PO
+2. Implement & Self-test
 
-Closes #123
-```
+3. Commit với message chuẩn
 
-### 3. Quy tắc code (Code Standards)
+4. Push & Tạo Pull Request
 
-**Python:**
-- Sử dụng type hints
-- Docstring cho mọi function/class
-- Maximum line length: 100 characters
-- Sử dụng PEP 8
+5. Code Review (ít nhất 1 reviewer)
 
-**JavaScript/React:**
-- Sử dụng ESLint
-- Component functional với hooks
-- Props validation với PropTypes
-- Maximum line length: 100 characters
+6. Merge vào dev_v1
 
-### 4. Quy tắc review (Review Process)
-
-1. Tạo branch từ `test_v1`
-2. Implement feature
-3. Self-test
-4. Create Pull Request
-5. Code review
-6. Merge vào `test_v1`
-
----
-
-## 🚢 Triển khai sản xuất (Production Deployment)
-
-### 1. Backend Deployment
-
-```bash
-# Build Docker image
-docker build -t smartflow-backend .
-
-# Run container
-docker run -d -p 8000:8000 --name smartflow-backend smartflow-backend
-
-# Hoặc sử dụng systemd service
-sudo systemctl start smartflow-backend
-sudo systemctl enable smartflow-backend
+7. Deploy staging → Test → Merge vào main
 ```
 
-### 2. Web Admin Deployment
+### 7.5. Quy tắc API Endpoint
 
-```bash
-# Build for production
-cd FrontEnd
-npm run build
+```
+# RESTful conventions
+GET    /api/v1/orders/                 # Danh sách (có phân trang)
+GET    /api/v1/orders/{id}             # Chi tiết
+POST   /api/v1/orders/                 # Tạo mới
+PUT    /api/v1/orders/{id}             # Cập nhật
+DELETE /api/v1/orders/{id}             # Xóa
 
-# Deploy dist/ folder to web server
-# Nginx config example:
-server {
-    listen 80;
-    server_name smartflowg7.cloud;
-    
-    location / {
-        root /var/www/smartflow/dist;
-        try_files $uri $uri/ /index.html;
-    }
-    
-    location /api {
-        proxy_pass http://localhost:8000;
-    }
-    
-    location /ws {
-        proxy_pass http://localhost:8000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
+# Phân trang response format
+{
+  "items": [...],
+  "total_count": 150,
+  "stats": { "all": 150, "production": 45, "completed": 80, "overdue": 25 }
 }
 ```
 
-### 3. Mobile App Deployment
+---
+
+## 🚢 8. Triển khai sản xuất
+
+### 8.1. Triển khai 1-Click (Khuyến nghị)
+
+Sử dụng script `ONE_CLICK_PUBLISH.bat` để tự động hóa toàn bộ quy trình:
 
 ```bash
-# Build Android APK
+ONE_CLICK_PUBLISH.bat
+```
+
+Script sẽ tự động thực hiện 5 bước:
+1. ✅ Cập nhật Version trong code (bump_version.py)
+2. ✅ Build Web Dashboard + Mobile (npm run build)
+3. ✅ Build Android APK (Gradle assembleDebug)
+4. ✅ Copy APK vào thư mục phát hành (static/apps/)
+5. ✅ Tự động khởi động lại Backend Server
+
+### 8.2. Triển khai Backend thủ công
+
+```bash
+# Production mode (multi-worker)
+cd BackEnd
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+
+# Hoặc dùng script
+start_server.bat
+```
+
+### 8.3. Triển khai Web Dashboard
+
+```bash
+# Build production bundle
+cd FrontEnd
+npm run build
+
+# Copy thư mục dist/ lên web server
+# Backend FastAPI sẽ tự serve static files từ dist/
+```
+
+### 8.4. Triển khai Mobile APK
+
+```bash
+# Build APK
 cd FrontEnd/Mobile
-npm run build:android
+npm run build
+npx cap sync android
+cd android && gradlew.bat clean assembleDebug
 
-# Build iOS IPA
-npm run build:ios
+# APK output:
+# android/app/build/outputs/apk/debug/app-debug.apk
 
-# Upload to distribution platform
-# - Google Play Store
-# - Apple App Store
-# - Internal distribution (Firebase App Distribution)
+# Copy vào thư mục phát hành
+copy app-debug.apk ..\..\..\..\BackEnd\static\apps\SmartFlow_Latest.apk
 ```
 
-### 4. Database Migration
+### 8.5. Cấu hình Cloudflare Tunnel
 
 ```bash
-# Run migration
-cd BackEnd
-python database/migrations/run_migrations.py
+# Cài đặt cloudflared
+# https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
 
-# Backup database
-sqlcmd -S localhost -U sa -P password -Q "BACKUP DATABASE SmartFlowDB TO DISK='C:\backup\SmartFlowDB.bak'"
+# Tạo tunnel
+cloudflared tunnel create smartflow
 
-# Restore database
-sqlcmd -S localhost -U sa -P password -Q "RESTORE DATABASE SmartFlowDB FROM DISK='C:\backup\SmartFlowDB.bak'"
+# Cấu hình (config.yml)
+tunnel: <tunnel-id>
+credentials-file: /root/.cloudflared/<tunnel-id>.json
+ingress:
+  - hostname: smartflowg7.cloud
+    service: http://localhost:8000
+  - service: http_status:404
+
+# Chạy tunnel
+cloudflared tunnel run smartflow
+```
+
+### 8.6. Backup & Restore Database
+
+```sql
+-- Backup
+BACKUP DATABASE ERP_G7_v4
+TO DISK = 'C:\backup\ERP_G7_v4.bak'
+WITH FORMAT, COMPRESSION;
+
+-- Restore
+RESTORE DATABASE ERP_G7_v4
+FROM DISK = 'C:\backup\ERP_G7_v4.bak'
+WITH REPLACE;
 ```
 
 ---
 
-## 🔧 Giải quyết sự cố (Troubleshooting)
+## 🔧 9. Giải quyết sự cố
 
-### 1. Backend không khởi động
+### Lỗi thường gặp
 
-**Lỗi:** `ModuleNotFoundError: No module named 'fastapi'`
+| # | Lỗi | Nguyên nhân | Giải pháp |
+|---|-----|-------------|-----------|
+| 1 | `ModuleNotFoundError: No module named 'fastapi'` | Chưa cài dependencies | `cd BackEnd && pip install -r requirements.txt` |
+| 2 | `Cannot connect to SQL Server` | SQL Server chưa chạy hoặc chuỗi kết nối sai | Kiểm tra SQL Server Service + chuỗi kết nối trong `.env` |
+| 3 | `Cannot resolve import '@modules/...'` | Alias chưa đúng hoặc thiếu package | Kiểm tra `vite.config.js` aliases + chạy `npm install` |
+| 4 | `WebSocket connection closed` | Backend chưa chạy | Kiểm tra Backend đang chạy ở port 8000 |
+| 5 | `Push notification not received` | FCM key chưa cấu hình | Kiểm tra `FCM_SERVER_KEY` trong `.env` |
+| 6 | `Build APK thất bại (đường dẫn tiếng Việt)` | Gradle không hỗ trợ ký tự Unicode trong path | Dùng `ONE_CLICK_PUBLISH.bat` (tự động mount ổ đĩa ảo Z:) |
+| 7 | `Pool timeout / Too many connections` | Vượt quá giới hạn connection pool | Tăng `pool_size` và `max_overflow` trong `config/database.py` |
+| 8 | `CORS error` | FrontEnd gọi API khác domain | Kiểm tra `allow_origins` trong `main.py` CORS config |
 
-**Giải pháp:**
+### Kiểm tra Health
+
 ```bash
-cd BackEnd
-pip install -r requirements.txt
+# Kiểm tra Backend đang chạy
+curl http://localhost:8000/health
+# Response: {"status": "ok"}
+
+# Kiểm tra API docs
+# Truy cập: http://localhost:8000/docs (Swagger UI)
 ```
-
-### 2. Database connection failed
-
-**Lỗi:** `Cannot connect to SQL Server`
-
-**Giải pháp:**
-- Kiểm tra SQL Server đang chạy
-- Kiểm tra connection string trong `config/database.py`
-- Kiểm tra firewall cho phép port 1433
-
-### 3. Frontend build failed
-
-**Lỗi:** `Cannot resolve import`
-
-**Giải pháp:**
-- Kiểm tra import path
-- Kiểm tra vite.config.js aliases
-- Chạy `npm install` để cài đặt dependencies
-
-### 4. WebSocket connection failed
-
-**Lỗi:** `WebSocket connection closed`
-
-**Giải pháp:**
-- Kiểm tra backend đang chạy
-- Kiểm tra WebSocket URL (không có `/api/v1` prefix)
-- Kiểm tra firewall cho phép port 8000
-
-### 5. Mobile app không nhận thông báo
-
-**Lỗi:** `Push notification not received`
-
-**Giải pháp:**
-- Kiểm tra FCM configuration
-- Kiểm tra device token
-- Kiểm tra notification permission
 
 ---
 
-## 📅 Nhật ký thay đổi (Changelog)
+## 📅 10. Nhật ký thay đổi
+
+### Version 2.0.0 (2026-07-15) — 🔥 Major Performance Release
+
+**Tối ưu hóa hiệu suất toàn diện:**
+- ⚡ Server-side Pagination cho 3 màn hình dữ liệu lớn (Plans, Orders, Quality Records)
+- ⚡ SWR Cache (Stale-While-Revalidate) cho Dashboard và Plan Detail API
+- ⚡ In-Memory Stage Cache giảm 100% query lặp lại
+- ⚡ 30+ Database Performance Indexes cho SQL Server
+- ⚡ NOLOCK hints cho tất cả read-only Dashboard queries
+- ⚡ AnyIO Thread Pool tuning lên 800 tokens
+- ⚡ Connection Pool mở rộng: 100 base + 400 overflow
+- ⚡ Startup optimization: loại bỏ 6/7 task khởi động không cần thiết
+- ⚡ Loại bỏ CSS animation nặng (shimmer, card entrance) trên FrontEnd
+
+**Tính năng mới:**
+- 🆕 Công cụ OPTIMIZE_SYSTEM.bat — tối ưu database 1-click
+- 🆕 Hệ thống Bug Management tích hợp
+- 🆕 System Monitor giám sát real-time
 
 ### Version 1.2.0 (2026-05-20)
 
-**New Features:**
-- Hỗ trợ tài khoản đa công đoạn — gộp Lắp ráp & Chà nhám vào cùng 1 tài khoản với selector công đoạn
-- Sửa luồng giải phóng Mã QR dự phòng — chỉ giải phóng sau khi QC xác nhận (không phải khi SX nhận hàng)
-- Nâng cấp trang Phiếu ngoại lệ: cột Tỷ lệ (%), Loại ngoại lệ, nút Xác minh
-- Thêm bộ lọc chính xác theo Mã đơn hàng (PO) trên Mobile Plan Tracking
+**Tính năng mới:**
+- Tài khoản đa công đoạn (Multi-stage Account) + Selector
+- Cải tiến QR dự phòng — chỉ giải phóng sau QC xác nhận
+- Nâng cấp trang Phiếu ngoại lệ: cột Tỷ lệ %, Loại ngoại lệ
+- Bộ lọc chính xác theo Mã PO trên Mobile
 
-**Bug Fixes:**
-- Ẩn mục "Kích thước" trên màn hình Kiểm tra đầu vào (MB2.4)
-- Đổi "SL Loại" → "SL Lỗi" với giá trị mặc định 0
-- Fix 3 bug stale closure, dropdown mất dữ liệu, reset PO khi đổi kế hoạch
+**Sửa lỗi:**
+- Fix 3 bug: stale closure, dropdown mất dữ liệu, reset PO khi đổi kế hoạch
 
 ### Version 1.1.5 (2026-05-07)
 
-**New Features:**
-- Triển khai thuật toán FIFO 2-Pass tối ưu Dashboard (giảm 99% thời gian load)
-- Hoàn thiện hệ thống "Sticky Header & Filter" cho trang Theo dõi kế hoạch
-- Ra mắt bộ công cụ `ONE_CLICK_PUBLISH.bat` giúp tự động hóa quy trình phát hành
-
-**Bug Fixes:**
-- Sửa lỗi đường dẫn tiếng Việt khi build APK bằng cơ chế `subst` ổ đĩa ảo
+**Tính năng mới:**
+- Thuật toán FIFO 2-Pass tối ưu Dashboard (giảm 99% thời gian load)
+- Sticky Header & Filter cho trang Theo dõi kế hoạch
+- Bộ công cụ `ONE_CLICK_PUBLISH.bat` tự động hóa phát hành
 
 ### Version 1.1.0 (2026-04-27)
 
-**New Features:**
-- Xây dựng hệ thống tài liệu toàn diện (Wiki)
-- Thêm logic tự động tính số lượng thực nhận và x2 giới hạn
-- Tích hợp WebSocket cho thông báo thời gian thực
+**Tính năng mới:**
+- Hệ thống tài liệu Developer Wiki
+- Logic tự động tính số lượng thực nhận và x2 giới hạn
+- WebSocket real-time notifications
 
-**Bug Fixes:**
-- Sửa lỗi import paths trong Mobile App
-- Sửa lỗi import paths trong Web Admin
-- Sửa lỗi backend router imports
+### Version 1.0.0 (2026-04-01) — 🎉 Initial Release
 
-### Version 1.0.0 (2026-04-01)
-
-**Initial Release:**
-- Hệ thống ERP cơ bản
-- Quản lý đơn hàng
-- Quản lý kế hoạch sản xuất
-- Tạo/Nhận phiếu giao
-- Kiểm tra chất lượng
-- Quét mã QR
-- Thông báo thời gian thực
+- Hệ thống ERP cơ bản: Đơn hàng, Kế hoạch SX, Phiếu giao/nhận, QC, QR Code, Notifications
 
 ---
 
-## 📞 Hỗ trợ (Support)
+## 📞 11. Hỗ trợ kỹ thuật
 
-### Liên hệ
+### Liên hệ hỗ trợ
 
-- **Email:** support@smartflowg7.cloud
-- **GitHub:** https://github.com/mynd02work-bit/SmartFlow/issues
-- **Documentation:** https://github.com/mynd02work-bit/SmartFlow/wiki
+| Kênh | Thông tin |
+|------|-----------|
+| 📱 **Zalo (Ưu tiên)** | **0888 187 044** hoặc **0981 206 221** |
+| 🌐 **Website** | [smartflowg7.cloud](https://smartflowg7.cloud) |
+| 💻 **GitHub** | [github.com/mynd02work-bit/SmartFlow](https://github.com/mynd02work-bit/SmartFlow) |
+| 📧 **API Docs** | `https://smartflowg7.cloud/docs` (Swagger UI) |
 
 ### Tài liệu tham khảo
 
-- [FastAPI Documentation](https://fastapi.tiangolo.com/)
-- [React Documentation](https://react.dev/)
-- [React Native Documentation](https://reactnative.dev/)
-- [SQL Server Documentation](https://docs.microsoft.com/en-us/sql/)
+| Tài liệu | Link |
+|-----------|------|
+| FastAPI Documentation | [fastapi.tiangolo.com](https://fastapi.tiangolo.com/) |
+| React Documentation | [react.dev](https://react.dev/) |
+| Capacitor Documentation | [capacitorjs.com](https://capacitorjs.com/) |
+| SQLAlchemy Documentation | [docs.sqlalchemy.org](https://docs.sqlalchemy.org/) |
+| Vite Documentation | [vite.dev](https://vite.dev/) |
+| SQL Server Documentation | [docs.microsoft.com/sql](https://docs.microsoft.com/en-us/sql/) |
 
 ---
 
 ## 📜 License
 
-Dự án ERP G7 - Phát triển bởi Đội ngũ Công nghệ G7.
+Dự án **SmartFlow ERP** — Phát triển bởi Đội ngũ Công nghệ **G7 Manufacturing**.
 
 © 2026 G7 Manufacturing. All rights reserved.
 
 ---
 
-**Last Updated:** 2026-06-03
-**Branch:** test_v1
-**Version:** 1.2.1
+<p align="center">
+  <strong>SmartFlow ERP</strong> — Nền tảng Điều hành Sản xuất Thông minh<br/>
+  <em>Kết nối mọi công đoạn. Tối ưu mọi quy trình. Kiểm soát mọi chi tiết.</em>
+</p>
+
+<p align="center">
+  <sub>Last Updated: 2026-07-15 • Branch: dev_v1 • Version: 2.0.0</sub>
+</p>

@@ -266,7 +266,7 @@ def get_plan_returns(plan_id: int, db: Session = Depends(get_db)):
     """
     [GET] Lấy danh sách phiếu trả hàng theo kế hoạch.
     """
-    returns = db.query(DeliveryReturn).filter(DeliveryReturn.plan_id == plan_id).all()
+    returns = db.query(DeliveryReturn).with_hint(DeliveryReturn, 'WITH (NOLOCK)').filter(DeliveryReturn.plan_id == plan_id).all()
     return returns
 
 @router.get("/detail/{return_id}")
@@ -276,7 +276,7 @@ def get_return_detail(return_id: int, db: Session = Depends(get_db)):
     """
     from sqlalchemy.orm import joinedload
     
-    return_record = db.query(DeliveryReturn).options(
+    return_record = db.query(DeliveryReturn).with_hint(DeliveryReturn, 'WITH (NOLOCK)').options(
         joinedload(DeliveryReturn.images)
     ).filter(DeliveryReturn.id == return_id).first()
     

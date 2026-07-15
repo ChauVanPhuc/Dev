@@ -19,20 +19,18 @@ _defect_map_cache_time = 0.0
 logger = logging.getLogger("claim_import")
 logger.setLevel(logging.INFO)
 
-# Paths for claim imports - use BackEnd/static/uploads for images
-BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# Fix: BACKEND_DIR already includes 'modules', so don't add it again
-CLAIM_IMPORTS_DIR = os.path.join(BACKEND_DIR, "claim_imports")
-PRICE_IMPORTS_DIR = os.path.join(BACKEND_DIR, "price_imports")
-DEFECT_IMPORTS_DIR = os.path.join(BACKEND_DIR, "defect_imports")
+# Paths for claim imports - use BackEnd/static/uploads
+BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+CLAIM_IMPORTS_DIR = os.path.join(BACKEND_DIR, "static", "uploads", "claim_imports")
+PRICE_IMPORTS_DIR = os.path.join(BACKEND_DIR, "static", "uploads", "price_imports")
+DEFECT_IMPORTS_DIR = os.path.join(BACKEND_DIR, "static", "uploads", "defect_imports")
 
 UPLOADS_DIR = os.path.join(CLAIM_IMPORTS_DIR, "uploads")
 JSON_DIR = os.path.join(CLAIM_IMPORTS_DIR, "json")
 EXCEL_DIR = os.path.join(CLAIM_IMPORTS_DIR, "excel")
-# Use BackEnd/static/uploads for images and PDF archives
-BACKEND_STATIC_DIR = os.path.join(os.path.dirname(BACKEND_DIR), "static")
-IMAGES_DIR = os.path.join(BACKEND_STATIC_DIR, "uploads", "claim_imports", "images")
-PDFS_DIR = os.path.join(BACKEND_STATIC_DIR, "uploads", "claim_imports", "pdfs")
+BACKEND_STATIC_DIR = os.path.join(BACKEND_DIR, "static")
+IMAGES_DIR = os.path.join(CLAIM_IMPORTS_DIR, "images")
+PDFS_DIR = os.path.join(CLAIM_IMPORTS_DIR, "pdfs")
 
 # Ensure all self-contained directories exist
 os.makedirs(UPLOADS_DIR, exist_ok=True)
