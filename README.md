@@ -70,53 +70,53 @@
 
 ### Kiến trúc hệ thống (System Architecture)
 
-```
-╔═══════════════════════════════════════════════════════════════╗
-║                    CLOUD INFRASTRUCTURE                       ║
-║  ┌───────────────────────────────────────────────────────┐    ║
-║  │  Cloudflare Tunnel (smartflowg7.cloud)                │    ║
-║  │  ✓ SSL/HTTPS          ✓ DDoS Protection               │    ║
-║  │  ✓ Global CDN         ✓ Zero-Trust Access              │    ║
-║  └───────────────────────────────────────────────────────┘    ║
-╚═══════════════════════════════════════════════════════════════╝
-                              │
-                              ▼
-╔═══════════════════════════════════════════════════════════════╗
-║               BACKEND SERVER (FastAPI + Python 3.13)         ║
-║  ┌─────────────────────┐  ┌─────────────────────────────┐    ║
-║  │  RESTful API Layer  │  │  WebSocket Server            │    ║
-║  │  /api/v1/*          │  │  /ws/{user_id}               │    ║
-║  │  ✓ JWT Auth         │  │  ✓ Real-time Notifications   │    ║
-║  │  ✓ RBAC             │  │  ✓ Live Dashboard Updates    │    ║
-║  │  ✓ Rate Limiting    │  │  ✓ Auto-reconnect            │    ║
-║  └─────────────────────┘  └─────────────────────────────┘    ║
-║  ┌─────────────────────┐  ┌─────────────────────────────┐    ║
-║  │  SWR Cache Layer    │  │  AI Chatbot Engine           │    ║
-║  │  ✓ In-Memory Cache  │  │  ✓ Google Gemini API         │    ║
-║  │  ✓ Auto-invalidate  │  │  ✓ Natural Language Query    │    ║
-║  └─────────────────────┘  └─────────────────────────────┘    ║
-║  ┌───────────────────────────────────────────────────────┐    ║
-║  │  Database Layer (SQL Server 2019+ / SQLAlchemy ORM)   │    ║
-║  │  ✓ Connection Pool (100 + 400 overflow)               │    ║
-║  │  ✓ Performance Indexes       ✓ NOLOCK Hints           │    ║
-║  │  ✓ Server-side Pagination    ✓ Pool Pre-ping          │    ║
-║  └───────────────────────────────────────────────────────┘    ║
-╚═══════════════════════════════════════════════════════════════╝
-          │                                │
-          ▼                                ▼
-┌──────────────────────┐    ┌──────────────────────────┐
-│    WEB DASHBOARD     │    │      MOBILE APP           │
-│   (React 18 + Vite)  │    │  (React + Capacitor 6)    │
-│                      │    │                           │
-│  ✓ Dashboard KPI     │    │  ✓ Tạo/Nhận Phiếu Giao   │
-│  ✓ Quản lý Đơn hàng  │    │  ✓ Quét mã QR            │
-│  ✓ Kế hoạch SX       │    │  ✓ Kiểm tra QC           │
-│  ✓ Hồ sơ Chất lượng  │    │  ✓ Push Notification     │
-│  ✓ Quản lý ISO       │    │  ✓ OTA Auto-Update       │
-│  ✓ KPI & Báo cáo     │    │  ✓ Offline-ready UI      │
-│  ✓ Claim & Mua hàng  │    │  ✓ Camera Native         │
-│  ✓ Thiết bị & Máy    │    │  ✓ Multi-stage Selector  │
-└──────────────────────┘    └──────────────────────────┘
+```mermaid
+flowchart TD
+    %% Styling Classes
+    classDef cloud fill:#FAF6F0,stroke:#7B5233,stroke-width:2px,color:#7B5233;
+    classDef server fill:#EFF6FF,stroke:#3B82F6,stroke-width:2px,color:#1E3A8A;
+    classDef client fill:#ECFDF5,stroke:#10B981,stroke-width:2px,color:#064E3B;
+    classDef db fill:#FEF2F2,stroke:#EF4444,stroke-width:2px,color:#991B1B;
+
+    %% Nodes
+    subgraph Cloud ["☁️ CLOUD INFRASTRUCTURE"]
+        CF["🌐 Cloudflare Tunnel (smartflowg7.cloud)<br>✓ SSL/HTTPS  •  ✓ DDoS Protection  •  ✓ Zero-Trust Access"]
+    end
+
+    subgraph Backend ["⚙️ BACKEND SERVER (FastAPI + Python 3.13)"]
+        API["📡 RESTful API Layer<br>✓ JWT Auth & RBAC<br>✓ Rate Limiting"]
+        WS["🔌 WebSocket Server<br>✓ Real-time Push<br>✓ Auto-reconnect"]
+        Cache["💾 SWR Cache Layer<br>✓ In-Memory Cache<br>✓ Auto-invalidate"]
+        AI["🧠 AI Chatbot Engine<br>✓ Gemini API Integration"]
+    end
+
+    subgraph DB_Group ["🗄️ DATABASE LAYER"]
+        DB["🛢️ SQL Server 2019+ (SQLAlchemy)<br>✓ Pool size: 100 + 400 overflow<br>✓ Performance Indexes & NOLOCK Hints"]
+    end
+
+    subgraph Clients ["📱 CLIENT APPLICATIONS"]
+        Web["💻 WEB DASHBOARD (React 18 + Vite)<br>✓ Dashboard KPI<br>✓ Quản lý Đơn hàng & KHSX<br>✓ Hồ sơ Chất lượng & Tài liệu ISO"]
+        Mobile["📱 MOBILE APP (React + Capacitor 6)<br>✓ Tạo/Nhận Phiếu Giao & Quét QR<br>✓ Kiểm tra QC & Chụp ảnh minh chứng<br>✓ Multi-stage Selector & OTA Update"]
+    end
+
+    %% Apply Classes
+    class CF cloud;
+    class API,WS,Cache,AI server;
+    class DB db;
+    class Web,Mobile client;
+
+    %% Relations
+    CF ──► API
+    CF ──► WS
+    API ──► DB
+    WS ──► DB
+    Cache ──► DB
+    AI ──► DB
+
+    API ──. Đẩy dữ liệu .──► Web
+    API ──. Đẩy dữ liệu .──► Mobile
+    WS ──. Real-time .──► Web
+    WS ──. Real-time .──► Mobile
 ```
 
 ### Luồng dữ liệu chính (Production Data Flow)
@@ -158,87 +158,87 @@ Lệnh Sản Xuất (Production Order) ──► Gán BOM (Bill of Materials)
 
 | # | Tính năng | Chi tiết | Mức độ |
 |---|-----------|----------|--------|
-| 1.1 | **Dashboard Sản xuất Thời gian thực** | Hiển thị tiến độ sản xuất tổng quan, biểu đồ theo tuần/công đoạn, tỷ lệ hoàn thành theo PO. Dữ liệu cập nhật real-time qua WebSocket. | 🔥 Cao cấp |
-| 1.2 | **Thuật toán FIFO 2-Pass** | Xử lý logic tính toán tiến độ sản xuất phức tạp trên 53,000+ bản ghi. Giảm thời gian phản hồi từ >10s xuống <0.1s. | 🔥 Cải tiến |
-| 1.3 | **SKU Deduplication** | Gộp nhóm BOM (Bill of Materials) theo SKU thay vì ID sản phẩm đơn lẻ, giảm tải dữ liệu xử lý lên đến 80%. | 🔥 Cải tiến |
-| 1.4 | **Báo cáo KPI đa chiều** | Báo cáo KPI theo nhân viên, phòng ban, khoảng thời gian. Hỗ trợ xuất Excel, biểu đồ trực quan. | ⭐ Xịn |
+| 1.1 | **Dashboard Sản xuất Thời gian thực** | Hiển thị tiến độ sản xuất tổng quan, biểu đồ theo tuần/công đoạn, tỷ lệ hoàn thành theo PO. Dữ liệu cập nhật real-time qua WebSocket. | <kbd>🔥 Cao cấp</kbd> |
+| 1.2 | **Thuật toán FIFO 2-Pass** | Xử lý logic tính toán tiến độ sản xuất phức tạp trên 53,000+ bản ghi. Giảm thời gian phản hồi từ >10s xuống <0.1s. | <kbd>⚡ Cải tiến</kbd> |
+| 1.3 | **SKU Deduplication** | Gộp nhóm BOM (Bill of Materials) theo SKU thay vì ID sản phẩm đơn lẻ, giảm tải dữ liệu xử lý lên đến 80%. | <kbd>⚡ Cải tiến</kbd> |
+| 1.4 | **Báo cáo KPI đa chiều** | Báo cáo KPI theo nhân viên, phòng ban, khoảng thời gian. Hỗ trợ xuất Excel, biểu đồ trực quan. | <kbd>⭐ Xịn</kbd> |
 
 ### 📦 Nhóm 2: Quản lý Đơn hàng & Kế hoạch Sản xuất
 
 | # | Tính năng | Chi tiết | Mức độ |
 |---|-----------|----------|--------|
-| 2.1 | **Quản lý Đơn hàng (PO)** | CRUD đơn hàng, theo dõi trạng thái (Chờ → Đang SX → Hoàn thành → Quá hạn), lọc theo khách hàng/hạn giao. | ⭐ Cốt lõi |
-| 2.2 | **Kế hoạch Sản xuất (KHSX)** | Tạo kế hoạch theo tháng/năm, gán danh sách PO vào kế hoạch, theo dõi tiến độ tổng thể. | ⭐ Cốt lõi |
-| 2.3 | **Quản lý Sản phẩm & BOM** | Tạo sản phẩm với mã SKU, quản lý cấu trúc BOM (Bill of Materials) đa cấp, gán công đoạn cho từng chi tiết. | ⭐ Cốt lõi |
-| 2.4 | **Import đơn hàng hàng loạt** | Upload file Excel để import hàng loạt đơn hàng, sản phẩm, chi tiết BOM. Hỗ trợ drag-and-drop, hiển thị progress. | 🔥 Cao cấp |
-| 2.5 | **Phân trang Server-side** | Tất cả danh sách lớn (PO, KHSX, Hồ sơ CL) đều phân trang từ Backend SQL, chỉ tải 15 dòng/trang, giảm tải FE tối đa. | 🔥 Cải tiến |
+| 2.1 | **Quản lý Đơn hàng (PO)** | CRUD đơn hàng, theo dõi trạng thái (Chờ → Đang SX → Hoàn thành → Quá hạn), lọc theo khách hàng/hạn giao. | <kbd>⚙️ Cốt lõi</kbd> |
+| 2.2 | **Kế hoạch Sản xuất (KHSX)** | Tạo kế hoạch theo tháng/năm, gán danh sách PO vào kế hoạch, theo dõi tiến độ tổng thể. | <kbd>⚙️ Cốt lõi</kbd> |
+| 2.3 | **Quản lý Sản phẩm & BOM** | Tạo sản phẩm với mã SKU, quản lý cấu trúc BOM (Bill of Materials) đa cấp, gán công đoạn cho từng chi tiết. | <kbd>⚙️ Cốt lõi</kbd> |
+| 2.4 | **Import đơn hàng hàng loạt** | Upload file Excel để import hàng loạt đơn hàng, sản phẩm, chi tiết BOM. Hỗ trợ drag-and-drop, hiển thị progress. | <kbd>🔥 Cao cấp</kbd> |
+| 2.5 | **Phân trang Server-side** | Tất cả danh sách lớn (PO, KHSX, Hồ sơ CL) đều phân trang từ Backend SQL, chỉ tải 15 dòng/trang, giảm tải FE tối đa. | <kbd>⚡ Cải tiến</kbd> |
 
 ### 🚚 Nhóm 3: Bàn giao & Giao nhận
 
 | # | Tính năng | Chi tiết | Mức độ |
 |---|-----------|----------|--------|
-| 3.1 | **Tạo Phiếu Giao (Mobile)** | Chọn chi tiết cần giao, nhập số lượng, chụp tối đa 3 ảnh minh chứng, gửi phiếu và nhận mã QR Giao Nhận. | ⭐ Cốt lõi |
-| 3.2 | **Nhận Phiếu Giao (Mobile)** | Quét mã QR hoặc chọn phiếu từ danh sách, xác nhận nhận hàng, kiểm tra số lượng và ảnh. | ⭐ Cốt lõi |
-| 3.3 | **Theo dõi Lịch sử Bàn giao** | Xem toàn bộ lịch sử giao-nhận giữa các công đoạn, lọc theo ngày/PO/công đoạn, xuất báo cáo Excel. | ⭐ Xịn |
-| 3.4 | **Phiếu Ngoại lệ Nâng cao** | Hiển thị tỷ lệ % lệch/trả, phân loại ngoại lệ rõ ràng, nút xác minh cho quản lý. | 🔥 Cải tiến |
-| 3.5 | **Kế hoạch Bàn giao (Delivery Plan)** | Hiển thị danh sách chi tiết cần giao, so sánh kế hoạch vs thực tế, trạng thái giao/nhận, xuất Excel/PDF. | ⭐ Xịn |
+| 3.1 | **Tạo Phiếu Giao (Mobile)** | Chọn chi tiết cần giao, nhập số lượng, chụp tối đa 3 ảnh minh chứng, gửi phiếu và nhận mã QR Giao Nhận. | <kbd>⚙️ Cốt lõi</kbd> |
+| 3.2 | **Nhận Phiếu Giao (Mobile)** | Quét mã QR hoặc chọn phiếu từ danh sách, xác nhận nhận hàng, kiểm tra số lượng và ảnh. | <kbd>⚙️ Cốt lõi</kbd> |
+| 3.3 | **Theo dõi Lịch sử Bàn giao** | Xem toàn bộ lịch sử giao-nhận giữa các công đoạn, lọc theo ngày/PO/công đoạn, xuất báo cáo Excel. | <kbd>⭐ Xịn</kbd> |
+| 3.4 | **Phiếu Ngoại lệ Nâng cao** | Hiển thị tỷ lệ % lệch/trả, phân loại ngoại lệ rõ ràng, nút xác minh cho quản lý. | <kbd>⚡ Cải tiến</kbd> |
+| 3.5 | **Kế hoạch Bàn giao (Delivery Plan)** | Hiển thị danh sách chi tiết cần giao, so sánh kế hoạch vs thực tế, trạng thái giao/nhận, xuất Excel/PDF. | <kbd>⭐ Xịn</kbd> |
 
 ### 🔍 Nhóm 4: Kiểm tra Chất lượng (QC)
 
 | # | Tính năng | Chi tiết | Mức độ |
 |---|-----------|----------|--------|
-| 4.1 | **Kiểm tra Đầu vào (Input Inspection)** | QC kiểm tra số lượng nhận/lỗi, chụp ảnh lỗi, đánh dấu Đạt/Không đạt. Tự động tính SL thực nhận. | ⭐ Cốt lõi |
-| 4.2 | **Kiểm tra theo Công đoạn** | Kiểm tra chất lượng tại từng công đoạn sản xuất, theo dõi tỷ lệ lỗi. | ⭐ Cốt lõi |
-| 4.3 | **Hồ sơ Chất lượng (PO)** | Tổng hợp toàn bộ dữ liệu kiểm tra, bàn giao, trả hàng theo từng PO. Phân trang server-side. | ⭐ Xịn |
-| 4.4 | **Quản lý Danh mục Lỗi (Defect)** | CRUD danh mục lỗi theo nhóm, cho phép tùy chỉnh checklist kiểm tra cho từng công đoạn. | ⭐ Xịn |
-| 4.5 | **Báo cáo Kiểm tra Chất lượng** | Thống kê lỗi theo loại/công đoạn/thời gian, biểu đồ Pareto, xuất báo cáo. | 🔥 Cao cấp |
+| 4.1 | **Kiểm tra Đầu vào (Input Inspection)** | QC kiểm tra số lượng nhận/lỗi, chụp ảnh lỗi, đánh dấu Đạt/Không đạt. Tự động tính SL thực nhận. | <kbd>⚙️ Cốt lõi</kbd> |
+| 4.2 | **Kiểm tra theo Công đoạn** | Kiểm tra chất lượng tại từng công đoạn sản xuất, theo dõi tỷ lệ lỗi. | <kbd>⚙️ Cốt lõi</kbd> |
+| 4.3 | **Hồ sơ Chất lượng (PO)** | Tổng hợp toàn bộ dữ liệu kiểm tra, bàn giao, trả hàng theo từng PO. Phân trang server-side. | <kbd>⭐ Xịn</kbd> |
+| 4.4 | **Quản lý Danh mục Lỗi (Defect)** | CRUD danh mục lỗi theo nhóm, cho phép tùy chỉnh checklist kiểm tra cho từng công đoạn. | <kbd>⭐ Xịn</kbd> |
+| 4.5 | **Báo cáo Kiểm tra Chất lượng** | Thống kê lỗi theo loại/công đoạn/thời gian, biểu đồ Pareto, xuất báo cáo. | <kbd>🔥 Cao cấp</kbd> |
 
 ### 📱 Nhóm 5: Hệ thống QR Code & Mobile
 
 | # | Tính năng | Chi tiết | Mức độ |
 |---|-----------|----------|--------|
-| 5.1 | **Quét mã QR đa năng** | Quét QR để nhận diện PO, kiện hàng, pallet, vị trí kho. Tốc độ quét <1 giây, dùng camera native. | ⭐ Cốt lõi |
-| 5.2 | **Mã QR Dự phòng Thông minh** | Tự động gán QR dự phòng khi QR chính bị hư. Chỉ giải phóng sau khi QC hoàn tất xác nhận. | 🔥 Cao cấp |
-| 5.3 | **Tài khoản Đa Công đoạn** | Gán nhiều công đoạn cho 1 tài khoản (VD: Lắp ráp + Chà nhám). Selector chuyển đổi nhanh. | 🔥 Cao cấp |
-| 5.4 | **Lọc Đơn hàng Chính xác (Mobile)** | Chọn chính xác 1 PO, chỉ hiển thị đơn đó thay vì toàn bộ kế hoạch, giảm tải dữ liệu Mobile. | 🔥 Cải tiến |
-| 5.5 | **Cập nhật OTA tự động** | App tự động kiểm tra phiên bản, thông báo có bản mới, tải và cài đặt APK trực tiếp không qua trình duyệt. | 🔥 Cao cấp |
+| 5.1 | **Quét mã QR đa năng** | Quét QR để nhận diện PO, kiện hàng, pallet, vị trí kho. Tốc độ quét <1 giây, dùng camera native. | <kbd>⚙️ Cốt lõi</kbd> |
+| 5.2 | **Mã QR Dự phòng Thông minh** | Tự động gán QR dự phòng khi QR chính bị hư. Chỉ giải phóng sau khi QC hoàn tất xác nhận. | <kbd>🔥 Cao cấp</kbd> |
+| 5.3 | **Tài khoản Đa Công đoạn** | Gán nhiều công đoạn cho 1 tài khoản (VD: Lắp ráp + Chà nhám). Selector chuyển đổi nhanh. | <kbd>🔥 Cao cấp</kbd> |
+| 5.4 | **Lọc Đơn hàng Chính xác (Mobile)** | Chọn chính xác 1 PO, chỉ hiển thị đơn đó thay vì toàn bộ kế hoạch, giảm tải dữ liệu Mobile. | <kbd>⚡ Cải tiến</kbd> |
+| 5.5 | **Cập nhật OTA tự động** | App tự động kiểm tra phiên bản, thông báo có bản mới, tải và cài đặt APK trực tiếp không qua trình duyệt. | <kbd>🔥 Cao cấp</kbd> |
 
 ### 🏢 Nhóm 6: Quản trị Hệ thống & ISO
 
 | # | Tính năng | Chi tiết | Mức độ |
 |---|-----------|----------|--------|
-| 6.1 | **Quản lý Người dùng & Phân quyền (RBAC)** | CRUD tài khoản, gán vai trò (Admin/Manager/QC/Worker), phân quyền chi tiết theo từng màn hình. | ⭐ Cốt lõi |
-| 6.2 | **Quản lý Phòng ban & Chức vụ** | CRUD phòng ban, chức vụ, gán nhân viên. | ⭐ Cốt lõi |
-| 6.3 | **Quản lý Tài liệu ISO** | Tạo/sửa/xóa tài liệu ISO, quản lý phiên bản, phân loại theo danh mục. | 🔥 Cao cấp |
-| 6.4 | **Biên tập Biểu mẫu ISO (Form Editor)** | Trình soạn thảo biểu mẫu ISO dạng WYSIWYG, kéo-thả trường, xuất PDF. | 🔥 Cao cấp |
-| 6.5 | **Biên tập Quy trình ISO (Process Flowchart)** | Trình vẽ sơ đồ quy trình ISO với canvas drag-and-drop, tự động nối các bước, xuất hình ảnh. | 🔥🔥 Rất cao cấp |
-| 6.6 | **Quản lý Màn hình hệ thống (Screens)** | Đăng ký, cấu hình, phân quyền truy cập cho từng màn hình chức năng. Auto-sync khi khởi động. | ⭐ Xịn |
-| 6.7 | **Quản lý Bug & Phản hồi** | Hệ thống báo lỗi tích hợp, theo dõi trạng thái xử lý, đính kèm ảnh chụp màn hình. | ⭐ Xịn |
-| 6.8 | **System Monitor** | Giám sát trạng thái hệ thống, thống kê API calls, database connections. | 🔥 Cao cấp |
+| 6.1 | **Quản lý Người dùng & Phân quyền (RBAC)** | CRUD tài khoản, gán vai trò (Admin/Manager/QC/Worker), phân quyền chi tiết theo từng màn hình. | <kbd>⚙️ Cốt lõi</kbd> |
+| 6.2 | **Quản lý Phòng ban & Chức vụ** | CRUD phòng ban, chức vụ, gán nhân viên. | <kbd>⚙️ Cốt lõi</kbd> |
+| 6.3 | **Quản lý Tài liệu ISO** | Tạo/sửa/xóa tài liệu ISO, quản lý phiên bản, phân loại theo danh mục. | <kbd>🔥 Cao cấp</kbd> |
+| 6.4 | **Biên tập Biểu mẫu ISO (Form Editor)** | Trình soạn thảo biểu mẫu ISO dạng WYSIWYG, kéo-thả trường, xuất PDF. | <kbd>🔥 Cao cấp</kbd> |
+| 6.5 | **Biên tập Quy trình ISO (Process Flowchart)** | Trình vẽ sơ đồ quy trình ISO với canvas drag-and-drop, tự động nối các bước, xuất hình ảnh. | <kbd>🚀 Rất cao cấp</kbd> |
+| 6.6 | **Quản lý Màn hình hệ thống (Screens)** | Đăng ký, cấu hình, phân quyền truy cập cho từng màn hình chức năng. Auto-sync khi khởi động. | <kbd>⭐ Xịn</kbd> |
+| 6.7 | **Quản lý Bug & Phản hồi** | Hệ thống báo lỗi tích hợp, theo dõi trạng thái xử lý, đính kèm ảnh chụp màn hình. | <kbd>⭐ Xịn</kbd> |
+| 6.8 | **System Monitor** | Giám sát trạng thái hệ thống, thống kê API calls, database connections. | <kbd>🔥 Cao cấp</kbd> |
 
 ### 🏗️ Nhóm 7: Thiết bị, Máy móc & KPI
 
 | # | Tính năng | Chi tiết | Mức độ |
 |---|-----------|----------|--------|
-| 7.1 | **Quản lý Thiết bị (Equipment)** | CRUD thiết bị, phân loại theo nhóm, theo dõi lịch sử bảo trì, bàn giao thiết bị. | ⭐ Xịn |
-| 7.2 | **Quản lý Máy móc (Machine)** | CRUD máy sản xuất, theo dõi tình trạng hoạt động, lịch sử sửa chữa, tài liệu kỹ thuật. | ⭐ Xịn |
-| 7.3 | **Đào tạo Thiết bị & Máy** | Quản lý chương trình đào tạo vận hành thiết bị/máy, theo dõi nhân viên đã đào tạo. | ⭐ Xịn |
-| 7.4 | **KPI Nhân viên** | Cấu hình quy tắc chấm điểm, checklist đánh giá, vi phạm, phản hồi. Báo cáo KPI đa chiều. | 🔥 Cao cấp |
+| 7.1 | **Quản lý Thiết bị (Equipment)** | CRUD thiết bị, phân loại theo nhóm, theo dõi lịch sử bảo trì, bàn giao thiết bị. | <kbd>⭐ Xịn</kbd> |
+| 7.2 | **Quản lý Máy móc (Machine)** | CRUD máy sản xuất, theo dõi tình trạng hoạt động, lịch sử sửa chữa, tài liệu kỹ thuật. | <kbd>⭐ Xịn</kbd> |
+| 7.3 | **Đào tạo Thiết bị & Máy** | Quản lý chương trình đào tạo vận hành thiết bị/máy, theo dõi nhân viên đã đào tạo. | <kbd>⭐ Xịn</kbd> |
+| 7.4 | **KPI Nhân viên** | Cấu hình quy tắc chấm điểm, checklist đánh giá, vi phạm, phản hồi. Báo cáo KPI đa chiều. | <kbd>🔥 Cao cấp</kbd> |
 
 ### 💰 Nhóm 8: Mua hàng & Claim
 
 | # | Tính năng | Chi tiết | Mức độ |
 |---|-----------|----------|--------|
-| 8.1 | **Quản lý Đơn mua hàng (Purchasing)** | Tạo yêu cầu mua hàng, duyệt đơn, theo dõi danh sách mặt hàng, đối soát với đơn đặt mua. | ⭐ Xịn |
-| 8.2 | **Quản lý Claim & Bảng giá** | Theo dõi claim khách hàng, quản lý bảng giá, lô hàng giao, đối soát chi phí. | 🔥 Cao cấp |
+| 8.1 | **Quản lý Đơn mua hàng (Purchasing)** | Tạo yêu cầu mua hàng, duyệt đơn, theo dõi danh sách mặt hàng, đối soát với đơn đặt mua. | <kbd>⭐ Xịn</kbd> |
+| 8.2 | **Quản lý Claim & Bảng giá** | Theo dõi claim khách hàng, quản lý bảng giá, lô hàng giao, đối soát chi phí. | <kbd>🔥 Cao cấp</kbd> |
 
 ### 🤖 Nhóm 9: AI & Thông minh
 
 | # | Tính năng | Chi tiết | Mức độ |
 |---|-----------|----------|--------|
-| 9.1 | **AI Chatbot sản xuất** | Tra cứu thông tin sản xuất bằng ngôn ngữ tự nhiên, tích hợp Google Gemini API. | 🔥🔥 Rất cao cấp |
-| 9.2 | **PDF Parser thông minh** | Trích xuất dữ liệu từ file PDF tài liệu ISO, tự động chuyển đổi sang định dạng hệ thống. | 🔥 Cao cấp |
-| 9.3 | **Thông báo đa kênh Real-time** | WebSocket cho Web, FCM cho Mobile. Tự động thông báo khi có phiếu giao mới, QC hoàn thành, hàng trả về. | ⭐ Xịn |
+| 9.1 | **AI Chatbot sản xuất** | Tra cứu thông tin sản xuất bằng ngôn ngữ tự nhiên, tích hợp Google Gemini API. | <kbd>🚀 Rất cao cấp</kbd> |
+| 9.2 | **PDF Parser thông minh** | Trích xuất dữ liệu từ file PDF tài liệu ISO, tự động chuyển đổi sang định dạng hệ thống. | <kbd>🔥 Cao cấp</kbd> |
+| 9.3 | **Thông báo đa kênh Real-time** | WebSocket cho Web, FCM cho Mobile. Tự động thông báo khi có phiếu giao mới, QC hoàn thành, hàng trả về. | <kbd>⭐ Xịn</kbd> |
 
 ---
 
