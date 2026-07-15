@@ -71,52 +71,54 @@
 ### Kiến trúc hệ thống (System Architecture)
 
 ```mermaid
-flowchart TD
+flowchart LR
     %% Styling Classes
     classDef cloud fill:#FAF6F0,stroke:#7B5233,stroke-width:2px,color:#7B5233;
     classDef server fill:#EFF6FF,stroke:#3B82F6,stroke-width:2px,color:#1E3A8A;
     classDef client fill:#ECFDF5,stroke:#10B981,stroke-width:2px,color:#064E3B;
     classDef db fill:#FEF2F2,stroke:#EF4444,stroke-width:2px,color:#991B1B;
 
-    %% Nodes
-    subgraph Cloud ["☁️ CLOUD INFRASTRUCTURE"]
-        CF["🌐 Cloudflare Tunnel (smartflowg7.cloud)<br>✓ SSL/HTTPS  •  ✓ DDoS Protection  •  ✓ Zero-Trust Access"]
-    end
-
-    subgraph Backend ["⚙️ BACKEND SERVER (FastAPI + Python 3.13)"]
-        API["📡 RESTful API Layer<br>✓ JWT Auth & RBAC<br>✓ Rate Limiting"]
-        WS["🔌 WebSocket Server<br>✓ Real-time Push<br>✓ Auto-reconnect"]
-        Cache["💾 SWR Cache Layer<br>✓ In-Memory Cache<br>✓ Auto-invalidate"]
-        AI["🧠 AI Chatbot Engine<br>✓ Gemini API Integration"]
-    end
-
-    subgraph DB_Group ["🗄️ DATABASE LAYER"]
-        DB["🛢️ SQL Server 2019+ (SQLAlchemy)<br>✓ Pool size: 100 + 400 overflow<br>✓ Performance Indexes & NOLOCK Hints"]
-    end
-
+    %% Client Subgraph (Left)
     subgraph Clients ["📱 CLIENT APPLICATIONS"]
-        Web["💻 WEB DASHBOARD (React 18 + Vite)<br>✓ Dashboard KPI<br>✓ Quản lý Đơn hàng & KHSX<br>✓ Hồ sơ Chất lượng & Tài liệu ISO"]
-        Mobile["📱 MOBILE APP (React + Capacitor 6)<br>✓ Tạo/Nhận Phiếu Giao & Quét QR<br>✓ Kiểm tra QC & Chụp ảnh minh chứng<br>✓ Multi-stage Selector & OTA Update"]
+        direction TB
+        Web["💻 WEB DASHBOARD (React 18)<br>• Dashboard KPI & Báo cáo<br>• Quản lý Đơn hàng & KHSX<br>• Hồ sơ Chất lượng & ISO"]
+        Mobile["📱 MOBILE APP (Capacitor 6)<br>• Tạo/Nhận Phiếu Giao & QR Code<br>• Kiểm QC & Chụp ảnh minh chứng<br>• Multi-stage Account & OTA Update"]
     end
+    class Clients,Web,Mobile client;
 
-    %% Apply Classes
-    class CF cloud;
-    class API,WS,Cache,AI server;
-    class DB db;
-    class Web,Mobile client;
+    %% Cloud/Gateway Subgraph (Center-Left)
+    subgraph Gateway ["☁️ GATEWAY & SECURITY"]
+        CF["🌐 Cloudflare Tunnel (smartflowg7.cloud)<br>• SSL/HTTPS & DDoS Protection<br>• Zero-Trust Secure Access"]
+    end
+    class Gateway,CF cloud;
 
-    %% Relations
+    %% Backend Subgraph (Center-Right)
+    subgraph Backend ["⚙️ BACKEND API SERVER (FastAPI)"]
+        direction TB
+        API["📡 RESTful API (JWT Auth & RBAC)"]
+        WS["🔌 WebSocket (Real-time Broadcast)"]
+        Cache["💾 SWR Cache (In-Memory Stage Cache)"]
+        AI["🧠 AI Chatbot Engine (Gemini API)"]
+    end
+    class Backend,API,WS,Cache,AI server;
+
+    %% Database Subgraph (Right)
+    subgraph Database ["🗄️ DATABASE LAYER"]
+        DB["🛢️ SQL Server 2019+ (SQLAlchemy)<br>• Connection Pool (100 + 400)<br>• 30+ Performance Indexes<br>• NOLOCK Hints & Query Tuning"]
+    end
+    class Database,DB db;
+
+    %% Horizontal Flow Relations
+    Web -- HTTPS/WSS --> CF
+    Mobile -- HTTPS/WSS --> CF
+    
     CF --> API
     CF --> WS
+    
     API --> DB
     WS --> DB
     Cache --> DB
     AI --> DB
-
-    API -.->|Đẩy dữ liệu| Web
-    API -.->|Đẩy dữ liệu| Mobile
-    WS -.->|Real-time| Web
-    WS -.->|Real-time| Mobile
 ```
 
 ### Luồng dữ liệu chính (Production Data Flow)
