@@ -73,38 +73,28 @@
 ```mermaid
 flowchart TD
     %% Styling Classes
-    classDef cloud fill:#FAF6F0,stroke:#7B5233,stroke-width:2px,color:#7B5233;
-    classDef server fill:#EFF6FF,stroke:#3B82F6,stroke-width:2px,color:#1E3A8A;
-    classDef client fill:#ECFDF5,stroke:#10B981,stroke-width:2px,color:#064E3B;
-    classDef db fill:#FEF2F2,stroke:#EF4444,stroke-width:2px,color:#991B1B;
+    classDef cloud fill:#FAF6F0,stroke:#7B5233,stroke-width:1.5px,color:#7B5233;
+    classDef server fill:#EFF6FF,stroke:#3B82F6,stroke-width:1.5px,color:#1E3A8A;
+    classDef client fill:#ECFDF5,stroke:#10B981,stroke-width:1.5px,color:#064E3B;
+    classDef db fill:#FEF2F2,stroke:#EF4444,stroke-width:1.5px,color:#991B1B;
 
-    %% Clients at the Top
-    subgraph Clients ["📱 CLIENT APPLICATIONS"]
-        Web["💻 WEB DASHBOARD (React 18)<br>• Dashboard KPI & Báo cáo<br>• Quản lý Đơn hàng & KHSX<br>• Hồ sơ Chất lượng & ISO"]
-        Mobile["📱 MOBILE APP (Capacitor 6)<br>• Tạo/Nhận Phiếu Giao & QR Code<br>• Kiểm QC & Chụp ảnh minh chứng<br>• Multi-stage Account & OTA Update"]
-    end
-    class Clients,Web,Mobile client;
+    Web["💻 Web Dashboard (React 18)<br>• Dashboard KPI & Báo cáo<br>• Quản lý Đơn hàng & KHSX<br>• Hồ sơ Chất lượng & ISO"]
+    Mobile["📱 Mobile App (Capacitor 6)<br>• Tạo/Nhận Phiếu Giao & QR Code<br>• Kiểm QC & Chụp ảnh minh chứng<br>• Multi-stage Account & OTA Update"]
+    
+    CF["🌐 Cloudflare Tunnel (smartflowg7.cloud)<br>• SSL/HTTPS & DDoS Protection<br>• Zero-Trust Secure Access"]
+    
+    API["📡 RESTful API (FastAPI)<br>• JWT Auth & RBAC Phân quyền"]
+    WS["🔌 WebSocket Server<br>• Truyền dữ liệu thời gian thực"]
+    Cache["💾 SWR Cache Layer<br>• In-Memory Stage Cache"]
+    AI["🧠 AI Chatbot Engine<br>• Gemini API Integration"]
+    
+    DB["🛢️ SQL Server Database<br>• Connection Pool (100 + 400)<br>• 30+ Performance Indexes & NOLOCK"]
 
-    %% Gateway in the Middle-Top
-    subgraph Gateway ["☁️ GATEWAY & SECURITY"]
-        CF["🌐 Cloudflare Tunnel (smartflowg7.cloud)<br>• SSL/HTTPS & DDoS Protection<br>• Zero-Trust Secure Access"]
-    end
-    class Gateway,CF cloud;
-
-    %% Backend in the Middle-Bottom
-    subgraph Backend ["⚙️ BACKEND API SERVER (FastAPI)"]
-        API["📡 RESTful API (JWT Auth & RBAC)"]
-        WS["🔌 WebSocket (Real-time Broadcast)"]
-        Cache["💾 SWR Cache (In-Memory Stage Cache)"]
-        AI["🧠 AI Chatbot Engine (Gemini API)"]
-    end
-    class Backend,API,WS,Cache,AI server;
-
-    %% Database at the Bottom
-    subgraph Database ["🗄️ DATABASE LAYER"]
-        DB["🛢️ SQL Server 2019+ (SQLAlchemy)<br>• Connection Pool (100 + 400)<br>• 30+ Performance Indexes<br>• NOLOCK Hints & Query Tuning"]
-    end
-    class Database,DB db;
+    %% Apply Classes
+    class CF cloud;
+    class API,WS,Cache,AI server;
+    class DB db;
+    class Web,Mobile client;
 
     %% Relations (strictly Top-to-Bottom)
     Web -->|HTTPS/WSS| CF
