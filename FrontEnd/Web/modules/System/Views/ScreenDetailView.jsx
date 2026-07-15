@@ -1157,9 +1157,9 @@ const ScreenDetail = () => {
   const [newComponentWorkflow, setNewComponentWorkflow] = useState('');
   const [newComponentBackend, setNewComponentBackend] = useState('');
   const [specDescriptions, setSpecDescriptions] = useState({
-    Frontend: 'Đặc tả chi tiết giao diện người dùng và cách bố trí các thành phần.',
-    'Luồng xử lý': 'Đặc tả luồng nghiệp vụ, tương tác và xử lý dữ liệu của màn hình.',
-    Backend: 'Đặc tả các API endpoint liên kết, dịch vụ và cấu trúc dữ liệu phía máy chủ.'
+    Frontend: '',
+    'Luồng xử lý': '',
+    Backend: ''
   });
 
   const [currentMockupIdx, setCurrentMockupIdx] = useState(0);
@@ -2604,7 +2604,11 @@ const ScreenDetail = () => {
                     return next;
                   });
                 }}
-                placeholder="Nhập nội dung mô tả đặc tả..."
+                placeholder={
+                  viewMode === 'blueprint' ? 'Đặc tả chi tiết giao diện người dùng và cách bố trí các thành phần.' :
+                  viewMode === 'workflow' ? 'Đặc tả luồng nghiệp vụ, tương tác và xử lý dữ liệu của màn hình.' :
+                  'Đặc tả các API endpoint liên kết, dịch vụ và cấu trúc dữ liệu phía máy chủ.'
+                }
                 style={{
                   width: '100%',
                   fontSize: '0.8rem',
