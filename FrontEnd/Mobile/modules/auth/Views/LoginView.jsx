@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthController } from '@modules/auth/Controllers/authController'
 import useAuthStore from '@modules/auth/Models/authModel'
 import Button from '@mobile/Shared/Views/components/ui/Button'
@@ -17,8 +17,13 @@ import background from '@mobile/assets/background-1.png'
  */
 const Login = () => {
   const navigate = useNavigate()
+  const location = useLocation()
   const { isAuthenticated, user } = useAuthStore()
   const { login, loading, error } = useAuthController()
+
+  const fromPath = location.state?.from?.pathname
+    ? (location.state.from.pathname + (location.state.from.search || ''))
+    : '/delivery-info';
 
   const [formData, setFormData] = useState({
     username: '',
@@ -33,7 +38,7 @@ const Login = () => {
     const handleAutoLogin = async () => {
       // 1. Nếu đã đăng nhập rồi thì chỉ việc đi tiếp
       if (isAuthenticated) {
-        navigate('/delivery-info', { replace: true });
+        navigate(fromPath, { replace: true });
         return;
       }
 
@@ -52,7 +57,7 @@ const Login = () => {
               PushNotificationService.init(userState.id);
             } catch (err) { }
 
-            navigate('/delivery-info', { replace: true });
+            navigate(fromPath, { replace: true });
           }
         } catch (e) { }
       }
@@ -117,7 +122,7 @@ const Login = () => {
         console.error("Lỗi khởi tạo Push:", err);
       }
 
-      navigate('/delivery-info');
+      navigate(fromPath);
     }
   }
 

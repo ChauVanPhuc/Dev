@@ -928,11 +928,13 @@ async def serve_ui(request: Request, full_path: str):
         raise HTTPException(status_code=404)
 
     # Nhận diện tên miền và nguồn gốc (referer) để phục vụ đúng UI (Dashboard vs Mobile)
+    forwarded_host = request.headers.get("x-forwarded-host", "").lower()
     host = request.headers.get("host", "").lower()
     referer = request.headers.get("referer", "").lower()
     
     is_dashboard = (
         "dashboard" in host or 
+        "dashboard" in forwarded_host or
         "/dashboard" in referer or 
         full_path_clean.startswith("dashboard")
     )
