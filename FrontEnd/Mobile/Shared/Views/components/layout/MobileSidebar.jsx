@@ -128,7 +128,6 @@ const Sidebar = () => {
         { label: 'Kiểm tra quy trình', path: '/inspection-stage-process' },
         { label: 'Kiểm tra mẫu đầu tiên', path: '/inspection-first-article' },
         { label: 'Kiểm tra bám dính', path: '/inspection-stage-adhesion' },
-        { label: 'Kiểm tra thông số', path: '/input-inspection' },
         { label: 'Nhập lỗi', path: '/inspection-daily' },
         { label: 'Lịch sử kiểm tra', path: '/logs' }
       ] 

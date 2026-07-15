@@ -559,7 +559,7 @@ const InputInspection = () => {
         {/* Nút hành động */}
         {effectiveViewOnly ? (
           <button
-            onClick={() => navigate('/input-inspection')}
+            onClick={() => navigate(-1)}
             style={{
               width: '100%', padding: '14px', borderRadius: '14px',
               border: '1.5px solid #e2e8f0', background: '#fff',
@@ -589,7 +589,7 @@ const InputInspection = () => {
               {loading ? 'Đang lưu...' : 'Xác nhận'}
             </button>
             <button
-              onClick={() => navigate('/input-inspection')}
+              onClick={() => navigate(-1)}
               style={{
                 flex: 1, padding: '14px', borderRadius: '14px',
                 border: '1.5px solid #e2e8f0', background: '#fff',
