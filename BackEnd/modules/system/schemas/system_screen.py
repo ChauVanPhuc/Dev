@@ -1,7 +1,8 @@
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
-from modules.system.schemas.system_component import SystemComponent as SystemComponentSchema
+from modules.system.schemas.system_component import SystemComponent as SystemComponentSchema, SystemComponentCreate
+from modules.system.schemas.screen_bug import ScreenBugResponse
 
 class SystemScreenBase(BaseModel):
     """
@@ -14,6 +15,23 @@ class SystemScreenBase(BaseModel):
     title: str
     subtitle: Optional[str] = None
     is_active: bool = True
+    status: Optional[str] = 'Mới thiết kế'
+    target_date: Optional[str] = None
+    mockup_path: Optional[str] = None
+
+class SystemScreenCreate(BaseModel):
+    """
+    Schema khoi tao man hinh moi.
+    """
+    platform: str
+    route_path: Optional[str] = None
+    title: str
+    subtitle: Optional[str] = None
+    status: Optional[str] = 'Mới thiết kế'
+    target_date: Optional[str] = None
+    subsystem: Optional[str] = None
+    components: Optional[List[SystemComponentCreate]] = None
+    mockup_path: Optional[str] = None
 
 class SystemScreenUpdate(BaseModel):
     """
@@ -24,6 +42,10 @@ class SystemScreenUpdate(BaseModel):
     title: Optional[str] = None
     subtitle: Optional[str] = None
     is_active: Optional[bool] = None
+    status: Optional[str] = None
+    target_date: Optional[str] = None
+    components: Optional[List[SystemComponentCreate]] = None
+    mockup_path: Optional[str] = None
 
 class SystemScreen(SystemScreenBase):
     """
@@ -32,6 +54,7 @@ class SystemScreen(SystemScreenBase):
     id: int
     updated_at: Optional[datetime] = None
     components: List[SystemComponentSchema] = []
+    bugs: List[ScreenBugResponse] = []
 
     class Config:
         from_attributes = True

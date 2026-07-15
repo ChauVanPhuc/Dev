@@ -74,6 +74,20 @@ export const screenService = {
 
     return api.get(`/screens/${id}`);
 
+  },
+
+  /**
+   * Tao moi mot dac ta man hinh
+   */
+  createScreen: async (data) => {
+    return api.post('/screens', data);
+  },
+
+  /**
+   * Xoa mot man hinh
+   */
+  deleteScreen: async (id) => {
+    return api.delete(`/screens/${id}`);
   }
 
 };

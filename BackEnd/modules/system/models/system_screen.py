@@ -19,6 +19,9 @@ class SystemScreen(Base):
     title = Column(NVARCHAR(100), nullable=False) # Vi du: 'Quan ly nguoi dung'
     subtitle = Column(NVARCHAR(150), nullable=True) # Vi du: 'Danh sach nguoi dung'
     is_active = Column(Boolean, default=True, nullable=False)
+    status = Column(NVARCHAR(50), default=u"Mới thiết kế", nullable=False)
+    target_date = Column(NVARCHAR(20), nullable=True)
+    mockup_path = Column(NVARCHAR(1000), nullable=True)
     updated_at = Column(DateTime, default=get_vietnam_time, onupdate=get_vietnam_time)
 
     # Relationships

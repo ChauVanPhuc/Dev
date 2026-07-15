@@ -1,9 +1,48 @@
 import React, { useState, useEffect } from 'react';
-
 import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+import { Bug, Play, Type, Table2, CheckSquare, List, Layout, Menu, CreditCard, Sliders, Bell, Component } from 'lucide-react';
+import api from '@webShared/Services/api.service';
+
+const renderComponentIcon = (type) => {
+  const props = { size: 16, style: { color: '#7B5233' } };
+  switch (type) {
+    case 'Button':
+      return <Play {...props} />;
+    case 'Input Field':
+      return <Type {...props} />;
+    case 'Table':
+      return <Table2 {...props} />;
+    case 'Checkbox / Radio':
+      return <CheckSquare {...props} />;
+    case 'Dropdown / Select':
+      return <List {...props} />;
+    case 'Modal / Dialog':
+      return <Layout {...props} />;
+    case 'Navbar / Sidebar':
+      return <Menu {...props} />;
+    case 'Card':
+      return <CreditCard {...props} />;
+    case 'Carousel / Slider':
+      return <Sliders {...props} />;
+    case 'Toast / Alert':
+      return <Bell {...props} />;
+    default:
+      return <Component {...props} />;
+  }
+};
+
+const getLoggedInUser = () => {
+  try {
+    const user = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
+    return user.full_name || user.username || 'Phúc';
+  } catch {
+    return 'Phúc';
+  }
+};
 
 import { screenService } from '@modules/System/Models/screen.service';
+import { bugService } from '@modules/System/Models/bug.service';
 
 import ScreenSimulator from '@modules/System/Views/components/ScreenSimulation';
 
@@ -949,6 +988,125 @@ const getComponentSubElements = (comp) => {
 
 
 
+const getComponentHint = (comp) => {
+  const type = comp.type || 'Khác';
+  const name = (comp.name || '').toLowerCase();
+  
+  if (type === 'Button') return 'Nút bấm kích hoạt hành động.';
+  if (type === 'Input Field') return 'Ô nhập dữ liệu văn bản.';
+  if (type === 'Checkbox / Radio') return 'Hộp chọn một hoặc nhiều mục.';
+  if (type === 'Dropdown / Select') return 'Menu danh sách thả xuống.';
+  if (type === 'Modal / Dialog') return 'Cửa sổ thông báo bật lên.';
+  if (type === 'Navbar / Sidebar') return 'Thanh điều hướng trang web.';
+  if (type === 'Card') return 'Thẻ chứa hình ảnh và thông tin.';
+  if (type === 'Table') return 'Bảng hiển thị dữ liệu cột.';
+  if (type === 'Carousel / Slider') return 'Trình trình chiếu ảnh chạy qua lại.';
+  if (type === 'Toast / Alert') return 'Thanh thông báo nhanh góc màn hình.';
+  if (type === 'Khác') return 'Không tồn tại trong các sự lựa chọn trên.';
+
+  // Fallback for legacy database records
+  if (type === 'UI Component') {
+    if (name.includes('button') || name.includes('btn') || name.includes('submit')) return 'Nút bấm kích hoạt hành động.';
+    if (name.includes('input') || name.includes('text') || name.includes('field')) return 'Ô nhập dữ liệu văn bản.';
+    if (name.includes('checkbox') || name.includes('radio') || name.includes('select-all')) return 'Hộp chọn một hoặc nhiều mục.';
+    if (name.includes('dropdown') || name.includes('select') || name.includes('combobox')) return 'Menu danh sách thả xuống.';
+    if (name.includes('modal') || name.includes('dialog') || name.includes('popup')) return 'Cửa sổ thông báo bật lên.';
+    if (name.includes('navbar') || name.includes('sidebar') || name.includes('menu')) return 'Thanh điều hướng trang web.';
+    if (name.includes('card') || name.includes('box')) return 'Thẻ chứa hình ảnh và thông tin.';
+    if (name.includes('table') || name.includes('grid') || name.includes('list')) return 'Bảng hiển thị dữ liệu cột.';
+    if (name.includes('carousel') || name.includes('slider') || name.includes('slideshow')) return 'Trình trình chiếu ảnh chạy qua lại.';
+    if (name.includes('toast') || name.includes('alert') || name.includes('notification')) return 'Thanh thông báo nhanh góc màn hình.';
+  }
+  return 'Không tồn tại trong các sự lựa chọn trên.';
+};
+
+const parseDescription = (desc) => {
+  if (!desc) return { tag: '', text: '' };
+  const match = desc.match(/^\[([^\]]+)\]\s*(.*)$/s);
+  if (match) {
+    return { tag: match[1], text: match[2] };
+  }
+  return { tag: '', text: desc };
+};
+
+const getImageUrl = (path) => {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) {
+    return path;
+  }
+  const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  return `${apiBase.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
+};
+
+const getPositionByName = (name) => {
+  if (!name) return 'QC';
+  const n = name.toLowerCase();
+  if (n.includes('admin') || n.includes('it') || n.includes('hệ thống') || n.includes('administrator')) return 'Admin';
+  if (n.includes('phuc') || n.includes('dev') || n.includes('coder') || n.includes('developer') || n.includes('phucv1')) return 'Lập trình viên';
+  if (n.includes('qc') || n.includes('tester') || n.includes('kiem thu') || n.includes('nguyễn văn') || n.includes('phuong')) return 'QC';
+  return 'QC';
+};
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return '-';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    return `${day}/${month}/${d.getFullYear()}`;
+  } catch {
+    return dateStr;
+  }
+};
+
+const getSubsystem = (screen) => {
+  if (!screen || !screen.current_code) return 'Quản lý hệ thống';
+  const prefix = screen.current_code.substring(0, 2).toUpperCase();
+  const mapping = {
+    'TC': 'Trang chủ',
+    'HD': 'Quản lý hệ thống',
+    'NS': 'Quản lý nhân sự',
+    'SX': 'Quản lý sản xuất',
+    'CL': 'Quản lý chất lượng',
+    'KD': 'Quản lý kinh doanh',
+    'KT': 'Quản lý kỹ thuật',
+    'BT': 'Bảo trì - cơ sở hạ tầng'
+  };
+  return mapping[prefix] || 'Quản lý hệ thống';
+};
+
+const SUBSYSTEM_PREFIXES = {
+  'Trang chủ': 'TC',
+  'Quản lý hệ thống': 'AD',
+  'Quản lý nhân sự': 'NS',
+  'Quản lý sản xuất': 'MA',
+  'Quản lý chất lượng': 'CL',
+  'Quản lý kinh doanh': 'KD',
+  'Quản lý kỹ thuật': 'KT',
+  'Bảo trì - cơ sở hạ tầng': 'BT'
+};
+
+const generateNextScreenCode = (subsystemName, screensList) => {
+  const prefix = SUBSYSTEM_PREFIXES[subsystemName] || 'AD';
+  const matchingCodes = (screensList || [])
+    .map(s => s.current_code || s.default_code || '')
+    .filter(code => code.startsWith(prefix));
+    
+  let maxSeq = 0;
+  matchingCodes.forEach(code => {
+    const numPart = code.substring(prefix.length);
+    const parsed = parseInt(numPart, 10);
+    if (!isNaN(parsed) && parsed > maxSeq) {
+      maxSeq = parsed;
+    }
+  });
+  
+  const nextSeq = maxSeq + 1;
+  const bb = String(nextSeq).padStart(2, '0');
+  return `${prefix}${bb}`;
+};
+
 const ScreenDetail = () => {
 
   const { id } = useParams();
@@ -958,15 +1116,96 @@ const ScreenDetail = () => {
 
   const outletContext = useOutletContext() || {};
 
-  const { showModal, startGlobalUpload, activeUploads } = outletContext;
+  const { showModal, startGlobalUpload, activeUploads, setCustomTitle, setCustomSubtitle, setCustomScreenCode } = outletContext;
 
   const [screen, setScreen] = useState(null);
+
+  useEffect(() => {
+    if (setCustomTitle) setCustomTitle('Đặc tả màn hình');
+  }, [setCustomTitle]);
+
+  useEffect(() => {
+    if (screen) {
+      if (setCustomSubtitle) setCustomSubtitle(`${screen.current_code}: ${screen.title}`);
+      if (setCustomScreenCode) setCustomScreenCode(screen.current_code);
+    } else {
+      if (setCustomSubtitle) setCustomSubtitle('Đặc tả màn hình chi tiết');
+      if (setCustomScreenCode) setCustomScreenCode('HD03');
+    }
+  }, [screen, setCustomSubtitle, setCustomScreenCode]);
 
   const [loading, setLoading] = useState(true);
 
   const [error, setError] = useState(null);
 
-  
+  const [formData, setFormData] = useState({
+    title: '',
+    route_path: '',
+    platform: 'Web',
+    subsystem: 'Quản lý hệ thống',
+    status: 'Mới thiết kế',
+    target_date: '',
+    subtitle: ''
+  });
+
+  const [showAddComponentModal, setShowAddComponentModal] = useState(false);
+  const [isTypeDropdownOpen, setIsTypeDropdownOpen] = useState(false);
+  const [isMockupExpanded, setIsMockupExpanded] = useState(false);
+  const [newComponentName, setNewComponentName] = useState('');
+  const [newComponentType, setNewComponentType] = useState('Button');
+  const [newComponentFrontend, setNewComponentFrontend] = useState('');
+  const [newComponentWorkflow, setNewComponentWorkflow] = useState('');
+  const [newComponentBackend, setNewComponentBackend] = useState('');
+  const [specDescriptions, setSpecDescriptions] = useState({
+    Frontend: 'Đặc tả chi tiết giao diện người dùng và cách bố trí các thành phần.',
+    'Luồng xử lý': 'Đặc tả luồng nghiệp vụ, tương tác và xử lý dữ liệu của màn hình.',
+    Backend: 'Đặc tả các API endpoint liên kết, dịch vụ và cấu trúc dữ liệu phía máy chủ.'
+  });
+
+  const [currentMockupIdx, setCurrentMockupIdx] = useState(0);
+  const [expandedBugId, setExpandedBugId] = useState(null);
+  const [isBugListCollapsed, setIsBugListCollapsed] = useState(false);
+  const [allScreens, setAllScreens] = useState([]);
+  const [showBugModal, setShowBugModal] = useState(false);
+  const [bugModalData, setBugModalData] = useState({
+    componentName: 'Chung',
+    severity: 'Medium',
+    description: '',
+    reporter: getLoggedInUser(),
+    assignee: 'IT',
+    targetDate: '',
+    imagePath: ''
+  });
+  const [bugModalMode, setBugModalMode] = useState('create'); // 'create' | 'edit'
+  const [selectedBug, setSelectedBug] = useState(null);
+  const [bugImageUploading, setBugImageUploading] = useState(false);
+  const [replyNotes, setReplyNotes] = useState('');
+  const [replyImages, setReplyImages] = useState([]);
+  const [replyUploading, setReplyUploading] = useState(false);
+  const [replyStatusVal, setReplyStatusVal] = useState('');
+  const [itAccounts, setItAccounts] = useState(['IT']);
+
+  useEffect(() => {
+    const fetchItAccounts = async () => {
+      try {
+        const res = await api.get('/accounts/?size=100');
+        if (res && res.items) {
+          const filtered = res.items
+            .filter(acc => {
+              const role = (acc.role_name || '').toLowerCase();
+              return role === 'it' || role.includes('it');
+            })
+            .map(acc => acc.full_name || acc.username);
+          if (filtered.length > 0) {
+            setItAccounts(filtered);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load IT accounts:', err);
+      }
+    };
+    fetchItAccounts();
+  }, []);
 
   // States for search and filter
 
@@ -1020,18 +1259,56 @@ const ScreenDetail = () => {
 
   const [selectedWorkflowStep, setSelectedWorkflowStep] = useState(0);
 
-
+  const showToast = (message, type = 'success') => {
+    toast(type, message);
+  };
 
   const fetchScreenDetail = async () => {
+    try {
+      const screensList = await screenService.getScreens();
+      setAllScreens(screensList || []);
+    } catch (err) {
+      console.error('Failed to load all screens list:', err);
+    }
+
+    if (id === 'new') {
+      setScreen({
+        id: 'new',
+        title: '',
+        route_path: '',
+        platform: 'Web',
+        status: 'Mới thiết kế',
+        target_date: '',
+        components: [
+          { id: 1, name: 'Nút A', type: 'Button', description: 'Nút bấm kích hoạt hành động.' },
+          { id: 2, name: 'Ô nhập liệu A', type: 'Input Field', description: 'Ô nhập dữ liệu văn bản.' },
+          { id: 3, name: 'Bảng A', type: 'Table', description: 'Bảng hiển thị dữ liệu cột.' },
+          { id: 4, name: 'Nút radio B', type: 'Checkbox / Radio', description: 'Hộp chọn một hoặc nhiều mục.' }
+        ],
+        bugs: []
+      });
+      setLoading(false);
+      return;
+    }
 
     try {
-
       setLoading(true);
-
       const data = await screenService.getScreenDetail(id);
+      
+      try {
+        const bugsData = await bugService.getBugs();
+        if (bugsData) {
+          if (Array.isArray(bugsData)) {
+            data.bugs = bugsData.filter(b => b.screen_id === data.id);
+          } else if (Array.isArray(bugsData.items)) {
+            data.bugs = bugsData.items.filter(b => b.screen_id === data.id);
+          }
+        }
+      } catch (bugErr) {
+        console.error('Failed to load bugs for screen detail:', bugErr);
+      }
 
       setScreen(data);
-
       setError(null);
 
     } catch (err) {
@@ -1048,7 +1325,389 @@ const ScreenDetail = () => {
 
   };
 
+  useEffect(() => {
+    if (screen) {
+      setFormData({
+        title: screen.title || '',
+        route_path: screen.route_path || '',
+        platform: screen.platform || 'Web',
+        subsystem: getSubsystem(screen),
+        status: screen.status || 'Mới thiết kế',
+        target_date: screen.target_date || '',
+        subtitle: screen.subtitle || ''
+      });
+    }
+  }, [screen]);
 
+  const handleSave = async (e) => {
+    if (e) e.preventDefault();
+    if (!formData.title || !formData.route_path) {
+      showToast('Vui lòng nhập đầy đủ Tên màn hình và Đường dẫn Route!', 'error');
+      return;
+    }
+    
+    if (!formData.target_date) {
+      showToast('Vui lòng chọn ngày hoàn thành dự kiến!', 'error');
+      return;
+    }
+    const today = new Date().toISOString().split('T')[0];
+    if (formData.target_date < today) {
+      showToast('Ngày hoàn thành dự kiến phải lớn hơn hoặc bằng ngày hiện tại!', 'error');
+      return;
+    }
+    
+    const componentsPayload = (screen?.components || []).map(c => ({
+      name: c.name,
+      type: c.type,
+      description: c.description || '',
+      technical_details: c.technical_details || '',
+      file_path: c.file_path || '',
+      is_active: c.is_active !== undefined ? c.is_active : true
+    }));
+
+    try {
+      if (id === 'new') {
+        const res = await screenService.createScreen({
+          title: formData.title,
+          route_path: formData.route_path,
+          platform: formData.platform,
+          status: formData.status || 'Mới thiết kế',
+          target_date: formData.target_date,
+          subtitle: formData.subtitle,
+          subsystem: formData.subsystem || 'Quản lý hệ thống',
+          components: componentsPayload
+        });
+        showToast('Tạo mới đặc tả màn hình thành công!');
+        navigate(`/admin/screens/${res.id}`);
+      } else {
+        await screenService.updateScreen(screen.id, {
+          title: formData.title,
+          route_path: formData.route_path,
+          platform: formData.platform,
+          status: formData.status,
+          target_date: formData.target_date,
+          subtitle: formData.subtitle,
+          mockup_path: screen.mockup_path,
+          components: componentsPayload
+        });
+        showToast('Cập nhật đặc tả màn hình thành công!');
+        fetchScreenDetail();
+      }
+    } catch (err) {
+      showToast('Lưu đặc tả thất bại!', 'error');
+    }
+  };
+
+  const handleMockupUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      showToast('Đang tải lên hình ảnh...', 'info');
+      const res = await bugService.uploadImage(file);
+      if (res && res.url) {
+        const mockups = screen.mockup_path ? screen.mockup_path.split(',').filter(Boolean) : [];
+        const updatedMockups = [...mockups, res.url];
+        const updatedPath = updatedMockups.join(',');
+        
+        if (id === 'new') {
+          setScreen(prev => ({ ...prev, mockup_path: updatedPath }));
+          setCurrentMockupIdx(updatedMockups.length - 1);
+          showToast('Tải lên hình ảnh thành công!');
+          return;
+        }
+        
+        await screenService.updateScreen(screen.id, {
+          title: formData.title,
+          route_path: formData.route_path,
+          platform: formData.platform,
+          status: formData.status,
+          target_date: formData.target_date,
+          subtitle: formData.subtitle,
+          mockup_path: updatedPath
+        });
+        
+        showToast('Tải lên hình ảnh thành công!');
+        setCurrentMockupIdx(updatedMockups.length - 1);
+        fetchScreenDetail();
+      }
+    } catch (err) {
+      showToast('Tải lên thất bại!', 'error');
+    }
+  };
+
+  const handleDeleteMockup = async () => {
+    if (window.confirm('Bạn có chắc chắn muốn xóa hình ảnh này?')) {
+      const mockups = screen.mockup_path ? screen.mockup_path.split(',').filter(Boolean) : [];
+      const updatedMockups = mockups.filter((_, idx) => idx !== currentMockupIdx);
+      const updatedPath = updatedMockups.join(',');
+      
+      if (id === 'new') {
+        setScreen(prev => ({ ...prev, mockup_path: updatedPath }));
+        setCurrentMockupIdx(0);
+        showToast('Xóa hình ảnh thành công!');
+        return;
+      }
+      
+      await screenService.updateScreen(screen.id, {
+        title: formData.title,
+        route_path: formData.route_path,
+        platform: formData.platform,
+        status: formData.status,
+        target_date: formData.target_date,
+        subtitle: formData.subtitle,
+        mockup_path: updatedPath
+      });
+      
+      showToast('Xóa hình ảnh thành công!');
+      setCurrentMockupIdx(0);
+      fetchScreenDetail();
+    }
+  };
+
+  const handleBugImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      setBugImageUploading(true);
+      showToast('Đang tải lên ảnh lỗi...', 'info');
+      const res = await bugService.uploadImage(file);
+      if (res && res.url) {
+        setBugModalData(prev => ({ ...prev, imagePath: res.url }));
+        showToast('Tải lên hình ảnh lỗi thành công!');
+      } else {
+        showToast('Không nhận được đường dẫn ảnh!', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Tải lên hình ảnh lỗi thất bại!', 'error');
+    } finally {
+      setBugImageUploading(false);
+    }
+  };
+
+  const handleCreateBug = async () => {
+    if (!bugModalData.description) {
+      showToast('Vui lòng nhập mô tả lỗi!', 'error');
+      return;
+    }
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (bugModalData.targetDate && bugModalData.targetDate < todayStr) {
+      showToast('Ngày yêu cầu hoàn thành không được là ngày quá khứ!', 'error');
+      return;
+    }
+    try {
+      const payload = {
+        screen_id: screen.id,
+        description: `[${bugModalData.componentName}] ${bugModalData.description}`,
+        severity: bugModalData.severity,
+        status: 'New',
+        reporter: bugModalData.reporter,
+        assignee: bugModalData.assignee,
+        requested_at: bugModalData.targetDate ? `${bugModalData.targetDate}T12:00:00Z` : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        image_paths: bugModalData.imagePath ? [bugModalData.imagePath] : [],
+        notes: ''
+      };
+      
+      await bugService.createBug(payload);
+      showToast('Khai báo lỗi thành công!');
+      setShowBugModal(false);
+      fetchScreenDetail();
+    } catch (err) {
+      console.error(err);
+      showToast('Khai báo lỗi thất bại!', 'error');
+    }
+  };
+
+  const handleDeleteBug = async (bugId) => {
+    if (window.confirm('Bạn có chắc chắn muốn xóa lỗi này khỏi cơ sở dữ liệu?')) {
+      try {
+        await bugService.deleteBug(bugId);
+        showToast('Xóa lỗi thành công!');
+        fetchScreenDetail();
+      } catch (err) {
+        console.error(err);
+        showToast('Xóa lỗi thất bại!', 'error');
+      }
+    }
+  };
+
+  const handleOpenEditBugModal = (bug) => {
+    setBugModalMode('edit');
+    setSelectedBug(bug);
+    
+    const parsed = parseDescription(bug.description);
+    
+    setBugModalData({
+      id: bug.id,
+      componentName: parsed.tag || 'Chung',
+      severity: bug.severity || 'Medium',
+      description: parsed.text || '',
+      reporter: bug.reporter || '',
+      assignee: bug.assignee || 'IT',
+      targetDate: bug.requested_at ? bug.requested_at.split('T')[0] : '',
+      imagePath: bug.images && bug.images.length > 0 ? bug.images[0].image_path : '',
+      status: bug.status || 'New'
+    });
+    
+    setReplyNotes('');
+    setReplyImages([]);
+    setReplyStatusVal('');
+    
+    setShowBugModal(true);
+  };
+
+  const handleUpdateBug = async () => {
+    if (!replyNotes.trim()) {
+      showToast('Vui lòng nhập nội dung phản hồi!', 'error');
+      return;
+    }
+    
+    let newStatus = bugModalData.status;
+    const current = (bugModalData.status || '').toLowerCase();
+    
+    if (current === 'new' || current === 'mới' || bugModalData.status === 'Sửa lại') {
+      if (replyStatusVal === 'Đã sửa') {
+        newStatus = 'Đã sửa';
+      }
+    } else if (bugModalData.status === 'Đã sửa') {
+      if (replyStatusVal === 'Hoàn thành') {
+        newStatus = 'Hoàn thành';
+      } else if (replyStatusVal === 'Từ chối') {
+        newStatus = 'Sửa lại';
+      }
+    }
+    
+    try {
+      const updatePayload = {
+        severity: bugModalData.severity,
+        assignee: bugModalData.assignee,
+        status: newStatus,
+        requested_at: bugModalData.targetDate ? `${bugModalData.targetDate}T12:00:00Z` : undefined
+      };
+      await bugService.updateBug(bugModalData.id, updatePayload);
+      
+      const replyPayload = {
+        status: newStatus,
+        notes: replyNotes,
+        updater: getLoggedInUser(),
+        image_paths: replyImages,
+        assignee: bugModalData.assignee
+      };
+      await bugService.addBugUpdate(bugModalData.id, replyPayload);
+      
+      showToast('Cập nhật tiến độ lỗi thành công!');
+      setShowBugModal(false);
+      fetchScreenDetail();
+    } catch (err) {
+      console.error(err);
+      showToast('Cập nhật tiến độ lỗi thất bại!', 'error');
+    }
+  };
+
+  const handleReplyImageUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+    try {
+      setReplyUploading(true);
+      showToast('Đang tải lên hình ảnh...', 'info');
+      const uploadedPaths = [];
+      for (const file of files) {
+        const res = await bugService.uploadImage(file);
+        if (res && res.url) {
+          uploadedPaths.push(res.url);
+        }
+      }
+      setReplyImages(prev => [...prev, ...uploadedPaths]);
+      showToast('Tải lên hình ảnh thành công!');
+    } catch (err) {
+      console.error(err);
+      showToast('Tải lên hình ảnh thất bại!', 'error');
+    } finally {
+      setReplyUploading(false);
+    }
+  };
+
+  const handleSubmitReply = async (bug) => {
+    if (!replyNotes.trim()) {
+      showToast('Vui lòng nhập nội dung phản hồi!', 'error');
+      return;
+    }
+    
+    let newStatus = bug.status;
+    const current = (bug.status || '').toLowerCase();
+    
+    if (current === 'new' || current === 'mới' || current === 'sửa lại') {
+      if (replyStatusVal !== 'Đã sửa') {
+        showToast('Vui lòng tích chọn trạng thái "Đã sửa" trước khi phản hồi!', 'error');
+        return;
+      }
+      newStatus = 'Đã sửa';
+    } else if (current === 'đã sửa' || current === 'resolved') {
+      if (replyStatusVal !== 'Hoàn thành' && replyStatusVal !== 'Sửa lại') {
+        showToast('Vui lòng tích chọn "Xác nhận (Hoàn thành)" hoặc "Từ chối (Sửa lại)"!', 'error');
+        return;
+      }
+      newStatus = replyStatusVal === 'Hoàn thành' ? 'Hoàn thành' : 'Sửa lại';
+    }
+
+    try {
+      const payload = {
+        notes: replyNotes,
+        status: newStatus,
+        updater: 'Phúc',
+        image_paths: replyImages,
+        assignee: bug.assignee
+      };
+      
+      await bugService.addBugUpdate(bug.id, payload);
+      showToast('Cập nhật phản hồi thành công!');
+      setReplyNotes('');
+      setReplyImages([]);
+      setReplyStatusVal('');
+      fetchScreenDetail();
+    } catch (err) {
+      console.error(err);
+      showToast('Gửi phản hồi thất bại!', 'error');
+    }
+  };
+
+  const handleAddComponent = () => {
+    setShowAddComponentModal(true);
+    setNewComponentName('');
+    setNewComponentType('Button');
+    setNewComponentFrontend('');
+    setNewComponentWorkflow('');
+    setNewComponentBackend('');
+  };
+
+  const confirmAddComponent = () => {
+    if (!newComponentName.trim()) {
+      showToast('Tên component không được để trống!', 'error');
+      return;
+    }
+    const newComp = {
+      id: Date.now(),
+      name: newComponentName.trim(),
+      type: newComponentType,
+      description: newComponentFrontend.trim() || 'Thành phần đặc tả giao diện',
+      technical_details: JSON.stringify({
+        frontend_description: newComponentFrontend.trim(),
+        workflow_description: newComponentWorkflow.trim(),
+        backend_description: newComponentBackend.trim()
+      })
+    };
+    
+    setScreen(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        components: [...(prev.components || []), newComp]
+      };
+    });
+    
+    setShowAddComponentModal(false);
+    showToast('Đã thêm thành phần mới vào danh sách!');
+  };
 
   useEffect(() => {
 
@@ -1426,1492 +2085,1174 @@ const ScreenDetail = () => {
 
 
 
+  const renderMetadataForm = () => {
+    const isNew = id === 'new';
+    const generatedCode = isNew ? generateNextScreenCode(formData.subsystem, allScreens) : '';
+    return (
+      <div className="card" style={{
+        background: '#fff',
+        border: '1px solid #E5E7EB',
+        borderRadius: '12px',
+        padding: '16px 20px',
+        marginBottom: '20px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+      }}>
+        {/* Card Header with Inline Selects & Buttons */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          borderBottom: '1px solid #F1F5F9',
+          paddingBottom: '12px',
+          marginBottom: '16px',
+          flexWrap: 'wrap',
+          gap: '12px'
+        }}>
+          <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: '800', color: '#2D1A12', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            Thông tin màn hình
+          </h3>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap', fontSize: '0.85rem' }}>
+            {/* Phân hệ select */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ color: '#64748B', fontWeight: '600', fontSize: '0.84rem' }}>Phân hệ:</span>
+              <select 
+                value={formData.subsystem} 
+                onChange={(e) => setFormData(prev => ({ ...prev, subsystem: e.target.value }))}
+                style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #E2E8F0', outline: 'none', fontWeight: '600', color: '#334155', fontSize: '0.82rem', backgroundColor: '#fff', height: '34px', cursor: 'pointer' }}
+              >
+                <option value="Trang chủ">Trang chủ</option>
+                <option value="Quản lý hệ thống">Quản lý hệ thống</option>
+                <option value="Quản lý nhân sự">Quản lý nhân sự</option>
+                <option value="Quản lý sản xuất">Quản lý sản xuất</option>
+                <option value="Quản lý chất lượng">Quản lý chất lượng</option>
+                <option value="Quản lý kinh doanh">Quản lý kinh doanh</option>
+                <option value="Quản lý kỹ thuật">Quản lý kỹ thuật</option>
+                <option value="Bảo trì - cơ sở hạ tầng">Bảo trì - cơ sở hạ tầng</option>
+              </select>
+            </div>
+
+            {/* Nền tảng select */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ color: '#64748B', fontWeight: '600', fontSize: '0.84rem' }}>Nền tảng:</span>
+              <select 
+                value={formData.platform} 
+                onChange={(e) => setFormData(prev => ({ ...prev, platform: e.target.value }))}
+                style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #E2E8F0', outline: 'none', fontWeight: '600', color: '#334155', fontSize: '0.82rem', backgroundColor: '#fff', height: '34px', cursor: 'pointer' }}
+              >
+                <option value="Web">Web</option>
+                <option value="Mobile">Mobile</option>
+              </select>
+            </div>
+
+            {/* Trạng thái select */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ color: '#64748B', fontWeight: '600', fontSize: '0.84rem' }}>Trạng thái:</span>
+              <select 
+                value={formData.status} 
+                onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
+                style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #E2E8F0', outline: 'none', fontWeight: '600', color: '#334155', fontSize: '0.82rem', backgroundColor: '#fff', height: '34px', cursor: 'pointer' }}
+              >
+                <option value="Mới thiết kế">Mới Thiết Kế</option>
+                <option value="Hoàn thành">Hoàn thành</option>
+              </select>
+            </div>
+
+            {/* Actions group */}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button 
+                type="button" 
+                className="btn btn-primary" 
+                onClick={handleSave}
+                style={{ padding: '6px 16px', fontSize: '0.82rem', borderRadius: '8px', backgroundColor: '#7B5233', borderColor: '#7B5233', color: '#fff', fontWeight: 'bold', height: '34px', cursor: 'pointer' }}
+              >
+                Lưu đặc tả
+              </button>
+              {!isNew && (
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    const defaultAssignee = itAccounts[0] || 'IT';
+                    setBugModalMode('create');
+                    setBugModalData({
+                      componentName: 'Chung',
+                      severity: 'Medium',
+                      description: '',
+                      reporter: getLoggedInUser(),
+                      assignee: defaultAssignee,
+                      targetDate: new Date().toISOString().split('T')[0],
+                      imagePath: ''
+                    });
+                    setShowBugModal(true);
+                  }}
+                  style={{ padding: '6px 16px', fontSize: '0.82rem', borderRadius: '8px', backgroundColor: '#5C4033', border: 'none', color: '#fff', fontWeight: 'bold', height: '34px', cursor: 'pointer' }}
+                >
+                  + Báo lỗi
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Card Body - 4 columns (layout from second screenshot) */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Mã màn hình</label>
+            <input 
+              type="text" 
+              className="form-control" 
+              value={isNew ? generatedCode : (screen?.current_code || '')} 
+              disabled
+              style={{ backgroundColor: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', color: '#64748B', fontWeight: '600', height: '36px', boxSizing: 'border-box' }}
+            />
+          </div>
+
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Tên màn hình *</label>
+            <input 
+              type="text" 
+              className="form-control" 
+              value={formData.title} 
+              onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+              placeholder="Ví dụ: Giám sát nhiệt độ lò"
+              required 
+              style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box' }}
+            />
+          </div>
+
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Đường dẫn *</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ fontSize: '0.8rem', color: '#64748B', whiteSpace: 'nowrap' }}>{formData.subsystem}/</span>
+              <input 
+                type="text" 
+                className="form-control" 
+                value={formData.route_path} 
+                onChange={(e) => setFormData(prev => ({ ...prev, route_path: e.target.value }))}
+                placeholder="users"
+                required 
+                style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box', flex: 1 }}
+              />
+            </div>
+          </div>
+
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Ngày hoàn thành dự kiến *</label>
+            <input 
+              type="date" 
+              className="form-control" 
+              value={formData.target_date} 
+              onChange={(e) => setFormData(prev => ({ ...prev, target_date: e.target.value }))}
+              required 
+              min={new Date().toISOString().split('T')[0]}
+              style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box' }}
+            />
+          </div>
+        </div>
+        
+        {/* Full-width Mô tả at the bottom */}
+        <div className="form-group" style={{ marginTop: '16px', marginBottom: 0 }}>
+          <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Mô tả *</label>
+          <input 
+            type="text" 
+            className="form-control" 
+            value={formData.subtitle} 
+            onChange={(e) => setFormData(prev => ({ ...prev, subtitle: e.target.value }))}
+            placeholder="Mô tả chức năng/vai trò..."
+            required 
+            style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box', width: '100%' }}
+          />
+        </div>
+      </div>
+    );
+  };
+
   const isModified = screen.current_code !== screen.default_code;
 
-
-
   return (
-
-    <div className="detail-container fade-in">
-
-
-
-      {/* Toolbar */}
-
-      <div className="mgmt-toolbar card">
-
-        <div className="toolbar-left">
-
-          <div className="screen-info">
-
-            <span className={`platform-badge ${screen.platform}`}>
-
-              {screen.platform === 'Web' ? '🖥️ Web' : '📱 Mobile'}
-
-            </span>
-
-            <span className={`code-badge ${isModified ? 'modified' : ''}`}>
-
-              {screen.current_code}
-
-            </span>
-
-            <div className="route-info-box">
-
-              <span className="route-label">Route:</span>
-
-              <span className="route-value font-mono">{screen.route_path}</span>
-
-            </div>
-
-          </div>
-
-        </div>
-
-        <div className="toolbar-right">
-
-          <div className="view-mode-tabs">
-
-            <button 
-
-              className={`view-mode-btn ${viewMode === 'blueprint' ? 'active' : ''}`}
-
-              onClick={() => setViewMode('blueprint')}
-
-            >
-
-              🖥️<span className="desktop-inline"> Bản vẽ mô phỏng</span><span className="mobile-inline"> Bản vẽ</span>
-
-            </button>
-
-            <button 
-
-              className={`view-mode-btn ${viewMode === 'workflow' ? 'active' : ''}`}
-
-              onClick={() => {
-
-                setViewMode('workflow');
-
-                setSelectedWorkflowStep(0);
-
-              }}
-
-            >
-
-              📊<span className="desktop-inline"> Luồng nghiệp vụ</span><span className="mobile-inline"> Nghiệp vụ</span>
-
-            </button>
-
-            <button 
-
-              className={`view-mode-btn ${viewMode === 'cards' ? 'active' : ''}`}
-
-              onClick={() => setViewMode('cards')}
-
-            >
-
-              🗂️<span className="desktop-inline"> Danh sách thẻ</span><span className="mobile-inline"> Dạng thẻ</span>
-
-            </button>
-
-          </div>
-
-        </div>
-
-      </div>
-
-
-
-      {/* Ghi chú auto-sync */}
-
-      <div className="auto-sync-banner">
-
-        <span className="sync-icon">🔄</span>
-
-        <span>Dữ liệu components được <strong>tự động đồng bộ</strong> từ hệ thống mỗi khi server khởi động. Không cần thao tác thủ công.</span>
-
-      </div>
-
-
-
-
-
-      {viewMode === 'blueprint' && (
-
-        <>
-
-          {/* Mobile sub-tabs selector */}
-
-          <div className="mobile-pane-tabs mobile-only">
-
-            <button 
-
-              className={`mobile-pane-tab ${mobilePane === 'tree' ? 'active' : ''}`}
-
-              onClick={() => setMobilePane('tree')}
-
-            >
-
-              🧩 Cấu trúc
-
-            </button>
-
-            <button 
-
-              className={`mobile-pane-tab ${mobilePane === 'simulator' ? 'active' : ''}`}
-
-              onClick={() => setMobilePane('simulator')}
-
-            >
-
-              🖥️ Mô phỏng
-
-            </button>
-
-            <button 
-
-              className={`mobile-pane-tab ${mobilePane === 'inspector' ? 'active' : ''}`}
-
-              onClick={() => setMobilePane('inspector')}
-
-            >
-
-              📋 Chi tiết
-
-            </button>
-
-          </div>
-
-
-
-          <div className={`detail-layout-grid platform-${screen.platform?.toLowerCase() || 'web'}`}>
-
-            {/* CỘT TRÁI: Danh sách Components chi tiết */}
-
-            <div className={`component-tree-pane ${mobilePane === 'tree' ? 'mobile-active' : 'mobile-hidden'}`}>
-
-            <div className="pane-header">
-
-              <span className="pane-icon">🧩</span>
-
-              <span className="pane-title">Components</span>
-
-            </div>
-
-            <div className="tree-filter-box">
-
-              <div className="tree-search-wrapper">
-
-                <span className="search-icon-compact">🔍</span>
-
-                <input type="text" placeholder="Tìm component..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="tree-search-input" />
-
-              </div>
-
-              <div className="tree-filter-tabs">
-
-                {['All', 'UI Component', 'Logic / Service', 'API Endpoint'].map(tab => (
-
-                  <button key={tab} className={`tree-filter-btn ${typeFilter === tab ? 'active' : ''}`} onClick={() => setTypeFilter(tab)}>
-
-                    {tab === 'All' ? 'Tất cả' : tab === 'UI Component' ? 'UI' : tab === 'Logic / Service' ? 'Logic' : 'API'}
-
-                  </button>
-
-                ))}
-
-              </div>
-
-            </div>
-
-            <div className="tree-scroll-area">
-
-              {filteredComponents.length === 0 ? (
-
-                <div className="tree-empty">Không tìm thấy</div>
-
+    <div className="detail-container fade-in" style={{ padding: '0 0 20px 0' }}>
+      
+      {/* 1. Top Metadata Form Card */}
+      {renderMetadataForm()}
+
+      {/* 2. Middle Row Split Grid Layout */}
+      <div className="detail-row-grid" style={{ 
+        display: 'grid', 
+        gridTemplateColumns: isMockupExpanded ? '1fr' : '280px 1fr', 
+        gap: '20px', 
+        marginBottom: '20px', 
+        alignItems: 'start' 
+      }}>
+        
+        {/* Left Column Card: Danh sách components */}
+        {!isMockupExpanded && (
+          <div className="card component-list-card" style={{
+            background: '#fff',
+            border: '1px solid #E5E7EB',
+            borderRadius: '12px',
+            padding: '20px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: '480px'
+          }}>
+            <h4 style={{ margin: '0 0 16px 0', fontSize: '0.82rem', fontWeight: '800', color: '#2D1A12', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Danh sách components
+            </h4>
+            
+            <div style={{ flex: 1, overflowY: 'auto', maxHeight: '420px', paddingRight: '4px' }}>
+              {screen.components && screen.components.length > 0 ? (
+                screen.components.map(comp => (
+                  <div 
+                    key={comp.id} 
+                    onClick={() => {
+                      setActiveComponent(comp.name);
+                      setSpecDescriptions(prev => ({
+                        ...prev,
+                        Frontend: `Đặc tả chi tiết Component [${comp.name}]:\n- Loại component: ${comp.type}\n- Gợi ý UI: ${getComponentHint(comp)}\n- Chi tiết: ${comp.description || 'Chưa cập nhật mô tả chi tiết.'}`
+                      }));
+                    }}
+                    title={getComponentHint(comp)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '10px',
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid',
+                      borderColor: activeComponent === comp.name ? '#7B5233' : '#F1F5F9',
+                      backgroundColor: activeComponent === comp.name ? '#FAF6F0' : '#FFF',
+                      cursor: 'pointer',
+                      marginBottom: '8px',
+                      fontSize: '0.8rem',
+                      fontWeight: activeComponent === comp.name ? 'bold' : 'normal',
+                      transition: 'all 0.2s',
+                      color: activeComponent === comp.name ? '#7B5233' : '#334155'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+                      <span style={{ width: '20px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {renderComponentIcon(comp.type)}
+                      </span>
+                      <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{comp.name}</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const defaultAssignee = itAccounts[0] || 'IT';
+                        setBugModalMode('create');
+                        setBugModalData({
+                          componentName: comp.name,
+                          severity: 'Medium',
+                          description: '',
+                          reporter: getLoggedInUser(),
+                          assignee: defaultAssignee,
+                          targetDate: new Date().toISOString().split('T')[0],
+                          imagePath: ''
+                        });
+                        setShowBugModal(true);
+                      }}
+                      title={`Báo lỗi cho component ${comp.name}`}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        opacity: 0.6,
+                        padding: '4px'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.opacity = 1}
+                      onMouseLeave={(e) => e.currentTarget.style.opacity = 0.6}
+                    >
+                      <Bug size={16} style={{ color: '#EF4444' }} />
+                    </button>
+                  </div>
+                ))
               ) : (
-
-                ['UI Component', 'Logic / Service', 'API Endpoint', 'Native API'].map(groupType => {
-
-                  const compsInGroup = filteredComponents.filter(c => {
-
-                    if (groupType === 'Logic / Service') return c.type === 'Logic / Service' || c.type === 'Business Logic';
-
-                    return c.type === groupType;
-
-                  });
-
-                  if (compsInGroup.length === 0) return null;
-
-                  const groupLabel = groupType === 'UI Component' ? 'UI Components' :
-
-                    (groupType === 'Logic / Service') ? 'Logic & Services' :
-
-                    groupType === 'API Endpoint' ? 'API Endpoints' : 'Native APIs';
-
-                  return (
-
-                    <div key={groupType} className="tree-group">
-
-                      <div className="tree-group-label">{groupLabel}</div>
-
-                      {compsInGroup.map(comp => {
-
-                        const isSelected = activeComponent === comp.name;
-
-                        const typeClass = getTypeClass(comp.type);
-
-                        const subEls = getComponentSubElements(comp);
-
-                        return (
-
-                          <div key={comp.id} className={`tree-comp-item ${isSelected ? 'selected' : ''}`}
-
-                            onClick={() => { setActiveComponent(comp.name); setMobilePane('inspector'); }}
-
-                            onMouseEnter={() => setHoveredComponent(comp.name)}
-
-                            onMouseLeave={() => setHoveredComponent(null)}>
-
-                            <div className="tree-comp-row">
-
-                              <span className="tree-comp-dot" data-type={typeClass}></span>
-
-                              <span className="tree-comp-name">{comp.name}</span>
-
-                              {isSelected && <span className="tree-comp-check">✓</span>}
-
-                            </div>
-
-                            <div className="tree-sub-elements">
-
-                              {subEls.map((el, idx) => (
-
-                                <div key={idx} className="tree-sub-el">
-
-                                  <span className="tree-sub-el-icon">{el.icon}</span>
-
-                                  <span className="tree-sub-el-name">{el.label}</span>
-
-                                </div>
-
-                              ))}
-
-                            </div>
-
-                          </div>
-
-                        );
-
-                      })}
-
-                    </div>
-
-                  );
-
-                })
-
+                <div style={{ padding: '20px', textAlign: 'center', color: '#94A3B8', fontStyle: 'italic', fontSize: '0.78rem' }}>
+                  Không có component nào.
+                </div>
               )}
-
             </div>
 
+            <button
+              type="button"
+              onClick={handleAddComponent}
+              style={{
+                background: 'transparent',
+                border: '1px dashed #7B5233',
+                color: '#7B5233',
+                borderRadius: '8px',
+                padding: '8px 16px',
+                fontSize: '0.78rem',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                width: '100%',
+                justifyContent: 'center',
+                marginTop: '12px'
+              }}
+            >
+              <span>+ Thêm thành phần</span>
+            </button>
           </div>
+        )}
 
-
-
-          {/* CỘT GIỮA: Bản vẽ thiết kế tương tác */}
-
-          <div className={`detail-simulator-pane ${mobilePane === 'simulator' ? 'mobile-active' : 'mobile-hidden'}`}>
-
-            <div className="pane-header" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-
-                <span className="pane-icon">🖥️</span>
-
-                <span className="pane-title">Thiết kế & Mô phỏng</span>
-
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-
-                <button className={`blueprint-toggle-btn ${blueprintOverlay ? 'active' : ''}`}
-
-                  onClick={() => setBlueprintOverlay(!blueprintOverlay)} title="Bật/Tắt đường bao thiết kế">
-
-                  📐 {blueprintOverlay ? 'Bật' : 'Tắt'}
-
-                </button>
-
-              </div>
-
+        {/* Right Column: Simulator/Mockup & Spec Tab Pane */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          
+          {/* Mockup Simulator Frame Card */}
+          <div className="card mockup-carousel-card" style={{
+            background: '#fff',
+            border: '1px solid #E5E7EB',
+            borderRadius: '12px',
+            padding: '16px',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+            minHeight: isMockupExpanded ? '600px' : '340px',
+            transition: 'all 0.3s ease-in-out'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '10px', marginBottom: '12px' }}>
+              <span 
+                onClick={() => setIsMockupExpanded(!isMockupExpanded)}
+                style={{ 
+                  fontSize: '1.25rem', 
+                  color: '#7B5233', 
+                  cursor: 'pointer', 
+                  fontWeight: 'bold', 
+                  padding: '4px 10px', 
+                  borderRadius: '6px', 
+                  backgroundColor: isMockupExpanded ? '#FAF6F0' : 'transparent',
+                  transition: 'all 0.2s',
+                  userSelect: 'none'
+                }}
+                title={isMockupExpanded ? "Thu nhỏ bản vẽ" : "Phóng to bản vẽ"}
+              >
+                ☰
+              </span>
+              <label htmlFor="mockup-file-upload-main" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 12px', fontSize: '0.74rem', borderRadius: '6px', backgroundColor: '#7B5233', color: '#fff', fontWeight: 'bold', cursor: 'pointer', margin: 0 }}>
+                + Thêm ảnh
+              </label>
+              <input type="file" id="mockup-file-upload-main" accept="image/*" onChange={handleMockupUpload} style={{ display: 'none' }} />
             </div>
 
-            {activeScenario && currentStepIndex >= 0 && (
-
-              <div className="walkthrough-widget">
-
-                <div className="walkthrough-bar-title">
-
-                  <span>🎬 Kịch bản: <strong>{activeScenario.title}</strong></span>
-
-                  <button className="walkthrough-close" onClick={() => { setActiveScenario(null); setCurrentStepIndex(-1); }}>×</button>
-
+            <div style={{ 
+              flex: 1, 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              background: '#F8FAFC', 
+              borderRadius: '8px', 
+              minHeight: isMockupExpanded ? '520px' : '240px', 
+              overflow: 'hidden', 
+              border: '1px solid #F1F5F9',
+              transition: 'all 0.3s ease-in-out'
+            }}>
+              {screen.mockup_path ? (
+                (() => {
+                  const mockups = screen.mockup_path.split(',').filter(Boolean);
+                  return (
+                    <img 
+                      src={getImageUrl(mockups[currentMockupIdx])} 
+                      alt="Mockup design" 
+                      style={{ 
+                        maxWidth: '100%', 
+                        maxHeight: isMockupExpanded ? '520px' : '250px', 
+                        objectFit: 'contain',
+                        transition: 'all 0.3s ease-in-out'
+                      }}
+                    />
+                  );
+                })()
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', color: '#94A3B8' }}>
+                  <span style={{ fontSize: '3rem' }}>🖼️</span>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 'bold' }}>Chưa có hình ảnh bản vẽ thực tế</span>
                 </div>
+              )}
+            </div>
 
-                <div className="walkthrough-step-desc">
-
-                  <span className="step-num-badge">Bước {currentStepIndex + 1}/{activeScenario.steps.length}</span>
-
-                  <span className="step-action-tag">{activeScenario.steps[currentStepIndex].action}</span>
-
-                  <strong>{activeScenario.steps[currentStepIndex].target}:</strong> {activeScenario.steps[currentStepIndex].note}
-
-                </div>
-
-                <div className="walkthrough-actions">
-
-                  <button className="walkthrough-btn" onClick={prevStep} disabled={currentStepIndex === 0}>◀ Trước</button>
-
-                  <button className="walkthrough-btn primary" onClick={nextStep}>
-
-                    {currentStepIndex === activeScenario.steps.length - 1 ? 'Xong 🎉' : 'Tiếp ▶'}
-
+            {/* Pagination Controls */}
+            {screen.mockup_path && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #F1F5F9', paddingTop: '10px', marginTop: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <button 
+                    type="button" 
+                    disabled={currentMockupIdx === 0} 
+                    onClick={() => setCurrentMockupIdx(prev => prev - 1)}
+                    style={{ padding: '3px 8px', border: '1px solid #E2E8F0', background: '#fff', borderRadius: '4px', cursor: 'pointer' }}
+                  >
+                    &lt;
                   </button>
-
+                  {(() => {
+                    const mockups = screen.mockup_path.split(',').filter(Boolean);
+                    return mockups.map((_, i) => (
+                      <button 
+                        key={i} 
+                        onClick={() => setCurrentMockupIdx(i)}
+                        style={{
+                          padding: '3px 7px',
+                          border: '1px solid',
+                          borderColor: currentMockupIdx === i ? '#7B5233' : '#E2E8F0',
+                          background: currentMockupIdx === i ? '#7B5233' : '#fff',
+                          color: currentMockupIdx === i ? '#fff' : '#334155',
+                          borderRadius: '4px',
+                          fontSize: '0.72rem',
+                          fontWeight: 'bold',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {i + 1}
+                      </button>
+                    ));
+                  })()}
+                  <button 
+                    type="button" 
+                    disabled={(() => {
+                      const mockups = screen.mockup_path.split(',').filter(Boolean);
+                      return currentMockupIdx === mockups.length - 1;
+                    })()} 
+                    onClick={() => setCurrentMockupIdx(prev => prev + 1)}
+                    style={{ padding: '3px 8px', border: '1px solid #E2E8F0', background: '#fff', borderRadius: '4px', cursor: 'pointer' }}
+                  >
+                    &gt;
+                  </button>
                 </div>
-
+                <button 
+                  type="button" 
+                  onClick={handleDeleteMockup}
+                  style={{ background: 'transparent', border: 'none', color: '#EF4444', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  Xóa ảnh
+                </button>
               </div>
-
             )}
-
-            <div className={`simulator-wrapper ${blueprintOverlay ? 'simulation-blueprint-active' : ''}`}>
-
-              <ScreenSimulator screenCode={screen.current_code} platform={screen.platform} routePath={screen.route_path}
-
-                components={screen.components} activeComponent={activeComponent} hoveredComponent={hoveredComponent}
-
-                onHover={setHoveredComponent} onClick={(name) => { setActiveComponent(name); setMobilePane('inspector'); scrollToComponent(name); }}
-
-                startGlobalUpload={startGlobalUpload} onRefresh={handleRefresh} simulationMode="mockup" />
-
-            </div>
-
           </div>
 
+          {/* Bottom Card: Thông tin đặc tả */}
+          {!isMockupExpanded && (
+            <div className="card spec-tabs-card" style={{
+              background: '#fff',
+              border: '1px solid #E5E7EB',
+              borderRadius: '12px',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '10px', marginBottom: '12px' }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: '800', color: '#2D1A12', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Thông tin đặc tả
+                </span>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#F1F5F9', padding: '2px', borderRadius: '8px' }}>
+                  {['Frontend', 'Luồng xử lý', 'Backend'].map(tab => {
+                    const modeMap = {
+                      'Frontend': 'blueprint',
+                      'Luồng xử lý': 'workflow',
+                      'Backend': 'cards'
+                    };
+                    const isActive = viewMode === modeMap[tab];
+                    return (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setViewMode(modeMap[tab])}
+                        style={{
+                          padding: '4px 12px',
+                          border: 'none',
+                          background: isActive ? '#fff' : 'transparent',
+                          color: isActive ? '#2D1A12' : '#64748B',
+                          borderRadius: '6px',
+                          fontSize: '0.72rem',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.05)' : 'none'
+                        }}
+                      >
+                        {tab}
+                      </button>
+                    );
+                  })}
+                  <span style={{ padding: '0 6px', color: '#94A3B8', fontSize: '0.75rem' }}>v</span>
+                </div>
+              </div>
 
-
-          {/* CỘT PHẢI: Chi tiết giải thích component đang chọn */}
-
-          <div className={`detail-inspector-pane ${mobilePane === 'inspector' ? 'mobile-active' : 'mobile-hidden'}`}>
-
-            <div className="pane-header">
-
-              <span className="pane-icon">📋</span>
-
-              <span className="pane-title">Chi tiết Component</span>
-
-            </div>
-
-            <div className="inspector-detail-view">
-
-              {(() => {
-
-                const comp = screen.components.find(c => c.name === activeComponent) || filteredComponents[0] || screen.components[0];
-
-                if (!comp) return (<div className="empty-detail-state"><span className="empty-detail-icon">🔍</span><p>Chọn một component để xem chi tiết.</p></div>);
-
-                const typeClass = getTypeClass(comp.type);
-
-                const typeLabel = getTypeLabel(comp.type);
-
-                const connected = getConnections(screen, comp.name);
-
-                const sandboxOut = sandboxOutputs[comp.name];
-
-                const isSandboxLoading = sandboxLoading[comp.name];
-
-                let codeDetails = getComponentCodeDetails(screen, comp.name);
-
-                let dbTables = [];
-
-                let calledApis = [];
-
-                let userGuideText = comp.description || 'Chưa cập nhật.';
-
-                let backendLogicText = "";
-
-
-
-                if (comp.technical_details && comp.technical_details.trim().startsWith('{')) {
-
-                  try {
-
-                    let jsonStr = comp.technical_details
-
-                      .replace(/\\u000e0/g, '\\u00e0')
-
-                      .replace(/\\u000e/g, '')
-
-                      .replace(/\u000e0/g, 'à')
-
-                      .replace(/\u000e/g, '');
-
-                    const parsed = JSON.parse(jsonStr);
-
-                    if (parsed) {
-
-                      const fixUnicodeChars = (str) => {
-
-                        if (typeof str !== 'string') return str;
-
-                        return str.replace(/\u000e0/g, 'à').replace(/\u000e/g, '');
-
-                      };
-
-                      if (parsed.handler_name || parsed.code_snippet) {
-
-                        codeDetails = {
-
-                          handlerName: fixUnicodeChars(parsed.handler_name) || codeDetails.handlerName,
-
-                          params: parsed.params || "event: any",
-
-                          processing: fixUnicodeChars(parsed.details) || codeDetails.processing,
-
-                          codeSnippet: parsed.code_snippet || codeDetails.codeSnippet
-
-                        };
-
-                      }
-
-                      if (parsed.database_tables) {
-
-                        dbTables = Array.isArray(parsed.database_tables) ? parsed.database_tables : [parsed.database_tables];
-
-                      }
-
-                      if (parsed.called_apis) {
-
-                        calledApis = Array.isArray(parsed.called_apis) ? parsed.called_apis : [parsed.called_apis];
-
-                      }
-
-                      if (parsed.user_guide) {
-
-                        userGuideText = fixUnicodeChars(parsed.user_guide);
-
-                      }
-
-                      if (parsed.details) {
-
-                        backendLogicText = fixUnicodeChars(parsed.details);
-
-                      }
-
-                    }
-
-                  } catch (e) {
-
-                    console.error("Failed to parse codeDetails from technical_details:", e);
-
-                  }
-
+              <div className="form-group" style={{ margin: 0 }}>
+                <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.75rem', display: 'block', marginBottom: '6px' }}>Mô tả</label>
+                <textarea
+                  rows="4"
+                  value={
+                    viewMode === 'blueprint' ? specDescriptions.Frontend :
+                    viewMode === 'workflow' ? specDescriptions['Luồng xử lý'] : specDescriptions.Backend
                 }
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSpecDescriptions(prev => {
+                    const next = { ...prev };
+                    if (viewMode === 'blueprint') next.Frontend = val;
+                    else if (viewMode === 'workflow') next['Luồng xử lý'] = val;
+                    else next.Backend = val;
+                    return next;
+                  });
+                }}
+                placeholder="Nhập nội dung mô tả đặc tả..."
+                style={{
+                  width: '100%',
+                  fontSize: '0.8rem',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '8px',
+                  padding: '10px',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                  fontFamily: 'inherit'
+                }}
+              />
+            </div>
+          </div>
+        )}
+        </div>
+      </div>
 
-                const isShowCode = showCodeState[comp.name] || false;
+      {/* 3. Bottom Card: Danh sách lỗi */}
+      {screen && (
+        <div className="bugs-inline-section card" style={{
+          marginTop: '20px',
+          border: '1px solid #E5E7EB',
+          borderRadius: '12px',
+          overflow: 'hidden',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          backgroundColor: '#fff'
+        }}>
+          <div 
+            className="bugs-section-header" 
+            onClick={() => setIsBugListCollapsed(!isBugListCollapsed)}
+            style={{
+              padding: '12px 20px',
+              backgroundColor: '#FAF6F0',
+              borderBottom: '1px solid #E5E7EB',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              cursor: 'pointer',
+              userSelect: 'none'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '0.88rem', fontWeight: '800', color: '#2D1A12', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Danh sách lỗi</span>
+              <span style={{
+                fontSize: '0.72rem',
+                backgroundColor: '#7B5233',
+                color: '#fff',
+                padding: '2px 8px',
+                borderRadius: '10px',
+                fontWeight: 'bold'
+              }}>{(screen.bugs || []).length}</span>
+            </div>
+            <div style={{ transform: isBugListCollapsed ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.2s', display: 'flex', alignItems: 'center' }}>
+              <span style={{ marginRight: '6px', color: '#7B5233', fontSize: '0.75rem' }}>v</span>
+            </div>
+          </div>
 
-                return (
-
-                  <div className="component-detail-wrapper">
-
-                    <div className="comp-detail-header-card">
-
-                      <div className="comp-detail-meta">
-
-                        <span className={`comp-type-badge ${typeClass}`}>{typeLabel}</span>
-
-                        <span className="comp-auto-tag">⚡ Hệ thống tự động đồng bộ</span>
-
-                      </div>
-
-                      <h3 className="comp-detail-name">{comp.name}</h3>
-
-                      {comp.file_path && (
-
-                        <div className="comp-detail-file-box">
-
-                          <span className="file-icon">📁</span>
-
-                          <span className="file-path font-mono" title={comp.file_path}>{comp.file_path}</span>
-
-                          <button className="btn-copy-path" onClick={() => { navigator.clipboard.writeText(comp.file_path); toast('success', 'Đã sao chép!'); }}>📋 Copy</button>
-
-                        </div>
-
-                      )}
-
-                    </div>
-
-
-
-                    {/* Mode Toggle Selector */}
-
-                    <div className="inspector-mode-toggle">
-
-                      <button 
-
-                        className={`inspector-toggle-btn ${inspectorTab === 'user' ? 'active' : ''}`}
-
-                        onClick={() => setInspectorTab('user')}
-
-                      >
-
-                        👥 Hướng dẫn sử dụng
-
-                      </button>
-
-                      <button 
-
-                        className={`inspector-toggle-btn ${inspectorTab === 'dev' ? 'active' : ''}`}
-
-                        onClick={() => setInspectorTab('dev')}
-
-                      >
-
-                        💻 Đặc tả kỹ thuật (Dev)
-
-                      </button>
-
-                    </div>
-
-
-
-                    {inspectorTab === 'user' ? (
-
-                      /* USER GUIDE TAB VIEW */
-
-                      <div className="tab-content-user fade-in">
-
-                        <div className="comp-detail-section">
-
-                          <h4 className="detail-section-title">Chức năng & Nghiệp vụ</h4>
-
-                          <div className="detail-desc-box user-guide-box">
-
-                            {userGuideText}
-
-                          </div>
-
-                        </div>
-
-
-
-                        <div className="comp-detail-section">
-
-                          <h4 className="detail-section-title">Thành phần Giao diện & Tương tác</h4>
-
-                          <div className="sub-elements-detail-list">
-
-                            {getComponentSubElements(comp).map((el, idx) => (
-
-                              <div key={idx} className="sub-el-detail-card user-friendly">
-
-                                <div className="sub-el-detail-header">
-
-                                  <span className="sub-el-detail-icon">{el.icon}</span>
-
-                                  <span className="sub-el-detail-label">{el.label}</span>
-
+          {!isBugListCollapsed && (
+            <div style={{ padding: '0 16px 16px 16px' }}>
+              {(!screen.bugs || screen.bugs.length === 0) ? (
+                <div style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontStyle: 'italic', fontSize: '0.8rem' }}>
+                  Không có báo cáo lỗi nào cho màn hình này.
+                </div>
+              ) : (
+                <div className="table-responsive" style={{ marginTop: '14px' }}>
+                  <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#7B5233', color: '#fff' }}>
+                        <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>Mã</th>
+                        <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>Component</th>
+                        <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>Mô tả</th>
+                        <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>Mức độ</th>
+                        <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>Trạng thái</th>
+                        <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>Ngày cập nhật</th>
+                        <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>Người cập nhật</th>
+                        <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>Ngày ghi nhận</th>
+                        <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {screen.bugs.map((bug) => {
+                        const isBugExpanded = expandedBugId === bug.id;
+                        const parsed = parseDescription(bug.description);
+                        const severityColors = {
+                          'Critical': '#EF4444',
+                          'High': '#F97316',
+                          'Medium': '#D97706',
+                          'Low': '#10B981'
+                        };
+                        return (
+                          <React.Fragment key={bug.id}>
+                            <tr 
+                              onClick={() => setExpandedBugId(isBugExpanded ? null : bug.id)}
+                              style={{ cursor: 'pointer', backgroundColor: isBugExpanded ? '#FAF6F0' : undefined }}
+                              className="clickable-row"
+                            >
+                              <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }} className="font-mono font-bold">BUG-{bug.id}</td>
+                              <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }} className="font-semibold">{parsed.tag || 'Chung'}</td>
+                              <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }}>{parsed.text}</td>
+                              <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }}>
+                                <span style={{ color: severityColors[bug.severity] || '#7B5233', fontWeight: 'bold' }}>
+                                  {bug.severity === 'Critical' ? 'Khẩn cấp' : (bug.severity === 'High' ? 'Cao' : (bug.severity === 'Medium' ? 'Trung bình' : 'Thấp'))}
+                                </span>
+                              </td>
+                              <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }}>
+                                <span className={`status-badge ${bug.status === 'Hoàn thành' ? 'status-resolved' : (bug.status === 'Đã sửa' ? 'status-processing' : 'status-new')}`}>
+                                  {bug.status === 'New' || bug.status === 'Mới' ? 'Mới' : (bug.status === 'Đã sửa' ? 'Đã sửa' : (bug.status === 'Sửa lại' ? 'Sửa lại' : 'Hoàn thành'))}
+                                </span>
+                              </td>
+                              <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }}>{formatDate(bug.completed_at || bug.created_at)}</td>
+                              <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }}>{bug.assignee || '-'}</td>
+                              <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }}>{formatDate(bug.created_at)}</td>
+                              <td 
+                                style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem', textAlign: 'center' }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenEditBugModal(bug);
+                                    }}
+                                    style={{
+                                      border: 'none',
+                                      background: 'none',
+                                      color: '#7B5233',
+                                      fontWeight: 'bold',
+                                      cursor: 'pointer',
+                                      fontSize: '0.76rem',
+                                      padding: '2px 4px'
+                                    }}
+                                  >
+                                    Chi tiết
+                                  </button>
+                                  <span style={{ color: '#E2E8F0' }}>|</span>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteBug(bug.id);
+                                    }}
+                                    style={{
+                                      border: 'none',
+                                      background: 'none',
+                                      color: '#EF4444',
+                                      fontWeight: 'bold',
+                                      cursor: 'pointer',
+                                      fontSize: '0.76rem',
+                                      padding: '2px 4px'
+                                    }}
+                                  >
+                                    Xóa
+                                  </button>
                                 </div>
-
-                                <div className="sub-el-detail-desc">{el.desc}</div>
-
-                              </div>
-
-                            ))}
-
-                          </div>
-
-                        </div>
-
-
-
-                        {currentScenarios && currentScenarios.length > 0 && (
-
-                          <div className="comp-detail-section">
-
-                            <h4 className="detail-section-title">Kịch bản Vận hành liên quan</h4>
-
-                            <div className="scenarios-grid">
-
-                              {currentScenarios.filter(scen => 
-
-                                scen.steps.some(step => step.target === comp.name)
-
-                              ).map((scen, idx) => (
-
-                                <div key={idx} className="scenario-item-card user-guide-scen" onClick={() => startScenario(scen)}>
-
-                                  <div className="scen-card-title">{scen.title}</div>
-
-                                  <div className="scen-card-desc">{scen.description}</div>
-
-                                  <div className="scen-card-action">Chạy thử kịch bản này ➔</div>
-
-                                </div>
-
-                              ))}
-
-                            </div>
-
-                          </div>
-
-                        )}
-
-                      </div>
-
-                    ) : (
-
-                      /* DEVELOPER SPEC TAB VIEW */
-
-                      <div className="tab-content-dev fade-in">
-
-                        <div className="comp-detail-section">
-
-                          <h4 className="detail-section-title">Logic Xử lý phía Server (Backend)</h4>
-
-                          <div className="detail-desc-box dev-logic-box">
-
-                            {backendLogicText || comp.description || 'Chưa cập nhật logic backend.'}
-
-                          </div>
-
-                        </div>
-
-
-
-                        {/* Database tables touched with detailed analysis */}
-
-                        {(dbTables.length > 0 || comp.description) && (
-
-                          <div className="comp-detail-section">
-
-                            <h4 className="detail-section-title">Bảng Cơ sở dữ liệu tác động</h4>
-
-                            <table className="dev-db-table">
-
-                              <thead>
-
-                                <tr>
-
-                                  <th>Bảng dữ liệu</th>
-
-                                  <th>Thao tác</th>
-
-                                  <th>Mô tả tác động</th>
-
-                                </tr>
-
-                              </thead>
-
-                              <tbody>
-
-                                {getDatabaseOperations(comp, dbTables).map((op, opIdx) => (
-
-                                  <tr key={opIdx}>
-
-                                    <td className="font-mono text-bold">🗄️ {op.table}</td>
-
-                                    <td>
-
-                                      <span className={`db-action-badge ${op.action.includes('Đọc') ? 'read' : 'write'}`}>
-
-                                        {op.action}
-
-                                      </span>
-
-                                    </td>
-
-                                    <td>{op.impact}</td>
-
-                                  </tr>
-
-                                ))}
-
-                              </tbody>
-
-                            </table>
-
-                          </div>
-
-                        )}
-
-
-
-                        {/* Calling APIs with parameter details */}
-
-                        {calledApis.length > 0 && (
-
-                          <div className="comp-detail-section">
-
-                            <h4 className="detail-section-title">APIs gọi xuống & Tham số đầu vào</h4>
-
-                            <div className="apis-list-container">
-
-                              {calledApis.map((apiItem, aIdx) => {
-
-                                const apiDoc = getApiDocumentation(apiItem);
-
-                                return (
-
-                                  <div key={aIdx} className="api-doc-block">
-
-                                    <div className="api-endpoint-pill font-mono">
-
-                                      <span className="api-method-badge">{apiDoc.method}</span>
-
-                                      <span className="api-path-text">{apiDoc.path}</span>
-
+                              </td>
+                            </tr>
+
+                            {/* Expandable details/replies */}
+                            {isBugExpanded && (
+                              <tr>
+                                <td colSpan={9} style={{ padding: '15px 25px', backgroundColor: '#FDFCFB', borderLeft: '4px solid #7B5233' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                    {/* 1. Always display the original bug report */}
+                                    <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                                      {/* Left: Original Screenshots */}
+                                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                        {bug.images && bug.images.length > 0 ? (
+                                          bug.images.map((img, idx) => (
+                                            <div key={idx} style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px solid #EADCC9', overflow: 'hidden', backgroundColor: '#FAF6F0' }}>
+                                              <img src={getImageUrl(img.image_path)} alt="Bug spec" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onClick={() => window.open(getImageUrl(img.image_path), '_blank')} />
+                                            </div>
+                                          ))
+                                        ) : (
+                                          <div style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px dashed #EADCC9', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FAF6F0', color: '#A08070', fontSize: '0.75rem' }}>
+                                            Không có ảnh
+                                          </div>
+                                        )}
+                                      </div>
+                                      {/* Right: Text box */}
+                                      <div style={{ flex: 1, minWidth: '250px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#8D6E63', fontWeight: 'bold', marginBottom: '4px' }}>
+                                          <span>Phản hồi từ [{getPositionByName(bug.reporter)} - {bug.reporter || 'Hệ thống'}]</span>
+                                          <span>{formatDate(bug.created_at)}</span>
+                                        </div>
+                                        <div style={{ padding: '12px 16px', borderRadius: '12px', border: '1px solid #EADCC9', backgroundColor: '#fff', fontSize: '0.82rem', color: '#2D1A12', minHeight: '38px' }}>
+                                          {parsed.text}
+                                        </div>
+                                      </div>
                                     </div>
 
-                                    <table className="dev-api-params-table">
-
-                                      <thead>
-
-                                        <tr>
-
-                                          <th>Tham số</th>
-
-                                          <th>Kiểu dữ liệu</th>
-
-                                          <th>Bắt buộc</th>
-
-                                          <th>Mô tả</th>
-
-                                        </tr>
-
-                                      </thead>
-
-                                      <tbody>
-
-                                        {apiDoc.params.map((p, pIdx) => (
-
-                                          <tr key={pIdx}>
-
-                                            <td className="font-mono text-bold">{p.name}</td>
-
-                                            <td className="font-mono text-muted">{p.type}</td>
-
-                                            <td>
-
-                                              <span className={`param-req-badge ${p.required === 'Có' ? 'yes' : 'no'}`}>
-
-                                                {p.required}
-
-                                              </span>
-
-                                            </td>
-
-                                            <td>{p.desc}</td>
-
-                                          </tr>
-
+                                    {/* 2. Display all updates / replies below it */}
+                                    {bug.updates && bug.updates.length > 0 && (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', borderTop: '1px dashed #FAF0E6', paddingTop: '16px' }}>
+                                        {bug.updates.map((update, uIdx) => (
+                                          <div key={uIdx} style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap', borderBottom: uIdx < bug.updates.length - 1 ? '1px dashed #FAF0E6' : 'none', paddingBottom: '12px' }}>
+                                            {/* Left: update screenshot proof */}
+                                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                              {update.images && update.images.length > 0 ? (
+                                                update.images.map((img, idx) => (
+                                                  <div key={idx} style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px solid #EADCC9', overflow: 'hidden', backgroundColor: '#FAF6F0' }}>
+                                                    <img src={getImageUrl(img.image_path)} alt="Bug update" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onClick={() => window.open(getImageUrl(img.image_path), '_blank')} />
+                                                  </div>
+                                                ))
+                                              ) : (
+                                                <div style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px dashed #EADCC9', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FAF6F0', color: '#A08070', fontSize: '0.75rem' }}>
+                                                  Không có ảnh
+                                                </div>
+                                              )}
+                                            </div>
+                                            {/* Right: update notes */}
+                                            <div style={{ flex: 1, minWidth: '250px' }}>
+                                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#8D6E63', fontWeight: 'bold', marginBottom: '4px' }}>
+                                                <span>Phản hồi từ [{getPositionByName(update.updater)} - {update.updater || 'QC'}]</span>
+                                                <span>{formatDate(update.created_at)}</span>
+                                              </div>
+                                              <div style={{ padding: '12px 16px', borderRadius: '12px', border: '1px solid #EADCC9', backgroundColor: '#fff', fontSize: '0.82rem', color: '#2D1A12', minHeight: '38px' }}>
+                                                {update.notes || <span style={{ color: '#999', fontStyle: 'italic' }}>Không có nội dung phản hồi.</span>}
+                                              </div>
+                                            </div>
+                                          </div>
                                         ))}
-
-                                      </tbody>
-
-                                    </table>
-
+                                      </div>
+                                    )}
                                   </div>
 
-                                );
+                                    {/* Reply & Update Form */}
+                                    {bug.status !== 'Hoàn thành' && bug.status !== 'Verified' ? (
+                                      <div style={{
+                                        marginTop: '15px',
+                                        paddingTop: '15px',
+                                        borderTop: '1px solid #FAF0E6',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '12px'
+                                      }}>
+                                        <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#7B5233', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                          Gửi phản hồi & Cập nhật tiến độ
+                                        </div>
 
-                              })}
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
+                                          {/* Text area for notes */}
+                                          <div className="form-group" style={{ margin: 0 }}>
+                                            <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.74rem', display: 'block', marginBottom: '6px' }}>Nội dung phản hồi *</label>
+                                            <textarea
+                                              value={replyNotes}
+                                              onChange={(e) => setReplyNotes(e.target.value)}
+                                              placeholder="Nhập nội dung phản hồi chi tiết về kết quả sửa lỗi hoặc lý do từ chối/xác nhận..."
+                                              style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.8rem', color: '#334155', boxSizing: 'border-box', minHeight: '60px', fontFamily: 'inherit', outline: 'none' }}
+                                            />
+                                          </div>
 
-                            </div>
+                                          {/* Status transitions options */}
+                                          <div className="form-group" style={{ margin: 0 }}>
+                                            <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.74rem', display: 'block', marginBottom: '6px' }}>Cập nhật trạng thái</label>
+                                            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '4px' }}>
+                                              {((bug.status || '').toLowerCase() === 'new' || (bug.status || '').toLowerCase() === 'mới' || bug.status === 'Sửa lại') ? (
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#334155', fontWeight: '600', cursor: 'pointer' }}>
+                                                  <input 
+                                                    type="checkbox"
+                                                    checked={replyStatusVal === 'Đã sửa'}
+                                                    onChange={(e) => setReplyStatusVal(e.target.checked ? 'Đã sửa' : '')}
+                                                    style={{ cursor: 'pointer' }}
+                                                  />
+                                                  Tích trạng thái đã sửa
+                                                </label>
+                                              ) : ((bug.status || '').toLowerCase() === 'đã sửa' || (bug.status || '').toLowerCase() === 'resolved') ? (
+                                                <>
+                                                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#10B981', fontWeight: '600', cursor: 'pointer' }}>
+                                                    <input 
+                                                      type="radio"
+                                                      name={`status-choice-${bug.id}`}
+                                                      checked={replyStatusVal === 'Hoàn thành'}
+                                                      onChange={() => setReplyStatusVal('Hoàn thành')}
+                                                      style={{ cursor: 'pointer' }}
+                                                    />
+                                                    Xác nhận (Hoàn thành)
+                                                  </label>
+                                                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#EF4444', fontWeight: '600', cursor: 'pointer' }}>
+                                                    <input 
+                                                      type="radio"
+                                                      name={`status-choice-${bug.id}`}
+                                                      checked={replyStatusVal === 'Sửa lại'}
+                                                      onChange={() => setReplyStatusVal('Sửa lại')}
+                                                      style={{ cursor: 'pointer' }}
+                                                    />
+                                                    Từ chối (Sửa lại)
+                                                  </label>
+                                                </>
+                                              ) : null}
+                                            </div>
+                                          </div>
 
-                          </div>
+                                          {/* Image Upload Area */}
+                                          <div className="form-group" style={{ margin: 0 }}>
+                                            <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.74rem', display: 'block', marginBottom: '6px' }}>Hình ảnh phản hồi (Đính kèm ảnh đã sửa)</label>
+                                            <input 
+                                              type="file" 
+                                              id={`reply-image-upload-${bug.id}`}
+                                              multiple 
+                                              accept="image/*" 
+                                              onChange={handleReplyImageUpload}
+                                              style={{ display: 'none' }} 
+                                            />
+                                            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                              <button
+                                                type="button"
+                                                onClick={() => document.getElementById(`reply-image-upload-${bug.id}`).click()}
+                                                style={{
+                                                  padding: '6px 12px',
+                                                  border: '1px dashed #7B5233',
+                                                  borderRadius: '6px',
+                                                  color: '#7B5233',
+                                                  backgroundColor: 'transparent',
+                                                  fontSize: '0.76rem',
+                                                  fontWeight: '600',
+                                                  cursor: 'pointer'
+                                                }}
+                                              >
+                                                {replyUploading ? 'Đang tải...' : '+ Tải ảnh lên'}
+                                              </button>
 
-                        )}
+                                              {/* Preview list */}
+                                              {replyImages.map((path, pIdx) => (
+                                                <div key={pIdx} style={{ position: 'relative', width: '60px', height: '40px', borderRadius: '4px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+                                                  <img src={getImageUrl(path)} alt="Reply preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => setReplyImages(prev => prev.filter((_, idx) => idx !== pIdx))}
+                                                    style={{
+                                                      position: 'absolute',
+                                                      top: 0,
+                                                      right: 0,
+                                                      background: 'rgba(0,0,0,0.6)',
+                                                      color: '#fff',
+                                                      border: 'none',
+                                                      borderRadius: '50%',
+                                                      width: '14px',
+                                                      height: '14px',
+                                                      cursor: 'pointer',
+                                                      fontSize: '9px',
+                                                      display: 'flex',
+                                                      alignItems: 'center',
+                                                      justifyContent: 'center'
+                                                    }}
+                                                  >
+                                                    &times;
+                                                  </button>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        </div>
 
-
-
-                        <div className="comp-detail-section">
-
-                          <h4 className="detail-section-title">Liên kết nghiệp vụ (Data-flow)</h4>
-
-                          <div className="comp-flow-mapping">
-
-                            <span className="flow-pill-source">{comp.name}</span>
-
-                            <span className="flow-arrow">➔</span>
-
-                            {connected.map((conn, cIdx) => (
-
-                              <React.Fragment key={cIdx}>
-
-                                {cIdx > 0 && <span className="flow-arrow">➔</span>}
-
-                                <span className="flow-pill-dest">{conn}</span>
-
-                              </React.Fragment>
-
-                            ))}
-
-                          </div>
-
-                        </div>
-
-
-
-                        <div className="comp-detail-section">
-
-                          <h4 className="detail-section-title">Mã nguồn xử lý & Hàm chính</h4>
-
-                          <div className="detail-code-box">
-
-                            <div className="detail-code-header font-mono">⚙️ {codeDetails.handlerName}({codeDetails.params})</div>
-
-                            <div className="detail-code-desc"><strong>Xử lý:</strong> {codeDetails.processing}</div>
-
-                            <button className="btn-toggle-code" onClick={() => toggleShowCode(comp.name)}>
-
-                              {isShowCode ? '🔼 Thu gọn' : '💻 Xem code chi tiết'}
-
-                            </button>
-
-                            {isShowCode && (
-
-                              <div className="code-snippet-container">
-
-                                <button className="btn-copy-code" onClick={() => { navigator.clipboard.writeText(codeDetails.codeSnippet); alert('Đã sao chép!'); }}>Copy</button>
-
-                                <pre className="detail-code-snippet font-mono"><code>{codeDetails.codeSnippet}</code></pre>
-
-                              </div>
-
+                                        {/* Action buttons */}
+                                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleSubmitReply(bug)}
+                                            style={{
+                                              padding: '8px 20px',
+                                              borderRadius: '8px',
+                                              backgroundColor: '#7B5233',
+                                              color: '#fff',
+                                              fontWeight: 'bold',
+                                              fontSize: '0.8rem',
+                                              border: 'none',
+                                              cursor: 'pointer',
+                                              boxShadow: '0 2px 4px rgba(123, 82, 51, 0.15)'
+                                            }}
+                                          >
+                                            Gửi phản hồi
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div style={{
+                                        marginTop: '10px',
+                                        padding: '8px 12px',
+                                        backgroundColor: '#ECFDF5',
+                                        borderRadius: '8px',
+                                        color: '#065F46',
+                                        fontSize: '0.78rem',
+                                        fontWeight: 'bold',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '6px'
+                                      }}>
+                                        ✔️ Lỗi này đã hoàn thành xử lý.
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
                             )}
-
-                          </div>
-
-                        </div>
-
-
-
-                        <div className="comp-detail-section">
-
-                          <h4 className="detail-section-title">Giả lập & Chạy thử (Sandbox)</h4>
-
-                          <div className="detail-sandbox-box">
-
-                            <p className="sandbox-info-text">Cấu hình Request Payload dưới đây và click chạy thử:</p>
-
-                            <div className="sandbox-input-area" style={{ marginBottom: 12 }}>
-
-                              <textarea
-
-                                className="sandbox-payload-editor font-mono"
-
-                                rows={5}
-
-                                style={{ width: '100%', background: '#1E1E1E', color: '#85C1E9', border: '1px solid #7B5233', borderRadius: 6, padding: 8, fontSize: '0.8rem', resize: 'vertical' }}
-
-                                value={sandboxPayloads[comp.name] !== undefined ? sandboxPayloads[comp.name] : (() => {
-
-                                  const defaultResult = getSandboxResponse(screen, comp.name);
-
-                                  return JSON.stringify(defaultResult.request, null, 2);
-
-                                })()}
-
-                                onChange={(e) => {
-
-                                  const val = e.target.value;
-
-                                  setSandboxPayloads(prev => ({ ...prev, [comp.name]: val }));
-
-                                }}
-
-                              />
-
-                            </div>
-
-                            <button className="btn-run-sandbox" onClick={() => runSandbox(comp.name, sandboxPayloads[comp.name])} disabled={isSandboxLoading}>
-
-                              {isSandboxLoading ? '⏳ Đang gọi...' : '⚡ Chạy thử Nghiệp Vụ'}
-
-                            </button>
-
-                            {sandboxOut && (
-
-                              <div className="sandbox-console-output font-mono">
-
-                                <div className="console-line-url">ENDPOINT: {sandboxOut.url}</div>
-
-                                <div className="console-line-req">PAYLOAD: {JSON.stringify(sandboxOut.request, null, 2)}</div>
-
-                                <div className="console-line-res">RESPONSE: {JSON.stringify(sandboxOut.response, null, 2)}</div>
-
-                              </div>
-
-                            )}
-
-                          </div>
-
-                        </div>
-
-                      </div>
-
-                    )}
-
-                  </div>
-
-                );
-
-              })()}
-
-            </div>
-
-          </div>
-
-        </div>
-        </>
-      )}
-
-
-
-      {viewMode === 'workflow' && (
-
-        /* CHẾ ĐỘ XEM LUỒNG NGHIỆP VỤ (Interactive Workflow Mode) */
-
-        <div className={`detail-layout-grid platform-${screen.platform?.toLowerCase() || 'web'}`}>
-
-          
-
-          {/* Cột trái: Sơ đồ luồng nghiệp vụ động dạng flowchart */}
-
-          <div className="detail-simulator-pane">
-
-            <div className="pane-header">
-
-              <span className="pane-icon">📊</span>
-
-              <span className="pane-title">Sơ đồ Luồng Nghiệp vụ (Process Flowchart)</span>
-
-            </div>
-
-            
-
-            <div className="workflow-graph-container">
-
-              {currentWorkflow.map((node, index) => {
-
-                const isActiveNode = selectedWorkflowStep === index;
-
-                
-
-                return (
-
-                  <div key={index} className="workflow-step-wrapper">
-
-                    {index > 0 && (
-
-                      <div className={`workflow-connector-line ${isActiveNode ? 'pulse-active' : ''}`}>
-
-                        <div className="connector-arrow">▼</div>
-
-                      </div>
-
-                    )}
-
-                    
-
-                    <div 
-
-                      className={`workflow-node-card ${isActiveNode ? 'node-active' : ''}`}
-
-                      onClick={() => {
-
-                        setSelectedWorkflowStep(index);
-
-                        setActiveComponent(node.component);
-
-                        scrollToComponent(node.component);
-
-                      }}
-
-                    >
-
-                      <div className="node-step-circle">{node.step}</div>
-
-                      <div className="node-content">
-
-                        <h4 className="node-title">{node.title}</h4>
-
-                        <p className="node-desc">{node.desc}</p>
-
-                        
-
-                        <div className="node-tags-row" style={{ marginTop: 6 }}>
-
-                          <span className="node-tag comp">📱 {node.component}</span>
-
-                          <span className="node-tag api">🌐 {node.api}</span>
-
-                          <span className="node-tag logic">⚙️ {node.logic}</span>
-
-                        </div>
-
-                      </div>
-
-                    </div>
-
-                  </div>
-
-                );
-
-              })}
-
-            </div>
-
-          </div>
-
-
-
-          {/* Cột phải: Inspector hiển thị thông tin kỹ thuật & Sandbox cho bước đang chọn */}
-
-          <div className="detail-inspector-pane">
-
-            <div className="pane-header">
-
-              <span className="pane-icon">🔍</span>
-
-              <span className="pane-title">Kỹ thuật & Code cho Bước {selectedWorkflowStep + 1}</span>
-
-            </div>
-
-
-
-            {/* Kịch bản nghiệp vụ */}
-
-            <div className="scenarios-section" style={{ borderBottom: '1px solid #EADCC9', paddingBottom: '15px' }}>
-
-              <h4 className="inspector-section-lbl" style={{ margin: '15px 20px 10px' }}>🎬 Kịch bản nghiệp vụ:</h4>
-
-              <div className="scenarios-grid" style={{ padding: '0 20px' }}>
-
-                {currentScenarios.map((scen, idx) => (
-
-                  <div key={idx} className="scenario-item-card" onClick={() => startScenario(scen)}>
-
-                    <div className="scen-card-title">{scen.title}</div>
-
-                    <div className="scen-card-desc">{scen.description}</div>
-
-                  </div>
-
-                ))}
-
-              </div>
-
-            </div>
-
-
-
-            <div className="inspector-detail-view">
-
-              {currentWorkflow[selectedWorkflowStep] ? (() => {
-
-                const node = currentWorkflow[selectedWorkflowStep];
-
-                const matchingComp = screen.components.find(c => c.name === node.component);
-
-                let codeDetails = getComponentCodeDetails(screen, node.component);
-
-                if (matchingComp && matchingComp.technical_details && matchingComp.technical_details.trim().startsWith('{')) {
-
-                  try {
-
-                    let jsonStr = matchingComp.technical_details
-
-                      .replace(/\\u000e0/g, '\\u00e0')
-
-                      .replace(/\\u000e/g, '')
-
-                      .replace(/\u000e0/g, 'à')
-
-                      .replace(/\u000e/g, '');
-
-                    const parsed = JSON.parse(jsonStr);
-
-                    if (parsed.handler_name || parsed.code_snippet) {
-
-                      const fixUnicodeChars = (str) => {
-
-                        if (typeof str !== 'string') return str;
-
-                        return str.replace(/\u000e0/g, 'à').replace(/\u000e/g, '');
-
-                      };
-
-                      codeDetails = {
-
-                        handlerName: fixUnicodeChars(parsed.handler_name) || codeDetails.handlerName,
-
-                        params: parsed.params || "event: any",
-
-                        processing: fixUnicodeChars(parsed.details) || codeDetails.processing,
-
-                        codeSnippet: parsed.code_snippet || codeDetails.codeSnippet
-
-                      };
-
-                    }
-
-                  } catch (e) {
-
-                    console.error("Failed to parse codeDetails from workflow component:", e);
-
-                  }
-
-                }
-
-                const isSandboxLoading = sandboxLoading[node.component];
-
-                const sandboxOut = sandboxOutputs[node.component];
-
-
-
-                return (
-
-                  <div className="workflow-inspect-details">
-
-                    <h3 className="wf-detail-title">{node.title}</h3>
-
-                    <p className="wf-detail-desc">{node.desc}</p>
-
-                    
-
-                    <div style={{ marginTop: 16 }}>
-
-                      <h4 className="section-subtitle">Thành phần UI liên đới:</h4>
-
-                      <div className="wf-comp-pill font-mono">{node.component}</div>
-
-                      {matchingComp && (
-
-                        <p style={{ fontSize: '0.82rem', color: '#4A2E20', margin: '4px 0 0 0' }}>
-
-                          {matchingComp.description}
-
-                        </p>
-
-                      )}
-
-                    </div>
-
-
-
-                    <div style={{ marginTop: 16 }}>
-
-                      <h4 className="section-subtitle">API Gọi Xuống Hệ Thống:</h4>
-
-                      <div className="wf-api-pill font-mono">{node.api}</div>
-
-                    </div>
-
-
-
-                    <div style={{ marginTop: 16 }}>
-
-                      <h4 className="section-subtitle">Xử lý logic backend/frontend:</h4>
-
-                      <div className="wf-logic-pill font-mono">{node.logic}</div>
-
-                    </div>
-
-
-
-                    <div style={{ marginTop: 20 }}>
-
-                      <h4 className="section-subtitle">Mã nguồn mẫu của bước này:</h4>
-
-                      <pre style={{ 
-
-                        background: '#1E1E1E', 
-
-                        color: '#A9B7C6', 
-
-                        padding: '10px 12px', 
-
-                        borderRadius: 6, 
-
-                        fontSize: '0.68rem', 
-
-                        overflowX: 'auto', 
-
-                        marginTop: 6, 
-
-                        fontFamily: 'monospace',
-
-                        textAlign: 'left',
-
-                        borderLeft: '3px solid #7B5233'
-
-                      }}>
-
-                        <code>{codeDetails.codeSnippet}</code>
-
-                      </pre>
-
-                    </div>
-
-
-
-                    <div style={{ marginTop: 20 }}>
-
-                      <h4 className="section-subtitle">Chạy thử nghiệp vụ cho bước này:</h4>
-
-                      <button 
-
-                        className="btn-run-sandbox"
-
-                        onClick={() => runSandbox(node.component)}
-
-                        disabled={isSandboxLoading}
-
-                        style={{ marginTop: 6 }}
-
-                      >
-
-                        {isSandboxLoading ? '⏳ Đang gọi API...' : '⚡ Chạy thử Nghiệp Vụ (Simulate Step)'}
-
-                      </button>
-
-
-
-                      {sandboxOut && (
-
-                        <div className="sandbox-console-output font-mono">
-
-                          <div className="console-line-url">URL: {sandboxOut.url}</div>
-
-                          <div className="console-line-req">Payload: {JSON.stringify(sandboxOut.request, null, 2)}</div>
-
-                          <div className="console-line-res">Response: {JSON.stringify(sandboxOut.response, null, 2)}</div>
-
-                        </div>
-
-                      )}
-
-                    </div>
-
-                  </div>
-
-                );
-
-              })() : (
-
-                <p style={{ color: '#7B5233', fontStyle: 'italic' }}>Hãy chọn một bước trên sơ đồ.</p>
-
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
-
             </div>
-
-          </div>
-
-        </div>
-      )}
-
-
-
-      {viewMode === 'cards' && (
-
-        /* Chế độ xem danh sách thẻ truyền thống (Full width) */
-
-        <>
-
-          {/* Thanh công cụ tìm kiếm và lọc */}
-
-          <div className="toolbar-section">
-
-            <div className="toolbar-left">
-
-              <div className="search-input-wrapper">
-
-                <span className="search-icon">🔍</span>
-
-                <input 
-
-                  type="text" 
-
-                  placeholder="Tìm kiếm components theo tên, file path, nghiệp vụ..." 
-
-                  value={searchQuery}
-
-                  onChange={(e) => setSearchQuery(e.target.value)}
-
-                  className="search-input"
-
-                />
-
-                {searchQuery && (
-
-                  <button className="btn-clear-search" onClick={() => setSearchQuery('')}>×</button>
-
-                )}
-
-              </div>
-
-              <div className="filter-select-wrapper">
-
-                <select 
-
-                  value={typeFilter} 
-
-                  onChange={(e) => setTypeFilter(e.target.value)}
-
-                  className="filter-select"
-
-                >
-
-                  <option value="All">Tất cả phân loại</option>
-
-                  <option value="UI Component">UI Component</option>
-
-                  <option value="Logic / Service">Logic / Service</option>
-
-                  <option value="Native API">Native API</option>
-
-                  <option value="API Endpoint">API Endpoint</option>
-
-                </select>
-
-              </div>
-
-            </div>
-
-            <div className="result-count">
-
-              {filteredComponents.length} / {stats.total} components
-
-            </div>
-
-          </div>
-
-
-
-          {filteredComponents.length === 0 ? (
-
-            <div className="empty-components-card">
-
-              <div className="empty-icon">📁</div>
-
-              <h3>Không tìm thấy component nào</h3>
-
-              <p>Hãy thử tìm kiếm với từ khóa khác hoặc chờ hệ thống tự động cập nhật.</p>
-
-              {(searchQuery || typeFilter !== 'All') && (
-
-                <button className="btn-reset-filters" onClick={() => { setSearchQuery(''); setTypeFilter('All'); }}>
-
-                  Xóa bộ lọc
-
-                </button>
-
-              )}
-
-            </div>
-
-          ) : (
-
-            <div className="components-grid">
-
-              {filteredComponents.map((comp) => {
-
-                const typeClass = getTypeClass(comp.type);
-
-                const typeLabel = getTypeLabel(comp.type);
-
-                
-
-                return (
-
-                  <div key={comp.id} className="component-card">
-
-                    <div className="comp-card-header">
-
-                      <span className={`comp-type-badge ${typeClass}`}>
-
-                        {typeLabel}
-
-                      </span>
-
-                      <span className="comp-auto-tag" title="Tự động sinh từ hệ thống">⚡ Auto</span>
-
-                    </div>
-
-                    
-
-                    <h3 className="comp-name">{comp.name}</h3>
-
-                    
-
-                    {comp.file_path && (
-
-                      <div className="comp-file-box">
-
-                        <span className="file-icon">📁</span>
-
-                        <span className="file-path font-mono" title={comp.file_path}>
-
-                          {comp.file_path}
-
-                        </span>
-
-                      </div>
-
-                    )}
-
-                    
-
-                    <div className="comp-body">
-
-                      <h4 className="section-subtitle">Chức năng tổng quát:</h4>
-
-                      <p className="comp-desc">{comp.description || 'Chưa cập nhật mô tả chức năng.'}</p>
-
-                      
-
-                      <h4 className="section-subtitle">Chi tiết luồng xử lý:</h4>
-
-                      <div className="comp-technical font-mono">
-
-                        {renderTechnicalDetails(comp.technical_details)}
-
-                      </div>
-
-                    </div>
-
-                  </div>
-
-                );
-
-              })}
-
-            </div>
-
           )}
-
-        </>
-
+        </div>
       )}
+      {/* HD05: Add Component Modal popup */}
+      {showAddComponentModal && (
+        <div className="hd05-modal-overlay-custom" style={{
+          zIndex: 9999,
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          backdropFilter: 'blur(3px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px'
+        }}>
+          <div className="hd05-modal-container-custom" style={{
+            background: '#ffffff',
+            padding: '28px',
+            borderRadius: '16px',
+            width: '600px',
+            maxWidth: '100%',
+            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.25)',
+            border: '1px solid #E2E8F0',
+            fontFamily: "'Outfit', sans-serif"
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '800', color: '#111827' }}>
+                HD05: Thêm thành phần
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setShowAddComponentModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px' }}
+              >
+                &times;
+              </button>
+            </div>
 
+            {/* Form */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              {/* Row 1: Name and Type */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '16px' }}>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label style={{ fontWeight: '700', color: '#374151', fontSize: '0.82rem', display: 'block', marginBottom: '6px' }}>
+                    Tên <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
+                  <input 
+                    type="text" 
+                    value={newComponentName} 
+                    onChange={(e) => setNewComponentName(e.target.value)} 
+                    placeholder="Nhập tên thành phần..." 
+                    style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: '8px', padding: '10px 14px', fontSize: '0.84rem', boxSizing: 'border-box', outline: 'none' }}
+                  />
+                </div>
 
+                <div className="form-group" style={{ margin: 0, position: 'relative' }}>
+                  <label style={{ fontWeight: '700', color: '#374151', fontSize: '0.82rem', display: 'block', marginBottom: '6px' }}>
+                    Loại Component
+                  </label>
+                  
+                  {/* Custom Dropdown Trigger */}
+                  <div 
+                    onClick={() => setIsTypeDropdownOpen(!isTypeDropdownOpen)}
+                    style={{ 
+                      width: '100%', 
+                      border: '1px solid #D1D5DB', 
+                      borderRadius: '8px', 
+                      padding: '10px 14px', 
+                      fontSize: '0.84rem', 
+                      boxSizing: 'border-box', 
+                      backgroundColor: '#fff', 
+                      cursor: 'pointer', 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center',
+                      userSelect: 'none',
+                      color: '#374151',
+                      fontWeight: '600'
+                    }}
+                  >
+                    <span>
+                      {newComponentType === 'Button' && 'Nút'}
+                      {newComponentType === 'Input Field' && 'Ô nhập dữ liệu'}
+                      {newComponentType === 'Checkbox / Radio' && 'Hộp chọn'}
+                      {newComponentType === 'Dropdown / Select' && 'Menu thả xuống'}
+                      {newComponentType === 'Modal / Dialog' && 'Hộp hội thoại'}
+                      {newComponentType === 'Navbar / Sidebar' && 'Thanh điều hướng'}
+                      {newComponentType === 'Card' && 'Thẻ thông tin'}
+                      {newComponentType === 'Table' && 'Bảng dữ liệu'}
+                      {newComponentType === 'Carousel / Slider' && 'Trình chiếu'}
+                      {newComponentType === 'Toast / Alert' && 'Thông báo nhanh'}
+                      {newComponentType === 'Khác' && 'Khác'}
+                    </span>
+                    <span style={{ fontSize: '0.65rem', color: '#9CA3AF' }}>▼</span>
+                  </div>
+
+                  {/* Custom Dropdown Menu with descriptions inside and hover states */}
+                  {isTypeDropdownOpen && (
+                    <>
+                      {/* Invisible backdrop to close the dropdown on click outside */}
+                      <div 
+                        onClick={() => setIsTypeDropdownOpen(false)}
+                        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10000 }} 
+                      />
+                      <div style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        backgroundColor: '#fff',
+                        border: '1px solid #E2E8F0',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
+                        zIndex: 10001,
+                        maxHeight: '260px',
+                        overflowY: 'auto',
+                        marginTop: '4px',
+                        padding: '4px 0'
+                      }}>
+                        {[
+                          { value: 'Button', label: 'Nút', hint: 'Nút bấm kích hoạt hành động.' },
+                          { value: 'Input Field', label: 'Ô nhập dữ liệu', hint: 'Ô nhập dữ liệu văn bản.' },
+                          { value: 'Checkbox / Radio', label: 'Hộp chọn', hint: 'Hộp chọn một hoặc nhiều mục.' },
+                          { value: 'Dropdown / Select', label: 'Menu thả xuống', hint: 'Menu danh sách thả xuống.' },
+                          { value: 'Modal / Dialog', label: 'Hộp hội thoại', hint: 'Cửa sổ thông báo bật lên.' },
+                          { value: 'Navbar / Sidebar', label: 'Thanh điều hướng', hint: 'Thanh điều hướng trang web.' },
+                          { value: 'Card', label: 'Thẻ thông tin', hint: 'Thẻ chứa hình ảnh và thông tin.' },
+                          { value: 'Table', label: 'Bảng dữ liệu', hint: 'Bảng hiển thị dữ liệu cột.' },
+                          { value: 'Carousel / Slider', label: 'Trình chiếu', hint: 'Trình trình chiếu ảnh chạy qua lại.' },
+                          { value: 'Toast / Alert', label: 'Thông báo nhanh', hint: 'Thanh thông báo nhanh góc màn hình.' },
+                          { value: 'Khác', label: 'Khác', hint: 'Không tồn tại trong các sự lựa chọn trên.' }
+                        ].map((item) => (
+                          <div
+                            key={item.value}
+                            onClick={() => {
+                              setNewComponentType(item.value);
+                              setIsTypeDropdownOpen(false);
+                            }}
+                            className="custom-select-item"
+                            title={item.hint}
+                            style={{
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '2px',
+                              transition: 'background 0.2s',
+                              borderBottom: '1px solid #FAF6F0'
+                            }}
+                          >
+                            <span style={{ fontWeight: '700', fontSize: '0.82rem', color: '#2D1A12' }}>{item.label}</span>
+                            <span style={{ fontSize: '0.7rem', color: '#8D6E63', fontStyle: 'italic' }}>{item.hint}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  <div style={{ fontSize: '0.74rem', color: '#8D6E63', marginTop: '6px', fontStyle: 'italic', lineHeight: '1.2' }}>
+                    {newComponentType === 'Button' && '💡 Gợi ý: Nút bấm kích hoạt hành động.'}
+                    {newComponentType === 'Input Field' && '💡 Gợi ý: Ô nhập dữ liệu văn bản.'}
+                    {newComponentType === 'Checkbox / Radio' && '💡 Gợi ý: Hộp chọn một hoặc nhiều mục.'}
+                    {newComponentType === 'Dropdown / Select' && '💡 Gợi ý: Menu danh sách thả xuống.'}
+                    {newComponentType === 'Modal / Dialog' && '💡 Gợi ý: Cửa sổ thông báo bật lên.'}
+                    {newComponentType === 'Navbar / Sidebar' && '💡 Gợi ý: Thanh điều hướng trang web.'}
+                    {newComponentType === 'Card' && '💡 Gợi ý: Thẻ chứa hình ảnh và thông tin.'}
+                    {newComponentType === 'Table' && '💡 Gợi ý: Bảng hiển thị dữ liệu cột.'}
+                    {newComponentType === 'Carousel / Slider' && '💡 Gợi ý: Trình trình chiếu ảnh chạy qua lại.'}
+                    {newComponentType === 'Toast / Alert' && '💡 Gợi ý: Thanh thông báo nhanh góc màn hình.'}
+                    {newComponentType === 'Khác' && '💡 Gợi ý: Không tồn tại trong các sự lựa chọn trên.'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 2: Frontend Spec */}
+              <div className="form-group" style={{ margin: 0 }}>
+                <label style={{ fontWeight: '700', color: '#374151', fontSize: '0.82rem', display: 'block', marginBottom: '6px' }}>
+                  Đặc tả Frontend
+                </label>
+                <textarea 
+                  rows="3"
+                  value={newComponentFrontend} 
+                  onChange={(e) => setNewComponentFrontend(e.target.value)} 
+                  placeholder="Mô tả cấu trúc hiển thị, giao diện của thành phần..."
+                  style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: '8px', padding: '10px 14px', fontSize: '0.84rem', boxSizing: 'border-box', outline: 'none', resize: 'vertical', fontFamily: 'inherit' }}
+                />
+              </div>
+
+              {/* Row 3: Workflow Spec */}
+              <div className="form-group" style={{ margin: 0 }}>
+                <label style={{ fontWeight: '700', color: '#374151', fontSize: '0.82rem', display: 'block', marginBottom: '6px' }}>
+                  Luồng xử lý/Điều kiện
+                </label>
+                <textarea 
+                  rows="3"
+                  value={newComponentWorkflow} 
+                  onChange={(e) => setNewComponentWorkflow(e.target.value)} 
+                  placeholder="Mô tả các điều kiện kiểm tra, kịch bản tương tác và luồng nghiệp vụ..."
+                  style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: '8px', padding: '10px 14px', fontSize: '0.84rem', boxSizing: 'border-box', outline: 'none', resize: 'vertical', fontFamily: 'inherit' }}
+                />
+              </div>
+
+              {/* Row 4: Backend Spec */}
+              <div className="form-group" style={{ margin: 0 }}>
+                <label style={{ fontWeight: '700', color: '#374151', fontSize: '0.82rem', display: 'block', marginBottom: '6px' }}>
+                  Đặc tả Backend
+                </label>
+                <textarea 
+                  rows="3"
+                  value={newComponentBackend} 
+                  onChange={(e) => setNewComponentBackend(e.target.value)} 
+                  placeholder="Mô tả API Endpoint cần gọi, tham số request/response và logic xử lý server..."
+                  style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: '8px', padding: '10px 14px', fontSize: '0.84rem', boxSizing: 'border-box', outline: 'none', resize: 'vertical', fontFamily: 'inherit' }}
+                />
+              </div>
+            </div>
+
+            {/* Actions Footer */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
+              <button 
+                type="button" 
+                onClick={() => setShowAddComponentModal(false)} 
+                style={{ padding: '10px 24px', border: '1px solid #7B5233', borderRadius: '8px', fontSize: '0.84rem', cursor: 'pointer', background: '#fff', color: '#7B5233', fontWeight: 'bold' }}
+              >
+                Hủy bỏ
+              </button>
+              <button 
+                type="button" 
+                onClick={confirmAddComponent} 
+                style={{ padding: '10px 24px', border: 'none', borderRadius: '8px', fontSize: '0.84rem', cursor: 'pointer', background: '#4A2E20', color: '#fff', fontWeight: 'bold' }}
+              >
+                Tạo mới
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style dangerouslySetInnerHTML={{ __html: `
+.custom-select-item:hover {
+  background-color: #FAF2E9 !important;
+}
 .detail-container {
   width: 100%;
   margin: 0;
@@ -5229,8 +5570,462 @@ const ScreenDetail = () => {
   }
 }
 ` }} />
-    </div>
+      {showBugModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(45, 26, 18, 0.4)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999,
+          backdropFilter: 'blur(2px)'
+        }}>
+          <div style={{
+            background: '#fff',
+            borderRadius: '16px',
+            width: '540px',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            boxShadow: '0 8px 30px rgba(0,0,0,0.15)',
+            border: '1px solid #EADCC9',
+            animation: 'fadeIn 0.2s ease-out'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '16px 24px',
+              borderBottom: '1px solid #F1F5F9'
+            }}>
+              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 'bold', color: '#2D1A12' }}>
+                {bugModalMode === 'edit' ? `HD04: Chi tiết lỗi BUG-${bugModalData.id}` : `${screen?.current_code || 'AD'}: Khai báo lỗi`}
+              </h3>
+              <button 
+                type="button"
+                onClick={() => setShowBugModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  color: '#94A3B8',
+                  padding: 0,
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+              >
+                &times;
+              </button>
+            </div>
 
+            {/* Modal Body */}
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              
+              {/* Row 1: Màn hình & Trạng thái */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '16px' }}>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Màn hình</label>
+                  <select 
+                    disabled 
+                    value={screen?.id}
+                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: '#F1F5F9', color: '#64748B', fontWeight: '500', boxSizing: 'border-box', height: '36px' }}
+                  >
+                    <option value={screen?.id}>{screen?.current_code}: {screen?.title}</option>
+                  </select>
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Trạng thái</label>
+                  <input 
+                    type="text" 
+                    value={bugModalMode === 'edit' ? (bugModalData.status === 'New' || bugModalData.status === 'Mới' ? 'Mới' : (bugModalData.status === 'Đã sửa' ? 'Đã sửa' : (bugModalData.status === 'Sửa lại' ? 'Sửa lại' : 'Hoàn thành'))) : 'Mới'} 
+                    disabled 
+                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: '#F1F5F9', color: '#64748B', fontWeight: '500', boxSizing: 'border-box', height: '36px' }}
+                  />
+                </div>
+              </div>
+
+              {/* Row 2: Component & Mức độ */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '16px' }}>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Component</label>
+                  <select 
+                    value={bugModalData.componentName}
+                    onChange={(e) => setBugModalData(prev => ({ ...prev, componentName: e.target.value }))}
+                    disabled={bugModalMode === 'edit'}
+                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: bugModalMode === 'edit' ? '#F1F5F9' : '#fff', color: bugModalMode === 'edit' ? '#64748B' : '#334155', fontWeight: '500', boxSizing: 'border-box', height: '36px', cursor: bugModalMode === 'edit' ? 'default' : 'pointer' }}
+                  >
+                    <option value="Chung">Chung</option>
+                    {(screen?.components || []).map(comp => (
+                      <option key={comp.id} value={comp.name}>{comp.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Mức độ</label>
+                  <select 
+                    value={bugModalData.severity}
+                    onChange={(e) => setBugModalData(prev => ({ ...prev, severity: e.target.value }))}
+                    disabled={bugModalMode === 'edit'}
+                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: bugModalMode === 'edit' ? '#F1F5F9' : '#fff', color: bugModalMode === 'edit' ? '#64748B' : '#334155', fontWeight: '500', boxSizing: 'border-box', height: '36px', cursor: bugModalMode === 'edit' ? 'default' : 'pointer' }}
+                  >
+                    <option value="Critical">Khẩn cấp</option>
+                    <option value="High">Cao</option>
+                    <option value="Medium">Trung bình</option>
+                    <option value="Low">Thấp</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Row 3: Mô tả lỗi */}
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="required" style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Mô tả lỗi *</label>
+                <textarea 
+                  value={bugModalData.description}
+                  onChange={(e) => setBugModalData(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Mô tả chi tiết hành vi lỗi hoặc sự khác biệt so với đặc tả..."
+                  required
+                  disabled={bugModalMode === 'edit'}
+                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', color: bugModalMode === 'edit' ? '#64748B' : '#334155', backgroundColor: bugModalMode === 'edit' ? '#F1F5F9' : '#fff', boxSizing: 'border-box', minHeight: '60px', fontFamily: 'inherit', outline: 'none' }}
+                />
+              </div>
+
+              {/* Row 4: Large Image Box */}
+              <div className="form-group" style={{ margin: 0 }}>
+                <input 
+                  type="file" 
+                  id="bug-image-upload" 
+                  accept="image/*" 
+                  onChange={handleBugImageUpload} 
+                  disabled={bugModalMode === 'edit'}
+                  style={{ display: 'none' }} 
+                />
+                <div 
+                  onClick={() => {
+                    if (bugModalMode !== 'edit') {
+                      document.getElementById('bug-image-upload').click();
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    height: '180px',
+                    border: '2px dashed #E2E8F0',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: '#F8FAFC',
+                    cursor: bugModalMode === 'edit' ? 'default' : 'pointer',
+                    overflow: 'hidden',
+                    position: 'relative'
+                  }}
+                >
+                  {bugImageUploading ? (
+                    <span style={{ fontSize: '0.82rem', color: '#64748B' }}>Đang tải ảnh lên...</span>
+                  ) : bugModalData.imagePath ? (
+                    <>
+                      <img 
+                        src={getImageUrl(bugModalData.imagePath)} 
+                        alt="Bug upload preview" 
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
+                      />
+                      {bugModalMode !== 'edit' && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setBugModalData(prev => ({ ...prev, imagePath: '' }));
+                          }}
+                          style={{
+                            position: 'absolute',
+                            top: '10px',
+                            right: '10px',
+                            background: 'rgba(0,0,0,0.6)',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '24px',
+                            height: '24px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '14px'
+                          }}
+                        >
+                          &times;
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ fontSize: '2.5rem', color: '#CBD5E1', marginBottom: '8px' }}>🖼️</span>
+                      <span style={{ fontSize: '0.78rem', color: '#64748B', fontWeight: 'bold' }}>Thêm hình ảnh lỗi</span>
+                      <span style={{ fontSize: '0.7rem', color: '#94A3B8', marginTop: '2px' }}>Hỗ trợ định dạng JPG, PNG</span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Row 5: Người ghi nhận & Thời gian ghi nhận */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '16px' }}>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Người ghi nhận</label>
+                  <input 
+                    type="text" 
+                    value={bugModalData.reporter} 
+                    disabled 
+                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: '#F1F5F9', color: '#64748B', fontWeight: '500', boxSizing: 'border-box', height: '36px' }}
+                  />
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Thời gian ghi nhận</label>
+                  <input 
+                    type="date" 
+                    value={new Date().toISOString().split('T')[0]} 
+                    disabled 
+                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: '#F1F5F9', color: '#64748B', boxSizing: 'border-box', height: '36px' }}
+                  />
+                </div>
+              </div>
+
+              {/* Row 6: Người xử lý & Hạn hoàn thành */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '16px' }}>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Người xử lý</label>
+                  <select 
+                    value={bugModalData.assignee}
+                    onChange={(e) => setBugModalData(prev => ({ ...prev, assignee: e.target.value }))}
+                    disabled={bugModalMode === 'edit'}
+                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: bugModalMode === 'edit' ? '#F1F5F9' : '#fff', color: bugModalMode === 'edit' ? '#64748B' : '#334155', fontWeight: '500', boxSizing: 'border-box', height: '36px', cursor: bugModalMode === 'edit' ? 'default' : 'pointer' }}
+                  >
+                    {itAccounts.map((acc, idx) => (
+                      <option key={idx} value={acc}>{acc}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Ngày yêu cầu hoàn thành</label>
+                   <input 
+                    type="date" 
+                    value={bugModalData.targetDate}
+                    min={new Date().toISOString().split('T')[0]}
+                    onChange={(e) => setBugModalData(prev => ({ ...prev, targetDate: e.target.value }))}
+                    disabled={bugModalMode === 'edit'}
+                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', color: bugModalMode === 'edit' ? '#64748B' : '#334155', backgroundColor: bugModalMode === 'edit' ? '#F1F5F9' : '#fff', boxSizing: 'border-box', height: '36px', cursor: bugModalMode === 'edit' ? 'default' : 'pointer' }}
+                  />
+                </div>
+              </div>
+
+              {/* Row 7 & 8: Phản hồi & Cập nhật trạng thái / Ảnh */}
+              {bugModalMode === 'edit' ? (
+                <>
+                  {/* Phản hồi * */}
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="required" style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Phản hồi *</label>
+                    <textarea 
+                      value={replyNotes}
+                      onChange={(e) => setReplyNotes(e.target.value)}
+                      placeholder="Nhập nội dung phản hồi kết quả sửa lỗi..."
+                      required
+                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', color: '#334155', boxSizing: 'border-box', minHeight: '60px', fontFamily: 'inherit', outline: 'none' }}
+                    />
+                  </div>
+
+                  {/* Cập nhật trạng thái */}
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Cập nhật trạng thái</label>
+                    <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '4px' }}>
+                      {((bugModalData.status || '').toLowerCase() === 'new' || (bugModalData.status || '').toLowerCase() === 'mới' || bugModalData.status === 'Sửa lại') ? (
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#334155', fontWeight: '600', cursor: 'pointer' }}>
+                          <input 
+                            type="checkbox"
+                            checked={replyStatusVal === 'Đã sửa'}
+                            onChange={(e) => setReplyStatusVal(e.target.checked ? 'Đã sửa' : '')}
+                            style={{ cursor: 'pointer' }}
+                          />
+                          Xác nhận đã sửa (Đã sửa)
+                        </label>
+                      ) : bugModalData.status === 'Đã sửa' ? (
+                        <>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#059669', fontWeight: '600', cursor: 'pointer' }}>
+                            <input 
+                              type="radio"
+                              name="status-transition-modal"
+                              checked={replyStatusVal === 'Hoàn thành'}
+                              onChange={() => setReplyStatusVal('Hoàn thành')}
+                              style={{ cursor: 'pointer' }}
+                            />
+                            Xác nhận (Hoàn thành)
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#EF4444', fontWeight: '600', cursor: 'pointer' }}>
+                            <input 
+                              type="radio"
+                              name="status-transition-modal"
+                              checked={replyStatusVal === 'Từ chối'}
+                              onChange={() => setReplyStatusVal('Từ chối')}
+                              style={{ cursor: 'pointer' }}
+                            />
+                            Từ chối (Sửa lại)
+                          </label>
+                        </>
+                      ) : (
+                        <span style={{ fontSize: '0.8rem', color: '#64748B', fontStyle: 'italic' }}>Không có tùy chọn chuyển đổi trạng thái nào cho trạng thái này.</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Phản hồi images upload */}
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Hình ảnh phản hồi đính kèm (Cho phép up ảnh đã chỉnh sửa)</label>
+                    <input 
+                      type="file" 
+                      id="modal-reply-image-upload" 
+                      accept="image/*" 
+                      multiple
+                      onChange={handleReplyImageUpload} 
+                      style={{ display: 'none' }} 
+                    />
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+                      <div 
+                        onClick={() => document.getElementById('modal-reply-image-upload').click()}
+                        style={{
+                          width: '120px',
+                          height: '80px',
+                          border: '2px dashed #E2E8F0',
+                          borderRadius: '8px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          backgroundColor: '#F8FAFC',
+                          cursor: 'pointer',
+                          color: '#64748B'
+                        }}
+                      >
+                        {replyUploading ? (
+                          <span style={{ fontSize: '0.7rem' }}>Đang tải...</span>
+                        ) : (
+                          <>
+                            <span style={{ fontSize: '1.25rem' }}>➕</span>
+                            <span style={{ fontSize: '0.68rem', fontWeight: 'bold', marginTop: '2px' }}>Tải ảnh lên</span>
+                          </>
+                        )}
+                      </div>
+                      
+                      {replyImages.map((img, idx) => (
+                        <div key={idx} style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px solid #E2E8F0', overflow: 'hidden', position: 'relative', backgroundColor: '#F8FAFC' }}>
+                          <img src={getImageUrl(img)} alt="Reply preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <button
+                            type="button"
+                            onClick={() => setReplyImages(prev => prev.filter((_, i) => i !== idx))}
+                            style={{
+                              position: 'absolute',
+                              top: '4px',
+                              right: '4px',
+                              background: 'rgba(0,0,0,0.6)',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: '50%',
+                              width: '18px',
+                              height: '18px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '11px'
+                            }}
+                          >
+                            &times;
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Row 7: Disabled Phản hồi */}
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Phản hồi *</label>
+                    <input 
+                      type="text" 
+                      disabled 
+                      placeholder="Người xử lý phản hồi sau khi hoàn thành..."
+                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: '#F1F5F9', color: '#64748B', boxSizing: 'border-box', height: '36px' }}
+                    />
+                  </div>
+
+                  {/* Row 8: Disabled Phản hồi images */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div style={{ height: '80px', border: '1px solid #E2E8F0', borderRadius: '8px', backgroundColor: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ fontSize: '1.25rem', color: '#CBD5E1' }}>🖼️</span>
+                    </div>
+                    <div style={{ height: '80px', border: '1px solid #E2E8F0', borderRadius: '8px', backgroundColor: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ fontSize: '1.25rem', color: '#CBD5E1' }}>🖼️</span>
+                    </div>
+                  </div>
+                </>
+              )}
+
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '16px 24px',
+              borderTop: '1px solid #F1F5F9',
+              backgroundColor: '#F8FAFC',
+              borderRadius: '0 0 16px 16px'
+            }}>
+              <button 
+                type="button" 
+                onClick={() => setShowBugModal(false)}
+                style={{
+                  padding: '8px 20px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  backgroundColor: '#fff',
+                  color: '#475569',
+                  fontWeight: 'bold',
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  height: '36px'
+                }}
+              >
+                Hủy bỏ
+              </button>
+              <button 
+                type="button" 
+                onClick={bugModalMode === 'edit' ? handleUpdateBug : handleCreateBug}
+                style={{
+                  padding: '8px 20px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: '#4A2E20',
+                  color: '#fff',
+                  fontWeight: 'bold',
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  height: '36px'
+                }}
+              >
+                {bugModalMode === 'edit' ? 'Lưu thay đổi' : 'Tạo mới'}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+    </div>
   );
 
 };

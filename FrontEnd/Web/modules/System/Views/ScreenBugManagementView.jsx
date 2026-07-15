@@ -107,6 +107,8 @@ const ScreenBugManagementView = () => {
     return () => document.removeEventListener('click', handleOutsideClick);
   }, []);
 
+  const [proofNotes, setProofNotes] = useState('');
+
   // Form states
   const [addForm, setAddForm] = useState(() => {
     try {
@@ -123,7 +125,8 @@ const ScreenBugManagementView = () => {
       status: 'New',
       assignee: 'Phucv1',
       requested_at: getTodayString(),
-      notes: ''
+      notes: '',
+      component_id: 'Chung'
     };
   });
 
@@ -256,6 +259,15 @@ const ScreenBugManagementView = () => {
     }
   };
 
+  const selectedScreenData = useMemo(() => {
+    if (!addForm.screen_id) return null;
+    return screens.find(s => s.id === parseInt(addForm.screen_id));
+  }, [addForm.screen_id, screens]);
+
+  const screenComponents = useMemo(() => {
+    return selectedScreenData ? (selectedScreenData.components || []) : [];
+  }, [selectedScreenData]);
+
   const fetchBugs = async () => {
     try {
       setLoading(true);
@@ -352,17 +364,23 @@ const ScreenBugManagementView = () => {
       return;
     }
 
+    if (addImages.length === 0) {
+      showToast('Bắt buộc phải tải lên hoặc dán ít nhất 1 hình ảnh bằng chứng/mockup lỗi!', 'error');
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       // Chuẩn hóa định dạng datetime gửi lên API
       const reqDate = new Date(addForm.requested_at).toISOString();
-      const finalDescription = addForm.description;
+      const tag = addForm.component_id && addForm.component_id !== 'Chung' ? `[${addForm.component_id}] ` : '';
+      const finalDescription = `${tag}${addForm.description.trim()}`;
 
       await bugService.createBug({
         screen_id: parseInt(addForm.screen_id),
         description: finalDescription,
         severity: addForm.severity,
-        status: addForm.status,
+        status: 'New', // Force default to New status
         assignee: addForm.assignee,
         requested_at: reqDate,
         notes: addForm.notes,
@@ -382,7 +400,8 @@ const ScreenBugManagementView = () => {
         status: 'New',
         assignee: phucUser ? (phucUser.full_name || phucUser.username) : 'Phucv1',
         requested_at: getTodayString(),
-        notes: ''
+        notes: '',
+        component_id: 'Chung'
       });
       setAddImages([]);
       fetchBugs();
@@ -733,6 +752,112 @@ const ScreenBugManagementView = () => {
     } catch {
       return dateStr;
     }
+  };
+
+  const renderQuickStatusActions = (bug) => {
+    const status = bug.status;
+    
+    const triggerStatusUpdate = (newStatus) => {
+      setActiveUpdateForProof({ id: bug.id, status: newStatus, isInitial: true });
+      setProofImages([]);
+      setProofNotes(''); // Clear notes draft
+      setShowProofModal(true);
+    };
+
+    if (status === 'New' || status === 'Mới') {
+      return (
+        <button
+          type="button"
+          onClick={() => triggerStatusUpdate('Resolved')}
+          style={{
+            background: '#F59E0B',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '6px',
+            padding: '6px 12px',
+            fontSize: '0.72rem',
+            fontWeight: '600',
+            cursor: 'pointer',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+          }}
+        >
+          ✓ Đã sửa
+        </button>
+      );
+    }
+    
+    if (status === 'In Progress' || status === 'Sửa lại') {
+      return (
+        <button
+          type="button"
+          onClick={() => triggerStatusUpdate('Resolved')}
+          style={{
+            background: '#F59E0B',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '6px',
+            padding: '6px 12px',
+            fontSize: '0.72rem',
+            fontWeight: '600',
+            cursor: 'pointer',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+          }}
+        >
+          ✓ Đã sửa
+        </button>
+      );
+    }
+    
+    if (status === 'Resolved' || status === 'Đã sửa') {
+      return (
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={() => triggerStatusUpdate('Verified')}
+            style={{
+              background: '#10B981',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '6px 12px',
+              fontSize: '0.72rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+            }}
+          >
+            ✓ Xác nhận
+          </button>
+          <button
+            type="button"
+            onClick={() => triggerStatusUpdate('In Progress')}
+            style={{
+              background: '#EF4444',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '6px 12px',
+              fontSize: '0.72rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+            }}
+          >
+            ✗ Từ chối
+          </button>
+        </div>
+      );
+    }
+    
+    if (status === 'Verified' || status === 'Hoàn thành') {
+      return (
+        <span style={{ fontSize: '0.72rem', color: '#15803D', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center' }}>
+          ✓ Đã hoàn thành
+        </span>
+      );
+    }
+
+    return null;
   };
 
   return (
@@ -1341,29 +1466,7 @@ const ScreenBugManagementView = () => {
                       <span style={{ fontSize: '0.62rem', color: '#94A3B8', fontWeight: '700', letterSpacing: '0.05em' }}>TRẠNG THÁI</span>
                       {renderStatusBadge(selectedBug.status)}
                       <span style={{ fontSize: '0.65rem', color: '#CBD5E1' }}>→</span>
-                      <select
-                        value={selectedBug.status}
-                        onChange={async (e) => {
-                          const newStatus = e.target.value;
-                          if (newStatus === 'Resolved' || newStatus === 'Verified') {
-                            setActiveUpdateForProof({ id: selectedBug.id, status: newStatus, isInitial: true });
-                            setProofImages([]);
-                            setShowProofModal(true);
-                          } else {
-                            handleQuickStatusChange(selectedBug, newStatus);
-                          }
-                        }}
-                        style={{
-                          fontSize: '0.72rem', padding: '3px 6px', borderRadius: '6px',
-                          border: '1px solid #E2E8F0', backgroundColor: '#F8FAFC',
-                          color: '#334155', fontWeight: '600', outline: 'none', cursor: 'pointer'
-                        }}
-                      >
-                        <option value="New">Mới</option>
-                        <option value="In Progress">Cần kiểm tra</option>
-                        <option value="Resolved">Đã sửa ✓</option>
-                        <option value="Verified">Đã xác nhận ✓✓</option>
-                      </select>
+                      {renderQuickStatusActions(selectedBug)}
                     </div>
                     <div style={{ width: '1px', height: '18px', backgroundColor: '#E2E8F0', flexShrink: 0 }} />
                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.7rem', color: '#64748B' }}>
@@ -2087,6 +2190,25 @@ const ScreenBugManagementView = () => {
                   )}
                 </div>
 
+                {/* Component Selector */}
+                <div className="form-group">
+                  <label className="required">Component bị lỗi</label>
+                  <select
+                    className="form-control"
+                    value={addForm.component_id || 'Chung'}
+                    onChange={(e) => setAddForm(prev => ({ ...prev, component_id: e.target.value }))}
+                    required
+                    style={{ borderRadius: '8px', padding: '10px 14px', fontSize: '0.9rem', minHeight: '42px' }}
+                  >
+                    <option value="Chung">Chung / Toàn bộ màn hình</option>
+                    {screenComponents.map(c => (
+                      <option key={c.id} value={c.name}>
+                        {c.name} ({c.type})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 {/* Description */}
                 <div className="form-group">
                   <label className="required">Mô tả chi tiết lỗi</label>
@@ -2411,10 +2533,14 @@ const ScreenBugManagementView = () => {
       {/* Proof Image Modal for Resolved/Verified */}
       {showProofModal && activeUpdateForProof && (
         <div className="modal-overlay" style={{ zIndex: 3000 }}>
-          <div className="modal-container" style={{ maxWidth: '400px', borderRadius: '12px', border: '1px solid #EADCC9' }}>
-            <div className="modal-header" style={{ backgroundColor: '#7B5233', color: '#fff', padding: '12px 18px' }}>
+          <div className="modal-container" style={{ maxWidth: '420px', borderRadius: '12px', border: '1px solid #EADCC9' }}>
+            <div className="modal-header" style={{
+              backgroundColor: activeUpdateForProof.status === 'Resolved' ? '#D97706' : (activeUpdateForProof.status === 'Verified' ? '#10B981' : '#EF4444'),
+              color: '#fff',
+              padding: '12px 18px'
+            }}>
               <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 'bold' }}>
-                Đính kèm bằng chứng hoàn thành
+                {activeUpdateForProof.status === 'Resolved' ? '✓ Cập nhật Đã sửa lỗi' : (activeUpdateForProof.status === 'Verified' ? '✓ Xác nhận lỗi đã sửa (Hoàn thành)' : '✗ Từ chối sửa lỗi (Sửa lại)')}
               </h4>
               <button
                 className="btn-close"
@@ -2422,6 +2548,7 @@ const ScreenBugManagementView = () => {
                   setShowProofModal(false);
                   setActiveUpdateForProof(null);
                   setProofImages([]);
+                  setProofNotes('');
                 }}
                 style={{ color: '#fff', border: 'none', background: 'transparent' }}
               >
@@ -2430,104 +2557,129 @@ const ScreenBugManagementView = () => {
             </div>
 
             <div className="modal-body" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div
-                onPaste={(e) => handlePasteImage(e, setProofImages)}
-                tabIndex={0}
-                style={{
-                  border: '2px dashed #7B5233',
-                  borderRadius: '10px',
-                  padding: '24px 16px',
-                  textAlign: 'center',
-                  backgroundColor: '#FAF6F0',
-                  cursor: 'pointer',
-                  outline: 'none',
-                  transition: 'background-color 0.2s',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}
-                onFocus={(e) => e.currentTarget.style.backgroundColor = '#FFF8F0'}
-                onBlur={(e) => e.currentTarget.style.backgroundColor = '#FAF6F0'}
-                onClick={() => document.getElementById('proof-file-input-manual')?.click()}
-              >
-                <span style={{ fontSize: '1.5rem' }}>📷</span>
-                <p style={{ margin: 0, fontSize: '0.8rem', color: '#5D4037', fontWeight: 'bold', lineHeight: '1.4' }}>
-                  Dán ảnh chụp màn hình (Ctrl+V) hoặc kéo thả tại đây
-                </p>
-                <div style={{ display: 'flex', gap: '10px', marginTop: '12px', width: '100%', maxWidth: '360px', justifyContent: 'center' }} onClick={(e) => e.stopPropagation()}>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => document.getElementById('proof-file-input-manual')?.click()}
-                    style={{
-                      height: '34px',
-                      fontSize: '0.75rem',
-                      fontWeight: '700',
-                      padding: '0 12px',
-                      borderRadius: '6px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      backgroundColor: '#4F46E5',
-                      color: '#fff',
-                      border: 'none',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <FolderOpen size={14} /> Duyệt qua các tệp
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-outline"
-                    onClick={() => handlePasteFromClipboardAPI(setProofImages)}
-                    style={{
-                      height: '34px',
-                      fontSize: '0.75rem',
-                      fontWeight: '700',
-                      padding: '0 12px',
-                      backgroundColor: '#fff',
-                      border: '1px solid #7B5233',
-                      color: '#7B5233',
-                      borderRadius: '6px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <Clipboard size={14} /> Dán từ bộ nhớ tạm
-                  </button>
-                </div>
-
-                <input
-                  type="file"
-                  id="proof-file-input-manual"
-                  multiple
-                  accept="image/*"
-                  style={{ display: 'none' }}
-                  onChange={async (e) => {
-                    const files = e.target.files;
-                    if (!files || files.length === 0) return;
-                    try {
-                      showToast('Đang tải ảnh chứng minh...', 'success');
-                      for (let i = 0; i < files.length; i++) {
-                        const res = await bugService.uploadImage(files[i]);
-                        if (res && res.url) {
-                          setProofImages(prev => [...prev, res.url]);
-                        }
-                      }
-                      showToast('Tải ảnh thành công!');
-                    } catch (err) {
-                      showToast('Không thể tải ảnh chứng minh!', 'error');
-                    } finally {
-                      e.target.value = '';
-                    }
-                  }}
+              
+              {/* Custom Text Area for notes */}
+              <div className="form-group">
+                <label className={activeUpdateForProof.status === 'In Progress' ? "required" : ""} style={{ fontWeight: 'bold', fontSize: '0.8rem', color: '#7B5233', display: 'block', marginBottom: '4px' }}>
+                  {activeUpdateForProof.status === 'In Progress' ? 'Lý do từ chối (Bắt buộc):' : 'Nội dung phản hồi (Tùy chọn):'}
+                </label>
+                <textarea
+                  className="form-control"
+                  rows="3"
+                  value={proofNotes}
+                  onChange={(e) => setProofNotes(e.target.value)}
+                  placeholder={activeUpdateForProof.status === 'In Progress' ? 'Vui lòng nhập lý do từ chối sửa lỗi...' : 'Nhập nội dung/chú thích phản hồi (nếu có)...'}
+                  required={activeUpdateForProof.status === 'In Progress'}
+                  style={{ fontSize: '0.82rem', borderRadius: '8px', padding: '8px', border: '1px solid #E2E8F0', width: '100%', boxSizing: 'border-box' }}
                 />
               </div>
+
+              {activeUpdateForProof.status !== 'In Progress' && (
+                <div className="form-group">
+                  <label className={activeUpdateForProof.status === 'Resolved' ? "required" : ""} style={{ fontWeight: 'bold', fontSize: '0.8rem', color: '#7B5233', display: 'block', marginBottom: '4px' }}>
+                    {activeUpdateForProof.status === 'Resolved' ? 'Hình ảnh bằng chứng sửa lỗi (Bắt buộc):' : 'Hình ảnh đính kèm (Tùy chọn):'}
+                  </label>
+                  
+                  <div
+                    onPaste={(e) => handlePasteImage(e, setProofImages)}
+                    tabIndex={0}
+                    style={{
+                      border: '2px dashed #7B5233',
+                      borderRadius: '10px',
+                      padding: '24px 16px',
+                      textAlign: 'center',
+                      backgroundColor: '#FAF6F0',
+                      cursor: 'pointer',
+                      outline: 'none',
+                      transition: 'background-color 0.2s',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}
+                    onFocus={(e) => e.currentTarget.style.backgroundColor = '#FFF8F0'}
+                    onBlur={(e) => e.currentTarget.style.backgroundColor = '#FAF6F0'}
+                    onClick={() => document.getElementById('proof-file-input-manual')?.click()}
+                  >
+                    <span style={{ fontSize: '1.5rem' }}>📷</span>
+                    <p style={{ margin: 0, fontSize: '0.8rem', color: '#5D4037', fontWeight: 'bold', lineHeight: '1.4' }}>
+                      Dán ảnh chụp màn hình (Ctrl+V) hoặc kéo thả tại đây
+                    </p>
+                    <div style={{ display: 'flex', gap: '10px', marginTop: '12px', width: '100%', maxWidth: '360px', justifyContent: 'center' }} onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => document.getElementById('proof-file-input-manual')?.click()}
+                        style={{
+                          height: '34px',
+                          fontSize: '0.75rem',
+                          fontWeight: '700',
+                          padding: '0 12px',
+                          borderRadius: '6px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          backgroundColor: '#4F46E5',
+                          color: '#fff',
+                          border: 'none',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <FolderOpen size={14} /> Duyệt qua các tệp
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-outline"
+                        onClick={() => handlePasteFromClipboardAPI(setProofImages)}
+                        style={{
+                          height: '34px',
+                          fontSize: '0.75rem',
+                          fontWeight: '700',
+                          padding: '0 12px',
+                          backgroundColor: '#fff',
+                          border: '1px solid #7B5233',
+                          color: '#7B5233',
+                          borderRadius: '6px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <Clipboard size={14} /> Dán từ bộ nhớ tạm
+                      </button>
+                    </div>
+    
+                    <input
+                      type="file"
+                      id="proof-file-input-manual"
+                      multiple
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={async (e) => {
+                        const files = e.target.files;
+                        if (!files || files.length === 0) return;
+                        try {
+                          showToast('Đang tải ảnh chứng minh...', 'success');
+                          for (let i = 0; i < files.length; i++) {
+                            const res = await bugService.uploadImage(files[i]);
+                            if (res && res.url) {
+                              setProofImages(prev => [...prev, res.url]);
+                            }
+                          }
+                          showToast('Tải ảnh thành công!');
+                        } catch (err) {
+                          showToast('Không thể tải ảnh chứng minh!', 'error');
+                        } finally {
+                          e.target.value = '';
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Preview của các ảnh đã chọn/dán */}
               {proofImages.length > 0 && (
@@ -2585,6 +2737,7 @@ const ScreenBugManagementView = () => {
                   setShowProofModal(false);
                   setActiveUpdateForProof(null);
                   setProofImages([]);
+                  setProofNotes('');
                 }}
                 style={{ borderRadius: '6px', fontSize: '0.75rem', padding: '6px 12px' }}
               >
@@ -2595,17 +2748,39 @@ const ScreenBugManagementView = () => {
                 className="btn-primary"
                 onClick={async () => {
                   const { id, status, isInitial } = activeUpdateForProof;
+                  
+                  // Validation
+                  if (status === 'Resolved' && proofImages.length === 0) {
+                    showToast('Vui lòng đính kèm hình ảnh bằng chứng sửa lỗi!', 'error');
+                    return;
+                  }
+                  if (status === 'In Progress' && !proofNotes.trim()) {
+                    showToast('Vui lòng nhập lý do từ chối sửa lỗi!', 'error');
+                    return;
+                  }
+
                   try {
+                    const username = getCurrentUserName();
+                    const statusLabel =
+                      status === 'New' ? 'Chưa hoàn thành (Mới)' :
+                        status === 'In Progress' ? 'Từ chối (Sửa lại)' :
+                          status === 'Resolved' ? 'Hoàn thành (Đã sửa)' : 'Đã xác nhận (Hoàn thành)';
+
+                    const defaultNotes = status === 'Resolved'
+                      ? 'Đã khắc phục lỗi giao diện.'
+                      : (status === 'Verified' ? 'Đã xác nhận hoàn thành sửa lỗi.' : 'Từ chối sửa lỗi.');
+                      
+                    const finalNotes = proofNotes.trim() || defaultNotes;
+
                     if (isInitial) {
-                      const username = getCurrentUserName();
                       const payload = {
-                        notes: `Cập nhật trạng thái sang Hoàn thành (Đã sửa) kèm ảnh chứng minh.`,
+                        notes: finalNotes,
                         image_paths: proofImages,
                         updater: username,
                         status: status
                       };
                       const res = await bugService.addBugUpdate(selectedBug.id, payload);
-                      showToast('Đã cập nhật trạng thái lỗi thành công!');
+                      showToast(`Đã chuyển trạng thái sang "${statusLabel}"!`);
 
                       setSelectedBug(prev => {
                         if (!prev) return null;
@@ -2615,7 +2790,11 @@ const ScreenBugManagementView = () => {
                           updates: [res, ...(prev.updates || [])]
                         };
                       });
-                      setEditForm(prev => ({ ...prev, status: status }));
+                      setEditForm(prev => ({
+                        ...prev,
+                        status: status,
+                        completed_at: (status === 'Resolved' || status === 'Verified') ? new Date().toISOString().split('T')[0] : ''
+                      }));
                     } else {
                       await bugService.updateCommentStatus(id, status, proofImages);
                       showToast('Đã cập nhật trạng thái phản hồi và đính kèm ảnh chứng minh!');

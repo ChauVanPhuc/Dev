@@ -763,6 +763,9 @@ def upgrade():
                     title NVARCHAR(100) NOT NULL,
                     subtitle NVARCHAR(150) NULL,
                     is_active BIT NOT NULL DEFAULT 1,
+                    status NVARCHAR(50) NOT NULL DEFAULT N'Mới thiết kế',
+                    target_date NVARCHAR(20) NULL,
+                    mockup_path NVARCHAR(1000) NULL,
                     updated_at DATETIME NULL,
                     CONSTRAINT UQ_platform_route UNIQUE (platform, route_path)
                 )
@@ -771,7 +774,29 @@ def upgrade():
             db.commit()
             print("[OK] Created system_screens table with composite unique constraint")
         else:
-            print("[INFO] system_screens table already exists, skipping creation.")
+            print("[INFO] system_screens table already exists, checking for dynamic column updates.")
+            try:
+                dialect = db.bind.dialect.name
+                if dialect == 'sqlite':
+                    existing_cols = [row[1] for row in db.execute(text("PRAGMA table_info(system_screens)")).fetchall()]
+                else:
+                    cols_query = text("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'system_screens'")
+                    existing_cols = [r[0] for r in db.execute(cols_query).fetchall()]
+                
+                if 'status' not in existing_cols:
+                    print("Adding 'status' column to system_screens table...")
+                    db.execute(text("ALTER TABLE system_screens ADD status NVARCHAR(50) NOT NULL DEFAULT N'Mới thiết kế'"))
+                    db.commit()
+                if 'target_date' not in existing_cols:
+                    print("Adding 'target_date' column to system_screens table...")
+                    db.execute(text("ALTER TABLE system_screens ADD target_date NVARCHAR(20) NULL"))
+                    db.commit()
+                if 'mockup_path' not in existing_cols:
+                    print("Adding 'mockup_path' column to system_screens table...")
+                    db.execute(text("ALTER TABLE system_screens ADD mockup_path NVARCHAR(1000) NULL"))
+                    db.commit()
+            except Exception as alter_err:
+                print(f"Error altering system_screens: {alter_err}")
             
         # Clean up corrupted auto-registered routes from Web platform
         cleanup_sql = text("""

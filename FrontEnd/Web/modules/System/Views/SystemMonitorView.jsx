@@ -22,9 +22,9 @@ const SystemMonitorView = () => {
   };
 
   useEffect(() => {
-    setCustomScreenCode('SYS-MONITOR');
-    setCustomTitle('Giám sát hệ thống & CSDL');
-    setCustomSubtitle('Theo dõi thời gian thực tài nguyên CPU, RAM, ổ đĩa và giới hạn kết nối của SQL Server.');
+    setCustomScreenCode('HD01');
+    setCustomTitle('Tổng quan hệ thống');
+    setCustomSubtitle('HD01: Hiển thị các thông số giám sát về màn hình');
   }, []);
 
   useEffect(() => {

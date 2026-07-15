@@ -84,9 +84,17 @@ export const ScreenProvider = ({ children }) => {
     }
     if (path.includes('screens')) {
       return {
-        screenCode: 'AD14',
-        title: 'Quản lý Màn hình',
-        subtitle: 'Cấu hình và thiết kế giao diện',
+        screenCode: 'HD02',
+        title: 'Danh sách màn hình',
+        subtitle: 'HD02: Hiển thị thông tin về các màn hình thuộc hệ thống',
+        isActive: true
+      };
+    }
+    if (path.includes('bugs')) {
+      return {
+        screenCode: 'HD04',
+        title: 'Khai báo lỗi',
+        subtitle: 'HD04: Khai báo và theo dõi các lỗi giao diện',
         isActive: true
       };
     }
@@ -124,9 +132,9 @@ export const ScreenProvider = ({ children }) => {
     }
     if (path.includes('monitor')) {
       return {
-        screenCode: 'AD15',
-        title: 'Giám sát hệ thống & CSDL',
-        subtitle: 'Theo dõi thời gian thực tài nguyên CPU, RAM, ổ đĩa và giới hạn kết nối của SQL Server',
+        screenCode: 'HD01',
+        title: 'Tổng quan hệ thống',
+        subtitle: 'HD01: Hiển thị các thông số giám sát về màn hình',
         isActive: true
       };
     }
