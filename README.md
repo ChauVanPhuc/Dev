@@ -71,6 +71,7 @@
 ### Kiến trúc hệ thống (System Architecture)
 
 ```mermaid
+%%{init: {'flowchart': {'curve': 'ortho'}}}%%
 flowchart TD
     %% Styling Classes
     classDef cloud fill:#FAF6F0,stroke:#7B5233,stroke-width:1.5px,color:#7B5233;
