@@ -510,8 +510,8 @@ const ScreenManagement = () => {
 
   return (
     <>
-      <div className="mgmt-container screen-management-container" style={{ paddingBottom: '40px' }}>
-        <div className="mgmt-main">
+      <div className="manufacture-plan-container screen-management-container">
+        <div className="sticky-top-zone">
           <div className="progress-cards-container" style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
@@ -1028,8 +1028,8 @@ const ScreenManagement = () => {
               </div>
             </div>
           )}
-
-          <div className="admin-list-layout">
+        </div>
+        <div className="admin-list-layout">
             <div className="mgmt-table admin-table-card card-shadow" style={{ 
               background: '#fff', 
               border: '1px solid #EADCC9'
@@ -1523,7 +1523,6 @@ const ScreenManagement = () => {
               )}
             </div>
           )}
-        </div>
       </div>
     </>
   );
