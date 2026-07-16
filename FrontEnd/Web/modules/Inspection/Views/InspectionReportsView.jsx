@@ -21,6 +21,7 @@ import {
 import api from '@webShared/Services/api.service';
 import ExcelJS from 'exceljs';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const getInspectionTypeLabel = (type) => {
   switch (type) {
@@ -36,6 +37,9 @@ const getInspectionTypeLabel = (type) => {
 
 const InspectionReports = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
+  
+  // Lấy metadata từ database thay vì hardcode
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/inspection-reports');
   
   // Tab control: 'stage' | 'input' | 'daily' | 'process'
   const [activeTab, setActiveTab] = useState('stage');
@@ -89,10 +93,12 @@ const InspectionReports = () => {
 
   // Set Header Title / Subtitle
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle("Báo cáo & Phiếu kiểm tra");
-    if (setCustomSubtitle) setCustomSubtitle("Quản lý toàn bộ kết quả kiểm tra công đoạn, kiểm tra đầu vào, lỗi hàng ngày và quy trình sản xuất.");
-    if (setCustomScreenCode) setCustomScreenCode('AD14');
-  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   // Load all data on mount / refresh
   const fetchData = async () => {

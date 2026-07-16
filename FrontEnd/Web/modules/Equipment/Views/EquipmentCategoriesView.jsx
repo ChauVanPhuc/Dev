@@ -5,9 +5,13 @@ import { ChevronDown, ChevronUp, Plus, Trash2, Edit, Search, Filter, Layers, Fil
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const EquipmentCategoriesView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
+  
+  // Lấy metadata từ database thay vì hardcode
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/equipment/categories');
   const navigate = useNavigate();
 
   const [equipments, setEquipments] = useState([]);
@@ -105,12 +109,12 @@ const EquipmentCategoriesView = () => {
   };
 
   useEffect(() => {
-    setCustomScreenCode('AD37.1');
-    setCustomTitle('Danh sách thiết bị');
-    setCustomSubtitle('Phân loại thiết bị theo nhóm và quản lý hướng dẫn vận hành SOP.');
-    fetchEquipments();
-    fetchSystemUsersAndRoles();
-  }, []);
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   // Computed categories tree
   const computedCategoryTree = useMemo(() => {

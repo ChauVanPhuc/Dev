@@ -5,9 +5,13 @@ import { Unlock, Plus, Printer, Search, X, CheckSquare, Square, Files, ChevronLe
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const BackupQRManagement = () => {
     const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = useOutletContext();
+  
+  // Lấy metadata từ database thay vì hardcode
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/backup-qr');
     const [qrCodes, setQrCodes] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -41,11 +45,12 @@ const BackupQRManagement = () => {
     };
 
     useEffect(() => {
-        setCustomScreenCode('AD11');
-        setCustomTitle('Quản lý mã QR Dự Phòng');
-        setCustomSubtitle('Hệ thống quản lý trạng thái luân chuyển của các thẻ QR cố định trên xưởng.');
-        fetchQRCodes();
-    }, []);
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
 
     const printQRsA4 = (items) => {

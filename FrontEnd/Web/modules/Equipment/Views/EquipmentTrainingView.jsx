@@ -2,10 +2,14 @@ import React, { useState, useEffect } from 'react';
 import api from '@webShared/Services/api.service';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { FileText, Search, Filter, Layers, FileUp, FileDown, Plus } from 'lucide-react';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
 const EquipmentTrainingView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
+  
+  // Lấy metadata từ database thay vì hardcode
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/equipment/training');
   const navigate = useNavigate();
 
   const [trainings, setTrainings] = useState([]);
@@ -26,11 +30,12 @@ const EquipmentTrainingView = () => {
   };
 
   useEffect(() => {
-    setCustomScreenCode('AD37.3');
-    setCustomTitle('Đào tạo vận hành thiết bị');
-    setCustomSubtitle('Danh sách các lớp đào tạo và tài liệu hướng dẫn vận hành an toàn.');
-    fetchTrainings();
-  }, []);
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   return (
     <div style={{ padding: '5px 20px 20px' }}>

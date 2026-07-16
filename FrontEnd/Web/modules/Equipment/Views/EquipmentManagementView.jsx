@@ -10,9 +10,13 @@ import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import EquipmentHandover from './EquipmentHandoverView';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const EquipmentManagementView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = useOutletContext();
+  
+  // Lấy metadata từ database thay vì hardcode
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/equipment');
   const navigate = useNavigate();
   
   // Data States
@@ -32,59 +36,12 @@ const EquipmentManagementView = () => {
   const [handoverEquipmentId, setHandoverEquipmentId] = useState(null);
 
   useEffect(() => {
-    if (location.state?.openHandover) {
-      const hId = location.state.handoverId;
-      setHandoverEquipmentId(hId ? parseInt(hId) : null);
-      setShowHandoverModal(true);
-      window.history.replaceState({}, document.title);
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
     }
-  }, [location.state]);
-  
-  // Pagination & Popups
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(15);
-  const [showOtherMenu, setShowOtherMenu] = useState(false);
-  const [showExportModal, setShowExportModal] = useState(false);
-  const [exportOptions, setExportOptions] = useState({
-    listSelected: true,
-    listAll: false,
-    docsSelected: false,
-    docsAll: false
-  });
-
-  // Fetch all equipments
-  const fetchEquipments = async () => {
-    setLoading(true);
-    try {
-      const data = await api.get('/equipments/');
-      setEquipments(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Lỗi khi tải danh sách thiết bị:', error);
-      setMessage({ type: 'error', text: 'Không thể tải danh sách thiết bị từ hệ thống.' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    setCustomScreenCode('AD37');
-    setCustomTitle('Quản lý thiết bị');
-    setCustomSubtitle('Hệ thống giám sát, bàn giao, kiểm định và đào tạo vận hành máy móc thiết bị.');
-    fetchEquipments();
-    
-    // Close action menu when clicking outside
-    const handleClickOutside = (e) => {
-      if (!e.target.closest('.action-menu') && !e.target.closest('.action-btn')) {
-        setActionMenuId(null);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    
-    return () => {
-      setHeaderExtra(null);
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   // Filtered equipments
   const filteredEquipments = useMemo(() => {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import api from '@webShared/Services/api.service';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 // Icons mapping for screens
 const SCREEN_ICONS = {
@@ -585,13 +586,18 @@ const UserCreate = () => {
   const setCustomTitle = outletContext?.setCustomTitle;
   const setCustomSubtitle = outletContext?.setCustomSubtitle;
   const setCustomScreenCode = outletContext?.setCustomScreenCode;
+  
+  // Lấy metadata từ database thay vì hardcode
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/users/create');
 
   // Cập nhật tiêu đề trang lên Layout Header
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle('Tạo người dùng mới');
-    if (setCustomSubtitle) setCustomSubtitle('Biểu mẫu thiết lập tài khoản và phân cấp vai trò, quyền hạn cho nhân sự');
-    if (setCustomScreenCode) setCustomScreenCode('AD3.1');
-  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
   
   // Dữ liệu từ API
   const [roles, setRoles] = useState([]);

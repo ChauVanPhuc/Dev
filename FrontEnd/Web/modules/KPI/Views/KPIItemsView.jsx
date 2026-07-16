@@ -3,11 +3,13 @@ import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Search, Plus, Trash2, Edit2, AlertTriangle, HelpCircle } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
 const KPIItemsView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
   const navigate = useNavigate();
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/kpi/items');
   const [kpiPool, setKpiPool] = useState([]);
   
   // Search
@@ -46,9 +48,14 @@ const KPIItemsView = () => {
   });
 
   useEffect(() => {
-    setCustomScreenCode('AD7.3');
-    setCustomTitle('Danh mục chỉ số KPI mẫu');
-    setCustomSubtitle('Cấu hình danh mục KPI mẫu chung phục vụ đánh giá hiệu suất.');
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+
+  useEffect(() => {
     fetchKpiPool();
   }, []);
 

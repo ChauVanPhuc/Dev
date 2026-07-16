@@ -5,6 +5,7 @@ import { Plus, Trash2, Edit, Search, Filter, Upload, FileText, Download, AlertCi
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const getDepartmentAbbreviation = (templateSymbol, user) => {
   if (templateSymbol) {
@@ -74,6 +75,9 @@ const getCurrentFormattedDate = () => {
 
 const ISODocumentListView = ({ mode = 'documents' }) => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
+  
+  // Lấy metadata từ database thay vì hardcode
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/iso/forms');
   const navigate = useNavigate();
 
   const [documents, setDocuments] = useState([]);
@@ -150,29 +154,12 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
   const [actionMenuId, setActionMenuId] = useState(null);
 
   useEffect(() => {
-    const handleOutsideClick = () => {
-      setActionMenuId(null);
-    };
-    window.addEventListener('click', handleOutsideClick);
-    return () => window.removeEventListener('click', handleOutsideClick);
-  }, []);
-
-  useEffect(() => {
-    setPage(1);
-  }, [searchTerm, statusFilter, mode]);
-
-  useEffect(() => {
-    if (mode === 'processes') {
-      setCustomTitle('Quản lý quy trình');
-      setCustomSubtitle('Nhân sự');
-      setCustomScreenCode('AD18');
-    } else {
-      setCustomTitle('Quản lý mẫu tài liệu');
-      setCustomSubtitle('Nhân sự');
-      setCustomScreenCode('AD17');
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
     }
-    fetchDocuments();
-  }, [mode]);
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   const fetchDocuments = async () => {
     setLoading(true);

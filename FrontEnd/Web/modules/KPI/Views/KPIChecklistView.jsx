@@ -3,11 +3,13 @@ import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Search, Plus, Trash2, Edit2, AlertTriangle, HelpCircle } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
 const KPIChecklistView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
   const navigate = useNavigate();
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/kpi/checklist');
   const [checklistPool, setChecklistPool] = useState([]);
   
   // Search
@@ -45,9 +47,14 @@ const KPIChecklistView = () => {
   });
 
   useEffect(() => {
-    setCustomScreenCode('AD7.2');
-    setCustomTitle('Danh mục Checklist mẫu');
-    setCustomSubtitle('Cấu hình danh mục các đầu việc mẫu để gán cho nhân viên.');
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+
+  useEffect(() => {
     fetchChecklistPool();
   }, []);
 

@@ -14,6 +14,7 @@ import {
     Activity
 } from 'lucide-react';
 import { planService } from '@modules/Plan/Models/plan.service';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 const TreeNode = ({ node }) => {
     const [isExpanded, setIsExpanded] = useState(true);
     const hasChildren = node.children && node.children.length > 0;
@@ -73,29 +74,19 @@ const ProductionProgress = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = useOutletContext();
+  
+  // Lấy metadata từ database thay vì hardcode
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/production-progress/:id');
     const [loading, setLoading] = useState(true);
     const [productData, setProductData] = useState(null);
 
     useEffect(() => {
-        const fetchProgress = async () => {
-            try {
-                setLoading(true);
-                const data = await planService.getProductProgress(id);
-                setProductData(data);
-                
-                if (data.prodName) {
-                    setCustomScreenCode('MA5');
-                    setCustomTitle(`Tiến độ: ${data.prodName}`);
-                }
-                setHeaderExtra(null);
-            } catch (error) {
-                console.error("Lỗi khi tải tiến độ:", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchProgress();
-    }, [id]);
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
     if (loading) return (
         <div className="progress-loading-container">

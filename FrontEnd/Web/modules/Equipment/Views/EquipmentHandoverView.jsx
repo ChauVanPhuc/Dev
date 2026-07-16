@@ -3,6 +3,7 @@ import api from '@webShared/Services/api.service';
 import { useOutletContext, useNavigate, useParams } from 'react-router-dom';
 import { X, Upload, Plus } from 'lucide-react';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
 const EquipmentHandoverView = ({ id: propId, onClose, onSaved }) => {
@@ -110,59 +111,12 @@ const EquipmentHandoverView = ({ id: propId, onClose, onSaved }) => {
   };
 
   useEffect(() => {
-    if (!isModal && setCustomScreenCode) {
-      setCustomScreenCode('AD37.4');
-      setCustomTitle(id ? 'Biên bản Bàn giao & Cập nhật thiết bị' : 'Khai báo & Bàn giao thiết bị mới');
-      setCustomSubtitle('Khai báo thông tin thiết bị, đính kèm biên bản PDF và hình ảnh thực tế bàn giao.');
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
     }
-    
-    fetchSystemUsersAndRoles();
-
-    const loadEquipmentData = async () => {
-      setLoading(true);
-      try {
-        const data = await api.get('/equipments/');
-        const list = Array.isArray(data) ? data : [];
-        setAllEquipments(list);
-        if (id) {
-          const eq = list.find(item => item.id === parseInt(id));
-          if (eq) {
-            setFormData({
-              id: eq.id,
-              name: eq.name || '',
-              code: eq.code || '',
-              type: eq.type || 'Vật lý',
-              status: eq.status || 'Bình thường',
-              purchase_date: eq.purchase_date || '',
-              maintenance_cycle: eq.maintenance_cycle || 30,
-              department: eq.department || '',
-              owner_name: eq.owner_name || '',
-              calibration_date: eq.calibration_date || '',
-              handover_date: eq.handover_date || '',
-              check_date: eq.check_date || '',
-              attachment_pdf: eq.attachment_pdf || '',
-              images: eq.images || '',
-              user_manual_steps: eq.user_manual_steps || '[]'
-            });
-          }
-        } else {
-          setFormData(prev => ({
-            ...prev,
-            code: `EQP-${String(list.length + 1).padStart(3, '0')}`,
-            purchase_date: new Date().toISOString().split('T')[0],
-            handover_date: new Date().toISOString().split('T')[0],
-            department: 'Quản lý chất lượng'
-          }));
-        }
-      } catch (error) {
-        console.error('Lỗi khi tải dữ liệu thiết bị:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadEquipmentData();
-  }, [id]);
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   const filteredUsers = useMemo(() => {
     if (!formData.department) return systemUsers;

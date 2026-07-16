@@ -8,6 +8,7 @@ import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const parseDescription = (desc) => {
   if (!desc) return { tag: '', text: '' };
@@ -38,6 +39,20 @@ const formatDate = (dateStr) => {
     const hours = String(d.getHours()).padStart(2, '0');
     const minutes = String(d.getMinutes()).padStart(2, '0');
     return `${hours}:${minutes} | ${day}/${month}/${year}`;
+  } catch (e) {
+    return dateStr;
+  }
+};
+
+const formatSimpleDate = (dateStr) => {
+  if (!dateStr) return '-';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
   } catch (e) {
     return dateStr;
   }
@@ -94,6 +109,9 @@ const ScreenManagement = () => {
   const setCustomTitle = outletContext?.setCustomTitle;
   const setCustomSubtitle = outletContext?.setCustomSubtitle;
   const setCustomScreenCode = outletContext?.setCustomScreenCode;
+  
+  // Lấy metadata từ database thay vì hardcode
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/screens');
 
   const [screens, setScreens] = useState([]);
   const [bugs, setBugs] = useState([]);
@@ -151,10 +169,12 @@ const ScreenManagement = () => {
   };
 
   useEffect(() => {
-    if (setCustomScreenCode) setCustomScreenCode('HD02');
-    if (setCustomTitle) setCustomTitle('Danh sách màn hình');
-    if (setCustomSubtitle) setCustomSubtitle('HD02: Hiển thị thông tin về các màn hình thuộc hệ thống');
-  }, [setCustomScreenCode, setCustomTitle, setCustomSubtitle]);
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   useEffect(() => {
     const handleOutsideClick = (e) => {
@@ -551,31 +571,36 @@ const ScreenManagement = () => {
     return bugs.filter(b => b.screen_id === selectedScreenId);
   }, [selectedScreenId, bugs]);
 
-  const renderProgressCard = (title, numerator, denominator, percentage) => {
+  const renderProgressCard = (title, numerator, denominator, percentage, hint) => {
     return (
       <div className="progress-card" style={{
         background: '#fff',
         border: '1px solid #EADCC9',
         borderRadius: '10px',
-        padding: '16px 20px',
+        padding: '14px 20px',
         boxShadow: '0 4px 12px rgba(123, 82, 51, 0.05)',
         flex: 1,
         minWidth: '220px',
         display: 'flex',
         flexDirection: 'column',
-        gap: '6px'
+        gap: '4px'
       }}>
         <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#7B5233' }}>{title}</div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-          <span style={{ fontSize: '2rem', fontWeight: '800', color: '#2D1A12', lineHeight: 1 }}>{numerator}</span>
-          <span style={{ fontSize: '1rem', color: '#8D6E63' }}>/{denominator}</span>
+          <span style={{ fontSize: '1.8rem', fontWeight: '800', color: '#2D1A12', lineHeight: 1 }}>{numerator}</span>
+          <span style={{ fontSize: '0.9rem', color: '#8D6E63' }}>/{denominator}</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '2px' }}>
           <div style={{ flex: 1, height: '6px', backgroundColor: '#FAF6F0', borderRadius: '3px', overflow: 'hidden', border: '1px solid rgba(123, 82, 51, 0.1)' }}>
             <div style={{ width: `${percentage}%`, height: '100%', backgroundColor: '#7B5233', borderRadius: '3px' }} />
           </div>
           <span style={{ fontSize: '0.78rem', color: '#8D6E63', fontWeight: 'bold', minWidth: '30px', textAlign: 'right' }}>{percentage}%</span>
         </div>
+        {hint && (
+          <div style={{ fontSize: '0.7rem', color: '#8D6E63', opacity: 0.85, marginTop: '2px', lineHeight: '1.2' }}>
+            {hint}
+          </div>
+        )}
       </div>
     );
   };
@@ -590,10 +615,10 @@ const ScreenManagement = () => {
             gap: '20px',
             marginBottom: '20px'
           }}>
-            {renderProgressCard("Tiến độ xây dựng", stats.completedScreens, stats.totalScreens, stats.buildPercentage)}
-            {renderProgressCard("Tiến độ chỉnh sửa", stats.completedBugs, stats.totalBugs, stats.editPercentage)}
-            {renderProgressCard("Tiến độ khắc phục", stats.fixedBugs, stats.totalBugs, stats.recoveryPercentage)}
-            {renderProgressCard("Lỗi khẩn cấp", stats.fixedUrgentBugs, stats.totalUrgentBugs, stats.urgentPercentage)}
+            {renderProgressCard("Tiến độ xây dựng", stats.completedScreens, stats.totalScreens, stats.buildPercentage, "Số màn hình hoàn thành / Tổng thiết kế")}
+            {renderProgressCard("Tiến độ chỉnh sửa", stats.completedBugs, stats.totalBugs, stats.editPercentage, "Lỗi đã sửa (Resolved) / Tổng số lỗi")}
+            {renderProgressCard("Tiến độ khắc phục", stats.fixedBugs, stats.totalBugs, stats.recoveryPercentage, "QC đã xác nhận đóng / Tổng số lỗi")}
+            {renderProgressCard("Lỗi khẩn cấp", stats.fixedUrgentBugs, stats.totalUrgentBugs, stats.urgentPercentage, "Số lỗi Critical/Khẩn cấp đã đóng")}
           </div>
 
           {/* Custom Toolbar */}
@@ -1142,6 +1167,7 @@ const ScreenManagement = () => {
                           <th>Trạng thái</th>
                           <th>Ngày thiết kế</th>
                           <th>Ngày cập nhật</th>
+                          <th>Ngày dự kiến</th>
                           <th style={{ textAlign: 'center' }}>Lỗi</th>
                           <th>Mô tả</th>
                           <th style={{ textAlign: 'center', width: '100px' }}>THAO TÁC</th>
@@ -1214,6 +1240,7 @@ const ScreenManagement = () => {
                               </td>
                               <td style={{ color: '#666', fontSize: '0.8rem' }}>{formatDate(screen.updated_at)}</td>
                               <td style={{ color: '#666', fontSize: '0.8rem' }}>{formatDate(screen.updated_at)}</td>
+                              <td style={{ color: '#7B5233', fontSize: '0.8rem', fontWeight: '500' }}>{formatSimpleDate(screen.target_date)}</td>
                               <td style={{ textAlign: 'center', fontWeight: 'bold', color: totalBugs > 0 ? (completedBugs === totalBugs ? '#059669' : '#EF4444') : '#64748B' }}>
                                 {completedBugs}/{totalBugs}
                               </td>
@@ -1548,8 +1575,8 @@ const ScreenManagement = () => {
                                           <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                                             {/* Left: Original Screenshots */}
                                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                              {bug.images && bug.images.length > 0 ? (
-                                                bug.images.map((img, idx) => (
+                                              {bug.images && bug.images.filter(img => !img.update_id).length > 0 ? (
+                                                bug.images.filter(img => !img.update_id).map((img, idx) => (
                                                   <div key={idx} style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px solid #EADCC9', overflow: 'hidden', backgroundColor: '#FAF6F0' }}>
                                                     <img src={getImageUrl(img.image_path)} alt="Bug spec" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onClick={() => window.open(getImageUrl(img.image_path), '_blank')} />
                                                   </div>

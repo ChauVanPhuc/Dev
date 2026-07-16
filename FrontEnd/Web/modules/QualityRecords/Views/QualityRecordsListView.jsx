@@ -14,10 +14,15 @@ import {
 import { planService } from '@modules/Plan/Models/plan.service';
 import { qualityService } from '@modules/QualityRecords/Models/quality.service';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const QualityRecordsListView = () => {
     const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
     const navigate = useNavigate();
+    
+    // Lấy metadata từ database thay vì hardcode
+    const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/quality-records');
+    
     const [plans, setPlans] = useState([]);
     const [selectedPlan, setSelectedPlan] = useState(null);
     const [selectedPlanId, setSelectedPlanId] = useState('');
@@ -59,12 +64,14 @@ const QualityRecordsListView = () => {
         };
     }, []);
 
-    // Cập nhật Title và Subtitle lên Header
+    // Cập nhật Title và Subtitle lên Header - Lấy từ database
     useEffect(() => {
-        if (setCustomTitle) setCustomTitle("Hồ sơ chất lượng (PO)");
-        if (setCustomSubtitle) setCustomSubtitle("Quản lý và xem hồ sơ chất lượng của các đơn hàng theo kế hoạch sản xuất.");
-        if (setCustomScreenCode) setCustomScreenCode('AD13');
-    }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+        if (screenCode && title) {
+            if (setCustomTitle) setCustomTitle(title);
+            if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+            if (setCustomScreenCode) setCustomScreenCode(screenCode);
+        }
+    }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
     // Lấy danh sách KHSX
     useEffect(() => {

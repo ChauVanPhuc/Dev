@@ -3,6 +3,7 @@ import api from '@webShared/Services/api.service';
 import { useParams, useNavigate, useLocation, useOutletContext } from 'react-router-dom';
 import { AlertCircle, FileText, GitBranch, ChevronUp, ChevronDown, Search, Filter, Download, ExternalLink, Eye, Printer, RefreshCw, BookOpen, Settings } from 'lucide-react';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
 const getCurrentFormattedDate = () => {
@@ -39,10 +40,12 @@ const ISOFormEditorView = () => {
   const [uploadLoading, setUploadLoading] = useState(false);
 
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle('Quản lý mẫu tài liệu');
-    if (setCustomSubtitle) setCustomSubtitle('Nhân sự - Cập nhật mẫu tài liệu');
-    if (setCustomScreenCode) setCustomScreenCode('AD17.1');
-  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   const [formData, setFormData] = useState({
     id: null,

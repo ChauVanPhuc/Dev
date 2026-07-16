@@ -19,11 +19,15 @@ import {
 } from 'lucide-react';
 import { qualityService } from '@modules/QualityRecords/Models/quality.service';
 import { API_ROOT } from '@webShared/Services/api.service';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const QualityRecordsDetailView = () => {
     const { id } = useParams(); // poCode
     const navigate = useNavigate();
     const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
+  
+  // Lấy metadata từ database thay vì hardcode
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/quality-records/:id');
     const [activeTab, setActiveTab] = useState('handover');
     const [loading, setLoading] = useState(true);
     const [orderInfo, setOrderInfo] = useState(null);
@@ -42,45 +46,12 @@ const QualityRecordsDetailView = () => {
 
 
     useEffect(() => {
-        return () => {
-            // Reset title ref on unmount to allow re-setting if we come back
-            hasSetTitle.current = false;
-        };
-    }, [id]);
-
-    // 1. Logic đặt Title (chỉ chạy 1 lần khi mount)
-    useEffect(() => {
-        if (!id || !setCustomTitle || hasSetTitle.current) return;
-        
-        hasSetTitle.current = true;
-        
-        const titleJSX = (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }} onClick={e => e.stopPropagation()}>
-                <button 
-                    onClick={(e) => { 
-                        e.preventDefault();
-                        e.stopPropagation(); 
-                        navigate('/admin/quality-records'); 
-                    }}
-                    style={{ 
-                        background: 'none', 
-                        border: 'none', 
-                        cursor: 'pointer', 
-                        display: 'flex', 
-                        alignItems: 'center',
-                        color: '#7B5233'
-                    }}
-                >
-                    <ChevronLeft size={24} />
-                </button>
-                <span style={{ color: '#2D1A12' }}>Hồ sơ PO #{id}</span>
-            </div>
-        );
-
-        setCustomTitle(titleJSX);
-        setCustomSubtitle("Xem lịch sử bàn giao, kiểm tra đầu vào và kết quả QC chi tiết.");
-        if (setCustomScreenCode) setCustomScreenCode('AD13.1');
-    }, [id, setCustomTitle, setCustomSubtitle, setCustomScreenCode, navigate]);
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
     // 2. Logic Fetch Data
     useEffect(() => {

@@ -4,9 +4,13 @@ import { useOutletContext, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Edit, FileText, X } from 'lucide-react';
 import '@styles/components.css';
 import EquipmentHandover from './EquipmentHandoverView';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const EquipmentDetailView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
+  
+  // Lấy metadata từ database thay vì hardcode
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/equipment/:id');
   const navigate = useNavigate();
   const { id } = useParams();
 
@@ -40,11 +44,12 @@ const EquipmentDetailView = () => {
   };
 
   useEffect(() => {
-    setCustomScreenCode('AD37.5');
-    setCustomTitle('Chi tiết thiết bị máy móc');
-    setCustomSubtitle('Thông tin bàn giao, lịch sử hiệu chuẩn định kỳ và hướng dẫn vận hành SOP.');
-    loadData();
-  }, [id]);
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   if (loading) {
     return <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>Đang tải chi tiết thiết bị...</div>;

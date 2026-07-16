@@ -4,9 +4,13 @@ import { useOutletContext, useNavigate } from 'react-router-dom';
 import { Search, Filter, Layers, FileDown, Plus, ClipboardList } from 'lucide-react';
 import '@styles/components.css';
 import ExcelJS from 'exceljs';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const MachineHistoryView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
+  
+  // Lấy metadata từ database thay vì hardcode
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/machines/history');
   const navigate = useNavigate();
 
   const [maintenances, setMaintenances] = useState([]);
@@ -26,11 +30,12 @@ const MachineHistoryView = () => {
   };
 
   useEffect(() => {
-    setCustomScreenCode('MC37.2');
-    setCustomTitle('Nhật ký & Lịch sử bảo trì máy móc');
-    setCustomSubtitle('Nhật ký chi tiết các lần bảo trì thiết bị máy móc sản xuất định kỳ và sự cố phát sinh.');
-    fetchMaintenances();
-  }, []);
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   // Filtered maintenance logs
   const filteredMaintenances = useMemo(() => {

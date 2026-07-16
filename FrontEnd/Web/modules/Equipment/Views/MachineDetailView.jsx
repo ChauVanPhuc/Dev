@@ -6,10 +6,14 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
 const MachineDetailView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
+  
+  // Lấy metadata từ database thay vì hardcode
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/machines/:id');
   const navigate = useNavigate();
   const { id } = useParams();
 
@@ -56,21 +60,12 @@ const MachineDetailView = () => {
   };
 
   useEffect(() => {
-    setCustomScreenCode('MC37.5');
-    setCustomTitle('Thông tin thiết bị máy móc');
-    setCustomSubtitle('Hồ sơ chi tiết thiết bị máy móc, lịch sử bảo dưỡng và hướng dẫn vận hành chuẩn.');
-    loadMachineData();
-
-    const handleClickOutside = (e) => {
-      if (!e.target.closest('.file-actions-container')) {
-        setActiveFileMenuId(null);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [id]);
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   if (loading) {
     return (

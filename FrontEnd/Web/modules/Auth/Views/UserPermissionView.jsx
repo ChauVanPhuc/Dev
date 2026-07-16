@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useOutletContext } from 'react-router-dom';
 import api from '@webShared/Services/api.service';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const SCREEN_ICONS = {
   users: (
@@ -572,6 +573,9 @@ const UserPermissionView = () => {
   const setCustomTitle = outletContext?.setCustomTitle;
   const setCustomSubtitle = outletContext?.setCustomSubtitle;
   const setCustomScreenCode = outletContext?.setCustomScreenCode;
+  
+  // Lấy metadata từ database thay vì hardcode
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/users/:id/permissions');
 
   const [userInfo, setUserInfo] = useState(null);
   const [screenPermissions, setScreenPermissions] = useState({});

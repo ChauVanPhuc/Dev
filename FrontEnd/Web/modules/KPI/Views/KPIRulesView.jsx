@@ -3,11 +3,13 @@ import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Search, Plus, Trash2, Edit2, AlertTriangle, HelpCircle } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
 const KPIRulesView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
   const navigate = useNavigate();
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/kpi/rules');
   const [rules, setRules] = useState([]);
   
   // Search
@@ -47,9 +49,14 @@ const KPIRulesView = () => {
   });
 
   useEffect(() => {
-    setCustomScreenCode('AD7.4');
-    setCustomTitle('Quy tắc cộng trừ điểm KPI');
-    setCustomSubtitle('Thiết lập luật chung cho QC báo cáo lỗi hoặc đề xuất khen thưởng.');
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+
+  useEffect(() => {
     fetchRules();
   }, []);
 

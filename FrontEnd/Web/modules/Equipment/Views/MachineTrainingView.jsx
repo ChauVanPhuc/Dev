@@ -2,10 +2,14 @@ import React, { useState, useEffect } from 'react';
 import api from '@webShared/Services/api.service';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { FileText, Search, Filter, BookOpen, Eye } from 'lucide-react';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
 const MachineTrainingView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
+  
+  // Lấy metadata từ database thay vì hardcode
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/machines/training');
   const navigate = useNavigate();
 
   const [machines, setMachines] = useState([]);
@@ -25,11 +29,12 @@ const MachineTrainingView = () => {
   };
 
   useEffect(() => {
-    setCustomScreenCode('MC37.3');
-    setCustomTitle('Hướng dẫn sử dụng máy móc');
-    setCustomSubtitle('Thư viện quy trình hướng dẫn vận hành chuẩn (SOP) và tài liệu sử dụng máy móc sản xuất an toàn.');
-    fetchMachines();
-  }, []);
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   const filteredMachines = useMemo(() => {
     return machines.filter(m => 

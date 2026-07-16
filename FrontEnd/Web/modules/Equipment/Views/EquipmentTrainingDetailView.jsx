@@ -2,10 +2,14 @@ import React, { useState, useEffect } from 'react';
 import api from '@webShared/Services/api.service';
 import { useOutletContext, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Download, FileText } from 'lucide-react';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
 const EquipmentTrainingDetailView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
+  
+  // Lấy metadata từ database thay vì hardcode
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/equipment/training/:id');
   const navigate = useNavigate();
   const { id } = useParams();
 
@@ -13,27 +17,12 @@ const EquipmentTrainingDetailView = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setCustomScreenCode('AD37.6');
-    setCustomTitle('Chi tiết đào tạo vận hành');
-    setCustomSubtitle('Xem thông tin chi tiết biên bản, kết quả đánh giá và nội dung tài liệu đào tạo.');
-
-    const fetchTrainingDetail = async () => {
-      setLoading(true);
-      try {
-        const data = await api.get('/equipments/trainings');
-        if (Array.isArray(data)) {
-          const found = data.find(t => t.id === parseInt(id));
-          setTraining(found || null);
-        }
-      } catch (error) {
-        console.error('Lỗi khi tải chi tiết đào tạo:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTrainingDetail();
-  }, [id]);
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   if (loading) {
     return <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>Đang tải chi tiết đào tạo...</div>;

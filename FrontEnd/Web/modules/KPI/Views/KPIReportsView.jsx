@@ -4,11 +4,15 @@ import { Search, Plus, Trash2, Edit2, AlertTriangle, HelpCircle, Lock, Upload, D
 import api from '@webShared/Services/api.service';
 import ExcelJS from 'exceljs';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
 const KPIReportsView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
   const navigate = useNavigate();
+  
+  // Lấy metadata từ database thay vì hardcode
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/kpi/reports');
   const [employees, setEmployees] = useState([]);
   const [expandedEmpId, setExpandedEmpId] = useState(null);
   const [activeTab, setActiveTab] = useState('performance'); // checklist, kpi, performance, rules, feedback
@@ -87,9 +91,14 @@ const KPIReportsView = () => {
   const [previewImage, setPreviewImage] = useState(null);
 
   useEffect(() => {
-    setCustomScreenCode('AD7');
-    setCustomTitle('Báo cáo KPI');
-    setCustomSubtitle('Hệ thống tổng hợp đánh giá và theo dõi hiệu suất năng suất lao động.');
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+
+  useEffect(() => {
     fetchEmployees();
     fetchPools();
   }, []);

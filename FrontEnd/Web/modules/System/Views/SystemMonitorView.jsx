@@ -2,9 +2,13 @@ import React, { useState, useEffect } from 'react';
 import api from '@webShared/Services/api.service';
 import { useOutletContext } from 'react-router-dom';
 import { Activity, Database, Cpu, HardDrive, RefreshCw, Smartphone, Monitor, Users } from 'lucide-react';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const SystemMonitorView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = useOutletContext();
+  
+  // Lấy metadata từ database thay vì hardcode
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/system-monitor');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshInterval, setRefreshInterval] = useState(3000); // 3s default
@@ -22,10 +26,12 @@ const SystemMonitorView = () => {
   };
 
   useEffect(() => {
-    setCustomScreenCode('HD01');
-    setCustomTitle('Tổng quan hệ thống');
-    setCustomSubtitle('HD01: Hiển thị các thông số giám sát về màn hình');
-  }, []);
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   useEffect(() => {
     fetchStats();

@@ -9,9 +9,13 @@ import {
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const MachineManagementView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = useOutletContext();
+  
+  // Lấy metadata từ database thay vì hardcode
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/machines');
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
   
@@ -64,11 +68,12 @@ const MachineManagementView = () => {
   };
 
   useEffect(() => {
-    setCustomScreenCode('MC37');
-    setCustomTitle('Danh sách thiết bị máy móc');
-    setCustomSubtitle('Hệ thống quản lý, lập lịch bảo trì và kiểm soát tình trạng thiết bị máy móc sản xuất.');
-    fetchMachines();
-  }, []);
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   // Dynamic filter options lists
   const uniqueFactories = useMemo(() => {

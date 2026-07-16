@@ -16,6 +16,7 @@ const logoCty = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKgAAACeCAIAAAA63
 import FlowchartTable from './FlowchartTable';
 import FlowchartCanvas from './FlowchartCanvas';
 import { useOutletContext, useNavigate, useParams, useLocation } from 'react-router-dom';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import { 
   ArrowLeft, Save, Plus, Trash2, Edit, ChevronUp, ChevronDown, CheckCircle, AlertCircle, 
   ListPlus, Settings, FileText, Activity, Download, Upload, HelpCircle, Eye,
@@ -784,6 +785,9 @@ const FlowchartConnectors = ({ steps, zoomScale }) => {
 
 const ISOProcessEditorView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
+  
+  // Lấy metadata từ database thay vì hardcode
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/iso/processes/:id');
   const navigate = useNavigate();
   const { id } = useParams();
   const location = useLocation();

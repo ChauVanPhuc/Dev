@@ -76,6 +76,7 @@ import { orderService } from '@modules/Order/Models/order.service';
 
 import PriorityManagerModal from '@webShared/Views/components/feedback/PriorityManagerModal';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 
 const PlanDetail = () => {
@@ -160,66 +161,12 @@ const PlanDetail = () => {
 
 
     useEffect(() => {
-
-        const fetchDetail = async () => {
-
-            try {
-
-                if (!plan) setLoading(true);
-
-                const data = await planService.getPlanById(id, page * limit, limit, searchTerm);
-
-                setPlan(data);
-
-                setTotalOrders(data.total_orders || 0);
-
-
-
-                if (data.name) {
-
-                    setCustomScreenCode('MA2.1');
-
-                    setCustomTitle(`Chi tiết Kế hoạch: ${data.name}`);
-
-                    setCustomSubtitle(
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-
-                            <span className="status-tag success">Đang sản xuất</span>
-
-                        </div>
-
-                    );
-
-
-
-                    setHeaderExtra(null);
-
-                }
-
-
-
-                if (!plan && data.orders && data.orders.length > 0) {
-
-                    setExpandedOrders(new Set([data.orders[0].id]));
-
-                }
-
-            } catch (error) {
-
-                console.error("Lỗi:", error);
-
-            } finally {
-
-                setLoading(false);
-
-            }
-
-        };
-
-        fetchDetail();
-
-    }, [id, page, limit, searchTerm]);
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
 
 

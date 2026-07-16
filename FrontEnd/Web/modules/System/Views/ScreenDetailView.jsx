@@ -77,10 +77,12 @@ const getBugStatusLabel = (status) => {
 import { screenService } from '@modules/System/Models/screen.service';
 import { bugService } from '@modules/System/Models/bug.service';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
+import BugDetailModal from '@webShared/Views/components/modals/BugDetailModal';
 
 import ScreenSimulator from '@modules/System/Views/components/ScreenSimulation';
 
 import SCREEN_DOCS from './components/screenDocs';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 
 
@@ -1145,6 +1147,7 @@ const ScreenDetail = () => {
 
   const { id } = useParams();
   const location = useLocation();
+  const isNew = id === 'new';
 
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -1153,21 +1156,24 @@ const ScreenDetail = () => {
 
   const { showModal, startGlobalUpload, activeUploads, setCustomTitle, setCustomSubtitle, setCustomScreenCode } = outletContext;
 
+  // Dynamic metadata - chỉ dùng khi KHÔNG phải trang new và đã có screen
+  const { screenCode, title, subtitle } = useScreenMetadataCached(
+    isNew ? null : '/admin/screens/:id'
+  );
+
   const [screen, setScreen] = useState(null);
 
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle('Đặc tả màn hình');
-  }, [setCustomTitle]);
-
-  useEffect(() => {
-    if (screen) {
-      if (setCustomSubtitle) setCustomSubtitle(`${screen.current_code}: ${screen.title}`);
-      if (setCustomScreenCode) setCustomScreenCode(screen.current_code);
-    } else {
-      if (setCustomSubtitle) setCustomSubtitle('Đặc tả màn hình chi tiết');
+    if (!isNew && screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    } else if (isNew) {
+      if (setCustomTitle) setCustomTitle('Đặc tả màn hình');
+      if (setCustomSubtitle) setCustomSubtitle('Tạo mới đặc tả màn hình');
       if (setCustomScreenCode) setCustomScreenCode('HD03');
     }
-  }, [screen, setCustomSubtitle, setCustomScreenCode]);
+  }, [isNew, screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   const [loading, setLoading] = useState(true);
 
@@ -1179,8 +1185,9 @@ const ScreenDetail = () => {
     platform: 'Web',
     subsystem: 'Quản lý hệ thống',
     status: 'Mới thiết kế',
-    target_date: '',
-    subtitle: ''
+    target_date: new Date().toISOString().split('T')[0],
+    subtitle: '',
+    current_code: ''
   });
 
   const [showAddComponentModal, setShowAddComponentModal] = useState(false);
@@ -1209,7 +1216,7 @@ const ScreenDetail = () => {
     reporter: getLoggedInUser(),
     assignee: 'IT',
     targetDate: '',
-    imagePath: ''
+    imagePaths: []
   });
   const [bugModalMode, setBugModalMode] = useState('create'); // 'create' | 'edit'
   const [selectedBug, setSelectedBug] = useState(null);
@@ -1219,6 +1226,7 @@ const ScreenDetail = () => {
   const [replyUploading, setReplyUploading] = useState(false);
   const [replyStatusVal, setReplyStatusVal] = useState('');
   const [itAccounts, setItAccounts] = useState(['IT']);
+  const [showRouteDropdown, setShowRouteDropdown] = useState(false);
 
   const [confirmModal, setConfirmModal] = useState({
     visible: false,
@@ -1391,10 +1399,7 @@ const ScreenDetail = () => {
           status: 'Mới thiết kế',
           target_date: '',
           components: [
-            { id: 1, name: 'Nút A', type: 'Button', description: 'Nút bấm kích hoạt hành động.' },
-            { id: 2, name: 'Ô nhập liệu A', type: 'Input Field', description: 'Ô nhập dữ liệu văn bản.' },
-            { id: 3, name: 'Bảng A', type: 'Table', description: 'Bảng hiển thị dữ liệu cột.' },
-            { id: 4, name: 'Nút radio B', type: 'Checkbox / Radio', description: 'Hộp chọn một hoặc nhiều mục.' }
+
           ],
           guides: [],
           bugs: []
@@ -1439,24 +1444,61 @@ const ScreenDetail = () => {
   };
 
   useEffect(() => {
-    if (screen) {
+    if (screen && !isNew) {
       setFormData({
         title: screen.title || '',
         route_path: screen.route_path || '',
         platform: screen.platform || 'Web',
         subsystem: getSubsystem(screen),
         status: screen.status || 'Mới thiết kế',
-        target_date: screen.target_date || '',
-        subtitle: screen.subtitle || ''
+        target_date: screen.target_date || new Date().toISOString().split('T')[0],
+        subtitle: screen.subtitle || '',
+        current_code: screen.current_code || ''
       });
     }
-  }, [screen]);
+  }, [screen, isNew]);
+
+  // Đóng route dropdown khi click bên ngoài
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (showRouteDropdown && !e.target.closest('.route-dropdown-container')) {
+        setShowRouteDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showRouteDropdown]);
 
   const handleSave = async (e) => {
     if (e) e.preventDefault();
     if (!formData.title || !formData.route_path) {
       showToast('Vui lòng nhập đầy đủ Tên màn hình và Đường dẫn Route!', 'error');
       return;
+    }
+
+    // Validate mã màn hình khi edit (chỉ khi user sửa mã)
+    if (!isNew && formData.current_code && formData.current_code !== screen?.current_code) {
+      if (!formData.current_code.trim()) {
+        showToast('Vui lòng nhập Mã màn hình!', 'error');
+        return;
+      }
+      
+      // Check trùng lặp mã màn hình
+      try {
+        const allScreens = await screenService.getScreens();
+        const isDuplicate = allScreens.some(s => 
+          s.current_code === formData.current_code && s.id !== screen.id
+        );
+        
+        if (isDuplicate) {
+          showToast(`Mã màn hình "${formData.current_code}" đã tồn tại! Vui lòng chọn mã khác.`, 'error');
+          return;
+        }
+      } catch (err) {
+        console.error('Error checking screen code:', err);
+        showToast('Không thể kiểm tra mã màn hình!', 'error');
+        return;
+      }
     }
 
     if (!formData.target_date) {
@@ -1501,7 +1543,7 @@ const ScreenDetail = () => {
         showToast('Tạo mới đặc tả màn hình thành công!');
         navigate(`/admin/screens/${res.id}`);
       } else {
-        await screenService.updateScreen(screen.id, {
+        const updatePayload = {
           title: formData.title,
           route_path: formData.route_path,
           platform: formData.platform,
@@ -1511,12 +1553,21 @@ const ScreenDetail = () => {
           mockup_path: screen.mockup_path,
           components: componentsPayload,
           guides: guidesPayload
-        });
+        };
+        
+        // Chỉ gửi current_code nếu nó thay đổi
+        if (formData.current_code && formData.current_code !== screen?.current_code) {
+          updatePayload.current_code = formData.current_code;
+        }
+        
+        await screenService.updateScreen(screen.id, updatePayload);
         showToast('Cập nhật đặc tả màn hình thành công!');
         fetchScreenDetail();
       }
     } catch (err) {
-      showToast('Lưu đặc tả thất bại!', 'error');
+      console.error('Error saving screen:', err);
+      const errorMsg = err?.response?.data?.message || err?.message || 'Lưu đặc tả thất bại!';
+      showToast(errorMsg, 'error');
     }
   };
 
@@ -1619,15 +1670,24 @@ const ScreenDetail = () => {
   };
 
   const handleBugImageUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
     try {
       setBugImageUploading(true);
       showToast('Đang tải lên ảnh lỗi...', 'info');
-      const res = await bugService.uploadImage(file);
-      if (res && res.url) {
-        setBugModalData(prev => ({ ...prev, imagePath: res.url }));
-        showToast('Tải lên hình ảnh lỗi thành công!');
+      const uploadedUrls = [];
+      for (const file of files) {
+        const res = await bugService.uploadImage(file);
+        if (res && res.url) {
+          uploadedUrls.push(res.url);
+        }
+      }
+      if (uploadedUrls.length > 0) {
+        setBugModalData(prev => ({
+          ...prev,
+          imagePaths: [...(prev.imagePaths || []), ...uploadedUrls]
+        }));
+        showToast(`Tải lên thành công ${uploadedUrls.length} hình ảnh lỗi!`);
       } else {
         showToast('Không nhận được đường dẫn ảnh!', 'error');
       }
@@ -1636,6 +1696,65 @@ const ScreenDetail = () => {
       showToast('Tải lên hình ảnh lỗi thất bại!', 'error');
     } finally {
       setBugImageUploading(false);
+    }
+  };
+
+  const handlePasteBugModal = async (e) => {
+    const clipboardData = e.clipboardData || (e.nativeEvent && e.nativeEvent.clipboardData);
+    if (!clipboardData) return;
+
+    const items = clipboardData.items;
+    if (!items) return;
+
+    const files = [];
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        const file = items[i].getAsFile();
+        if (file) {
+          files.push(file);
+        }
+      }
+    }
+
+    if (files.length > 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        if (bugModalMode === 'edit') {
+          setReplyUploading(true);
+          showToast('Đang tải lên ảnh phản hồi từ clipboard...', 'info');
+          const uploadedPaths = [];
+          for (const file of files) {
+            const res = await bugService.uploadImage(file);
+            if (res && res.url) {
+              uploadedPaths.push(res.url);
+            }
+          }
+          setReplyImages(prev => [...prev, ...uploadedPaths]);
+          showToast('Tải lên hình ảnh phản hồi từ clipboard thành công!');
+        } else {
+          setBugImageUploading(true);
+          showToast('Đang tải lên ảnh lỗi từ clipboard...', 'info');
+          const uploadedUrls = [];
+          for (const file of files) {
+            const res = await bugService.uploadImage(file);
+            if (res && res.url) {
+              uploadedUrls.push(res.url);
+            }
+          }
+          setBugModalData(prev => ({
+            ...prev,
+            imagePaths: [...(prev.imagePaths || []), ...uploadedUrls]
+          }));
+          showToast(`Tải lên thành công ${uploadedUrls.length} hình ảnh lỗi!`);
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('Tải lên hình ảnh từ clipboard thất bại!', 'error');
+      } finally {
+        setReplyUploading(false);
+        setBugImageUploading(false);
+      }
     }
   };
 
@@ -1658,7 +1777,7 @@ const ScreenDetail = () => {
         reporter: bugModalData.reporter,
         assignee: bugModalData.assignee,
         requested_at: bugModalData.targetDate ? `${bugModalData.targetDate}T12:00:00Z` : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-        image_paths: bugModalData.imagePath ? [bugModalData.imagePath] : [],
+        image_paths: bugModalData.imagePaths || [],
         notes: ''
       };
 
@@ -1703,7 +1822,7 @@ const ScreenDetail = () => {
       reporter: bug.reporter || '',
       assignee: bug.assignee || 'IT',
       targetDate: bug.requested_at ? bug.requested_at.split('T')[0] : '',
-      imagePath: bug.images && bug.images.length > 0 ? bug.images[0].image_path : '',
+      imagePaths: bug.images && bug.images.length > 0 ? bug.images.filter(img => !img.update_id).map(img => img.image_path) : [],
       status: bug.status || 'New'
     });
 
@@ -1732,7 +1851,7 @@ const ScreenDetail = () => {
     } else if (isFixed) {
       if (replyStatusVal === 'Hoàn thành') {
         newStatus = 'Hoàn thành';
-      } else if (replyStatusVal === 'Từ chối') {
+      } else if (replyStatusVal === 'Từ chối' || replyStatusVal === 'Sửa lại') {
         newStatus = 'Sửa lại';
       }
     }
@@ -1787,6 +1906,8 @@ const ScreenDetail = () => {
     }
   };
 
+
+
   const handleSubmitReply = async (bug) => {
     if (!replyNotes.trim()) {
       showToast('Vui lòng nhập nội dung phản hồi!', 'error');
@@ -1798,13 +1919,13 @@ const ScreenDetail = () => {
 
     if (current === 'new' || current === 'mới' || current === 'sửa lại') {
       if (replyStatusVal !== 'Đã sửa') {
-        showToast('Vui lòng tích chọn trạng thái "Đã sửa" trước khi phản hồi!', 'error');
+        showToast('Vui lòng chọn trạng thái "Đã sửa" ở mục Trạng thái (góc trên bên phải) trước khi phản hồi!', 'error');
         return;
       }
       newStatus = 'Đã sửa';
     } else if (current === 'đã sửa' || current === 'resolved') {
-      if (replyStatusVal !== 'Hoàn thành' && replyStatusVal !== 'Sửa lại') {
-        showToast('Vui lòng tích chọn "Xác nhận (Hoàn thành)" hoặc "Từ chối (Sửa lại)"!', 'error');
+      if (replyStatusVal !== 'Hoàn thành' && replyStatusVal !== 'Sửa lại' && replyStatusVal !== 'Từ chối') {
+        showToast('Vui lòng chọn "Hoàn thành" hoặc "Sửa lại" ở mục Trạng thái (góc trên bên phải)!', 'error');
         return;
       }
       newStatus = replyStatusVal === 'Hoàn thành' ? 'Hoàn thành' : 'Sửa lại';
@@ -2273,7 +2394,6 @@ const ScreenDetail = () => {
 
 
   const renderMetadataForm = () => {
-    const isNew = id === 'new';
     const generatedCode = isNew ? generateNextScreenCode(formData.subsystem, allScreens) : '';
     return (
       <div className="card" style={{
@@ -2377,7 +2497,7 @@ const ScreenDetail = () => {
                       reporter: getLoggedInUser(),
                       assignee: defaultAssignee,
                       targetDate: new Date().toISOString().split('T')[0],
-                      imagePath: ''
+                      imagePaths: []
                     });
                     setShowBugModal(true);
                   }}
@@ -2397,9 +2517,22 @@ const ScreenDetail = () => {
             <input
               type="text"
               className="form-control"
-              value={isNew ? generatedCode : (screen?.current_code || '')}
-              disabled
-              style={{ backgroundColor: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', color: '#64748B', fontWeight: '600', height: '36px', boxSizing: 'border-box' }}
+              value={isNew ? (generatedCode || '') : (formData.current_code || '')}
+              onChange={(e) => !isNew && setFormData(prev => ({ ...prev, current_code: e.target.value.toUpperCase() }))}
+              placeholder="VD: AD13, HD02"
+              style={{ 
+                backgroundColor: isNew ? '#F1F5F9' : '#fff',
+                border: '1px solid #E2E8F0', 
+                borderRadius: '8px', 
+                padding: '8px 12px', 
+                fontSize: '0.8rem', 
+                color: isNew ? '#64748B' : '#111827',
+                fontWeight: '600', 
+                height: '36px', 
+                boxSizing: 'border-box',
+                cursor: isNew ? 'not-allowed' : 'text'
+              }}
+              disabled={isNew}
             />
           </div>
 
@@ -2410,25 +2543,96 @@ const ScreenDetail = () => {
               className="form-control"
               value={formData.title}
               onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-              placeholder="Ví dụ: Giám sát nhiệt độ lò"
+              placeholder="VD: Quản lý người dùng, Báo cáo KPI, Danh sách thiết bị..."
               required
-              style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box' }}
+              style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box' }}
             />
           </div>
 
-          <div className="form-group" style={{ margin: 0 }}>
-            <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Đường dẫn</label>
+          <div className="form-group" style={{ margin: 0, position: 'relative' }}>
+            <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>
+              Đường dẫn
+              <span style={{ fontSize: '0.7rem', color: '#94A3B8', fontWeight: 'normal', marginLeft: '8px' }}>
+                💡 {(() => {
+                  const existingRoutes = allScreens.map(s => s.route_path?.replace(/^\/admin\//, ''));
+                  const suggestedRoutes = [
+                    'users', 'users/create', 'users/:id/edit', 'users/:id/permissions',
+                    'departments', 'positions', 'roles',
+                    'kpi/reports', 'kpi/checklist', 'kpi/items', 'kpi/rules', 'kpi/feedback',
+                    'equipment', 'equipment/categories', 'equipment/training', 'equipment/history',
+                    'machines', 'machines/history', 'machines/training',
+                    'quality-records', 'quality-records/:id',
+                    'inspection-reports', 'inspection-reports/:id',
+                    'plans', 'plans/:id', 'production-progress/:id',
+                    'iso/forms', 'iso/forms/:id', 'iso/processes', 'iso/processes/:id',
+                    'backup-qr', 'system-monitor', 'screens', 'screens/:id',
+                    'dashboard', 'settings', 'profile', 'notifications'
+                  ];
+                  const available = suggestedRoutes.filter(route => !existingRoutes.includes(route));
+                  return `${available.length} routes chưa có màn hình`;
+                })()}
+              </span>
+            </label>
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ fontSize: '0.8rem', color: '#64748B', whiteSpace: 'nowrap' }}>{formData.subsystem}/</span>
-              <input
-                type="text"
-                className="form-control"
-                value={formData.route_path}
-                onChange={(e) => setFormData(prev => ({ ...prev, route_path: e.target.value }))}
-                placeholder="users"
-                required
-                style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box', flex: 1 }}
-              />
+              <div className="route-dropdown-container" style={{ position: 'relative', flex: 1 }}>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={formData.route_path}
+                  onChange={(e) => setFormData(prev => ({ ...prev, route_path: e.target.value }))}
+                  onFocus={() => setShowRouteDropdown(true)}
+                  placeholder="VD: users, kpi/reports, equipment..."
+                  required
+                  style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 32px 8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box', width: '100%' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowRouteDropdown(!showRouteDropdown)}
+                  style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', fontSize: '0.9rem' }}
+                >
+                  ▼
+                </button>
+                {showRouteDropdown && (() => {
+                  const existingRoutes = allScreens.map(s => s.route_path?.replace(/^\/admin\//, ''));
+                  const routeGroups = {
+                    '👥 Auth': ['users', 'users/create', 'users/:id/edit', 'users/:id/permissions', 'departments', 'positions', 'roles'],
+                    '📊 KPI': ['kpi/reports', 'kpi/checklist', 'kpi/items', 'kpi/rules', 'kpi/feedback'],
+                    '🛠️ Equipment': ['equipment', 'equipment/categories', 'equipment/training', 'equipment/history', 'machines', 'machines/history', 'machines/training'],
+                    '✅ Quality': ['quality-records', 'quality-records/:id', 'inspection-reports', 'inspection-reports/:id'],
+                    '📅 Plan': ['plans', 'plans/:id', 'production-progress/:id'],
+                    '📝 ISO': ['iso/forms', 'iso/forms/:id', 'iso/processes', 'iso/processes/:id'],
+                    '⚙️ System': ['backup-qr', 'system-monitor', 'screens', 'screens/:id', 'dashboard', 'settings', 'profile', 'notifications']
+                  };
+                  const filterText = formData.route_path.toLowerCase();
+                  return (
+                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px', backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', maxHeight: '300px', overflowY: 'auto', zIndex: 1000 }}>
+                      {Object.entries(routeGroups).map(([group, routes]) => {
+                        const availableRoutes = routes.filter(r => !existingRoutes.includes(r) && r.toLowerCase().includes(filterText));
+                        if (availableRoutes.length === 0) return null;
+                        return (
+                          <div key={group} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                            <div style={{ padding: '8px 12px', fontSize: '0.7rem', fontWeight: 'bold', color: '#64748B', backgroundColor: '#F8FAFC' }}>{group}</div>
+                            {availableRoutes.map(route => (
+                              <div
+                                key={route}
+                                onClick={() => {
+                                  setFormData(prev => ({ ...prev, route_path: route }));
+                                  setShowRouteDropdown(false);
+                                }}
+                                style={{ padding: '8px 12px', fontSize: '0.8rem', cursor: 'pointer', color: '#1E293B', transition: 'all 0.2s' }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F1F5F9'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              >
+                                {route}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
           </div>
 
@@ -2441,7 +2645,7 @@ const ScreenDetail = () => {
               onChange={(e) => setFormData(prev => ({ ...prev, target_date: e.target.value }))}
               required
               min={new Date().toISOString().split('T')[0]}
-              style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box' }}
+              style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box' }}
             />
           </div>
         </div>
@@ -2454,9 +2658,9 @@ const ScreenDetail = () => {
             className="form-control"
             value={formData.subtitle}
             onChange={(e) => setFormData(prev => ({ ...prev, subtitle: e.target.value }))}
-            placeholder="Mô tả chức năng/vai trò..."
+            placeholder="VD: Quản lý tài khoản người dùng, phân quyền và theo dõi hoạt động"
             required
-            style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box', width: '100%' }}
+            style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box', width: '100%' }}
           />
         </div>
       </div>
@@ -2631,7 +2835,7 @@ const ScreenDetail = () => {
                                     reporter: getLoggedInUser(),
                                     assignee: defaultAssignee,
                                     targetDate: new Date().toISOString().split('T')[0],
-                                    imagePath: ''
+                                    imagePaths: []
                                   });
                                   setShowBugModal(true);
                                 }}
@@ -3403,8 +3607,8 @@ const ScreenDetail = () => {
                           <React.Fragment key={bug.id}>
                             <tr
                               onClick={() => setExpandedBugId(isBugExpanded ? null : bug.id)}
-                              style={{ 
-                                cursor: 'pointer', 
+                              style={{
+                                cursor: 'pointer',
                                 backgroundColor: isBugExpanded ? '#FAF6F0' : undefined,
                                 position: 'relative',
                                 zIndex: activeBugMenu === bug.id ? 50 : 1
@@ -3433,10 +3637,10 @@ const ScreenDetail = () => {
                               <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }}>{bug.assignee || '-'}</td>
                               <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }}>{formatDate(bug.created_at)}</td>
                               <td
-                                style={{ 
-                                  padding: '10px', 
-                                  border: '1px solid #E5E7EB', 
-                                  fontSize: '0.78rem', 
+                                style={{
+                                  padding: '10px',
+                                  border: '1px solid #E5E7EB',
+                                  fontSize: '0.78rem',
                                   textAlign: 'center',
                                   position: 'relative',
                                   zIndex: activeBugMenu === bug.id ? 100 : 1
@@ -3537,8 +3741,8 @@ const ScreenDetail = () => {
                                       <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                                         {/* Left: Original Screenshots */}
                                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                          {bug.images && bug.images.length > 0 ? (
-                                            bug.images.map((img, idx) => (
+                                          {bug.images && bug.images.filter(img => !img.update_id).length > 0 ? (
+                                            bug.images.filter(img => !img.update_id).map((img, idx) => (
                                               <div key={idx} style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px solid #EADCC9', overflow: 'hidden', backgroundColor: '#FAF6F0' }}>
                                                 <img src={getImageUrl(img.image_path)} alt="Bug spec" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onClick={() => window.open(getImageUrl(img.image_path), '_blank')} />
                                               </div>
@@ -6185,16 +6389,19 @@ const ScreenDetail = () => {
           zIndex: 9999,
           backdropFilter: 'blur(2px)'
         }}>
-          <div style={{
-            background: '#fff',
-            borderRadius: '16px',
-            width: '540px',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            boxShadow: '0 8px 30px rgba(0,0,0,0.15)',
-            border: '1px solid #EADCC9',
-            animation: 'fadeIn 0.2s ease-out'
-          }}>
+          <div
+            onPaste={handlePasteBugModal}
+            style={{
+              background: '#fff',
+              borderRadius: '16px',
+              width: '540px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              boxShadow: '0 8px 30px rgba(0,0,0,0.15)',
+              border: '1px solid #EADCC9',
+              animation: 'fadeIn 0.2s ease-out'
+            }}
+          >
             {/* Modal Header */}
             <div style={{
               display: 'flex',
@@ -6241,12 +6448,51 @@ const ScreenDetail = () => {
                 </div>
                 <div className="form-group" style={{ margin: 0 }}>
                   <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Trạng thái</label>
-                  <input
-                    type="text"
-                    value={bugModalMode === 'edit' ? getBugStatusLabel(bugModalData.status) : 'Mới'}
-                    disabled
-                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: '#F1F5F9', color: '#64748B', fontWeight: '500', boxSizing: 'border-box', height: '36px' }}
-                  />
+                  {bugModalMode === 'edit' ? (
+                    (() => {
+                      const currentStatus = getBugStatusLabel(bugModalData.status);
+                      if (currentStatus === 'Mới' || currentStatus === 'Sửa lại') {
+                        return (
+                          <select
+                            value={replyStatusVal || ''}
+                            onChange={(e) => setReplyStatusVal(e.target.value)}
+                            style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: '#fff', color: '#334155', fontWeight: '500', boxSizing: 'border-box', height: '36px', cursor: 'pointer' }}
+                          >
+                            <option value="">{currentStatus} (Hiện tại)</option>
+                            <option value="Đã sửa">Xác nhận đã sửa (Đã sửa)</option>
+                          </select>
+                        );
+                      } else if (currentStatus === 'Đã sửa') {
+                        return (
+                          <select
+                            value={replyStatusVal || ''}
+                            onChange={(e) => setReplyStatusVal(e.target.value)}
+                            style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: '#fff', color: '#334155', fontWeight: '500', boxSizing: 'border-box', height: '36px', cursor: 'pointer' }}
+                          >
+                            <option value="">Đã sửa (Hiện tại)</option>
+                            <option value="Hoàn thành">Xác nhận (Hoàn thành)</option>
+                            <option value="Sửa lại">Từ chối (Sửa lại)</option>
+                          </select>
+                        );
+                      } else {
+                        return (
+                          <input
+                            type="text"
+                            value={currentStatus}
+                            disabled
+                            style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: '#F1F5F9', color: '#64748B', fontWeight: '500', boxSizing: 'border-box', height: '36px' }}
+                          />
+                        );
+                      }
+                    })()
+                  ) : (
+                    <input
+                      type="text"
+                      value="Mới"
+                      disabled
+                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: '#F1F5F9', color: '#64748B', fontWeight: '500', boxSizing: 'border-box', height: '36px' }}
+                    />
+                  )}
                 </div>
               </div>
 
@@ -6284,93 +6530,126 @@ const ScreenDetail = () => {
 
               {/* Row 3: Mô tả lỗi */}
               <div className="form-group" style={{ margin: 0 }}>
-                <label className="required" style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Mô tả lỗi</label>
+                <label className="required" style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>
+                  Mô tả lỗi
+                  <span style={{ fontSize: '0.7rem', color: '#9CA3AF', fontWeight: 'normal', marginLeft: '8px' }}>
+                    💡 Có thể dán ảnh trực tiếp (Ctrl+V)
+                  </span>
+                </label>
                 <textarea
                   value={bugModalData.description}
                   onChange={(e) => setBugModalData(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Mô tả chi tiết hành vi lỗi hoặc sự khác biệt so với đặc tả..."
+                  onPaste={handlePasteBugModal}
+                  placeholder="Mô tả chi tiết hành vi lỗi hoặc sự khác biệt so với đặc tả... (Có thể dán ảnh bằng Ctrl+V)"
                   required
                   disabled={bugModalMode === 'edit'}
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', color: bugModalMode === 'edit' ? '#64748B' : '#334155', backgroundColor: bugModalMode === 'edit' ? '#F1F5F9' : '#fff', boxSizing: 'border-box', minHeight: '60px', fontFamily: 'inherit', outline: 'none' }}
                 />
               </div>
 
-              {/* Row 4: Large Image Box */}
+              {/* Row 4: Image Upload Zone & Preview List */}
               <div className="form-group" style={{ margin: 0 }}>
-                <input
-                  type="file"
-                  id="bug-image-upload"
-                  accept="image/*"
-                  onChange={handleBugImageUpload}
-                  disabled={bugModalMode === 'edit'}
-                  style={{ display: 'none' }}
-                />
-                <div
-                  onClick={() => {
-                    if (bugModalMode !== 'edit') {
-                      document.getElementById('bug-image-upload').click();
-                    }
-                  }}
-                  style={{
-                    width: '100%',
-                    height: '180px',
-                    border: '2px dashed #E2E8F0',
-                    borderRadius: '12px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    backgroundColor: '#F8FAFC',
-                    cursor: bugModalMode === 'edit' ? 'default' : 'pointer',
-                    overflow: 'hidden',
-                    position: 'relative'
-                  }}
-                >
-                  {bugImageUploading ? (
-                    <span style={{ fontSize: '0.82rem', color: '#64748B' }}>Đang tải ảnh lên...</span>
-                  ) : bugModalData.imagePath ? (
-                    <>
-                      <img
-                        src={getImageUrl(bugModalData.imagePath)}
-                        alt="Bug upload preview"
-                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                      />
-                      {bugModalMode !== 'edit' && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setBugModalData(prev => ({ ...prev, imagePath: '' }));
-                          }}
-                          style={{
-                            position: 'absolute',
-                            top: '10px',
-                            right: '10px',
-                            background: 'rgba(0,0,0,0.6)',
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: '50%',
-                            width: '24px',
-                            height: '24px',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: '14px'
-                          }}
-                        >
-                          &times;
-                        </button>
+                {bugModalMode !== 'edit' && (
+                  <>
+                    <input
+                      type="file"
+                      id="bug-image-upload"
+                      accept="image/*"
+                      multiple
+                      onChange={handleBugImageUpload}
+                      style={{ display: 'none' }}
+                    />
+                    <div
+                      onClick={() => {
+                        document.getElementById('bug-image-upload').click();
+                      }}
+                      style={{
+                        width: '100%',
+                        height: '110px',
+                        border: '2px dashed #E2E8F0',
+                        borderRadius: '12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: '#F8FAFC',
+                        cursor: 'pointer',
+                        overflow: 'hidden',
+                        position: 'relative',
+                        marginBottom: '10px'
+                      }}
+                    >
+                      {bugImageUploading ? (
+                        <span style={{ fontSize: '0.82rem', color: '#64748B' }}>Đang tải ảnh lên...</span>
+                      ) : (
+                        <>
+                          <span style={{ fontSize: '2rem', color: '#CBD5E1', marginBottom: '4px' }}>🖼️</span>
+                          <span style={{ fontSize: '0.78rem', color: '#64748B', fontWeight: 'bold' }}>Thêm hình ảnh lỗi</span>
+                          <span style={{ fontSize: '0.7rem', color: '#94A3B8', marginTop: '2px' }}>Hỗ trợ JPG, PNG (chọn nhiều / dán Ctrl+V)</span>
+                        </>
                       )}
-                    </>
-                  ) : (
-                    <>
-                      <span style={{ fontSize: '2.5rem', color: '#CBD5E1', marginBottom: '8px' }}>🖼️</span>
-                      <span style={{ fontSize: '0.78rem', color: '#64748B', fontWeight: 'bold' }}>Thêm hình ảnh lỗi</span>
-                      <span style={{ fontSize: '0.7rem', color: '#94A3B8', marginTop: '2px' }}>Hỗ trợ định dạng JPG, PNG</span>
-                    </>
-                  )}
-                </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Preview / Existing images list */}
+                {bugModalData.imagePaths && bugModalData.imagePaths.length > 0 && (
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
+                    {bugModalData.imagePaths.map((img, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          position: 'relative',
+                          width: '80px',
+                          height: '80px',
+                          border: '1px solid #E2E8F0',
+                          borderRadius: '8px',
+                          overflow: 'hidden',
+                          backgroundColor: '#F8FAFC'
+                        }}
+                      >
+                        <img
+                          src={getImageUrl(img)}
+                          alt={`Bug preview ${idx}`}
+                          onClick={() => window.open(getImageUrl(img), '_blank')}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }}
+                        />
+                        {bugModalMode !== 'edit' && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setBugModalData(prev => ({
+                                ...prev,
+                                imagePaths: prev.imagePaths.filter((_, i) => i !== idx)
+                              }));
+                            }}
+                            style={{
+                              position: 'absolute',
+                              top: '2px',
+                              right: '2px',
+                              background: 'rgba(239, 68, 68, 0.9)',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: '50%',
+                              width: '18px',
+                              height: '18px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '10px',
+                              lineHeight: '1',
+                              padding: 0
+                            }}
+                          >
+                            &times;
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Row 5: Người ghi nhận & Thời gian ghi nhận */}
@@ -6428,57 +6707,20 @@ const ScreenDetail = () => {
                 <>
                   {/* Phản hồi * */}
                   <div className="form-group" style={{ margin: 0 }}>
-                    <label className="required" style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Phản hồi</label>
+                    <label className="required" style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>
+                      Phản hồi
+                      <span style={{ fontSize: '0.7rem', color: '#9CA3AF', fontWeight: 'normal', marginLeft: '8px' }}>
+                        💡 Có thể dán ảnh trực tiếp (Ctrl+V)
+                      </span>
+                    </label>
                     <textarea
                       value={replyNotes}
                       onChange={(e) => setReplyNotes(e.target.value)}
-                      placeholder="Nhập nội dung phản hồi kết quả sửa lỗi..."
+                      onPaste={handlePasteBugModal}
+                      placeholder="Nhập nội dung phản hồi kết quả sửa lỗi... (Có thể dán ảnh bằng Ctrl+V)"
                       required
                       style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', color: '#334155', boxSizing: 'border-box', minHeight: '60px', fontFamily: 'inherit', outline: 'none' }}
                     />
-                  </div>
-
-                  {/* Cập nhật trạng thái */}
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Cập nhật trạng thái</label>
-                    <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '4px' }}>
-                      {(getBugStatusLabel(bugModalData.status) === 'Mới' || getBugStatusLabel(bugModalData.status) === 'Sửa lại') ? (
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#334155', fontWeight: '600', cursor: 'pointer' }}>
-                          <input
-                            type="checkbox"
-                            checked={replyStatusVal === 'Đã sửa'}
-                            onChange={(e) => setReplyStatusVal(e.target.checked ? 'Đã sửa' : '')}
-                            style={{ cursor: 'pointer' }}
-                          />
-                          Xác nhận đã sửa (Đã sửa)
-                        </label>
-                      ) : getBugStatusLabel(bugModalData.status) === 'Đã sửa' ? (
-                        <>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#059669', fontWeight: '600', cursor: 'pointer' }}>
-                            <input
-                              type="radio"
-                              name="status-transition-modal"
-                              checked={replyStatusVal === 'Hoàn thành'}
-                              onChange={() => setReplyStatusVal('Hoàn thành')}
-                              style={{ cursor: 'pointer' }}
-                            />
-                            Xác nhận (Hoàn thành)
-                          </label>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#EF4444', fontWeight: '600', cursor: 'pointer' }}>
-                            <input
-                              type="radio"
-                              name="status-transition-modal"
-                              checked={replyStatusVal === 'Từ chối'}
-                              onChange={() => setReplyStatusVal('Từ chối')}
-                              style={{ cursor: 'pointer' }}
-                            />
-                            Từ chối (Sửa lại)
-                          </label>
-                        </>
-                      ) : (
-                        <span style={{ fontSize: '0.8rem', color: '#64748B', fontStyle: 'italic' }}>Không có tùy chọn chuyển đổi trạng thái nào cho trạng thái này.</span>
-                      )}
-                    </div>
                   </div>
 
                   {/* Phản hồi images upload */}

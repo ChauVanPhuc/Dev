@@ -4,6 +4,7 @@ import { ArrowLeft, Plus, Edit2, Trash2, Check, X, Search, Shield, Layers, FileD
 import api from '@webShared/Services/api.service';
 import ExcelJS from 'exceljs';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
 const SCREEN_GROUPS = [
@@ -87,13 +88,18 @@ const PositionManagement = () => {
   const setCustomTitle = outletContext?.setCustomTitle;
   const setCustomSubtitle = outletContext?.setCustomSubtitle;
   const setCustomScreenCode = outletContext?.setCustomScreenCode;
+  
+  // Lấy metadata từ database thay vì hardcode
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/positions');
 
   // Cập nhật tiêu đề trang lên Layout Header
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle('Quản lý chức vụ');
-    if (setCustomSubtitle) setCustomSubtitle('Danh sách chức vụ trong hệ thống và phân quyền mặc định.');
-    if (setCustomScreenCode) setCustomScreenCode('AD3.5');
-  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   // Kiểm tra quyền ghi
   const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');

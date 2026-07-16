@@ -3,6 +3,7 @@ import { useNavigate, useParams, useOutletContext } from 'react-router-dom';
 import api from '@webShared/Services/api.service';
 import { authService } from '@modules/Auth/Models/auth.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 // Icons mapping for screens
 const SCREEN_ICONS = {
@@ -592,6 +593,9 @@ const UserEdit = ({ isProfile = false }) => {
   const setCustomTitle = outletContext?.setCustomTitle;
   const setCustomSubtitle = outletContext?.setCustomSubtitle;
   const setCustomScreenCode = outletContext?.setCustomScreenCode;
+  
+  // Lấy metadata từ database thay vì hardcode
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/users/:id/edit');
 
   // Cập nhật tiêu đề trang lên Layout Header
   useEffect(() => {

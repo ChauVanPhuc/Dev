@@ -4,9 +4,13 @@ import { useOutletContext, useNavigate } from 'react-router-dom';
 import { Search, Filter, Layers, FileUp, FileDown, Plus } from 'lucide-react';
 import '@styles/components.css';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const EquipmentHistoryView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
+  
+  // Lấy metadata từ database thay vì hardcode
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/equipment/history');
   const navigate = useNavigate();
 
   const [inspections, setInspections] = useState([]);
@@ -32,11 +36,12 @@ const EquipmentHistoryView = () => {
   };
 
   useEffect(() => {
-    setCustomScreenCode('AD37.2');
-    setCustomTitle('Nhật ký kiểm tra & Hiệu chuẩn thiết bị');
-    setCustomSubtitle('Lịch sử kiểm tra định kỳ, bảo trì và hiệu chuẩn chất lượng thiết bị.');
-    fetchInspections();
-  }, []);
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   // Filtered data
   const filtered = useMemo(() => {

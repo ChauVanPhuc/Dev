@@ -177,6 +177,9 @@ const ScreenBugManagementView = () => {
 
     if (files.length === 0) return;
 
+    e.preventDefault();
+    e.stopPropagation();
+
     for (const file of files) {
       try {
         showToast('Đang tải ảnh từ clipboard...', 'success');

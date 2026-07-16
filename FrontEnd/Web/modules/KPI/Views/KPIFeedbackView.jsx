@@ -3,11 +3,13 @@ import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Search, Plus, Trash2, Edit2, AlertTriangle, HelpCircle, Lock, Upload, Download } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
 const KPIFeedbackView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
   const navigate = useNavigate();
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/kpi/feedback');
   const [employees, setEmployees] = useState([]);
   const [selectedEmpId, setSelectedEmpId] = useState('');
   const [feedbacks, setFeedbacks] = useState([]);
@@ -50,9 +52,14 @@ const KPIFeedbackView = () => {
   });
 
   useEffect(() => {
-    setCustomScreenCode('AD7.5');
-    setCustomTitle('Ý kiến đóng góp & Nhận xét KPI');
-    setCustomSubtitle('Nhật ký và cấu trúc ý kiến đóng góp của từng nhân viên.');
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+
+  useEffect(() => {
     fetchEmployees();
   }, []);
 
