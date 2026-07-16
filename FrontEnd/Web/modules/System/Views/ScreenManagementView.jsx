@@ -455,15 +455,18 @@ const ScreenManagement = () => {
     const buildPercentage = totalScreens > 0 ? Math.round((completedScreens / totalScreens) * 100) : 0;
 
     const totalBugs = bugs.length;
-    const completedBugs = bugs.filter(b => b.status === 'Hoàn thành').length;
+    // Tiến độ chỉnh sửa (Dev sửa xong): status là 'Đã sửa' hoặc 'Hoàn thành'
+    const completedBugs = bugs.filter(b => b.status === 'Đã sửa' || b.status === 'Hoàn thành').length;
     const editPercentage = totalBugs > 0 ? Math.round((completedBugs / totalBugs) * 100) : 0;
 
-    const fixedBugs = bugs.filter(b => b.status === 'Đã sửa' || b.status === 'Hoàn thành').length;
+    // Tiến độ khắc phục (QC xác nhận hoàn thành): status là 'Hoàn thành'
+    const fixedBugs = bugs.filter(b => b.status === 'Hoàn thành').length;
     const recoveryPercentage = totalBugs > 0 ? Math.round((fixedBugs / totalBugs) * 100) : 0;
 
-    const urgentBugs = bugs.filter(b => b.severity === 'Critical' || b.severity === 'High');
+    // Lỗi khẩn cấp: Chỉ lọc mức độ 'Critical'
+    const urgentBugs = bugs.filter(b => b.severity === 'Critical');
     const totalUrgentBugs = urgentBugs.length;
-    const fixedUrgentBugs = urgentBugs.filter(b => b.status === 'Đã sửa' || b.status === 'Hoàn thành').length;
+    const fixedUrgentBugs = urgentBugs.filter(b => b.status === 'Hoàn thành').length;
     const urgentPercentage = totalUrgentBugs > 0 ? Math.round((fixedUrgentBugs / totalUrgentBugs) * 100) : 0;
 
     return {
