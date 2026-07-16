@@ -88,6 +88,13 @@ export const screenService = {
    */
   deleteScreen: async (id) => {
     return api.delete(`/screens/${id}`);
+  },
+
+  /**
+   * Sao chep mot man hinh
+   */
+  copyScreen: async (id) => {
+    return api.post(`/screens/${id}/copy`);
   }
 
 };

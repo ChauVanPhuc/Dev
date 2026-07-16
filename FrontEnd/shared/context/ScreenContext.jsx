@@ -24,6 +24,23 @@ export const ScreenProvider = ({ children }) => {
   }, []);
 
   const getScreenInfo = (path) => {
+    if (path.includes('screens/bugs')) {
+      return {
+        screenCode: 'HD06',
+        title: 'Danh sách lỗi hệ thống',
+        subtitle: 'HD06: Hiển thị danh sách các lỗi được ghi nhận trên hệ thống',
+        isActive: true
+      };
+    }
+    if (path.includes('screens/progress')) {
+      return {
+        screenCode: 'HD07',
+        title: 'Tiến độ thực hiện',
+        subtitle: 'HD07: Tổng quan về tiến độ dự án',
+        isActive: true
+      };
+    }
+
     // Custom override for machinery details
     if (path.includes('/machines/detail/')) {
       return {

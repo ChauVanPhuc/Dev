@@ -248,7 +248,11 @@ const UserManagement = () => {
       if (extraMenuRef.current && !extraMenuRef.current.contains(e.target)) setShowExtraMenu(false);
 
       // Chỉ đóng action menu khi click thực sự ra ngoài menu và ngoài nút bấm "..."
-      if (!e.target.closest('.action-menu') && !e.target.closest('.action-btn')) {
+      if (typeof e.target.closest === 'function') {
+        if (!e.target.closest('.action-menu') && !e.target.closest('.action-btn')) {
+          setActionMenuId(null);
+        }
+      } else {
         setActionMenuId(null);
       }
     };

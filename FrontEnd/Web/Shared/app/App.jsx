@@ -27,6 +27,7 @@ import BackupQRManagement from '@modules/System/Views/BackupQRManagementView';
 import ScreenManagement from '@modules/System/Views/ScreenManagementView';
 import ScreenDetail from '@modules/System/Views/ScreenDetailView';
 import ScreenBugManagement from '@modules/System/Views/ScreenBugManagementView';
+import ProjectProgress from '@modules/System/Views/ProjectProgressView';
 import DefectManagement from '@modules/Inspection/Views/DefectManagementView';
 import QualityRecords from '@modules/QualityRecords/Views/QualityRecordsListView';
 import QualityRecordsDetail from '@modules/QualityRecords/Views/QualityRecordsDetailView';
@@ -562,7 +563,8 @@ function App() {
             <Route path="data" element={<ProtectedRoute permissionKey="data"><DataPackaging /></ProtectedRoute>} />
             <Route path="screens" element={<ProtectedRoute permissionKey="screens"><ScreenManagement /></ProtectedRoute>} />
             <Route path="screens/:id" element={<ProtectedRoute permissionKey="screens"><ScreenDetail /></ProtectedRoute>} />
-            <Route path="bugs" element={<ProtectedRoute permissionKey="bugs"><ScreenBugManagement /></ProtectedRoute>} />
+            <Route path="screens/bugs" element={<ProtectedRoute permissionKey="bugs"><ScreenBugManagement /></ProtectedRoute>} />
+            <Route path="screens/progress" element={<ProtectedRoute permissionKey="screens"><ProjectProgress /></ProtectedRoute>} />
             <Route path="monitor" element={<ProtectedRoute permissionKey="monitor"><SystemMonitor /></ProtectedRoute>} />
             <Route path="equipment" element={<ProtectedRoute permissionKey="equipment"><EquipmentManagement /></ProtectedRoute>} />
             <Route path="equipment/categories" element={<ProtectedRoute permissionKey="equipment"><EquipmentCategories /></ProtectedRoute>} />

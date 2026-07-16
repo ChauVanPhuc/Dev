@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
+import { useParams, useNavigate, useOutletContext, useLocation } from 'react-router-dom';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
-import { Bug, Play, Type, Table2, CheckSquare, List, Layout, Menu, CreditCard, Sliders, Bell, Component } from 'lucide-react';
+import { Bug, Play, Type, Table2, CheckSquare, List, Layout, Menu, CreditCard, Sliders, Bell, Component, MoreVertical } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 
 const renderComponentIcon = (type) => {
@@ -32,6 +32,30 @@ const renderComponentIcon = (type) => {
   }
 };
 
+const CATEGORIES = [
+  { key: 'UI Component', label: 'UI Component', icon: '📂' },
+  { key: 'Logic / Service', label: 'Logic / Service', icon: '⚙️' },
+  { key: 'API Endpoint', label: 'API Endpoint', icon: '🔗' },
+  { key: 'Native API', label: 'Native API', icon: '📱' }
+];
+
+const getComponentCategory = (comp) => {
+  const type = comp.type || '';
+  if (['Button', 'Input Field', 'Checkbox / Radio', 'Dropdown / Select', 'Modal / Dialog', 'Navbar / Sidebar', 'Card', 'Table', 'Carousel / Slider', 'Toast / Alert', 'UI Component'].includes(type)) {
+    return 'UI Component';
+  }
+  if (['Logic / Service', 'Business Logic', 'Service'].includes(type) || type.toLowerCase().includes('service') || type.toLowerCase().includes('logic')) {
+    return 'Logic / Service';
+  }
+  if (['API Endpoint', 'API', 'Web Service'].includes(type) || type.toLowerCase().includes('api')) {
+    return 'API Endpoint';
+  }
+  if (['Native API', 'Native', 'Device'].includes(type)) {
+    return 'Native API';
+  }
+  return 'UI Component';
+};
+
 const getLoggedInUser = () => {
   try {
     const user = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
@@ -52,6 +76,7 @@ const getBugStatusLabel = (status) => {
 
 import { screenService } from '@modules/System/Models/screen.service';
 import { bugService } from '@modules/System/Models/bug.service';
+import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
 
 import ScreenSimulator from '@modules/System/Views/components/ScreenSimulation';
 
@@ -113,7 +138,7 @@ const renderTechnicalDetails = (technicalDetails) => {
 
       const parsed = JSON.parse(trimmed);
 
-      
+
 
       const fixUnicodeChars = (str) => {
 
@@ -145,17 +170,17 @@ const renderTechnicalDetails = (technicalDetails) => {
 
               <span style={{ fontWeight: '600', color: '#7B5233', fontSize: '0.85rem' }}>Tên hàm xử lý:</span>{' '}
 
-              <code className="tech-code font-mono" style={{ 
+              <code className="tech-code font-mono" style={{
 
-                background: '#F5E6D3', 
+                background: '#F5E6D3',
 
-                color: '#4A2E20', 
+                color: '#4A2E20',
 
-                padding: '2px 6px', 
+                padding: '2px 6px',
 
-                borderRadius: 4, 
+                borderRadius: 4,
 
-                fontSize: '0.8rem' 
+                fontSize: '0.8rem'
 
               }}>{handlerName}</code>
 
@@ -187,17 +212,17 @@ const renderTechnicalDetails = (technicalDetails) => {
 
                   <li key={aIdx} style={{ listStyleType: 'disc', color: '#4A2E20', fontSize: '0.85rem' }}>
 
-                    <code className="tech-code font-mono" style={{ 
+                    <code className="tech-code font-mono" style={{
 
-                      background: '#F5E6D3', 
+                      background: '#F5E6D3',
 
-                      color: '#4A2E20', 
+                      color: '#4A2E20',
 
-                      padding: '1px 4px', 
+                      padding: '1px 4px',
 
-                      borderRadius: 3, 
+                      borderRadius: 3,
 
-                      fontSize: '0.75rem' 
+                      fontSize: '0.75rem'
 
                     }}>{fixUnicodeChars(api)}</code>
 
@@ -217,21 +242,21 @@ const renderTechnicalDetails = (technicalDetails) => {
 
               <span style={{ fontWeight: '600', color: '#7B5233', fontSize: '0.85rem' }}>Mã nguồn xử lý:</span>
 
-              <pre className="tech-code-snippet font-mono" style={{ 
+              <pre className="tech-code-snippet font-mono" style={{
 
-                background: '#1E1E1E', 
+                background: '#1E1E1E',
 
-                color: '#A9B7C6', 
+                color: '#A9B7C6',
 
-                padding: '10px 12px', 
+                padding: '10px 12px',
 
-                borderRadius: 6, 
+                borderRadius: 6,
 
-                fontSize: '0.75rem', 
+                fontSize: '0.75rem',
 
-                overflowX: 'auto', 
+                overflowX: 'auto',
 
-                marginTop: 6, 
+                marginTop: 6,
 
                 fontFamily: 'monospace',
 
@@ -269,7 +294,7 @@ const renderTechnicalDetails = (technicalDetails) => {
 
     .replace(/\u000e/g, '');
 
-    
+
 
   return cleanText.split('\n').map((line, idx) => (
 
@@ -295,7 +320,7 @@ const getWorkflowForScreen = (screen, components = []) => {
 
   if (doc && doc.workflows && doc.workflows.length > 0) return doc.workflows;
 
-  
+
 
   const uiComps = components.filter(c => c.type === 'UI Component' && c.name !== 'UserGuideButton' && c.name !== 'NotificationBell');
 
@@ -657,7 +682,7 @@ const getDatabaseOperations = (comp, dbTables) => {
 
   const desc = (comp.description || '').toLowerCase();
 
-  
+
 
   return tables.map(table => {
 
@@ -665,7 +690,7 @@ const getDatabaseOperations = (comp, dbTables) => {
 
     let impact = `Truy vấn dữ liệu liên quan từ bảng ${table}.`;
 
-    
+
 
     if (name.includes('create') || name.includes('add') || desc.includes('tạo') || desc.includes('thêm')) {
 
@@ -687,7 +712,7 @@ const getDatabaseOperations = (comp, dbTables) => {
 
     }
 
-    
+
 
     return { table, action, impact };
 
@@ -707,7 +732,7 @@ const getApiDocumentation = (apiItem) => {
 
   const path = parts[1] || apiItem;
 
-  
+
 
   let params = [];
 
@@ -735,7 +760,7 @@ const getApiDocumentation = (apiItem) => {
 
   }
 
-  
+
 
   return { method, path, params };
 
@@ -1000,7 +1025,7 @@ const getComponentSubElements = (comp) => {
 const getComponentHint = (comp) => {
   const type = comp.type || 'Khác';
   const name = (comp.name || '').toLowerCase();
-  
+
   if (type === 'Button') return 'Nút bấm kích hoạt hành động.';
   if (type === 'Input Field') return 'Ô nhập dữ liệu văn bản.';
   if (type === 'Checkbox / Radio') return 'Hộp chọn một hoặc nhiều mục.';
@@ -1101,7 +1126,7 @@ const generateNextScreenCode = (subsystemName, screensList) => {
   const matchingCodes = (screensList || [])
     .map(s => s.current_code || s.default_code || '')
     .filter(code => code.startsWith(prefix));
-    
+
   let maxSeq = 0;
   matchingCodes.forEach(code => {
     const numPart = code.substring(prefix.length);
@@ -1110,7 +1135,7 @@ const generateNextScreenCode = (subsystemName, screensList) => {
       maxSeq = parsed;
     }
   });
-  
+
   const nextSeq = maxSeq + 1;
   const bb = String(nextSeq).padStart(2, '0');
   return `${prefix}${bb}`;
@@ -1119,6 +1144,7 @@ const generateNextScreenCode = (subsystemName, screensList) => {
 const ScreenDetail = () => {
 
   const { id } = useParams();
+  const location = useLocation();
 
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -1194,6 +1220,33 @@ const ScreenDetail = () => {
   const [replyStatusVal, setReplyStatusVal] = useState('');
   const [itAccounts, setItAccounts] = useState(['IT']);
 
+  const [confirmModal, setConfirmModal] = useState({
+    visible: false,
+    title: '',
+    message: '',
+    onConfirm: null,
+    type: 'warning'
+  });
+
+  const showConfirm = (title, message, onConfirm, type = 'warning') => {
+    setConfirmModal({
+      visible: true,
+      title,
+      message,
+      onConfirm: () => {
+        if (typeof onConfirm === 'function') {
+          onConfirm();
+        }
+        setConfirmModal(prev => ({ ...prev, visible: false }));
+      },
+      type
+    });
+  };
+
+  const [activeTab, setActiveTab] = useState('components');
+  const [selectedGuideIdx, setSelectedGuideIdx] = useState(0);
+  const [isGuideCompDropdownOpen, setIsGuideCompDropdownOpen] = useState(false);
+
   useEffect(() => {
     const fetchItAccounts = async () => {
       try {
@@ -1229,6 +1282,27 @@ const ScreenDetail = () => {
   const [activeComponent, setActiveComponent] = useState(null);
 
   const [hoveredComponent, setHoveredComponent] = useState(null);
+
+  const [activeComponentMenu, setActiveComponentMenu] = useState(null);
+
+  const [activeBugMenu, setActiveBugMenu] = useState(null);
+
+
+
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (typeof e.target.closest === 'function') {
+        if (!e.target.closest('.comp-action-btn') && !e.target.closest('.action-menu')) {
+          setActiveComponentMenu(null);
+        }
+        if (!e.target.closest('.bug-action-btn') && !e.target.closest('.action-menu')) {
+          setActiveBugMenu(null);
+        }
+      }
+    };
+    document.addEventListener('click', handleOutsideClick);
+    return () => document.removeEventListener('click', handleOutsideClick);
+  }, []);
 
   const [viewMode, setViewMode] = useState('blueprint'); // 'blueprint', 'workflow', or 'cards'
 
@@ -1281,21 +1355,51 @@ const ScreenDetail = () => {
     }
 
     if (id === 'new') {
-      setScreen({
-        id: 'new',
-        title: '',
-        route_path: '',
-        platform: 'Web',
-        status: 'Mới thiết kế',
-        target_date: '',
-        components: [
-          { id: 1, name: 'Nút A', type: 'Button', description: 'Nút bấm kích hoạt hành động.' },
-          { id: 2, name: 'Ô nhập liệu A', type: 'Input Field', description: 'Ô nhập dữ liệu văn bản.' },
-          { id: 3, name: 'Bảng A', type: 'Table', description: 'Bảng hiển thị dữ liệu cột.' },
-          { id: 4, name: 'Nút radio B', type: 'Checkbox / Radio', description: 'Hộp chọn một hoặc nhiều mục.' }
-        ],
-        bugs: []
-      });
+      const copyData = location.state?.copyFromScreen;
+      if (copyData) {
+        setScreen({
+          id: 'new',
+          title: copyData.title ? `${copyData.title} - Sao chép` : '',
+          route_path: copyData.route_path ? `${copyData.route_path}-copy` : '',
+          platform: copyData.platform || 'Web',
+          status: 'Mới thiết kế',
+          target_date: copyData.target_date || '',
+          subtitle: copyData.subtitle || '',
+          components: (copyData.components || []).map((c, idx) => ({
+            id: idx + 1,
+            name: c.name,
+            type: c.type,
+            description: c.description || '',
+            technical_details: c.technical_details || '',
+            file_path: c.file_path || '',
+            is_active: c.is_active !== undefined ? c.is_active : true
+          })),
+          guides: (copyData.guides || []).map((g, idx) => ({
+            step_number: g.step_number || (idx + 1),
+            title: g.title,
+            related_components: g.related_components || '',
+            description: g.description || ''
+          })),
+          bugs: []
+        });
+      } else {
+        setScreen({
+          id: 'new',
+          title: '',
+          route_path: '',
+          platform: 'Web',
+          status: 'Mới thiết kế',
+          target_date: '',
+          components: [
+            { id: 1, name: 'Nút A', type: 'Button', description: 'Nút bấm kích hoạt hành động.' },
+            { id: 2, name: 'Ô nhập liệu A', type: 'Input Field', description: 'Ô nhập dữ liệu văn bản.' },
+            { id: 3, name: 'Bảng A', type: 'Table', description: 'Bảng hiển thị dữ liệu cột.' },
+            { id: 4, name: 'Nút radio B', type: 'Checkbox / Radio', description: 'Hộp chọn một hoặc nhiều mục.' }
+          ],
+          guides: [],
+          bugs: []
+        });
+      }
       setLoading(false);
       return;
     }
@@ -1303,7 +1407,7 @@ const ScreenDetail = () => {
     try {
       setLoading(true);
       const data = await screenService.getScreenDetail(id);
-      
+
       try {
         const bugsData = await bugService.getBugs();
         if (bugsData) {
@@ -1354,7 +1458,7 @@ const ScreenDetail = () => {
       showToast('Vui lòng nhập đầy đủ Tên màn hình và Đường dẫn Route!', 'error');
       return;
     }
-    
+
     if (!formData.target_date) {
       showToast('Vui lòng chọn ngày hoàn thành dự kiến!', 'error');
       return;
@@ -1364,7 +1468,7 @@ const ScreenDetail = () => {
       showToast('Ngày hoàn thành dự kiến phải lớn hơn hoặc bằng ngày hiện tại!', 'error');
       return;
     }
-    
+
     const componentsPayload = (screen?.components || []).map(c => ({
       name: c.name,
       type: c.type,
@@ -1372,6 +1476,13 @@ const ScreenDetail = () => {
       technical_details: c.technical_details || '',
       file_path: c.file_path || '',
       is_active: c.is_active !== undefined ? c.is_active : true
+    }));
+
+    const guidesPayload = (screen?.guides || []).map(g => ({
+      step_number: g.step_number,
+      title: g.title,
+      related_components: g.related_components || '',
+      description: g.description || ''
     }));
 
     try {
@@ -1384,7 +1495,8 @@ const ScreenDetail = () => {
           target_date: formData.target_date,
           subtitle: formData.subtitle,
           subsystem: formData.subsystem || 'Quản lý hệ thống',
-          components: componentsPayload
+          components: componentsPayload,
+          guides: guidesPayload
         });
         showToast('Tạo mới đặc tả màn hình thành công!');
         navigate(`/admin/screens/${res.id}`);
@@ -1397,7 +1509,8 @@ const ScreenDetail = () => {
           target_date: formData.target_date,
           subtitle: formData.subtitle,
           mockup_path: screen.mockup_path,
-          components: componentsPayload
+          components: componentsPayload,
+          guides: guidesPayload
         });
         showToast('Cập nhật đặc tả màn hình thành công!');
         fetchScreenDetail();
@@ -1405,6 +1518,29 @@ const ScreenDetail = () => {
     } catch (err) {
       showToast('Lưu đặc tả thất bại!', 'error');
     }
+  };
+
+  const handleCopyScreenDetail = () => {
+    if (!screen || id === 'new') return;
+    showConfirm(
+      'Sao chép đặc tả màn hình',
+      `Bạn có chắc chắn muốn sao chép cấu hình màn hình này thành một màn hình mới (không kèm ảnh mockup)?`,
+      () => {
+        const copyPayload = {
+          title: formData.title,
+          route_path: formData.route_path,
+          platform: formData.platform,
+          subsystem: formData.subsystem,
+          status: 'Mới thiết kế',
+          target_date: formData.target_date,
+          subtitle: formData.subtitle,
+          components: screen.components,
+          guides: screen.guides
+        };
+        navigate('/admin/screens/new', { state: { copyFromScreen: copyPayload } });
+      },
+      'warning'
+    );
   };
 
   const handleMockupUpload = async (e) => {
@@ -1417,14 +1553,14 @@ const ScreenDetail = () => {
         const mockups = screen.mockup_path ? screen.mockup_path.split(',').filter(Boolean) : [];
         const updatedMockups = [...mockups, res.url];
         const updatedPath = updatedMockups.join(',');
-        
+
         if (id === 'new') {
           setScreen(prev => ({ ...prev, mockup_path: updatedPath }));
           setCurrentMockupIdx(updatedMockups.length - 1);
           showToast('Tải lên hình ảnh thành công!');
           return;
         }
-        
+
         await screenService.updateScreen(screen.id, {
           title: formData.title,
           route_path: formData.route_path,
@@ -1434,7 +1570,7 @@ const ScreenDetail = () => {
           subtitle: formData.subtitle,
           mockup_path: updatedPath
         });
-        
+
         showToast('Tải lên hình ảnh thành công!');
         setCurrentMockupIdx(updatedMockups.length - 1);
         fetchScreenDetail();
@@ -1444,33 +1580,42 @@ const ScreenDetail = () => {
     }
   };
 
-  const handleDeleteMockup = async () => {
-    if (window.confirm('Bạn có chắc chắn muốn xóa hình ảnh này?')) {
-      const mockups = screen.mockup_path ? screen.mockup_path.split(',').filter(Boolean) : [];
-      const updatedMockups = mockups.filter((_, idx) => idx !== currentMockupIdx);
-      const updatedPath = updatedMockups.join(',');
-      
-      if (id === 'new') {
-        setScreen(prev => ({ ...prev, mockup_path: updatedPath }));
-        setCurrentMockupIdx(0);
-        showToast('Xóa hình ảnh thành công!');
-        return;
+  const handleDeleteMockup = () => {
+    showConfirm(
+      'Xác nhận xóa',
+      'Bạn có chắc chắn muốn xóa hình ảnh này?',
+      async () => {
+        const mockups = screen.mockup_path ? screen.mockup_path.split(',').filter(Boolean) : [];
+        const updatedMockups = mockups.filter((_, idx) => idx !== currentMockupIdx);
+        const updatedPath = updatedMockups.join(',');
+
+        if (id === 'new') {
+          setScreen(prev => ({ ...prev, mockup_path: updatedPath }));
+          setCurrentMockupIdx(0);
+          showToast('Xóa hình ảnh thành công!');
+          return;
+        }
+
+        try {
+          await screenService.updateScreen(screen.id, {
+            title: formData.title,
+            route_path: formData.route_path,
+            platform: formData.platform,
+            status: formData.status,
+            target_date: formData.target_date,
+            subtitle: formData.subtitle,
+            mockup_path: updatedPath
+          });
+
+          showToast('Xóa hình ảnh thành công!');
+          setCurrentMockupIdx(0);
+          fetchScreenDetail();
+        } catch (err) {
+          console.error(err);
+          showToast('Xóa hình ảnh thất bại!', 'error');
+        }
       }
-      
-      await screenService.updateScreen(screen.id, {
-        title: formData.title,
-        route_path: formData.route_path,
-        platform: formData.platform,
-        status: formData.status,
-        target_date: formData.target_date,
-        subtitle: formData.subtitle,
-        mockup_path: updatedPath
-      });
-      
-      showToast('Xóa hình ảnh thành công!');
-      setCurrentMockupIdx(0);
-      fetchScreenDetail();
-    }
+    );
   };
 
   const handleBugImageUpload = async (e) => {
@@ -1516,7 +1661,7 @@ const ScreenDetail = () => {
         image_paths: bugModalData.imagePath ? [bugModalData.imagePath] : [],
         notes: ''
       };
-      
+
       await bugService.createBug(payload);
       showToast('Khai báo lỗi thành công!');
       setShowBugModal(false);
@@ -1527,25 +1672,29 @@ const ScreenDetail = () => {
     }
   };
 
-  const handleDeleteBug = async (bugId) => {
-    if (window.confirm('Bạn có chắc chắn muốn xóa lỗi này khỏi cơ sở dữ liệu?')) {
-      try {
-        await bugService.deleteBug(bugId);
-        showToast('Xóa lỗi thành công!');
-        fetchScreenDetail();
-      } catch (err) {
-        console.error(err);
-        showToast('Xóa lỗi thất bại!', 'error');
+  const handleDeleteBug = (bugId) => {
+    showConfirm(
+      'Xác nhận xóa',
+      'Bạn có chắc chắn muốn xóa lỗi này khỏi cơ sở dữ liệu?',
+      async () => {
+        try {
+          await bugService.deleteBug(bugId);
+          showToast('Xóa lỗi thành công!');
+          fetchScreenDetail();
+        } catch (err) {
+          console.error(err);
+          showToast('Xóa lỗi thất bại!', 'error');
+        }
       }
-    }
+    );
   };
 
   const handleOpenEditBugModal = (bug) => {
     setBugModalMode('edit');
     setSelectedBug(bug);
-    
+
     const parsed = parseDescription(bug.description);
-    
+
     setBugModalData({
       id: bug.id,
       componentName: parsed.tag || 'Chung',
@@ -1557,11 +1706,11 @@ const ScreenDetail = () => {
       imagePath: bug.images && bug.images.length > 0 ? bug.images[0].image_path : '',
       status: bug.status || 'New'
     });
-    
+
     setReplyNotes('');
     setReplyImages([]);
     setReplyStatusVal('');
-    
+
     setShowBugModal(true);
   };
 
@@ -1570,12 +1719,12 @@ const ScreenDetail = () => {
       showToast('Vui lòng nhập nội dung phản hồi!', 'error');
       return;
     }
-    
+
     let newStatus = bugModalData.status;
     const current = (bugModalData.status || '').toLowerCase();
     const isNewOrReopened = current === 'new' || current === 'mới' || current === 'sửa lại' || current === 'in progress' || current === 'in_progress';
     const isFixed = current === 'resolved' || current === 'đã sửa';
-    
+
     if (isNewOrReopened) {
       if (replyStatusVal === 'Đã sửa') {
         newStatus = 'Đã sửa';
@@ -1587,7 +1736,7 @@ const ScreenDetail = () => {
         newStatus = 'Sửa lại';
       }
     }
-    
+
     try {
       const updatePayload = {
         severity: bugModalData.severity,
@@ -1596,7 +1745,7 @@ const ScreenDetail = () => {
         requested_at: bugModalData.targetDate ? `${bugModalData.targetDate}T12:00:00Z` : undefined
       };
       await bugService.updateBug(bugModalData.id, updatePayload);
-      
+
       const replyPayload = {
         status: newStatus,
         notes: replyNotes,
@@ -1605,7 +1754,7 @@ const ScreenDetail = () => {
         assignee: bugModalData.assignee
       };
       await bugService.addBugUpdate(bugModalData.id, replyPayload);
-      
+
       showToast('Cập nhật tiến độ lỗi thành công!');
       setShowBugModal(false);
       fetchScreenDetail();
@@ -1643,10 +1792,10 @@ const ScreenDetail = () => {
       showToast('Vui lòng nhập nội dung phản hồi!', 'error');
       return;
     }
-    
+
     let newStatus = bug.status;
     const current = (bug.status || '').toLowerCase();
-    
+
     if (current === 'new' || current === 'mới' || current === 'sửa lại') {
       if (replyStatusVal !== 'Đã sửa') {
         showToast('Vui lòng tích chọn trạng thái "Đã sửa" trước khi phản hồi!', 'error');
@@ -1669,7 +1818,7 @@ const ScreenDetail = () => {
         image_paths: replyImages,
         assignee: bug.assignee
       };
-      
+
       await bugService.addBugUpdate(bug.id, payload);
       showToast('Cập nhật phản hồi thành công!');
       setReplyNotes('');
@@ -1707,7 +1856,7 @@ const ScreenDetail = () => {
         backend_description: newComponentBackend.trim()
       })
     };
-    
+
     setScreen(prev => {
       if (!prev) return null;
       return {
@@ -1715,9 +1864,36 @@ const ScreenDetail = () => {
         components: [...(prev.components || []), newComp]
       };
     });
-    
+
     setShowAddComponentModal(false);
     showToast('Đã thêm thành phần mới vào danh sách!');
+  };
+
+  const handleDeleteComponent = (compName) => {
+    showConfirm(
+      'Xóa thành phần đặc tả',
+      `Bạn có chắc chắn muốn xóa thành phần "${compName}"? Các hướng dẫn sử dụng liên quan sẽ mất liên kết.`,
+      () => {
+        setScreen(prev => {
+          if (!prev) return null;
+          const updatedComponents = (prev.components || []).filter(c => c.name !== compName);
+          const updatedGuides = (prev.guides || []).map(g => {
+            if (g.related_components) {
+              const comps = g.related_components.split(',').map(c => c.trim()).filter(c => c !== compName);
+              return { ...g, related_components: comps.join(', ') };
+            }
+            return g;
+          });
+          return {
+            ...prev,
+            components: updatedComponents,
+            guides: updatedGuides
+          };
+        });
+        showToast(`Đã xóa thành phần "${compName}" khỏi danh sách tạm thời. Hãy nhấn "Lưu lại" để hoàn tất.`);
+      },
+      'danger'
+    );
   };
 
   useEffect(() => {
@@ -1746,11 +1922,11 @@ const ScreenDetail = () => {
 
     if (!screen || !screen.components) return [];
 
-    
+
 
     return screen.components.filter((comp) => {
 
-      const matchesSearch = 
+      const matchesSearch =
 
         comp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
 
@@ -1760,7 +1936,7 @@ const ScreenDetail = () => {
 
         (comp.file_path && comp.file_path.toLowerCase().includes(searchQuery.toLowerCase()));
 
-        
+
 
       let matchesType = false;
 
@@ -1778,7 +1954,7 @@ const ScreenDetail = () => {
 
       }
 
-      
+
 
       return matchesSearch && matchesType;
 
@@ -1798,7 +1974,7 @@ const ScreenDetail = () => {
 
     if (!screen || !screen.components) return { total: 0, ui: 0, logic: 0, native: 0, api: 0 };
 
-    
+
 
     return screen.components.reduce(
 
@@ -2122,13 +2298,13 @@ const ScreenDetail = () => {
           <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: '800', color: '#2D1A12', display: 'flex', alignItems: 'center', gap: '6px' }}>
             Thông tin màn hình
           </h3>
-          
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap', fontSize: '0.85rem' }}>
             {/* Phân hệ select */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ color: '#64748B', fontWeight: '600', fontSize: '0.84rem' }}>Phân hệ:</span>
-              <select 
-                value={formData.subsystem} 
+              <select
+                value={formData.subsystem}
                 onChange={(e) => setFormData(prev => ({ ...prev, subsystem: e.target.value }))}
                 style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #E2E8F0', outline: 'none', fontWeight: '600', color: '#334155', fontSize: '0.82rem', backgroundColor: '#fff', height: '34px', cursor: 'pointer' }}
               >
@@ -2146,8 +2322,8 @@ const ScreenDetail = () => {
             {/* Nền tảng select */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ color: '#64748B', fontWeight: '600', fontSize: '0.84rem' }}>Nền tảng:</span>
-              <select 
-                value={formData.platform} 
+              <select
+                value={formData.platform}
                 onChange={(e) => setFormData(prev => ({ ...prev, platform: e.target.value }))}
                 style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #E2E8F0', outline: 'none', fontWeight: '600', color: '#334155', fontSize: '0.82rem', backgroundColor: '#fff', height: '34px', cursor: 'pointer' }}
               >
@@ -2159,8 +2335,8 @@ const ScreenDetail = () => {
             {/* Trạng thái select */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ color: '#64748B', fontWeight: '600', fontSize: '0.84rem' }}>Trạng thái:</span>
-              <select 
-                value={formData.status} 
+              <select
+                value={formData.status}
                 onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
                 style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #E2E8F0', outline: 'none', fontWeight: '600', color: '#334155', fontSize: '0.82rem', backgroundColor: '#fff', height: '34px', cursor: 'pointer' }}
               >
@@ -2171,17 +2347,26 @@ const ScreenDetail = () => {
 
             {/* Actions group */}
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <button 
-                type="button" 
-                className="btn btn-primary" 
+              <button
+                type="button"
+                className="btn btn-primary"
                 onClick={handleSave}
                 style={{ padding: '6px 16px', fontSize: '0.82rem', borderRadius: '8px', backgroundColor: '#7B5233', borderColor: '#7B5233', color: '#fff', fontWeight: 'bold', height: '34px', cursor: 'pointer' }}
               >
                 Lưu đặc tả
               </button>
               {!isNew && (
-                <button 
-                  type="button" 
+                <button
+                  type="button"
+                  onClick={handleCopyScreenDetail}
+                  style={{ padding: '6px 16px', fontSize: '0.82rem', borderRadius: '8px', backgroundColor: '#5C4033', border: 'none', color: '#fff', fontWeight: 'bold', height: '34px', cursor: 'pointer' }}
+                >
+                  Sao chép
+                </button>
+              )}
+              {!isNew && (
+                <button
+                  type="button"
                   onClick={() => {
                     const defaultAssignee = itAccounts[0] || 'IT';
                     setBugModalMode('create');
@@ -2209,68 +2394,68 @@ const ScreenDetail = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
           <div className="form-group" style={{ margin: 0 }}>
             <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Mã màn hình</label>
-            <input 
-              type="text" 
-              className="form-control" 
-              value={isNew ? generatedCode : (screen?.current_code || '')} 
+            <input
+              type="text"
+              className="form-control"
+              value={isNew ? generatedCode : (screen?.current_code || '')}
               disabled
               style={{ backgroundColor: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', color: '#64748B', fontWeight: '600', height: '36px', boxSizing: 'border-box' }}
             />
           </div>
 
           <div className="form-group" style={{ margin: 0 }}>
-            <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Tên màn hình *</label>
-            <input 
-              type="text" 
-              className="form-control" 
-              value={formData.title} 
+            <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Tên màn hình</label>
+            <input
+              type="text"
+              className="form-control"
+              value={formData.title}
               onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
               placeholder="Ví dụ: Giám sát nhiệt độ lò"
-              required 
+              required
               style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box' }}
             />
           </div>
 
           <div className="form-group" style={{ margin: 0 }}>
-            <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Đường dẫn *</label>
+            <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Đường dẫn</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <span style={{ fontSize: '0.8rem', color: '#64748B', whiteSpace: 'nowrap' }}>{formData.subsystem}/</span>
-              <input 
-                type="text" 
-                className="form-control" 
-                value={formData.route_path} 
+              <input
+                type="text"
+                className="form-control"
+                value={formData.route_path}
                 onChange={(e) => setFormData(prev => ({ ...prev, route_path: e.target.value }))}
                 placeholder="users"
-                required 
+                required
                 style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box', flex: 1 }}
               />
             </div>
           </div>
 
           <div className="form-group" style={{ margin: 0 }}>
-            <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Ngày hoàn thành dự kiến *</label>
-            <input 
-              type="date" 
-              className="form-control" 
-              value={formData.target_date} 
+            <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Ngày hoàn thành dự kiến</label>
+            <input
+              type="date"
+              className="form-control"
+              value={formData.target_date}
               onChange={(e) => setFormData(prev => ({ ...prev, target_date: e.target.value }))}
-              required 
+              required
               min={new Date().toISOString().split('T')[0]}
               style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box' }}
             />
           </div>
         </div>
-        
+
         {/* Full-width Mô tả at the bottom */}
         <div className="form-group" style={{ marginTop: '16px', marginBottom: 0 }}>
-          <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Mô tả *</label>
-          <input 
-            type="text" 
-            className="form-control" 
-            value={formData.subtitle} 
+          <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Mô tả</label>
+          <input
+            type="text"
+            className="form-control"
+            value={formData.subtitle}
             onChange={(e) => setFormData(prev => ({ ...prev, subtitle: e.target.value }))}
             placeholder="Mô tả chức năng/vai trò..."
-            required 
+            required
             style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box', width: '100%' }}
           />
         </div>
@@ -2282,20 +2467,20 @@ const ScreenDetail = () => {
 
   return (
     <div className="detail-container fade-in" style={{ padding: '0 0 20px 0' }}>
-      
+
       {/* 1. Top Metadata Form Card */}
       {renderMetadataForm()}
 
       {/* 2. Middle Row Split Grid Layout */}
-      <div className="detail-row-grid" style={{ 
-        display: 'grid', 
-        gridTemplateColumns: isMockupExpanded ? '1fr' : '280px 1fr', 
-        gap: '20px', 
-        marginBottom: '20px', 
-        alignItems: 'start' 
+      <div className="detail-row-grid" style={{
+        display: 'grid',
+        gridTemplateColumns: isMockupExpanded ? '1fr' : '280px 1fr',
+        gap: '20px',
+        marginBottom: '20px',
+        alignItems: 'start'
       }}>
-        
-        {/* Left Column Card: Danh sách components */}
+
+        {/* Left Column Card: Danh sách components / Hướng dẫn sử dụng */}
         {!isMockupExpanded && (
           <div className="card component-list-card" style={{
             background: '#fff',
@@ -2305,120 +2490,373 @@ const ScreenDetail = () => {
             boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
             display: 'flex',
             flexDirection: 'column',
-            minHeight: '480px'
+            minHeight: '590px'
           }}>
-            <h4 style={{ margin: '0 0 16px 0', fontSize: '0.82rem', fontWeight: '800', color: '#2D1A12', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Danh sách components
-            </h4>
-            
-            <div style={{ flex: 1, overflowY: 'auto', maxHeight: '420px', paddingRight: '4px' }}>
-              {screen.components && screen.components.length > 0 ? (
-                screen.components.map(comp => (
-                  <div 
-                    key={comp.id} 
-                    onClick={() => {
-                      setActiveComponent(comp.name);
-                      setSpecDescriptions(prev => ({
-                        ...prev,
-                        Frontend: `Đặc tả chi tiết Component [${comp.name}]:\n- Loại component: ${comp.type}\n- Gợi ý UI: ${getComponentHint(comp)}\n- Chi tiết: ${comp.description || 'Chưa cập nhật mô tả chi tiết.'}`
-                      }));
-                    }}
-                    title={getComponentHint(comp)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '10px',
-                      padding: '10px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid',
-                      borderColor: activeComponent === comp.name ? '#7B5233' : '#F1F5F9',
-                      backgroundColor: activeComponent === comp.name ? '#FAF6F0' : '#FFF',
-                      cursor: 'pointer',
-                      marginBottom: '8px',
-                      fontSize: '0.8rem',
-                      fontWeight: activeComponent === comp.name ? 'bold' : 'normal',
-                      transition: 'all 0.2s',
-                      color: activeComponent === comp.name ? '#7B5233' : '#334155'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
-                      <span style={{ width: '20px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {renderComponentIcon(comp.type)}
-                      </span>
-                      <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{comp.name}</span>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const defaultAssignee = itAccounts[0] || 'IT';
-                        setBugModalMode('create');
-                        setBugModalData({
-                          componentName: comp.name,
-                          severity: 'Medium',
-                          description: '',
-                          reporter: getLoggedInUser(),
-                          assignee: defaultAssignee,
-                          targetDate: new Date().toISOString().split('T')[0],
-                          imagePath: ''
-                        });
-                        setShowBugModal(true);
-                      }}
-                      title={`Báo lỗi cho component ${comp.name}`}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        opacity: 0.6,
-                        padding: '4px'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.opacity = 1}
-                      onMouseLeave={(e) => e.currentTarget.style.opacity = 0.6}
-                    >
-                      <Bug size={16} style={{ color: '#EF4444' }} />
-                    </button>
-                  </div>
-                ))
-              ) : (
-                <div style={{ padding: '20px', textAlign: 'center', color: '#94A3B8', fontStyle: 'italic', fontSize: '0.78rem' }}>
-                  Không có component nào.
-                </div>
-              )}
+            <div style={{ display: 'flex', borderBottom: '1px solid #F1F5F9', marginBottom: '16px', gap: '16px' }}>
+              <button
+                type="button"
+                onClick={() => setActiveTab('components')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: activeTab === 'components' ? '2px solid #7B5233' : '2px solid transparent',
+                  color: activeTab === 'components' ? '#7B5233' : '#64748B',
+                  fontWeight: activeTab === 'components' ? 'bold' : 'normal',
+                  padding: '8px 4px',
+                  cursor: 'pointer',
+                  fontSize: '0.8rem',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  outline: 'none'
+                }}
+              >
+                Thành phần
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('guides')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: activeTab === 'guides' ? '2px solid #7B5233' : '2px solid transparent',
+                  color: activeTab === 'guides' ? '#7B5233' : '#64748B',
+                  fontWeight: activeTab === 'guides' ? 'bold' : 'normal',
+                  padding: '8px 4px',
+                  cursor: 'pointer',
+                  fontSize: '0.8rem',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  outline: 'none'
+                }}
+              >
+                Hướng dẫn sử dụng
+              </button>
             </div>
 
-            <button
-              type="button"
-              onClick={handleAddComponent}
-              style={{
-                background: 'transparent',
-                border: '1px dashed #7B5233',
-                color: '#7B5233',
-                borderRadius: '8px',
-                padding: '8px 16px',
-                fontSize: '0.78rem',
-                fontWeight: '700',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                width: '100%',
-                justifyContent: 'center',
-                marginTop: '12px'
-              }}
-            >
-              <span>+ Thêm thành phần</span>
-            </button>
+            {activeTab === 'components' ? (
+              <>
+                <div style={{ flex: 1, overflowY: 'auto', maxHeight: '420px', paddingRight: '4px' }}>
+                  {screen.components && screen.components.length > 0 ? (
+                    screen.components.map(comp => (
+                      <div
+                        key={comp.id}
+                        onClick={() => {
+                          setActiveComponent(comp.name);
+                          setSpecDescriptions(prev => ({
+                            ...prev,
+                            Frontend: `Đặc tả chi tiết Component [${comp.name}]:\n- Loại component: ${comp.type}\n- Gợi ý UI: ${getComponentHint(comp)}\n- Chi tiết: ${comp.description || 'Chưa cập nhật mô tả chi tiết.'}`
+                          }));
+                        }}
+                        title={getComponentHint(comp)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '10px',
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                          border: '1px solid',
+                          borderColor: activeComponent === comp.name ? '#7B5233' : '#F1F5F9',
+                          backgroundColor: activeComponent === comp.name ? '#FAF6F0' : '#FFF',
+                          cursor: 'pointer',
+                          marginBottom: '8px',
+                          fontSize: '0.8rem',
+                          fontWeight: activeComponent === comp.name ? 'bold' : 'normal',
+                          transition: 'all 0.2s',
+                          color: activeComponent === comp.name ? '#7B5233' : '#334155'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+                          <span style={{ width: '20px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {renderComponentIcon(comp.type)}
+                          </span>
+                          <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{comp.name}</span>
+                        </div>
+
+                        <div style={{ position: 'relative' }}>
+                          <button
+                            type="button"
+                            className="comp-action-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveComponentMenu(activeComponentMenu === comp.name ? null : comp.name);
+                            }}
+                            title="Thao tác"
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              opacity: 0.6,
+                              padding: '4px',
+                              color: '#7B5233',
+                              borderRadius: '4px'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.opacity = 1}
+                            onMouseLeave={(e) => e.currentTarget.style.opacity = 0.6}
+                          >
+                            <MoreVertical size={16} />
+                          </button>
+                          {activeComponentMenu === comp.name && (
+                            <div className="action-menu" style={{
+                              position: 'absolute',
+                              right: 0,
+                              top: '24px',
+                              zIndex: 100,
+                              width: '120px',
+                              backgroundColor: '#FFF',
+                              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                              border: '1px solid #E2E8F0',
+                              borderRadius: '6px',
+                              padding: '4px 0',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              opacity: 1,
+                              animation: 'none'
+                            }}>
+                              <button
+                                className="action-menu-item"
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveComponentMenu(null);
+                                  const defaultAssignee = itAccounts[0] || 'IT';
+                                  setBugModalMode('create');
+                                  setBugModalData({
+                                    componentName: comp.name,
+                                    severity: 'Medium',
+                                    description: '',
+                                    reporter: getLoggedInUser(),
+                                    assignee: defaultAssignee,
+                                    targetDate: new Date().toISOString().split('T')[0],
+                                    imagePath: ''
+                                  });
+                                  setShowBugModal(true);
+                                }}
+                                style={{
+                                  padding: '8px 12px',
+                                  fontSize: '0.78rem',
+                                  textAlign: 'left',
+                                  border: 'none',
+                                  background: 'none',
+                                  cursor: 'pointer',
+                                  color: '#334155'
+                                }}
+                              >
+                                Báo lỗi
+                              </button>
+                              <button
+                                className="action-menu-item danger"
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveComponentMenu(null);
+                                  handleDeleteComponent(comp.name);
+                                }}
+                                style={{
+                                  padding: '8px 12px',
+                                  fontSize: '0.78rem',
+                                  textAlign: 'left',
+                                  border: 'none',
+                                  background: 'none',
+                                  cursor: 'pointer',
+                                  color: '#EF4444'
+                                }}
+                              >
+                                Xóa
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ padding: '20px', textAlign: 'center', color: '#94A3B8', fontStyle: 'italic', fontSize: '0.78rem' }}>
+                      Không có component nào.
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleAddComponent}
+                  style={{
+                    background: 'transparent',
+                    border: '1px dashed #7B5233',
+                    color: '#7B5233',
+                    borderRadius: '8px',
+                    padding: '8px 16px',
+                    fontSize: '0.78rem',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    width: '100%',
+                    justifyContent: 'center',
+                    marginTop: '12px'
+                  }}
+                >
+                  <span>+ Thêm thành phần</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{ flex: 1, overflowY: 'auto', maxHeight: '420px', paddingRight: '4px' }}>
+                  {screen.guides && screen.guides.length > 0 ? (
+                    screen.guides.map((step, idx) => (
+                      <div
+                        key={step.id || idx}
+                        onClick={() => setSelectedGuideIdx(idx)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '10px',
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                          border: '1px solid',
+                          borderColor: selectedGuideIdx === idx ? '#7B5233' : '#F1F5F9',
+                          backgroundColor: selectedGuideIdx === idx ? '#FAF6F0' : '#FFF',
+                          cursor: 'pointer',
+                          marginBottom: '8px',
+                          fontSize: '0.8rem',
+                          fontWeight: selectedGuideIdx === idx ? 'bold' : 'normal',
+                          transition: 'all 0.2s',
+                          color: selectedGuideIdx === idx ? '#7B5233' : '#334155'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+                          <span style={{ width: '20px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                            ⏩
+                          </span>
+                          <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                            Bước {step.step_number || (idx + 1)}: {step.title || 'Hành động mới'}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (idx > 0) {
+                                setScreen(prev => {
+                                  const list = [...(prev.guides || [])];
+                                  const temp = list[idx];
+                                  list[idx] = list[idx - 1];
+                                  list[idx - 1] = temp;
+                                  list.forEach((item, i) => { item.step_number = i + 1; });
+                                  return { ...prev, guides: list };
+                                });
+                                setSelectedGuideIdx(idx - 1);
+                              }
+                            }}
+                            disabled={idx === 0}
+                            style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', opacity: idx === 0 ? 0.3 : 0.6, padding: '2px', fontSize: '0.7rem' }}
+                          >
+                            ▲
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (idx < screen.guides.length - 1) {
+                                setScreen(prev => {
+                                  const list = [...(prev.guides || [])];
+                                  const temp = list[idx];
+                                  list[idx] = list[idx + 1];
+                                  list[idx + 1] = temp;
+                                  list.forEach((item, i) => { item.step_number = i + 1; });
+                                  return { ...prev, guides: list };
+                                });
+                                setSelectedGuideIdx(idx + 1);
+                              }
+                            }}
+                            disabled={idx === screen.guides.length - 1}
+                            style={{ background: 'none', border: 'none', cursor: idx === screen.guides.length - 1 ? 'default' : 'pointer', opacity: idx === screen.guides.length - 1 ? 0.3 : 0.6, padding: '2px', fontSize: '0.7rem' }}
+                          >
+                            ▼
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              showConfirm(
+                                'Xác nhận xóa',
+                                `Bạn có chắc chắn muốn xóa bước "${step.title || 'bước này'}" khỏi tài liệu hướng dẫn?`,
+                                () => {
+                                  setScreen(prev => {
+                                    const filtered = (prev.guides || []).filter((_, i) => i !== idx);
+                                    filtered.forEach((item, i) => { item.step_number = i + 1; });
+                                    return { ...prev, guides: filtered };
+                                  });
+                                  setSelectedGuideIdx(Math.max(0, idx - 1));
+                                  showToast('Đã xóa bước hướng dẫn!');
+                                }
+                              );
+                            }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', opacity: 0.6, padding: '2px', fontSize: '0.7rem' }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ padding: '20px', textAlign: 'center', color: '#94A3B8', fontStyle: 'italic', fontSize: '0.78rem' }}>
+                      Chưa khai báo các bước hướng dẫn.
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextStepNum = (screen.guides || []).length + 1;
+                    const newStep = {
+                      id: `temp_${Date.now()}`,
+                      step_number: nextStepNum,
+                      title: 'Hành động mới',
+                      related_components: '',
+                      description: ''
+                    };
+                    setScreen(prev => ({
+                      ...prev,
+                      guides: [...(prev.guides || []), newStep]
+                    }));
+                    setSelectedGuideIdx(nextStepNum - 1);
+                    showToast('Đã thêm bước hướng dẫn mới!');
+                  }}
+                  style={{
+                    background: 'transparent',
+                    border: '1px dashed #7B5233',
+                    color: '#7B5233',
+                    borderRadius: '8px',
+                    padding: '8px 16px',
+                    fontSize: '0.78rem',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    width: '100%',
+                    justifyContent: 'center',
+                    marginTop: '12px'
+                  }}
+                >
+                  <span>+ Thêm bước</span>
+                </button>
+              </>
+            )}
           </div>
         )}
 
         {/* Right Column: Simulator/Mockup & Spec Tab Pane */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          
+
           {/* Mockup Simulator Frame Card */}
           <div className="card mockup-carousel-card" style={{
             background: '#fff',
@@ -2432,15 +2870,15 @@ const ScreenDetail = () => {
             transition: 'all 0.3s ease-in-out'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '10px', marginBottom: '12px' }}>
-              <span 
+              <span
                 onClick={() => setIsMockupExpanded(!isMockupExpanded)}
-                style={{ 
-                  fontSize: '1.25rem', 
-                  color: '#7B5233', 
-                  cursor: 'pointer', 
-                  fontWeight: 'bold', 
-                  padding: '4px 10px', 
-                  borderRadius: '6px', 
+                style={{
+                  fontSize: '1.25rem',
+                  color: '#7B5233',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  padding: '4px 10px',
+                  borderRadius: '6px',
                   backgroundColor: isMockupExpanded ? '#FAF6F0' : 'transparent',
                   transition: 'all 0.2s',
                   userSelect: 'none'
@@ -2455,15 +2893,15 @@ const ScreenDetail = () => {
               <input type="file" id="mockup-file-upload-main" accept="image/*" onChange={handleMockupUpload} style={{ display: 'none' }} />
             </div>
 
-            <div style={{ 
-              flex: 1, 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              background: '#F8FAFC', 
-              borderRadius: '8px', 
-              minHeight: isMockupExpanded ? '520px' : '240px', 
-              overflow: 'hidden', 
+            <div style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: '#F8FAFC',
+              borderRadius: '8px',
+              minHeight: isMockupExpanded ? '520px' : '240px',
+              overflow: 'hidden',
               border: '1px solid #F1F5F9',
               transition: 'all 0.3s ease-in-out'
             }}>
@@ -2471,12 +2909,12 @@ const ScreenDetail = () => {
                 (() => {
                   const mockups = screen.mockup_path.split(',').filter(Boolean);
                   return (
-                    <img 
-                      src={getImageUrl(mockups[currentMockupIdx])} 
-                      alt="Mockup design" 
-                      style={{ 
-                        maxWidth: '100%', 
-                        maxHeight: isMockupExpanded ? '520px' : '250px', 
+                    <img
+                      src={getImageUrl(mockups[currentMockupIdx])}
+                      alt="Mockup design"
+                      style={{
+                        maxWidth: '100%',
+                        maxHeight: isMockupExpanded ? '520px' : '250px',
                         objectFit: 'contain',
                         transition: 'all 0.3s ease-in-out'
                       }}
@@ -2495,9 +2933,9 @@ const ScreenDetail = () => {
             {screen.mockup_path && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #F1F5F9', paddingTop: '10px', marginTop: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <button 
-                    type="button" 
-                    disabled={currentMockupIdx === 0} 
+                  <button
+                    type="button"
+                    disabled={currentMockupIdx === 0}
                     onClick={() => setCurrentMockupIdx(prev => prev - 1)}
                     style={{ padding: '3px 8px', border: '1px solid #E2E8F0', background: '#fff', borderRadius: '4px', cursor: 'pointer' }}
                   >
@@ -2506,8 +2944,8 @@ const ScreenDetail = () => {
                   {(() => {
                     const mockups = screen.mockup_path.split(',').filter(Boolean);
                     return mockups.map((_, i) => (
-                      <button 
-                        key={i} 
+                      <button
+                        key={i}
                         onClick={() => setCurrentMockupIdx(i)}
                         style={{
                           padding: '3px 7px',
@@ -2525,20 +2963,20 @@ const ScreenDetail = () => {
                       </button>
                     ));
                   })()}
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     disabled={(() => {
                       const mockups = screen.mockup_path.split(',').filter(Boolean);
                       return currentMockupIdx === mockups.length - 1;
-                    })()} 
+                    })()}
                     onClick={() => setCurrentMockupIdx(prev => prev + 1)}
                     style={{ padding: '3px 8px', border: '1px solid #E2E8F0', background: '#fff', borderRadius: '4px', cursor: 'pointer' }}
                   >
                     &gt;
                   </button>
                 </div>
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={handleDeleteMockup}
                   style={{ background: 'transparent', border: 'none', color: '#EF4444', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
                 >
@@ -2559,81 +2997,333 @@ const ScreenDetail = () => {
               flexDirection: 'column',
               boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '10px', marginBottom: '12px' }}>
-                <span style={{ fontSize: '0.82rem', fontWeight: '800', color: '#2D1A12', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Thông tin đặc tả
-                </span>
-                
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#F1F5F9', padding: '2px', borderRadius: '8px' }}>
-                  {['Frontend', 'Luồng xử lý', 'Backend'].map(tab => {
-                    const modeMap = {
-                      'Frontend': 'blueprint',
-                      'Luồng xử lý': 'workflow',
-                      'Backend': 'cards'
-                    };
-                    const isActive = viewMode === modeMap[tab];
-                    return (
-                      <button
-                        key={tab}
-                        type="button"
-                        onClick={() => setViewMode(modeMap[tab])}
-                        style={{
-                          padding: '4px 12px',
-                          border: 'none',
-                          background: isActive ? '#fff' : 'transparent',
-                          color: isActive ? '#2D1A12' : '#64748B',
-                          borderRadius: '6px',
-                          fontSize: '0.72rem',
-                          fontWeight: '700',
-                          cursor: 'pointer',
-                          boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.05)' : 'none'
-                        }}
-                      >
-                        {tab}
-                      </button>
-                    );
-                  })}
-                  <span style={{ padding: '0 6px', color: '#94A3B8', fontSize: '0.75rem' }}>v</span>
-                </div>
-              </div>
+              {activeTab === 'guides' ? (
+                <>
+                  <div style={{ borderBottom: '1px solid #F1F5F9', paddingBottom: '10px', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '0.82rem', fontWeight: '800', color: '#2D1A12', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Thông tin đặc tả
+                    </span>
+                  </div>
+                  {screen.guides && screen.guides.length > 0 && selectedGuideIdx >= 0 && selectedGuideIdx < screen.guides.length ? (
+                    (() => {
+                      const currentStep = screen.guides[selectedGuideIdx];
+                      const selectedComps = currentStep.related_components ? currentStep.related_components.split(',').map(c => c.trim()).filter(Boolean) : [];
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '16px' }}>
+                            <div className="form-group" style={{ margin: 0 }}>
+                              <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.75rem', display: 'block', marginBottom: '6px' }}>Bước</label>
+                              <select
+                                value={currentStep.step_number}
+                                onChange={(e) => {
+                                  const newNum = parseInt(e.target.value);
+                                  setScreen(prev => {
+                                    const list = [...(prev.guides || [])];
+                                    const targetIdx = newNum - 1;
+                                    const sourceIdx = selectedGuideIdx;
+                                    const [removed] = list.splice(sourceIdx, 1);
+                                    list.splice(targetIdx, 0, removed);
+                                    list.forEach((item, i) => { item.step_number = i + 1; });
+                                    return { ...prev, guides: list };
+                                  });
+                                  setSelectedGuideIdx(newNum - 1);
+                                }}
+                                style={{ width: '100%', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '6px 10px', fontSize: '0.8rem', outline: 'none', height: '34px', boxSizing: 'border-box' }}
+                              >
+                                {(screen.guides || []).map((_, i) => (
+                                  <option key={i + 1} value={i + 1}>Bước {i + 1}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="form-group" style={{ margin: 0 }}>
+                              <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.75rem', display: 'block', marginBottom: '6px' }}>Tên nội dung *</label>
+                              <input
+                                type="text"
+                                value={currentStep.title || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setScreen(prev => {
+                                    const list = [...(prev.guides || [])];
+                                    list[selectedGuideIdx] = { ...list[selectedGuideIdx], title: val };
+                                    return { ...prev, guides: list };
+                                  });
+                                }}
+                                placeholder="Tên nội dung / hành động..."
+                                required
+                                style={{ width: '100%', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '6px 10px', fontSize: '0.8rem', boxSizing: 'border-box', outline: 'none', height: '34px' }}
+                              />
+                            </div>
+                          </div>
 
-              <div className="form-group" style={{ margin: 0 }}>
-                <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.75rem', display: 'block', marginBottom: '6px' }}>Mô tả</label>
-                <textarea
-                  rows="4"
-                  value={
-                    viewMode === 'blueprint' ? specDescriptions.Frontend :
-                    viewMode === 'workflow' ? specDescriptions['Luồng xử lý'] : specDescriptions.Backend
-                }
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setSpecDescriptions(prev => {
-                    const next = { ...prev };
-                    if (viewMode === 'blueprint') next.Frontend = val;
-                    else if (viewMode === 'workflow') next['Luồng xử lý'] = val;
-                    else next.Backend = val;
-                    return next;
-                  });
-                }}
-                placeholder={
-                  viewMode === 'blueprint' ? 'Đặc tả chi tiết giao diện người dùng và cách bố trí các thành phần.' :
-                  viewMode === 'workflow' ? 'Đặc tả luồng nghiệp vụ, tương tác và xử lý dữ liệu của màn hình.' :
-                  'Đặc tả các API endpoint liên kết, dịch vụ và cấu trúc dữ liệu phía máy chủ.'
-                }
-                style={{
-                  width: '100%',
-                  fontSize: '0.8rem',
-                  border: '1px solid #E2E8F0',
-                  borderRadius: '8px',
-                  padding: '10px',
-                  boxSizing: 'border-box',
-                  outline: 'none',
-                  fontFamily: 'inherit'
-                }}
-              />
+                          <div className="form-group" style={{ margin: 0, position: 'relative' }}>
+                            <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.75rem', display: 'block', marginBottom: '6px' }}>Các thành phần liên quan</label>
+                            <div
+                              onClick={() => setIsGuideCompDropdownOpen(!isGuideCompDropdownOpen)}
+                              style={{
+                                width: '100%',
+                                border: '1px solid #E2E8F0',
+                                borderRadius: '8px',
+                                padding: '6px 12px',
+                                fontSize: '0.8rem',
+                                backgroundColor: '#FFF',
+                                cursor: 'pointer',
+                                minHeight: '34px',
+                                boxSizing: 'border-box',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                flexWrap: 'wrap',
+                                gap: '6px'
+                              }}
+                            >
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', flex: 1 }}>
+                                {selectedComps.length > 0 ? (
+                                  selectedComps.map(c => (
+                                    <span
+                                      key={c}
+                                      style={{
+                                        backgroundColor: '#FAF6F0',
+                                        border: '1px solid #EADCC9',
+                                        color: '#7B5233',
+                                        borderRadius: '4px',
+                                        padding: '2px 6px',
+                                        fontSize: '0.72rem',
+                                        fontWeight: 'bold',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px'
+                                      }}
+                                    >
+                                      {c}
+                                      <span
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const filtered = selectedComps.filter(item => item !== c);
+                                          const newVal = filtered.join(', ');
+                                          setScreen(prev => {
+                                            const list = [...(prev.guides || [])];
+                                            list[selectedGuideIdx] = { ...list[selectedGuideIdx], related_components: newVal };
+                                            return { ...prev, guides: list };
+                                          });
+                                        }}
+                                        style={{ cursor: 'pointer', color: '#A1826F', fontSize: '0.65rem' }}
+                                      >
+                                        ✕
+                                      </span>
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span style={{ color: '#94A3B8' }}>Chọn các thành phần liên quan...</span>
+                                )}
+                              </div>
+                              <span style={{ fontSize: '0.7rem', color: '#94A3B8' }}>{isGuideCompDropdownOpen ? '▲' : '▼'}</span>
+                            </div>
+
+                            {isGuideCompDropdownOpen && (
+                              <>
+                                <div
+                                  onClick={() => setIsGuideCompDropdownOpen(false)}
+                                  style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 990 }}
+                                />
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    top: '100%',
+                                    left: 0,
+                                    right: 0,
+                                    backgroundColor: '#fff',
+                                    border: '1px solid #E2E8F0',
+                                    borderRadius: '8px',
+                                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                                    zIndex: 995,
+                                    maxHeight: '180px',
+                                    overflowY: 'auto',
+                                    marginTop: '4px',
+                                    padding: '6px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '2px'
+                                  }}
+                                >
+                                  {screen.components && screen.components.length > 0 ? (
+                                    screen.components.map(comp => {
+                                      const isChecked = selectedComps.includes(comp.name);
+                                      return (
+                                        <div
+                                          key={comp.id}
+                                          onClick={() => {
+                                            let updated;
+                                            if (isChecked) {
+                                              updated = selectedComps.filter(item => item !== comp.name);
+                                            } else {
+                                              updated = [...selectedComps, comp.name];
+                                            }
+                                            const newVal = updated.join(', ');
+                                            setScreen(prev => {
+                                              const list = [...(prev.guides || [])];
+                                              list[selectedGuideIdx] = { ...list[selectedGuideIdx], related_components: newVal };
+                                              return { ...prev, guides: list };
+                                            });
+                                          }}
+                                          onMouseEnter={(e) => {
+                                            if (!isChecked) e.currentTarget.style.backgroundColor = '#FAF6F0';
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            if (!isChecked) e.currentTarget.style.backgroundColor = 'transparent';
+                                          }}
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'flex-start',
+                                            gap: '10px',
+                                            padding: '8px 12px',
+                                            borderRadius: '6px',
+                                            cursor: 'pointer',
+                                            fontSize: '0.78rem',
+                                            userSelect: 'none',
+                                            backgroundColor: isChecked ? '#FAF6F0' : 'transparent',
+                                            color: isChecked ? '#7B5233' : '#334155',
+                                            fontWeight: isChecked ? 'bold' : 'normal',
+                                            width: '100%',
+                                            boxSizing: 'border-box',
+                                            textAlign: 'left',
+                                            transition: 'background-color 0.2s ease'
+                                          }}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={isChecked}
+                                            readOnly
+                                            style={{ cursor: 'pointer', margin: 0, width: '16px', height: '16px', flexShrink: 0 }}
+                                          />
+                                          <span style={{ textAlign: 'left', display: 'inline-block' }}>{comp.name}</span>
+                                        </div>
+                                      );
+                                    })
+                                  ) : (
+                                    <div style={{ padding: '8px', color: '#94A3B8', fontSize: '0.75rem', fontStyle: 'italic' }}>
+                                      Không có component nào.
+                                    </div>
+                                  )}
+                                </div>
+                              </>
+                            )}
+                          </div>
+
+                          <div className="form-group" style={{ margin: 0 }}>
+                            <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.75rem', display: 'block', marginBottom: '6px' }}>Mô tả chi tiết</label>
+                            <textarea
+                              rows="4"
+                              value={currentStep.description || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setScreen(prev => {
+                                  const list = [...(prev.guides || [])];
+                                  list[selectedGuideIdx] = { ...list[selectedGuideIdx], description: val };
+                                  return { ...prev, guides: list };
+                                });
+                              }}
+                              placeholder="Mô tả chi tiết hành động hoặc hướng dẫn của bước..."
+                              style={{
+                                width: '100%',
+                                fontSize: '0.8rem',
+                                border: '1px solid #E2E8F0',
+                                borderRadius: '8px',
+                                padding: '10px',
+                                boxSizing: 'border-box',
+                                outline: 'none',
+                                fontFamily: 'inherit'
+                              }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })()
+                  ) : (
+                    <div style={{ padding: '20px', textAlign: 'center', color: '#94A3B8', fontStyle: 'italic', fontSize: '0.8rem' }}>
+                      Vui lòng chọn hoặc thêm một bước để chỉnh sửa thông tin đặc tả.
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '10px', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '0.82rem', fontWeight: '800', color: '#2D1A12', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Thông tin đặc tả
+                    </span>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#F1F5F9', padding: '2px', borderRadius: '8px' }}>
+                      {['Frontend', 'Luồng xử lý', 'Backend'].map(tab => {
+                        const modeMap = {
+                          'Frontend': 'blueprint',
+                          'Luồng xử lý': 'workflow',
+                          'Backend': 'cards'
+                        };
+                        const isActive = viewMode === modeMap[tab];
+                        return (
+                          <button
+                            key={tab}
+                            type="button"
+                            onClick={() => setViewMode(modeMap[tab])}
+                            style={{
+                              padding: '4px 12px',
+                              border: 'none',
+                              background: isActive ? '#fff' : 'transparent',
+                              color: isActive ? '#2D1A12' : '#64748B',
+                              borderRadius: '6px',
+                              fontSize: '0.72rem',
+                              fontWeight: '700',
+                              cursor: 'pointer',
+                              boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.05)' : 'none'
+                            }}
+                          >
+                            {tab === 'Backend' ? 'Backend ▾' : tab}
+                          </button>
+                        );
+                      })}
+                      <span style={{ padding: '0 6px', color: '#94A3B8', fontSize: '0.75rem' }}>v</span>
+                    </div>
+                  </div>
+
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.75rem', display: 'block', marginBottom: '6px' }}>Mô tả</label>
+                    <textarea
+                      rows="4"
+                      value={
+                        viewMode === 'blueprint' ? specDescriptions.Frontend :
+                          viewMode === 'workflow' ? specDescriptions['Luồng xử lý'] : specDescriptions.Backend
+                      }
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSpecDescriptions(prev => {
+                          const next = { ...prev };
+                          if (viewMode === 'blueprint') next.Frontend = val;
+                          else if (viewMode === 'workflow') next['Luồng xử lý'] = val;
+                          else next.Backend = val;
+                          return next;
+                        });
+                      }}
+                      placeholder={
+                        viewMode === 'blueprint' ? 'Đặc tả chi tiết giao diện người dùng và cách bố trí các thành phần.' :
+                          viewMode === 'workflow' ? 'Đặc tả luồng nghiệp vụ, tương tác và xử lý dữ liệu của màn hình.' :
+                            'Đặc tả các API endpoint liên kết, dịch vụ và cấu trúc dữ liệu phía máy chủ.'
+                      }
+                      style={{
+                        width: '100%',
+                        fontSize: '0.8rem',
+                        border: '1px solid #E2E8F0',
+                        borderRadius: '8px',
+                        padding: '10px',
+                        boxSizing: 'border-box',
+                        outline: 'none',
+                        fontFamily: 'inherit'
+                      }}
+                    />
+                  </div>
+                </>
+              )}
             </div>
-          </div>
-        )}
+          )}
         </div>
       </div>
 
@@ -2647,8 +3337,8 @@ const ScreenDetail = () => {
           boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
           backgroundColor: '#fff'
         }}>
-          <div 
-            className="bugs-section-header" 
+          <div
+            className="bugs-section-header"
             onClick={() => setIsBugListCollapsed(!isBugListCollapsed)}
             style={{
               padding: '12px 20px',
@@ -2696,7 +3386,7 @@ const ScreenDetail = () => {
                         <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>Ngày cập nhật</th>
                         <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>Người cập nhật</th>
                         <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>Ngày ghi nhận</th>
-                        <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>Thao tác</th>
+                        <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>THAO TÁC</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2711,9 +3401,14 @@ const ScreenDetail = () => {
                         };
                         return (
                           <React.Fragment key={bug.id}>
-                            <tr 
+                            <tr
                               onClick={() => setExpandedBugId(isBugExpanded ? null : bug.id)}
-                              style={{ cursor: 'pointer', backgroundColor: isBugExpanded ? '#FAF6F0' : undefined }}
+                              style={{ 
+                                cursor: 'pointer', 
+                                backgroundColor: isBugExpanded ? '#FAF6F0' : undefined,
+                                position: 'relative',
+                                zIndex: activeBugMenu === bug.id ? 50 : 1
+                              }}
                               className="clickable-row"
                             >
                               <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }} className="font-mono font-bold">BUG-{bug.id}</td>
@@ -2725,59 +3420,109 @@ const ScreenDetail = () => {
                                 </span>
                               </td>
                               <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }}>
-                                <span className={`status-badge ${
-                                  getBugStatusLabel(bug.status) === 'Hoàn thành' 
-                                    ? 'status-resolved' 
-                                    : (getBugStatusLabel(bug.status) === 'Đã sửa' 
-                                      ? 'status-processing' 
-                                      : 'status-new')
-                                }`}>
+                                <span className={`status-badge ${getBugStatusLabel(bug.status) === 'Hoàn thành'
+                                  ? 'status-resolved'
+                                  : (getBugStatusLabel(bug.status) === 'Đã sửa'
+                                    ? 'status-processing'
+                                    : 'status-new')
+                                  }`}>
                                   {getBugStatusLabel(bug.status)}
                                 </span>
                               </td>
                               <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }}>{formatDate(bug.completed_at || bug.created_at)}</td>
                               <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }}>{bug.assignee || '-'}</td>
                               <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }}>{formatDate(bug.created_at)}</td>
-                              <td 
-                                style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem', textAlign: 'center' }}
+                              <td
+                                style={{ 
+                                  padding: '10px', 
+                                  border: '1px solid #E5E7EB', 
+                                  fontSize: '0.78rem', 
+                                  textAlign: 'center',
+                                  position: 'relative',
+                                  zIndex: activeBugMenu === bug.id ? 100 : 1
+                                }}
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', position: 'relative' }}>
                                   <button
+                                    className="bug-action-btn"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleOpenEditBugModal(bug);
+                                      if (e.nativeEvent && e.nativeEvent.stopImmediatePropagation) {
+                                        e.nativeEvent.stopImmediatePropagation();
+                                      }
+                                      setActiveBugMenu(activeBugMenu === bug.id ? null : bug.id);
                                     }}
+                                    title="Thao tác"
                                     style={{
                                       border: 'none',
                                       background: 'none',
-                                      color: '#7B5233',
-                                      fontWeight: 'bold',
+                                      color: '#64748B',
                                       cursor: 'pointer',
-                                      fontSize: '0.76rem',
-                                      padding: '2px 4px'
+                                      padding: '4px'
                                     }}
                                   >
-                                    Chi tiết
+                                    <MoreVertical size={16} style={{ pointerEvents: 'none' }} />
                                   </button>
-                                  <span style={{ color: '#E2E8F0' }}>|</span>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDeleteBug(bug.id);
-                                    }}
-                                    style={{
-                                      border: 'none',
-                                      background: 'none',
-                                      color: '#EF4444',
-                                      fontWeight: 'bold',
-                                      cursor: 'pointer',
-                                      fontSize: '0.76rem',
-                                      padding: '2px 4px'
-                                    }}
-                                  >
-                                    Xóa
-                                  </button>
+                                  {activeBugMenu === bug.id && (
+                                    <div className="action-menu" style={{
+                                      position: 'absolute',
+                                      right: 0,
+                                      top: '100%',
+                                      backgroundColor: 'white',
+                                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                                      borderRadius: '4px',
+                                      zIndex: 9999,
+                                      minWidth: '120px',
+                                      border: '1px solid #E2E8F0',
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      opacity: 1,
+                                      animation: 'none'
+                                    }}>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setActiveBugMenu(null);
+                                          handleOpenEditBugModal(bug);
+                                        }}
+                                        style={{
+                                          padding: '8px 12px',
+                                          textAlign: 'left',
+                                          background: 'none',
+                                          border: 'none',
+                                          borderBottom: '1px solid #E2E8F0',
+                                          cursor: 'pointer',
+                                          fontSize: '0.85rem',
+                                          color: '#7B5233',
+                                          fontWeight: '600'
+                                        }}
+                                      >
+                                        Chi tiết
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setActiveBugMenu(null);
+                                          handleDeleteBug(bug.id);
+                                        }}
+                                        style={{
+                                          padding: '8px 12px',
+                                          textAlign: 'left',
+                                          background: 'none',
+                                          border: 'none',
+                                          cursor: 'pointer',
+                                          fontSize: '0.85rem',
+                                          color: '#EF4444',
+                                          fontWeight: '600'
+                                        }}
+                                      >
+                                        Xóa
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -2787,69 +3532,69 @@ const ScreenDetail = () => {
                               <tr>
                                 <td colSpan={9} style={{ padding: '15px 25px', backgroundColor: '#FDFCFB', borderLeft: '4px solid #7B5233' }}>
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                    {/* 1. Always display the original bug report */}
-                                    <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                                      {/* Left: Original Screenshots */}
-                                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                        {bug.images && bug.images.length > 0 ? (
-                                          bug.images.map((img, idx) => (
-                                            <div key={idx} style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px solid #EADCC9', overflow: 'hidden', backgroundColor: '#FAF6F0' }}>
-                                              <img src={getImageUrl(img.image_path)} alt="Bug spec" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onClick={() => window.open(getImageUrl(img.image_path), '_blank')} />
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                      {/* 1. Always display the original bug report */}
+                                      <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                                        {/* Left: Original Screenshots */}
+                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                          {bug.images && bug.images.length > 0 ? (
+                                            bug.images.map((img, idx) => (
+                                              <div key={idx} style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px solid #EADCC9', overflow: 'hidden', backgroundColor: '#FAF6F0' }}>
+                                                <img src={getImageUrl(img.image_path)} alt="Bug spec" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onClick={() => window.open(getImageUrl(img.image_path), '_blank')} />
+                                              </div>
+                                            ))
+                                          ) : (
+                                            <div style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px dashed #EADCC9', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FAF6F0', color: '#A08070', fontSize: '0.75rem' }}>
+                                              Không có ảnh
                                             </div>
-                                          ))
-                                        ) : (
-                                          <div style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px dashed #EADCC9', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FAF6F0', color: '#A08070', fontSize: '0.75rem' }}>
-                                            Không có ảnh
+                                          )}
+                                        </div>
+                                        {/* Right: Text box */}
+                                        <div style={{ flex: 1, minWidth: '250px' }}>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#8D6E63', fontWeight: 'bold', marginBottom: '4px' }}>
+                                            <span>Phản hồi từ [{getPositionByName(bug.reporter)} - {bug.reporter || 'Hệ thống'}]</span>
+                                            <span>{formatDate(bug.created_at)}</span>
                                           </div>
-                                        )}
-                                      </div>
-                                      {/* Right: Text box */}
-                                      <div style={{ flex: 1, minWidth: '250px' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#8D6E63', fontWeight: 'bold', marginBottom: '4px' }}>
-                                          <span>Phản hồi từ [{getPositionByName(bug.reporter)} - {bug.reporter || 'Hệ thống'}]</span>
-                                          <span>{formatDate(bug.created_at)}</span>
-                                        </div>
-                                        <div style={{ padding: '12px 16px', borderRadius: '12px', border: '1px solid #EADCC9', backgroundColor: '#fff', fontSize: '0.82rem', color: '#2D1A12', minHeight: '38px' }}>
-                                          {parsed.text}
+                                          <div style={{ padding: '12px 16px', borderRadius: '12px', border: '1px solid #EADCC9', backgroundColor: '#fff', fontSize: '0.82rem', color: '#2D1A12', minHeight: '38px' }}>
+                                            {parsed.text}
+                                          </div>
                                         </div>
                                       </div>
-                                    </div>
 
-                                    {/* 2. Display all updates / replies below it */}
-                                    {bug.updates && bug.updates.length > 0 && (
-                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', borderTop: '1px dashed #FAF0E6', paddingTop: '16px' }}>
-                                        {bug.updates.map((update, uIdx) => (
-                                          <div key={uIdx} style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap', borderBottom: uIdx < bug.updates.length - 1 ? '1px dashed #FAF0E6' : 'none', paddingBottom: '12px' }}>
-                                            {/* Left: update screenshot proof */}
-                                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                              {update.images && update.images.length > 0 ? (
-                                                update.images.map((img, idx) => (
-                                                  <div key={idx} style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px solid #EADCC9', overflow: 'hidden', backgroundColor: '#FAF6F0' }}>
-                                                    <img src={getImageUrl(img.image_path)} alt="Bug update" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onClick={() => window.open(getImageUrl(img.image_path), '_blank')} />
+                                      {/* 2. Display all updates / replies below it */}
+                                      {bug.updates && bug.updates.length > 0 && (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', borderTop: '1px dashed #FAF0E6', paddingTop: '16px' }}>
+                                          {bug.updates.map((update, uIdx) => (
+                                            <div key={uIdx} style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap', borderBottom: uIdx < bug.updates.length - 1 ? '1px dashed #FAF0E6' : 'none', paddingBottom: '12px' }}>
+                                              {/* Left: update screenshot proof */}
+                                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                {update.images && update.images.length > 0 ? (
+                                                  update.images.map((img, idx) => (
+                                                    <div key={idx} style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px solid #EADCC9', overflow: 'hidden', backgroundColor: '#FAF6F0' }}>
+                                                      <img src={getImageUrl(img.image_path)} alt="Bug update" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onClick={() => window.open(getImageUrl(img.image_path), '_blank')} />
+                                                    </div>
+                                                  ))
+                                                ) : (
+                                                  <div style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px dashed #EADCC9', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FAF6F0', color: '#A08070', fontSize: '0.75rem' }}>
+                                                    Không có ảnh
                                                   </div>
-                                                ))
-                                              ) : (
-                                                <div style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px dashed #EADCC9', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FAF6F0', color: '#A08070', fontSize: '0.75rem' }}>
-                                                  Không có ảnh
+                                                )}
+                                              </div>
+                                              {/* Right: update notes */}
+                                              <div style={{ flex: 1, minWidth: '250px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#8D6E63', fontWeight: 'bold', marginBottom: '4px' }}>
+                                                  <span>Phản hồi từ [{getPositionByName(update.updater)} - {update.updater || 'QC'}]</span>
+                                                  <span>{formatDate(update.created_at)}</span>
                                                 </div>
-                                              )}
-                                            </div>
-                                            {/* Right: update notes */}
-                                            <div style={{ flex: 1, minWidth: '250px' }}>
-                                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#8D6E63', fontWeight: 'bold', marginBottom: '4px' }}>
-                                                <span>Phản hồi từ [{getPositionByName(update.updater)} - {update.updater || 'QC'}]</span>
-                                                <span>{formatDate(update.created_at)}</span>
-                                              </div>
-                                              <div style={{ padding: '12px 16px', borderRadius: '12px', border: '1px solid #EADCC9', backgroundColor: '#fff', fontSize: '0.82rem', color: '#2D1A12', minHeight: '38px' }}>
-                                                {update.notes || <span style={{ color: '#999', fontStyle: 'italic' }}>Không có nội dung phản hồi.</span>}
+                                                <div style={{ padding: '12px 16px', borderRadius: '12px', border: '1px solid #EADCC9', backgroundColor: '#fff', fontSize: '0.82rem', color: '#2D1A12', minHeight: '38px' }}>
+                                                  {update.notes || <span style={{ color: '#999', fontStyle: 'italic' }}>Không có nội dung phản hồi.</span>}
+                                                </div>
                                               </div>
                                             </div>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
                                 </td>
                               </tr>
@@ -2896,8 +3641,8 @@ const ScreenDetail = () => {
               <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '800', color: '#111827' }}>
                 HD05: Thêm thành phần
               </h3>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setShowAddComponentModal(false)}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px' }}
               >
@@ -2913,11 +3658,11 @@ const ScreenDetail = () => {
                   <label style={{ fontWeight: '700', color: '#374151', fontSize: '0.82rem', display: 'block', marginBottom: '6px' }}>
                     Tên <span style={{ color: '#EF4444' }}>*</span>
                   </label>
-                  <input 
-                    type="text" 
-                    value={newComponentName} 
-                    onChange={(e) => setNewComponentName(e.target.value)} 
-                    placeholder="Nhập tên thành phần..." 
+                  <input
+                    type="text"
+                    value={newComponentName}
+                    onChange={(e) => setNewComponentName(e.target.value)}
+                    placeholder="Nhập tên thành phần..."
                     style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: '8px', padding: '10px 14px', fontSize: '0.84rem', boxSizing: 'border-box', outline: 'none' }}
                   />
                 </div>
@@ -2926,21 +3671,21 @@ const ScreenDetail = () => {
                   <label style={{ fontWeight: '700', color: '#374151', fontSize: '0.82rem', display: 'block', marginBottom: '6px' }}>
                     Loại Component
                   </label>
-                  
+
                   {/* Custom Dropdown Trigger */}
-                  <div 
+                  <div
                     onClick={() => setIsTypeDropdownOpen(!isTypeDropdownOpen)}
-                    style={{ 
-                      width: '100%', 
-                      border: '1px solid #D1D5DB', 
-                      borderRadius: '8px', 
-                      padding: '10px 14px', 
-                      fontSize: '0.84rem', 
-                      boxSizing: 'border-box', 
-                      backgroundColor: '#fff', 
-                      cursor: 'pointer', 
-                      display: 'flex', 
-                      justifyContent: 'space-between', 
+                    style={{
+                      width: '100%',
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '8px',
+                      padding: '10px 14px',
+                      fontSize: '0.84rem',
+                      boxSizing: 'border-box',
+                      backgroundColor: '#fff',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      justifyContent: 'space-between',
                       alignItems: 'center',
                       userSelect: 'none',
                       color: '#374151',
@@ -2967,9 +3712,9 @@ const ScreenDetail = () => {
                   {isTypeDropdownOpen && (
                     <>
                       {/* Invisible backdrop to close the dropdown on click outside */}
-                      <div 
+                      <div
                         onClick={() => setIsTypeDropdownOpen(false)}
-                        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10000 }} 
+                        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10000 }}
                       />
                       <div style={{
                         position: 'absolute',
@@ -3045,10 +3790,10 @@ const ScreenDetail = () => {
                 <label style={{ fontWeight: '700', color: '#374151', fontSize: '0.82rem', display: 'block', marginBottom: '6px' }}>
                   Đặc tả Frontend
                 </label>
-                <textarea 
+                <textarea
                   rows="3"
-                  value={newComponentFrontend} 
-                  onChange={(e) => setNewComponentFrontend(e.target.value)} 
+                  value={newComponentFrontend}
+                  onChange={(e) => setNewComponentFrontend(e.target.value)}
                   placeholder="Mô tả cấu trúc hiển thị, giao diện của thành phần..."
                   style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: '8px', padding: '10px 14px', fontSize: '0.84rem', boxSizing: 'border-box', outline: 'none', resize: 'vertical', fontFamily: 'inherit' }}
                 />
@@ -3059,10 +3804,10 @@ const ScreenDetail = () => {
                 <label style={{ fontWeight: '700', color: '#374151', fontSize: '0.82rem', display: 'block', marginBottom: '6px' }}>
                   Luồng xử lý/Điều kiện
                 </label>
-                <textarea 
+                <textarea
                   rows="3"
-                  value={newComponentWorkflow} 
-                  onChange={(e) => setNewComponentWorkflow(e.target.value)} 
+                  value={newComponentWorkflow}
+                  onChange={(e) => setNewComponentWorkflow(e.target.value)}
                   placeholder="Mô tả các điều kiện kiểm tra, kịch bản tương tác và luồng nghiệp vụ..."
                   style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: '8px', padding: '10px 14px', fontSize: '0.84rem', boxSizing: 'border-box', outline: 'none', resize: 'vertical', fontFamily: 'inherit' }}
                 />
@@ -3073,10 +3818,10 @@ const ScreenDetail = () => {
                 <label style={{ fontWeight: '700', color: '#374151', fontSize: '0.82rem', display: 'block', marginBottom: '6px' }}>
                   Đặc tả Backend
                 </label>
-                <textarea 
+                <textarea
                   rows="3"
-                  value={newComponentBackend} 
-                  onChange={(e) => setNewComponentBackend(e.target.value)} 
+                  value={newComponentBackend}
+                  onChange={(e) => setNewComponentBackend(e.target.value)}
                   placeholder="Mô tả API Endpoint cần gọi, tham số request/response và logic xử lý server..."
                   style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: '8px', padding: '10px 14px', fontSize: '0.84rem', boxSizing: 'border-box', outline: 'none', resize: 'vertical', fontFamily: 'inherit' }}
                 />
@@ -3085,16 +3830,16 @@ const ScreenDetail = () => {
 
             {/* Actions Footer */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
-              <button 
-                type="button" 
-                onClick={() => setShowAddComponentModal(false)} 
+              <button
+                type="button"
+                onClick={() => setShowAddComponentModal(false)}
                 style={{ padding: '10px 24px', border: '1px solid #7B5233', borderRadius: '8px', fontSize: '0.84rem', cursor: 'pointer', background: '#fff', color: '#7B5233', fontWeight: 'bold' }}
               >
                 Hủy bỏ
               </button>
-              <button 
-                type="button" 
-                onClick={confirmAddComponent} 
+              <button
+                type="button"
+                onClick={confirmAddComponent}
                 style={{ padding: '10px 24px', border: 'none', borderRadius: '8px', fontSize: '0.84rem', cursor: 'pointer', background: '#4A2E20', color: '#fff', fontWeight: 'bold' }}
               >
                 Tạo mới
@@ -3104,7 +3849,8 @@ const ScreenDetail = () => {
         </div>
       )}
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
 .custom-select-item:hover {
   background-color: #FAF2E9 !important;
 }
@@ -5460,7 +6206,7 @@ const ScreenDetail = () => {
               <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 'bold', color: '#2D1A12' }}>
                 {bugModalMode === 'edit' ? `HD04: Chi tiết lỗi BUG-${bugModalData.id}` : `${screen?.current_code || 'AD'}: Khai báo lỗi`}
               </h3>
-              <button 
+              <button
                 type="button"
                 onClick={() => setShowBugModal(false)}
                 style={{
@@ -5480,13 +6226,13 @@ const ScreenDetail = () => {
 
             {/* Modal Body */}
             <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              
+
               {/* Row 1: Màn hình & Trạng thái */}
               <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '16px' }}>
                 <div className="form-group" style={{ margin: 0 }}>
                   <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Màn hình</label>
-                  <select 
-                    disabled 
+                  <select
+                    disabled
                     value={screen?.id}
                     style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: '#F1F5F9', color: '#64748B', fontWeight: '500', boxSizing: 'border-box', height: '36px' }}
                   >
@@ -5495,10 +6241,10 @@ const ScreenDetail = () => {
                 </div>
                 <div className="form-group" style={{ margin: 0 }}>
                   <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Trạng thái</label>
-                  <input 
-                    type="text" 
-                    value={bugModalMode === 'edit' ? getBugStatusLabel(bugModalData.status) : 'Mới'} 
-                    disabled 
+                  <input
+                    type="text"
+                    value={bugModalMode === 'edit' ? getBugStatusLabel(bugModalData.status) : 'Mới'}
+                    disabled
                     style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: '#F1F5F9', color: '#64748B', fontWeight: '500', boxSizing: 'border-box', height: '36px' }}
                   />
                 </div>
@@ -5508,7 +6254,7 @@ const ScreenDetail = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '16px' }}>
                 <div className="form-group" style={{ margin: 0 }}>
                   <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Component</label>
-                  <select 
+                  <select
                     value={bugModalData.componentName}
                     onChange={(e) => setBugModalData(prev => ({ ...prev, componentName: e.target.value }))}
                     disabled={bugModalMode === 'edit'}
@@ -5522,7 +6268,7 @@ const ScreenDetail = () => {
                 </div>
                 <div className="form-group" style={{ margin: 0 }}>
                   <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Mức độ</label>
-                  <select 
+                  <select
                     value={bugModalData.severity}
                     onChange={(e) => setBugModalData(prev => ({ ...prev, severity: e.target.value }))}
                     disabled={bugModalMode === 'edit'}
@@ -5538,8 +6284,8 @@ const ScreenDetail = () => {
 
               {/* Row 3: Mô tả lỗi */}
               <div className="form-group" style={{ margin: 0 }}>
-                <label className="required" style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Mô tả lỗi *</label>
-                <textarea 
+                <label className="required" style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Mô tả lỗi</label>
+                <textarea
                   value={bugModalData.description}
                   onChange={(e) => setBugModalData(prev => ({ ...prev, description: e.target.value }))}
                   placeholder="Mô tả chi tiết hành vi lỗi hoặc sự khác biệt so với đặc tả..."
@@ -5551,15 +6297,15 @@ const ScreenDetail = () => {
 
               {/* Row 4: Large Image Box */}
               <div className="form-group" style={{ margin: 0 }}>
-                <input 
-                  type="file" 
-                  id="bug-image-upload" 
-                  accept="image/*" 
-                  onChange={handleBugImageUpload} 
+                <input
+                  type="file"
+                  id="bug-image-upload"
+                  accept="image/*"
+                  onChange={handleBugImageUpload}
                   disabled={bugModalMode === 'edit'}
-                  style={{ display: 'none' }} 
+                  style={{ display: 'none' }}
                 />
-                <div 
+                <div
                   onClick={() => {
                     if (bugModalMode !== 'edit') {
                       document.getElementById('bug-image-upload').click();
@@ -5584,10 +6330,10 @@ const ScreenDetail = () => {
                     <span style={{ fontSize: '0.82rem', color: '#64748B' }}>Đang tải ảnh lên...</span>
                   ) : bugModalData.imagePath ? (
                     <>
-                      <img 
-                        src={getImageUrl(bugModalData.imagePath)} 
-                        alt="Bug upload preview" 
-                        style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
+                      <img
+                        src={getImageUrl(bugModalData.imagePath)}
+                        alt="Bug upload preview"
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                       />
                       {bugModalMode !== 'edit' && (
                         <button
@@ -5631,19 +6377,19 @@ const ScreenDetail = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '16px' }}>
                 <div className="form-group" style={{ margin: 0 }}>
                   <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Người ghi nhận</label>
-                  <input 
-                    type="text" 
-                    value={bugModalData.reporter} 
-                    disabled 
+                  <input
+                    type="text"
+                    value={bugModalData.reporter}
+                    disabled
                     style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: '#F1F5F9', color: '#64748B', fontWeight: '500', boxSizing: 'border-box', height: '36px' }}
                   />
                 </div>
                 <div className="form-group" style={{ margin: 0 }}>
                   <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Thời gian ghi nhận</label>
-                  <input 
-                    type="date" 
-                    value={new Date().toISOString().split('T')[0]} 
-                    disabled 
+                  <input
+                    type="date"
+                    value={new Date().toISOString().split('T')[0]}
+                    disabled
                     style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: '#F1F5F9', color: '#64748B', boxSizing: 'border-box', height: '36px' }}
                   />
                 </div>
@@ -5653,7 +6399,7 @@ const ScreenDetail = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '16px' }}>
                 <div className="form-group" style={{ margin: 0 }}>
                   <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Người xử lý</label>
-                  <select 
+                  <select
                     value={bugModalData.assignee}
                     onChange={(e) => setBugModalData(prev => ({ ...prev, assignee: e.target.value }))}
                     disabled={bugModalMode === 'edit'}
@@ -5666,8 +6412,8 @@ const ScreenDetail = () => {
                 </div>
                 <div className="form-group" style={{ margin: 0 }}>
                   <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Ngày yêu cầu hoàn thành</label>
-                   <input 
-                    type="date" 
+                  <input
+                    type="date"
                     value={bugModalData.targetDate}
                     min={new Date().toISOString().split('T')[0]}
                     onChange={(e) => setBugModalData(prev => ({ ...prev, targetDate: e.target.value }))}
@@ -5682,8 +6428,8 @@ const ScreenDetail = () => {
                 <>
                   {/* Phản hồi * */}
                   <div className="form-group" style={{ margin: 0 }}>
-                    <label className="required" style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Phản hồi *</label>
-                    <textarea 
+                    <label className="required" style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Phản hồi</label>
+                    <textarea
                       value={replyNotes}
                       onChange={(e) => setReplyNotes(e.target.value)}
                       placeholder="Nhập nội dung phản hồi kết quả sửa lỗi..."
@@ -5698,7 +6444,7 @@ const ScreenDetail = () => {
                     <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '4px' }}>
                       {(getBugStatusLabel(bugModalData.status) === 'Mới' || getBugStatusLabel(bugModalData.status) === 'Sửa lại') ? (
                         <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#334155', fontWeight: '600', cursor: 'pointer' }}>
-                          <input 
+                          <input
                             type="checkbox"
                             checked={replyStatusVal === 'Đã sửa'}
                             onChange={(e) => setReplyStatusVal(e.target.checked ? 'Đã sửa' : '')}
@@ -5709,7 +6455,7 @@ const ScreenDetail = () => {
                       ) : getBugStatusLabel(bugModalData.status) === 'Đã sửa' ? (
                         <>
                           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#059669', fontWeight: '600', cursor: 'pointer' }}>
-                            <input 
+                            <input
                               type="radio"
                               name="status-transition-modal"
                               checked={replyStatusVal === 'Hoàn thành'}
@@ -5719,7 +6465,7 @@ const ScreenDetail = () => {
                             Xác nhận (Hoàn thành)
                           </label>
                           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#EF4444', fontWeight: '600', cursor: 'pointer' }}>
-                            <input 
+                            <input
                               type="radio"
                               name="status-transition-modal"
                               checked={replyStatusVal === 'Từ chối'}
@@ -5738,16 +6484,16 @@ const ScreenDetail = () => {
                   {/* Phản hồi images upload */}
                   <div className="form-group" style={{ margin: 0 }}>
                     <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Hình ảnh phản hồi đính kèm (Cho phép up ảnh đã chỉnh sửa)</label>
-                    <input 
-                      type="file" 
-                      id="modal-reply-image-upload" 
-                      accept="image/*" 
+                    <input
+                      type="file"
+                      id="modal-reply-image-upload"
+                      accept="image/*"
                       multiple
-                      onChange={handleReplyImageUpload} 
-                      style={{ display: 'none' }} 
+                      onChange={handleReplyImageUpload}
+                      style={{ display: 'none' }}
                     />
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
-                      <div 
+                      <div
                         onClick={() => document.getElementById('modal-reply-image-upload').click()}
                         style={{
                           width: '120px',
@@ -5772,7 +6518,7 @@ const ScreenDetail = () => {
                           </>
                         )}
                       </div>
-                      
+
                       {replyImages.map((img, idx) => (
                         <div key={idx} style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px solid #E2E8F0', overflow: 'hidden', position: 'relative', backgroundColor: '#F8FAFC' }}>
                           <img src={getImageUrl(img)} alt="Reply preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -5808,9 +6554,9 @@ const ScreenDetail = () => {
                   {/* Row 7: Disabled Phản hồi */}
                   <div className="form-group" style={{ margin: 0 }}>
                     <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Phản hồi *</label>
-                    <input 
-                      type="text" 
-                      disabled 
+                    <input
+                      type="text"
+                      disabled
                       placeholder="Người xử lý phản hồi sau khi hoàn thành..."
                       style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: '#F1F5F9', color: '#64748B', boxSizing: 'border-box', height: '36px' }}
                     />
@@ -5841,8 +6587,8 @@ const ScreenDetail = () => {
               backgroundColor: '#F8FAFC',
               borderRadius: '0 0 16px 16px'
             }}>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setShowBugModal(false)}
                 style={{
                   padding: '8px 20px',
@@ -5858,8 +6604,8 @@ const ScreenDetail = () => {
               >
                 Hủy bỏ
               </button>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={bugModalMode === 'edit' ? handleUpdateBug : handleCreateBug}
                 style={{
                   padding: '8px 20px',
@@ -5880,6 +6626,14 @@ const ScreenDetail = () => {
           </div>
         </div>
       )}
+      <BeautifulConfirmModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        type={confirmModal.type}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal(prev => ({ ...prev, visible: false }))}
+      />
     </div>
   );
 

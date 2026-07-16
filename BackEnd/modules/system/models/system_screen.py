@@ -26,5 +26,6 @@ class SystemScreen(Base):
 
     # Relationships
     components = relationship("SystemComponent", back_populates="screen", cascade="all, delete-orphan")
+    guides = relationship("SystemGuide", back_populates="screen", cascade="all, delete-orphan")
     bugs = relationship("ScreenBug", back_populates="screen", cascade="all, delete-orphan")
 

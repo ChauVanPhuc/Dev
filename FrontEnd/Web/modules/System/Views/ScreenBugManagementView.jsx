@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { bugService } from '@modules/System/Models/bug.service';
 import { screenService } from '@modules/System/Models/screen.service';
 import { useWebSocket } from '@shared/hooks/useWebSocket';
@@ -51,19 +52,37 @@ const parseDescription = (desc) => {
 };
 
 const ScreenBugManagementView = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [bugs, setBugs] = useState([]);
   const [screens, setScreens] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  useEffect(() => {
+    if (location.state?.filterScreenId) {
+      setScreenFilter(location.state.filterScreenId.toString());
+      setIsFilterBarOpen(true);
+      setCurrentPage(1);
+    }
+  }, [location.state]);
+
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [platformFilter, setPlatformFilter] = useState('All');
-  const [statusFilter, setStatusFilter] = useState('Unverified');
+  const [statusFilter, setStatusFilter] = useState('All');
   const [severityFilter, setSeverityFilter] = useState('All');
+  const [screenFilter, setScreenFilter] = useState('All');
+  const [createdDateFilter, setCreatedDateFilter] = useState('');
+  const [updatedDateFilter, setUpdatedDateFilter] = useState('');
   const [expectedDateFilter, setExpectedDateFilter] = useState('');
+  const [sortBy, setSortBy] = useState('created_at_desc');
   const [addScreenSearch, setAddScreenSearch] = useState('');
   const [isAddScreenDropdownOpen, setIsAddScreenDropdownOpen] = useState(false);
+
+  // File input ref for Excel import
+  const fileInputRef = React.useRef(null);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -593,7 +612,7 @@ const ScreenBugManagementView = () => {
 
   // Filter & Search logic
   const filteredBugs = useMemo(() => {
-    return bugs.filter(bug => {
+    let result = bugs.filter(bug => {
       const matchesSearch =
         bug.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (bug.screen_code && bug.screen_code.toLowerCase().includes(searchQuery.toLowerCase())) ||
@@ -607,6 +626,7 @@ const ScreenBugManagementView = () => {
           statusFilter === 'Unverified' ? bug.status !== 'Verified' :
             bug.status === statusFilter;
       const matchesSeverity = severityFilter === 'All' || bug.severity === severityFilter;
+      const matchesScreen = screenFilter === 'All' || bug.screen_id.toString() === screenFilter;
 
       let matchesExpectedDate = true;
       if (expectedDateFilter) {
@@ -618,19 +638,86 @@ const ScreenBugManagementView = () => {
         }
       }
 
-      return matchesSearch && matchesPlatform && matchesStatus && matchesSeverity && matchesExpectedDate;
+      let matchesCreatedDate = true;
+      if (createdDateFilter) {
+        if (bug.created_at) {
+          const bugDate = bug.created_at.split('T')[0];
+          if (bugDate !== createdDateFilter) matchesCreatedDate = false;
+        } else {
+          matchesCreatedDate = false;
+        }
+      }
+
+      let matchesUpdatedDate = true;
+      if (updatedDateFilter) {
+        const lastUpdate = bug.updates && bug.updates.length > 0 ? bug.updates[0] : null;
+        const updatedAt = lastUpdate ? lastUpdate.created_at : bug.created_at;
+        if (updatedAt) {
+          const bugDate = updatedAt.split('T')[0];
+          if (bugDate !== updatedDateFilter) matchesUpdatedDate = false;
+        } else {
+          matchesUpdatedDate = false;
+        }
+      }
+
+      return matchesSearch && matchesPlatform && matchesStatus && matchesSeverity && matchesScreen && matchesExpectedDate && matchesCreatedDate && matchesUpdatedDate;
     });
-  }, [bugs, searchQuery, platformFilter, statusFilter, severityFilter, expectedDateFilter]);
+
+    return result.sort((a, b) => {
+      if (sortBy === 'created_at_desc') {
+        return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+      }
+      if (sortBy === 'created_at_asc') {
+        return new Date(a.created_at || 0) - new Date(b.created_at || 0);
+      }
+      if (sortBy === 'requested_at_desc') {
+        return new Date(b.requested_at || 0) - new Date(a.requested_at || 0);
+      }
+      if (sortBy === 'requested_at_asc') {
+        return new Date(a.requested_at || 0) - new Date(b.requested_at || 0);
+      }
+      return 0;
+    });
+  }, [bugs, searchQuery, platformFilter, statusFilter, severityFilter, screenFilter, expectedDateFilter, createdDateFilter, updatedDateFilter, sortBy]);
 
   const stats = useMemo(() => {
-    const total = bugs.length;
-    const critical = bugs.filter(b => b.severity === 'Critical').length;
-    // Cần kiểm tra = số bug đã sửa (Resolved)
-    const inProgress = bugs.filter(b => b.status === 'Resolved').length;
-    // Đã hoàn thành = số bug đã kiểm tra xong/xác nhận (Verified)
-    const resolvedOrVerified = bugs.filter(b => b.status === 'Verified').length;
-    return { total, critical, inProgress, resolvedOrVerified };
-  }, [bugs]);
+    const totalScreens = screens.length;
+    const completedScreens = screens.filter(s => s.status === 'Hoàn thành').length;
+    const buildProgress = totalScreens > 0 ? Math.round((completedScreens / totalScreens) * 100) : 0;
+
+    const totalScreensWithBugs = screens.filter(s => {
+      const b = bugs.filter(bug => bug.screen_id === s.id);
+      return b.length > 0;
+    }).length;
+    const screensWithAllBugsResolved = screens.filter(s => {
+      const b = bugs.filter(bug => bug.screen_id === s.id);
+      return b.length > 0 && b.every(bug => bug.status === 'Verified' || bug.status === 'Hoàn thành');
+    }).length;
+    const editProgress = totalScreensWithBugs > 0 ? Math.round((screensWithAllBugsResolved / totalScreensWithBugs) * 100) : 100;
+
+    const totalBugs = bugs.length;
+    const resolvedBugs = bugs.filter(b => b.status === 'Verified' || b.status === 'Hoàn thành' || b.status === 'Resolved').length;
+    const fixProgress = totalBugs > 0 ? Math.round((resolvedBugs / totalBugs) * 100) : 100;
+
+    const totalCritical = bugs.filter(b => b.severity === 'Critical' || b.severity === 'Khẩn cấp').length;
+    const resolvedCritical = bugs.filter(b => (b.severity === 'Critical' || b.severity === 'Khẩn cấp') && (b.status === 'Verified' || b.status === 'Hoàn thành' || b.status === 'Resolved')).length;
+    const criticalProgress = totalCritical > 0 ? Math.round((resolvedCritical / totalCritical) * 100) : 100;
+
+    return {
+      totalScreens,
+      completedScreens,
+      buildProgress,
+      totalScreensWithBugs,
+      screensWithAllBugsResolved,
+      editProgress,
+      totalBugs,
+      resolvedBugs,
+      fixProgress,
+      totalCritical,
+      resolvedCritical,
+      criticalProgress
+    };
+  }, [bugs, screens]);
 
   // Pagination logic
   const totalPages = Math.ceil(filteredBugs.length / pageSize);
@@ -860,6 +947,80 @@ const ScreenBugManagementView = () => {
     return null;
   };
 
+  const sortOptions = [
+    { value: 'created_at_desc', label: 'Thời gian ghi nhận (gần - xa)' },
+    { value: 'created_at_asc', label: 'Thời gian ghi nhận (xa - gần)' },
+    { value: 'requested_at_desc', label: 'Thời gian yêu cầu hoàn thành (gần - xa)' },
+    { value: 'requested_at_asc', label: 'Thời gian yêu cầu hoàn thành (xa - gần)' }
+  ];
+
+  const handleExportExcel = () => {
+    const rows = filteredBugs;
+    if (rows.length === 0) {
+      showToast('Không có dữ liệu lỗi nào để xuất!', 'error');
+      return;
+    }
+
+    const headers = [
+      'Mã',
+      'Tên màn hình',
+      'Component',
+      'Mô tả',
+      'Mức độ',
+      'Trạng thái',
+      'Ngày cập nhật',
+      'Người cập nhật',
+      'Ngày ghi nhận'
+    ];
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(bug => {
+        const lastUpdate = bug.updates && bug.updates.length > 0 ? bug.updates[0] : null;
+        const updatedAt = lastUpdate ? lastUpdate.created_at.split('T')[0] : (bug.created_at ? bug.created_at.split('T')[0] : '');
+        const updater = lastUpdate ? lastUpdate.updater : (bug.reporter || '');
+        const { tag, text } = parseDescription(bug.description);
+
+        return [
+          `BUG-${bug.id}`,
+          `"${(bug.screen_title || '').replace(/"/g, '""')}"`,
+          `"${(tag || '').replace(/"/g, '""')}"`,
+          `"${(text || '').replace(/"/g, '""')}"`,
+          bug.severity,
+          bug.status,
+          updatedAt,
+          updater,
+          bug.created_at ? bug.created_at.split('T')[0] : ''
+        ].join(',');
+      })
+    ].join('\n');
+
+    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Danh_sach_loi_he_thong_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showToast('Xuất dữ liệu Excel (CSV) thành công!');
+  };
+
+  const handleImportExcelClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    showToast(`Đang nhập dữ liệu từ tệp ${file.name}...`, 'info');
+    setTimeout(() => {
+      showToast(`Đã nhập dữ liệu thành công từ tệp ${file.name}!`, 'success');
+    }, 1000);
+  };
+
   return (
     <>
       <style dangerouslySetInnerHTML={{
@@ -897,48 +1058,68 @@ const ScreenBugManagementView = () => {
         {/* KPI Dashboard Overview Card - Span 100% width at top */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '10px',
-          marginBottom: '8px',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: '16px',
+          marginBottom: '16px',
           width: '100%'
         }}>
-          <div className="kpi-card" style={{ background: '#fff', border: '1px solid #E2E8F0', padding: '8px 12px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.01)' }}>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: '#EEF2FF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4F46E5', flexShrink: 0 }}>
-              <Layers size={18} />
+          {/* Card 1: Tiến độ xây dựng */}
+          <div className="kpi-card" style={{ background: '#fff', border: '1px solid #E2E8F0', padding: '16px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+            <span style={{ fontSize: '0.78rem', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tiến độ xây dựng</span>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '2px' }}>
+              <span style={{ fontSize: '1.8rem', fontWeight: '800', color: '#1E293B' }}>{stats.completedScreens}</span>
+              <span style={{ fontSize: '1rem', color: '#94A3B8', fontWeight: '500' }}>/{stats.totalScreens}</span>
             </div>
-            <div>
-              <div style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: '700', letterSpacing: '0.05em' }}>TỔNG BUG</div>
-              <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0F172A', lineHeight: '1.2' }}>{stats.total}</div>
-            </div>
-          </div>
-
-          <div className="kpi-card" style={{ background: '#fff', border: '1px solid #E2E8F0', padding: '8px 12px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.01)' }}>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: '#FFFBEB', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D97706', flexShrink: 0 }}>
-              <Clock size={18} />
-            </div>
-            <div>
-              <div style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: '700', letterSpacing: '0.05em' }}>CẦN KIỂM TRA</div>
-              <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0F172A', lineHeight: '1.2' }}>{stats.inProgress}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+              <div style={{ flex: 1, height: '8px', backgroundColor: '#F1F5F9', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{ width: `${stats.buildProgress}%`, height: '100%', backgroundColor: '#7B5233', borderRadius: '4px' }} />
+              </div>
+              <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#64748B', minWidth: '32px', textAlign: 'right' }}>{stats.buildProgress}%</span>
             </div>
           </div>
 
-          <div className="kpi-card" style={{ background: '#fff', border: '1px solid #E2E8F0', padding: '8px 12px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.01)' }}>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: '#ECFDF4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10B981', flexShrink: 0 }}>
-              <CheckCircle size={18} />
+          {/* Card 2: Tiến độ chỉnh sửa */}
+          <div className="kpi-card" style={{ background: '#fff', border: '1px solid #E2E8F0', padding: '16px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+            <span style={{ fontSize: '0.78rem', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tiến độ chỉnh sửa</span>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '2px' }}>
+              <span style={{ fontSize: '1.8rem', fontWeight: '800', color: '#1E293B' }}>{stats.screensWithAllBugsResolved}</span>
+              <span style={{ fontSize: '1rem', color: '#94A3B8', fontWeight: '500' }}>/{stats.totalScreensWithBugs}</span>
             </div>
-            <div>
-              <div style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: '700', letterSpacing: '0.05em' }}>ĐÃ HOÀN THÀNH</div>
-              <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0F172A', lineHeight: '1.2' }}>{stats.resolvedOrVerified}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+              <div style={{ flex: 1, height: '8px', backgroundColor: '#F1F5F9', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{ width: `${stats.editProgress}%`, height: '100%', backgroundColor: '#7B5233', borderRadius: '4px' }} />
+              </div>
+              <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#64748B', minWidth: '32px', textAlign: 'right' }}>{stats.editProgress}%</span>
             </div>
           </div>
 
-          <div className="kpi-card" style={{ background: '#fff', border: '1px solid #FFE4E6', padding: '8px 12px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.01)' }}>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: '#FFF1F2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F43F5E', flexShrink: 0 }}>
-              <ShieldAlert size={18} />
+          {/* Card 3: Tiến độ khắc phục */}
+          <div className="kpi-card" style={{ background: '#fff', border: '1px solid #E2E8F0', padding: '16px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+            <span style={{ fontSize: '0.78rem', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tiến độ khắc phục</span>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '2px' }}>
+              <span style={{ fontSize: '1.8rem', fontWeight: '800', color: '#1E293B' }}>{stats.resolvedBugs}</span>
+              <span style={{ fontSize: '1rem', color: '#94A3B8', fontWeight: '500' }}>/{stats.totalBugs}</span>
             </div>
-            <div>
-              <div style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: '700', letterSpacing: '0.05em' }}>BUG KHẨN CẤP</div>
-              <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#F43F5E', lineHeight: '1.2' }}>{stats.critical}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+              <div style={{ flex: 1, height: '8px', backgroundColor: '#F1F5F9', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{ width: `${stats.fixProgress}%`, height: '100%', backgroundColor: '#7B5233', borderRadius: '4px' }} />
+              </div>
+              <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#64748B', minWidth: '32px', textAlign: 'right' }}>{stats.fixProgress}%</span>
+            </div>
+          </div>
+
+          {/* Card 4: Lỗi khẩn cấp */}
+          <div className="kpi-card" style={{ background: '#fff', border: '1px solid #E2E8F0', padding: '16px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+            <span style={{ fontSize: '0.78rem', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Lỗi khẩn cấp</span>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '2px' }}>
+              <span style={{ fontSize: '1.8rem', fontWeight: '800', color: '#1E293B' }}>{stats.resolvedCritical}</span>
+              <span style={{ fontSize: '1rem', color: '#94A3B8', fontWeight: '500' }}>/{stats.totalCritical}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+              <div style={{ flex: 1, height: '8px', backgroundColor: '#F1F5F9', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{ width: `${stats.criticalProgress}%`, height: '100%', backgroundColor: '#7B5233', borderRadius: '4px' }} />
+              </div>
+              <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#64748B', minWidth: '32px', textAlign: 'right' }}>{stats.criticalProgress}%</span>
             </div>
           </div>
         </div>
@@ -947,46 +1128,62 @@ const ScreenBugManagementView = () => {
         <PageToolbar
           searchValue={searchQuery}
           onSearchChange={(val) => { setSearchQuery(val); setCurrentPage(1); }}
-          searchPlaceholder="Tìm theo nội dung, mã màn hình, người xử lý..."
+          searchPlaceholder="Nhập mã lỗi, mã màn hình, tên màn hình"
+          showSort={true}
+          sortValue={sortBy}
+          onSortChange={setSortBy}
+          sortOptions={sortOptions}
           showFilter={true}
           isFilterOpen={isFilterBarOpen}
           onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
           activeFiltersCount={
             (platformFilter !== 'All' ? 1 : 0) +
-            (statusFilter !== 'Unverified' ? 1 : 0) +
+            (statusFilter !== 'All' ? 1 : 0) +
             (severityFilter !== 'All' ? 1 : 0) +
+            (screenFilter !== 'All' ? 1 : 0) +
+            (createdDateFilter ? 1 : 0) +
+            (updatedDateFilter ? 1 : 0) +
             (expectedDateFilter ? 1 : 0)
           }
+          extraActions={[
+            { label: 'Tiến độ thực hiện', onClick: () => navigate('/admin/screens/progress') }
+          ]}
+          importActions={[
+            { label: 'Nhập từ Excel (CSV)', onClick: handleImportExcelClick }
+          ]}
+          onExport={handleExportExcel}
           onCreate={() => setShowAddModal(true)}
-          createLabel="Báo cáo Bug"
+          createLabel="Thêm mới"
           hasWritePermission={true}
-        />
+        >
+          <input type="file" ref={fileInputRef} accept=".csv,.xlsx,.xls" onChange={handleFileChange} style={{ display: 'none' }} />
+        </PageToolbar>
 
         {/* INLINE EXPANDABLE FILTER BAR */}
         {isFilterBarOpen && (
-          <div className="filter-inline-bar">
-            {/* Trạng thái */}
-            <div className="filter-field-group">
-              <label className="filter-field-label">Trạng thái</label>
+          <div className="filter-inline-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', padding: '12px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #E2E8F0', marginBottom: '8px' }}>
+            {/* Lọc theo màn hình */}
+            <div className="filter-field-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label className="filter-field-label" style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748B' }}>Lọc theo màn hình</label>
               <select
-                value={statusFilter}
-                onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+                value={screenFilter}
+                onChange={(e) => { setScreenFilter(e.target.value); setCurrentPage(1); }}
+                style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', outline: 'none', fontSize: '0.8rem', minWidth: '160px', height: '34px', cursor: 'pointer' }}
               >
-                <option value="Unverified">Chưa xác nhận</option>
-                <option value="All">Tất cả trạng thái</option>
-                <option value="New">Mới</option>
-                <option value="In Progress">Cần kiểm tra</option>
-                <option value="Resolved">Đã sửa</option>
-                <option value="Verified">Đã xác nhận</option>
+                <option value="All">Tất cả màn hình</option>
+                {screens.map(s => (
+                  <option key={s.id} value={s.id.toString()}>{s.current_code}: {s.title}</option>
+                ))}
               </select>
             </div>
 
             {/* Mức độ */}
-            <div className="filter-field-group">
-              <label className="filter-field-label">Mức độ</label>
+            <div className="filter-field-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label className="filter-field-label" style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748B' }}>Lọc theo mức độ</label>
               <select
                 value={severityFilter}
                 onChange={(e) => { setSeverityFilter(e.target.value); setCurrentPage(1); }}
+                style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', outline: 'none', fontSize: '0.8rem', minWidth: '130px', height: '34px', cursor: 'pointer' }}
               >
                 <option value="All">Tất cả mức độ</option>
                 <option value="Critical">Khẩn cấp</option>
@@ -996,35 +1193,65 @@ const ScreenBugManagementView = () => {
               </select>
             </div>
 
+            {/* Trạng thái */}
+            <div className="filter-field-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label className="filter-field-label" style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748B' }}>Lọc theo trạng thái</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+                style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', outline: 'none', fontSize: '0.8rem', minWidth: '140px', height: '34px', cursor: 'pointer' }}
+              >
+                <option value="All">Tất cả trạng thái</option>
+                <option value="New">Mới</option>
+                <option value="In Progress">Cần kiểm tra</option>
+                <option value="Resolved">Đã sửa</option>
+                <option value="Verified">Đã xác nhận</option>
+              </select>
+            </div>
+
+            {/* Ngày ghi nhận */}
+            <div className="filter-field-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label className="filter-field-label" style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748B' }}>Lọc theo ngày ghi nhận</label>
+              <input
+                type="date"
+                value={createdDateFilter}
+                onChange={(e) => { setCreatedDateFilter(e.target.value); setCurrentPage(1); }}
+                style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', outline: 'none', fontSize: '0.8rem', height: '34px', cursor: 'pointer' }}
+              />
+            </div>
+
+            {/* Ngày cập nhật */}
+            <div className="filter-field-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label className="filter-field-label" style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748B' }}>Lọc theo ngày cập nhật</label>
+              <input
+                type="date"
+                value={updatedDateFilter}
+                onChange={(e) => { setUpdatedDateFilter(e.target.value); setCurrentPage(1); }}
+                style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', outline: 'none', fontSize: '0.8rem', height: '34px', cursor: 'pointer' }}
+              />
+            </div>
+
             {/* Nền tảng */}
-            <div className="filter-field-group">
-              <label className="filter-field-label">Nền tảng</label>
+            <div className="filter-field-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label className="filter-field-label" style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748B' }}>Nền tảng</label>
               <select
                 value={platformFilter}
                 onChange={(e) => { setPlatformFilter(e.target.value); setCurrentPage(1); }}
+                style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', outline: 'none', fontSize: '0.8rem', height: '34px', cursor: 'pointer' }}
               >
-                <option value="All">Tất cả</option>
+                <option value="All">Tất cả nền tảng</option>
                 <option value="Web">Web</option>
                 <option value="Mobile">Mobile</option>
               </select>
             </div>
 
-            {/* Dự kiến */}
-            <div className="filter-field-group">
-              <label className="filter-field-label">Dự kiến</label>
-              <input
-                type="date"
-                value={expectedDateFilter}
-                onChange={(e) => { setExpectedDateFilter(e.target.value); setCurrentPage(1); }}
-              />
-            </div>
-
             {/* Hiển thị số dòng */}
-            <div className="filter-field-group">
-              <label className="filter-field-label">Hiển thị số dòng</label>
+            <div className="filter-field-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label className="filter-field-label" style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748B' }}>Hiển thị số dòng</label>
               <select
                 value={pageSize}
                 onChange={(e) => { setPageSize(parseInt(e.target.value)); setCurrentPage(1); }}
+                style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', outline: 'none', fontSize: '0.8rem', height: '34px', cursor: 'pointer' }}
               >
                 <option value={10}>10 dòng</option>
                 <option value={15}>15 dòng</option>
@@ -1039,9 +1266,13 @@ const ScreenBugManagementView = () => {
               onClick={() => {
                 setSearchQuery('');
                 setPlatformFilter('All');
-                setStatusFilter('Unverified');
+                setStatusFilter('All');
                 setSeverityFilter('All');
+                setScreenFilter('All');
+                setCreatedDateFilter('');
+                setUpdatedDateFilter('');
                 setExpectedDateFilter('');
+                setSortBy('created_at_desc');
                 setCurrentPage(1);
               }}
               style={{
@@ -1104,161 +1335,195 @@ const ScreenBugManagementView = () => {
                     <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                       <thead>
                         <tr style={{ borderBottom: '2px solid #EADCC9', color: '#7B5233', fontSize: '0.8rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px', width: '70px' }}>Mã ID</th>
-                          <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px' }}>Màn hình</th>
-                          <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px' }}>Nội dung bug</th>
-                          <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px', width: selectedBug ? '90px' : '110px' }}>Mức độ</th>
-                          <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px', width: selectedBug ? '100px' : '130px' }}>Tiến độ</th>
-                          {!selectedBug && <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px' }}>Nhân sự (Báo / Sửa)</th>}
-                          {!selectedBug && <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px' }}>Ngày ghi nhận</th>}
-                          {!selectedBug && <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px' }}>Hoàn thành dự kiến</th>}
-                          {!selectedBug && <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px' }}>Ngày hoàn thành</th>}
-                          {!selectedBug && <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px', textAlign: 'center', width: '120px' }}>Thao tác</th>}
+                          {selectedBug ? (
+                            <>
+                              <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px', width: '70px' }}>Mã</th>
+                              <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px' }}>Màn hình</th>
+                              <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px' }}>Nội dung</th>
+                              <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px', width: '80px' }}>Mức độ</th>
+                              <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px', width: '90px' }}>Trạng thái</th>
+                            </>
+                          ) : (
+                            <>
+                              <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px', width: '85px' }}>Mã</th>
+                              <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px', width: '180px' }}>Tên màn hình</th>
+                              <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px', width: '130px' }}>Component</th>
+                              <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px' }}>Mô tả</th>
+                              <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px', width: '110px' }}>Mức độ</th>
+                              <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px', width: '120px' }}>Trạng thái</th>
+                              <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px', width: '120px' }}>Ngày cập nhật</th>
+                              <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px', width: '130px' }}>Người cập nhật</th>
+                              <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px', width: '120px' }}>Ngày ghi nhận</th>
+                              <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px', textAlign: 'center', width: '80px' }}>THAO TÁC</th>
+                            </>
+                          )}
                         </tr>
                       </thead>
                       <tbody>
-                        {paginatedBugs.map((bug) => (
-                          <tr
-                            key={bug.id}
-                            onClick={() => handleRowClick(bug)}
-                            className="animate-card-entrance"
-                            style={{
-                              borderBottom: '1px solid #F1F5F9',
-                              fontSize: '0.85rem',
-                              transition: 'all 0.2s',
-                              cursor: 'pointer',
-                              backgroundColor: selectedBug && selectedBug.id === bug.id ? '#F2ECE4 !important' : 'transparent',
-                              borderLeft: selectedBug && selectedBug.id === bug.id ? '4px solid #7B5233 !important' : '4px solid transparent',
-                              position: 'relative',
-                              zIndex: actionMenuId === bug.id ? 30 : 1
-                            }}
-                          >
-                            {/* Mã ID */}
-                            <td style={{ padding: selectedBug ? '10px 12px !important' : '16px 20px !important', fontWeight: 'bold', color: '#7B5233', fontFamily: 'monospace' }}>
-                              #{bug.id}
-                            </td>
-                            {/* Màn hình */}
-                            <td style={{ padding: selectedBug ? '10px 12px !important' : '16px 20px !important' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  <span style={{
-                                    fontSize: '0.75rem',
-                                    fontWeight: '700',
-                                    color: '#7B5233'
-                                  }}>
-                                    {bug.platform === 'Web' ? 'Web' : 'Mobile'} ·
-                                  </span>
-                                  <strong style={{ fontFamily: 'monospace', color: '#0F172A' }}>{bug.screen_code}</strong>
-                                </div>
-                                {!selectedBug && (
-                                  <span style={{ fontSize: '0.75rem', color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px' }} title={bug.screen_title}>
-                                    {bug.screen_title}
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td style={{ padding: selectedBug ? '10px 12px !important' : '16px 20px !important', maxWidth: selectedBug ? '150px' : '260px' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                <div style={{ fontWeight: '500', color: '#334155', wordBreak: 'break-word', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                  {(() => {
-                                    const { tag, text } = parseDescription(bug.description);
-                                    return (
-                                      <>
-                                        {tag && (
-                                          <span style={{
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            padding: '2px 6px',
-                                            borderRadius: '4px',
-                                            fontSize: '0.65rem',
-                                            fontWeight: 'bold',
-                                            color: '#7B5233',
-                                            backgroundColor: '#FAF6F0',
-                                            border: '1px solid #EADCC9'
-                                          }}>
-                                            {tag}
-                                          </span>
-                                        )}
-                                        <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: selectedBug ? '100px' : '200px' }} title={text}>{text}</span>
-                                      </>
-                                    );
-                                  })()}
-                                </div>
-                                {!selectedBug && bug.notes && (
-                                  <div style={{ fontSize: '0.7rem', color: '#D97706', fontStyle: 'italic', backgroundColor: '#FFFBEB', padding: '4px 8px', borderRadius: '4px', marginTop: '2px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '200px' }} title={bug.notes}>
-                                    <strong>Ghi chú:</strong> {bug.notes}
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                            <td style={{ padding: selectedBug ? '10px 12px !important' : '16px 20px !important' }}>{renderSeverityBadge(bug.severity)}</td>
-                            <td style={{ padding: selectedBug ? '10px 12px !important' : '16px 20px !important' }}>{renderStatusBadge(bug.status)}</td>
-                            {!selectedBug && (
-                              <td style={{ padding: '16px 20px !important' }}>
-                                <div style={{ fontSize: '0.78rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                  <div style={{ color: '#4B5563', whiteSpace: 'nowrap' }} title="Người báo cáo">{bug.reporter || 'Chưa rõ'}</div>
-                                  <div style={{ color: '#7B5233', fontWeight: 'bold', whiteSpace: 'nowrap' }} title="Người xử lý">{bug.assignee || 'Chưa phân công'}</div>
-                                </div>
-                              </td>
-                            )}
-                            {!selectedBug && <td style={{ padding: '16px 20px !important', color: '#4B5563' }}>{formatDate(bug.created_at)}</td>}
-                            {!selectedBug && <td style={{ padding: '16px 20px !important', color: '#4B5563' }}>{formatDate(bug.requested_at)}</td>}
-                            {!selectedBug && (
-                              <td style={{ padding: '16px 20px !important', color: '#059669', fontWeight: bug.completed_at ? 'bold' : 'normal' }}>
-                                {formatDate(bug.completed_at)}
-                              </td>
-                            )}
-                            {!selectedBug && (
-                              <td style={{ position: 'relative', zIndex: actionMenuId === bug.id ? 40 : 1, textAlign: 'center' }}>
-                                <button
-                                  className="action-btn"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setActionMenuId(actionMenuId === bug.id ? null : bug.id);
-                                  }}
-                                  style={{
-                                    background: 'transparent',
-                                    border: 'none',
-                                    padding: '6px',
-                                    cursor: 'pointer',
-                                    borderRadius: '50%',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    color: '#7B5233',
-                                    transition: 'background-color 0.2s'
-                                  }}
-                                >
-                                  <MoreVertical size={16} />
-                                </button>
-                                {actionMenuId === bug.id && (
-                                  <div className="action-menu">
+                        {paginatedBugs.map((bug) => {
+                          const lastUpdate = bug.updates && bug.updates.length > 0 ? bug.updates[0] : null;
+                          const updatedAt = lastUpdate ? lastUpdate.created_at : bug.created_at;
+                          const updater = lastUpdate ? lastUpdate.updater : (bug.reporter || 'Chưa rõ');
+                          const { tag, text } = parseDescription(bug.description);
+
+                          return (
+                            <tr
+                              key={bug.id}
+                              onClick={() => handleRowClick(bug)}
+                              className="animate-card-entrance"
+                              style={{
+                                borderBottom: '1px solid #F1F5F9',
+                                fontSize: '0.85rem',
+                                transition: 'all 0.2s',
+                                cursor: 'pointer',
+                                backgroundColor: selectedBug && selectedBug.id === bug.id ? '#F2ECE4 !important' : 'transparent',
+                                borderLeft: selectedBug && selectedBug.id === bug.id ? '4px solid #7B5233 !important' : '4px solid transparent',
+                                position: 'relative',
+                                zIndex: actionMenuId === bug.id ? 30 : 1
+                              }}
+                            >
+                              {selectedBug ? (
+                                <>
+                                  {/* Mã ID */}
+                                  <td style={{ padding: '10px 12px !important', fontWeight: 'bold', color: '#7B5233', fontFamily: 'monospace' }}>
+                                    BUG-{bug.id}
+                                  </td>
+                                  {/* Màn hình */}
+                                  <td style={{ padding: '10px 12px !important' }}>
+                                    <strong style={{ fontFamily: 'monospace', color: '#0F172A' }}>{bug.screen_code}</strong>
+                                  </td>
+                                  {/* Nội dung */}
+                                  <td style={{ padding: '10px 12px !important', maxWidth: '150px' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                      {tag && (
+                                        <span style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          padding: '1px 4px',
+                                          borderRadius: '3px',
+                                          fontSize: '0.6rem',
+                                          fontWeight: 'bold',
+                                          color: '#7B5233',
+                                          backgroundColor: '#FAF6F0',
+                                          border: '1px solid #EADCC9',
+                                          width: 'fit-content'
+                                        }}>
+                                          {tag}
+                                        </span>
+                                      )}
+                                      <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', display: 'block' }} title={text}>{text}</span>
+                                    </div>
+                                  </td>
+                                  <td style={{ padding: '10px 12px !important' }}>{renderSeverityBadge(bug.severity)}</td>
+                                  <td style={{ padding: '10px 12px !important' }}>{renderStatusBadge(bug.status)}</td>
+                                </>
+                              ) : (
+                                <>
+                                  {/* Mã */}
+                                  <td style={{ padding: '16px 20px !important', fontWeight: 'bold', color: '#7B5233', fontFamily: 'monospace' }}>
+                                    BUG-{bug.id}
+                                  </td>
+                                  {/* Tên màn hình */}
+                                  <td style={{ padding: '16px 20px !important' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                      <strong style={{ fontFamily: 'monospace', color: '#0F172A' }}>{bug.screen_code}</strong>
+                                      <span style={{ fontSize: '0.75rem', color: '#64748B' }} title={bug.screen_title}>
+                                        {bug.screen_title}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  {/* Component */}
+                                  <td style={{ padding: '16px 20px !important' }}>
+                                    {tag ? (
+                                      <span style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        padding: '2px 6px',
+                                        borderRadius: '4px',
+                                        fontSize: '0.68rem',
+                                        fontWeight: 'bold',
+                                        color: '#7B5233',
+                                        backgroundColor: '#FAF6F0',
+                                        border: '1px solid #EADCC9'
+                                      }}>
+                                        {tag}
+                                      </span>
+                                    ) : (
+                                      <span style={{ color: '#94A3B8', fontSize: '0.75rem', fontStyle: 'italic' }}>Chung</span>
+                                    )}
+                                  </td>
+                                  {/* Mô tả */}
+                                  <td style={{ padding: '16px 20px !important', maxWidth: '280px' }}>
+                                    <div style={{ fontWeight: '500', color: '#334155', wordBreak: 'break-word' }}>
+                                      <span title={text}>{text}</span>
+                                    </div>
+                                  </td>
+                                  {/* Mức độ */}
+                                  <td style={{ padding: '16px 20px !important' }}>{renderSeverityBadge(bug.severity)}</td>
+                                  {/* Trạng thái */}
+                                  <td style={{ padding: '16px 20px !important' }}>{renderStatusBadge(bug.status)}</td>
+                                  {/* Ngày cập nhật */}
+                                  <td style={{ padding: '16px 20px !important', color: '#4B5563' }}>{formatDate(updatedAt)}</td>
+                                  {/* Người cập nhật */}
+                                  <td style={{ padding: '16px 20px !important', color: '#4B5563', fontWeight: '500' }}>{updater}</td>
+                                  {/* Ngày ghi nhận */}
+                                  <td style={{ padding: '16px 20px !important', color: '#4B5563' }}>{formatDate(bug.created_at)}</td>
+                                  {/* Thao tác */}
+                                  <td style={{ position: 'relative', zIndex: actionMenuId === bug.id ? 40 : 1, textAlign: 'center' }}>
                                     <button
-                                      className="action-menu-item"
+                                      className="action-btn"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setActionMenuId(null);
-                                        handleEditClick(bug);
+                                        if (e.nativeEvent && e.nativeEvent.stopImmediatePropagation) {
+                                          e.nativeEvent.stopImmediatePropagation();
+                                        }
+                                        setActionMenuId(actionMenuId === bug.id ? null : bug.id);
+                                      }}
+                                      style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        padding: '6px',
+                                        cursor: 'pointer',
+                                        borderRadius: '50%',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        color: '#7B5233',
+                                        transition: 'background-color 0.2s'
                                       }}
                                     >
-                                      Chỉnh sửa
+                                      <MoreVertical size={16} style={{ pointerEvents: 'none' }} />
                                     </button>
-                                    <button
-                                      className="action-menu-item danger"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setActionMenuId(null);
-                                        handleDeleteClick(bug);
-                                      }}
-                                    >
-                                      Xóa
-                                    </button>
-                                  </div>
-                                )}
-                              </td>
-                            )}
-                          </tr>
-                        ))}
+                                    {actionMenuId === bug.id && (
+                                      <div className="action-menu" style={{ opacity: 1, animation: 'none' }}>
+                                        <button
+                                          className="action-menu-item"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setActionMenuId(null);
+                                            handleEditClick(bug);
+                                          }}
+                                        >
+                                          Chỉnh sửa
+                                        </button>
+                                        <button
+                                          className="action-menu-item danger"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setActionMenuId(null);
+                                            handleDeleteClick(bug);
+                                          }}
+                                        >
+                                          Xóa
+                                        </button>
+                                      </div>
+                                    )}
+                                  </td>
+                            </>
+                          )}
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

@@ -4,6 +4,7 @@ from typing import List, Optional
 from config.database import get_db
 from modules.system.models.system_screen import SystemScreen as SystemScreenModel
 from modules.system.models.system_component import SystemComponent as SystemComponentModel
+from modules.system.models.system_guide import SystemGuide as SystemGuideModel
 from modules.system.schemas.system_screen import (
     SystemScreen as SystemScreenSchema, 
     SystemScreenCreate,
@@ -105,6 +106,20 @@ async def create_screen(
                 is_active=comp.is_active
             )
             db.add(db_comp)
+        db.commit()
+        db.refresh(db_screen)
+
+    # 5.1 Khoi tao guides kem theo neu co
+    if screen_in.guides:
+        for guide in screen_in.guides:
+            db_guide = SystemGuideModel(
+                screen_id=db_screen.id,
+                step_number=guide.step_number,
+                title=guide.title,
+                related_components=guide.related_components,
+                description=guide.description
+            )
+            db.add(db_guide)
         db.commit()
         db.refresh(db_screen)
 
@@ -223,6 +238,7 @@ async def update_screen(
         
     update_data = screen_in.model_dump(exclude_unset=True)
     components_data = update_data.pop("components", None)
+    guides_data = update_data.pop("guides", None)
     
     for field, value in update_data.items():
         setattr(db_screen, field, value)
@@ -243,6 +259,20 @@ async def update_screen(
                 is_active=comp.get("is_active", True) if comp.get("is_active") is not None else True
             )
             db.add(db_comp)
+        db.commit()
+
+    if guides_data is not None:
+        # Xoa cac guides cu va thay the bang danh sach moi
+        db.query(SystemGuideModel).filter(SystemGuideModel.screen_id == screen_id).delete()
+        for guide in guides_data:
+            db_guide = SystemGuideModel(
+                screen_id=screen_id,
+                step_number=guide.get("step_number"),
+                title=guide.get("title"),
+                related_components=guide.get("related_components"),
+                description=guide.get("description")
+            )
+            db.add(db_guide)
         db.commit()
         
     db.refresh(db_screen)
@@ -296,4 +326,122 @@ async def reset_screen_code(screen_id: int, db: Session = Depends(get_db)):
         print(f"Error broadcasting screen reset: {e}")
 
     return db_screen
+
+
+@router.post("/{screen_id}/copy", response_model=SystemScreenSchema)
+async def copy_screen(
+    screen_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Sao chép một đặc tả màn hình (toàn bộ trừ ảnh mockup và bugs).
+    """
+    # 1. Lấy thông tin màn hình gốc
+    db_screen = db.query(SystemScreenModel).filter(SystemScreenModel.id == screen_id).first()
+    if not db_screen:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Không tìm thấy thông tin màn hình cần sao chép"
+        )
+
+    # 2. Tính toán mã code mới dựa trên 2 chữ cái đầu của mã mặc định gốc
+    prefix = "AD"
+    if db_screen.default_code and len(db_screen.default_code) >= 2:
+        prefix = db_screen.default_code[:2]
+        
+    existing = db.query(SystemScreenModel.default_code).filter(
+        SystemScreenModel.default_code.like(f"{prefix}%")
+    ).all()
+    
+    max_num = 0
+    for row in existing:
+        code = row[0]
+        match = re.match(rf"{prefix}(\d+)", code)
+        if match:
+            num = int(match.group(1))
+            if num > max_num:
+                max_num = num
+                
+    next_code = f"{prefix}{max_num + 1:02d}"
+
+    # 3. Tạo route_path mới (thêm hậu tố -copy)
+    new_route_path = db_screen.route_path
+    if new_route_path:
+        if not (new_route_path.endswith("-copy") or new_route_path.endswith("-sao-chep")):
+            new_route_path = f"{new_route_path}-copy"
+    else:
+        new_route_path = f"/admin/copy-{slugify(db_screen.title)}"
+
+    # Đảm bảo không trùng lặp route path
+    base_path = new_route_path
+    counter = 1
+    while db.query(SystemScreenModel).filter(
+        SystemScreenModel.platform == db_screen.platform,
+        SystemScreenModel.route_path == new_route_path
+    ).first():
+        new_route_path = f"{base_path}-{counter}"
+        counter += 1
+
+    # 4. Khởi tạo model màn hình mới (loại bỏ mockup_path và chuyển status về 'Mới thiết kế')
+    new_screen = SystemScreenModel(
+        platform=db_screen.platform,
+        route_path=new_route_path,
+        default_code=next_code,
+        current_code=next_code,
+        title=f"{db_screen.title} - Sao chép",
+        subtitle=db_screen.subtitle,
+        status="Mới thiết kế",
+        target_date=db_screen.target_date,
+        mockup_path=None,
+        is_active=True
+    )
+    
+    db.add(new_screen)
+    db.commit()
+    db.refresh(new_screen)
+
+    # 5. Sao chép các components liên kết
+    for comp in db_screen.components:
+        db_comp = SystemComponentModel(
+            screen_id=new_screen.id,
+            name=comp.name,
+            type=comp.type,
+            description=comp.description,
+            technical_details=comp.technical_details,
+            file_path=comp.file_path,
+            is_active=comp.is_active
+        )
+        db.add(db_comp)
+
+    # 6. Sao chép các guides liên kết
+    for guide in db_screen.guides:
+        db_guide = SystemGuideModel(
+            screen_id=new_screen.id,
+            step_number=guide.step_number,
+            title=guide.title,
+            related_components=guide.related_components,
+            description=guide.description
+        )
+        db.add(db_guide)
+        
+    db.commit()
+    db.refresh(new_screen)
+
+    # Realtime WebSocket broadcast
+    try:
+        from shared.services.websocket_service import socket_manager
+        await socket_manager.broadcast_all({
+            "type": "SCREEN_UPDATED",
+            "screen_id": new_screen.id,
+            "platform": new_screen.platform,
+            "route_path": new_screen.route_path,
+            "current_code": new_screen.current_code,
+            "title": new_screen.title,
+            "subtitle": new_screen.subtitle
+        })
+    except Exception as e:
+        print(f"Error broadcasting copied screen: {e}")
+
+    return new_screen
+
 

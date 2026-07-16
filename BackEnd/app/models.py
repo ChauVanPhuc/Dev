@@ -33,6 +33,7 @@ from modules.capa.models.capa_evaluation import CAPAEvaluation
 from modules.system.models.system_screen import SystemScreen
 from modules.system.models.system_component import SystemComponent
 from modules.system.models.screen_bug import ScreenBug, ScreenBugUpdate, ScreenBugImage
+from modules.system.models.system_guide import SystemGuide
 from modules.inspection.models.defect_type import DefectType, ClientDefect, DefectGlossary
 from modules.chatbot.models.chatbot_history import ChatbotHistory
 from modules.purchasing.models.purchase_requisition import PurchaseRequisition
@@ -46,7 +47,7 @@ __all__ = [
     "ProductPlan", "MobileDailyPlan", "Role", "Stage", "Notification", "MasterCategory", "MasterProduct",
     "MasterBOMDetail", "DeliveryQC", "DeliveryReturn", "permission_stage", "role_permission",
     "BackupQRCode", "PalletCard", "KPI", "AwardDiscipline", "StaffEvaluation", "CAPA",
-    "CAPAOccurrence", "CAPAEvaluation", "SystemScreen", "SystemComponent", "ScreenBug",
+    "CAPAOccurrence", "CAPAEvaluation", "SystemScreen", "SystemComponent", "SystemGuide", "ScreenBug",
     "ScreenBugUpdate", "ScreenBugImage", "DefectType", "ClientDefect", "DefectGlossary", "ChatbotHistory",
     "PurchaseRequisition", "PurchaseOrderItem", "Machine", "MachineMaintenance", "MachineDocument",
     "ISODocument", "ISORevisionLog", "ISOSection", "ISOProcessStep",

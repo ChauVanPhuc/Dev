@@ -7,6 +7,7 @@ import { useScreen } from '@shared/context/ScreenContext';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
+import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
 
 const parseDescription = (desc) => {
   if (!desc) return { tag: '', text: '' };
@@ -126,6 +127,29 @@ const ScreenManagement = () => {
   const [customizationFilter, setCustomizationFilter] = useState('all');
   const { refreshScreens } = useScreen();
 
+  const [confirmModal, setConfirmModal] = useState({
+    visible: false,
+    title: '',
+    message: '',
+    onConfirm: null,
+    type: 'warning'
+  });
+
+  const showConfirm = (title, message, onConfirm, type = 'warning') => {
+    setConfirmModal({
+      visible: true,
+      title,
+      message,
+      onConfirm: () => {
+        if (typeof onConfirm === 'function') {
+          onConfirm();
+        }
+        setConfirmModal(prev => ({ ...prev, visible: false }));
+      },
+      type
+    });
+  };
+
   useEffect(() => {
     if (setCustomScreenCode) setCustomScreenCode('HD02');
     if (setCustomTitle) setCustomTitle('Danh sách màn hình');
@@ -171,30 +195,40 @@ const ScreenManagement = () => {
   }, []);
 
   const handleDeleteScreen = async (screen) => {
-    if (window.confirm(`Bạn có chắc chắn muốn xóa màn hình "${screen.title}" khỏi cơ sở dữ liệu?`)) {
-      try {
-        await screenService.deleteScreen(screen.id);
-        showToast('Xóa màn hình thành công!');
-        if (selectedScreenId === screen.id) setSelectedScreenId(null);
-        fetchAllData();
-        refreshScreens();
-      } catch (error) {
-        showToast('Không thể xóa màn hình. Vui lòng thử lại!', 'error');
-      }
-    }
+    showConfirm(
+      'Xóa màn hình',
+      `Bạn có chắc chắn muốn xóa màn hình "${screen.title}" khỏi cơ sở dữ liệu?`,
+      async () => {
+        try {
+          await screenService.deleteScreen(screen.id);
+          showToast('Xóa màn hình thành công!');
+          if (selectedScreenId === screen.id) setSelectedScreenId(null);
+          fetchAllData();
+          refreshScreens();
+        } catch (error) {
+          showToast('Không thể xóa màn hình. Vui lòng thử lại!', 'error');
+        }
+      },
+      'danger'
+    );
   };
 
   const handleReset = async (screen) => {
-    if (window.confirm(`Bạn có chắc chắn muốn đặt lại mã màn hình của "${screen.title}" về mặc định (${screen.default_code})?`)) {
-      try {
-        await screenService.resetScreen(screen.id);
-        showToast('Đã đặt lại mã màn hình về mặc định!');
-        fetchAllData();
-        refreshScreens();
-      } catch (error) {
-        showToast('Đặt lại thất bại!', 'error');
-      }
-    }
+    showConfirm(
+      'Đặt lại mã màn hình',
+      `Bạn có chắc chắn muốn đặt lại mã màn hình của "${screen.title}" về mặc định (${screen.default_code})?`,
+      async () => {
+        try {
+          await screenService.resetScreen(screen.id);
+          showToast('Đã đặt lại mã màn hình về mặc định!');
+          fetchAllData();
+          refreshScreens();
+        } catch (error) {
+          showToast('Đặt lại thất bại!', 'error');
+        }
+      },
+      'warning'
+    );
   };
 
   const fileInputRef = useRef(null);
@@ -217,6 +251,26 @@ const ScreenManagement = () => {
     } catch (error) {
       showToast('Cập nhật trạng thái thất bại!', 'error');
     }
+  };
+
+  const handleCopyScreen = async (screen) => {
+    showConfirm(
+      'Sao chép màn hình',
+      `Bạn có chắc chắn muốn sao chép đặc tả màn hình "${screen.title}" (không bao gồm ảnh mockup)?`,
+      async () => {
+        try {
+          setLoading(true);
+          const fullDetail = await screenService.getScreenDetail(screen.id);
+          showToast('Đã tải cấu hình màn hình gốc, chuẩn bị chuyển hướng...', 'info');
+          navigate('/admin/screens/new', { state: { copyFromScreen: fullDetail } });
+        } catch (error) {
+          showToast('Không thể tải thông tin cấu hình màn hình gốc!', 'error');
+        } finally {
+          setLoading(false);
+        }
+      },
+      'warning'
+    );
   };
 
   const handleImportExcelClick = () => {
@@ -736,14 +790,14 @@ const ScreenManagement = () => {
                     padding: '4px 0'
                   }}>
                     <div
-                      onClick={() => { setIsOtherDropdownOpen(false); navigate('/admin/bugs'); }}
+                      onClick={() => { setIsOtherDropdownOpen(false); navigate('/admin/screens/bugs'); }}
                       style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '0.82rem', color: '#374151' }}
                       className="custom-select-item"
                     >
                       Danh sách lỗi hệ thống
                     </div>
                     <div
-                      onClick={() => { setIsOtherDropdownOpen(false); navigate('/admin/monitor'); }}
+                      onClick={() => { setIsOtherDropdownOpen(false); navigate('/admin/screens/progress'); }}
                       style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '0.82rem', color: '#374151' }}
                       className="custom-select-item"
                     >
@@ -1090,7 +1144,7 @@ const ScreenManagement = () => {
                           <th>Ngày cập nhật</th>
                           <th style={{ textAlign: 'center' }}>Lỗi</th>
                           <th>Mô tả</th>
-                          <th style={{ textAlign: 'center', width: '100px' }}>Thao tác</th>
+                          <th style={{ textAlign: 'center', width: '100px' }}>THAO TÁC</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1171,11 +1225,14 @@ const ScreenManagement = () => {
                                   className="action-btn"
                                   onClick={(e) => {
                                     e.stopPropagation();
+                                    if (e.nativeEvent && e.nativeEvent.stopImmediatePropagation) {
+                                      e.nativeEvent.stopImmediatePropagation();
+                                    }
                                     setActionMenuId(actionMenuId === screen.id ? null : screen.id);
                                   }}
-                                ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
+                                ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ pointerEvents: 'none' }}><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
                                 {actionMenuId === screen.id && (
-                                  <div className="action-menu" style={{ right: '50%', transform: 'translateX(50%)', top: '80%' }}>
+                                  <div className="action-menu" style={{ right: '50%', transform: 'translateX(50%)', top: '80%', opacity: 1, animation: 'none' }}>
                                     <button
                                       className="action-menu-item"
                                       onClick={() => {
@@ -1202,6 +1259,16 @@ const ScreenManagement = () => {
                                       }}
                                     >
                                       Tải xuống PDF
+                                    </button>
+                                    <button
+                                      className="action-menu-item"
+                                      onClick={() => {
+                                        setActionMenuId(null);
+                                        handleCopyScreen(screen);
+                                      }}
+                                      style={{ color: '#0284C7' }}
+                                    >
+                                      Sao chép
                                     </button>
                                     <button
                                       className="action-menu-item danger"
@@ -1282,6 +1349,14 @@ const ScreenManagement = () => {
                                 title="Sửa"
                               >
                                 ✏️
+                              </button>
+                              <button 
+                                className="action-icon-btn"
+                                onClick={(e) => { e.stopPropagation(); handleCopyScreen(screen); }}
+                                title="Sao chép"
+                                style={{ color: '#0284C7' }}
+                              >
+                                📋
                               </button>
                               <button 
                                 className="action-icon-btn delete"
@@ -1421,7 +1496,7 @@ const ScreenManagement = () => {
                             <th style={{ color: '#fff' }}>Ngày cập nhật</th>
                             <th style={{ color: '#fff' }}>Người cập nhật</th>
                             <th style={{ color: '#fff' }}>Ngày ghi nhận</th>
-                            <th style={{ color: '#fff', textAlign: 'center' }}>Thao tác</th>
+                            <th style={{ color: '#fff', textAlign: 'center' }}>THAO TÁC</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1544,9 +1619,17 @@ const ScreenManagement = () => {
               )}
             </div>
           )}
-      </div>
-    </>
-  );
+      <BeautifulConfirmModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        type={confirmModal.type}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal(prev => ({ ...prev, visible: false }))}
+      />
+    </div>
+  </>
+);
 };
 
 export default ScreenManagement;

@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 from modules.system.schemas.system_component import SystemComponent as SystemComponentSchema, SystemComponentCreate
+from modules.system.schemas.system_guide import SystemGuide as SystemGuideSchema, SystemGuideCreate
 from modules.system.schemas.screen_bug import ScreenBugResponse
 
 class SystemScreenBase(BaseModel):
@@ -31,6 +32,7 @@ class SystemScreenCreate(BaseModel):
     target_date: Optional[str] = None
     subsystem: Optional[str] = None
     components: Optional[List[SystemComponentCreate]] = None
+    guides: Optional[List[SystemGuideCreate]] = None
     mockup_path: Optional[str] = None
 
 class SystemScreenUpdate(BaseModel):
@@ -45,6 +47,7 @@ class SystemScreenUpdate(BaseModel):
     status: Optional[str] = None
     target_date: Optional[str] = None
     components: Optional[List[SystemComponentCreate]] = None
+    guides: Optional[List[SystemGuideCreate]] = None
     mockup_path: Optional[str] = None
 
 class SystemScreen(SystemScreenBase):
@@ -54,6 +57,7 @@ class SystemScreen(SystemScreenBase):
     id: int
     updated_at: Optional[datetime] = None
     components: List[SystemComponentSchema] = []
+    guides: List[SystemGuideSchema] = []
     bugs: List[ScreenBugResponse] = []
 
     class Config:
