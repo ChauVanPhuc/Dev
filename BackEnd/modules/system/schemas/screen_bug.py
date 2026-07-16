@@ -30,7 +30,7 @@ class ScreenBugBase(BaseModel):
     screen_id: int
     description: str
     severity: str = "Medium" # Critical, High, Medium, Low
-    status: str = "New" # New, In Progress, Resolved, Verified
+    status: str = "Mới" # Mới, Sửa lại, Đã sửa, Hoàn thành
     assignee: Optional[str] = None
     reporter: Optional[str] = None
     requested_at: datetime
@@ -41,7 +41,7 @@ class ScreenBugCreate(BaseModel):
     screen_id: int
     description: str
     severity: str = "Medium"
-    status: str = "New"
+    status: str = "Mới"
     assignee: Optional[str] = None
     reporter: Optional[str] = None
     requested_at: datetime

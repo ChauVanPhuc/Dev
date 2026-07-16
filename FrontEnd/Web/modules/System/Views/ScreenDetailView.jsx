@@ -41,6 +41,15 @@ const getLoggedInUser = () => {
   }
 };
 
+const getBugStatusLabel = (status) => {
+  const s = (status || '').toLowerCase();
+  if (s === 'new' || s === 'mới') return 'Mới';
+  if (s === 'resolved' || s === 'đã sửa') return 'Đã sửa';
+  if (s === 'verified' || s === 'hoàn thành') return 'Hoàn thành';
+  if (s === 'reopened' || s === 'sửa lại' || s === 'in progress' || s === 'in_progress') return 'Sửa lại';
+  return status;
+};
+
 import { screenService } from '@modules/System/Models/screen.service';
 import { bugService } from '@modules/System/Models/bug.service';
 
@@ -1564,12 +1573,14 @@ const ScreenDetail = () => {
     
     let newStatus = bugModalData.status;
     const current = (bugModalData.status || '').toLowerCase();
+    const isNewOrReopened = current === 'new' || current === 'mới' || current === 'sửa lại' || current === 'in progress' || current === 'in_progress';
+    const isFixed = current === 'resolved' || current === 'đã sửa';
     
-    if (current === 'new' || current === 'mới' || bugModalData.status === 'Sửa lại') {
+    if (isNewOrReopened) {
       if (replyStatusVal === 'Đã sửa') {
         newStatus = 'Đã sửa';
       }
-    } else if (bugModalData.status === 'Đã sửa') {
+    } else if (isFixed) {
       if (replyStatusVal === 'Hoàn thành') {
         newStatus = 'Hoàn thành';
       } else if (replyStatusVal === 'Từ chối') {
@@ -2714,8 +2725,14 @@ const ScreenDetail = () => {
                                 </span>
                               </td>
                               <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }}>
-                                <span className={`status-badge ${bug.status === 'Hoàn thành' ? 'status-resolved' : (bug.status === 'Đã sửa' ? 'status-processing' : 'status-new')}`}>
-                                  {bug.status === 'New' || bug.status === 'Mới' ? 'Mới' : (bug.status === 'Đã sửa' ? 'Đã sửa' : (bug.status === 'Sửa lại' ? 'Sửa lại' : 'Hoàn thành'))}
+                                <span className={`status-badge ${
+                                  getBugStatusLabel(bug.status) === 'Hoàn thành' 
+                                    ? 'status-resolved' 
+                                    : (getBugStatusLabel(bug.status) === 'Đã sửa' 
+                                      ? 'status-processing' 
+                                      : 'status-new')
+                                }`}>
+                                  {getBugStatusLabel(bug.status)}
                                 </span>
                               </td>
                               <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }}>{formatDate(bug.completed_at || bug.created_at)}</td>
@@ -5480,7 +5497,7 @@ const ScreenDetail = () => {
                   <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Trạng thái</label>
                   <input 
                     type="text" 
-                    value={bugModalMode === 'edit' ? (bugModalData.status === 'New' || bugModalData.status === 'Mới' ? 'Mới' : (bugModalData.status === 'Đã sửa' ? 'Đã sửa' : (bugModalData.status === 'Sửa lại' ? 'Sửa lại' : 'Hoàn thành'))) : 'Mới'} 
+                    value={bugModalMode === 'edit' ? getBugStatusLabel(bugModalData.status) : 'Mới'} 
                     disabled 
                     style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: '#F1F5F9', color: '#64748B', fontWeight: '500', boxSizing: 'border-box', height: '36px' }}
                   />
@@ -5679,7 +5696,7 @@ const ScreenDetail = () => {
                   <div className="form-group" style={{ margin: 0 }}>
                     <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Cập nhật trạng thái</label>
                     <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '4px' }}>
-                      {((bugModalData.status || '').toLowerCase() === 'new' || (bugModalData.status || '').toLowerCase() === 'mới' || bugModalData.status === 'Sửa lại') ? (
+                      {(getBugStatusLabel(bugModalData.status) === 'Mới' || getBugStatusLabel(bugModalData.status) === 'Sửa lại') ? (
                         <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#334155', fontWeight: '600', cursor: 'pointer' }}>
                           <input 
                             type="checkbox"
@@ -5689,7 +5706,7 @@ const ScreenDetail = () => {
                           />
                           Xác nhận đã sửa (Đã sửa)
                         </label>
-                      ) : bugModalData.status === 'Đã sửa' ? (
+                      ) : getBugStatusLabel(bugModalData.status) === 'Đã sửa' ? (
                         <>
                           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#059669', fontWeight: '600', cursor: 'pointer' }}>
                             <input 

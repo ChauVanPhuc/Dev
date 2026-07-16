@@ -316,13 +316,13 @@ async def update_screen_bug(bug_id: int, bug_in: ScreenBugUpdate, db: Session = 
     update_data = bug_in.model_dump(exclude_unset=True)
 
     should_notify_reporter = False
-    if "status" in update_data and update_data["status"] == "Resolved" and db_bug.status != "Resolved":
+    if "status" in update_data and update_data["status"] in ["Resolved", "Đã sửa"] and db_bug.status not in ["Resolved", "Đã sửa"]:
         should_notify_reporter = True
 
     # Logic tự động điền/xóa completed_at
     if "status" in update_data:
         new_status = update_data["status"]
-        if new_status in ["Resolved", "Verified"]:
+        if new_status in ["Resolved", "Verified", "Đã sửa", "Hoàn thành"]:
             if "completed_at" not in update_data or update_data["completed_at"] is None:
                 update_data["completed_at"] = get_vietnam_time()
         else:
@@ -472,10 +472,10 @@ async def create_bug_comment_update(
     # 2. Cập nhật trạng thái và người phân công của bug chính nếu có thay đổi
     should_notify_reporter = False
     if update_in.status:
-        if update_in.status == "Resolved" and db_bug.status != "Resolved":
+        if update_in.status in ["Resolved", "Đã sửa"] and db_bug.status not in ["Resolved", "Đã sửa"]:
             should_notify_reporter = True
         db_bug.status = update_in.status
-        if update_in.status in ["Resolved", "Verified"]:
+        if update_in.status in ["Resolved", "Verified", "Đã sửa", "Hoàn thành"]:
             db_bug.completed_at = get_vietnam_time()
         else:
             db_bug.completed_at = None
@@ -560,10 +560,10 @@ async def update_comment_status(
     should_notify_reporter = False
     db_bug = db.query(ScreenBugModel).filter(ScreenBugModel.id == db_update.bug_id).first()
     if db_bug:
-        if new_status == "Resolved" and db_bug.status != "Resolved":
+        if new_status in ["Resolved", "Đã sửa"] and db_bug.status not in ["Resolved", "Đã sửa"]:
             should_notify_reporter = True
         db_bug.status = new_status
-        if new_status in ["Resolved", "Verified"]:
+        if new_status in ["Resolved", "Verified", "Đã sửa", "Hoàn thành"]:
             db_bug.completed_at = get_vietnam_time()
         else:
             db_bug.completed_at = None

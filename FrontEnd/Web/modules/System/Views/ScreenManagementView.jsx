@@ -451,22 +451,37 @@ const ScreenManagement = () => {
 
   const stats = useMemo(() => {
     const totalScreens = screens.length;
-    const completedScreens = screens.filter(s => s.status === 'Hoàn thành').length;
+    const completedScreens = screens.filter(s => {
+      const status = (s.status || '').toLowerCase();
+      return status === 'hoàn thành' || status === 'completed';
+    }).length;
     const buildPercentage = totalScreens > 0 ? Math.round((completedScreens / totalScreens) * 100) : 0;
 
     const totalBugs = bugs.length;
-    // Tiến độ chỉnh sửa (Dev sửa xong): status là 'Đã sửa' hoặc 'Hoàn thành'
-    const completedBugs = bugs.filter(b => b.status === 'Đã sửa' || b.status === 'Hoàn thành').length;
+    // Tiến độ chỉnh sửa (Dev sửa xong): status là 'Đã sửa'/'Resolved' hoặc 'Hoàn thành'/'Verified'
+    const completedBugs = bugs.filter(b => {
+      const s = (b.status || '').toLowerCase();
+      return s === 'resolved' || s === 'đã sửa' || s === 'verified' || s === 'hoàn thành';
+    }).length;
     const editPercentage = totalBugs > 0 ? Math.round((completedBugs / totalBugs) * 100) : 0;
 
-    // Tiến độ khắc phục (QC xác nhận hoàn thành): status là 'Hoàn thành'
-    const fixedBugs = bugs.filter(b => b.status === 'Hoàn thành').length;
+    // Tiến độ khắc phục (QC xác nhận hoàn thành): status là 'Hoàn thành'/'Verified'
+    const fixedBugs = bugs.filter(b => {
+      const s = (b.status || '').toLowerCase();
+      return s === 'verified' || s === 'hoàn thành';
+    }).length;
     const recoveryPercentage = totalBugs > 0 ? Math.round((fixedBugs / totalBugs) * 100) : 0;
 
-    // Lỗi khẩn cấp: Chỉ lọc mức độ 'Critical'
-    const urgentBugs = bugs.filter(b => b.severity === 'Critical');
+    // Lỗi khẩn cấp: Chỉ lọc mức độ 'Critical' hoặc 'Khẩn cấp'
+    const urgentBugs = bugs.filter(b => {
+      const sev = (b.severity || '').toLowerCase();
+      return sev === 'critical' || sev === 'khẩn cấp';
+    });
     const totalUrgentBugs = urgentBugs.length;
-    const fixedUrgentBugs = urgentBugs.filter(b => b.status === 'Hoàn thành').length;
+    const fixedUrgentBugs = urgentBugs.filter(b => {
+      const s = (b.status || '').toLowerCase();
+      return s === 'verified' || s === 'hoàn thành';
+    }).length;
     const urgentPercentage = totalUrgentBugs > 0 ? Math.round((fixedUrgentBugs / totalUrgentBugs) * 100) : 0;
 
     return {
@@ -1083,7 +1098,10 @@ const ScreenManagement = () => {
                           const isSelected = selectedScreenId === screen.id;
                           const isChecked = checkedScreenIds.includes(screen.id);
                           const screenBugs = bugs.filter(b => b.screen_id === screen.id);
-                          const completedBugs = screenBugs.filter(b => b.status === 'Hoàn thành').length;
+                          const completedBugs = screenBugs.filter(b => {
+                            const s = (b.status || '').toLowerCase();
+                            return s === 'verified' || s === 'hoàn thành';
+                          }).length;
                           const totalBugs = screenBugs.length;
                           
                           return (
