@@ -203,7 +203,6 @@ def get_plans(
     
     # Filter by user_stage (factory) if applicable
     if factory:
-        from modules.production.models.order import Order
         query = query.join(Order).filter(Order.id.in_(allowed_order_ids))
 
     # Nếu có tham số search (áp dụng khi phân trang)
@@ -283,7 +282,6 @@ def get_plans(
 
     # 4. Phân trang
     total_count = query.count()
-    from modules.production.models.order import Order
     paginated_plans = query.options(
         selectinload(ProductPlan.orders).selectinload(Order.products)
     ).offset((page - 1) * pageSize).limit(pageSize).all()

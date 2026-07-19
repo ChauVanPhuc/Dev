@@ -26,6 +26,7 @@ class SystemScreenCreate(BaseModel):
     """
     platform: str
     route_path: Optional[str] = None
+    current_code: Optional[str] = None
     title: str
     subtitle: Optional[str] = None
     status: Optional[str] = 'Mới thiết kế'
@@ -43,6 +44,8 @@ class SystemScreenUpdate(BaseModel):
     current_code: Optional[str] = None
     title: Optional[str] = None
     subtitle: Optional[str] = None
+    route_path: Optional[str] = None
+    platform: Optional[str] = None
     is_active: Optional[bool] = None
     status: Optional[str] = None
     target_date: Optional[str] = None

@@ -408,6 +408,28 @@ const ScreenBugManagementView = () => {
         notes: addForm.notes,
         image_paths: addImages
       });
+
+      // Cập nhật trạng thái màn hình tương ứng về 'Mới thiết kế'
+      try {
+        const targetScreenId = parseInt(addForm.screen_id);
+        const targetScreen = screens.find(s => s.id === targetScreenId);
+        if (targetScreen) {
+          await screenService.updateScreen(targetScreen.id, {
+            title: targetScreen.title,
+            route_path: targetScreen.route_path,
+            platform: targetScreen.platform,
+            status: 'Mới thiết kế',
+            target_date: targetScreen.target_date,
+            subtitle: targetScreen.subtitle,
+            mockup_path: targetScreen.mockup_path,
+            components: targetScreen.components || [],
+            guides: targetScreen.guides || []
+          });
+        }
+      } catch (screenErr) {
+        console.error('Failed to reset screen status on bug report:', screenErr);
+      }
+
       showToast('Báo cáo lỗi màn hình thành công!');
       setShowAddModal(false);
       localStorage.setItem('smartflow_last_reported_screen_id', addForm.screen_id);
@@ -1149,6 +1171,7 @@ const ScreenBugManagementView = () => {
             (expectedDateFilter ? 1 : 0)
           }
           extraActions={[
+            { label: 'Quản lý màn hình', onClick: () => navigate('/admin/screens') },
             { label: 'Tiến độ thực hiện', onClick: () => navigate('/admin/screens/progress') }
           ]}
           importActions={[

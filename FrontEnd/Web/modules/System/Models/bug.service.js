@@ -46,7 +46,7 @@ export const bugService = {
     formData.append('file', file);
     return api.post('/screen-bugs/upload-image', formData, {
       headers: {
-        'Content-Type': 'multipart/form-data'
+        'Content-Type': undefined
       }
     });
   },

@@ -95,6 +95,20 @@ export const screenService = {
    */
   copyScreen: async (id) => {
     return api.post(`/screens/${id}/copy`);
+  },
+
+  /**
+   * Xuat file theo form mau cua component export
+   */
+  exportScreenFile: async (screenId, { button_id, mode, data, context }) => {
+    return api.post(`/screens/${screenId}/export`, {
+      button_id,
+      mode,
+      data,
+      context
+    }, {
+      responseType: 'blob'
+    });
   }
 
 };

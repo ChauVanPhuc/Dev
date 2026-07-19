@@ -27,6 +27,7 @@ from modules.claim.routes.claim_routes import router as claim_router
 
 from modules.purchasing.routes import purchase_requisition_router, purchase_order_item_router
 from modules.inspection.routes.iso_router import router as iso_router
+from modules.hr.routes import hr_router
 
 
 
@@ -90,6 +91,7 @@ api_router.include_router(purchase_requisition_router.router, prefix="/purchase-
 
 api_router.include_router(purchase_order_item_router.router, prefix="/purchase-order-items", tags=["purchase-order-items"])
 api_router.include_router(iso_router, prefix="/iso-documents", tags=["iso-documents"])
+api_router.include_router(hr_router.router, prefix="/hr", tags=["hr"])
 
 
 

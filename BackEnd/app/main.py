@@ -82,25 +82,6 @@ async def lifespan(app: FastAPI):
 
     db = SessionLocal()
 
-    try:
-        # [AUTO-MIGRATION] Auto-run screen migrations (Nhóm 2)
-        try:
-            import sys
-            sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
-            from database.migrations.create_system_screens_table import upgrade as upgrade_screens
-            print("Running auto-migration for system screens...")
-            upgrade_screens()
-        except Exception as e:
-            print(f"Auto-migration screens error: {e}")
-
-    except Exception as e:
-
-        print(f"Migration error: {e}")
-
-    finally:
-
-        db.close()
-
 
 
     yield
@@ -221,6 +202,7 @@ async def check_write_permissions(request: Request, call_next):
             "/accounts/login",
             "/api/v1/accounts/login",
             "/api/v1/claims/chat",
+            "/api/v1/screen-bugs/upload-image",
             "/health",
             "/ws",
         )

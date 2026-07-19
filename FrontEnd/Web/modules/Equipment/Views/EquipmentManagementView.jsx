@@ -34,6 +34,13 @@ const EquipmentManagementView = () => {
   const location = useLocation();
   const [showHandoverModal, setShowHandoverModal] = useState(false);
   const [handoverEquipmentId, setHandoverEquipmentId] = useState(null);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportOptions, setExportOptions] = useState({
+    listSelected: true,
+    listAll: true,
+    docsSelected: false,
+    docsAll: false
+  });
 
   useEffect(() => {
     if (screenCode && title) {
@@ -413,7 +420,7 @@ const EquipmentManagementView = () => {
                         onChange={(e) => setExportOptions({ ...exportOptions, listSelected: e.target.checked })} 
                         style={{ accentColor: '#7B5233', width: '15px', height: '15px' }}
                       />
-                      Xuất danh sách
+                      Xuất danh sách (Excel)
                     </label>
                   </td>
                   <td style={{ padding: '14px 8px', textAlign: 'center' }}>
@@ -435,7 +442,7 @@ const EquipmentManagementView = () => {
                         onChange={(e) => setExportOptions({ ...exportOptions, docsSelected: e.target.checked })} 
                         style={{ accentColor: '#7B5233', width: '15px', height: '15px' }}
                       />
-                      Xuất tài liệu
+                      Xuất tài liệu (PDF)
                     </label>
                   </td>
                   <td style={{ padding: '14px 8px', textAlign: 'center' }}>

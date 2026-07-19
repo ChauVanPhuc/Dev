@@ -9,9 +9,9 @@ import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const BackupQRManagement = () => {
     const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = useOutletContext();
-  
-  // Lấy metadata từ database thay vì hardcode
-  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/backup-qr');
+
+    // Lấy metadata từ database thay vì hardcode
+    const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/backup-qr');
     const [qrCodes, setQrCodes] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -22,15 +22,15 @@ const BackupQRManagement = () => {
     const [statusFilter, setStatusFilter] = useState('all');
     const { toast } = useToast();
     const setMessage = (msg) => {
-      if (msg && msg.text) {
-        toast(msg.type, msg.text);
-      }
+        if (msg && msg.text) {
+            toast(msg.type, msg.text);
+        }
     };
-    
+
     const [showAddModal, setShowAddModal] = useState(false);
     const [quantity, setQuantity] = useState(10);
 
-    
+
 
     const fetchQRCodes = async () => {
         setLoading(true);
@@ -45,23 +45,23 @@ const BackupQRManagement = () => {
     };
 
     useEffect(() => {
-    if (screenCode && title) {
-      if (setCustomTitle) setCustomTitle(title);
-      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
-      if (setCustomScreenCode) setCustomScreenCode(screenCode);
-    }
-  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+        if (screenCode && title) {
+            if (setCustomTitle) setCustomTitle(title);
+            if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+            if (setCustomScreenCode) setCustomScreenCode(screenCode);
+        }
+    }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
 
     const printQRsA4 = (items) => {
         if (items.length === 0) return toast('warning', 'Không có mã nào để in.');
-        
+
         // Chia các mã QR thành nhóm tối đa 4 mã trên 1 trang A4
         const chunks = [];
         for (let i = 0; i < items.length; i += 4) {
             chunks.push(items.slice(i, i + 4));
         }
-        
+
         const printWindow = window.open('', '_blank');
         const content = chunks.map((chunk) => {
             const cardsHtml = chunk.map((qr) => `
@@ -143,20 +143,20 @@ const BackupQRManagement = () => {
     useEffect(() => {
         setHeaderExtra(
             <div style={{ display: 'flex', gap: '10px' }}>
-                <button 
+                <button
                     onClick={() => printQRsA4(qrCodes)}
-                    style={{ 
-                        display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', 
+                    style={{
+                        display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px',
                         backgroundColor: '#1e293b', color: '#fff', border: 'none', borderRadius: '8px',
                         cursor: 'pointer', fontWeight: '700', fontSize: '13px'
                     }}
                 >
                     <Files size={18} /> In toàn bộ A4 (4 thẻ/tờ)
                 </button>
-                <button 
+                <button
                     onClick={() => setShowAddModal(true)}
-                    style={{ 
-                        display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', 
+                    style={{
+                        display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px',
                         backgroundColor: '#A0301B', color: '#fff', border: 'none', borderRadius: '8px',
                         cursor: 'pointer', fontWeight: '700', fontSize: '13px'
                     }}
@@ -224,11 +224,11 @@ const BackupQRManagement = () => {
                     onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
                     activeFiltersCount={statusFilter !== 'all' ? 1 : 0}
                     extraActions={selectedIds.length > 0 ? [
-                      {
-                        label: `In thẻ đã chọn (${selectedIds.length})`,
-                        icon: <Printer size={14} />,
-                        onClick: () => printQRsA4(qrCodes.filter(qr => selectedIds.includes(qr.id)))
-                      }
+                        {
+                            label: `In thẻ đã chọn (${selectedIds.length})`,
+                            icon: <Printer size={14} />,
+                            onClick: () => printQRsA4(qrCodes.filter(qr => selectedIds.includes(qr.id)))
+                        }
                     ] : []}
                     hasWritePermission={true}
                 />
@@ -271,128 +271,128 @@ const BackupQRManagement = () => {
             <div className="admin-list-layout">
                 <div className="mgmt-table admin-table-card page-card" style={{ padding: 0, overflow: 'hidden' }}>
                     <div className="admin-table-scroll">
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                        <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                            <th style={{ padding: '16px 24px', width: '60px', textAlign: 'left' }}>
-                                <div onClick={toggleSelectAll} style={{ cursor: 'pointer', display: 'flex' }}>
-                                    {selectedIds.length === filteredQRs.length && filteredQRs.length > 0 ? <CheckSquare size={20} color="#A0301B" /> : <Square size={20} color="#cbd5e1" />}
-                                </div>
-                            </th>
-                            <th style={{ padding: '16px 24px', color: '#64748b', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left' }}>Mã QR</th>
-                            <th style={{ padding: '16px 24px', color: '#64748b', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left' }}>Trạng thái</th>
-                            <th style={{ padding: '16px 24px', color: '#64748b', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left' }}>Phiếu đang gán</th>
-                            <th style={{ padding: '16px 24px', color: '#64748b', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Thao tác</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {filteredQRs.slice((page - 1) * pageSize, page * pageSize).map((qr) => (
-                            <tr key={qr.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                <td style={{ padding: '12px 24px' }}>
-                                    <div onClick={() => toggleSelect(qr.id)} style={{ cursor: 'pointer' }}>
-                                        {selectedIds.includes(qr.id) ? <CheckSquare size={22} color="#A0301B" /> : <Square size={22} color="#cbd5e1" />}
-                                    </div>
-                                </td>
-                                <td style={{ padding: '12px 24px' }}>
-                                    <span style={{ fontWeight: '800', color: '#1e293b', fontSize: '15px' }}>{qr.code}</span>
-                                </td>
-                                <td style={{ padding: '12px 24px' }}>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
-                                        <span style={{ 
-                                            padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '800',
-                                            backgroundColor: qr.status === 'Trống' ? '#dcfce7' : '#fee2e2',
-                                            color: qr.status === 'Trống' ? '#15803d' : '#b91c1c',
-                                        }}>
-                                            {qr.status === 'Trống' ? 'SẴN SÀNG' : 'ĐANG DÙNG'}
-                                        </span>
-                                        {qr.status !== 'Trống' && qr.scheduled_release_at && (
-                                            <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '500' }}>
-                                                Tự mở: {new Date(qr.scheduled_release_at).toLocaleString('vi-VN', {hour: '2-digit', minute:'2-digit', day: '2-digit', month: '2-digit'})}
-                                            </span>
-                                        )}
-                                    </div>
-                                </td>
-                                <td style={{ padding: '12px 24px' }}>
-                                    {qr.current_delivery_id ? (
-                                        <span style={{ color: '#0ea5e9', fontWeight: '700' }}>#{qr.current_delivery_id}</span>
-                                    ) : <span style={{ color: '#cbd5e1' }}>—</span>}
-                                </td>
-                                <td style={{ padding: '12px 24px', textAlign: 'right' }}>
-                                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                                        <button 
-                                            onClick={() => printQRsA4([qr])} 
-                                            style={{ padding: '6px 12px', background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}
-                                        >
-                                            <Printer size={15} />
-                                        </button>
-                                        {qr.status === 'Đang Sử Dụng' && (
-                                            <button 
-                                                onClick={() => handleRelease(qr.id, qr.code)} 
-                                                style={{ padding: '6px 12px', background: '#fff1f2', color: '#e11d48', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}
-                                            >
-                                                <Unlock size={15} />
-                                            </button>
-                                        )}
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-
-            {/* Phân trang - Desktop */}
-                <div className="admin-pagination-desktop desktop-only">
-                    <span className="pagination-info">
-                        Hiển thị {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredQRs.length)} / {filteredQRs.length} kết quả
-                    </span>
-                    <div className="pagination-controls" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <button 
-                            disabled={page === 1} 
-                            onClick={() => setPage(prev => Math.max(prev - 1, 1))} 
-                            className="page-btn"
-                        >
-                            &lt; Trước
-                        </button>
-                        {(() => {
-                            const totalPages = Math.ceil(filteredQRs.length / pageSize);
-                            const pages = [];
-                            const delta = 2;
-                            for (let i = 1; i <= totalPages; i++) {
-                              if (i === 1 || i === totalPages || (i >= page - delta && i <= page + delta)) {
-                                pages.push(i);
-                              } else if (pages[pages.length - 1] !== '...') {
-                                pages.push('...');
-                              }
-                            }
-                            return pages.map((p, idx) => {
-                              if (p === '...') {
-                                return (
-                                  <span key={`ell-${idx}`} style={{ padding: '0 8px', color: '#7B5233', fontWeight: '700' }}>
-                                    ...
-                                  </span>
-                                );
-                              }
-                              return (
-                                <button
-                                  key={p}
-                                  className={`page-btn ${page === p ? 'active' : ''}`}
-                                  onClick={() => setPage(p)}
-                                >
-                                  {p}
-                                </button>
-                              );
-                            });
-                          })()}
-                        <button 
-                            disabled={page >= Math.ceil(filteredQRs.length / pageSize)} 
-                            onClick={() => setPage(prev => Math.min(prev + 1, Math.ceil(filteredQRs.length / pageSize)))} 
-                            className="page-btn"
-                        >
-                            Sau &gt;
-                        </button>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                                <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                                    <th style={{ padding: '16px 24px', width: '60px', textAlign: 'left' }}>
+                                        <div onClick={toggleSelectAll} style={{ cursor: 'pointer', display: 'flex' }}>
+                                            {selectedIds.length === filteredQRs.length && filteredQRs.length > 0 ? <CheckSquare size={20} color="#A0301B" /> : <Square size={20} color="#cbd5e1" />}
+                                        </div>
+                                    </th>
+                                    <th style={{ padding: '16px 24px', color: '#64748b', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left' }}>Mã QR</th>
+                                    <th style={{ padding: '16px 24px', color: '#64748b', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left' }}>Trạng thái</th>
+                                    <th style={{ padding: '16px 24px', color: '#64748b', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left' }}>Phiếu đang gán</th>
+                                    <th style={{ padding: '16px 24px', color: '#64748b', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Thao tác</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredQRs.slice((page - 1) * pageSize, page * pageSize).map((qr) => (
+                                    <tr key={qr.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                        <td style={{ padding: '12px 24px' }}>
+                                            <div onClick={() => toggleSelect(qr.id)} style={{ cursor: 'pointer' }}>
+                                                {selectedIds.includes(qr.id) ? <CheckSquare size={22} color="#A0301B" /> : <Square size={22} color="#cbd5e1" />}
+                                            </div>
+                                        </td>
+                                        <td style={{ padding: '12px 24px' }}>
+                                            <span style={{ fontWeight: '800', color: '#1e293b', fontSize: '15px' }}>{qr.code}</span>
+                                        </td>
+                                        <td style={{ padding: '12px 24px' }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                                                <span style={{
+                                                    padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '800',
+                                                    backgroundColor: qr.status === 'Trống' ? '#dcfce7' : '#fee2e2',
+                                                    color: qr.status === 'Trống' ? '#15803d' : '#b91c1c',
+                                                }}>
+                                                    {qr.status === 'Trống' ? 'SẴN SÀNG' : 'ĐANG DÙNG'}
+                                                </span>
+                                                {qr.status !== 'Trống' && qr.scheduled_release_at && (
+                                                    <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '500' }}>
+                                                        Tự mở: {new Date(qr.scheduled_release_at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td style={{ padding: '12px 24px' }}>
+                                            {qr.current_delivery_id ? (
+                                                <span style={{ color: '#0ea5e9', fontWeight: '700' }}>#{qr.current_delivery_id}</span>
+                                            ) : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                        </td>
+                                        <td style={{ padding: '12px 24px', textAlign: 'right' }}>
+                                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                                <button
+                                                    onClick={() => printQRsA4([qr])}
+                                                    style={{ padding: '6px 12px', background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}
+                                                >
+                                                    <Printer size={15} />
+                                                </button>
+                                                {qr.status === 'Đang Sử Dụng' && (
+                                                    <button
+                                                        onClick={() => handleRelease(qr.id, qr.code)}
+                                                        style={{ padding: '6px 12px', background: '#fff1f2', color: '#e11d48', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}
+                                                    >
+                                                        <Unlock size={15} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
-                </div>
+
+                    {/* Phân trang - Desktop */}
+                    <div className="admin-pagination-desktop desktop-only">
+                        <span className="pagination-info">
+                            Hiển thị {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredQRs.length)} / {filteredQRs.length} kết quả
+                        </span>
+                        <div className="pagination-controls" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <button
+                                disabled={page === 1}
+                                onClick={() => setPage(prev => Math.max(prev - 1, 1))}
+                                className="page-btn"
+                            >
+                                &lt; Trước
+                            </button>
+                            {(() => {
+                                const totalPages = Math.ceil(filteredQRs.length / pageSize);
+                                const pages = [];
+                                const delta = 2;
+                                for (let i = 1; i <= totalPages; i++) {
+                                    if (i === 1 || i === totalPages || (i >= page - delta && i <= page + delta)) {
+                                        pages.push(i);
+                                    } else if (pages[pages.length - 1] !== '...') {
+                                        pages.push('...');
+                                    }
+                                }
+                                return pages.map((p, idx) => {
+                                    if (p === '...') {
+                                        return (
+                                            <span key={`ell-${idx}`} style={{ padding: '0 8px', color: '#7B5233', fontWeight: '700' }}>
+                                                ...
+                                            </span>
+                                        );
+                                    }
+                                    return (
+                                        <button
+                                            key={p}
+                                            className={`page-btn ${page === p ? 'active' : ''}`}
+                                            onClick={() => setPage(p)}
+                                        >
+                                            {p}
+                                        </button>
+                                    );
+                                });
+                            })()}
+                            <button
+                                disabled={page >= Math.ceil(filteredQRs.length / pageSize)}
+                                onClick={() => setPage(prev => Math.min(prev + 1, Math.ceil(filteredQRs.length / pageSize)))}
+                                className="page-btn"
+                            >
+                                Sau &gt;
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -418,16 +418,16 @@ const BackupQRManagement = () => {
                             <X size={20} onClick={() => setShowAddModal(false)} style={{ cursor: 'pointer', color: '#94a3b8' }} />
                         </div>
                         <form onSubmit={handleAddQR}>
-                            <input 
-                                type="number" 
-                                min="1" 
-                                max="200" 
-                                autoFocus 
-                                value={quantity} 
+                            <input
+                                type="number"
+                                min="1"
+                                max="200"
+                                autoFocus
+                                value={quantity}
                                 onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                                style={{ 
-                                    width: '100%', padding: '12px 15px', border: '2px solid #e2e8f0', 
-                                    borderRadius: '12px', marginBottom: '20px', outline: 'none', 
+                                style={{
+                                    width: '100%', padding: '12px 15px', border: '2px solid #e2e8f0',
+                                    borderRadius: '12px', marginBottom: '20px', outline: 'none',
                                     fontSize: '24px', fontWeight: '800', textAlign: 'center',
                                     fontFamily: 'inherit'
                                 }}

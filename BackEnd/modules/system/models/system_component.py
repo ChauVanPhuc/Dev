@@ -15,8 +15,8 @@ class SystemComponent(Base):
     screen_id = Column(Integer, ForeignKey("system_screens.id", ondelete="CASCADE"), nullable=False)
     name = Column(NVARCHAR(150), nullable=False)
     type = Column(NVARCHAR(50), nullable=False, default="UI Component") # 'UI Component', 'Business Logic', 'Native API', 'API Endpoint'
-    description = Column(NVARCHAR(500), nullable=True)
-    technical_details = Column(NVARCHAR(1000), nullable=True)
+    description = Column(NVARCHAR(None), nullable=True)  # NVARCHAR(MAX) for long descriptions
+    technical_details = Column(NVARCHAR(None), nullable=True)  # NVARCHAR(MAX) for long technical details
     file_path = Column(NVARCHAR(250), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     updated_at = Column(DateTime, default=get_vietnam_time, onupdate=get_vietnam_time)

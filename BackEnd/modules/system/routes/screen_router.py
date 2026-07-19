@@ -1,7 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, status, UploadFile
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
+import os
+import uuid
 from config.database import get_db
+from config.settings import settings
+from jose import jwt
+from modules.auth.models.accounts import Account as AccountModel
 from modules.system.models.system_screen import SystemScreen as SystemScreenModel
 from modules.system.models.system_component import SystemComponent as SystemComponentModel
 from modules.system.models.system_guide import SystemGuide as SystemGuideModel
@@ -10,8 +17,50 @@ from modules.system.schemas.system_screen import (
     SystemScreenCreate,
     SystemScreenUpdate
 )
+from modules.system.services.export_service import export_screen_component_file
 import re
 import unicodedata
+
+
+class ExportComponentRequest(BaseModel):
+    button_id: str
+    mode: Optional[str] = Field(None, description="single hoac list")
+    data: Any = Field([], description="Du lieu tu trang dang dung (object hoac list object)")
+    context: Optional[Dict[str, Any]] = Field(None, description="Thong tin bo sung: filters, params, v.v.")
+
+
+def get_current_user(request: Request, db: Session = Depends(get_db)) -> AccountModel:
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Yêu cầu cần Token xác thực Bearer.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token = auth_header.split(" ")[1]
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token không hợp lệ (không tìm thấy username).",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Token đã hết hạn hoặc không hợp lệ. Chi tiết: {str(e)}",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    user = db.query(AccountModel).filter(AccountModel.username == username).first()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Tài khoản không tồn tại.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
 
 router = APIRouter()
 
@@ -32,9 +81,9 @@ async def create_screen(
     """
     subsystem_abbreviation = {
         "Trang chủ": "TC",
-        "Quản lý hệ thống": "AD",
-        "Quản lý nhân sự": "NS",
-        "Quản lý sản xuất": "MA",
+        "Quản lý hệ thống": "HT",
+        "Quản lý nhân sự": "HS",
+        "Quản lý sản xuất": "SX",
         "Quản lý chất lượng": "CL",
         "Quản lý kinh doanh": "KD",
         "Quản lý kỹ thuật": "KT",
@@ -42,7 +91,7 @@ async def create_screen(
     }
 
     # 1. Tinh toan prefix
-    prefix = subsystem_abbreviation.get(screen_in.subsystem, "AD")
+    prefix = subsystem_abbreviation.get(screen_in.subsystem, "HT")
     
     # 2. Tim index cao nhat cho prefix nay
     existing = db.query(SystemScreenModel.default_code).filter(
@@ -81,7 +130,7 @@ async def create_screen(
         platform=screen_in.platform,
         route_path=route_path,
         default_code=next_code,
-        current_code=next_code,
+        current_code=screen_in.current_code if (screen_in.current_code and screen_in.current_code.strip()) else next_code,
         title=screen_in.title,
         subtitle=screen_in.subtitle,
         status=screen_in.status or "Mới thiết kế",
@@ -443,5 +492,71 @@ async def copy_screen(
         print(f"Error broadcasting copied screen: {e}")
 
     return new_screen
+
+
+@router.post("/upload-component-sample")
+async def upload_component_sample(file: UploadFile = File(...)):
+    """
+    Tải lên file mẫu cho thành phần màn hình.
+    Chỉ chấp nhận file Word, Excel và PDF.
+    Lưu vào BackEnd/static/uploads/component_samples/
+    """
+    allowed_extensions = {".doc", ".docx", ".xls", ".xlsx", ".pdf"}
+    allowed_content_types = {
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/pdf",
+        "application/octet-stream"
+    }
+
+    file_ext = os.path.splitext(file.filename or "")[1].lower()
+    if file_ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Chỉ chấp nhận file Word (.doc, .docx), Excel (.xls, .xlsx) hoặc PDF (.pdf)"
+        )
+
+    content_type = file.content_type or ""
+    if content_type and content_type not in allowed_content_types:
+        # Vẫn cho phép nếu đuôi file hợp lệ nhưng content-type không khớp
+        pass
+
+    upload_dir = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "..", "static", "uploads", "component_samples")
+    )
+    os.makedirs(upload_dir, exist_ok=True)
+
+    new_filename = f"{uuid.uuid4()}{file_ext}"
+    file_path = os.path.join(upload_dir, new_filename)
+
+    with open(file_path, "wb") as buffer:
+        content = await file.read()
+        buffer.write(content)
+
+    return {"url": f"/static/uploads/component_samples/{new_filename}"}
+
+
+@router.post("/{screen_id}/export")
+async def export_component_file(
+    screen_id: int,
+    req: ExportComponentRequest,
+    db: Session = Depends(get_db),
+    current_user: AccountModel = Depends(get_current_user),
+):
+    """
+    Xuat file theo form mau cua component export.
+    Nhan button_id, du lieu cua trang dang dung va tra ve file da fill.
+    """
+    return export_screen_component_file(
+        db=db,
+        screen_id=screen_id,
+        button_id=req.button_id,
+        mode=req.mode,
+        data=req.data,
+        context=req.context,
+        user_name=current_user.full_name or current_user.username,
+    )
 
 

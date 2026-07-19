@@ -12,6 +12,12 @@ import UserEdit from '@modules/Auth/Views/UserEditView';
 import UserPermissionView from '@modules/Auth/Views/UserPermissionView';
 import DepartmentManagement from '@modules/Auth/Views/DepartmentManagementView';
 import PositionManagement from '@modules/Auth/Views/PositionManagementView';
+import EmployeeListView from '@modules/Auth/Views/EmployeeListView';
+import OrgChartView from '@modules/Auth/Views/OrgChartView';
+import HierarchyChartView from '@modules/Auth/Views/HierarchyChartView';
+import PersonnelChartView from '@modules/Auth/Views/PersonnelChartView';
+import FactoryStructureView from '@modules/Auth/Views/FactoryStructureView';
+import HRManagementView from '@modules/Auth/Views/HRManagementView';
 import HandoverList from '@modules/Delivery/Views/HandoverListView';
 import IncidentLogs from '@modules/System/Views/IncidentLogsView';
 import InspectionReports from '@modules/Inspection/Views/InspectionReportsView';
@@ -78,6 +84,11 @@ import ISOProcessEditor from '@modules/ISO/Views/ISOProcessEditorView';
 
 import { authService } from '@modules/Auth/Models/auth.service';
 import { ScreenProvider } from '@shared/context/ScreenContext';
+
+const isUserLoggedIn = () => {
+  const token = authService.getToken();
+  return token && token !== 'null' && token !== 'undefined' && token !== '';
+};
 
 const AccessDenied = () => (
   <div style={{
@@ -431,6 +442,10 @@ const PermissionEnforcer = ({ permission, children }) => {
 };
 
 const ProtectedRoute = ({ permissionKey, children }) => {
+  if (!isUserLoggedIn()) {
+    return <Navigate to="/login" replace />;
+  }
+
   const user = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
 
   // Chặn hoàn toàn tài khoản công nhân truy cập bất kỳ route Web nào
@@ -505,11 +520,11 @@ const ProtectedRoute = ({ permissionKey, children }) => {
 
 // Route wrappers to evaluate authentication status dynamically at render time
 const LoginRoute = () => {
-  return authService.getToken() ? <Navigate to="/admin/dashboard" replace /> : <LoginPage />;
+  return isUserLoggedIn() ? <Navigate to="/admin/dashboard" replace /> : <LoginPage />;
 };
 
 const RootRoute = () => {
-  return authService.getToken() ? <Navigate to="/admin/dashboard" replace /> : <Navigate to="/login" replace />;
+  return isUserLoggedIn() ? <Navigate to="/admin/dashboard" replace /> : <Navigate to="/login" replace />;
 };
 
 // Redirect handover requests to equipment view with state payload
@@ -543,6 +558,9 @@ function App() {
             <Route path="users/permissions/:id" element={<ProtectedRoute permissionKey="users"><UserEdit /></ProtectedRoute>} />
             <Route path="users/departments" element={<ProtectedRoute permissionKey="users"><DepartmentManagement /></ProtectedRoute>} />
             <Route path="users/positions" element={<ProtectedRoute permissionKey="users"><PositionManagement /></ProtectedRoute>} />
+            <Route path="hr" element={<Navigate to="hr/org-chart" />} />
+            <Route path="hr/org-chart" element={<ProtectedRoute permissionKey="users"><HRManagementView /></ProtectedRoute>} />
+            <Route path="hr/employees" element={<ProtectedRoute permissionKey="users"><EmployeeListView /></ProtectedRoute>} />
             <Route path="handovers" element={<ProtectedRoute permissionKey="handovers"><HandoverList /></ProtectedRoute>} />
             <Route path="logs" element={<ProtectedRoute permissionKey="logs"><IncidentLogs /></ProtectedRoute>} />
             <Route path="defects" element={<ProtectedRoute permissionKey="defects"><DefectManagement /></ProtectedRoute>} />

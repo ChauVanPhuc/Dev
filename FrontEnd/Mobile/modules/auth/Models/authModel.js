@@ -29,11 +29,15 @@ const getInitialPermissions = () => {
   }
 }
 
+const isValidToken = (token) => {
+  return !!token && token !== 'null' && token !== 'undefined' && token !== ''
+}
+
 const useAuthStore = create((set) => ({
   // Khởi tạo từ localStorage nếu có
   user: getInitialUser(),
   token: localStorage.getItem('token') || null,
-  isAuthenticated: !!localStorage.getItem('token'),
+  isAuthenticated: isValidToken(localStorage.getItem('token')),
   permissions: getInitialPermissions(),
 
   /**
@@ -61,7 +65,7 @@ const useAuthStore = create((set) => ({
       set((state) => ({ 
         user, 
         token: token || state.token, 
-        isAuthenticated: !!(token || state.token),
+        isAuthenticated: isValidToken(token || state.token),
         permissions: nextPermissions
       }))
     } else {

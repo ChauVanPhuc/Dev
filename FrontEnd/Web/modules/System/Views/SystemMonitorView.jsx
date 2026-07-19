@@ -6,7 +6,7 @@ import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const SystemMonitorView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = useOutletContext();
-  
+
   // Lấy metadata từ database thay vì hardcode
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/system-monitor');
   const [data, setData] = useState(null);

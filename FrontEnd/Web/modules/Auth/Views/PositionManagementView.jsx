@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { ArrowLeft, Plus, Edit2, Trash2, Check, X, Search, Shield, Layers, FileDown, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
+import { ArrowLeft, Plus, Edit2, Trash2, Check, X, Search, Shield, Layers, FileDown, ChevronLeft, ChevronRight, Filter, FolderTree } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import ExcelJS from 'exceljs';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
@@ -90,7 +90,7 @@ const PositionManagement = () => {
   const setCustomScreenCode = outletContext?.setCustomScreenCode;
   
   // Lấy metadata từ database thay vì hardcode
-  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/positions');
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/users/positions');
 
   // Cập nhật tiêu đề trang lên Layout Header
   useEffect(() => {

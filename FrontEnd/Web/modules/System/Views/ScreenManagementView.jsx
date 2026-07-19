@@ -2,13 +2,14 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { screenService } from '@modules/System/Models/screen.service';
 import { bugService } from '@modules/System/Models/bug.service';
-import { Search, Filter, ChevronLeft, ChevronRight, FileDown, Eye, Trash2, ArrowUpDown, Plus } from 'lucide-react';
+import { Search, Filter, ChevronLeft, ChevronRight, FileDown, Eye, Trash2, ArrowUpDown, Plus, LayoutGrid, FileInput, FileOutput } from 'lucide-react';
 import { useScreen } from '@shared/context/ScreenContext';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
-import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
+import { useScreenMetadataCached, clearScreenMetadataCache } from '@webShared/hooks/useScreenMetadata';
+import * as XLSX from 'xlsx';
 
 const parseDescription = (desc) => {
   if (!desc) return { tag: '', text: '' };
@@ -61,14 +62,14 @@ const formatSimpleDate = (dateStr) => {
 const getSubsystem = (screen) => {
   const code = screen.current_code || '';
   if (code.startsWith('TC')) return 'Trang chủ';
-  if (code.startsWith('HD') || code.startsWith('AD')) return 'Quản lý hệ thống';
-  if (code.startsWith('NS')) return 'Quản lý nhân sự';
+  if (code.startsWith('HT') || code.startsWith('HD') || code.startsWith('AD')) return 'Quản lý hệ thống';
+  if (code.startsWith('HS') || code.startsWith('NS')) return 'Quản lý nhân sự';
   if (code.startsWith('SX') || code.startsWith('MA')) return 'Quản lý sản xuất';
   if (code.startsWith('CL') || code.startsWith('QC')) return 'Quản lý chất lượng';
   if (code.startsWith('KD')) return 'Quản lý kinh doanh';
   if (code.startsWith('KT')) return 'Quản lý kỹ thuật';
   if (code.startsWith('BT')) return 'Bảo trì - cơ sở hạ tầng';
-  
+
   // Fallback by route path
   const path = screen.route_path || '';
   if (path.includes('/manufacture') || path.includes('/plan') || path.includes('/delivery-tracking') || path.includes('/orders')) {
@@ -95,7 +96,7 @@ const getSubsystem = (screen) => {
 const getImageUrl = (path) => {
   if (!path) return '';
   if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) return path;
-  
+
   // Clean ngrok endpoint root
   const apiRoot = localStorage.getItem('smartflow_api_root') || 'http://localhost:8000';
   const cleanRoot = apiRoot.endsWith('/') ? apiRoot.slice(0, -1) : apiRoot;
@@ -109,7 +110,7 @@ const ScreenManagement = () => {
   const setCustomTitle = outletContext?.setCustomTitle;
   const setCustomSubtitle = outletContext?.setCustomSubtitle;
   const setCustomScreenCode = outletContext?.setCustomScreenCode;
-  
+
   // Lấy metadata từ database thay vì hardcode
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/screens');
 
@@ -120,7 +121,7 @@ const ScreenManagement = () => {
   const [platformFilter, setPlatformFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
-  
+
   const [selectedScreenId, setSelectedScreenId] = useState(null);
   const [expandedBugId, setExpandedBugId] = useState(null);
   const [isBugListCollapsed, setIsBugListCollapsed] = useState(false);
@@ -134,8 +135,13 @@ const ScreenManagement = () => {
 
   const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
   const [isOtherDropdownOpen, setIsOtherDropdownOpen] = useState(false);
-  const [isExcelDropdownOpen, setIsExcelDropdownOpen] = useState(false);
-  const [isPdfDropdownOpen, setIsPdfDropdownOpen] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportOptions, setExportOptions] = useState({
+    listSelected: true,
+    listAll: false,
+    docsSelected: false,
+    docsAll: false
+  });
 
   const { toast } = useToast();
   const [actionMenuId, setActionMenuId] = useState(null);
@@ -182,8 +188,6 @@ const ScreenManagement = () => {
         setActionMenuId(null);
         setIsSortDropdownOpen(false);
         setIsOtherDropdownOpen(false);
-        setIsExcelDropdownOpen(false);
-        setIsPdfDropdownOpen(false);
       }
     };
     window.addEventListener('click', handleOutsideClick);
@@ -223,6 +227,7 @@ const ScreenManagement = () => {
           await screenService.deleteScreen(screen.id);
           showToast('Xóa màn hình thành công!');
           if (selectedScreenId === screen.id) setSelectedScreenId(null);
+          clearScreenMetadataCache();
           fetchAllData();
           refreshScreens();
         } catch (error) {
@@ -241,6 +246,7 @@ const ScreenManagement = () => {
         try {
           await screenService.resetScreen(screen.id);
           showToast('Đã đặt lại mã màn hình về mặc định!');
+          clearScreenMetadataCache();
           fetchAllData();
           refreshScreens();
         } catch (error) {
@@ -266,6 +272,7 @@ const ScreenManagement = () => {
         mockup_path: screen.mockup_path
       });
       showToast(`Đã ${nextStatus === 'Tạm dừng' ? 'tạm dừng' : 'khôi phục'} hoạt động màn hình!`);
+      clearScreenMetadataCache();
       fetchAllData();
       refreshScreens();
     } catch (error) {
@@ -293,20 +300,144 @@ const ScreenManagement = () => {
     );
   };
 
+
+
   const handleImportExcelClick = () => {
     if (fileInputRef.current) {
       fileInputRef.current.click();
     }
   };
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    showToast(`Đang nhập dữ liệu từ tệp ${file.name}...`, 'info');
-    setTimeout(() => {
-      showToast(`Đã nhập dữ liệu thành công từ tệp ${file.name}!`, 'success');
+  const handleFileChange = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    showToast(`Đang đọc ${files.length} tệp nhập liệu...`, 'info');
+
+    let totalSuccessCount = 0;
+    let totalFailCount = 0;
+    let readErrors = 0;
+
+    for (const file of files) {
+      try {
+        const fileData = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (event) => resolve(new Uint8Array(event.target.result));
+          reader.onerror = (err) => reject(err);
+          reader.readAsArrayBuffer(file);
+        });
+
+        const workbook = XLSX.read(fileData, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        
+        // Convert sheet to JSON array of arrays
+        const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        if (rows.length < 2) {
+          console.warn(`Tệp ${file.name} không có dữ liệu để nhập.`);
+          continue;
+        }
+
+        let fileSuccessCount = 0;
+        let fileFailCount = 0;
+
+        // Loop starting from index 1 (skipping headers row)
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          if (!row || row.length === 0) continue;
+
+          const currentCode = row[0] ? String(row[0]).trim() : '';
+          const defaultCode = row[1] ? String(row[1]).trim() : '';
+          let title = row[2] ? String(row[2]).trim() : '';
+          let subsystem = row[3] ? String(row[3]).trim() : '';
+          const platform = row[4] ? String(row[4]).trim() : '';
+          const status = row[5] ? String(row[5]).trim() : '';
+          const pathColumn = row[6] ? String(row[6]).trim() : '';
+          const description = row[7] ? String(row[7]).trim() : ''; // Column 7 is 'Mô tả'
+
+          // Nếu có cột Đường dẫn, phân tách để lấy Phân hệ và Tiêu đề (hỗ trợ cả dấu -> và /)
+          if (pathColumn) {
+            const parts = pathColumn.split(/\s*->\s*|\s*\/\s*/);
+            if (parts.length >= 2) {
+              if (!subsystem) {
+                subsystem = parts[0].trim();
+              }
+              if (!title) {
+                title = parts[1].trim();
+              }
+            }
+          }
+
+          if (!title) continue; // Must have at least a title
+
+          // Match existing screen by current_code or default_code
+          const existing = screens.find(s => 
+            (currentCode && s.current_code === currentCode) ||
+            (defaultCode && s.default_code === defaultCode)
+          );
+
+          try {
+            if (existing) {
+              // Update existing screen metadata
+              await screenService.updateScreen(existing.id, {
+                title: title || existing.title,
+                route_path: existing.route_path,
+                subsystem: subsystem || existing.subsystem,
+                platform: platform || existing.platform,
+                status: status || existing.status,
+                target_date: existing.target_date || new Date().toISOString().split('T')[0],
+                subtitle: description || existing.subtitle,
+                mockup_path: existing.mockup_path
+              });
+            } else {
+              // Create new screen metadata
+              const cleanTitle = title.toLowerCase()
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                .replace(/đ/g, 'd')
+                .replace(/[^a-z0-9\s]/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+              const generatedRoute = `/admin/${cleanTitle}`;
+
+              await screenService.createScreen({
+                title: title || 'Màn hình mới',
+                route_path: generatedRoute,
+                platform: platform || 'Web',
+                status: status || 'Mới thiết kế',
+                target_date: new Date().toISOString().split('T')[0],
+                subtitle: description || '',
+                subsystem: subsystem || 'Quản lý hệ thống',
+                components: [],
+                guides: []
+              });
+            }
+            fileSuccessCount++;
+          } catch (err) {
+            console.error('Lỗi khi nhập dòng: ', row, err);
+            fileFailCount++;
+          }
+        }
+
+        totalSuccessCount += fileSuccessCount;
+        totalFailCount += fileFailCount;
+
+      } catch (fileErr) {
+        console.error(`Lỗi đọc tệp ${file.name}:`, fileErr);
+        readErrors++;
+      }
+    }
+
+    if (totalSuccessCount > 0) {
+      showToast(`Nhập dữ liệu thành công! Đã cập nhật/tạo mới ${totalSuccessCount} màn hình.`, 'success');
+      clearScreenMetadataCache();
       fetchAllData();
-    }, 1500);
+      if (refreshScreens) refreshScreens();
+    }
+    if (totalFailCount > 0 || readErrors > 0) {
+      showToast(`Có lỗi xảy ra: ${totalFailCount} dòng lỗi, ${readErrors} file lỗi!`, 'error');
+    }
+
+    e.target.value = '';
   };
 
   const handleExportExcel = (exportAll = true) => {
@@ -325,7 +456,7 @@ const ScreenManagement = () => {
         `"${getSubsystem(s)}"`,
         `"${s.platform || ''}"`,
         `"${s.status || 'Mới thiết kế'}"`,
-        `"${s.route_path || ''}"`,
+        `"${((getSubsystem(s) ? getSubsystem(s) + ' / ' : '') + (s.title || '')).replace(/"/g, '""')}"`,
         `"${(s.subtitle || '').replace(/"/g, '""')}"`
       ].join(','))
     ].join('\n');
@@ -333,10 +464,20 @@ const ScreenManagement = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Danh_sach_man_hinh_${exportAll ? 'toan_bo' : 'chon_loc'}_${new Date().toISOString().slice(0,10)}.csv`;
+    a.download = `Danh_sach_man_hinh_${exportAll ? 'toan_bo' : 'chon_loc'}_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     showToast('Xuất Excel thành công!');
+  };
+
+  const handleConfirmExport = () => {
+    if (exportOptions.listSelected) {
+      handleExportExcel(exportOptions.listAll);
+    }
+    if (exportOptions.docsSelected) {
+      handleExportPDF(exportOptions.docsAll);
+    }
+    setShowExportModal(false);
   };
 
   const handleExportPDFSingle = (screenItem) => {
@@ -350,12 +491,12 @@ const ScreenManagement = () => {
     } else {
       rows = exportAll ? filteredScreens : screens.filter(s => checkedScreenIds.includes(s.id));
     }
-    
+
     if (rows.length === 0) {
       showToast('Không có màn hình nào được chọn để xuất PDF!', 'error');
       return;
     }
-    
+
     const printWindow = window.open('', '_blank');
     const contentHtml = rows.map(s => `
       <div class="screen-spec" style="page-break-after: always; padding: 30px; font-family: Arial, sans-serif; color: #2D1A12; max-width: 800px; margin: 0 auto;">
@@ -424,7 +565,7 @@ const ScreenManagement = () => {
         ` : '<p style="font-style: italic; color: #8D6E63; font-size: 0.85rem;">Chưa khai báo thành phần giao diện.</p>'}
       </div>
     `).join('');
-    
+
     printWindow.document.write(`
       <html>
         <head>
@@ -778,7 +919,7 @@ const ScreenManagement = () => {
 
             {/* Right side: Actions dropdowns */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              
+
               {/* Nút Khác */}
               <div className="dropdown-container" style={{ position: 'relative' }}>
                 <button
@@ -790,14 +931,15 @@ const ScreenManagement = () => {
                     gap: '6px',
                     padding: '8px 12px',
                     borderRadius: '8px',
-                    border: '1px solid #D1D5DB',
-                    background: '#fff',
+                    border: 'none',
+                    background: '#7B5233',
                     cursor: 'pointer',
                     fontSize: '0.82rem',
                     fontWeight: 'bold',
-                    color: '#7B5233'
+                    color: '#fff'
                   }}
                 >
+                  <LayoutGrid size={14} />
                   <span>Khác</span>
                   <span style={{ fontSize: '0.6rem' }}>▼</span>
                 </button>
@@ -811,7 +953,7 @@ const ScreenManagement = () => {
                     borderRadius: '8px',
                     boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
                     zIndex: 100,
-                    width: '180px',
+                    width: '200px',
                     padding: '4px 0'
                   }}>
                     <div
@@ -832,7 +974,7 @@ const ScreenManagement = () => {
                 )}
               </div>
 
-              {/* Nút Nhập Excel */}
+              {/* Nút Nhập dữ liệu */}
               <div>
                 <button
                   type="button"
@@ -843,129 +985,49 @@ const ScreenManagement = () => {
                     gap: '6px',
                     padding: '8px 12px',
                     borderRadius: '8px',
-                    border: '1px solid #D1D5DB',
-                    background: '#fff',
+                    border: 'none',
+                    background: '#7B5233',
                     cursor: 'pointer',
                     fontSize: '0.82rem',
                     fontWeight: 'bold',
-                    color: '#7B5233'
+                    color: '#fff'
                   }}
                 >
-                  <span>Nhập Excel</span>
+                  <FileInput size={14} />
+                  <span>Nhập dữ liệu</span>
                 </button>
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  accept=".xlsx, .xls, .csv" 
-                  onChange={handleFileChange} 
-                  style={{ display: 'none' }} 
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  multiple
+                  accept=".xlsx, .xls, .csv"
+                  onChange={handleFileChange}
+                  style={{ display: 'none' }}
                 />
               </div>
 
-              {/* Nút Xuất Excel */}
-              <div className="dropdown-container" style={{ position: 'relative' }}>
+              {/* Nút Xuất dữ liệu (Mở modal cấu hình) */}
+              <div>
                 <button
                   type="button"
-                  onClick={() => setIsExcelDropdownOpen(!isExcelDropdownOpen)}
+                  onClick={() => setShowExportModal(true)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
                     padding: '8px 12px',
                     borderRadius: '8px',
-                    border: '1px solid #D1D5DB',
-                    background: '#fff',
+                    border: 'none',
+                    background: '#7B5233',
                     cursor: 'pointer',
                     fontSize: '0.82rem',
                     fontWeight: 'bold',
-                    color: '#7B5233'
+                    color: '#fff'
                   }}
                 >
-                  <span>Xuất Excel</span>
-                  <span style={{ fontSize: '0.6rem' }}>▼</span>
+                  <FileOutput size={14} />
+                  <span>Xuất dữ liệu</span>
                 </button>
-                {isExcelDropdownOpen && (
-                  <div style={{
-                    position: 'absolute',
-                    top: '110%',
-                    right: 0,
-                    backgroundColor: '#fff',
-                    border: '1px solid #E2E8F0',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
-                    zIndex: 100,
-                    width: '180px',
-                    padding: '4px 0'
-                  }}>
-                    <div
-                      onClick={() => { setIsExcelDropdownOpen(false); handleExportExcel(true); }}
-                      style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '0.82rem', color: '#374151' }}
-                      className="custom-select-item"
-                    >
-                      Xuất toàn bộ
-                    </div>
-                    <div
-                      onClick={() => { setIsExcelDropdownOpen(false); handleExportExcel(false); }}
-                      style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '0.82rem', color: '#374151' }}
-                      className="custom-select-item"
-                    >
-                      Xuất theo danh sách chọn
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Nút Xuất PDF */}
-              <div className="dropdown-container" style={{ position: 'relative' }}>
-                <button
-                  type="button"
-                  onClick={() => setIsPdfDropdownOpen(!isPdfDropdownOpen)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #D1D5DB',
-                    background: '#fff',
-                    cursor: 'pointer',
-                    fontSize: '0.82rem',
-                    fontWeight: 'bold',
-                    color: '#7B5233'
-                  }}
-                >
-                  <span>Xuất PDF</span>
-                  <span style={{ fontSize: '0.6rem' }}>▼</span>
-                </button>
-                {isPdfDropdownOpen && (
-                  <div style={{
-                    position: 'absolute',
-                    top: '110%',
-                    right: 0,
-                    backgroundColor: '#fff',
-                    border: '1px solid #E2E8F0',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
-                    zIndex: 100,
-                    width: '180px',
-                    padding: '4px 0'
-                  }}>
-                    <div
-                      onClick={() => { setIsPdfDropdownOpen(false); handleExportPDF(true); }}
-                      style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '0.82rem', color: '#374151' }}
-                      className="custom-select-item"
-                    >
-                      Xuất toàn bộ
-                    </div>
-                    <div
-                      onClick={() => { setIsPdfDropdownOpen(false); handleExportPDF(false); }}
-                      style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '0.82rem', color: '#374151' }}
-                      className="custom-select-item"
-                    >
-                      Xuất theo danh sách chọn
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Nút Thêm mới */}
@@ -976,11 +1038,11 @@ const ScreenManagement = () => {
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '4px',
-                    padding: '8px 16px',
+                    gap: '6px',
+                    padding: '8px 12px',
                     borderRadius: '8px',
                     border: 'none',
-                    background: '#4A2E20',
+                    background: '#7B5233',
                     color: '#fff',
                     cursor: 'pointer',
                     fontSize: '0.82rem',
@@ -988,7 +1050,7 @@ const ScreenManagement = () => {
                   }}
                 >
                   <Plus size={14} strokeWidth={3} />
-                  <span>Tạo mới</span>
+                  <span>Thêm mới</span>
                 </button>
               </div>
 
@@ -1127,536 +1189,631 @@ const ScreenManagement = () => {
           )}
         </div>
         <div className="admin-list-layout">
-            <div className="mgmt-table admin-table-card card-shadow" style={{ 
-              background: '#fff', 
-              border: '1px solid #EADCC9'
-            }}>
-              {loading ? (
-                <div className="loading-state">
-                  <div className="spinner"></div>
-                  <span>Đang tải cấu hình màn hình...</span>
+          <div className="mgmt-table admin-table-card card-shadow" style={{
+            background: '#fff',
+            border: '1px solid #EADCC9'
+          }}>
+            {loading ? (
+              <div className="loading-state">
+                <div className="spinner"></div>
+                <span>Đang tải cấu hình màn hình...</span>
+              </div>
+            ) : filteredScreens.length === 0 ? (
+              <div className="empty-state" style={{ padding: 40, textAlign: 'center', color: '#888' }}>Không tìm thấy màn hình nào phù hợp</div>
+            ) : (
+              <>
+                <div className="table-responsive desktop-only admin-table-scroll">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: '40px', textAlign: 'center' }}>
+                          <input
+                            type="checkbox"
+                            checked={paginatedScreens.length > 0 && paginatedScreens.every(s => checkedScreenIds.includes(s.id))}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                const paginatedIds = paginatedScreens.map(s => s.id);
+                                setCheckedScreenIds(prev => [...new Set([...prev, ...paginatedIds])]);
+                              } else {
+                                const paginatedIds = paginatedScreens.map(s => s.id);
+                                setCheckedScreenIds(prev => prev.filter(id => !paginatedIds.includes(id)));
+                              }
+                            }}
+                            style={{ cursor: 'pointer' }}
+                          />
+                        </th>
+                        <th>Mã</th>
+                        <th>Tên màn hình</th>
+                        <th>Phân hệ</th>
+                        <th>Nền tảng</th>
+                        <th>Trạng thái</th>
+                        <th>Ngày thiết kế</th>
+                        <th>Ngày cập nhật</th>
+                        <th>Ngày dự kiến</th>
+                        <th style={{ textAlign: 'center' }}>Lỗi</th>
+                        <th>Mô tả</th>
+                        <th style={{ textAlign: 'center', width: '100px' }}>THAO TÁC</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedScreens.map((screen) => {
+                        const isSelected = selectedScreenId === screen.id;
+                        const isChecked = checkedScreenIds.includes(screen.id);
+                        const screenBugs = bugs.filter(b => b.screen_id === screen.id);
+                        const completedBugs = screenBugs.filter(b => {
+                          const s = (b.status || '').toLowerCase();
+                          return s === 'verified' || s === 'hoàn thành';
+                        }).length;
+                        const totalBugs = screenBugs.length;
+
+                        return (
+                          <tr
+                            key={screen.id}
+                            className={`clickable-row ${isSelected ? 'selected-row' : ''}`}
+                            onClick={(e) => {
+                              if (e.target.closest('.actions-cell') || e.target.closest('button') || e.target.closest('input[type="checkbox"]')) return;
+                              navigate(`/admin/screens/${screen.id}`);
+                            }}
+                            style={{
+                              position: 'relative',
+                              zIndex: actionMenuId === screen.id ? 30 : 1,
+                              backgroundColor: isSelected ? '#FAF6F0' : undefined,
+                              opacity: screen.status === 'Tạm dừng' ? 0.6 : 1,
+                              borderLeft: screen.status === 'Tạm dừng' ? '4px solid #9CA3AF' : undefined
+                            }}
+                          >
+                            <td style={{ textAlign: 'center' }}>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {
+                                  setCheckedScreenIds(prev =>
+                                    prev.includes(screen.id)
+                                      ? prev.filter(id => id !== screen.id)
+                                      : [...prev, screen.id]
+                                  );
+                                }}
+                                style={{ cursor: 'pointer' }}
+                              />
+                            </td>
+                            <td className="code-text font-mono font-semibold" style={{ color: '#7B5233' }}>{screen.current_code}</td>
+                            <td className="font-semibold">{screen.title}</td>
+                            <td>{getSubsystem(screen)}</td>
+                            <td>
+                              <span className={`platform-badge ${screen.platform}`}>
+                                {screen.platform === 'Web' ? '🖥️ Web' : '📱 Mobile'}
+                              </span>
+                            </td>
+                            <td>
+                              <span
+                                className={`status-badge ${screen.status === 'Hoàn thành' ? 'status-resolved' : (screen.status === 'Tạm dừng' ? 'status-closed' : 'status-new')}`}
+                                style={{
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  fontSize: '0.78rem',
+                                  backgroundColor: screen.status === 'Tạm dừng' ? '#E2E8F0' : undefined,
+                                  color: screen.status === 'Tạm dừng' ? '#475569' : undefined
+                                }}
+                              >
+                                {screen.status || 'Mới thiết kế'}
+                              </span>
+                            </td>
+                            <td style={{ color: '#666', fontSize: '0.8rem' }}>{formatDate(screen.updated_at)}</td>
+                            <td style={{ color: '#666', fontSize: '0.8rem' }}>{formatDate(screen.updated_at)}</td>
+                            <td style={{ color: '#7B5233', fontSize: '0.8rem', fontWeight: '500' }}>{formatSimpleDate(screen.target_date)}</td>
+                            <td style={{ textAlign: 'center', fontWeight: 'bold', color: totalBugs > 0 ? (completedBugs === totalBugs ? '#059669' : '#EF4444') : '#64748B' }}>
+                              {completedBugs}/{totalBugs}
+                            </td>
+                            <td style={{ color: '#666', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {screen.subtitle || '-'}
+                            </td>
+                            <td className="actions-cell" style={{ position: 'relative', textAlign: 'center', zIndex: actionMenuId === screen.id ? 40 : 1 }}>
+                              <button
+                                className="action-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (e.nativeEvent && e.nativeEvent.stopImmediatePropagation) {
+                                    e.nativeEvent.stopImmediatePropagation();
+                                  }
+                                  setActionMenuId(actionMenuId === screen.id ? null : screen.id);
+                                }}
+                              ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ pointerEvents: 'none' }}><circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" /></svg></button>
+                              {actionMenuId === screen.id && (
+                                <div className="action-menu" style={{ right: '50%', transform: 'translateX(50%)', top: '80%', opacity: 1, animation: 'none' }}>
+                                  <button
+                                    className="action-menu-item"
+                                    onClick={() => {
+                                      setActionMenuId(null);
+                                      navigate(`/admin/screens/${screen.id}`);
+                                    }}
+                                  >
+                                    Chi tiết
+                                  </button>
+                                  <button
+                                    className="action-menu-item"
+                                    onClick={() => {
+                                      setActionMenuId(null);
+                                      handlePauseScreen(screen);
+                                    }}
+                                  >
+                                    {screen.status === 'Tạm dừng' ? 'Khôi phục' : 'Tạm dừng'}
+                                  </button>
+                                  <button
+                                    className="action-menu-item"
+                                    onClick={() => {
+                                      setActionMenuId(null);
+                                      handleExportPDFSingle(screen);
+                                    }}
+                                  >
+                                    Tải xuống PDF
+                                  </button>
+                                  <button
+                                    className="action-menu-item"
+                                    onClick={() => {
+                                      setActionMenuId(null);
+                                      handleCopyScreen(screen);
+                                    }}
+                                    style={{ color: '#0284C7' }}
+                                  >
+                                    Sao chép
+                                  </button>
+                                  <button
+                                    className="action-menu-item danger"
+                                    onClick={() => {
+                                      setActionMenuId(null);
+                                      handleDeleteScreen(screen);
+                                    }}
+                                    style={{ color: '#EF4444' }}
+                                  >
+                                    Xóa
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-              ) : filteredScreens.length === 0 ? (
-                <div className="empty-state" style={{ padding: 40, textAlign: 'center', color: '#888' }}>Không tìm thấy màn hình nào phù hợp</div>
-              ) : (
-                <>
-                  <div className="table-responsive desktop-only admin-table-scroll">
-                    <table className="data-table">
+
+                <div className="mobile-only mgmt-cards-container">
+                  {paginatedScreens.map((screen) => {
+                    const isSelected = selectedScreenId === screen.id;
+                    const isChecked = checkedScreenIds.includes(screen.id);
+                    const screenBugs = bugs.filter(b => b.screen_id === screen.id);
+                    const completedBugs = screenBugs.filter(b => b.status === 'Hoàn thành').length;
+                    const totalBugs = screenBugs.length;
+
+                    return (
+                      <div
+                        key={screen.id}
+                        className="mgmt-card"
+                        style={{
+                          border: isSelected ? '2px solid #7B5233' : '1px solid #EADCC9',
+                          opacity: screen.status === 'Tạm dừng' ? 0.6 : 1
+                        }}
+                      >
+                        <div className="mgmt-card-main" onClick={() => navigate(`/admin/screens/${screen.id}`)}>
+                          <div className="mgmt-card-avatar" onClick={(e) => {
+                            e.stopPropagation();
+                            setCheckedScreenIds(prev =>
+                              prev.includes(screen.id)
+                                ? prev.filter(id => id !== screen.id)
+                                : [...prev, screen.id]
+                            );
+                          }} style={{ cursor: 'pointer', backgroundColor: isSelected ? '#FAF6F0' : undefined }}>
+                            {isChecked ? '✓' : (screen.platform === 'Web' ? '🖥️' : '📱')}
+                          </div>
+                          <div className="mgmt-card-details">
+                            <div className="mgmt-card-title-row">
+                              <h4 className="mgmt-card-title">{screen.title}</h4>
+                              <span className={`platform-badge ${screen.platform}`}>
+                                {screen.platform}
+                              </span>
+                            </div>
+                            <p style={{ fontSize: '0.82rem', color: '#666', margin: '4px 0', lineHeight: '1.4' }}>
+                              {screen.subtitle || 'Không có mô tả phụ'}
+                            </p>
+                            <div className="mgmt-card-meta-chips" style={{ marginTop: '6px' }}>
+                              <span className="mgmt-card-chip font-mono">
+                                {screen.route_path}
+                              </span>
+                              <span className="mgmt-card-chip" style={{ backgroundColor: '#FAF6F0', color: '#7B5233' }}>
+                                {getSubsystem(screen)}
+                              </span>
+                              <span className={`mgmt-card-chip ${screen.status === 'Hoàn thành' ? 'success' : (screen.status === 'Tạm dừng' ? 'default' : 'info')}`} style={screen.status === 'Tạm dừng' ? { backgroundColor: '#E2E8F0', color: '#475569' } : undefined}>
+                                {screen.status || 'Mới thiết kế'}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="mgmt-card-actions">
+                            <button
+                              className="action-icon-btn"
+                              onClick={(e) => { e.stopPropagation(); navigate(`/admin/screens/${screen.id}`); }}
+                              title="Sửa"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              className="action-icon-btn"
+                              onClick={(e) => { e.stopPropagation(); handleCopyScreen(screen); }}
+                              title="Sao chép"
+                              style={{ color: '#0284C7' }}
+                            >
+                              📋
+                            </button>
+                            <button
+                              className="action-icon-btn delete"
+                              onClick={(e) => { e.stopPropagation(); handleDeleteScreen(screen); }}
+                              title="Xóa"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                        <div className="mgmt-card-footer">
+                          <div className="mgmt-card-footer-left font-mono">
+                            Mã: <span style={{ fontWeight: 'bold', color: '#7B5233' }}>{screen.current_code}</span>
+                          </div>
+                          <div className="mgmt-card-footer-right" style={{ color: totalBugs > 0 ? (completedBugs === totalBugs ? '#059669' : '#EF4444') : '#64748B', fontWeight: 'bold' }}>
+                            Lỗi: {completedBugs}/{totalBugs}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {totalPages > 1 && (
+                  <div className="admin-pagination-desktop">
+                    <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
+                      Hiển thị <b>{paginatedScreens.length}</b> trên <b>{filteredScreens.length}</b> kết quả
+                    </div>
+                    <div style={{ display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+                      <button
+                        disabled={currentPage === 1}
+                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                        className="page-btn"
+                      >
+                        &lt; Trước
+                      </button>
+                      {(() => {
+                        const pages = [];
+                        const delta = 2;
+                        for (let i = 1; i <= totalPages; i++) {
+                          if (i === 1 || i === totalPages || (i >= currentPage - delta && i <= currentPage + delta)) {
+                            pages.push(i);
+                          } else if (pages[pages.length - 1] !== '...') {
+                            pages.push('...');
+                          }
+                        }
+                        return pages.map((p, idx) => {
+                          if (p === '...') {
+                            return (
+                              <span key={`ell-${idx}`} style={{ padding: '0 8px', color: '#7B5233', fontWeight: '700' }}>
+                                ...
+                              </span>
+                            );
+                          }
+                          return (
+                            <button
+                              key={p}
+                              className={`page-btn ${currentPage === p ? 'active' : ''}`}
+                              onClick={() => setCurrentPage(p)}
+                            >
+                              {p}
+                            </button>
+                          );
+                        });
+                      })()}
+                      <button
+                        disabled={currentPage >= totalPages}
+                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                        className="page-btn"
+                      >
+                        Sau &gt;
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* DỰNG BẢNG DANH SÁCH LỖI INLINE (CHỈ HIỂN THỊ KHI ĐÃ CHỌN MÀN HÌNH) */}
+        {selectedScreenId && (
+          <div className="bugs-inline-section card" style={{
+            marginTop: '30px',
+            border: '1px solid #EADCC9',
+            borderRadius: '12px',
+            overflow: 'hidden',
+            boxShadow: '0 4px 15px rgba(123, 82, 51, 0.05)',
+            backgroundColor: '#fff'
+          }}>
+            <div
+              className="bugs-section-header"
+              onClick={() => setIsBugListCollapsed(!isBugListCollapsed)}
+              style={{
+                padding: '16px 20px',
+                backgroundColor: '#FAF6F0',
+                borderBottom: '1px solid #EADCC9',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                cursor: 'pointer',
+                userSelect: 'none'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '1.1rem', fontWeight: '800', color: '#2D1A12' }}>Danh sách lỗi</span>
+                <span style={{
+                  fontSize: '0.75rem',
+                  backgroundColor: '#A0301B',
+                  color: '#fff',
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  fontWeight: 'bold'
+                }}>{selectedScreenBugs.length}</span>
+              </div>
+              <div style={{ transform: isBugListCollapsed ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.2s' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7B5233" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </div>
+            </div>
+
+            {!isBugListCollapsed && (
+              <div style={{ padding: '20px' }}>
+                {selectedScreenBugs.length === 0 ? (
+                  <div style={{ padding: '20px', textAlign: 'center', color: '#888', fontStyle: 'italic' }}>
+                    Không có báo cáo lỗi nào cho màn hình này.
+                  </div>
+                ) : (
+                  <div className="table-responsive">
+                    <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
-                        <tr>
-                          <th style={{ width: '40px', textAlign: 'center' }}>
-                            <input 
-                              type="checkbox"
-                              checked={paginatedScreens.length > 0 && paginatedScreens.every(s => checkedScreenIds.includes(s.id))}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  const paginatedIds = paginatedScreens.map(s => s.id);
-                                  setCheckedScreenIds(prev => [...new Set([...prev, ...paginatedIds])]);
-                                } else {
-                                  const paginatedIds = paginatedScreens.map(s => s.id);
-                                  setCheckedScreenIds(prev => prev.filter(id => !paginatedIds.includes(id)));
-                                }
-                              }}
-                              style={{ cursor: 'pointer' }}
-                            />
-                          </th>
-                          <th>Mã</th>
-                          <th>Tên màn hình</th>
-                          <th>Phân hệ</th>
-                          <th>Nền tảng</th>
-                          <th>Trạng thái</th>
-                          <th>Ngày thiết kế</th>
-                          <th>Ngày cập nhật</th>
-                          <th>Ngày dự kiến</th>
-                          <th style={{ textAlign: 'center' }}>Lỗi</th>
-                          <th>Mô tả</th>
-                          <th style={{ textAlign: 'center', width: '100px' }}>THAO TÁC</th>
+                        <tr style={{ backgroundColor: '#7B5233', color: '#fff' }}>
+                          <th style={{ color: '#fff' }}>Mã</th>
+                          <th style={{ color: '#fff' }}>Component</th>
+                          <th style={{ color: '#fff' }}>Mô tả</th>
+                          <th style={{ color: '#fff' }}>Mức độ</th>
+                          <th style={{ color: '#fff' }}>Trạng thái</th>
+                          <th style={{ color: '#fff' }}>Ngày cập nhật</th>
+                          <th style={{ color: '#fff' }}>Người cập nhật</th>
+                          <th style={{ color: '#fff' }}>Ngày ghi nhận</th>
+                          <th style={{ color: '#fff', textAlign: 'center' }}>THAO TÁC</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {paginatedScreens.map((screen) => {
-                          const isSelected = selectedScreenId === screen.id;
-                          const isChecked = checkedScreenIds.includes(screen.id);
-                          const screenBugs = bugs.filter(b => b.screen_id === screen.id);
-                          const completedBugs = screenBugs.filter(b => {
-                            const s = (b.status || '').toLowerCase();
-                            return s === 'verified' || s === 'hoàn thành';
-                          }).length;
-                          const totalBugs = screenBugs.length;
-                          
+                        {selectedScreenBugs.map((bug) => {
+                          const isBugExpanded = expandedBugId === bug.id;
+                          const parsed = parseDescription(bug.description);
+                          const severityColors = {
+                            'Critical': '#EF4444',
+                            'High': '#F97316',
+                            'Medium': '#D97706',
+                            'Low': '#10B981'
+                          };
                           return (
-                            <tr 
-                              key={screen.id}
-                              className={`clickable-row ${isSelected ? 'selected-row' : ''}`}
-                              onClick={(e) => {
-                                if (e.target.closest('.actions-cell') || e.target.closest('button') || e.target.closest('input[type="checkbox"]')) return;
-                                navigate(`/admin/screens/${screen.id}`);
-                              }}
-                              style={{
-                                position: 'relative',
-                                zIndex: actionMenuId === screen.id ? 30 : 1,
-                                backgroundColor: isSelected ? '#FAF6F0' : undefined,
-                                opacity: screen.status === 'Tạm dừng' ? 0.6 : 1,
-                                borderLeft: screen.status === 'Tạm dừng' ? '4px solid #9CA3AF' : undefined
-                              }}
-                            >
-                              <td style={{ textAlign: 'center' }}>
-                                <input 
-                                  type="checkbox" 
-                                  checked={isChecked}
-                                  onChange={() => {
-                                    setCheckedScreenIds(prev => 
-                                      prev.includes(screen.id) 
-                                        ? prev.filter(id => id !== screen.id) 
-                                        : [...prev, screen.id]
-                                    );
-                                    setSelectedScreenId(screen.id);
-                                    setExpandedBugId(null);
-                                  }}
-                                  style={{ cursor: 'pointer' }}
-                                />
-                              </td>
-                              <td className="code-text font-mono font-semibold" style={{ color: '#7B5233' }}>{screen.current_code}</td>
-                              <td className="font-semibold">{screen.title}</td>
-                              <td>{getSubsystem(screen)}</td>
-                              <td>
-                                <span className={`platform-badge ${screen.platform}`}>
-                                  {screen.platform === 'Web' ? '🖥️ Web' : '📱 Mobile'}
-                                </span>
-                              </td>
-                              <td>
-                                <span 
-                                  className={`status-badge ${screen.status === 'Hoàn thành' ? 'status-resolved' : (screen.status === 'Tạm dừng' ? 'status-closed' : 'status-new')}`} 
-                                  style={{ 
-                                    padding: '2px 8px', 
-                                    borderRadius: '4px', 
-                                    fontSize: '0.78rem',
-                                    backgroundColor: screen.status === 'Tạm dừng' ? '#E2E8F0' : undefined,
-                                    color: screen.status === 'Tạm dừng' ? '#475569' : undefined
-                                  }}
-                                >
-                                  {screen.status || 'Mới thiết kế'}
-                                </span>
-                              </td>
-                              <td style={{ color: '#666', fontSize: '0.8rem' }}>{formatDate(screen.updated_at)}</td>
-                              <td style={{ color: '#666', fontSize: '0.8rem' }}>{formatDate(screen.updated_at)}</td>
-                              <td style={{ color: '#7B5233', fontSize: '0.8rem', fontWeight: '500' }}>{formatSimpleDate(screen.target_date)}</td>
-                              <td style={{ textAlign: 'center', fontWeight: 'bold', color: totalBugs > 0 ? (completedBugs === totalBugs ? '#059669' : '#EF4444') : '#64748B' }}>
-                                {completedBugs}/{totalBugs}
-                              </td>
-                              <td style={{ color: '#666', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {screen.subtitle || '-'}
-                              </td>
-                              <td className="actions-cell" style={{ position: 'relative', textAlign: 'center', zIndex: actionMenuId === screen.id ? 40 : 1 }}>
-                                <button
-                                  className="action-btn"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (e.nativeEvent && e.nativeEvent.stopImmediatePropagation) {
-                                      e.nativeEvent.stopImmediatePropagation();
-                                    }
-                                    setActionMenuId(actionMenuId === screen.id ? null : screen.id);
-                                  }}
-                                ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ pointerEvents: 'none' }}><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
-                                {actionMenuId === screen.id && (
-                                  <div className="action-menu" style={{ right: '50%', transform: 'translateX(50%)', top: '80%', opacity: 1, animation: 'none' }}>
-                                    <button
-                                      className="action-menu-item"
-                                      onClick={() => {
-                                        setActionMenuId(null);
-                                        navigate(`/admin/screens/${screen.id}`);
-                                      }}
-                                    >
-                                      Chi tiết
-                                    </button>
-                                    <button
-                                      className="action-menu-item"
-                                      onClick={() => {
-                                        setActionMenuId(null);
-                                        handlePauseScreen(screen);
-                                      }}
-                                    >
-                                      {screen.status === 'Tạm dừng' ? 'Khôi phục' : 'Tạm dừng'}
-                                    </button>
-                                    <button
-                                      className="action-menu-item"
-                                      onClick={() => {
-                                        setActionMenuId(null);
-                                        handleExportPDFSingle(screen);
-                                      }}
-                                    >
-                                      Tải xuống PDF
-                                    </button>
-                                    <button
-                                      className="action-menu-item"
-                                      onClick={() => {
-                                        setActionMenuId(null);
-                                        handleCopyScreen(screen);
-                                      }}
-                                      style={{ color: '#0284C7' }}
-                                    >
-                                      Sao chép
-                                    </button>
-                                    <button
-                                      className="action-menu-item danger"
-                                      onClick={() => {
-                                        setActionMenuId(null);
-                                        handleDeleteScreen(screen);
-                                      }}
-                                      style={{ color: '#EF4444' }}
-                                    >
-                                      Xóa
-                                    </button>
-                                  </div>
-                                )}
-                              </td>
-                            </tr>
+                            <React.Fragment key={bug.id}>
+                              <tr
+                                onClick={() => setExpandedBugId(isBugExpanded ? null : bug.id)}
+                                style={{ cursor: 'pointer', backgroundColor: isBugExpanded ? '#FAF6F0' : undefined }}
+                                className="clickable-row"
+                              >
+                                <td className="font-mono font-bold">BUG-{bug.id}</td>
+                                <td className="font-semibold">{parsed.tag || 'Chung'}</td>
+                                <td>{parsed.text}</td>
+                                <td>
+                                  <span style={{ color: severityColors[bug.severity] || '#7B5233', fontWeight: 'bold' }}>
+                                    {bug.severity === 'Critical' ? 'Khẩn cấp' : (bug.severity === 'High' ? 'Cao' : (bug.severity === 'Medium' ? 'Trung bình' : 'Thấp'))}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span className={`status-badge ${bug.status === 'Hoàn thành' ? 'status-resolved' : (bug.status === 'Đã sửa' ? 'status-processing' : 'status-new')}`}>
+                                    {bug.status === 'New' || bug.status === 'Mới' ? 'Mới' : (bug.status === 'Đã sửa' ? 'Đã sửa' : (bug.status === 'Sửa lại' ? 'Sửa lại' : 'Hoàn thành'))}
+                                  </span>
+                                </td>
+                                <td>{formatDate(bug.completed_at || bug.created_at)}</td>
+                                <td>{bug.assignee || '-'}</td>
+                                <td>{formatDate(bug.created_at)}</td>
+                                <td style={{ textAlign: 'center' }}>
+                                  <span style={{ fontSize: '0.8rem', color: '#7B5233', fontWeight: 'bold' }}>...</span>
+                                </td>
+                              </tr>
+
+                              {/* HIỂN THỊ PHẢN HỒI KHI ĐƯỢC CLICK MỞ RỘNG DÒNG (ANH 2) */}
+                              {isBugExpanded && (
+                                <tr>
+                                  <td colSpan={9} style={{ padding: '15px 25px', backgroundColor: '#FDFCFB', borderLeft: '4px solid #7B5233' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                                      {/* Hộp thoại phản hồi gốc / Lịch sử cập nhật */}
+                                      {bug.status === 'New' || bug.status === 'Mới' || !bug.updates || bug.updates.length === 0 ? (
+                                        // Hiển thị mô tả lỗi gốc
+                                        <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                                          {/* Left: Original Screenshots */}
+                                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                            {bug.images && bug.images.filter(img => !img.update_id).length > 0 ? (
+                                              bug.images.filter(img => !img.update_id).map((img, idx) => (
+                                                <div key={idx} style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px solid #EADCC9', overflow: 'hidden', backgroundColor: '#FAF6F0' }}>
+                                                  <img src={getImageUrl(img.image_path)} alt="Bug spec" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onClick={() => window.open(getImageUrl(img.image_path), '_blank')} />
+                                                </div>
+                                              ))
+                                            ) : (
+                                              <div style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px dashed #EADCC9', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FAF6F0', color: '#A08070', fontSize: '0.75rem' }}>
+                                                Không có ảnh
+                                              </div>
+                                            )}
+                                          </div>
+                                          {/* Right: Text box */}
+                                          <div style={{ flex: 1, minWidth: '250px' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#8D6E63', fontWeight: 'bold', marginBottom: '4px' }}>
+                                              <span>Phản hồi từ [{getPositionByName(bug.reporter)} - {bug.reporter || 'QC'}]</span>
+                                              <span>{formatDate(bug.created_at)}</span>
+                                            </div>
+                                            <div style={{ padding: '12px 16px', borderRadius: '12px', border: '1px solid #EADCC9', backgroundColor: '#fff', fontSize: '0.88rem', color: '#2D1A12', minHeight: '38px' }}>
+                                              {parsed.text}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        // Hiển thị lịch sử các lần phản hồi/comment
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                          {bug.updates.map((update, uIdx) => (
+                                            <div key={uIdx} style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap', borderBottom: uIdx < bug.updates.length - 1 ? '1px dashed #FAF0E6' : 'none', paddingBottom: '12px' }}>
+                                              {/* Left: update screenshot proof */}
+                                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                {update.images && update.images.length > 0 ? (
+                                                  update.images.map((img, idx) => (
+                                                    <div key={idx} style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px solid #EADCC9', overflow: 'hidden', backgroundColor: '#FAF6F0' }}>
+                                                      <img src={getImageUrl(img.image_path)} alt="Bug update" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onClick={() => window.open(getImageUrl(img.image_path), '_blank')} />
+                                                    </div>
+                                                  ))
+                                                ) : (
+                                                  <div style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px dashed #EADCC9', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FAF6F0', color: '#A08070', fontSize: '0.75rem' }}>
+                                                    Không có ảnh
+                                                  </div>
+                                                )}
+                                              </div>
+                                              {/* Right: update notes */}
+                                              <div style={{ flex: 1, minWidth: '250px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#8D6E63', fontWeight: 'bold', marginBottom: '4px' }}>
+                                                  <span>Phản hồi từ [{getPositionByName(update.updater)} - {update.updater || 'QC'}]</span>
+                                                  <span>{formatDate(update.created_at)}</span>
+                                                </div>
+                                                <div style={{ padding: '12px 16px', borderRadius: '12px', border: '1px solid #EADCC9', backgroundColor: '#fff', fontSize: '0.88rem', color: '#2D1A12', minHeight: '38px' }}>
+                                                  {update.notes || <span style={{ color: '#999', fontStyle: 'italic' }}>Không có nội dung phản hồi.</span>}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
                           );
                         })}
                       </tbody>
                     </table>
                   </div>
-
-                  <div className="mobile-only mgmt-cards-container">
-                    {paginatedScreens.map((screen) => {
-                      const isSelected = selectedScreenId === screen.id;
-                      const isChecked = checkedScreenIds.includes(screen.id);
-                      const screenBugs = bugs.filter(b => b.screen_id === screen.id);
-                      const completedBugs = screenBugs.filter(b => b.status === 'Hoàn thành').length;
-                      const totalBugs = screenBugs.length;
-                      
-                      return (
-                        <div 
-                          key={screen.id} 
-                          className="mgmt-card"
-                          style={{ 
-                            border: isSelected ? '2px solid #7B5233' : '1px solid #EADCC9',
-                            opacity: screen.status === 'Tạm dừng' ? 0.6 : 1
-                          }}
-                        >
-                          <div className="mgmt-card-main" onClick={() => navigate(`/admin/screens/${screen.id}`)}>
-                            <div className="mgmt-card-avatar" onClick={(e) => {
-                              e.stopPropagation();
-                              setCheckedScreenIds(prev => 
-                                prev.includes(screen.id) 
-                                  ? prev.filter(id => id !== screen.id) 
-                                  : [...prev, screen.id]
-                              );
-                              setSelectedScreenId(screen.id);
-                              setExpandedBugId(null);
-                            }} style={{ cursor: 'pointer', backgroundColor: isSelected ? '#FAF6F0' : undefined }}>
-                              {isChecked ? '✓' : (screen.platform === 'Web' ? '🖥️' : '📱')}
-                            </div>
-                            <div className="mgmt-card-details">
-                              <div className="mgmt-card-title-row">
-                                <h4 className="mgmt-card-title">{screen.title}</h4>
-                                <span className={`platform-badge ${screen.platform}`}>
-                                  {screen.platform}
-                                </span>
-                              </div>
-                              <p style={{ fontSize: '0.82rem', color: '#666', margin: '4px 0', lineHeight: '1.4' }}>
-                                {screen.subtitle || 'Không có mô tả phụ'}
-                              </p>
-                              <div className="mgmt-card-meta-chips" style={{ marginTop: '6px' }}>
-                                <span className="mgmt-card-chip font-mono">
-                                  {screen.route_path}
-                                </span>
-                                <span className="mgmt-card-chip" style={{ backgroundColor: '#FAF6F0', color: '#7B5233' }}>
-                                  {getSubsystem(screen)}
-                                </span>
-                                <span className={`mgmt-card-chip ${screen.status === 'Hoàn thành' ? 'success' : (screen.status === 'Tạm dừng' ? 'default' : 'info')}`} style={screen.status === 'Tạm dừng' ? { backgroundColor: '#E2E8F0', color: '#475569' } : undefined}>
-                                  {screen.status || 'Mới thiết kế'}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="mgmt-card-actions">
-                              <button 
-                                className="action-icon-btn"
-                                onClick={(e) => { e.stopPropagation(); navigate(`/admin/screens/${screen.id}`); }}
-                                title="Sửa"
-                              >
-                                ✏️
-                              </button>
-                              <button 
-                                className="action-icon-btn"
-                                onClick={(e) => { e.stopPropagation(); handleCopyScreen(screen); }}
-                                title="Sao chép"
-                                style={{ color: '#0284C7' }}
-                              >
-                                📋
-                              </button>
-                              <button 
-                                className="action-icon-btn delete"
-                                onClick={(e) => { e.stopPropagation(); handleDeleteScreen(screen); }}
-                                title="Xóa"
-                              >
-                                🗑️
-                              </button>
-                            </div>
-                          </div>
-                          <div className="mgmt-card-footer">
-                            <div className="mgmt-card-footer-left font-mono">
-                              Mã: <span style={{ fontWeight: 'bold', color: '#7B5233' }}>{screen.current_code}</span>
-                            </div>
-                            <div className="mgmt-card-footer-right" style={{ color: totalBugs > 0 ? (completedBugs === totalBugs ? '#059669' : '#EF4444') : '#64748B', fontWeight: 'bold' }}>
-                              Lỗi: {completedBugs}/{totalBugs}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {totalPages > 1 && (
-                    <div className="admin-pagination-desktop">
-                      <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
-                        Hiển thị <b>{paginatedScreens.length}</b> trên <b>{filteredScreens.length}</b> kết quả
-                      </div>
-                      <div style={{ display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
-                        <button 
-                          disabled={currentPage === 1} 
-                          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
-                          className="page-btn"
-                        >
-                          &lt; Trước
-                        </button>
-                        {(() => {
-                          const pages = [];
-                          const delta = 2;
-                          for (let i = 1; i <= totalPages; i++) {
-                            if (i === 1 || i === totalPages || (i >= currentPage - delta && i <= currentPage + delta)) {
-                              pages.push(i);
-                            } else if (pages[pages.length - 1] !== '...') {
-                              pages.push('...');
-                            }
-                          }
-                          return pages.map((p, idx) => {
-                            if (p === '...') {
-                              return (
-                                <span key={`ell-${idx}`} style={{ padding: '0 8px', color: '#7B5233', fontWeight: '700' }}>
-                                  ...
-                                </span>
-                              );
-                            }
-                            return (
-                              <button
-                                key={p}
-                                className={`page-btn ${currentPage === p ? 'active' : ''}`}
-                                onClick={() => setCurrentPage(p)}
-                              >
-                                {p}
-                              </button>
-                            );
-                          });
-                        })()}
-                        <button 
-                          disabled={currentPage >= totalPages} 
-                          onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
-                          className="page-btn"
-                        >
-                          Sau &gt;
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
+        )}
+      </div>
 
-          {/* DỰNG BẢNG DANH SÁCH LỖI INLINE (CHỈ HIỂN THỊ KHI ĐÃ CHỌN MÀN HÌNH) */}
-          {selectedScreenId && (
-            <div className="bugs-inline-section card" style={{
-              marginTop: '30px',
-              border: '1px solid #EADCC9',
-              borderRadius: '12px',
-              overflow: 'hidden',
-              boxShadow: '0 4px 15px rgba(123, 82, 51, 0.05)',
-              backgroundColor: '#fff'
-            }}>
-              <div 
-                className="bugs-section-header" 
-                onClick={() => setIsBugListCollapsed(!isBugListCollapsed)}
-                style={{
-                  padding: '16px 20px',
-                  backgroundColor: '#FAF6F0',
-                  borderBottom: '1px solid #EADCC9',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  cursor: 'pointer',
-                  userSelect: 'none'
+      {/* Export Options Modal */}
+      {showExportModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+          backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 9999, display: 'flex',
+          alignItems: 'center', justifyContent: 'center', padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: '#fff', borderRadius: '12px', width: '420px', padding: '24px',
+            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', border: '1px solid #EADCC9'
+          }}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '900', color: '#7B5233', textAlign: 'center' }}>
+              Tùy chọn xuất dữ liệu
+            </h3>
+            
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #E5E7EB' }}>
+                  <th style={{ padding: '12px 8px', textAlign: 'left', fontSize: '14px', fontWeight: '700', color: '#7B5233' }}>Nội dung cần xuất</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '14px', fontWeight: '700', color: '#7B5233', width: '120px' }}>Xuất toàn bộ</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style={{ borderBottom: '1px solid #F3F4F6' }}>
+                  <td style={{ padding: '14px 8px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', fontWeight: '600', color: '#475569', cursor: 'pointer' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={exportOptions.listSelected} 
+                        onChange={(e) => setExportOptions({ ...exportOptions, listSelected: e.target.checked })} 
+                        style={{ accentColor: '#7B5233', width: '15px', height: '15px' }}
+                      />
+                      Xuất danh sách (Excel)
+                    </label>
+                  </td>
+                  <td style={{ padding: '14px 8px', textAlign: 'center' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={exportOptions.listAll} 
+                      disabled={!exportOptions.listSelected}
+                      onChange={(e) => setExportOptions({ ...exportOptions, listAll: e.target.checked })} 
+                      style={{ accentColor: '#7B5233', width: '15px', height: '15px', cursor: exportOptions.listSelected ? 'pointer' : 'default' }}
+                    />
+                  </td>
+                </tr>
+                <tr style={{ borderBottom: '1px solid #F3F4F6' }}>
+                  <td style={{ padding: '14px 8px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', fontWeight: '600', color: '#475569', cursor: 'pointer' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={exportOptions.docsSelected} 
+                        onChange={(e) => setExportOptions({ ...exportOptions, docsSelected: e.target.checked })} 
+                        style={{ accentColor: '#7B5233', width: '15px', height: '15px' }}
+                      />
+                      Xuất tài liệu (PDF)
+                    </label>
+                  </td>
+                  <td style={{ padding: '14px 8px', textAlign: 'center' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={exportOptions.docsAll} 
+                      disabled={!exportOptions.docsSelected}
+                      onChange={(e) => setExportOptions({ ...exportOptions, docsAll: e.target.checked })} 
+                      style={{ accentColor: '#7B5233', width: '15px', height: '15px', cursor: exportOptions.docsSelected ? 'pointer' : 'default' }}
+                    />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button 
+                onClick={handleConfirmExport}
+                disabled={!exportOptions.listSelected && !exportOptions.docsSelected}
+                style={{ 
+                  display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 20px', 
+                  backgroundColor: (!exportOptions.listSelected && !exportOptions.docsSelected) ? '#cbd5e1' : '#7B5233', 
+                  color: '#fff', border: 'none', borderRadius: '8px', cursor: (!exportOptions.listSelected && !exportOptions.docsSelected) ? 'default' : 'pointer', 
+                  fontWeight: '700', fontSize: '13px'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontSize: '1.1rem', fontWeight: '800', color: '#2D1A12' }}>Danh sách lỗi</span>
-                  <span style={{
-                    fontSize: '0.75rem',
-                    backgroundColor: '#A0301B',
-                    color: '#fff',
-                    padding: '2px 8px',
-                    borderRadius: '10px',
-                    fontWeight: 'bold'
-                  }}>{selectedScreenBugs.length}</span>
-                </div>
-                <div style={{ transform: isBugListCollapsed ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.2s' }}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7B5233" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                </div>
-              </div>
-
-              {!isBugListCollapsed && (
-                <div style={{ padding: '20px' }}>
-                  {selectedScreenBugs.length === 0 ? (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#888', fontStyle: 'italic' }}>
-                      Không có báo cáo lỗi nào cho màn hình này.
-                    </div>
-                  ) : (
-                    <div className="table-responsive">
-                      <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead>
-                          <tr style={{ backgroundColor: '#7B5233', color: '#fff' }}>
-                            <th style={{ color: '#fff' }}>Mã</th>
-                            <th style={{ color: '#fff' }}>Component</th>
-                            <th style={{ color: '#fff' }}>Mô tả</th>
-                            <th style={{ color: '#fff' }}>Mức độ</th>
-                            <th style={{ color: '#fff' }}>Trạng thái</th>
-                            <th style={{ color: '#fff' }}>Ngày cập nhật</th>
-                            <th style={{ color: '#fff' }}>Người cập nhật</th>
-                            <th style={{ color: '#fff' }}>Ngày ghi nhận</th>
-                            <th style={{ color: '#fff', textAlign: 'center' }}>THAO TÁC</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedScreenBugs.map((bug) => {
-                            const isBugExpanded = expandedBugId === bug.id;
-                            const parsed = parseDescription(bug.description);
-                            const severityColors = {
-                              'Critical': '#EF4444',
-                              'High': '#F97316',
-                              'Medium': '#D97706',
-                              'Low': '#10B981'
-                            };
-                            return (
-                              <React.Fragment key={bug.id}>
-                                <tr 
-                                  onClick={() => setExpandedBugId(isBugExpanded ? null : bug.id)}
-                                  style={{ cursor: 'pointer', backgroundColor: isBugExpanded ? '#FAF6F0' : undefined }}
-                                  className="clickable-row"
-                                >
-                                  <td className="font-mono font-bold">BUG-{bug.id}</td>
-                                  <td className="font-semibold">{parsed.tag || 'Chung'}</td>
-                                  <td>{parsed.text}</td>
-                                  <td>
-                                    <span style={{ color: severityColors[bug.severity] || '#7B5233', fontWeight: 'bold' }}>
-                                      {bug.severity === 'Critical' ? 'Khẩn cấp' : (bug.severity === 'High' ? 'Cao' : (bug.severity === 'Medium' ? 'Trung bình' : 'Thấp'))}
-                                    </span>
-                                  </td>
-                                  <td>
-                                    <span className={`status-badge ${bug.status === 'Hoàn thành' ? 'status-resolved' : (bug.status === 'Đã sửa' ? 'status-processing' : 'status-new')}`}>
-                                      {bug.status === 'New' || bug.status === 'Mới' ? 'Mới' : (bug.status === 'Đã sửa' ? 'Đã sửa' : (bug.status === 'Sửa lại' ? 'Sửa lại' : 'Hoàn thành'))}
-                                    </span>
-                                  </td>
-                                  <td>{formatDate(bug.completed_at || bug.created_at)}</td>
-                                  <td>{bug.assignee || '-'}</td>
-                                  <td>{formatDate(bug.created_at)}</td>
-                                  <td style={{ textAlign: 'center' }}>
-                                    <span style={{ fontSize: '0.8rem', color: '#7B5233', fontWeight: 'bold' }}>...</span>
-                                  </td>
-                                </tr>
-
-                                {/* HIỂN THỊ PHẢN HỒI KHI ĐƯỢC CLICK MỞ RỘNG DÒNG (ANH 2) */}
-                                {isBugExpanded && (
-                                  <tr>
-                                    <td colSpan={9} style={{ padding: '15px 25px', backgroundColor: '#FDFCFB', borderLeft: '4px solid #7B5233' }}>
-                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                                        {/* Hộp thoại phản hồi gốc / Lịch sử cập nhật */}
-                                        {bug.status === 'New' || bug.status === 'Mới' || !bug.updates || bug.updates.length === 0 ? (
-                                          // Hiển thị mô tả lỗi gốc
-                                          <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                                            {/* Left: Original Screenshots */}
-                                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                              {bug.images && bug.images.filter(img => !img.update_id).length > 0 ? (
-                                                bug.images.filter(img => !img.update_id).map((img, idx) => (
-                                                  <div key={idx} style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px solid #EADCC9', overflow: 'hidden', backgroundColor: '#FAF6F0' }}>
-                                                    <img src={getImageUrl(img.image_path)} alt="Bug spec" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onClick={() => window.open(getImageUrl(img.image_path), '_blank')} />
-                                                  </div>
-                                                ))
-                                              ) : (
-                                                <div style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px dashed #EADCC9', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FAF6F0', color: '#A08070', fontSize: '0.75rem' }}>
-                                                  Không có ảnh
-                                                </div>
-                                              )}
-                                            </div>
-                                            {/* Right: Text box */}
-                                            <div style={{ flex: 1, minWidth: '250px' }}>
-                                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#8D6E63', fontWeight: 'bold', marginBottom: '4px' }}>
-                                                <span>Phản hồi từ [{getPositionByName(bug.reporter)} - {bug.reporter || 'QC'}]</span>
-                                                <span>{formatDate(bug.created_at)}</span>
-                                              </div>
-                                              <div style={{ padding: '12px 16px', borderRadius: '12px', border: '1px solid #EADCC9', backgroundColor: '#fff', fontSize: '0.88rem', color: '#2D1A12', minHeight: '38px' }}>
-                                                {parsed.text}
-                                              </div>
-                                            </div>
-                                          </div>
-                                        ) : (
-                                          // Hiển thị lịch sử các lần phản hồi/comment
-                                          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                            {bug.updates.map((update, uIdx) => (
-                                              <div key={uIdx} style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap', borderBottom: uIdx < bug.updates.length - 1 ? '1px dashed #FAF0E6' : 'none', paddingBottom: '12px' }}>
-                                                {/* Left: update screenshot proof */}
-                                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                                  {update.images && update.images.length > 0 ? (
-                                                    update.images.map((img, idx) => (
-                                                      <div key={idx} style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px solid #EADCC9', overflow: 'hidden', backgroundColor: '#FAF6F0' }}>
-                                                        <img src={getImageUrl(img.image_path)} alt="Bug update" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onClick={() => window.open(getImageUrl(img.image_path), '_blank')} />
-                                                      </div>
-                                                    ))
-                                                  ) : (
-                                                    <div style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px dashed #EADCC9', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FAF6F0', color: '#A08070', fontSize: '0.75rem' }}>
-                                                      Không có ảnh
-                                                    </div>
-                                                  )}
-                                                </div>
-                                                {/* Right: update notes */}
-                                                <div style={{ flex: 1, minWidth: '250px' }}>
-                                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#8D6E63', fontWeight: 'bold', marginBottom: '4px' }}>
-                                                    <span>Phản hồi từ [{getPositionByName(update.updater)} - {update.updater || 'QC'}]</span>
-                                                    <span>{formatDate(update.created_at)}</span>
-                                                  </div>
-                                                  <div style={{ padding: '12px 16px', borderRadius: '12px', border: '1px solid #EADCC9', backgroundColor: '#fff', fontSize: '0.88rem', color: '#2D1A12', minHeight: '38px' }}>
-                                                    {update.notes || <span style={{ color: '#999', fontStyle: 'italic' }}>Không có nội dung phản hồi.</span>}
-                                                  </div>
-                                                </div>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        )}
-                                      </div>
-                                    </td>
-                                  </tr>
-                                )}
-                              </React.Fragment>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              )}
+                <FileDown size={16} />
+                Xuất dữ liệu
+              </button>
+              <button 
+                onClick={() => setShowExportModal(false)}
+                style={{ 
+                  display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 20px', 
+                  backgroundColor: '#7B5233', color: '#fff', border: 'none', borderRadius: '8px', 
+                  cursor: 'pointer', fontWeight: '700', fontSize: '13px' 
+                }}
+              >
+                Hủy
+              </button>
             </div>
-          )}
+          </div>
+        </div>
+      )}
+
       <BeautifulConfirmModal
         visible={confirmModal.visible}
         title={confirmModal.title}
         message={confirmModal.message}
         type={confirmModal.type}
         onConfirm={confirmModal.onConfirm}
-        onCancel={() => setConfirmModal(prev => ({ ...prev, visible: false }))}
       />
-    </div>
-  </>
-);
+    </>
+  );
 };
 
 export default ScreenManagement;

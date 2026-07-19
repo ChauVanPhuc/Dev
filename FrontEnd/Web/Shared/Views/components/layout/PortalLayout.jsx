@@ -379,6 +379,16 @@ const PortalLayout = () => {
     location.pathname.includes('/detail');
 
   const [sidebarActive, setSidebarActive] = useState(false);
+
+  const handleBackClick = () => {
+    if (typeof window.hasUnsavedChangesScreenDetail === 'function' && window.hasUnsavedChangesScreenDetail()) {
+      if (typeof window.triggerScreenDetailUnsavedChangesModal === 'function') {
+        window.triggerScreenDetailUnsavedChangesModal();
+        return;
+      }
+    }
+    navigate(-1);
+  };
   const [showNotifications, setShowNotifications] = useState(false);
   const [customTitle, setCustomTitle] = useState(null);
   const [customSubtitle, setCustomSubtitle] = useState(null);
@@ -1425,7 +1435,7 @@ const PortalLayout = () => {
               {/* Back button logic */}
               {showBackButton && (
                 <button 
-                  onClick={() => navigate(-1)}
+                  onClick={handleBackClick}
                   style={{
                     background: 'none',
                     border: '1.5px solid #7B5233',

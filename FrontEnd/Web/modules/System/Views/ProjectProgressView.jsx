@@ -337,7 +337,7 @@ const ProjectProgressView = () => {
         </div>
 
         {/* Toolbar region */}
-        <PageToolbar
+         <PageToolbar
           searchValue={searchQuery}
           onSearchChange={(val) => { setSearchQuery(val); setCurrentPage(1); }}
           searchPlaceholder="Nhập mã màn hình, tên màn hình..."
@@ -345,6 +345,10 @@ const ProjectProgressView = () => {
           isFilterOpen={isFilterBarOpen}
           onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
           activeFiltersCount={subsystemFilter !== 'All' ? 1 : 0}
+          extraActions={[
+            { label: 'Quản lý màn hình', onClick: () => navigate('/admin/screens') },
+            { label: 'Danh sách lỗi hệ thống', onClick: () => navigate('/admin/screens/bugs') }
+          ]}
           importActions={[
             { label: 'Nhập từ Excel (CSV)', onClick: handleImportExcelClick }
           ]}

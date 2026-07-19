@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useOutletContext, useLocation } from 'react-router-dom';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
-import { Bug, Play, Type, Table2, CheckSquare, List, Layout, Menu, CreditCard, Sliders, Bell, Component, MoreVertical } from 'lucide-react';
-import api from '@webShared/Services/api.service';
+import { Bug, Play, Type, Table2, CheckSquare, List, Layout, Menu, CreditCard, Sliders, Bell, Component, MoreVertical, ChevronDown, Upload, FileText, X, Plus, Edit } from 'lucide-react';
+import api, { getBaseURL } from '@webShared/Services/api.service';
 
 const renderComponentIcon = (type) => {
   const props = { size: 16, style: { color: '#7B5233' } };
@@ -82,7 +82,8 @@ import BugDetailModal from '@webShared/Views/components/modals/BugDetailModal';
 import ScreenSimulator from '@modules/System/Views/components/ScreenSimulation';
 
 import SCREEN_DOCS from './components/screenDocs';
-import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
+import { useScreenMetadataCached, clearScreenMetadataCache } from '@webShared/hooks/useScreenMetadata';
+import { useScreen } from '@shared/context/ScreenContext';
 
 
 
@@ -1070,7 +1071,7 @@ const getImageUrl = (path) => {
   if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) {
     return path;
   }
-  const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const apiBase = getBaseURL();
   return `${apiBase.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
 };
 
@@ -1101,9 +1102,13 @@ const getSubsystem = (screen) => {
   const prefix = screen.current_code.substring(0, 2).toUpperCase();
   const mapping = {
     'TC': 'Trang chủ',
+    'HT': 'Quản lý hệ thống',
     'HD': 'Quản lý hệ thống',
+    'AD': 'Quản lý hệ thống',
+    'HS': 'Quản lý nhân sự',
     'NS': 'Quản lý nhân sự',
     'SX': 'Quản lý sản xuất',
+    'MA': 'Quản lý sản xuất',
     'CL': 'Quản lý chất lượng',
     'KD': 'Quản lý kinh doanh',
     'KT': 'Quản lý kỹ thuật',
@@ -1114,17 +1119,154 @@ const getSubsystem = (screen) => {
 
 const SUBSYSTEM_PREFIXES = {
   'Trang chủ': 'TC',
-  'Quản lý hệ thống': 'AD',
-  'Quản lý nhân sự': 'NS',
-  'Quản lý sản xuất': 'MA',
+  'Quản lý hệ thống': 'HT',
+  'Quản lý nhân sự': 'HS',
+  'Quản lý sản xuất': 'SX',
   'Quản lý chất lượng': 'CL',
   'Quản lý kinh doanh': 'KD',
   'Quản lý kỹ thuật': 'KT',
   'Bảo trì - cơ sở hạ tầng': 'BT'
 };
 
+const ROUTE_SUGGESTIONS = {
+  'Trang chủ': [
+    { title: 'Trang chủ', path: '/admin/dashboard' }
+  ],
+  'Quản lý hệ thống': [
+    { title: 'Quản lý hệ thống', path: '/admin/monitor' },
+    { title: 'Danh sách màn hình', path: '/admin/screens' },
+    { title: 'Quy trình nghiệp vụ', path: '/admin/iso-processes' },
+    { title: 'Theo dõi góp ý', path: '/admin/feedback' },
+    { title: 'Đóng gói dữ liệu', path: '/admin/data' }
+  ],
+  'Quản lý nhân sự': [
+    { title: 'Quản lý mẫu tài liệu', path: '/admin/iso-documents' },
+    { title: 'Quản lý quy trình', path: '/admin/iso-processes' }
+  ],
+  'Quản lý sản xuất': [
+    { title: 'Kế hoạch sản xuất', path: '/admin/plan' },
+    { title: 'Kế hoạch bàn giao', path: '/admin/delivery-tracking' },
+    { title: 'Phiếu ngoại lệ', path: '/admin/exception-deliveries' },
+    { title: 'Trang chủ sản xuất', path: '/admin/manufacture-dashboard' },
+    { title: 'Quản lý mã QR', path: '/admin/backup-qrs' }
+  ],
+  'Quản lý chất lượng': [
+    { title: 'Hồ sơ chất lượng', path: '/admin/quality-records' },
+    { title: 'Danh sách lỗi', path: '/admin/defects' },
+    { title: 'Claim khách hàng', path: '/admin/claims' },
+    { title: 'Quản lý CAPA', path: '/admin/feedback?type=quality' },
+    { title: 'Báo cáo kiểm tra', path: '/admin/reports' },
+    { title: 'Danh sách bàn giao', path: '/admin/handovers' },
+    { title: 'Điểm nóng cần chú ý', path: '/admin/hotspots' },
+    { title: 'Quản lý thiết bị', path: '/admin/equipment' }
+  ],
+  'Quản lý kinh doanh': [
+    { title: 'Thời gian xuất cont', path: '/admin/shipments' },
+    { title: 'Quản lý giá tủ', path: '/admin/prices' },
+    { title: 'Đơn đặt mua', path: '/admin/purchase-requisitions' },
+    { title: 'Đơn mua hàng', path: '/admin/purchase-order-items' }
+  ],
+  'Quản lý kỹ thuật': [
+    { title: 'Bom sản phẩm', path: '/admin/products' }
+  ],
+  'Bảo trì - cơ sở hạ tầng': [
+    { title: 'Danh sách thiết bị', path: '/admin/machines' },
+    { title: 'Lịch sử bảo trì', path: '/admin/machines/history' },
+    { title: 'Hướng dẫn sử dụng', path: '/admin/machines/training' }
+  ]
+};
+const slugify = (text) => {
+  if (!text) return '';
+  return text
+    .toString()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Khử dấu
+    .replace(/[đĐ]/g, 'd')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-') // Đổi khoảng trắng thành -
+    .replace(/[^a-z0-9\-]/g, '') // Loại bỏ ký tự đặc biệt khác ngoại trừ -
+    .replace(/\-\-+/g, '-'); // Tránh nhiều dấu - liên tiếp
+};
+
+const parseRoutePath = (routePath, subsystem) => {
+  if (!routePath) {
+    return {
+      frontendPath: '',
+      backendPath: ''
+    };
+  }
+
+  let clean = routePath.trim().replace(/\/+/g, '/');
+  const subPrefix = subsystem ? subsystem.trim().replace(/\/+/g, '') : '';
+  if (subPrefix && clean.startsWith(subPrefix)) {
+    clean = clean.substring(subPrefix.length);
+  }
+
+  const lastSlashIdx = clean.lastIndexOf('/');
+  if (lastSlashIdx !== -1) {
+    const frontend = clean.substring(0, lastSlashIdx);
+    const backend = clean.substring(lastSlashIdx + 1);
+    return {
+      frontendPath: frontend || '',
+      backendPath: backend || ''
+    };
+  } else {
+    return {
+      frontendPath: '',
+      backendPath: clean
+    };
+  }
+};
+
+const combineRoutePath = (dir, url) => {
+  const cleanDir = (dir || '').trim();
+  const cleanUrl = (url || '').trim();
+  let combined = '';
+  if (cleanDir && cleanUrl) {
+    combined = `${cleanDir}/${cleanUrl}`;
+  } else {
+    combined = cleanDir || cleanUrl || '';
+  }
+  return combined.replace(/\/+/g, '/');
+};
+
+const normalizeRoutePath = (path) => {
+  if (!path) return '';
+  return path.trim().replace(/\/+/g, '/');
+};
+
+const getDisplayRoutePath = (path, subsystem) => {
+  if (!path) return '';
+
+  // Find in suggestion paths of the current subsystem first
+  const suggestions = ROUTE_SUGGESTIONS[subsystem] || [];
+  const suggestion = suggestions.find(s => s.path === path);
+  if (suggestion) {
+    return suggestion.title;
+  }
+
+  // Otherwise, find in any subsystem suggestions as fallback
+  for (const sub in ROUTE_SUGGESTIONS) {
+    const found = ROUTE_SUGGESTIONS[sub].find(s => s.path === path);
+    if (found) return found.title;
+  }
+
+  // Strip prefix
+  if (path.startsWith('/admin/')) {
+    return path.slice(7);
+  }
+  if (path.startsWith('/admin')) {
+    return path.slice(6);
+  }
+  if (path.startsWith('/')) {
+    return path.slice(1);
+  }
+  return path;
+};
+
 const generateNextScreenCode = (subsystemName, screensList) => {
-  const prefix = SUBSYSTEM_PREFIXES[subsystemName] || 'AD';
+  const prefix = SUBSYSTEM_PREFIXES[subsystemName] || 'HT';
   const matchingCodes = (screensList || [])
     .map(s => s.current_code || s.default_code || '')
     .filter(code => code.startsWith(prefix));
@@ -1143,6 +1285,16 @@ const generateNextScreenCode = (subsystemName, screensList) => {
   return `${prefix}${bb}`;
 };
 
+const COMPONENT_COLORS = {
+  default: { bg: '#FFFFFF', border: '#E2E8F0', text: '#334155' },
+  red: { bg: '#FFF5F5', border: '#FEB2B2', text: '#9B2C2C' },
+  orange: { bg: '#FFFAF0', border: '#FBD38D', text: '#9C4221' },
+  yellow: { bg: '#FFFFF0', border: '#FAF089', text: '#744210' },
+  green: { bg: '#F0FFF4', border: '#9AE6B4', text: '#22543D' },
+  blue: { bg: '#EBF8FF', border: '#90CDF4', text: '#2B6CB0' },
+  purple: { bg: '#FAF5FF', border: '#D6BCFA', text: '#553C9A' }
+};
+
 const ScreenDetail = () => {
 
   const { id } = useParams();
@@ -1155,33 +1307,16 @@ const ScreenDetail = () => {
   const outletContext = useOutletContext() || {};
 
   const { showModal, startGlobalUpload, activeUploads, setCustomTitle, setCustomSubtitle, setCustomScreenCode } = outletContext;
-
-  // Dynamic metadata - chỉ dùng khi KHÔNG phải trang new và đã có screen
-  const { screenCode, title, subtitle } = useScreenMetadataCached(
-    isNew ? null : '/admin/screens/:id'
-  );
-
-  const [screen, setScreen] = useState(null);
-
-  useEffect(() => {
-    if (!isNew && screenCode && title) {
-      if (setCustomTitle) setCustomTitle(title);
-      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
-      if (setCustomScreenCode) setCustomScreenCode(screenCode);
-    } else if (isNew) {
-      if (setCustomTitle) setCustomTitle('Đặc tả màn hình');
-      if (setCustomSubtitle) setCustomSubtitle('Tạo mới đặc tả màn hình');
-      if (setCustomScreenCode) setCustomScreenCode('HD03');
-    }
-  }, [isNew, screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
-
+  const { refreshScreens } = useScreen();
+  const [allScreens, setAllScreens] = useState([]);
+  const [screen, setScreen] = useState({ id: '', title: '', components: [], guides: [], bugs: [] });
   const [loading, setLoading] = useState(true);
-
   const [error, setError] = useState(null);
-
   const [formData, setFormData] = useState({
     title: '',
     route_path: '',
+    frontend_path: '',
+    backend_path: '',
     platform: 'Web',
     subsystem: 'Quản lý hệ thống',
     status: 'Mới thiết kế',
@@ -1190,14 +1325,377 @@ const ScreenDetail = () => {
     current_code: ''
   });
 
+  const [isBackendPathManuallyEdited, setIsBackendPathManuallyEdited] = useState(false);
+
+  const generatedCode = isNew ? generateNextScreenCode(formData.subsystem, allScreens) : '';
+
+  // Effect to automatically sync URL path from code and title
+  useEffect(() => {
+    if (isBackendPathManuallyEdited) return; // Do not overwrite user's manual customization
+
+    const code = (formData.current_code || generatedCode || '').trim().toLowerCase();
+    const name = slugify(formData.title || '');
+    const newUrlPath = code && name ? `${code}-${name}` : (code || name);
+
+    setFormData(prev => {
+      if (prev.backend_path === newUrlPath) return prev; // Avoid unnecessary updates
+      const prefix = prev.subsystem ? `${prev.subsystem}/${prev.frontend_path}` : prev.frontend_path;
+      const newRoutePath = combineRoutePath(prefix, newUrlPath);
+      return {
+        ...prev,
+        backend_path: newUrlPath,
+        route_path: newRoutePath
+      };
+    });
+  }, [formData.current_code, generatedCode, formData.title, isBackendPathManuallyEdited]);
+
+  // Dynamic metadata - chỉ dùng khi KHÔNG phải trang new và đã có screen
+  const { screenCode, title, subtitle } = useScreenMetadataCached(
+    isNew ? null : '/admin/screens/:id'
+  );
+
+  useEffect(() => {
+    if (!isNew && screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    } else if (isNew) {
+      if (setCustomTitle) setCustomTitle(null);
+      if (setCustomSubtitle) setCustomSubtitle(null);
+      if (setCustomScreenCode) setCustomScreenCode(null);
+    }
+  }, [isNew, screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+
   const [showAddComponentModal, setShowAddComponentModal] = useState(false);
   const [isTypeDropdownOpen, setIsTypeDropdownOpen] = useState(false);
   const [isMockupExpanded, setIsMockupExpanded] = useState(false);
+
+  const originalScreenRef = React.useRef(null);
+  const latestDataRef = React.useRef(null);
+  const [showBlockerModal, setShowBlockerModal] = useState(false);
+  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
+  const scrollBodyRef = React.useRef(null);
+
+
+  useEffect(() => {
+    const scrollBody = scrollBodyRef.current;
+
+    const handleScroll = () => {
+      const isScrolled = (scrollBody ? scrollBody.scrollTop > 0 : false) || window.scrollY > 0;
+      setIsHeaderCollapsed(isScrolled);
+    };
+
+    handleScroll();
+    if (scrollBody) {
+      scrollBody.addEventListener('scroll', handleScroll, { passive: true });
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      if (scrollBody) {
+        scrollBody.removeEventListener('scroll', handleScroll);
+      }
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
+  useEffect(() => {
+    latestDataRef.current = { formData, screen, isNew };
+  }, [formData, screen, isNew]);
+
+  const hasChanges = (currentFormData, currentScreen, currentIsNew) => {
+    if (currentIsNew) {
+      const isTitleFilled = !!(currentFormData.title && currentFormData.title.trim());
+      const isRouteFilled = !!(currentFormData.route_path && currentFormData.route_path.trim());
+      const isSubtitleFilled = !!(currentFormData.subtitle && currentFormData.subtitle.trim());
+      const hasComponents = (currentScreen?.components || []).length > 0;
+      const hasGuides = (currentScreen?.guides || []).length > 0;
+      return isTitleFilled || isRouteFilled || isSubtitleFilled || hasComponents || hasGuides;
+    }
+
+    if (!originalScreenRef.current) return false;
+    const orig = originalScreenRef.current;
+
+    const isTitleChanged = currentFormData.title !== orig.title;
+    const isRouteChanged = normalizeRoutePath(currentFormData.route_path) !== normalizeRoutePath(orig.route_path);
+    const isPlatformChanged = currentFormData.platform !== orig.platform;
+    const isSubsystemChanged = currentFormData.subsystem !== orig.subsystem;
+    const isStatusChanged = currentFormData.status !== orig.status;
+    const isTargetDateChanged = currentFormData.target_date !== orig.target_date;
+    const isSubtitleChanged = currentFormData.subtitle !== orig.subtitle;
+    const isCurrentCodeChanged = currentFormData.current_code !== orig.current_code;
+
+    // Check components
+    const currentComps = (currentScreen?.components || []).map(c => ({
+      name: c.name,
+      type: c.type || 'Button',
+      description: c.description || '',
+      technical_details: typeof c.technical_details === 'object' ? JSON.stringify(c.technical_details) : (c.technical_details || '')
+    }));
+    const origComps = (orig.components || []).map(c => ({
+      name: c.name,
+      type: c.type || 'Button',
+      description: c.description || '',
+      technical_details: typeof c.technical_details === 'object' ? JSON.stringify(c.technical_details) : (c.technical_details || '')
+    }));
+    const isComponentsChanged = JSON.stringify(currentComps) !== JSON.stringify(origComps);
+
+    // Check guides
+    const currentGuides = (currentScreen?.guides || []).map(g => ({
+      step_number: g.step_number,
+      title: g.title,
+      related_components: g.related_components || '',
+      description: g.description || ''
+    }));
+    const origGuides = (orig.guides || []).map(g => ({
+      step_number: g.step_number,
+      title: g.title,
+      related_components: g.related_components || '',
+      description: g.description || ''
+    }));
+    const isGuidesChanged = JSON.stringify(currentGuides) !== JSON.stringify(origGuides);
+
+    return isTitleChanged || isRouteChanged || isPlatformChanged || isSubsystemChanged || isStatusChanged || isTargetDateChanged || isSubtitleChanged || isCurrentCodeChanged || isComponentsChanged || isGuidesChanged;
+  };
+
+  const performAutoSave = async (data, scr, isNewScreen) => {
+    if (!data.title) {
+      toast('error', 'Vui lòng nhập đầy đủ Tên màn hình!');
+      return false;
+    }
+
+    const componentsPayload = (scr?.components || []).map(c => ({
+      name: c.name,
+      type: c.type || 'Button',
+      description: c.description || '',
+      technical_details: typeof c.technical_details === 'object' ? JSON.stringify(c.technical_details) : (c.technical_details || ''),
+      file_path: c.file_path || '',
+      is_active: c.is_active !== undefined ? c.is_active : true
+    }));
+
+    const guidesPayload = (scr?.guides || []).map(g => ({
+      step_number: g.step_number,
+      title: g.title,
+      related_components: g.related_components || '',
+      description: g.description || ''
+    }));
+
+    try {
+      if (isNewScreen) {
+        // Xác định mã màn hình cho màn hình mới
+        const codeToUse = data.current_code || generateNextScreenCode(data.subsystem || 'Quản lý hệ thống', allScreens);
+        
+        await screenService.createScreen({
+          title: data.title,
+          route_path: normalizeRoutePath(data.route_path),
+          platform: data.platform,
+          status: data.status || 'Mới thiết kế',
+          target_date: data.target_date,
+          subtitle: data.subtitle,
+          subsystem: data.subsystem || 'Quản lý hệ thống',
+          components: componentsPayload,
+          guides: guidesPayload,
+          current_code: codeToUse
+        });
+        toast('success', 'Tạo mới đặc tả màn hình thành công!');
+      } else {
+        const updatePayload = {
+          title: data.title,
+          route_path: normalizeRoutePath(data.route_path),
+          platform: data.platform,
+          status: data.status,
+          target_date: data.target_date,
+          subtitle: data.subtitle,
+          mockup_path: scr.mockup_path,
+          components: componentsPayload,
+          guides: guidesPayload
+        };
+        if (data.current_code && data.current_code !== scr?.current_code) {
+          updatePayload.current_code = data.current_code;
+        }
+
+        await screenService.updateScreen(scr.id, updatePayload);
+        toast('success', 'Cập nhật đặc tả màn hình thành công!');
+      }
+      clearScreenMetadataCache();
+      if (refreshScreens) refreshScreens();
+      return true;
+    } catch (err) {
+      console.error('Auto-save error:', err);
+      toast('error', 'Lưu đặc tả màn hình thất bại!');
+      return false;
+    }
+  };
+
+  const [targetUrl, setTargetUrl] = useState(null);
+
+  useEffect(() => {
+    const handleGlobalClick = (e) => {
+      const anchor = e.target.closest('a');
+      if (!anchor) return;
+
+      const href = anchor.getAttribute('href');
+      if (!href) return;
+
+      let isInternal = false;
+      try {
+        const urlObj = new URL(href, window.location.origin);
+        isInternal = urlObj.origin === window.location.origin;
+      } catch (err) {
+        isInternal = !href.startsWith('http') && !href.startsWith('//');
+      }
+
+      if (!isInternal || href.startsWith('javascript') || anchor.getAttribute('target') === '_blank') {
+        return;
+      }
+
+      const currentFormData = latestDataRef.current?.formData;
+      const currentScreen = latestDataRef.current?.screen;
+      const currentIsNew = latestDataRef.current?.isNew;
+
+      if (!currentFormData) return;
+
+      const shouldBlock = hasChanges(currentFormData, currentScreen, currentIsNew);
+      const currentPath = window.location.pathname;
+      const targetPath = href.split('?')[0];
+
+      if (shouldBlock && targetPath && targetPath !== currentPath) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        setTargetUrl(href);
+        setShowBlockerModal(true);
+      }
+    };
+
+    const handlePopState = (e) => {
+      const currentFormData = latestDataRef.current?.formData;
+      const currentScreen = latestDataRef.current?.screen;
+      const currentIsNew = latestDataRef.current?.isNew;
+
+      if (!currentFormData) return;
+
+      const shouldBlock = hasChanges(currentFormData, currentScreen, currentIsNew);
+
+      if (shouldBlock) {
+        window.history.pushState(null, null, window.location.pathname);
+        setTargetUrl(null);
+        setShowBlockerModal(true);
+      }
+    };
+
+    window.hasUnsavedChangesScreenDetail = () => {
+      const currentFormData = latestDataRef.current?.formData;
+      const currentScreen = latestDataRef.current?.screen;
+      const currentIsNew = latestDataRef.current?.isNew;
+      if (!currentFormData) return false;
+      return hasChanges(currentFormData, currentScreen, currentIsNew);
+    };
+
+    window.triggerScreenDetailUnsavedChangesModal = () => {
+      setShowBlockerModal(true);
+    };
+
+    document.addEventListener('click', handleGlobalClick, true);
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      document.removeEventListener('click', handleGlobalClick, true);
+      window.removeEventListener('popstate', handlePopState);
+      delete window.hasUnsavedChangesScreenDetail;
+      delete window.triggerScreenDetailUnsavedChangesModal;
+    };
+  }, []);
+
+  const handleSaveAndLeave = async () => {
+    const { formData: currentFormData, screen: currentScreen, isNew: currentIsNew } = latestDataRef.current;
+    const success = await performAutoSave(currentFormData, currentScreen, currentIsNew);
+    if (success) {
+      setShowBlockerModal(false);
+      if (latestDataRef.current) {
+        originalScreenRef.current = {
+          title: currentFormData.title,
+          route_path: normalizeRoutePath(currentFormData.route_path),
+          platform: currentFormData.platform,
+          subsystem: currentFormData.subsystem,
+          status: currentFormData.status,
+          target_date: currentFormData.target_date,
+          subtitle: currentFormData.subtitle,
+          current_code: currentFormData.current_code,
+          components: JSON.parse(JSON.stringify(currentScreen?.components || [])),
+          guides: JSON.parse(JSON.stringify(currentScreen?.guides || []))
+        };
+      }
+      if (targetUrl) {
+        navigate(targetUrl);
+      } else {
+        navigate('/admin/screens');
+      }
+    }
+  };
+
+  const handleDiscardAndLeave = () => {
+    setShowBlockerModal(false);
+    if (latestDataRef.current) {
+      const { formData: currentFormData, screen: currentScreen } = latestDataRef.current;
+      originalScreenRef.current = {
+        title: currentFormData.title,
+        route_path: normalizeRoutePath(currentFormData.route_path),
+        platform: currentFormData.platform,
+        subsystem: currentFormData.subsystem,
+        status: currentFormData.status,
+        target_date: currentFormData.target_date,
+        subtitle: currentFormData.subtitle,
+        current_code: currentFormData.current_code,
+        components: JSON.parse(JSON.stringify(currentScreen?.components || [])),
+        guides: JSON.parse(JSON.stringify(currentScreen?.guides || []))
+      };
+    }
+    if (targetUrl) {
+      navigate(targetUrl);
+    } else {
+      navigate('/admin/screens');
+    }
+  };
+
+  const handleCancelLeave = () => {
+    setShowBlockerModal(false);
+    setTargetUrl(null);
+  };
+
+  // Cảnh báo khi người dùng reload / đóng tab trình duyệt
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      const currentFormData = latestDataRef.current?.formData;
+      const currentScreen = latestDataRef.current?.screen;
+      const currentIsNew = latestDataRef.current?.isNew;
+
+      if (!currentFormData) return;
+
+      const shouldWarn = hasChanges(currentFormData, currentScreen, currentIsNew);
+
+      if (shouldWarn) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
+  const [editingComponent, setEditingComponent] = useState(null);
   const [newComponentName, setNewComponentName] = useState('');
   const [newComponentType, setNewComponentType] = useState('Button');
   const [newComponentFrontend, setNewComponentFrontend] = useState('');
   const [newComponentWorkflow, setNewComponentWorkflow] = useState('');
   const [newComponentBackend, setNewComponentBackend] = useState('');
+  const [newComponentButtonId, setNewComponentButtonId] = useState('');
+  const [newComponentExportMode, setNewComponentExportMode] = useState('list');
+  const [newComponentSampleFile, setNewComponentSampleFile] = useState(null);
+  const [newComponentSampleFileUrl, setNewComponentSampleFileUrl] = useState('');
+  const [isUploadingSample, setIsUploadingSample] = useState(false);
+  const sampleFileInputRef = useRef(null);
   const [specDescriptions, setSpecDescriptions] = useState({
     Frontend: '',
     'Luồng xử lý': '',
@@ -1205,9 +1703,15 @@ const ScreenDetail = () => {
   });
 
   const [currentMockupIdx, setCurrentMockupIdx] = useState(0);
+  const [showZoomModal, setShowZoomModal] = useState(false);
+  const [zoomScale, setZoomScale] = useState(1);
+  const [zoomOffset, setZoomOffset] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [expandedBugId, setExpandedBugId] = useState(null);
   const [isBugListCollapsed, setIsBugListCollapsed] = useState(false);
-  const [allScreens, setAllScreens] = useState([]);
+  const [isSpecCardCollapsed, setIsSpecCardCollapsed] = useState(false);
+  const [isScreenInfoCollapsed, setIsScreenInfoCollapsed] = useState(false);
   const [showBugModal, setShowBugModal] = useState(false);
   const [bugModalData, setBugModalData] = useState({
     componentName: 'Chung',
@@ -1227,6 +1731,92 @@ const ScreenDetail = () => {
   const [replyStatusVal, setReplyStatusVal] = useState('');
   const [itAccounts, setItAccounts] = useState(['IT']);
   const [showRouteDropdown, setShowRouteDropdown] = useState(false);
+
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [linkSubsystem, setLinkSubsystem] = useState('Quản lý hệ thống');
+  const [linkScreenId, setLinkScreenId] = useState('');
+  const [linkComponentId, setLinkComponentId] = useState('');
+
+  const subsystems = React.useMemo(() => [
+    'Trang chủ',
+    'Quản lý hệ thống',
+    'Quản lý nhân sự',
+    'Quản lý sản xuất',
+    'Quản lý chất lượng',
+    'Quản lý kinh doanh',
+    'Quản lý kỹ thuật',
+    'Bảo trì - cơ sở hạ tầng'
+  ], []);
+
+  const filteredScreens = React.useMemo(() => {
+    return (allScreens || []).filter(s => getSubsystem(s) === linkSubsystem);
+  }, [allScreens, linkSubsystem]);
+
+  useEffect(() => {
+    if (filteredScreens.length > 0) {
+      const match = filteredScreens.find(s => String(s.id) === String(linkScreenId));
+      if (!match) {
+        setLinkScreenId(String(filteredScreens[0].id));
+      }
+    } else {
+      setLinkScreenId('');
+    }
+  }, [filteredScreens, linkScreenId]);
+
+  const linkFilteredComponents = React.useMemo(() => {
+    const screenObj = (allScreens || []).find(s => String(s.id) === String(linkScreenId));
+    return screenObj?.components || [];
+  }, [allScreens, linkScreenId]);
+
+  useEffect(() => {
+    if (linkFilteredComponents.length > 0) {
+      const match = linkFilteredComponents.find(c => c.name === linkComponentId);
+      if (!match) {
+        setLinkComponentId(linkFilteredComponents[0].name);
+      }
+    } else {
+      setLinkComponentId('');
+    }
+  }, [linkFilteredComponents, linkComponentId]);
+
+  const displayInfoText = React.useMemo(() => {
+    const screenObj = (allScreens || []).find(s => String(s.id) === String(linkScreenId));
+    const screenTitle = screenObj?.title || '';
+
+    let path = linkSubsystem;
+    if (screenTitle) {
+      path += '/' + screenTitle;
+      if (linkComponentId) {
+        path += '/' + linkComponentId;
+      }
+    }
+    return path;
+  }, [linkSubsystem, linkScreenId, linkComponentId, allScreens]);
+
+  const handleConfirmLink = () => {
+    let finalPath = displayInfoText;
+    const currentSubsystem = formData.subsystem || 'Quản lý hệ thống';
+    if (finalPath.startsWith(currentSubsystem + '/')) {
+      finalPath = finalPath.substring(currentSubsystem.length + 1);
+    } else if (finalPath === currentSubsystem) {
+      finalPath = '';
+    }
+
+    if (finalPath && !finalPath.startsWith('/')) {
+      finalPath = '/' + finalPath;
+    }
+
+    setFormData(prev => {
+      const prefix = prev.subsystem ? prev.subsystem + (finalPath || '') : (finalPath || '');
+      return {
+        ...prev,
+        frontend_path: finalPath,
+        route_path: combineRoutePath(prefix, prev.backend_path)
+      };
+    });
+
+    setShowLinkModal(false);
+  };
 
   const [confirmModal, setConfirmModal] = useState({
     visible: false,
@@ -1260,12 +1850,22 @@ const ScreenDetail = () => {
       try {
         const res = await api.get('/accounts/?size=100');
         if (res && res.items) {
-          const filtered = res.items
+          let filtered = res.items
             .filter(acc => {
               const role = (acc.role_name || '').toLowerCase();
               return role === 'it' || role.includes('it');
             })
             .map(acc => acc.full_name || acc.username);
+
+          // Sắp xếp đưa tài khoản chứa chữ 'phuc' lên đầu tiên để làm mặc định
+          filtered.sort((a, b) => {
+            const hasPhucA = (a || '').toLowerCase().includes('phuc');
+            const hasPhucB = (b || '').toLowerCase().includes('phuc');
+            if (hasPhucA && !hasPhucB) return -1;
+            if (!hasPhucA && hasPhucB) return 1;
+            return 0;
+          });
+
           if (filtered.length > 0) {
             setItAccounts(filtered);
           }
@@ -1312,7 +1912,15 @@ const ScreenDetail = () => {
     return () => document.removeEventListener('click', handleOutsideClick);
   }, []);
 
-  const [viewMode, setViewMode] = useState('blueprint'); // 'blueprint', 'workflow', or 'cards'
+  const [viewMode, setViewMode] = useState('blueprint'); // 'blueprint', 'workflow', 'cards', or 'sample'
+
+  const [specSampleFile, setSpecSampleFile] = useState(null);
+  const [specSampleFileUrl, setSpecSampleFileUrl] = useState('');
+  const [isSpecUploadingSample, setIsSpecUploadingSample] = useState(false);
+  const [isSpecExporting, setIsSpecExporting] = useState(false);
+  const [specExportData, setSpecExportData] = useState('[\n  {"ma": "MAU-001", "ten": "Dữ liệu mẫu 1"}\n]');
+  const specFileInputRef = useRef(null);
+  const mockupFileInputRef = useRef(null);
 
   const [blueprintOverlay, setBlueprintOverlay] = useState(false); // Design vs Blueprint overlay mode
 
@@ -1354,18 +1962,56 @@ const ScreenDetail = () => {
     toast(type, message);
   };
 
-  const fetchScreenDetail = async () => {
-    try {
-      const screensList = await screenService.getScreens();
-      setAllScreens(screensList || []);
-    } catch (err) {
-      console.error('Failed to load all screens list:', err);
-    }
+  // Helper: Tự động gợi ý title và subtitle dựa trên route
+  const getRouteSuggestions = (route) => {
+    const routeMap = {
+      'users': { title: 'Quản lý người dùng', subtitle: 'Quản lý tài khoản người dùng, phân quyền và theo dõi hoạt động' },
+      'users/create': { title: 'Tạo người dùng mới', subtitle: 'Thêm tài khoản người dùng mới vào hệ thống' },
+      'users/:id/edit': { title: 'Chỉnh sửa người dùng', subtitle: 'Cập nhật thông tin tài khoản người dùng' },
+      'users/:id/permissions': { title: 'Phân quyền người dùng', subtitle: 'Quản lý quyền truy cập của người dùng' },
+      'departments': { title: 'Quản lý phòng ban', subtitle: 'Quản lý danh sách phòng ban trong công ty' },
+      'positions': { title: 'Quản lý chức vụ', subtitle: 'Quản lý danh sách chức vụ và cấp bậc' },
+      'roles': { title: 'Quản lý vai trò', subtitle: 'Quản lý vai trò và quyền hạn trong hệ thống' },
+      'kpi/reports': { title: 'Báo cáo KPI', subtitle: 'Xem và phân tích báo cáo hiệu suất KPI' },
+      'kpi/checklist': { title: 'Checklist KPI', subtitle: 'Quản lý danh sách kiểm tra KPI' },
+      'kpi/items': { title: 'Chỉ tiêu KPI', subtitle: 'Quản lý các chỉ tiêu đánh giá KPI' },
+      'kpi/rules': { title: 'Quy tắc KPI', subtitle: 'Thiết lập quy tắc tính toán KPI' },
+      'kpi/feedback': { title: 'Phản hồi KPI', subtitle: 'Quản lý phản hồi và đánh giá KPI' },
+      'equipment': { title: 'Quản lý thiết bị', subtitle: 'Quản lý danh sách thiết bị sản xuất' },
+      'equipment/categories': { title: 'Danh mục thiết bị', subtitle: 'Phân loại và quản lý danh mục thiết bị' },
+      'equipment/training': { title: 'Đào tạo thiết bị', subtitle: 'Quản lý tài liệu đào tạo sử dụng thiết bị' },
+      'equipment/history': { title: 'Lịch sử thiết bị', subtitle: 'Theo dõi lịch sử sử dụng và bảo trì thiết bị' },
+      'machines': { title: 'Quản lý máy móc', subtitle: 'Quản lý danh sách máy móc sản xuất' },
+      'machines/history': { title: 'Lịch sử bảo trì máy', subtitle: 'Theo dõi lịch sử bảo trì máy móc' },
+      'machines/training': { title: 'Hướng dẫn vận hành máy', subtitle: 'Tài liệu hướng dẫn vận hành máy móc' },
+      'quality-records': { title: 'Hồ sơ chất lượng', subtitle: 'Quản lý hồ sơ kiểm soát chất lượng' },
+      'quality-records/:id': { title: 'Chi tiết hồ sơ chất lượng', subtitle: 'Xem chi tiết hồ sơ kiểm soát chất lượng' },
+      'inspection-reports': { title: 'Báo cáo kiểm tra', subtitle: 'Quản lý báo cáo kiểm tra chất lượng' },
+      'inspection-reports/:id': { title: 'Chi tiết báo cáo kiểm tra', subtitle: 'Xem chi tiết báo cáo kiểm tra' },
+      'plans': { title: 'Kế hoạch sản xuất', subtitle: 'Quản lý kế hoạch sản xuất' },
+      'plans/:id': { title: 'Chi tiết kế hoạch', subtitle: 'Xem chi tiết kế hoạch sản xuất' },
+      'production-progress/:id': { title: 'Tiến độ sản xuất', subtitle: 'Theo dõi tiến độ thực hiện sản xuất' },
+      'iso/forms': { title: 'Biểu mẫu ISO', subtitle: 'Quản lý biểu mẫu ISO' },
+      'iso/forms/:id': { title: 'Chi tiết biểu mẫu ISO', subtitle: 'Xem và chỉnh sửa biểu mẫu ISO' },
+      'iso/processes': { title: 'Quy trình ISO', subtitle: 'Quản lý quy trình ISO' },
+      'iso/processes/:id': { title: 'Chi tiết quy trình ISO', subtitle: 'Xem chi tiết quy trình ISO' },
+      'backup-qr': { title: 'Sao lưu QR', subtitle: 'Quản lý sao lưu mã QR' },
+      'system-monitor': { title: 'Giám sát hệ thống', subtitle: 'Theo dõi trạng thái và hiệu suất hệ thống' },
+      'screens': { title: 'Quản lý màn hình', subtitle: 'Quản lý đặc tả màn hình hệ thống' },
+      'screens/:id': { title: 'Chi tiết màn hình', subtitle: 'Xem và chỉnh sửa đặc tả màn hình' },
+      'dashboard': { title: 'Trang chủ', subtitle: 'Tổng quan hệ thống và thống kê' },
+      'settings': { title: 'Cài đặt', subtitle: 'Cấu hình hệ thống' },
+      'profile': { title: 'Hồ sơ cá nhân', subtitle: 'Quản lý thông tin cá nhân' },
+      'notifications': { title: 'Thông báo', subtitle: 'Quản lý thông báo hệ thống' }
+    };
+    return routeMap[route] || { title: '', subtitle: '' };
+  };
 
+  const fetchScreenDetail = async () => {
     if (id === 'new') {
       const copyData = location.state?.copyFromScreen;
       if (copyData) {
-        setScreen({
+        const initialScreen = {
           id: 'new',
           title: copyData.title ? `${copyData.title} - Sao chép` : '',
           route_path: copyData.route_path ? `${copyData.route_path}-copy` : '',
@@ -1389,74 +2035,139 @@ const ScreenDetail = () => {
             description: g.description || ''
           })),
           bugs: []
+        };
+        setScreen(initialScreen);
+        setIsBackendPathManuallyEdited(false);
+        const parsed = parseRoutePath(initialScreen.route_path, getSubsystem(initialScreen));
+        setFormData({
+          title: initialScreen.title,
+          route_path: initialScreen.route_path,
+          frontend_path: parsed.frontendPath,
+          backend_path: parsed.backendPath,
+          platform: initialScreen.platform,
+          subsystem: getSubsystem(initialScreen),
+          status: initialScreen.status,
+          target_date: initialScreen.target_date || new Date().toISOString().split('T')[0],
+          subtitle: initialScreen.subtitle,
+          current_code: ''
         });
+        originalScreenRef.current = {
+          title: initialScreen.title,
+          route_path: initialScreen.route_path,
+          platform: initialScreen.platform,
+          subsystem: getSubsystem(initialScreen),
+          status: initialScreen.status,
+          target_date: initialScreen.target_date || new Date().toISOString().split('T')[0],
+          subtitle: initialScreen.subtitle,
+          current_code: '',
+          components: JSON.parse(JSON.stringify(initialScreen.components || [])),
+          guides: JSON.parse(JSON.stringify(initialScreen.guides || []))
+        };
       } else {
-        setScreen({
+        const initialScreen = {
           id: 'new',
           title: '',
           route_path: '',
           platform: 'Web',
           status: 'Mới thiết kế',
           target_date: '',
-          components: [
-
-          ],
+          components: [],
           guides: [],
           bugs: []
+        };
+        setScreen(initialScreen);
+        setIsBackendPathManuallyEdited(false);
+        setFormData({
+          title: '',
+          route_path: '',
+          frontend_path: '',
+          backend_path: '',
+          platform: 'Web',
+          subsystem: 'Quản lý hệ thống',
+          status: 'Mới thiết kế',
+          target_date: new Date().toISOString().split('T')[0],
+          subtitle: '',
+          current_code: ''
         });
+        originalScreenRef.current = {
+          title: '',
+          route_path: '',
+          platform: 'Web',
+          subsystem: 'Quản lý hệ thống',
+          status: 'Mới thiết kế',
+          target_date: new Date().toISOString().split('T')[0],
+          subtitle: '',
+          current_code: '',
+          components: [],
+          guides: []
+        };
       }
       setLoading(false);
+      // Fetch screens asynchronously in the background so it is completely non-blocking
+      screenService.getScreens()
+        .then(list => setAllScreens(list || []))
+        .catch(err => console.error('Failed to load all screens list in background:', err));
       return;
     }
 
     try {
       setLoading(true);
-      const data = await screenService.getScreenDetail(id);
+      setIsBackendPathManuallyEdited(false);
 
-      try {
-        const bugsData = await bugService.getBugs();
-        if (bugsData) {
-          if (Array.isArray(bugsData)) {
-            data.bugs = bugsData.filter(b => b.screen_id === data.id);
-          } else if (Array.isArray(bugsData.items)) {
-            data.bugs = bugsData.items.filter(b => b.screen_id === data.id);
-          }
+      // Fetch screen details, bugs list, and all screens concurrently
+      const [data, bugsData, screensList] = await Promise.all([
+        screenService.getScreenDetail(id),
+        bugService.getBugs().catch(e => { console.error('Failed to load bugs for screen detail:', e); return []; }),
+        screenService.getScreens().catch(e => { console.error('Failed to load all screens list:', e); return []; })
+      ]);
+
+      if (screensList) {
+        setAllScreens(screensList);
+      }
+
+      if (bugsData) {
+        if (Array.isArray(bugsData)) {
+          data.bugs = bugsData.filter(b => b.screen_id === data.id);
+        } else if (Array.isArray(bugsData.items)) {
+          data.bugs = bugsData.items.filter(b => b.screen_id === data.id);
         }
-      } catch (bugErr) {
-        console.error('Failed to load bugs for screen detail:', bugErr);
       }
 
       setScreen(data);
+      const parsed = parseRoutePath(data.route_path || '', getSubsystem(data));
+      setFormData({
+        title: data.title || '',
+        route_path: data.route_path || '',
+        frontend_path: parsed.frontendPath || '',
+        backend_path: parsed.backendPath || '',
+        platform: data.platform || 'Web',
+        subsystem: getSubsystem(data),
+        status: data.status || 'Mới thiết kế',
+        target_date: data.target_date || new Date().toISOString().split('T')[0],
+        subtitle: data.subtitle || '',
+        current_code: data.current_code || ''
+      });
       setError(null);
+      originalScreenRef.current = {
+        title: data.title || '',
+        route_path: data.route_path || '',
+        platform: data.platform || 'Web',
+        subsystem: getSubsystem(data),
+        status: data.status || 'Mới thiết kế',
+        target_date: data.target_date || new Date().toISOString().split('T')[0],
+        subtitle: data.subtitle || '',
+        current_code: data.current_code || '',
+        components: JSON.parse(JSON.stringify(data.components || [])),
+        guides: JSON.parse(JSON.stringify(data.guides || []))
+      };
 
     } catch (err) {
-
       console.error('Lỗi khi tải chi tiết màn hình:', err);
-
       setError('Không thể tải thông tin chi tiết màn hình. Vui lòng thử lại sau.');
-
     } finally {
-
       setLoading(false);
-
     }
-
   };
-
-  useEffect(() => {
-    if (screen && !isNew) {
-      setFormData({
-        title: screen.title || '',
-        route_path: screen.route_path || '',
-        platform: screen.platform || 'Web',
-        subsystem: getSubsystem(screen),
-        status: screen.status || 'Mới thiết kế',
-        target_date: screen.target_date || new Date().toISOString().split('T')[0],
-        subtitle: screen.subtitle || '',
-        current_code: screen.current_code || ''
-      });
-    }
-  }, [screen, isNew]);
 
   // Đóng route dropdown khi click bên ngoài
   useEffect(() => {
@@ -1471,33 +2182,36 @@ const ScreenDetail = () => {
 
   const handleSave = async (e) => {
     if (e) e.preventDefault();
-    if (!formData.title || !formData.route_path) {
-      showToast('Vui lòng nhập đầy đủ Tên màn hình và Đường dẫn Route!', 'error');
+    if (!formData.title) {
+      showToast('Vui lòng nhập đầy đủ Tên màn hình!', 'error');
       return;
     }
 
-    // Validate mã màn hình khi edit (chỉ khi user sửa mã)
-    if (!isNew && formData.current_code && formData.current_code !== screen?.current_code) {
-      if (!formData.current_code.trim()) {
-        showToast('Vui lòng nhập Mã màn hình!', 'error');
-        return;
-      }
+    // Xác định mã màn hình sẽ được sử dụng
+    const finalCode = isNew ? (formData.current_code || generatedCode) : formData.current_code;
+
+    // Validate và check trùng lặp mã màn hình
+    if (finalCode && finalCode.trim()) {
+      // Đối với màn hình mới hoặc màn hình đang edit có thay đổi mã
+      const isCodeChanged = isNew || (formData.current_code && formData.current_code !== screen?.current_code);
       
-      // Check trùng lặp mã màn hình
-      try {
-        const allScreens = await screenService.getScreens();
-        const isDuplicate = allScreens.some(s => 
-          s.current_code === formData.current_code && s.id !== screen.id
-        );
-        
-        if (isDuplicate) {
-          showToast(`Mã màn hình "${formData.current_code}" đã tồn tại! Vui lòng chọn mã khác.`, 'error');
+      if (isCodeChanged) {
+        // Check trùng lặp mã màn hình
+        try {
+          const allScreens = await screenService.getScreens();
+          const isDuplicate = allScreens.some(s =>
+            s.current_code === finalCode && s.id !== screen.id
+          );
+
+          if (isDuplicate) {
+            showToast(`Mã màn hình "${finalCode}" đã tồn tại! Vui lòng chọn mã khác.`, 'error');
+            return;
+          }
+        } catch (err) {
+          console.error('Error checking screen code:', err);
+          showToast('Không thể kiểm tra mã màn hình!', 'error');
           return;
         }
-      } catch (err) {
-        console.error('Error checking screen code:', err);
-        showToast('Không thể kiểm tra mã màn hình!', 'error');
-        return;
       }
     }
 
@@ -1531,21 +2245,30 @@ const ScreenDetail = () => {
       if (id === 'new') {
         const res = await screenService.createScreen({
           title: formData.title,
-          route_path: formData.route_path,
+          route_path: normalizeRoutePath(formData.route_path),
           platform: formData.platform,
           status: formData.status || 'Mới thiết kế',
           target_date: formData.target_date,
           subtitle: formData.subtitle,
           subsystem: formData.subsystem || 'Quản lý hệ thống',
           components: componentsPayload,
-          guides: guidesPayload
+          guides: guidesPayload,
+          current_code: finalCode
         });
         showToast('Tạo mới đặc tả màn hình thành công!');
-        navigate(`/admin/screens/${res.id}`);
+
+        // Clear cache và làm mới context
+        clearScreenMetadataCache();
+        if (refreshScreens) refreshScreens();
+
+        // Quay lại trang danh sách màn hình quản lý
+        setTimeout(() => {
+          navigate('/admin/screens');
+        });
       } else {
         const updatePayload = {
           title: formData.title,
-          route_path: formData.route_path,
+          route_path: normalizeRoutePath(formData.route_path),
           platform: formData.platform,
           status: formData.status,
           target_date: formData.target_date,
@@ -1554,14 +2277,19 @@ const ScreenDetail = () => {
           components: componentsPayload,
           guides: guidesPayload
         };
-        
+
         // Chỉ gửi current_code nếu nó thay đổi
         if (formData.current_code && formData.current_code !== screen?.current_code) {
           updatePayload.current_code = formData.current_code;
         }
-        
+
         await screenService.updateScreen(screen.id, updatePayload);
         showToast('Cập nhật đặc tả màn hình thành công!');
+
+        // Clear cache và làm mới context
+        clearScreenMetadataCache();
+        if (refreshScreens) refreshScreens();
+
         fetchScreenDetail();
       }
     } catch (err) {
@@ -1579,7 +2307,7 @@ const ScreenDetail = () => {
       () => {
         const copyPayload = {
           title: formData.title,
-          route_path: formData.route_path,
+          route_path: normalizeRoutePath(formData.route_path),
           platform: formData.platform,
           subsystem: formData.subsystem,
           status: 'Mới thiết kế',
@@ -1594,27 +2322,33 @@ const ScreenDetail = () => {
     );
   };
 
-  const handleMockupUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const processMockupFiles = async (files) => {
+    if (!files || files.length === 0) return;
     try {
-      showToast('Đang tải lên hình ảnh...', 'info');
-      const res = await bugService.uploadImage(file);
-      if (res && res.url) {
+      showToast('Đang tải lên ảnh mockup...', 'info');
+      const uploadedPaths = [];
+      for (const file of files) {
+        const res = await bugService.uploadImage(file);
+        if (res && res.url) {
+          uploadedPaths.push(res.url);
+        }
+      }
+
+      if (uploadedPaths.length > 0) {
         const mockups = screen.mockup_path ? screen.mockup_path.split(',').filter(Boolean) : [];
-        const updatedMockups = [...mockups, res.url];
+        const updatedMockups = [...mockups, ...uploadedPaths];
         const updatedPath = updatedMockups.join(',');
 
         if (id === 'new') {
           setScreen(prev => ({ ...prev, mockup_path: updatedPath }));
           setCurrentMockupIdx(updatedMockups.length - 1);
-          showToast('Tải lên hình ảnh thành công!');
+          showToast('Tải lên ảnh thành công!');
           return;
         }
 
         await screenService.updateScreen(screen.id, {
           title: formData.title,
-          route_path: formData.route_path,
+          route_path: normalizeRoutePath(formData.route_path),
           platform: formData.platform,
           status: formData.status,
           target_date: formData.target_date,
@@ -1622,12 +2356,68 @@ const ScreenDetail = () => {
           mockup_path: updatedPath
         });
 
-        showToast('Tải lên hình ảnh thành công!');
+        showToast('Tải lên ảnh thành công!');
         setCurrentMockupIdx(updatedMockups.length - 1);
         fetchScreenDetail();
       }
     } catch (err) {
       showToast('Tải lên thất bại!', 'error');
+    }
+  };
+
+  const handlePasteMockup = async (e) => {
+    const clipboardData = e.clipboardData || (e.nativeEvent && e.nativeEvent.clipboardData);
+    if (!clipboardData) return;
+
+    const items = clipboardData.items;
+    if (!items) return;
+
+    const files = [];
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        const file = items[i].getAsFile();
+        if (file) {
+          files.push(file);
+        }
+      }
+    }
+
+    if (files.length > 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      await processMockupFiles(files);
+    }
+  };
+
+  const handlePasteMockupFromClipboard = async () => {
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.read) {
+        showToast('Nút dán yêu cầu kết nối bảo mật (HTTPS hoặc localhost) do chính sách bảo mật trình duyệt. Hãy nhấn Ctrl+V để dán ảnh trực tiếp!', 'error');
+        return;
+      }
+
+      showToast('Đang yêu cầu quyền truy cập clipboard...', 'info');
+      const clipboardItems = await navigator.clipboard.read();
+      const files = [];
+      for (const item of clipboardItems) {
+        for (const type of item.types) {
+          if (type.startsWith('image/')) {
+            const blob = await item.getType(type);
+            const file = new File([blob], 'clipboard-image.png', { type });
+            files.push(file);
+          }
+        }
+      }
+
+      if (files.length === 0) {
+        showToast('Không tìm thấy hình ảnh nào trong bảng nhớ tạm!', 'warn');
+        return;
+      }
+
+      await processMockupFiles(files);
+    } catch (err) {
+      console.error('Lỗi khi đọc clipboard:', err);
+      showToast('Không thể đọc bảng nhớ tạm. Vui lòng cho phép quyền truy cập clipboard khi trình duyệt yêu cầu.', 'error');
     }
   };
 
@@ -1650,7 +2440,7 @@ const ScreenDetail = () => {
         try {
           await screenService.updateScreen(screen.id, {
             title: formData.title,
-            route_path: formData.route_path,
+            route_path: normalizeRoutePath(formData.route_path),
             platform: formData.platform,
             status: formData.status,
             target_date: formData.target_date,
@@ -1668,6 +2458,36 @@ const ScreenDetail = () => {
       }
     );
   };
+
+  const handleZoomIn = () => setZoomScale(prev => Math.min(prev + 0.25, 4));
+  const handleZoomOut = () => setZoomScale(prev => Math.max(prev - 0.25, 0.5));
+  const handleZoomReset = () => {
+    setZoomScale(1);
+    setZoomOffset({ x: 0, y: 0 });
+  };
+
+  const handleMouseDown = (e) => {
+    if (zoomScale <= 1) return;
+    e.preventDefault();
+    setIsPanning(true);
+    setPanStart({ x: e.clientX - zoomOffset.x, y: e.clientY - zoomOffset.y });
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isPanning) return;
+    setZoomOffset({
+      x: e.clientX - panStart.x,
+      y: e.clientY - panStart.y
+    });
+  };
+
+  const handleMouseUp = () => setIsPanning(false);
+
+  const handleWheel = (e) => {
+    const delta = e.deltaY < 0 ? 0.15 : -0.15;
+    setZoomScale(prev => Math.max(0.5, Math.min(prev + delta, 4)));
+  };
+
 
   const handleBugImageUpload = async (e) => {
     const files = Array.from(e.target.files);
@@ -1782,6 +2602,25 @@ const ScreenDetail = () => {
       };
 
       await bugService.createBug(payload);
+
+      // Cập nhật trạng thái màn hình về 'Mới thiết kế'
+      try {
+        await screenService.updateScreen(screen.id, {
+          title: screen.title,
+          route_path: screen.route_path,
+          platform: screen.platform,
+          status: 'Mới thiết kế',
+          target_date: screen.target_date,
+          subtitle: screen.subtitle,
+          mockup_path: screen.mockup_path,
+          components: screen.components || [],
+          guides: screen.guides || []
+        });
+        if (refreshScreens) refreshScreens();
+      } catch (screenErr) {
+        console.error('Failed to reset screen status on bug report:', screenErr);
+      }
+
       showToast('Khai báo lỗi thành công!');
       setShowBugModal(false);
       fetchScreenDetail();
@@ -1834,10 +2673,6 @@ const ScreenDetail = () => {
   };
 
   const handleUpdateBug = async () => {
-    if (!replyNotes.trim()) {
-      showToast('Vui lòng nhập nội dung phản hồi!', 'error');
-      return;
-    }
 
     let newStatus = bugModalData.status;
     const current = (bugModalData.status || '').toLowerCase();
@@ -1909,10 +2744,6 @@ const ScreenDetail = () => {
 
 
   const handleSubmitReply = async (bug) => {
-    if (!replyNotes.trim()) {
-      showToast('Vui lòng nhập nội dung phản hồi!', 'error');
-      return;
-    }
 
     let newStatus = bug.status;
     const current = (bug.status || '').toLowerCase();
@@ -1953,12 +2784,310 @@ const ScreenDetail = () => {
   };
 
   const handleAddComponent = () => {
+    setEditingComponent(null);
     setShowAddComponentModal(true);
     setNewComponentName('');
     setNewComponentType('Button');
     setNewComponentFrontend('');
     setNewComponentWorkflow('');
     setNewComponentBackend('');
+    setNewComponentButtonId('');
+    setNewComponentExportMode('list');
+    setNewComponentSampleFile(null);
+    setNewComponentSampleFileUrl('');
+    setIsUploadingSample(false);
+  };
+
+  const handleEditComponentClick = (comp) => {
+    let techObj = {};
+    if (comp.technical_details) {
+      try {
+        techObj = typeof comp.technical_details === 'string'
+          ? JSON.parse(comp.technical_details)
+          : comp.technical_details;
+      } catch (err) { }
+    }
+    setEditingComponent(comp);
+    setNewComponentName(comp.name);
+    setNewComponentType(comp.type || 'Button');
+    setNewComponentFrontend(techObj.frontend_description || comp.description || '');
+    setNewComponentWorkflow(techObj.workflow_description || '');
+    setNewComponentBackend(techObj.backend_description || '');
+    setNewComponentButtonId(techObj.button_id || '');
+    setNewComponentExportMode(techObj.export_mode || 'list');
+    setNewComponentSampleFile(null);
+    setNewComponentSampleFileUrl(comp.file_path || techObj.sample_file_url || '');
+    setIsUploadingSample(false);
+    setShowAddComponentModal(true);
+  };
+
+  const handleSetComponentColor = (compName, colorKey) => {
+    setScreen(prev => {
+      if (!prev) return null;
+      const updatedComponents = (prev.components || []).map(c => {
+        if (c.name === compName) {
+          let techObj = {};
+          if (c.technical_details) {
+            try {
+              techObj = typeof c.technical_details === 'string'
+                ? JSON.parse(c.technical_details)
+                : c.technical_details;
+            } catch (err) { }
+          }
+          const updatedTech = {
+            ...techObj,
+            color: colorKey
+          };
+          return {
+            ...c,
+            technical_details: JSON.stringify(updatedTech)
+          };
+        }
+        return c;
+      });
+      return {
+        ...prev,
+        components: updatedComponents
+      };
+    });
+    showToast(`Đã tô màu thành phần. Hãy nhấn "Lưu lại" để hoàn tất.`);
+  };
+
+  const handleSampleFileChange = async (e) => {
+    const input = e.target;
+    const files = Array.from(input.files);
+    if (files.length === 0) return;
+
+    const allowedExts = ['.doc', '.docx', '.xls', '.xlsx', '.pdf'];
+    const validFiles = [];
+
+    for (const file of files) {
+      const dotIndex = file.name.lastIndexOf('.');
+      const ext = dotIndex >= 0 ? file.name.slice(dotIndex).toLowerCase() : '';
+      if (!allowedExts.includes(ext)) {
+        showToast(`Tệp "${file.name}" không hợp lệ! Chỉ chấp nhận Word, Excel hoặc PDF.`, 'error');
+        continue;
+      }
+      validFiles.push(file);
+    }
+
+    if (validFiles.length === 0) {
+      input.value = '';
+      return;
+    }
+
+    setIsUploadingSample(true);
+    try {
+      const uploadedUrls = [];
+      for (const file of validFiles) {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await api.post('/screens/upload-component-sample', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+        if (res && res.url) {
+          uploadedUrls.push(res.url);
+        }
+      }
+
+      if (uploadedUrls.length > 0) {
+        const existingUrls = newComponentSampleFileUrl ? newComponentSampleFileUrl.split(',').filter(Boolean) : [];
+        const newUrls = [...existingUrls, ...uploadedUrls].join(',');
+        setNewComponentSampleFileUrl(newUrls);
+        showToast(`Tải lên thành công ${uploadedUrls.length} file mẫu!`);
+      } else {
+        showToast('Tải lên file mẫu thất bại!', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Lỗi khi tải lên file mẫu!', 'error');
+    } finally {
+      setIsUploadingSample(false);
+      input.value = '';
+    }
+  };
+
+  const handleRemoveSampleFile = () => {
+    setNewComponentSampleFile(null);
+    setNewComponentSampleFileUrl('');
+  };
+
+  const handleSpecSampleFileChange = async (e) => {
+    const input = e.target;
+    const files = Array.from(input.files);
+    if (files.length === 0) return;
+
+    const allowedExts = ['.doc', '.docx', '.xls', '.xlsx', '.pdf'];
+    const validFiles = [];
+
+    for (const file of files) {
+      const dotIndex = file.name.lastIndexOf('.');
+      const ext = dotIndex >= 0 ? file.name.slice(dotIndex).toLowerCase() : '';
+      if (!allowedExts.includes(ext)) {
+        showToast(`Tệp "${file.name}" không hợp lệ! Chỉ chấp nhận Word, Excel hoặc PDF.`, 'error');
+        continue;
+      }
+      validFiles.push(file);
+    }
+
+    if (validFiles.length === 0) {
+      input.value = '';
+      return;
+    }
+
+    setIsSpecUploadingSample(true);
+    try {
+      const uploadedUrls = [];
+      for (const file of validFiles) {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await api.post('/screens/upload-component-sample', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+        if (res && res.url) {
+          uploadedUrls.push(res.url);
+        }
+      }
+
+      if (uploadedUrls.length > 0) {
+        const existingUrls = specSampleFileUrl ? specSampleFileUrl.split(',').filter(Boolean) : [];
+        const newUrls = [...existingUrls, ...uploadedUrls].join(',');
+        setSpecSampleFileUrl(newUrls);
+        setScreen(prev => {
+          if (!prev) return null;
+          const updatedComps = (prev.components || []).map(c => {
+            if (c.name === activeComponent) {
+              let techObj = {};
+              if (c.technical_details) {
+                try {
+                  techObj = typeof c.technical_details === 'string'
+                    ? JSON.parse(c.technical_details)
+                    : c.technical_details;
+                } catch (err) { }
+              }
+              return {
+                ...c,
+                file_path: newUrls,
+                technical_details: JSON.stringify({
+                  ...techObj,
+                  sample_file_url: newUrls
+                })
+              };
+            }
+            return c;
+          });
+          return { ...prev, components: updatedComps };
+        });
+        showToast(`Tải lên thành công ${uploadedUrls.length} file mẫu!`);
+      } else {
+        showToast('Tải lên file mẫu thất bại!', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Lỗi khi tải lên file mẫu!', 'error');
+    } finally {
+      setIsSpecUploadingSample(false);
+      input.value = '';
+    }
+  };
+
+  const handleRemoveSpecSampleFile = () => {
+    setSpecSampleFileUrl('');
+    setScreen(prev => {
+      if (!prev) return null;
+      const updatedComps = (prev.components || []).map(c => {
+        if (c.name === activeComponent) {
+          let techObj = {};
+          if (c.technical_details) {
+            try {
+              techObj = typeof c.technical_details === 'string'
+                ? JSON.parse(c.technical_details)
+                : c.technical_details;
+            } catch (err) { }
+          }
+          const { sample_file_url, ...restTech } = techObj;
+          return {
+            ...c,
+            file_path: '',
+            technical_details: JSON.stringify(restTech)
+          };
+        }
+        return c;
+      });
+      return { ...prev, components: updatedComps };
+    });
+  };
+
+  const handleSpecExportTest = async () => {
+    if (!screen || !screen.id) {
+      showToast('Chưa có màn hình để xuất!', 'error');
+      return;
+    }
+    if (!activeComponent) {
+      showToast('Vui lòng chọn component export!', 'error');
+      return;
+    }
+    const comp = (screen.components || []).find(c => c.name === activeComponent);
+    if (!comp) {
+      showToast('Không tìm thấy component!', 'error');
+      return;
+    }
+    let techObj = {};
+    if (comp.technical_details) {
+      try {
+        techObj = typeof comp.technical_details === 'string'
+          ? JSON.parse(comp.technical_details)
+          : comp.technical_details;
+      } catch (err) { }
+    }
+    const buttonId = techObj.button_id || '';
+    const sampleUrl = comp.file_path || techObj.sample_file_url || '';
+    if (!buttonId) {
+      showToast('Component chưa có Tên ID nút (button_id)!', 'error');
+      return;
+    }
+    if (!sampleUrl) {
+      showToast('Component chưa có file mẫu!', 'error');
+      return;
+    }
+
+    let dataPayload;
+    try {
+      dataPayload = JSON.parse(specExportData || '[]');
+    } catch (err) {
+      showToast('Dữ liệu mẫu JSON không hợp lệ!', 'error');
+      return;
+    }
+
+    setIsSpecExporting(true);
+    try {
+      const blob = await screenService.exportScreenFile(screen.id, {
+        button_id: buttonId,
+        mode: techObj.export_mode || 'list',
+        data: dataPayload,
+        context: {}
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const ext = sampleUrl.split('.').pop().toLowerCase();
+      const safeBtn = (buttonId || 'export').replace(/[^\w\-]/g, '_');
+      link.download = `${safeBtn}_${new Date().toISOString().slice(0, 19).replace(/[-T:]/g, '')}.${ext}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      showToast('Xuất file thử thành công!', 'success');
+    } catch (err) {
+      console.error('Export test error:', err);
+      showToast(err?.response?.data?.detail || 'Xuất file thử thất bại!', 'error');
+    } finally {
+      setIsSpecExporting(false);
+    }
   };
 
   const confirmAddComponent = () => {
@@ -1966,28 +3095,94 @@ const ScreenDetail = () => {
       showToast('Tên component không được để trống!', 'error');
       return;
     }
-    const newComp = {
-      id: Date.now(),
-      name: newComponentName.trim(),
-      type: newComponentType,
-      description: newComponentFrontend.trim() || 'Thành phần đặc tả giao diện',
-      technical_details: JSON.stringify({
-        frontend_description: newComponentFrontend.trim(),
-        workflow_description: newComponentWorkflow.trim(),
-        backend_description: newComponentBackend.trim()
-      })
-    };
 
-    setScreen(prev => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        components: [...(prev.components || []), newComp]
+    if (editingComponent) {
+      const oldName = editingComponent.name;
+      const newName = newComponentName.trim();
+
+      setScreen(prev => {
+        if (!prev) return null;
+
+        const updatedComponents = (prev.components || []).map(c => {
+          if (c.name === oldName) {
+            let techObj = {};
+            if (c.technical_details) {
+              try {
+                techObj = typeof c.technical_details === 'string'
+                  ? JSON.parse(c.technical_details)
+                  : c.technical_details;
+              } catch (err) { }
+            }
+            return {
+              ...c,
+              name: newName,
+              type: newComponentType,
+              description: newComponentFrontend.trim() || 'Thành phần đặc tả giao diện',
+              file_path: newComponentSampleFileUrl,
+              technical_details: JSON.stringify({
+                ...techObj,
+                frontend_description: newComponentFrontend.trim(),
+                workflow_description: newComponentWorkflow.trim(),
+                backend_description: newComponentBackend.trim(),
+                button_id: newComponentButtonId.trim(),
+                export_mode: newComponentExportMode,
+                sample_file_url: newComponentSampleFileUrl
+              })
+            };
+          }
+          return c;
+        });
+
+        const updatedGuides = (prev.guides || []).map(g => {
+          if (g.related_components && oldName !== newName) {
+            const comps = g.related_components.split(',').map(c => c.trim()).map(c => c === oldName ? newName : c);
+            return { ...g, related_components: comps.join(', ') };
+          }
+          return g;
+        });
+
+        return {
+          ...prev,
+          components: updatedComponents,
+          guides: updatedGuides
+        };
+      });
+
+      if (activeComponent === oldName) {
+        setActiveComponent(newName);
+      }
+
+      setShowAddComponentModal(false);
+      setEditingComponent(null);
+      showToast('Đã cập nhật thông tin thành phần! Hãy nhấn "Lưu lại" để hoàn tất.');
+    } else {
+      const newComp = {
+        id: Date.now(),
+        name: newComponentName.trim(),
+        type: newComponentType,
+        description: newComponentFrontend.trim() || 'Thành phần đặc tả giao diện',
+        file_path: newComponentSampleFileUrl,
+        technical_details: JSON.stringify({
+          frontend_description: newComponentFrontend.trim(),
+          workflow_description: newComponentWorkflow.trim(),
+          backend_description: newComponentBackend.trim(),
+          button_id: newComponentButtonId.trim(),
+          export_mode: newComponentExportMode,
+          sample_file_url: newComponentSampleFileUrl
+        })
       };
-    });
 
-    setShowAddComponentModal(false);
-    showToast('Đã thêm thành phần mới vào danh sách!');
+      setScreen(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          components: [...(prev.components || []), newComp]
+        };
+      });
+
+      setShowAddComponentModal(false);
+      showToast('Đã thêm thành phần mới vào danh sách!');
+    }
   };
 
   const handleDeleteComponent = (compName) => {
@@ -2345,29 +3540,7 @@ const ScreenDetail = () => {
 
 
 
-  if (loading) {
-
-    return (
-
-      <div className="detail-container">
-
-        <div className="loading-state">
-
-          <div className="spinner"></div>
-
-          <p>Đang tải chi tiết cấu hình màn hình...</p>
-
-        </div>
-
-      </div>
-
-    );
-
-  }
-
-
-
-  if (error || !screen) {
+  if (error) {
 
     return (
 
@@ -2394,274 +3567,496 @@ const ScreenDetail = () => {
 
 
   const renderMetadataForm = () => {
-    const generatedCode = isNew ? generateNextScreenCode(formData.subsystem, allScreens) : '';
     return (
-      <div className="card" style={{
-        background: '#fff',
-        border: '1px solid #E5E7EB',
-        borderRadius: '12px',
-        padding: '16px 20px',
-        marginBottom: '20px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+      <div style={{
+        position: 'sticky',
+        top: '60px',
+        zIndex: 890,
+        background: '#F8FAFC',
+        marginLeft: '-15px',
+        marginRight: '-15px',
+        paddingTop: '12px',
+        paddingBottom: '8px',
+        paddingLeft: '15px',
+        paddingRight: '15px',
+        borderBottom: '1px solid #E2E8F0',
+        boxSizing: 'border-box',
+        transition: 'all 0.25s ease',
+        flexShrink: 0
       }}>
-        {/* Card Header with Inline Selects & Buttons */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          borderBottom: '1px solid #F1F5F9',
-          paddingBottom: '12px',
-          marginBottom: '16px',
-          flexWrap: 'wrap',
-          gap: '12px'
+        <div className="card" style={{
+          background: '#fff',
+          border: '1px solid #E2E8F0',
+          borderRadius: '12px',
+          padding: '16px 20px',
+          boxShadow: isHeaderCollapsed ? '0 4px 12px rgba(0, 0, 0, 0.08)' : '0 1px 3px rgba(0, 0, 0, 0.05)',
+          marginBottom: (isHeaderCollapsed || isScreenInfoCollapsed) ? '12px' : '20px',
+          boxSizing: 'border-box',
+          transition: 'all 0.25s ease'
         }}>
-          <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: '800', color: '#2D1A12', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            Thông tin màn hình
-          </h3>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap', fontSize: '0.85rem' }}>
-            {/* Phân hệ select */}
+          {/* Card Header with Inline Selects & Buttons */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            borderBottom: (isHeaderCollapsed || isScreenInfoCollapsed) ? 'none' : '1px solid #CBD5E1',
+            paddingBottom: (isHeaderCollapsed || isScreenInfoCollapsed) ? '0' : '12px',
+            marginBottom: (isHeaderCollapsed || isScreenInfoCollapsed) ? '0' : '16px',
+            flexWrap: 'wrap',
+            gap: '12px'
+          }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ color: '#64748B', fontWeight: '600', fontSize: '0.84rem' }}>Phân hệ:</span>
-              <select
-                value={formData.subsystem}
-                onChange={(e) => setFormData(prev => ({ ...prev, subsystem: e.target.value }))}
-                style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #E2E8F0', outline: 'none', fontWeight: '600', color: '#334155', fontSize: '0.82rem', backgroundColor: '#fff', height: '34px', cursor: 'pointer' }}
-              >
-                <option value="Trang chủ">Trang chủ</option>
-                <option value="Quản lý hệ thống">Quản lý hệ thống</option>
-                <option value="Quản lý nhân sự">Quản lý nhân sự</option>
-                <option value="Quản lý sản xuất">Quản lý sản xuất</option>
-                <option value="Quản lý chất lượng">Quản lý chất lượng</option>
-                <option value="Quản lý kinh doanh">Quản lý kinh doanh</option>
-                <option value="Quản lý kỹ thuật">Quản lý kỹ thuật</option>
-                <option value="Bảo trì - cơ sở hạ tầng">Bảo trì - cơ sở hạ tầng</option>
-              </select>
-            </div>
-
-            {/* Nền tảng select */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ color: '#64748B', fontWeight: '600', fontSize: '0.84rem' }}>Nền tảng:</span>
-              <select
-                value={formData.platform}
-                onChange={(e) => setFormData(prev => ({ ...prev, platform: e.target.value }))}
-                style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #E2E8F0', outline: 'none', fontWeight: '600', color: '#334155', fontSize: '0.82rem', backgroundColor: '#fff', height: '34px', cursor: 'pointer' }}
-              >
-                <option value="Web">Web</option>
-                <option value="Mobile">Mobile</option>
-              </select>
-            </div>
-
-            {/* Trạng thái select */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ color: '#64748B', fontWeight: '600', fontSize: '0.84rem' }}>Trạng thái:</span>
-              <select
-                value={formData.status}
-                onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
-                style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #E2E8F0', outline: 'none', fontWeight: '600', color: '#334155', fontSize: '0.82rem', backgroundColor: '#fff', height: '34px', cursor: 'pointer' }}
-              >
-                <option value="Mới thiết kế">Mới Thiết Kế</option>
-                <option value="Hoàn thành">Hoàn thành</option>
-              </select>
-            </div>
-
-            {/* Actions group */}
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: '800', color: '#2D1A12' }}>
+                Thông tin màn hình
+              </h3>
               <button
                 type="button"
-                className="btn btn-primary"
-                onClick={handleSave}
-                style={{ padding: '6px 16px', fontSize: '0.82rem', borderRadius: '8px', backgroundColor: '#7B5233', borderColor: '#7B5233', color: '#fff', fontWeight: 'bold', height: '34px', cursor: 'pointer' }}
+                onClick={() => setIsScreenInfoCollapsed(!isScreenInfoCollapsed)}
+                style={{
+                  background: '#F1F5F9',
+                  border: 'none',
+                  color: '#64748B',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '4px',
+                  borderRadius: '6px',
+                  transition: 'all 0.2s',
+                  outline: 'none',
+                  width: '24px',
+                  height: '24px'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#E2E8F0';
+                  e.currentTarget.style.color = '#334155';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#F1F5F9';
+                  e.currentTarget.style.color = '#64748B';
+                }}
               >
-                Lưu đặc tả
-              </button>
-              {!isNew && (
-                <button
-                  type="button"
-                  onClick={handleCopyScreenDetail}
-                  style={{ padding: '6px 16px', fontSize: '0.82rem', borderRadius: '8px', backgroundColor: '#5C4033', border: 'none', color: '#fff', fontWeight: 'bold', height: '34px', cursor: 'pointer' }}
-                >
-                  Sao chép
-                </button>
-              )}
-              {!isNew && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const defaultAssignee = itAccounts[0] || 'IT';
-                    setBugModalMode('create');
-                    setBugModalData({
-                      componentName: 'Chung',
-                      severity: 'Medium',
-                      description: '',
-                      reporter: getLoggedInUser(),
-                      assignee: defaultAssignee,
-                      targetDate: new Date().toISOString().split('T')[0],
-                      imagePaths: []
-                    });
-                    setShowBugModal(true);
+                <ChevronDown
+                  size={14}
+                  style={{
+                    transform: isScreenInfoCollapsed ? 'rotate(0deg)' : 'rotate(180deg)',
+                    transition: 'transform 0.2s',
+                    strokeWidth: 2.5
                   }}
-                  style={{ padding: '6px 16px', fontSize: '0.82rem', borderRadius: '8px', backgroundColor: '#5C4033', border: 'none', color: '#fff', fontWeight: 'bold', height: '34px', cursor: 'pointer' }}
-                >
-                  + Báo lỗi
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Card Body - 4 columns (layout from second screenshot) */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
-          <div className="form-group" style={{ margin: 0 }}>
-            <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Mã màn hình</label>
-            <input
-              type="text"
-              className="form-control"
-              value={isNew ? (generatedCode || '') : (formData.current_code || '')}
-              onChange={(e) => !isNew && setFormData(prev => ({ ...prev, current_code: e.target.value.toUpperCase() }))}
-              placeholder="VD: AD13, HD02"
-              style={{ 
-                backgroundColor: isNew ? '#F1F5F9' : '#fff',
-                border: '1px solid #E2E8F0', 
-                borderRadius: '8px', 
-                padding: '8px 12px', 
-                fontSize: '0.8rem', 
-                color: isNew ? '#64748B' : '#111827',
-                fontWeight: '600', 
-                height: '36px', 
-                boxSizing: 'border-box',
-                cursor: isNew ? 'not-allowed' : 'text'
-              }}
-              disabled={isNew}
-            />
-          </div>
-
-          <div className="form-group" style={{ margin: 0 }}>
-            <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Tên màn hình</label>
-            <input
-              type="text"
-              className="form-control"
-              value={formData.title}
-              onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-              placeholder="VD: Quản lý người dùng, Báo cáo KPI, Danh sách thiết bị..."
-              required
-              style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box' }}
-            />
-          </div>
-
-          <div className="form-group" style={{ margin: 0, position: 'relative' }}>
-            <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>
-              Đường dẫn
-              <span style={{ fontSize: '0.7rem', color: '#94A3B8', fontWeight: 'normal', marginLeft: '8px' }}>
-                💡 {(() => {
-                  const existingRoutes = allScreens.map(s => s.route_path?.replace(/^\/admin\//, ''));
-                  const suggestedRoutes = [
-                    'users', 'users/create', 'users/:id/edit', 'users/:id/permissions',
-                    'departments', 'positions', 'roles',
-                    'kpi/reports', 'kpi/checklist', 'kpi/items', 'kpi/rules', 'kpi/feedback',
-                    'equipment', 'equipment/categories', 'equipment/training', 'equipment/history',
-                    'machines', 'machines/history', 'machines/training',
-                    'quality-records', 'quality-records/:id',
-                    'inspection-reports', 'inspection-reports/:id',
-                    'plans', 'plans/:id', 'production-progress/:id',
-                    'iso/forms', 'iso/forms/:id', 'iso/processes', 'iso/processes/:id',
-                    'backup-qr', 'system-monitor', 'screens', 'screens/:id',
-                    'dashboard', 'settings', 'profile', 'notifications'
-                  ];
-                  const available = suggestedRoutes.filter(route => !existingRoutes.includes(route));
-                  return `${available.length} routes chưa có màn hình`;
-                })()}
-              </span>
-            </label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <div className="route-dropdown-container" style={{ position: 'relative', flex: 1 }}>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={formData.route_path}
-                  onChange={(e) => setFormData(prev => ({ ...prev, route_path: e.target.value }))}
-                  onFocus={() => setShowRouteDropdown(true)}
-                  placeholder="VD: users, kpi/reports, equipment..."
-                  required
-                  style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 32px 8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box', width: '100%' }}
                 />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+              {/* Styled Metadata Pill Box Container */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '16px',
+                flexWrap: 'wrap',
+                background: '#F8FAFC',
+                padding: '6px 16px',
+                borderRadius: '10px',
+                border: '1px solid #E2E8F0',
+                boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.02)'
+              }}>
+                {/* Phân hệ select */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ color: '#475569', fontWeight: '700', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Phân hệ:</span>
+                  <select
+                    value={formData.subsystem}
+                    onChange={(e) => setFormData(prev => ({ ...prev, subsystem: e.target.value }))}
+                    style={{
+                      padding: '4px 28px 4px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid #CBD5E1',
+                      outline: 'none',
+                      fontWeight: '600',
+                      color: '#334155',
+                      fontSize: '0.8rem',
+                      backgroundColor: '#fff',
+                      height: '28px',
+                      cursor: 'pointer',
+                      appearance: 'none',
+                      WebkitAppearance: 'none',
+                      backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748B' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>")`,
+                      backgroundRepeat: 'no-repeat',
+                      backgroundPosition: 'right 8px center',
+                      backgroundSize: '12px',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    <option value="Trang chủ">Trang chủ</option>
+                    <option value="Quản lý hệ thống">Quản lý hệ thống</option>
+                    <option value="Quản lý nhân sự">Quản lý nhân sự</option>
+                    <option value="Quản lý sản xuất">Quản lý sản xuất</option>
+                    <option value="Quản lý chất lượng">Quản lý chất lượng</option>
+                    <option value="Quản lý kinh doanh">Quản lý kinh doanh</option>
+                    <option value="Quản lý kỹ thuật">Quản lý kỹ thuật</option>
+                    <option value="Bảo trì - cơ sở hạ tầng">Bảo trì - cơ sở hạ tầng</option>
+                  </select>
+                </div>
+
+                {/* Nền tảng select */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ color: '#475569', fontWeight: '700', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Nền tảng:</span>
+                  <select
+                    value={formData.platform}
+                    onChange={(e) => setFormData(prev => ({ ...prev, platform: e.target.value }))}
+                    style={{
+                      padding: '4px 28px 4px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid #CBD5E1',
+                      outline: 'none',
+                      fontWeight: '600',
+                      color: '#334155',
+                      fontSize: '0.8rem',
+                      backgroundColor: '#fff',
+                      height: '28px',
+                      cursor: 'pointer',
+                      appearance: 'none',
+                      WebkitAppearance: 'none',
+                      backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748B' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>")`,
+                      backgroundRepeat: 'no-repeat',
+                      backgroundPosition: 'right 8px center',
+                      backgroundSize: '12px',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    <option value="Web">Web</option>
+                    <option value="Mobile">Mobile</option>
+                  </select>
+                </div>
+
+                {/* Trạng thái select */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ color: '#475569', fontWeight: '700', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Trạng thái:</span>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
+                    style={{
+                      padding: '4px 28px 4px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid #CBD5E1',
+                      outline: 'none',
+                      fontWeight: '600',
+                      color: '#334155',
+                      fontSize: '0.8rem',
+                      backgroundColor: '#fff',
+                      height: '28px',
+                      cursor: 'pointer',
+                      appearance: 'none',
+                      WebkitAppearance: 'none',
+                      backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748B' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>")`,
+                      backgroundRepeat: 'no-repeat',
+                      backgroundPosition: 'right 8px center',
+                      backgroundSize: '12px',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    <option value="Mới thiết kế">Mới Thiết Kế</option>
+                    <option value="Hoàn thành">Hoàn thành</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Actions group */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <button
                   type="button"
-                  onClick={() => setShowRouteDropdown(!showRouteDropdown)}
-                  style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', fontSize: '0.9rem' }}
+                  className="btn btn-primary"
+                  onClick={handleSave}
+                  style={{
+                    padding: '6px 16px',
+                    fontSize: '0.82rem',
+                    borderRadius: '8px',
+                    backgroundColor: '#7B5233',
+                    border: 'none',
+                    color: '#fff',
+                    fontWeight: 'bold',
+                    height: '34px',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 4px rgba(123, 82, 51, 0.2)',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#8E6243';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                    e.currentTarget.style.boxShadow = '0 4px 6px rgba(123, 82, 51, 0.3)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#7B5233';
+                    e.currentTarget.style.transform = 'none';
+                    e.currentTarget.style.boxShadow = '0 2px 4px rgba(123, 82, 51, 0.2)';
+                  }}
                 >
-                  ▼
+                  Lưu đặc tả
                 </button>
-                {showRouteDropdown && (() => {
-                  const existingRoutes = allScreens.map(s => s.route_path?.replace(/^\/admin\//, ''));
-                  const routeGroups = {
-                    '👥 Auth': ['users', 'users/create', 'users/:id/edit', 'users/:id/permissions', 'departments', 'positions', 'roles'],
-                    '📊 KPI': ['kpi/reports', 'kpi/checklist', 'kpi/items', 'kpi/rules', 'kpi/feedback'],
-                    '🛠️ Equipment': ['equipment', 'equipment/categories', 'equipment/training', 'equipment/history', 'machines', 'machines/history', 'machines/training'],
-                    '✅ Quality': ['quality-records', 'quality-records/:id', 'inspection-reports', 'inspection-reports/:id'],
-                    '📅 Plan': ['plans', 'plans/:id', 'production-progress/:id'],
-                    '📝 ISO': ['iso/forms', 'iso/forms/:id', 'iso/processes', 'iso/processes/:id'],
-                    '⚙️ System': ['backup-qr', 'system-monitor', 'screens', 'screens/:id', 'dashboard', 'settings', 'profile', 'notifications']
-                  };
-                  const filterText = formData.route_path.toLowerCase();
-                  return (
-                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px', backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', maxHeight: '300px', overflowY: 'auto', zIndex: 1000 }}>
-                      {Object.entries(routeGroups).map(([group, routes]) => {
-                        const availableRoutes = routes.filter(r => !existingRoutes.includes(r) && r.toLowerCase().includes(filterText));
-                        if (availableRoutes.length === 0) return null;
-                        return (
-                          <div key={group} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                            <div style={{ padding: '8px 12px', fontSize: '0.7rem', fontWeight: 'bold', color: '#64748B', backgroundColor: '#F8FAFC' }}>{group}</div>
-                            {availableRoutes.map(route => (
-                              <div
-                                key={route}
-                                onClick={() => {
-                                  setFormData(prev => ({ ...prev, route_path: route }));
-                                  setShowRouteDropdown(false);
-                                }}
-                                style={{ padding: '8px 12px', fontSize: '0.8rem', cursor: 'pointer', color: '#1E293B', transition: 'all 0.2s' }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F1F5F9'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-              >
-                                {route}
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })()}
+                {!isNew && !isHeaderCollapsed && (
+                  <button
+                    type="button"
+                    onClick={handleCopyScreenDetail}
+                    style={{
+                      padding: '6px 16px',
+                      fontSize: '0.82rem',
+                      borderRadius: '8px',
+                      backgroundColor: '#7B5233',
+                      border: 'none',
+                      color: '#fff',
+                      fontWeight: 'bold',
+                      height: '34px',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 4px rgba(123, 82, 51, 0.2)',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#8E6243';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      e.currentTarget.style.boxShadow = '0 4px 6px rgba(123, 82, 51, 0.3)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#7B5233';
+                      e.currentTarget.style.transform = 'none';
+                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(123, 82, 51, 0.2)';
+                    }}
+                  >
+                    Sao chép
+                  </button>
+                )}
+                {!isNew && !isHeaderCollapsed && formData.status === 'Hoàn thành' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const defaultAssignee = itAccounts[0] || 'IT';
+                      setBugModalMode('create');
+                      setBugModalData({
+                        componentName: 'Chung',
+                        severity: 'Medium',
+                        description: '',
+                        reporter: getLoggedInUser(),
+                        assignee: defaultAssignee,
+                        targetDate: new Date().toISOString().split('T')[0],
+                        imagePaths: []
+                      });
+                      setShowBugModal(true);
+                    }}
+                    style={{
+                      padding: '6px 16px',
+                      fontSize: '0.82rem',
+                      borderRadius: '8px',
+                      backgroundColor: '#7B5233',
+                      border: 'none',
+                      color: '#fff',
+                      fontWeight: 'bold',
+                      height: '34px',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 4px rgba(123, 82, 51, 0.2)',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#8E6243';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      e.currentTarget.style.boxShadow = '0 4px 6px rgba(123, 82, 51, 0.3)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#7B5233';
+                      e.currentTarget.style.transform = 'none';
+                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(123, 82, 51, 0.2)';
+                    }}
+                  >
+                    + Báo lỗi
+                  </button>
+                )}
               </div>
             </div>
           </div>
 
-          <div className="form-group" style={{ margin: 0 }}>
-            <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Ngày hoàn thành dự kiến</label>
-            <input
-              type="date"
-              className="form-control"
-              value={formData.target_date}
-              onChange={(e) => setFormData(prev => ({ ...prev, target_date: e.target.value }))}
-              required
-              min={new Date().toISOString().split('T')[0]}
-              style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box' }}
-            />
-          </div>
-        </div>
+          {/* Card Body - 5 columns (hidden when collapsed) */}
+          {!isHeaderCollapsed && !isScreenInfoCollapsed && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Mã màn hình</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={formData.current_code || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, current_code: e.target.value.toUpperCase() }))}
+                    placeholder={isNew ? (generatedCode || 'VD: HT03, SX02') : 'VD: HT03, SX02'}
+                    style={{
+                      backgroundColor: (formData.status === 'Hoàn thành') ? '#F1F5F9' : '#fff',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '8px',
+                      padding: '8px 12px',
+                      fontSize: '0.8rem',
+                      color: (formData.status === 'Hoàn thành') ? '#64748B' : '#111827',
+                      fontWeight: '600',
+                      height: '36px',
+                      boxSizing: 'border-box',
+                      cursor: (formData.status === 'Hoàn thành') ? 'not-allowed' : 'text'
+                    }}
+                    disabled={formData.status === 'Hoàn thành'}
+                  />
+                </div>
 
-        {/* Full-width Mô tả at the bottom */}
-        <div className="form-group" style={{ marginTop: '16px', marginBottom: 0 }}>
-          <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Mô tả</label>
-          <input
-            type="text"
-            className="form-control"
-            value={formData.subtitle}
-            onChange={(e) => setFormData(prev => ({ ...prev, subtitle: e.target.value }))}
-            placeholder="VD: Quản lý tài khoản người dùng, phân quyền và theo dõi hoạt động"
-            required
-            style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box', width: '100%' }}
-          />
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Tên màn hình</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={formData.title}
+                    onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                    placeholder="VD: Quản lý người dùng, Báo cáo KPI, Danh sách thiết bị..."
+                    required
+                    style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Đường dẫn frontend</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '36px' }}>
+                    <span style={{ fontSize: '0.8rem', color: '#64748B', fontWeight: '500', whiteSpace: 'nowrap' }}>
+                      {formData.subsystem}
+                    </span>
+                    {formData.frontend_path && (
+                      <span style={{ fontSize: '0.8rem', color: '#1E293B', fontWeight: '600' }}>
+                        {formData.frontend_path}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (formData.frontend_path) {
+                          const cleanPath = formData.frontend_path.replace(/^\//, '');
+                          const parts = cleanPath.split('/');
+                          const screenObj = (allScreens || []).find(s => s.title === parts[0]);
+                          if (screenObj) {
+                            setLinkSubsystem(getSubsystem(screenObj));
+                            setLinkScreenId(String(screenObj.id));
+                            setLinkComponentId(parts[1] || '');
+                          } else {
+                            setLinkSubsystem(formData.subsystem || 'Quản lý hệ thống');
+                            setLinkScreenId('');
+                            setLinkComponentId('');
+                          }
+                        } else {
+                          setLinkSubsystem(formData.subsystem || 'Quản lý hệ thống');
+                          setLinkScreenId('');
+                          setLinkComponentId('');
+                        }
+
+                        setShowLinkModal(true);
+                      }}
+                      style={{
+                        backgroundColor: '#7B5233',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        padding: '0 14px',
+                        height: '36px',
+                        fontSize: '0.78rem',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '4px',
+                        transition: 'background-color 0.2s',
+                        whiteSpace: 'nowrap'
+                      }}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = '#8E6243'}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = '#7B5233'}
+                    >
+                      {formData.frontend_path ? (
+                        <>
+                          <Edit size={14} />
+                          Edit
+                        </>
+                      ) : (
+                        <>
+                          <Plus size={14} />
+                          Chọn
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Đường dẫn backend</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={formData.backend_path}
+                    onChange={(e) => {
+                      const newBack = e.target.value;
+                      setIsBackendPathManuallyEdited(true);
+                      setFormData(prev => {
+                        const prefix = prev.subsystem ? `${prev.subsystem}/${prev.frontend_path}` : prev.frontend_path;
+                        return {
+                          ...prev,
+                          backend_path: newBack,
+                          route_path: combineRoutePath(prefix, newBack)
+                        };
+                      });
+                    }}
+                    placeholder="Đường dẫn backend"
+                    style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box', width: '100%', color: '#111827', fontWeight: '500' }}
+                  />
+                </div>
+
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Ngày hoàn thành dự kiến</label>
+                  <input
+                    type="date"
+                    className="form-control"
+                    value={formData.target_date}
+                    onChange={(e) => setFormData(prev => ({ ...prev, target_date: e.target.value }))}
+                    required
+                    min={new Date().toISOString().split('T')[0]}
+                    style={{
+                      backgroundColor: (formData.status === 'Hoàn thành') ? '#F1F5F9' : '#fff',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '8px',
+                      padding: '8px 12px',
+                      fontSize: '0.8rem',
+                      color: (formData.status === 'Hoàn thành') ? '#64748B' : '#111827',
+                      height: '36px',
+                      boxSizing: 'border-box',
+                      cursor: (formData.status === 'Hoàn thành') ? 'not-allowed' : 'text'
+                    }}
+                    disabled={formData.status === 'Hoàn thành'}
+                  />
+                </div>
+              </div>
+
+              {/* Full-width Mô tả at the bottom */}
+              <div className="form-group" style={{ marginTop: '16px', marginBottom: 0 }}>
+                <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Mô tả</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={formData.subtitle}
+                  onChange={(e) => setFormData(prev => ({ ...prev, subtitle: e.target.value }))}
+                  placeholder="VD: Quản lý tài khoản người dùng, phân quyền và theo dõi hoạt động"
+                  required
+                  style={{
+                    backgroundColor: (formData.status === 'Hoàn thành') ? '#F1F5F9' : '#fff',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                    fontSize: '0.8rem',
+                    color: (formData.status === 'Hoàn thành') ? '#64748B' : '#111827',
+                    height: '36px',
+                    boxSizing: 'border-box',
+                    width: '100%',
+                    cursor: (formData.status === 'Hoàn thành') ? 'not-allowed' : 'text'
+                  }}
+                  disabled={formData.status === 'Hoàn thành'}
+                />
+              </div>
+            </>
+          )}
         </div>
       </div>
     );
@@ -2670,1150 +4065,1498 @@ const ScreenDetail = () => {
   const isModified = screen.current_code !== screen.default_code;
 
   return (
-    <div className="detail-container fade-in" style={{ padding: '0 0 20px 0' }}>
+    <div className="detail-container fade-in" style={{ padding: '0 0 20px 0', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
 
-      {/* 1. Top Metadata Form Card */}
+      {/* 1. Top Metadata Form Card - Always visible, outside scroll body */}
       {renderMetadataForm()}
 
-      {/* 2. Middle Row Split Grid Layout */}
-      <div className="detail-row-grid" style={{
-        display: 'grid',
-        gridTemplateColumns: isMockupExpanded ? '1fr' : '280px 1fr',
-        gap: '20px',
-        marginBottom: '20px',
-        alignItems: 'start'
-      }}>
+      <div className="detail-scroll-body" ref={scrollBodyRef}>
 
-        {/* Left Column Card: Danh sách components / Hướng dẫn sử dụng */}
-        {!isMockupExpanded && (
-          <div className="card component-list-card" style={{
-            background: '#fff',
-            border: '1px solid #E5E7EB',
-            borderRadius: '12px',
-            padding: '20px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-            display: 'flex',
-            flexDirection: 'column',
-            minHeight: '590px'
-          }}>
-            <div style={{ display: 'flex', borderBottom: '1px solid #F1F5F9', marginBottom: '16px', gap: '16px' }}>
-              <button
-                type="button"
-                onClick={() => setActiveTab('components')}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  borderBottom: activeTab === 'components' ? '2px solid #7B5233' : '2px solid transparent',
-                  color: activeTab === 'components' ? '#7B5233' : '#64748B',
-                  fontWeight: activeTab === 'components' ? 'bold' : 'normal',
-                  padding: '8px 4px',
-                  cursor: 'pointer',
-                  fontSize: '0.8rem',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  outline: 'none'
-                }}
-              >
-                Thành phần
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('guides')}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  borderBottom: activeTab === 'guides' ? '2px solid #7B5233' : '2px solid transparent',
-                  color: activeTab === 'guides' ? '#7B5233' : '#64748B',
-                  fontWeight: activeTab === 'guides' ? 'bold' : 'normal',
-                  padding: '8px 4px',
-                  cursor: 'pointer',
-                  fontSize: '0.8rem',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  outline: 'none'
-                }}
-              >
-                Hướng dẫn sử dụng
-              </button>
-            </div>
+        {/* 2. Middle Row Split Grid Layout */}
+        <div className="detail-row-grid" style={{
+          display: 'grid',
+          gridTemplateColumns: isMockupExpanded ? '1fr' : '280px 1fr',
+          gap: '20px',
+          marginBottom: '20px',
+          alignItems: 'start'
+        }}>
 
-            {activeTab === 'components' ? (
-              <>
-                <div style={{ flex: 1, overflowY: 'auto', maxHeight: '420px', paddingRight: '4px' }}>
-                  {screen.components && screen.components.length > 0 ? (
-                    screen.components.map(comp => (
-                      <div
-                        key={comp.id}
-                        onClick={() => {
-                          setActiveComponent(comp.name);
-                          setSpecDescriptions(prev => ({
-                            ...prev,
-                            Frontend: `Đặc tả chi tiết Component [${comp.name}]:\n- Loại component: ${comp.type}\n- Gợi ý UI: ${getComponentHint(comp)}\n- Chi tiết: ${comp.description || 'Chưa cập nhật mô tả chi tiết.'}`
-                          }));
-                        }}
-                        title={getComponentHint(comp)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: '10px',
-                          padding: '10px 12px',
-                          borderRadius: '8px',
-                          border: '1px solid',
-                          borderColor: activeComponent === comp.name ? '#7B5233' : '#F1F5F9',
-                          backgroundColor: activeComponent === comp.name ? '#FAF6F0' : '#FFF',
-                          cursor: 'pointer',
-                          marginBottom: '8px',
-                          fontSize: '0.8rem',
-                          fontWeight: activeComponent === comp.name ? 'bold' : 'normal',
-                          transition: 'all 0.2s',
-                          color: activeComponent === comp.name ? '#7B5233' : '#334155'
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
-                          <span style={{ width: '20px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                            {renderComponentIcon(comp.type)}
-                          </span>
-                          <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{comp.name}</span>
-                        </div>
-
-                        <div style={{ position: 'relative' }}>
-                          <button
-                            type="button"
-                            className="comp-action-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveComponentMenu(activeComponentMenu === comp.name ? null : comp.name);
-                            }}
-                            title="Thao tác"
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              opacity: 0.6,
-                              padding: '4px',
-                              color: '#7B5233',
-                              borderRadius: '4px'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.opacity = 1}
-                            onMouseLeave={(e) => e.currentTarget.style.opacity = 0.6}
-                          >
-                            <MoreVertical size={16} />
-                          </button>
-                          {activeComponentMenu === comp.name && (
-                            <div className="action-menu" style={{
-                              position: 'absolute',
-                              right: 0,
-                              top: '24px',
-                              zIndex: 100,
-                              width: '120px',
-                              backgroundColor: '#FFF',
-                              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-                              border: '1px solid #E2E8F0',
-                              borderRadius: '6px',
-                              padding: '4px 0',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              opacity: 1,
-                              animation: 'none'
-                            }}>
-                              <button
-                                className="action-menu-item"
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveComponentMenu(null);
-                                  const defaultAssignee = itAccounts[0] || 'IT';
-                                  setBugModalMode('create');
-                                  setBugModalData({
-                                    componentName: comp.name,
-                                    severity: 'Medium',
-                                    description: '',
-                                    reporter: getLoggedInUser(),
-                                    assignee: defaultAssignee,
-                                    targetDate: new Date().toISOString().split('T')[0],
-                                    imagePaths: []
-                                  });
-                                  setShowBugModal(true);
-                                }}
-                                style={{
-                                  padding: '8px 12px',
-                                  fontSize: '0.78rem',
-                                  textAlign: 'left',
-                                  border: 'none',
-                                  background: 'none',
-                                  cursor: 'pointer',
-                                  color: '#334155'
-                                }}
-                              >
-                                Báo lỗi
-                              </button>
-                              <button
-                                className="action-menu-item danger"
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveComponentMenu(null);
-                                  handleDeleteComponent(comp.name);
-                                }}
-                                style={{
-                                  padding: '8px 12px',
-                                  fontSize: '0.78rem',
-                                  textAlign: 'left',
-                                  border: 'none',
-                                  background: 'none',
-                                  cursor: 'pointer',
-                                  color: '#EF4444'
-                                }}
-                              >
-                                Xóa
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#94A3B8', fontStyle: 'italic', fontSize: '0.78rem' }}>
-                      Không có component nào.
-                    </div>
-                  )}
-                </div>
-
+          {/* Left Column Card: Danh sách components / Hướng dẫn sử dụng */}
+          {!isMockupExpanded && (
+            <div className="card component-list-card" style={{
+              background: '#fff',
+              border: '1px solid #D1D5DB',
+              borderRadius: '12px',
+              padding: '20px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+              display: 'flex',
+              flexDirection: 'column',
+              minHeight: '590px'
+            }}>
+              <div style={{ display: 'flex', borderBottom: '1px solid #CBD5E1', marginBottom: '16px', gap: '16px' }}>
                 <button
                   type="button"
-                  onClick={handleAddComponent}
+                  onClick={() => setActiveTab('components')}
                   style={{
-                    background: 'transparent',
-                    border: '1px dashed #7B5233',
-                    color: '#7B5233',
-                    borderRadius: '8px',
-                    padding: '8px 16px',
-                    fontSize: '0.78rem',
-                    fontWeight: '700',
+                    background: 'none',
+                    border: 'none',
+                    borderBottom: activeTab === 'components' ? '2px solid #7B5233' : '2px solid transparent',
+                    color: activeTab === 'components' ? '#7B5233' : '#64748B',
+                    fontWeight: activeTab === 'components' ? 'bold' : 'normal',
+                    padding: '8px 4px',
                     cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    width: '100%',
-                    justifyContent: 'center',
-                    marginTop: '12px'
+                    fontSize: '0.8rem',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    outline: 'none'
                   }}
                 >
-                  <span>+ Thêm thành phần</span>
+                  Thành phần
                 </button>
-              </>
-            ) : (
-              <>
-                <div style={{ flex: 1, overflowY: 'auto', maxHeight: '420px', paddingRight: '4px' }}>
-                  {screen.guides && screen.guides.length > 0 ? (
-                    screen.guides.map((step, idx) => (
-                      <div
-                        key={step.id || idx}
-                        onClick={() => setSelectedGuideIdx(idx)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: '10px',
-                          padding: '10px 12px',
-                          borderRadius: '8px',
-                          border: '1px solid',
-                          borderColor: selectedGuideIdx === idx ? '#7B5233' : '#F1F5F9',
-                          backgroundColor: selectedGuideIdx === idx ? '#FAF6F0' : '#FFF',
-                          cursor: 'pointer',
-                          marginBottom: '8px',
-                          fontSize: '0.8rem',
-                          fontWeight: selectedGuideIdx === idx ? 'bold' : 'normal',
-                          transition: 'all 0.2s',
-                          color: selectedGuideIdx === idx ? '#7B5233' : '#334155'
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
-                          <span style={{ width: '20px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                            ⏩
-                          </span>
-                          <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                            Bước {step.step_number || (idx + 1)}: {step.title || 'Hành động mới'}
-                          </span>
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (idx > 0) {
-                                setScreen(prev => {
-                                  const list = [...(prev.guides || [])];
-                                  const temp = list[idx];
-                                  list[idx] = list[idx - 1];
-                                  list[idx - 1] = temp;
-                                  list.forEach((item, i) => { item.step_number = i + 1; });
-                                  return { ...prev, guides: list };
-                                });
-                                setSelectedGuideIdx(idx - 1);
-                              }
-                            }}
-                            disabled={idx === 0}
-                            style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', opacity: idx === 0 ? 0.3 : 0.6, padding: '2px', fontSize: '0.7rem' }}
-                          >
-                            ▲
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (idx < screen.guides.length - 1) {
-                                setScreen(prev => {
-                                  const list = [...(prev.guides || [])];
-                                  const temp = list[idx];
-                                  list[idx] = list[idx + 1];
-                                  list[idx + 1] = temp;
-                                  list.forEach((item, i) => { item.step_number = i + 1; });
-                                  return { ...prev, guides: list };
-                                });
-                                setSelectedGuideIdx(idx + 1);
-                              }
-                            }}
-                            disabled={idx === screen.guides.length - 1}
-                            style={{ background: 'none', border: 'none', cursor: idx === screen.guides.length - 1 ? 'default' : 'pointer', opacity: idx === screen.guides.length - 1 ? 0.3 : 0.6, padding: '2px', fontSize: '0.7rem' }}
-                          >
-                            ▼
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              showConfirm(
-                                'Xác nhận xóa',
-                                `Bạn có chắc chắn muốn xóa bước "${step.title || 'bước này'}" khỏi tài liệu hướng dẫn?`,
-                                () => {
-                                  setScreen(prev => {
-                                    const filtered = (prev.guides || []).filter((_, i) => i !== idx);
-                                    filtered.forEach((item, i) => { item.step_number = i + 1; });
-                                    return { ...prev, guides: filtered };
-                                  });
-                                  setSelectedGuideIdx(Math.max(0, idx - 1));
-                                  showToast('Đã xóa bước hướng dẫn!');
-                                }
-                              );
-                            }}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', opacity: 0.6, padding: '2px', fontSize: '0.7rem' }}
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#94A3B8', fontStyle: 'italic', fontSize: '0.78rem' }}>
-                      Chưa khai báo các bước hướng dẫn.
-                    </div>
-                  )}
-                </div>
-
                 <button
                   type="button"
                   onClick={() => {
-                    const nextStepNum = (screen.guides || []).length + 1;
-                    const newStep = {
-                      id: `temp_${Date.now()}`,
-                      step_number: nextStepNum,
-                      title: 'Hành động mới',
-                      related_components: '',
-                      description: ''
-                    };
-                    setScreen(prev => ({
-                      ...prev,
-                      guides: [...(prev.guides || []), newStep]
-                    }));
-                    setSelectedGuideIdx(nextStepNum - 1);
-                    showToast('Đã thêm bước hướng dẫn mới!');
+                    setActiveTab('guides');
+                    setActiveComponent(null);
+                    setSpecDescriptions({ Frontend: '', 'Luồng xử lý': '', Backend: '' });
                   }}
                   style={{
-                    background: 'transparent',
-                    border: '1px dashed #7B5233',
-                    color: '#7B5233',
-                    borderRadius: '8px',
-                    padding: '8px 16px',
-                    fontSize: '0.78rem',
-                    fontWeight: '700',
+                    background: 'none',
+                    border: 'none',
+                    borderBottom: activeTab === 'guides' ? '2px solid #7B5233' : '2px solid transparent',
+                    color: activeTab === 'guides' ? '#7B5233' : '#64748B',
+                    fontWeight: activeTab === 'guides' ? 'bold' : 'normal',
+                    padding: '8px 4px',
                     cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    width: '100%',
-                    justifyContent: 'center',
-                    marginTop: '12px'
+                    fontSize: '0.8rem',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    outline: 'none'
                   }}
                 >
-                  <span>+ Thêm bước</span>
-                </button>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Right Column: Simulator/Mockup & Spec Tab Pane */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-
-          {/* Mockup Simulator Frame Card */}
-          <div className="card mockup-carousel-card" style={{
-            background: '#fff',
-            border: '1px solid #E5E7EB',
-            borderRadius: '12px',
-            padding: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-            minHeight: isMockupExpanded ? '600px' : '340px',
-            transition: 'all 0.3s ease-in-out'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '10px', marginBottom: '12px' }}>
-              <span
-                onClick={() => setIsMockupExpanded(!isMockupExpanded)}
-                style={{
-                  fontSize: '1.25rem',
-                  color: '#7B5233',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                  padding: '4px 10px',
-                  borderRadius: '6px',
-                  backgroundColor: isMockupExpanded ? '#FAF6F0' : 'transparent',
-                  transition: 'all 0.2s',
-                  userSelect: 'none'
-                }}
-                title={isMockupExpanded ? "Thu nhỏ bản vẽ" : "Phóng to bản vẽ"}
-              >
-                ☰
-              </span>
-              <label htmlFor="mockup-file-upload-main" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 12px', fontSize: '0.74rem', borderRadius: '6px', backgroundColor: '#7B5233', color: '#fff', fontWeight: 'bold', cursor: 'pointer', margin: 0 }}>
-                + Thêm ảnh
-              </label>
-              <input type="file" id="mockup-file-upload-main" accept="image/*" onChange={handleMockupUpload} style={{ display: 'none' }} />
-            </div>
-
-            <div style={{
-              flex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: '#F8FAFC',
-              borderRadius: '8px',
-              minHeight: isMockupExpanded ? '520px' : '240px',
-              overflow: 'hidden',
-              border: '1px solid #F1F5F9',
-              transition: 'all 0.3s ease-in-out'
-            }}>
-              {screen.mockup_path ? (
-                (() => {
-                  const mockups = screen.mockup_path.split(',').filter(Boolean);
-                  return (
-                    <img
-                      src={getImageUrl(mockups[currentMockupIdx])}
-                      alt="Mockup design"
-                      style={{
-                        maxWidth: '100%',
-                        maxHeight: isMockupExpanded ? '520px' : '250px',
-                        objectFit: 'contain',
-                        transition: 'all 0.3s ease-in-out'
-                      }}
-                    />
-                  );
-                })()
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', color: '#94A3B8' }}>
-                  <span style={{ fontSize: '3rem' }}>🖼️</span>
-                  <span style={{ fontSize: '0.78rem', fontWeight: 'bold' }}>Chưa có hình ảnh bản vẽ thực tế</span>
-                </div>
-              )}
-            </div>
-
-            {/* Pagination Controls */}
-            {screen.mockup_path && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #F1F5F9', paddingTop: '10px', marginTop: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <button
-                    type="button"
-                    disabled={currentMockupIdx === 0}
-                    onClick={() => setCurrentMockupIdx(prev => prev - 1)}
-                    style={{ padding: '3px 8px', border: '1px solid #E2E8F0', background: '#fff', borderRadius: '4px', cursor: 'pointer' }}
-                  >
-                    &lt;
-                  </button>
-                  {(() => {
-                    const mockups = screen.mockup_path.split(',').filter(Boolean);
-                    return mockups.map((_, i) => (
-                      <button
-                        key={i}
-                        onClick={() => setCurrentMockupIdx(i)}
-                        style={{
-                          padding: '3px 7px',
-                          border: '1px solid',
-                          borderColor: currentMockupIdx === i ? '#7B5233' : '#E2E8F0',
-                          background: currentMockupIdx === i ? '#7B5233' : '#fff',
-                          color: currentMockupIdx === i ? '#fff' : '#334155',
-                          borderRadius: '4px',
-                          fontSize: '0.72rem',
-                          fontWeight: 'bold',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {i + 1}
-                      </button>
-                    ));
-                  })()}
-                  <button
-                    type="button"
-                    disabled={(() => {
-                      const mockups = screen.mockup_path.split(',').filter(Boolean);
-                      return currentMockupIdx === mockups.length - 1;
-                    })()}
-                    onClick={() => setCurrentMockupIdx(prev => prev + 1)}
-                    style={{ padding: '3px 8px', border: '1px solid #E2E8F0', background: '#fff', borderRadius: '4px', cursor: 'pointer' }}
-                  >
-                    &gt;
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleDeleteMockup}
-                  style={{ background: 'transparent', border: 'none', color: '#EF4444', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
-                >
-                  Xóa ảnh
+                  Hướng dẫn sử dụng
                 </button>
               </div>
-            )}
-          </div>
 
-          {/* Bottom Card: Thông tin đặc tả */}
-          {!isMockupExpanded && (
-            <div className="card spec-tabs-card" style={{
+              {activeTab === 'components' ? (
+                <>
+                  <div style={{ flex: 1, overflowY: 'auto', maxHeight: '420px', paddingRight: '4px' }}>
+                    {screen.components && screen.components.length > 0 ? (
+                      screen.components.map(comp => {
+                        let techObj = {};
+                        if (comp.technical_details) {
+                          try {
+                            techObj = typeof comp.technical_details === 'string'
+                              ? JSON.parse(comp.technical_details)
+                              : comp.technical_details;
+                          } catch (e) { }
+                        }
+                        const colorKey = techObj.color || 'default';
+                        const colorScheme = COMPONENT_COLORS[colorKey] || COMPONENT_COLORS.default;
+                        const isSelected = activeComponent === comp.name;
+
+                        return (
+                          <div
+                            key={comp.id}
+                            onClick={() => {
+                              setActiveComponent(comp.name);
+                              setSpecDescriptions({
+                                Frontend: techObj.frontend_description || comp.description || '',
+                                'Luồng xử lý': techObj.workflow_description || '',
+                                Backend: techObj.backend_description || ''
+                              });
+                              setSpecSampleFile(null);
+                              setSpecSampleFileUrl(comp.file_path || techObj.sample_file_url || '');
+                              setIsSpecUploadingSample(false);
+                            }}
+                            title={getComponentHint(comp)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: '10px',
+                              padding: '10px 12px',
+                              borderRadius: '8px',
+                              border: '1px solid',
+                              borderColor: isSelected ? '#7B5233' : colorScheme.border,
+                              backgroundColor: isSelected ? '#FAF6F0' : colorScheme.bg,
+                              cursor: 'pointer',
+                              marginBottom: '8px',
+                              fontSize: '0.8rem',
+                              fontWeight: isSelected ? 'bold' : 'normal',
+                              transition: 'all 0.2s',
+                              color: isSelected ? '#7B5233' : colorScheme.text
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+                              <span style={{ width: '20px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {renderComponentIcon(comp.type)}
+                              </span>
+                              <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{comp.name}</span>
+                            </div>
+
+                            <div style={{ position: 'relative' }}>
+                              <button
+                                type="button"
+                                className="comp-action-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveComponentMenu(activeComponentMenu === comp.name ? null : comp.name);
+                                }}
+                                title="Thao tác"
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  opacity: 0.6,
+                                  padding: '4px',
+                                  color: '#7B5233',
+                                  borderRadius: '4px'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.opacity = 1}
+                                onMouseLeave={(e) => e.currentTarget.style.opacity = 0.6}
+                              >
+                                <MoreVertical size={16} />
+                              </button>
+                              {activeComponentMenu === comp.name && (
+                                <div className="action-menu" style={{
+                                  position: 'absolute',
+                                  right: 0,
+                                  top: '24px',
+                                  zIndex: 100,
+                                  width: '150px',
+                                  backgroundColor: '#FFF',
+                                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                                  border: '1px solid #E2E8F0',
+                                  borderRadius: '6px',
+                                  padding: '4px 0',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  opacity: 1,
+                                  animation: 'none'
+                                }}>
+                                  <button
+                                    className="action-menu-item"
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActiveComponentMenu(null);
+                                      handleEditComponentClick(comp);
+                                    }}
+                                    style={{
+                                      padding: '8px 12px',
+                                      fontSize: '0.78rem',
+                                      textAlign: 'left',
+                                      border: 'none',
+                                      background: 'none',
+                                      cursor: 'pointer',
+                                      color: '#334155'
+                                    }}
+                                  >
+                                    Sửa thành phần
+                                  </button>
+                                  {formData.status === 'Hoàn thành' && (
+                                    <button
+                                      className="action-menu-item"
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActiveComponentMenu(null);
+                                        const defaultAssignee = itAccounts[0] || 'IT';
+                                        setBugModalMode('create');
+                                        setBugModalData({
+                                          componentName: comp.name,
+                                          severity: 'Medium',
+                                          description: '',
+                                          reporter: getLoggedInUser(),
+                                          assignee: defaultAssignee,
+                                          targetDate: new Date().toISOString().split('T')[0],
+                                          imagePaths: []
+                                        });
+                                        setShowBugModal(true);
+                                      }}
+                                      style={{
+                                        padding: '8px 12px',
+                                        fontSize: '0.78rem',
+                                        textAlign: 'left',
+                                        border: 'none',
+                                        background: 'none',
+                                        cursor: 'pointer',
+                                        color: '#334155'
+                                      }}
+                                    >
+                                      Báo lỗi
+                                    </button>
+                                  )}
+                                  <button
+                                    className="action-menu-item danger"
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActiveComponentMenu(null);
+                                      handleDeleteComponent(comp.name);
+                                    }}
+                                    style={{
+                                      padding: '8px 12px',
+                                      fontSize: '0.78rem',
+                                      textAlign: 'left',
+                                      border: 'none',
+                                      background: 'none',
+                                      cursor: 'pointer',
+                                      color: '#EF4444'
+                                    }}
+                                  >
+                                    Xóa
+                                  </button>
+                                  <div style={{ borderTop: '1px solid #CBD5E1', margin: '4px 0' }} />
+                                  <div style={{ padding: '4px 12px', fontSize: '0.72rem', color: '#64748B', fontWeight: 'bold' }}>Tô màu</div>
+                                  <div style={{ display: 'flex', gap: '6px', padding: '4px 12px', flexWrap: 'wrap' }}>
+                                    {Object.keys(COMPONENT_COLORS).map((cKey) => {
+                                      const cVal = COMPONENT_COLORS[cKey];
+                                      return (
+                                        <button
+                                          key={cKey}
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleSetComponentColor(comp.name, cKey);
+                                            setActiveComponentMenu(null);
+                                          }}
+                                          title={cKey === 'default' ? 'Mặc định' : cKey}
+                                          style={{
+                                            width: '16px',
+                                            height: '16px',
+                                            borderRadius: '50%',
+                                            backgroundColor: cVal.bg,
+                                            border: `1px solid ${cVal.border}`,
+                                            cursor: 'pointer',
+                                            padding: 0,
+                                            display: 'block',
+                                            boxShadow: techObj.color === cKey ? '0 0 0 2px #7B5233' : 'none'
+                                          }}
+                                        />
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div style={{ padding: '20px', textAlign: 'center', color: '#94A3B8', fontStyle: 'italic', fontSize: '0.78rem' }}>
+                        Không có component nào.
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleAddComponent}
+                    style={{
+                      background: 'transparent',
+                      border: '1px dashed #7B5233',
+                      color: '#7B5233',
+                      borderRadius: '8px',
+                      padding: '8px 16px',
+                      fontSize: '0.78rem',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      width: '100%',
+                      justifyContent: 'center',
+                      marginTop: '12px'
+                    }}
+                  >
+                    <span>+ Thêm thành phần</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div style={{ flex: 1, overflowY: 'auto', maxHeight: '420px', paddingRight: '4px' }}>
+                    {screen.guides && screen.guides.length > 0 ? (
+                      screen.guides.map((step, idx) => (
+                        <div
+                          key={step.id || idx}
+                          onClick={() => setSelectedGuideIdx(idx)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '10px',
+                            padding: '10px 12px',
+                            borderRadius: '8px',
+                            border: '1px solid',
+                            borderColor: selectedGuideIdx === idx ? '#7B5233' : '#CBD5E1',
+                            backgroundColor: selectedGuideIdx === idx ? '#FAF6F0' : '#FFF',
+                            cursor: 'pointer',
+                            marginBottom: '8px',
+                            fontSize: '0.8rem',
+                            fontWeight: selectedGuideIdx === idx ? 'bold' : 'normal',
+                            transition: 'all 0.2s',
+                            color: selectedGuideIdx === idx ? '#7B5233' : '#334155'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+                            <span style={{ width: '20px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                              ⏩
+                            </span>
+                            <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                              Bước {step.step_number || (idx + 1)}: {step.title || 'Hành động mới'}
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (idx > 0) {
+                                  setScreen(prev => {
+                                    const list = [...(prev.guides || [])];
+                                    const temp = list[idx];
+                                    list[idx] = list[idx - 1];
+                                    list[idx - 1] = temp;
+                                    list.forEach((item, i) => { item.step_number = i + 1; });
+                                    return { ...prev, guides: list };
+                                  });
+                                  setSelectedGuideIdx(idx - 1);
+                                }
+                              }}
+                              disabled={idx === 0}
+                              style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', opacity: idx === 0 ? 0.3 : 0.6, padding: '2px', fontSize: '0.7rem' }}
+                            >
+                              ▲
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (idx < screen.guides.length - 1) {
+                                  setScreen(prev => {
+                                    const list = [...(prev.guides || [])];
+                                    const temp = list[idx];
+                                    list[idx] = list[idx + 1];
+                                    list[idx + 1] = temp;
+                                    list.forEach((item, i) => { item.step_number = i + 1; });
+                                    return { ...prev, guides: list };
+                                  });
+                                  setSelectedGuideIdx(idx + 1);
+                                }
+                              }}
+                              disabled={idx === screen.guides.length - 1}
+                              style={{ background: 'none', border: 'none', cursor: idx === screen.guides.length - 1 ? 'default' : 'pointer', opacity: idx === screen.guides.length - 1 ? 0.3 : 0.6, padding: '2px', fontSize: '0.7rem' }}
+                            >
+                              ▼
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                showConfirm(
+                                  'Xác nhận xóa',
+                                  `Bạn có chắc chắn muốn xóa bước "${step.title || 'bước này'}" khỏi tài liệu hướng dẫn?`,
+                                  () => {
+                                    setScreen(prev => {
+                                      const filtered = (prev.guides || []).filter((_, i) => i !== idx);
+                                      filtered.forEach((item, i) => { item.step_number = i + 1; });
+                                      return { ...prev, guides: filtered };
+                                    });
+                                    setSelectedGuideIdx(Math.max(0, idx - 1));
+                                    showToast('Đã xóa bước hướng dẫn!');
+                                  }
+                                );
+                              }}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', opacity: 0.6, padding: '2px', fontSize: '0.7rem' }}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div style={{ padding: '20px', textAlign: 'center', color: '#94A3B8', fontStyle: 'italic', fontSize: '0.78rem' }}>
+                        Chưa khai báo các bước hướng dẫn.
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextStepNum = (screen.guides || []).length + 1;
+                      const newStep = {
+                        id: `temp_${Date.now()}`,
+                        step_number: nextStepNum,
+                        title: 'Hành động mới',
+                        related_components: '',
+                        description: ''
+                      };
+                      setScreen(prev => ({
+                        ...prev,
+                        guides: [...(prev.guides || []), newStep]
+                      }));
+                      setSelectedGuideIdx(nextStepNum - 1);
+                      showToast('Đã thêm bước hướng dẫn mới!');
+                    }}
+                    style={{
+                      background: 'transparent',
+                      border: '1px dashed #7B5233',
+                      color: '#7B5233',
+                      borderRadius: '8px',
+                      padding: '8px 16px',
+                      fontSize: '0.78rem',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      width: '100%',
+                      justifyContent: 'center',
+                      marginTop: '12px'
+                    }}
+                  >
+                    <span>+ Thêm bước</span>
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Right Column: Simulator/Mockup & Spec Tab Pane */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+            {/* Mockup Simulator Frame Card */}
+            <div className="card mockup-carousel-card" style={{
               background: '#fff',
-              border: '1px solid #E5E7EB',
+              border: '1px solid #D1D5DB',
               borderRadius: '12px',
               padding: '16px',
               display: 'flex',
               flexDirection: 'column',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+              minHeight: isMockupExpanded ? '600px' : '340px',
+              transition: 'all 0.3s ease-in-out'
             }}>
-              {activeTab === 'guides' ? (
-                <>
-                  <div style={{ borderBottom: '1px solid #F1F5F9', paddingBottom: '10px', marginBottom: '12px' }}>
-                    <span style={{ fontSize: '0.82rem', fontWeight: '800', color: '#2D1A12', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      Thông tin đặc tả
-                    </span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #CBD5E1', paddingBottom: '10px', marginBottom: '12px' }}>
+                <span
+                  onClick={() => setIsMockupExpanded(!isMockupExpanded)}
+                  style={{
+                    fontSize: '1.25rem',
+                    color: '#7B5233',
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    backgroundColor: isMockupExpanded ? '#FAF6F0' : 'transparent',
+                    transition: 'all 0.2s',
+                    userSelect: 'none'
+                  }}
+                  title={isMockupExpanded ? "Thu nhỏ bản vẽ" : "Phóng to bản vẽ"}
+                >
+                  ☰
+                </span>
+                <button
+                  type="button"
+                  onClick={handlePasteMockupFromClipboard}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 12px', fontSize: '0.74rem', borderRadius: '6px', backgroundColor: '#7B5233', color: '#fff', fontWeight: 'bold', cursor: 'pointer', margin: 0, border: 'none' }}
+                >
+                  + Dán ảnh
+                </button>
+              </div>
+
+              <div
+                onPaste={handlePasteMockup}
+                tabIndex={0}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: '#F8FAFC',
+                  borderRadius: '8px',
+                  minHeight: isMockupExpanded ? '520px' : '240px',
+                  overflow: 'hidden',
+                  border: '1px solid #CBD5E1',
+                  transition: 'all 0.3s ease-in-out',
+                  outline: 'none'
+                }}
+              >
+                {screen.mockup_path ? (
+                  (() => {
+                    const mockups = screen.mockup_path.split(',').filter(Boolean);
+                    return (
+                      <img
+                        src={getImageUrl(mockups[currentMockupIdx])}
+                        alt="Mockup design"
+                        onClick={() => setShowZoomModal(true)}
+                        style={{
+                          maxWidth: '100%',
+                          maxHeight: isMockupExpanded ? '520px' : '250px',
+                          objectFit: 'contain',
+                          cursor: 'zoom-in',
+                          transition: 'all 0.3s ease-in-out'
+                        }}
+                      />
+                    );
+                  })()
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', color: '#94A3B8' }}>
+                    <span style={{ fontSize: '3rem' }}>🖼️</span>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 'bold' }}>Chưa có hình ảnh bản vẽ thực tế (Nhấn nút + Dán ảnh hoặc Ctrl+V để dán ảnh)</span>
                   </div>
-                  {screen.guides && screen.guides.length > 0 && selectedGuideIdx >= 0 && selectedGuideIdx < screen.guides.length ? (
-                    (() => {
-                      const currentStep = screen.guides[selectedGuideIdx];
-                      const selectedComps = currentStep.related_components ? currentStep.related_components.split(',').map(c => c.trim()).filter(Boolean) : [];
-                      return (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                          <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '16px' }}>
-                            <div className="form-group" style={{ margin: 0 }}>
-                              <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.75rem', display: 'block', marginBottom: '6px' }}>Bước</label>
-                              <select
-                                value={currentStep.step_number}
-                                onChange={(e) => {
-                                  const newNum = parseInt(e.target.value);
-                                  setScreen(prev => {
-                                    const list = [...(prev.guides || [])];
-                                    const targetIdx = newNum - 1;
-                                    const sourceIdx = selectedGuideIdx;
-                                    const [removed] = list.splice(sourceIdx, 1);
-                                    list.splice(targetIdx, 0, removed);
-                                    list.forEach((item, i) => { item.step_number = i + 1; });
-                                    return { ...prev, guides: list };
-                                  });
-                                  setSelectedGuideIdx(newNum - 1);
-                                }}
-                                style={{ width: '100%', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '6px 10px', fontSize: '0.8rem', outline: 'none', height: '34px', boxSizing: 'border-box' }}
-                              >
-                                {(screen.guides || []).map((_, i) => (
-                                  <option key={i + 1} value={i + 1}>Bước {i + 1}</option>
-                                ))}
-                              </select>
+                )}
+              </div>
+
+              {/* Pagination Controls */}
+              {screen.mockup_path && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #CBD5E1', paddingTop: '10px', marginTop: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <button
+                      type="button"
+                      disabled={currentMockupIdx === 0}
+                      onClick={() => setCurrentMockupIdx(prev => prev - 1)}
+                      style={{ padding: '3px 8px', border: '1px solid #E2E8F0', background: '#fff', borderRadius: '4px', cursor: 'pointer' }}
+                    >
+                      &lt;
+                    </button>
+                    {(() => {
+                      const mockups = screen.mockup_path.split(',').filter(Boolean);
+                      return mockups.map((_, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setCurrentMockupIdx(i)}
+                          style={{
+                            padding: '3px 7px',
+                            border: '1px solid',
+                            borderColor: currentMockupIdx === i ? '#7B5233' : '#E2E8F0',
+                            background: currentMockupIdx === i ? '#7B5233' : '#fff',
+                            color: currentMockupIdx === i ? '#fff' : '#334155',
+                            borderRadius: '4px',
+                            fontSize: '0.72rem',
+                            fontWeight: 'bold',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {i + 1}
+                        </button>
+                      ));
+                    })()}
+                    <button
+                      type="button"
+                      disabled={(() => {
+                        const mockups = screen.mockup_path.split(',').filter(Boolean);
+                        return currentMockupIdx === mockups.length - 1;
+                      })()}
+                      onClick={() => setCurrentMockupIdx(prev => prev + 1)}
+                      style={{ padding: '3px 8px', border: '1px solid #E2E8F0', background: '#fff', borderRadius: '4px', cursor: 'pointer' }}
+                    >
+                      &gt;
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDeleteMockup}
+                    style={{ background: 'transparent', border: 'none', color: '#EF4444', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
+                  >
+                    Xóa ảnh
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Card: Thông tin đặc tả */}
+            {!isMockupExpanded && (
+              <div className="card spec-tabs-card" style={{
+                background: '#fff',
+                border: '1px solid #D1D5DB',
+                borderRadius: '12px',
+                padding: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+              }}>
+                {activeTab === 'guides' ? (
+                  <>
+                    <div style={{ borderBottom: '1px solid #CBD5E1', paddingBottom: '10px', marginBottom: '12px' }}>
+                      <span style={{ fontSize: '0.82rem', fontWeight: '800', color: '#2D1A12', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Thông tin đặc tả
+                      </span>
+                    </div>
+                    {screen.guides && screen.guides.length > 0 && selectedGuideIdx >= 0 && selectedGuideIdx < screen.guides.length ? (
+                      (() => {
+                        const currentStep = screen.guides[selectedGuideIdx];
+                        const selectedComps = currentStep.related_components ? currentStep.related_components.split(',').map(c => c.trim()).filter(Boolean) : [];
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 280px', gap: '16px' }}>
+                              <div className="form-group" style={{ margin: 0 }}>
+                                <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.75rem', display: 'block', marginBottom: '6px' }}>Bước</label>
+                                <select
+                                  value={currentStep.step_number}
+                                  onChange={(e) => {
+                                    const newNum = parseInt(e.target.value);
+                                    setScreen(prev => {
+                                      const list = [...(prev.guides || [])];
+                                      const targetIdx = newNum - 1;
+                                      const sourceIdx = selectedGuideIdx;
+                                      const [removed] = list.splice(sourceIdx, 1);
+                                      list.splice(targetIdx, 0, removed);
+                                      list.forEach((item, i) => { item.step_number = i + 1; });
+                                      return { ...prev, guides: list };
+                                    });
+                                    setSelectedGuideIdx(newNum - 1);
+                                  }}
+                                  style={{ width: '100%', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '6px 10px', fontSize: '0.8rem', outline: 'none', backgroundColor: '#fff', height: '34px', boxSizing: 'border-box' }}
+                                >
+                                  {(screen.guides || []).map((_, i) => (
+                                    <option key={i + 1} value={i + 1}>Bước {i + 1}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="form-group" style={{ margin: 0 }}>
+                                <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.75rem', display: 'block', marginBottom: '6px' }}>Tên nội dung *</label>
+                                <input
+                                  type="text"
+                                  value={currentStep.title || ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setScreen(prev => {
+                                      const list = [...(prev.guides || [])];
+                                      list[selectedGuideIdx] = { ...list[selectedGuideIdx], title: val };
+                                      return { ...prev, guides: list };
+                                    });
+                                  }}
+                                  placeholder="Tên nội dung / hành động..."
+                                  required
+                                  style={{ width: '100%', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '6px 10px', fontSize: '0.8rem', boxSizing: 'border-box', outline: 'none', backgroundColor: '#fff', height: '34px' }}
+                                />
+                              </div>
+                              <div className="form-group" style={{ margin: 0, position: 'relative' }}>
+                                <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.75rem', display: 'block', marginBottom: '6px' }}>Các thành phần liên quan</label>
+                                <div
+                                  onClick={() => setIsGuideCompDropdownOpen(!isGuideCompDropdownOpen)}
+                                  style={{
+                                    width: '100%',
+                                    border: '1px solid #E2E8F0',
+                                    borderRadius: '8px',
+                                    padding: '6px 12px',
+                                    fontSize: '0.8rem',
+                                    backgroundColor: '#FFF',
+                                    cursor: 'pointer',
+                                    minHeight: '34px',
+                                    boxSizing: 'border-box',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    flexWrap: 'wrap',
+                                    gap: '6px'
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', flex: 1 }}>
+                                    {selectedComps.length > 0 ? (
+                                      selectedComps.map(c => (
+                                        <span
+                                          key={c}
+                                          style={{
+                                            backgroundColor: '#FAF6F0',
+                                            border: '1px solid #EADCC9',
+                                            color: '#7B5233',
+                                            borderRadius: '4px',
+                                            padding: '2px 6px',
+                                            fontSize: '0.72rem',
+                                            fontWeight: 'bold',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '4px'
+                                          }}
+                                        >
+                                          {c}
+                                          <span
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              const filtered = selectedComps.filter(item => item !== c);
+                                              const newVal = filtered.join(', ');
+                                              setScreen(prev => {
+                                                const list = [...(prev.guides || [])];
+                                                list[selectedGuideIdx] = { ...list[selectedGuideIdx], related_components: newVal };
+                                                return { ...prev, guides: list };
+                                              });
+                                            }}
+                                            style={{ cursor: 'pointer', color: '#A1826F', fontSize: '0.65rem' }}
+                                          >
+                                            ✕
+                                          </span>
+                                        </span>
+                                      ))
+                                    ) : (
+                                      <span style={{ color: '#94A3B8' }}>Chọn các thành phần liên quan...</span>
+                                    )}
+                                  </div>
+                                  <span style={{ fontSize: '0.7rem', color: '#94A3B8' }}>{isGuideCompDropdownOpen ? '▲' : '▼'}</span>
+                                </div>
+
+                                {isGuideCompDropdownOpen && (
+                                  <>
+                                    <div
+                                      onClick={() => setIsGuideCompDropdownOpen(false)}
+                                      style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 990 }}
+                                    />
+                                    <div
+                                      style={{
+                                        position: 'absolute',
+                                        top: '100%',
+                                        left: 0,
+                                        right: 0,
+                                        backgroundColor: '#fff',
+                                        border: '1px solid #E2E8F0',
+                                        borderRadius: '8px',
+                                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                                        zIndex: 995,
+                                        maxHeight: '180px',
+                                        overflowY: 'auto',
+                                        marginTop: '4px',
+                                        padding: '6px',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '2px'
+                                      }}
+                                    >
+                                      {screen.components && screen.components.length > 0 ? (
+                                        screen.components.map(comp => {
+                                          const isChecked = selectedComps.includes(comp.name);
+                                          return (
+                                            <div
+                                              key={comp.id}
+                                              onClick={() => {
+                                                let updated;
+                                                if (isChecked) {
+                                                  updated = selectedComps.filter(item => item !== comp.name);
+                                                } else {
+                                                  updated = [...selectedComps, comp.name];
+                                                }
+                                                const newVal = updated.join(', ');
+                                                setScreen(prev => {
+                                                  const list = [...(prev.guides || [])];
+                                                  list[selectedGuideIdx] = { ...list[selectedGuideIdx], related_components: newVal };
+                                                  return { ...prev, guides: list };
+                                                });
+                                              }}
+                                              onMouseEnter={(e) => {
+                                                if (!isChecked) e.currentTarget.style.backgroundColor = '#FAF6F0';
+                                              }}
+                                              onMouseLeave={(e) => {
+                                                if (!isChecked) e.currentTarget.style.backgroundColor = 'transparent';
+                                              }}
+                                              style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'flex-start',
+                                                gap: '10px',
+                                                padding: '8px 12px',
+                                                borderRadius: '6px',
+                                                cursor: 'pointer',
+                                                fontSize: '0.78rem',
+                                                userSelect: 'none',
+                                                backgroundColor: isChecked ? '#FAF6F0' : 'transparent',
+                                                color: isChecked ? '#7B5233' : '#334155',
+                                                fontWeight: isChecked ? 'bold' : 'normal',
+                                                width: '100%',
+                                                boxSizing: 'border-box',
+                                                textAlign: 'left',
+                                                transition: 'background-color 0.2s ease'
+                                              }}
+                                            >
+                                              <input
+                                                type="checkbox"
+                                                checked={isChecked}
+                                                readOnly
+                                                style={{ cursor: 'pointer', margin: 0, width: '16px', height: '16px', flexShrink: 0 }}
+                                              />
+                                              <span style={{ textAlign: 'left', display: 'inline-block' }}>{comp.name}</span>
+                                            </div>
+                                          );
+                                        })
+                                      ) : (
+                                        <div style={{ padding: '8px', color: '#94A3B8', fontSize: '0.75rem', fontStyle: 'italic' }}>
+                                          Không có component nào.
+                                        </div>
+                                      )}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
                             </div>
+
                             <div className="form-group" style={{ margin: 0 }}>
-                              <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.75rem', display: 'block', marginBottom: '6px' }}>Tên nội dung *</label>
-                              <input
-                                type="text"
-                                value={currentStep.title || ''}
+                              <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.75rem', display: 'block', marginBottom: '6px' }}>Mô tả chi tiết</label>
+                              <textarea
+                                rows="4"
+                                value={currentStep.description || ''}
                                 onChange={(e) => {
                                   const val = e.target.value;
                                   setScreen(prev => {
                                     const list = [...(prev.guides || [])];
-                                    list[selectedGuideIdx] = { ...list[selectedGuideIdx], title: val };
+                                    list[selectedGuideIdx] = { ...list[selectedGuideIdx], description: val };
                                     return { ...prev, guides: list };
                                   });
                                 }}
-                                placeholder="Tên nội dung / hành động..."
-                                required
-                                style={{ width: '100%', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '6px 10px', fontSize: '0.8rem', boxSizing: 'border-box', outline: 'none', height: '34px' }}
+                                placeholder="Mô tả chi tiết hành động hoặc hướng dẫn của bước..."
+                                style={{
+                                  width: '100%',
+                                  fontSize: '0.8rem',
+                                  border: '1px solid #E2E8F0',
+                                  borderRadius: '8px',
+                                  padding: '10px',
+                                  boxSizing: 'border-box',
+                                  outline: 'none',
+                                  backgroundColor: '#fff',
+                                  fontFamily: 'inherit'
+                                }}
                               />
                             </div>
                           </div>
+                        );
+                      })()
+                    ) : (
+                      <div style={{ padding: '20px', textAlign: 'center', color: '#94A3B8', fontStyle: 'italic', fontSize: '0.8rem' }}>
+                        Vui lòng chọn hoặc thêm một bước để chỉnh sửa thông tin đặc tả.
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {activeComponent ? (
+                      <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #CBD5E1', paddingBottom: '10px', marginBottom: '12px' }}>
+                          <span style={{ fontSize: '0.82rem', fontWeight: '800', color: '#2D1A12', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            Thông tin đặc tả: {activeComponent}
+                          </span>
 
-                          <div className="form-group" style={{ margin: 0, position: 'relative' }}>
-                            <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.75rem', display: 'block', marginBottom: '6px' }}>Các thành phần liên quan</label>
-                            <div
-                              onClick={() => setIsGuideCompDropdownOpen(!isGuideCompDropdownOpen)}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#F1F5F9', padding: '2px', borderRadius: '8px' }}>
+                              {['Frontend', 'Luồng xử lý', 'Backend', 'File mẫu'].map(tab => {
+                                const modeMap = {
+                                  'Frontend': 'blueprint',
+                                  'Luồng xử lý': 'workflow',
+                                  'Backend': 'cards',
+                                  'File mẫu': 'sample'
+                                };
+                                const isActive = viewMode === modeMap[tab];
+                                
+                                // Kiểm tra xem tab có dữ liệu không
+                                let hasData = false;
+                                if (tab === 'Frontend') {
+                                  hasData = !!(specDescriptions.Frontend && specDescriptions.Frontend.trim());
+                                } else if (tab === 'Luồng xử lý') {
+                                  hasData = !!(specDescriptions['Luồng xử lý'] && specDescriptions['Luồng xử lý'].trim());
+                                } else if (tab === 'Backend') {
+                                  hasData = !!(specDescriptions.Backend && specDescriptions.Backend.trim());
+                                } else if (tab === 'File mẫu') {
+                                  hasData = !!(specSampleFileUrl && specSampleFileUrl.trim());
+                                }
+                                
+                                return (
+                                  <button
+                                    key={tab}
+                                    type="button"
+                                    onClick={() => setViewMode(modeMap[tab])}
+                                    style={{
+                                      padding: '4px 12px',
+                                      border: 'none',
+                                      background: isActive ? '#fff' : 'transparent',
+                                      color: isActive ? '#2D1A12' : '#64748B',
+                                      borderRadius: '6px',
+                                      fontSize: '0.72rem',
+                                      fontWeight: '700',
+                                      cursor: 'pointer',
+                                      boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.05)' : 'none',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '4px'
+                                    }}
+                                  >
+                                    {tab}
+                                    {hasData && (
+                                      <span style={{ color: '#EF4444', fontWeight: 'bold', fontSize: '0.9rem' }}>*</span>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setIsSpecCardCollapsed(!isSpecCardCollapsed)}
                               style={{
-                                width: '100%',
-                                border: '1px solid #E2E8F0',
-                                borderRadius: '8px',
-                                padding: '6px 12px',
-                                fontSize: '0.8rem',
-                                backgroundColor: '#FFF',
+                                background: '#F1F5F9',
+                                border: 'none',
+                                color: '#64748B',
                                 cursor: 'pointer',
-                                minHeight: '34px',
-                                boxSizing: 'border-box',
                                 display: 'flex',
                                 alignItems: 'center',
-                                justifyContent: 'space-between',
-                                flexWrap: 'wrap',
-                                gap: '6px'
+                                justifyContent: 'center',
+                                padding: '6px',
+                                borderRadius: '8px',
+                                transition: 'all 0.2s',
+                                outline: 'none',
+                                width: '32px',
+                                height: '32px'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = '#E2E8F0';
+                                e.currentTarget.style.color = '#334155';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = '#F1F5F9';
+                                e.currentTarget.style.color = '#64748B';
                               }}
                             >
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', flex: 1 }}>
-                                {selectedComps.length > 0 ? (
-                                  selectedComps.map(c => (
-                                    <span
-                                      key={c}
-                                      style={{
-                                        backgroundColor: '#FAF6F0',
-                                        border: '1px solid #EADCC9',
-                                        color: '#7B5233',
-                                        borderRadius: '4px',
-                                        padding: '2px 6px',
-                                        fontSize: '0.72rem',
-                                        fontWeight: 'bold',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '4px'
-                                      }}
-                                    >
-                                      {c}
-                                      <span
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          const filtered = selectedComps.filter(item => item !== c);
-                                          const newVal = filtered.join(', ');
-                                          setScreen(prev => {
-                                            const list = [...(prev.guides || [])];
-                                            list[selectedGuideIdx] = { ...list[selectedGuideIdx], related_components: newVal };
-                                            return { ...prev, guides: list };
-                                          });
-                                        }}
-                                        style={{ cursor: 'pointer', color: '#A1826F', fontSize: '0.65rem' }}
-                                      >
-                                        ✕
-                                      </span>
-                                    </span>
-                                  ))
-                                ) : (
-                                  <span style={{ color: '#94A3B8' }}>Chọn các thành phần liên quan...</span>
-                                )}
-                              </div>
-                              <span style={{ fontSize: '0.7rem', color: '#94A3B8' }}>{isGuideCompDropdownOpen ? '▲' : '▼'}</span>
-                            </div>
+                              <ChevronDown
+                                size={18}
+                                style={{
+                                  transform: isSpecCardCollapsed ? 'rotate(0deg)' : 'rotate(180deg)',
+                                  transition: 'transform 0.2s',
+                                  strokeWidth: 2.5
+                                }}
+                              />
+                            </button>
+                          </div>
+                        </div>
 
-                            {isGuideCompDropdownOpen && (
+                        {!isSpecCardCollapsed && (
+                          <div style={{ margin: 0 }}>
+                            {viewMode === 'sample' ? (
                               <>
-                                <div
-                                  onClick={() => setIsGuideCompDropdownOpen(false)}
-                                  style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 990 }}
+                                <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.75rem', display: 'block', marginBottom: '6px' }}>File mẫu</label>
+                                <input
+                                  type="file"
+                                  ref={specFileInputRef}
+                                  multiple
+                                  accept=".doc,.docx,.xls,.xlsx,.pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf"
+                                  onChange={handleSpecSampleFileChange}
+                                  disabled={isSpecUploadingSample}
+                                  style={{ display: 'none' }}
                                 />
+
                                 <div
+                                  onClick={() => !isSpecUploadingSample && specFileInputRef.current && specFileInputRef.current.click()}
                                   style={{
-                                    position: 'absolute',
-                                    top: '100%',
-                                    left: 0,
-                                    right: 0,
-                                    backgroundColor: '#fff',
-                                    border: '1px solid #E2E8F0',
-                                    borderRadius: '8px',
-                                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                                    zIndex: 995,
-                                    maxHeight: '180px',
-                                    overflowY: 'auto',
-                                    marginTop: '4px',
-                                    padding: '6px',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '2px'
+                                    border: '2px dashed #D1D5DB',
+                                    borderRadius: '10px',
+                                    padding: '18px 12px',
+                                    textAlign: 'center',
+                                    cursor: isSpecUploadingSample ? 'not-allowed' : 'pointer',
+                                    background: isSpecUploadingSample ? '#F9FAFB' : '#fff',
+                                    transition: 'all 0.2s ease',
+                                    marginBottom: '8px'
                                   }}
+                                  onMouseEnter={(e) => { if (!isSpecUploadingSample) { e.currentTarget.style.borderColor = '#7B5233'; e.currentTarget.style.background = '#FDFBF7'; } }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#D1D5DB'; e.currentTarget.style.background = isSpecUploadingSample ? '#F9FAFB' : '#fff'; }}
                                 >
-                                  {screen.components && screen.components.length > 0 ? (
-                                    screen.components.map(comp => {
-                                      const isChecked = selectedComps.includes(comp.name);
-                                      return (
-                                        <div
-                                          key={comp.id}
+                                  <Upload size={24} style={{ color: '#7B5233', marginBottom: '6px' }} />
+                                  <div style={{ fontSize: '0.78rem', color: '#374151', fontWeight: 600, marginBottom: '2px' }}>
+                                    Nhấn để chọn file mẫu (Có thể chọn nhiều file)
+                                  </div>
+                                  <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>
+                                    Word, Excel, PDF
+                                  </div>
+                                </div>
+
+                                {isSpecUploadingSample && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', border: '1px solid #F3E8D8', borderRadius: '10px', background: '#FDFBF7', color: '#7B5233', fontSize: '0.78rem', marginBottom: '8px' }}>
+                                    <div style={{ width: '16px', height: '16px', border: '2px solid #D1B99D', borderTopColor: '#7B5233', borderRadius: '50%' }} />
+                                    <span>Đang tải lên file mẫu...</span>
+                                  </div>
+                                )}
+
+                                {specSampleFileUrl && !isSpecUploadingSample && (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
+                                    {specSampleFileUrl.split(',').filter(Boolean).map((fileUrl, index) => (
+                                      <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', border: '1px solid #D1D5DB', borderRadius: '10px', background: '#F9FAFB' }}>
+                                        <FileText size={18} style={{ color: '#7B5233', flexShrink: 0 }} />
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                          <a
+                                            href={`${getBaseURL()}${fileUrl}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            style={{ display: 'block', fontSize: '0.78rem', color: '#7B5233', fontWeight: 600, textDecoration: 'underline', wordBreak: 'break-all', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                          >
+                                            {fileUrl.split('/').pop()}
+                                          </a>
+                                        </div>
+                                        <button
+                                          type="button"
                                           onClick={() => {
-                                            let updated;
-                                            if (isChecked) {
-                                              updated = selectedComps.filter(item => item !== comp.name);
-                                            } else {
-                                              updated = [...selectedComps, comp.name];
-                                            }
-                                            const newVal = updated.join(', ');
+                                            const remaining = specSampleFileUrl.split(',').filter(Boolean).filter((_, i) => i !== index).join(',');
+                                            setSpecSampleFileUrl(remaining);
                                             setScreen(prev => {
-                                              const list = [...(prev.guides || [])];
-                                              list[selectedGuideIdx] = { ...list[selectedGuideIdx], related_components: newVal };
-                                              return { ...prev, guides: list };
+                                              if (!prev) return null;
+                                              const updatedComps = (prev.components || []).map(c => {
+                                                if (c.name === activeComponent) {
+                                                  let techObj = {};
+                                                  if (c.technical_details) {
+                                                    try {
+                                                      techObj = typeof c.technical_details === 'string'
+                                                        ? JSON.parse(c.technical_details)
+                                                        : c.technical_details;
+                                                    } catch (err) { }
+                                                  }
+                                                  return {
+                                                    ...c,
+                                                    file_path: remaining,
+                                                    technical_details: JSON.stringify({
+                                                      ...techObj,
+                                                      sample_file_url: remaining
+                                                    })
+                                                  };
+                                                }
+                                                return c;
+                                              });
+                                              return { ...prev, components: updatedComps };
                                             });
                                           }}
-                                          onMouseEnter={(e) => {
-                                            if (!isChecked) e.currentTarget.style.backgroundColor = '#FAF6F0';
-                                          }}
-                                          onMouseLeave={(e) => {
-                                            if (!isChecked) e.currentTarget.style.backgroundColor = 'transparent';
-                                          }}
-                                          style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'flex-start',
-                                            gap: '10px',
-                                            padding: '8px 12px',
-                                            borderRadius: '6px',
-                                            cursor: 'pointer',
-                                            fontSize: '0.78rem',
-                                            userSelect: 'none',
-                                            backgroundColor: isChecked ? '#FAF6F0' : 'transparent',
-                                            color: isChecked ? '#7B5233' : '#334155',
-                                            fontWeight: isChecked ? 'bold' : 'normal',
-                                            width: '100%',
-                                            boxSizing: 'border-box',
-                                            textAlign: 'left',
-                                            transition: 'background-color 0.2s ease'
-                                          }}
+                                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', border: 'none', background: '#FEE2E2', color: '#EF4444', cursor: 'pointer' }}
+                                          title="Xóa file mẫu"
                                         >
-                                          <input
-                                            type="checkbox"
-                                            checked={isChecked}
-                                            readOnly
-                                            style={{ cursor: 'pointer', margin: 0, width: '16px', height: '16px', flexShrink: 0 }}
-                                          />
-                                          <span style={{ textAlign: 'left', display: 'inline-block' }}>{comp.name}</span>
-                                        </div>
-                                      );
-                                    })
-                                  ) : (
-                                    <div style={{ padding: '8px', color: '#94A3B8', fontSize: '0.75rem', fontStyle: 'italic' }}>
-                                      Không có component nào.
-                                    </div>
-                                  )}
-                                </div>
+                                          <X size={14} />
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {specSampleFileUrl && !isSpecUploadingSample && (
+                                  <div style={{ marginTop: '12px' }}>
+                                    <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.75rem', display: 'block', marginBottom: '6px' }}>
+                                      Dữ liệu mẫu để xuất thử (JSON)
+                                    </label>
+                                    <textarea
+                                      rows="3"
+                                      value={specExportData}
+                                      onChange={(e) => setSpecExportData(e.target.value)}
+                                      placeholder='[{"ma": "PO-001", "ten": "Don hang mau"}] hoac {"ma": "PO-001", "ten": "Don hang mau"}'
+                                      style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: '8px', padding: '8px 10px', fontSize: '0.78rem', boxSizing: 'border-box', outline: 'none', resize: 'vertical', fontFamily: 'inherit', backgroundColor: '#ffffff' }}
+                                    />
+                                    <button
+                                      type="button"
+                                      disabled={isSpecExporting}
+                                      onClick={handleSpecExportTest}
+                                      style={{ marginTop: '8px', width: '100%', background: '#7B5233', color: '#FFF', border: 'none', borderRadius: '8px', padding: '8px 12px', fontSize: '0.78rem', fontWeight: 700, cursor: isSpecExporting ? 'not-allowed' : 'pointer', opacity: isSpecExporting ? 0.7 : 1 }}
+                                    >
+                                      {isSpecExporting ? 'Đang xuất...' : 'Xuất file thử'}
+                                    </button>
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.75rem', display: 'block', marginBottom: '6px' }}>Mô tả</label>
+                                <textarea
+                                  rows="4"
+                                  value={
+                                    viewMode === 'blueprint' ? specDescriptions.Frontend :
+                                      viewMode === 'workflow' ? specDescriptions['Luồng xử lý'] :
+                                        viewMode === 'cards' ? specDescriptions.Backend : ''
+                                  }
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setSpecDescriptions(prev => {
+                                      const next = { ...prev };
+                                      if (viewMode === 'blueprint') next.Frontend = val;
+                                      else if (viewMode === 'workflow') next['Luồng xử lý'] = val;
+                                      else if (viewMode === 'cards') next.Backend = val;
+                                      return next;
+                                    });
+
+                                    // Save directly back to active component in components list
+                                    setScreen(prev => {
+                                      if (!prev) return null;
+                                      const updatedComps = (prev.components || []).map(c => {
+                                        if (c.name === activeComponent) {
+                                          let techObj = {};
+                                          if (c.technical_details) {
+                                            try {
+                                              techObj = typeof c.technical_details === 'string'
+                                                ? JSON.parse(c.technical_details)
+                                                : c.technical_details;
+                                            } catch (err) { }
+                                          }
+                                          const updatedTech = {
+                                            ...techObj,
+                                            frontend_description: viewMode === 'blueprint' ? val : (techObj.frontend_description || ''),
+                                            workflow_description: viewMode === 'workflow' ? val : (techObj.workflow_description || ''),
+                                            backend_description: viewMode === 'cards' ? val : (techObj.backend_description || '')
+                                          };
+                                          return {
+                                            ...c,
+                                            description: viewMode === 'blueprint' ? val : c.description,
+                                            technical_details: JSON.stringify(updatedTech)
+                                          };
+                                        }
+                                        return c;
+                                      });
+                                      return { ...prev, components: updatedComps };
+                                    });
+                                  }}
+                                  placeholder={
+                                    viewMode === 'blueprint' ? 'Đặc tả chi tiết giao diện người dùng và cách bố trí các thành phần.' :
+                                      viewMode === 'workflow' ? 'Đặc tả luồng nghiệp vụ, tương tác và xử lý dữ liệu của màn hình.' :
+                                        viewMode === 'cards' ? 'Đặc tả các API endpoint liên kết, dịch vụ và cấu trúc dữ liệu phía máy chủ.' : ''
+                                  }
+                                  style={{
+                                    width: '100%',
+                                    fontSize: '0.8rem',
+                                    border: '1px solid #E2E8F0',
+                                    borderRadius: '8px',
+                                    padding: '10px',
+                                    boxSizing: 'border-box',
+                                    outline: 'none',
+                                    fontFamily: 'inherit'
+                                  }}
+                                />
                               </>
                             )}
                           </div>
-
-                          <div className="form-group" style={{ margin: 0 }}>
-                            <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.75rem', display: 'block', marginBottom: '6px' }}>Mô tả chi tiết</label>
-                            <textarea
-                              rows="4"
-                              value={currentStep.description || ''}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setScreen(prev => {
-                                  const list = [...(prev.guides || [])];
-                                  list[selectedGuideIdx] = { ...list[selectedGuideIdx], description: val };
-                                  return { ...prev, guides: list };
-                                });
-                              }}
-                              placeholder="Mô tả chi tiết hành động hoặc hướng dẫn của bước..."
-                              style={{
-                                width: '100%',
-                                fontSize: '0.8rem',
-                                border: '1px solid #E2E8F0',
-                                borderRadius: '8px',
-                                padding: '10px',
-                                boxSizing: 'border-box',
-                                outline: 'none',
-                                fontFamily: 'inherit'
-                              }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })()
-                  ) : (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#94A3B8', fontStyle: 'italic', fontSize: '0.8rem' }}>
-                      Vui lòng chọn hoặc thêm một bước để chỉnh sửa thông tin đặc tả.
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '10px', marginBottom: '12px' }}>
-                    <span style={{ fontSize: '0.82rem', fontWeight: '800', color: '#2D1A12', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      Thông tin đặc tả
-                    </span>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#F1F5F9', padding: '2px', borderRadius: '8px' }}>
-                      {['Frontend', 'Luồng xử lý', 'Backend'].map(tab => {
-                        const modeMap = {
-                          'Frontend': 'blueprint',
-                          'Luồng xử lý': 'workflow',
-                          'Backend': 'cards'
-                        };
-                        const isActive = viewMode === modeMap[tab];
-                        return (
-                          <button
-                            key={tab}
-                            type="button"
-                            onClick={() => setViewMode(modeMap[tab])}
-                            style={{
-                              padding: '4px 12px',
-                              border: 'none',
-                              background: isActive ? '#fff' : 'transparent',
-                              color: isActive ? '#2D1A12' : '#64748B',
-                              borderRadius: '6px',
-                              fontSize: '0.72rem',
-                              fontWeight: '700',
-                              cursor: 'pointer',
-                              boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.05)' : 'none'
-                            }}
-                          >
-                            {tab === 'Backend' ? 'Backend ▾' : tab}
-                          </button>
-                        );
-                      })}
-                      <span style={{ padding: '0 6px', color: '#94A3B8', fontSize: '0.75rem' }}>v</span>
-                    </div>
-                  </div>
-
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.75rem', display: 'block', marginBottom: '6px' }}>Mô tả</label>
-                    <textarea
-                      rows="4"
-                      value={
-                        viewMode === 'blueprint' ? specDescriptions.Frontend :
-                          viewMode === 'workflow' ? specDescriptions['Luồng xử lý'] : specDescriptions.Backend
-                      }
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setSpecDescriptions(prev => {
-                          const next = { ...prev };
-                          if (viewMode === 'blueprint') next.Frontend = val;
-                          else if (viewMode === 'workflow') next['Luồng xử lý'] = val;
-                          else next.Backend = val;
-                          return next;
-                        });
-                      }}
-                      placeholder={
-                        viewMode === 'blueprint' ? 'Đặc tả chi tiết giao diện người dùng và cách bố trí các thành phần.' :
-                          viewMode === 'workflow' ? 'Đặc tả luồng nghiệp vụ, tương tác và xử lý dữ liệu của màn hình.' :
-                            'Đặc tả các API endpoint liên kết, dịch vụ và cấu trúc dữ liệu phía máy chủ.'
-                      }
-                      style={{
-                        width: '100%',
-                        fontSize: '0.8rem',
-                        border: '1px solid #E2E8F0',
-                        borderRadius: '8px',
-                        padding: '10px',
-                        boxSizing: 'border-box',
-                        outline: 'none',
-                        fontFamily: 'inherit'
-                      }}
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* 3. Bottom Card: Danh sách lỗi */}
-      {screen && (
-        <div className="bugs-inline-section card" style={{
-          marginTop: '20px',
-          border: '1px solid #E5E7EB',
-          borderRadius: '12px',
-          overflow: 'hidden',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-          backgroundColor: '#fff'
-        }}>
-          <div
-            className="bugs-section-header"
-            onClick={() => setIsBugListCollapsed(!isBugListCollapsed)}
-            style={{
-              padding: '12px 20px',
-              backgroundColor: '#FAF6F0',
-              borderBottom: '1px solid #E5E7EB',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              cursor: 'pointer',
-              userSelect: 'none'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '0.88rem', fontWeight: '800', color: '#2D1A12', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Danh sách lỗi</span>
-              <span style={{
-                fontSize: '0.72rem',
-                backgroundColor: '#7B5233',
-                color: '#fff',
-                padding: '2px 8px',
-                borderRadius: '10px',
-                fontWeight: 'bold'
-              }}>{(screen.bugs || []).length}</span>
-            </div>
-            <div style={{ transform: isBugListCollapsed ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.2s', display: 'flex', alignItems: 'center' }}>
-              <span style={{ marginRight: '6px', color: '#7B5233', fontSize: '0.75rem' }}>v</span>
-            </div>
+                        )}
+                      </>
+                    ) : (
+                      <div style={{ padding: '20px', textAlign: 'center', color: '#94A3B8', fontStyle: 'italic', fontSize: '0.8rem' }}>
+                        Vui lòng chọn hoặc thêm một thành phần để xem và sửa đổi thông tin đặc tả.
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
+        </div>
 
-          {!isBugListCollapsed && (
-            <div style={{ padding: '0 16px 16px 16px' }}>
-              {(!screen.bugs || screen.bugs.length === 0) ? (
-                <div style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontStyle: 'italic', fontSize: '0.8rem' }}>
-                  Không có báo cáo lỗi nào cho màn hình này.
-                </div>
-              ) : (
-                <div className="table-responsive" style={{ marginTop: '14px' }}>
-                  <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ backgroundColor: '#7B5233', color: '#fff' }}>
-                        <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>Mã</th>
-                        <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>Component</th>
-                        <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>Mô tả</th>
-                        <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>Mức độ</th>
-                        <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>Trạng thái</th>
-                        <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>Ngày cập nhật</th>
-                        <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>Người cập nhật</th>
-                        <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>Ngày ghi nhận</th>
-                        <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>THAO TÁC</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {screen.bugs.map((bug) => {
-                        const isBugExpanded = expandedBugId === bug.id;
-                        const parsed = parseDescription(bug.description);
-                        const severityColors = {
-                          'Critical': '#EF4444',
-                          'High': '#F97316',
-                          'Medium': '#D97706',
-                          'Low': '#10B981'
-                        };
-                        return (
-                          <React.Fragment key={bug.id}>
-                            <tr
-                              onClick={() => setExpandedBugId(isBugExpanded ? null : bug.id)}
-                              style={{
-                                cursor: 'pointer',
-                                backgroundColor: isBugExpanded ? '#FAF6F0' : undefined,
-                                position: 'relative',
-                                zIndex: activeBugMenu === bug.id ? 50 : 1
-                              }}
-                              className="clickable-row"
-                            >
-                              <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }} className="font-mono font-bold">BUG-{bug.id}</td>
-                              <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }} className="font-semibold">{parsed.tag || 'Chung'}</td>
-                              <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }}>{parsed.text}</td>
-                              <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }}>
-                                <span style={{ color: severityColors[bug.severity] || '#7B5233', fontWeight: 'bold' }}>
-                                  {bug.severity === 'Critical' ? 'Khẩn cấp' : (bug.severity === 'High' ? 'Cao' : (bug.severity === 'Medium' ? 'Trung bình' : 'Thấp'))}
-                                </span>
-                              </td>
-                              <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }}>
-                                <span className={`status-badge ${getBugStatusLabel(bug.status) === 'Hoàn thành'
-                                  ? 'status-resolved'
-                                  : (getBugStatusLabel(bug.status) === 'Đã sửa'
-                                    ? 'status-processing'
-                                    : 'status-new')
-                                  }`}>
-                                  {getBugStatusLabel(bug.status)}
-                                </span>
-                              </td>
-                              <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }}>{formatDate(bug.completed_at || bug.created_at)}</td>
-                              <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }}>{bug.assignee || '-'}</td>
-                              <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }}>{formatDate(bug.created_at)}</td>
-                              <td
+        {/* 3. Bottom Card: Danh sách lỗi */}
+        {screen && (
+          <div className="bugs-inline-section card" style={{
+            marginTop: '20px',
+            border: '1px solid #D1D5DB',
+            borderRadius: '12px',
+            overflow: 'hidden',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+            backgroundColor: '#fff'
+          }}>
+            <div
+              className="bugs-section-header"
+              onClick={() => setIsBugListCollapsed(!isBugListCollapsed)}
+              style={{
+                padding: '12px 20px',
+                backgroundColor: '#FAF6F0',
+                borderBottom: '1px solid #D1D5DB',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                cursor: 'pointer',
+                userSelect: 'none'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '0.88rem', fontWeight: '800', color: '#2D1A12', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Danh sách lỗi</span>
+                <span style={{
+                  fontSize: '0.72rem',
+                  backgroundColor: '#7B5233',
+                  color: '#fff',
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  fontWeight: 'bold'
+                }}>{(screen.bugs || []).length}</span>
+              </div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsBugListCollapsed(!isBugListCollapsed);
+                }}
+                style={{
+                  background: '#F1F5F9',
+                  border: 'none',
+                  color: '#64748B',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '6px',
+                  borderRadius: '8px',
+                  transition: 'all 0.2s',
+                  outline: 'none',
+                  width: '32px',
+                  height: '32px'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#E2E8F0';
+                  e.currentTarget.style.color = '#334155';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#F1F5F9';
+                  e.currentTarget.style.color = '#64748B';
+                }}
+              >
+                <ChevronDown
+                  size={18}
+                  style={{
+                    transform: isBugListCollapsed ? 'rotate(0deg)' : 'rotate(180deg)',
+                    transition: 'transform 0.2s',
+                    strokeWidth: 2.5
+                  }}
+                />
+              </button>
+            </div>
+
+            {!isBugListCollapsed && (
+              <div style={{ padding: '0 16px 16px 16px' }}>
+                {(!screen.bugs || screen.bugs.length === 0) ? (
+                  <div style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontStyle: 'italic', fontSize: '0.8rem' }}>
+                    Không có báo cáo lỗi nào cho màn hình này.
+                  </div>
+                ) : (
+                  <div className="table-responsive" style={{ marginTop: '14px' }}>
+                    <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#7B5233', color: '#fff' }}>
+                          <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #D1D5DB' }}>Mã</th>
+                          <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #D1D5DB' }}>Component</th>
+                          <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #D1D5DB' }}>Mô tả</th>
+                          <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #D1D5DB' }}>Mức độ</th>
+                          <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #D1D5DB' }}>Trạng thái</th>
+                          <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #D1D5DB' }}>Ngày cập nhật</th>
+                          <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #D1D5DB' }}>Người cập nhật</th>
+                          <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #D1D5DB' }}>Ngày ghi nhận</th>
+                          <th style={{ color: '#fff', padding: '10px', fontSize: '0.76rem', fontWeight: 'bold', border: '1px solid #D1D5DB' }}>THAO TÁC</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {screen.bugs.map((bug) => {
+                          const isBugExpanded = expandedBugId === bug.id;
+                          const parsed = parseDescription(bug.description);
+                          const severityColors = {
+                            'Critical': '#EF4444',
+                            'High': '#F97316',
+                            'Medium': '#D97706',
+                            'Low': '#10B981'
+                          };
+                          return (
+                            <React.Fragment key={bug.id}>
+                              <tr
+                                onClick={() => setExpandedBugId(isBugExpanded ? null : bug.id)}
                                 style={{
-                                  padding: '10px',
-                                  border: '1px solid #E5E7EB',
-                                  fontSize: '0.78rem',
-                                  textAlign: 'center',
+                                  cursor: 'pointer',
+                                  backgroundColor: isBugExpanded ? '#FAF6F0' : undefined,
                                   position: 'relative',
-                                  zIndex: activeBugMenu === bug.id ? 100 : 1
+                                  zIndex: activeBugMenu === bug.id ? 50 : 1
                                 }}
-                                onClick={(e) => e.stopPropagation()}
+                                className="clickable-row"
                               >
-                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', position: 'relative' }}>
-                                  <button
-                                    className="bug-action-btn"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (e.nativeEvent && e.nativeEvent.stopImmediatePropagation) {
-                                        e.nativeEvent.stopImmediatePropagation();
-                                      }
-                                      setActiveBugMenu(activeBugMenu === bug.id ? null : bug.id);
-                                    }}
-                                    title="Thao tác"
-                                    style={{
-                                      border: 'none',
-                                      background: 'none',
-                                      color: '#64748B',
-                                      cursor: 'pointer',
-                                      padding: '4px'
-                                    }}
-                                  >
-                                    <MoreVertical size={16} style={{ pointerEvents: 'none' }} />
-                                  </button>
-                                  {activeBugMenu === bug.id && (
-                                    <div className="action-menu" style={{
-                                      position: 'absolute',
-                                      right: 0,
-                                      top: '100%',
-                                      backgroundColor: 'white',
-                                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                                      borderRadius: '4px',
-                                      zIndex: 9999,
-                                      minWidth: '120px',
-                                      border: '1px solid #E2E8F0',
-                                      display: 'flex',
-                                      flexDirection: 'column',
-                                      opacity: 1,
-                                      animation: 'none'
-                                    }}>
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setActiveBugMenu(null);
-                                          handleOpenEditBugModal(bug);
-                                        }}
-                                        style={{
-                                          padding: '8px 12px',
-                                          textAlign: 'left',
-                                          background: 'none',
-                                          border: 'none',
-                                          borderBottom: '1px solid #E2E8F0',
-                                          cursor: 'pointer',
-                                          fontSize: '0.85rem',
-                                          color: '#7B5233',
-                                          fontWeight: '600'
-                                        }}
-                                      >
-                                        Chi tiết
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setActiveBugMenu(null);
-                                          handleDeleteBug(bug.id);
-                                        }}
-                                        style={{
-                                          padding: '8px 12px',
-                                          textAlign: 'left',
-                                          background: 'none',
-                                          border: 'none',
-                                          cursor: 'pointer',
-                                          fontSize: '0.85rem',
-                                          color: '#EF4444',
-                                          fontWeight: '600'
-                                        }}
-                                      >
-                                        Xóa
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-
-                            {/* Expandable details/replies */}
-                            {isBugExpanded && (
-                              <tr>
-                                <td colSpan={9} style={{ padding: '15px 25px', backgroundColor: '#FDFCFB', borderLeft: '4px solid #7B5233' }}>
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                      {/* 1. Always display the original bug report */}
-                                      <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                                        {/* Left: Original Screenshots */}
-                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                          {bug.images && bug.images.filter(img => !img.update_id).length > 0 ? (
-                                            bug.images.filter(img => !img.update_id).map((img, idx) => (
-                                              <div key={idx} style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px solid #EADCC9', overflow: 'hidden', backgroundColor: '#FAF6F0' }}>
-                                                <img src={getImageUrl(img.image_path)} alt="Bug spec" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onClick={() => window.open(getImageUrl(img.image_path), '_blank')} />
-                                              </div>
-                                            ))
-                                          ) : (
-                                            <div style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px dashed #EADCC9', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FAF6F0', color: '#A08070', fontSize: '0.75rem' }}>
-                                              Không có ảnh
-                                            </div>
-                                          )}
-                                        </div>
-                                        {/* Right: Text box */}
-                                        <div style={{ flex: 1, minWidth: '250px' }}>
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#8D6E63', fontWeight: 'bold', marginBottom: '4px' }}>
-                                            <span>Phản hồi từ [{getPositionByName(bug.reporter)} - {bug.reporter || 'Hệ thống'}]</span>
-                                            <span>{formatDate(bug.created_at)}</span>
-                                          </div>
-                                          <div style={{ padding: '12px 16px', borderRadius: '12px', border: '1px solid #EADCC9', backgroundColor: '#fff', fontSize: '0.82rem', color: '#2D1A12', minHeight: '38px' }}>
-                                            {parsed.text}
-                                          </div>
-                                        </div>
+                                <td style={{ padding: '10px', border: '1px solid #D1D5DB', fontSize: '0.78rem' }} className="font-mono font-bold">BUG-{bug.id}</td>
+                                <td style={{ padding: '10px', border: '1px solid #D1D5DB', fontSize: '0.78rem' }} className="font-semibold">{parsed.tag || 'Chung'}</td>
+                                <td style={{ padding: '10px', border: '1px solid #D1D5DB', fontSize: '0.78rem' }}>{parsed.text}</td>
+                                <td style={{ padding: '10px', border: '1px solid #D1D5DB', fontSize: '0.78rem' }}>
+                                  <span style={{ color: severityColors[bug.severity] || '#7B5233', fontWeight: 'bold' }}>
+                                    {bug.severity === 'Critical' ? 'Khẩn cấp' : (bug.severity === 'High' ? 'Cao' : (bug.severity === 'Medium' ? 'Trung bình' : 'Thấp'))}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '10px', border: '1px solid #D1D5DB', fontSize: '0.78rem' }}>
+                                  <span className={`status-badge ${getBugStatusLabel(bug.status) === 'Hoàn thành'
+                                    ? 'status-resolved'
+                                    : (getBugStatusLabel(bug.status) === 'Đã sửa'
+                                      ? 'status-processing'
+                                      : 'status-new')
+                                    }`}>
+                                    {getBugStatusLabel(bug.status)}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '10px', border: '1px solid #D1D5DB', fontSize: '0.78rem' }}>{formatDate(bug.completed_at || bug.created_at)}</td>
+                                <td style={{ padding: '10px', border: '1px solid #D1D5DB', fontSize: '0.78rem' }}>{bug.assignee || '-'}</td>
+                                <td style={{ padding: '10px', border: '1px solid #D1D5DB', fontSize: '0.78rem' }}>{formatDate(bug.created_at)}</td>
+                                <td
+                                  style={{
+                                    padding: '10px',
+                                    border: '1px solid #D1D5DB',
+                                    fontSize: '0.78rem',
+                                    textAlign: 'center',
+                                    position: 'relative',
+                                    zIndex: activeBugMenu === bug.id ? 100 : 1
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', position: 'relative' }}>
+                                    <button
+                                      className="bug-action-btn"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (e.nativeEvent && e.nativeEvent.stopImmediatePropagation) {
+                                          e.nativeEvent.stopImmediatePropagation();
+                                        }
+                                        setActiveBugMenu(activeBugMenu === bug.id ? null : bug.id);
+                                      }}
+                                      title="Thao tác"
+                                      style={{
+                                        border: 'none',
+                                        background: 'none',
+                                        color: '#64748B',
+                                        cursor: 'pointer',
+                                        padding: '4px'
+                                      }}
+                                    >
+                                      <MoreVertical size={16} style={{ pointerEvents: 'none' }} />
+                                    </button>
+                                    {activeBugMenu === bug.id && (
+                                      <div className="action-menu" style={{
+                                        position: 'absolute',
+                                        right: 0,
+                                        top: '100%',
+                                        backgroundColor: 'white',
+                                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                                        borderRadius: '4px',
+                                        zIndex: 9999,
+                                        minWidth: '120px',
+                                        border: '1px solid #E2E8F0',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        opacity: 1,
+                                        animation: 'none'
+                                      }}>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setActiveBugMenu(null);
+                                            handleOpenEditBugModal(bug);
+                                          }}
+                                          style={{
+                                            padding: '8px 12px',
+                                            textAlign: 'left',
+                                            background: 'none',
+                                            border: 'none',
+                                            borderBottom: '1px solid #E2E8F0',
+                                            cursor: 'pointer',
+                                            fontSize: '0.85rem',
+                                            color: '#7B5233',
+                                            fontWeight: '600'
+                                          }}
+                                        >
+                                          Chi tiết
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setActiveBugMenu(null);
+                                            handleDeleteBug(bug.id);
+                                          }}
+                                          style={{
+                                            padding: '8px 12px',
+                                            textAlign: 'left',
+                                            background: 'none',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            fontSize: '0.85rem',
+                                            color: '#EF4444',
+                                            fontWeight: '600'
+                                          }}
+                                        >
+                                          Xóa
+                                        </button>
                                       </div>
-
-                                      {/* 2. Display all updates / replies below it */}
-                                      {bug.updates && bug.updates.length > 0 && (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', borderTop: '1px dashed #FAF0E6', paddingTop: '16px' }}>
-                                          {bug.updates.map((update, uIdx) => (
-                                            <div key={uIdx} style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap', borderBottom: uIdx < bug.updates.length - 1 ? '1px dashed #FAF0E6' : 'none', paddingBottom: '12px' }}>
-                                              {/* Left: update screenshot proof */}
-                                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                                {update.images && update.images.length > 0 ? (
-                                                  update.images.map((img, idx) => (
-                                                    <div key={idx} style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px solid #EADCC9', overflow: 'hidden', backgroundColor: '#FAF6F0' }}>
-                                                      <img src={getImageUrl(img.image_path)} alt="Bug update" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onClick={() => window.open(getImageUrl(img.image_path), '_blank')} />
-                                                    </div>
-                                                  ))
-                                                ) : (
-                                                  <div style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px dashed #EADCC9', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FAF6F0', color: '#A08070', fontSize: '0.75rem' }}>
-                                                    Không có ảnh
-                                                  </div>
-                                                )}
-                                              </div>
-                                              {/* Right: update notes */}
-                                              <div style={{ flex: 1, minWidth: '250px' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#8D6E63', fontWeight: 'bold', marginBottom: '4px' }}>
-                                                  <span>Phản hồi từ [{getPositionByName(update.updater)} - {update.updater || 'QC'}]</span>
-                                                  <span>{formatDate(update.created_at)}</span>
-                                                </div>
-                                                <div style={{ padding: '12px 16px', borderRadius: '12px', border: '1px solid #EADCC9', backgroundColor: '#fff', fontSize: '0.82rem', color: '#2D1A12', minHeight: '38px' }}>
-                                                  {update.notes || <span style={{ color: '#999', fontStyle: 'italic' }}>Không có nội dung phản hồi.</span>}
-                                                </div>
-                                              </div>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
+                                    )}
                                   </div>
                                 </td>
                               </tr>
-                            )}
-                          </React.Fragment>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+
+                              {/* Expandable details/replies */}
+                              {isBugExpanded && (
+                                <tr>
+                                  <td colSpan={9} style={{ padding: '15px 25px', backgroundColor: '#FDFCFB', borderLeft: '4px solid #7B5233' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                        {/* 1. Always display the original bug report */}
+                                        <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                                          {/* Left: Original Screenshots */}
+                                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                            {bug.images && bug.images.filter(img => !img.update_id).length > 0 ? (
+                                              bug.images.filter(img => !img.update_id).map((img, idx) => (
+                                                <div key={idx} style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px solid #EADCC9', overflow: 'hidden', backgroundColor: '#FAF6F0' }}>
+                                                  <img src={getImageUrl(img.image_path)} alt="Bug spec" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onClick={() => window.open(getImageUrl(img.image_path), '_blank')} />
+                                                </div>
+                                              ))
+                                            ) : (
+                                              <div style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px dashed #EADCC9', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FAF6F0', color: '#A08070', fontSize: '0.75rem' }}>
+                                                Không có ảnh
+                                              </div>
+                                            )}
+                                          </div>
+                                          {/* Right: Text box */}
+                                          <div style={{ flex: 1, minWidth: '250px' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#8D6E63', fontWeight: 'bold', marginBottom: '4px' }}>
+                                              <span>Phản hồi từ [{getPositionByName(bug.reporter)} - {bug.reporter || 'Hệ thống'}]</span>
+                                              <span>{formatDate(bug.created_at)}</span>
+                                            </div>
+                                            <div style={{ padding: '12px 16px', borderRadius: '12px', border: '1px solid #EADCC9', backgroundColor: '#fff', fontSize: '0.82rem', color: '#2D1A12', minHeight: '38px' }}>
+                                              {parsed.text}
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        {/* 2. Display all updates / replies below it */}
+                                        {bug.updates && bug.updates.length > 0 && (
+                                          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', borderTop: '1px dashed #FAF0E6', paddingTop: '16px' }}>
+                                            {bug.updates.map((update, uIdx) => (
+                                              <div key={uIdx} style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap', borderBottom: uIdx < bug.updates.length - 1 ? '1px dashed #FAF0E6' : 'none', paddingBottom: '12px' }}>
+                                                {/* Left: update screenshot proof */}
+                                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                  {update.images && update.images.length > 0 ? (
+                                                    update.images.map((img, idx) => (
+                                                      <div key={idx} style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px solid #EADCC9', overflow: 'hidden', backgroundColor: '#FAF6F0' }}>
+                                                        <img src={getImageUrl(img.image_path)} alt="Bug update" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onClick={() => window.open(getImageUrl(img.image_path), '_blank')} />
+                                                      </div>
+                                                    ))
+                                                  ) : (
+                                                    <div style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px dashed #EADCC9', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FAF6F0', color: '#A08070', fontSize: '0.75rem' }}>
+                                                      Không có ảnh
+                                                    </div>
+                                                  )}
+                                                </div>
+                                                {/* Right: update notes */}
+                                                <div style={{ flex: 1, minWidth: '250px' }}>
+                                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#8D6E63', fontWeight: 'bold', marginBottom: '4px' }}>
+                                                    <span>Phản hồi từ [{getPositionByName(update.updater)} - {update.updater || 'QC'}]</span>
+                                                    <span>{formatDate(update.created_at)}</span>
+                                                  </div>
+                                                  <div style={{ padding: '12px 16px', borderRadius: '12px', border: '1px solid #EADCC9', backgroundColor: '#fff', fontSize: '0.82rem', color: '#2D1A12', minHeight: '38px' }}>
+                                                    {update.notes || <span style={{ color: '#999', fontStyle: 'italic' }}>Không có nội dung phản hồi.</span>}
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
       {/* HD05: Add Component Modal popup */}
       {showAddComponentModal && (
         <div className="hd05-modal-overlay-custom" style={{
@@ -3832,18 +5575,21 @@ const ScreenDetail = () => {
         }}>
           <div className="hd05-modal-container-custom" style={{
             background: '#ffffff',
-            padding: '28px',
+            padding: '24px 28px',
             borderRadius: '16px',
             width: '600px',
             maxWidth: '100%',
+            maxHeight: 'calc(100vh - 40px)',
+            display: 'flex',
+            flexDirection: 'column',
             boxShadow: '0 10px 30px rgba(0, 0, 0, 0.25)',
             border: '1px solid #E2E8F0',
             fontFamily: "'Outfit', sans-serif"
           }}>
             {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexShrink: 0 }}>
               <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '800', color: '#111827' }}>
-                HD05: Thêm thành phần
+                {editingComponent ? 'HD05: Chỉnh sửa thành phần' : 'HD05: Thêm thành phần'}
               </h3>
               <button
                 type="button"
@@ -3855,7 +5601,7 @@ const ScreenDetail = () => {
             </div>
 
             {/* Form */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto', flex: 1, paddingRight: '8px', marginBottom: '18px' }}>
               {/* Row 1: Name and Type */}
               <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '16px' }}>
                 <div className="form-group" style={{ margin: 0 }}>
@@ -3867,7 +5613,7 @@ const ScreenDetail = () => {
                     value={newComponentName}
                     onChange={(e) => setNewComponentName(e.target.value)}
                     placeholder="Nhập tên thành phần..."
-                    style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: '8px', padding: '10px 14px', fontSize: '0.84rem', boxSizing: 'border-box', outline: 'none' }}
+                    style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: '8px', padding: '10px 14px', fontSize: '0.84rem', boxSizing: 'border-box', outline: 'none', backgroundColor: '#ffffff' }}
                   />
                 </div>
 
@@ -3973,62 +5719,160 @@ const ScreenDetail = () => {
                       </div>
                     </>
                   )}
-                  <div style={{ fontSize: '0.74rem', color: '#8D6E63', marginTop: '6px', fontStyle: 'italic', lineHeight: '1.2' }}>
-                    {newComponentType === 'Button' && '💡 Gợi ý: Nút bấm kích hoạt hành động.'}
-                    {newComponentType === 'Input Field' && '💡 Gợi ý: Ô nhập dữ liệu văn bản.'}
-                    {newComponentType === 'Checkbox / Radio' && '💡 Gợi ý: Hộp chọn một hoặc nhiều mục.'}
-                    {newComponentType === 'Dropdown / Select' && '💡 Gợi ý: Menu danh sách thả xuống.'}
-                    {newComponentType === 'Modal / Dialog' && '💡 Gợi ý: Cửa sổ thông báo bật lên.'}
-                    {newComponentType === 'Navbar / Sidebar' && '💡 Gợi ý: Thanh điều hướng trang web.'}
-                    {newComponentType === 'Card' && '💡 Gợi ý: Thẻ chứa hình ảnh và thông tin.'}
-                    {newComponentType === 'Table' && '💡 Gợi ý: Bảng hiển thị dữ liệu cột.'}
-                    {newComponentType === 'Carousel / Slider' && '💡 Gợi ý: Trình trình chiếu ảnh chạy qua lại.'}
-                    {newComponentType === 'Toast / Alert' && '💡 Gợi ý: Thanh thông báo nhanh góc màn hình.'}
-                    {newComponentType === 'Khác' && '💡 Gợi ý: Không tồn tại trong các sự lựa chọn trên.'}
-                  </div>
                 </div>
               </div>
 
-              {/* Row 2: Frontend Spec */}
+              {/* Row 2: Button ID & Export Mode grouped in grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', flexShrink: 0 }}>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label style={{ fontWeight: '700', color: '#374151', fontSize: '0.82rem', display: 'block', marginBottom: '6px' }}>
+                    Tên ID nút
+                  </label>
+                  <input
+                    type="text"
+                    value={newComponentButtonId}
+                    onChange={(e) => setNewComponentButtonId(e.target.value)}
+                    placeholder="Nhập id/tên định danh của nút..."
+                    style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: '8px', padding: '10px 14px', fontSize: '0.84rem', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit', backgroundColor: '#ffffff' }}
+                  />
+                </div>
+
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label style={{ fontWeight: '700', color: '#374151', fontSize: '0.82rem', display: 'block', marginBottom: '6px' }}>
+                    Chế độ xuất dữ liệu
+                  </label>
+                  <select
+                    value={newComponentExportMode}
+                    onChange={(e) => setNewComponentExportMode(e.target.value)}
+                    style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: '8px', padding: '10px 14px', fontSize: '0.84rem', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit', backgroundColor: '#ffffff' }}
+                  >
+                    <option value="list">Danh sách (List)</option>
+                    <option value="single">Một bản ghi (Single)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Row 3: Frontend Spec */}
               <div className="form-group" style={{ margin: 0 }}>
                 <label style={{ fontWeight: '700', color: '#374151', fontSize: '0.82rem', display: 'block', marginBottom: '6px' }}>
                   Đặc tả Frontend
                 </label>
                 <textarea
-                  rows="3"
+                  rows="2"
                   value={newComponentFrontend}
                   onChange={(e) => setNewComponentFrontend(e.target.value)}
                   placeholder="Mô tả cấu trúc hiển thị, giao diện của thành phần..."
-                  style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: '8px', padding: '10px 14px', fontSize: '0.84rem', boxSizing: 'border-box', outline: 'none', resize: 'vertical', fontFamily: 'inherit' }}
+                  style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: '8px', padding: '10px 14px', fontSize: '0.84rem', boxSizing: 'border-box', outline: 'none', resize: 'vertical', fontFamily: 'inherit', backgroundColor: '#ffffff' }}
                 />
               </div>
 
-              {/* Row 3: Workflow Spec */}
+              {/* Row 4: Workflow Spec */}
               <div className="form-group" style={{ margin: 0 }}>
                 <label style={{ fontWeight: '700', color: '#374151', fontSize: '0.82rem', display: 'block', marginBottom: '6px' }}>
                   Luồng xử lý/Điều kiện
                 </label>
                 <textarea
-                  rows="3"
+                  rows="2"
                   value={newComponentWorkflow}
                   onChange={(e) => setNewComponentWorkflow(e.target.value)}
                   placeholder="Mô tả các điều kiện kiểm tra, kịch bản tương tác và luồng nghiệp vụ..."
-                  style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: '8px', padding: '10px 14px', fontSize: '0.84rem', boxSizing: 'border-box', outline: 'none', resize: 'vertical', fontFamily: 'inherit' }}
+                  style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: '8px', padding: '10px 14px', fontSize: '0.84rem', boxSizing: 'border-box', outline: 'none', resize: 'vertical', fontFamily: 'inherit', backgroundColor: '#ffffff' }}
                 />
               </div>
 
-              {/* Row 4: Backend Spec */}
+              {/* Row 5: Backend Spec */}
               <div className="form-group" style={{ margin: 0 }}>
                 <label style={{ fontWeight: '700', color: '#374151', fontSize: '0.82rem', display: 'block', marginBottom: '6px' }}>
                   Đặc tả Backend
                 </label>
                 <textarea
-                  rows="3"
+                  rows="2"
                   value={newComponentBackend}
                   onChange={(e) => setNewComponentBackend(e.target.value)}
                   placeholder="Mô tả API Endpoint cần gọi, tham số request/response và logic xử lý server..."
-                  style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: '8px', padding: '10px 14px', fontSize: '0.84rem', boxSizing: 'border-box', outline: 'none', resize: 'vertical', fontFamily: 'inherit' }}
+                  style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: '8px', padding: '10px 14px', fontSize: '0.84rem', boxSizing: 'border-box', outline: 'none', resize: 'vertical', fontFamily: 'inherit', backgroundColor: '#ffffff' }}
                 />
+              </div>
+
+              {/* Row 6: Sample File Upload */}
+              <div className="form-group" style={{ margin: 0 }}>
+                <label style={{ fontWeight: '700', color: '#374151', fontSize: '0.82rem', display: 'block', marginBottom: '8px' }}>
+                  File mẫu
+                </label>
+                <input
+                  type="file"
+                  ref={sampleFileInputRef}
+                  multiple
+                  accept=".doc,.docx,.xls,.xlsx,.pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf"
+                  onChange={handleSampleFileChange}
+                  disabled={isUploadingSample}
+                  style={{ display: 'none' }}
+                />
+
+                <div
+                  onClick={() => !isUploadingSample && sampleFileInputRef.current && sampleFileInputRef.current.click()}
+                  style={{
+                    border: '2px dashed #D1D5DB',
+                    borderRadius: '10px',
+                    padding: '22px 16px',
+                    textAlign: 'center',
+                    cursor: isUploadingSample ? 'not-allowed' : 'pointer',
+                    background: isUploadingSample ? '#F9FAFB' : '#fff',
+                    transition: 'all 0.2s ease',
+                    marginBottom: '8px'
+                  }}
+                  onMouseEnter={(e) => { if (!isUploadingSample) { e.currentTarget.style.borderColor = '#7B5233'; e.currentTarget.style.background = '#FDFBF7'; } }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#D1D5DB'; e.currentTarget.style.background = isUploadingSample ? '#F9FAFB' : '#fff'; }}
+                >
+                  <Upload size={28} style={{ color: '#7B5233', marginBottom: '8px' }} />
+                  <div style={{ fontSize: '0.84rem', color: '#374151', fontWeight: 600, marginBottom: '4px' }}>
+                    Nhấn để chọn file mẫu (Có thể chọn nhiều file)
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#9CA3AF' }}>
+                    Word (.doc, .docx), Excel (.xls, .xlsx), PDF (.pdf)
+                  </div>
+                </div>
+
+                {isUploadingSample && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '14px', border: '1px solid #F3E8D8', borderRadius: '10px', background: '#FDFBF7', color: '#7B5233', fontSize: '0.84rem', marginBottom: '8px' }}>
+                    <div style={{ width: '18px', height: '18px', border: '2px solid #D1B99D', borderTopColor: '#7B5233', borderRadius: '50%' }} />
+                    <span>Đang tải lên file mẫu...</span>
+                  </div>
+                )}
+
+                {newComponentSampleFileUrl && !isUploadingSample && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {newComponentSampleFileUrl.split(',').filter(Boolean).map((fileUrl, index) => (
+                      <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', border: '1px solid #D1D5DB', borderRadius: '10px', background: '#F9FAFB' }}>
+                        <FileText size={22} style={{ color: '#7B5233', flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <a
+                            href={`${getBaseURL()}${fileUrl}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ display: 'block', fontSize: '0.82rem', color: '#7B5233', fontWeight: 600, textDecoration: 'underline', wordBreak: 'break-all', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          >
+                            {fileUrl.split('/').pop()}
+                          </a>
+                          <div style={{ fontSize: '0.72rem', color: '#9CA3AF', marginTop: '2px' }}>
+                            Đã tải lên thành công
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const remaining = newComponentSampleFileUrl.split(',').filter(Boolean).filter((_, i) => i !== index).join(',');
+                            setNewComponentSampleFileUrl(remaining);
+                          }}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '30px', height: '30px', borderRadius: '8px', border: 'none', background: '#FEE2E2', color: '#EF4444', cursor: 'pointer' }}
+                          title="Xóa file mẫu"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -4044,11 +5888,217 @@ const ScreenDetail = () => {
               <button
                 type="button"
                 onClick={confirmAddComponent}
-                style={{ padding: '10px 24px', border: 'none', borderRadius: '8px', fontSize: '0.84rem', cursor: 'pointer', background: '#4A2E20', color: '#fff', fontWeight: 'bold' }}
+                disabled={isUploadingSample}
+                style={{ padding: '10px 24px', border: 'none', borderRadius: '8px', fontSize: '0.84rem', cursor: isUploadingSample ? 'not-allowed' : 'pointer', background: '#4A2E20', color: '#fff', fontWeight: 'bold', opacity: isUploadingSample ? 0.6 : 1 }}
               >
-                Tạo mới
+                {isUploadingSample ? 'Đang tải file...' : (editingComponent ? 'Cập nhật' : 'Tạo mới')}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Blocker Modal Dialog */}
+      {showBlockerModal && (
+        <div style={{
+          zIndex: 100000,
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          backdropFilter: 'blur(3px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px'
+        }}>
+          <div style={{
+            background: '#ffffff',
+            padding: '24px',
+            borderRadius: '16px',
+            width: '450px',
+            maxWidth: '100%',
+            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.25)',
+            border: '1px solid #E2E8F0',
+            fontFamily: "'Outfit', sans-serif"
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <span style={{ fontSize: '1.8rem' }}>⚠️</span>
+              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: '800', color: '#1E293B' }}>
+                Thay đổi chưa được lưu
+              </h3>
+            </div>
+
+            {/* Description */}
+            <p style={{ margin: '0 0 24px 0', fontSize: '0.88rem', color: '#64748B', lineHeight: '1.5' }}>
+              Bạn đang rời khỏi trang khi chưa lưu đặc tả. Bạn có muốn lưu các thay đổi này trước khi rời đi không?
+            </p>
+
+            {/* Footer Buttons */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={handleCancelLeave}
+                style={{
+                  padding: '8px 16px',
+                  border: '1px solid #D1D5DB',
+                  borderRadius: '8px',
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  background: '#fff',
+                  color: '#475569',
+                  fontWeight: '600'
+                }}
+              >
+                Hủy (Ở lại)
+              </button>
+              <button
+                type="button"
+                onClick={handleDiscardAndLeave}
+                style={{
+                  padding: '8px 16px',
+                  border: '1px solid #FCA5A5',
+                  borderRadius: '8px',
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  background: '#FFF5F5',
+                  color: '#EF4444',
+                  fontWeight: '600'
+                }}
+              >
+                Rời đi không lưu
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveAndLeave}
+                style={{
+                  padding: '8px 16px',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  background: '#7B5233',
+                  color: '#fff',
+                  fontWeight: '700'
+                }}
+              >
+                Lưu và rời đi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Zoom Modal for Mockup */}
+      {showZoomModal && screen.mockup_path && (
+        <div style={{
+          zIndex: 100000,
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.85)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          userSelect: 'none'
+        }}>
+          {/* Controls toolbar */}
+          <div style={{
+            position: 'absolute',
+            top: '20px',
+            right: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            zIndex: 100001
+          }}>
+            <button
+              type="button"
+              onClick={handleZoomIn}
+              style={{ width: '36px', height: '36px', borderRadius: '8px', border: 'none', background: '#33221A', color: '#fff', fontSize: '1.2rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}
+              title="Phóng to"
+            >
+              +
+            </button>
+            <button
+              type="button"
+              onClick={handleZoomOut}
+              style={{ width: '36px', height: '36px', borderRadius: '8px', border: 'none', background: '#33221A', color: '#fff', fontSize: '1.2rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}
+              title="Thu nhỏ"
+            >
+              -
+            </button>
+            <button
+              type="button"
+              onClick={handleZoomReset}
+              style={{ padding: '0 12px', height: '36px', borderRadius: '8px', border: 'none', background: '#33221A', color: '#fff', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}
+              title="Đặt lại zoom"
+            >
+              Đặt lại ({(zoomScale * 100).toFixed(0)}%)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowZoomModal(false);
+                handleZoomReset();
+              }}
+              style={{ width: '36px', height: '36px', borderRadius: '8px', border: 'none', background: '#EF4444', color: '#fff', fontSize: '1.2rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}
+              title="Đóng"
+            >
+              &times;
+            </button>
+          </div>
+
+          {/* Drag instructions */}
+          <div style={{
+            position: 'absolute',
+            bottom: '20px',
+            color: '#CBD5E1',
+            fontSize: '0.82rem',
+            background: 'rgba(0, 0, 0, 0.6)',
+            padding: '6px 12px',
+            borderRadius: '6px',
+            zIndex: 100001,
+            pointerEvents: 'none'
+          }}>
+            Lăn chuột để phóng to/thu nhỏ. Nhấp chuột và kéo để di chuyển ảnh.
+          </div>
+
+          {/* Image display wrapper */}
+          <div
+            style={{
+              width: '95vw',
+              height: '95vh',
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: zoomScale > 1 ? (isPanning ? 'grabbing' : 'grab') : 'zoom-in'
+            }}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onWheel={handleWheel}
+          >
+            <img
+              src={getImageUrl(screen.mockup_path.split(',').filter(Boolean)[currentMockupIdx])}
+              alt="Zoomed mockup"
+              style={{
+                maxWidth: '90vw',
+                maxHeight: '90vh',
+                objectFit: 'contain',
+                transform: `scale(${zoomScale}) translate(${zoomOffset.x / zoomScale}px, ${zoomOffset.y / zoomScale}px)`,
+                transition: isPanning ? 'none' : 'transform 0.15s ease-out',
+                pointerEvents: 'none' // Prevents browser default drag-and-drop on image
+              }}
+            />
           </div>
         </div>
       )}
@@ -4064,12 +6114,11 @@ const ScreenDetail = () => {
   padding: 0;
   font-family: 'Outfit', 'Inter', sans-serif;
   color: #2D1A12;
-  min-height: auto;
+  box-sizing: border-box;
 }
 
-/* Thu nhỏ padding của container chính trên trang này để khít viewport */
-.dashboard-content:has(.detail-container) {
-  padding: 15px 20px !important;
+.detail-scroll-body {
+  width: 100%;
 }
 
 .fade-in {
@@ -4543,11 +6592,8 @@ const ScreenDetail = () => {
 .detail-layout-grid .detail-inspector-pane {
   height: calc(100vh - 240px);
   min-height: 480px;
-}
-
-.detail-layout-grid .detail-simulator-pane {
   position: sticky;
-  top: 90px;
+  top: 150px;
 }
 
 /* RESPONSIVE CO DÃN KHI TRÌNH DUYỆT BỊ THU NHỎ */
@@ -6171,19 +8217,6 @@ const ScreenDetail = () => {
     display: flex !important;
   }
 
-  /* Make page fit screen without global scroll */
-  .dashboard-content:has(.detail-container) {
-    padding: 8px 10px !important;
-    height: calc(100vh - 64px) !important;
-    overflow: hidden !important;
-  }
-
-  .detail-container {
-    height: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-    overflow: hidden !important;
-  }
 
   /* Hide auto-sync banner or make it extremely compact on mobile */
   .auto-sync-banner {
@@ -6408,7 +8441,7 @@ const ScreenDetail = () => {
               justifyContent: 'space-between',
               alignItems: 'center',
               padding: '16px 24px',
-              borderBottom: '1px solid #F1F5F9'
+              borderBottom: '1px solid #CBD5E1'
             }}>
               <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 'bold', color: '#2D1A12' }}>
                 {bugModalMode === 'edit' ? `HD04: Chi tiết lỗi BUG-${bugModalData.id}` : `${screen?.current_code || 'AD'}: Khai báo lỗi`}
@@ -6450,38 +8483,110 @@ const ScreenDetail = () => {
                   <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Trạng thái</label>
                   {bugModalMode === 'edit' ? (
                     (() => {
-                      const currentStatus = getBugStatusLabel(bugModalData.status);
-                      if (currentStatus === 'Mới' || currentStatus === 'Sửa lại') {
+                      const activeStatusLabel = getBugStatusLabel(replyStatusVal || bugModalData.status);
+                      if (activeStatusLabel === 'Mới' || activeStatusLabel === 'Sửa lại') {
                         return (
-                          <select
-                            value={replyStatusVal || ''}
-                            onChange={(e) => setReplyStatusVal(e.target.value)}
-                            style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: '#fff', color: '#334155', fontWeight: '500', boxSizing: 'border-box', height: '36px', cursor: 'pointer' }}
-                          >
-                            <option value="">{currentStatus} (Hiện tại)</option>
-                            <option value="Đã sửa">Xác nhận đã sửa (Đã sửa)</option>
-                          </select>
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            backgroundColor: '#E5E7EB',
+                            borderRadius: '8px',
+                            padding: '4px 12px',
+                            border: '1px solid #CBD5E1',
+                            height: '36px',
+                            boxSizing: 'border-box',
+                            width: '100%'
+                          }}>
+                            <span style={{ fontSize: '0.82rem', color: '#334155', fontWeight: 'bold' }}>{activeStatusLabel}</span>
+                            <button
+                              type="button"
+                              onClick={() => setReplyStatusVal('Đã sửa')}
+                              style={{
+                                backgroundColor: '#4A2E20',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '6px',
+                                padding: '4px 12px',
+                                fontWeight: 'bold',
+                                fontSize: '0.78rem',
+                                cursor: 'pointer',
+                                transition: 'background-color 0.15s'
+                              }}
+                            >
+                              Xác nhận
+                            </button>
+                          </div>
                         );
-                      } else if (currentStatus === 'Đã sửa') {
+                      } else if (activeStatusLabel === 'Đã sửa') {
                         return (
-                          <select
-                            value={replyStatusVal || ''}
-                            onChange={(e) => setReplyStatusVal(e.target.value)}
-                            style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: '#fff', color: '#334155', fontWeight: '500', boxSizing: 'border-box', height: '36px', cursor: 'pointer' }}
-                          >
-                            <option value="">Đã sửa (Hiện tại)</option>
-                            <option value="Hoàn thành">Xác nhận (Hoàn thành)</option>
-                            <option value="Sửa lại">Từ chối (Sửa lại)</option>
-                          </select>
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            backgroundColor: '#E5E7EB',
+                            borderRadius: '8px',
+                            padding: '4px 12px',
+                            border: '1px solid #CBD5E1',
+                            height: '36px',
+                            boxSizing: 'border-box',
+                            width: '100%'
+                          }}>
+                            <span style={{ fontSize: '0.82rem', color: '#334155', fontWeight: 'bold' }}>Đã sửa</span>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button
+                                type="button"
+                                onClick={() => setReplyStatusVal('Sửa lại')}
+                                style={{
+                                  backgroundColor: '#fff',
+                                  color: '#475569',
+                                  border: '1px solid #CBD5E1',
+                                  borderRadius: '6px',
+                                  padding: '4px 12px',
+                                  fontWeight: 'bold',
+                                  fontSize: '0.78rem',
+                                  cursor: 'pointer',
+                                  transition: 'background-color 0.15s'
+                                }}
+                              >
+                                Từ chối
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setReplyStatusVal('Hoàn thành')}
+                                style={{
+                                  backgroundColor: '#4A2E20',
+                                  color: '#fff',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  padding: '4px 12px',
+                                  fontWeight: 'bold',
+                                  fontSize: '0.78rem',
+                                  cursor: 'pointer',
+                                  transition: 'background-color 0.15s'
+                                }}
+                              >
+                                Xác nhận
+                              </button>
+                            </div>
+                          </div>
                         );
                       } else {
                         return (
-                          <input
-                            type="text"
-                            value={currentStatus}
-                            disabled
-                            style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: '#F1F5F9', color: '#64748B', fontWeight: '500', boxSizing: 'border-box', height: '36px' }}
-                          />
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            backgroundColor: '#F1F5F9',
+                            borderRadius: '8px',
+                            padding: '4px 12px',
+                            border: '1px solid #E2E8F0',
+                            height: '36px',
+                            boxSizing: 'border-box',
+                            width: '100%'
+                          }}>
+                            <span style={{ fontSize: '0.82rem', color: '#64748B', fontWeight: 'bold' }}>{activeStatusLabel}</span>
+                          </div>
                         );
                       }
                     })()
@@ -6530,67 +8635,21 @@ const ScreenDetail = () => {
 
               {/* Row 3: Mô tả lỗi */}
               <div className="form-group" style={{ margin: 0 }}>
-                <label className="required" style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>
+                <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>
                   Mô tả lỗi
-                  <span style={{ fontSize: '0.7rem', color: '#9CA3AF', fontWeight: 'normal', marginLeft: '8px' }}>
-                    💡 Có thể dán ảnh trực tiếp (Ctrl+V)
-                  </span>
                 </label>
                 <textarea
                   value={bugModalData.description}
                   onChange={(e) => setBugModalData(prev => ({ ...prev, description: e.target.value }))}
                   onPaste={handlePasteBugModal}
                   placeholder="Mô tả chi tiết hành vi lỗi hoặc sự khác biệt so với đặc tả... (Có thể dán ảnh bằng Ctrl+V)"
-                  required
                   disabled={bugModalMode === 'edit'}
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', color: bugModalMode === 'edit' ? '#64748B' : '#334155', backgroundColor: bugModalMode === 'edit' ? '#F1F5F9' : '#fff', boxSizing: 'border-box', minHeight: '60px', fontFamily: 'inherit', outline: 'none' }}
                 />
               </div>
 
-              {/* Row 4: Image Upload Zone & Preview List */}
+              {/* Row 4: Image Preview List (No selector box) */}
               <div className="form-group" style={{ margin: 0 }}>
-                {bugModalMode !== 'edit' && (
-                  <>
-                    <input
-                      type="file"
-                      id="bug-image-upload"
-                      accept="image/*"
-                      multiple
-                      onChange={handleBugImageUpload}
-                      style={{ display: 'none' }}
-                    />
-                    <div
-                      onClick={() => {
-                        document.getElementById('bug-image-upload').click();
-                      }}
-                      style={{
-                        width: '100%',
-                        height: '110px',
-                        border: '2px dashed #E2E8F0',
-                        borderRadius: '12px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: '#F8FAFC',
-                        cursor: 'pointer',
-                        overflow: 'hidden',
-                        position: 'relative',
-                        marginBottom: '10px'
-                      }}
-                    >
-                      {bugImageUploading ? (
-                        <span style={{ fontSize: '0.82rem', color: '#64748B' }}>Đang tải ảnh lên...</span>
-                      ) : (
-                        <>
-                          <span style={{ fontSize: '2rem', color: '#CBD5E1', marginBottom: '4px' }}>🖼️</span>
-                          <span style={{ fontSize: '0.78rem', color: '#64748B', fontWeight: 'bold' }}>Thêm hình ảnh lỗi</span>
-                          <span style={{ fontSize: '0.7rem', color: '#94A3B8', marginTop: '2px' }}>Hỗ trợ JPG, PNG (chọn nhiều / dán Ctrl+V)</span>
-                        </>
-                      )}
-                    </div>
-                  </>
-                )}
 
                 {/* Preview / Existing images list */}
                 {bugModalData.imagePaths && bugModalData.imagePaths.length > 0 && (
@@ -6702,23 +8761,19 @@ const ScreenDetail = () => {
                 </div>
               </div>
 
-              {/* Row 7 & 8: Phản hồi & Cập nhật trạng thái / Ảnh */}
-              {bugModalMode === 'edit' ? (
+              {/* Row 7 & 8: Phản hồi & Cập nhật trạng thái / Ảnh (Chỉ hiện khi edit và không bắt buộc) */}
+              {bugModalMode === 'edit' && (
                 <>
-                  {/* Phản hồi * */}
+                  {/* Phản hồi */}
                   <div className="form-group" style={{ margin: 0 }}>
-                    <label className="required" style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>
+                    <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>
                       Phản hồi
-                      <span style={{ fontSize: '0.7rem', color: '#9CA3AF', fontWeight: 'normal', marginLeft: '8px' }}>
-                        💡 Có thể dán ảnh trực tiếp (Ctrl+V)
-                      </span>
                     </label>
                     <textarea
                       value={replyNotes}
                       onChange={(e) => setReplyNotes(e.target.value)}
                       onPaste={handlePasteBugModal}
                       placeholder="Nhập nội dung phản hồi kết quả sửa lỗi... (Có thể dán ảnh bằng Ctrl+V)"
-                      required
                       style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', color: '#334155', boxSizing: 'border-box', minHeight: '60px', fontFamily: 'inherit', outline: 'none' }}
                     />
                   </div>
@@ -6726,40 +8781,7 @@ const ScreenDetail = () => {
                   {/* Phản hồi images upload */}
                   <div className="form-group" style={{ margin: 0 }}>
                     <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Hình ảnh phản hồi đính kèm (Cho phép up ảnh đã chỉnh sửa)</label>
-                    <input
-                      type="file"
-                      id="modal-reply-image-upload"
-                      accept="image/*"
-                      multiple
-                      onChange={handleReplyImageUpload}
-                      style={{ display: 'none' }}
-                    />
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
-                      <div
-                        onClick={() => document.getElementById('modal-reply-image-upload').click()}
-                        style={{
-                          width: '120px',
-                          height: '80px',
-                          border: '2px dashed #E2E8F0',
-                          borderRadius: '8px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          backgroundColor: '#F8FAFC',
-                          cursor: 'pointer',
-                          color: '#64748B'
-                        }}
-                      >
-                        {replyUploading ? (
-                          <span style={{ fontSize: '0.7rem' }}>Đang tải...</span>
-                        ) : (
-                          <>
-                            <span style={{ fontSize: '1.25rem' }}>➕</span>
-                            <span style={{ fontSize: '0.68rem', fontWeight: 'bold', marginTop: '2px' }}>Tải ảnh lên</span>
-                          </>
-                        )}
-                      </div>
 
                       {replyImages.map((img, idx) => (
                         <div key={idx} style={{ width: '120px', height: '80px', borderRadius: '8px', border: '1px solid #E2E8F0', overflow: 'hidden', position: 'relative', backgroundColor: '#F8FAFC' }}>
@@ -6791,30 +8813,9 @@ const ScreenDetail = () => {
                     </div>
                   </div>
                 </>
-              ) : (
-                <>
-                  {/* Row 7: Disabled Phản hồi */}
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Phản hồi *</label>
-                    <input
-                      type="text"
-                      disabled
-                      placeholder="Người xử lý phản hồi sau khi hoàn thành..."
-                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: '#F1F5F9', color: '#64748B', boxSizing: 'border-box', height: '36px' }}
-                    />
-                  </div>
-
-                  {/* Row 8: Disabled Phản hồi images */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                    <div style={{ height: '80px', border: '1px solid #E2E8F0', borderRadius: '8px', backgroundColor: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <span style={{ fontSize: '1.25rem', color: '#CBD5E1' }}>🖼️</span>
-                    </div>
-                    <div style={{ height: '80px', border: '1px solid #E2E8F0', borderRadius: '8px', backgroundColor: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <span style={{ fontSize: '1.25rem', color: '#CBD5E1' }}>🖼️</span>
-                    </div>
-                  </div>
-                </>
               )}
+
+
 
             </div>
 
@@ -6825,7 +8826,7 @@ const ScreenDetail = () => {
               alignItems: 'center',
               gap: '12px',
               padding: '16px 24px',
-              borderTop: '1px solid #F1F5F9',
+              borderTop: '1px solid #CBD5E1',
               backgroundColor: '#F8FAFC',
               borderRadius: '0 0 16px 16px'
             }}>
@@ -6865,6 +8866,146 @@ const ScreenDetail = () => {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+      {/* Modal Chọn link dẫn Frontend */}
+      {showLinkModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.4)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999
+        }}>
+          <div style={{
+            backgroundColor: '#fff',
+            borderRadius: '12px',
+            width: '480px',
+            padding: '24px',
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+            fontFamily: 'Inter, sans-serif'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#1E293B', margin: 0 }}>
+                03.1: Chọn link dẫn Frontend
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowLinkModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Phân hệ</label>
+                <select
+                  value={linkSubsystem}
+                  onChange={(e) => setLinkSubsystem(e.target.value)}
+                  style={{ width: '100%', border: '1px solid #CBD5E1', borderRadius: '8px', padding: '8px 12px', fontSize: '0.84rem', outline: 'none', color: '#1E293B', backgroundColor: '#fff', height: '36px' }}
+                >
+                  {subsystems.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Màn hình liên quan</label>
+                  <select
+                    value={linkScreenId}
+                    onChange={(e) => setLinkScreenId(e.target.value)}
+                    style={{ width: '100%', border: '1px solid #CBD5E1', borderRadius: '8px', padding: '8px 12px', fontSize: '0.84rem', outline: 'none', color: '#1E293B', backgroundColor: '#fff', height: '36px' }}
+                  >
+                    <option value="">-- Chọn màn hình --</option>
+                    {filteredScreens.map(s => (
+                      <option key={s.id} value={s.id}>{s.title}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Thành phần tương tác</label>
+                  <select
+                    value={linkComponentId}
+                    onChange={(e) => setLinkComponentId(e.target.value)}
+                    style={{ width: '100%', border: '1px solid #CBD5E1', borderRadius: '8px', padding: '8px 12px', fontSize: '0.84rem', outline: 'none', color: '#1E293B', backgroundColor: '#fff', height: '36px' }}
+                    disabled={!linkScreenId}
+                  >
+                    <option value="">-- Chọn component --</option>
+                    {linkFilteredComponents.map(c => (
+                      <option key={c.name} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Thông tin hiển thị</label>
+                <div style={{
+                  width: '100%',
+                  border: '1px solid #E2E8F0',
+                  backgroundColor: '#F1F5F9',
+                  borderRadius: '8px',
+                  padding: '10px 14px',
+                  fontSize: '0.84rem',
+                  fontWeight: '500',
+                  color: '#475569',
+                  minHeight: '38px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  boxSizing: 'border-box'
+                }}>
+                  {displayInfoText}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
+              <button
+                type="button"
+                onClick={() => setShowLinkModal(false)}
+                style={{
+                  padding: '8px 20px',
+                  borderRadius: '8px',
+                  border: '1px solid #7B5233',
+                  backgroundColor: '#fff',
+                  color: '#7B5233',
+                  fontWeight: 'bold',
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  height: '36px'
+                }}
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmLink}
+                style={{
+                  padding: '8px 20px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: '#7B5233',
+                  color: '#fff',
+                  fontWeight: 'bold',
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  height: '36px'
+                }}
+              >
+                Xác nhận
+              </button>
+            </div>
           </div>
         </div>
       )}

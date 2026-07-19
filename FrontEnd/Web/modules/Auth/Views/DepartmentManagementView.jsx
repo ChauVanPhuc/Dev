@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { ArrowLeft, Plus, Edit2, Trash2, Check, X, Search, Shield, ChevronDown, Layers, FileDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Plus, Edit2, Trash2, Check, X, Search, Shield, ChevronDown, Layers, FileDown, ChevronLeft, ChevronRight, FolderTree, Briefcase } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import ExcelJS from 'exceljs';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
@@ -90,7 +90,7 @@ const DepartmentManagement = () => {
   const setCustomScreenCode = outletContext?.setCustomScreenCode;
   
   // Lấy metadata từ database thay vì hardcode
-  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/departments');
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/users/departments');
 
   // Cập nhật tiêu đề trang lên Layout Header
   useEffect(() => {

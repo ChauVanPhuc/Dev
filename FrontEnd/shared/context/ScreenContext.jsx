@@ -63,120 +63,33 @@ export const ScreenProvider = ({ children }) => {
       }
     }
 
-    // Ho tro ca duong dan dong co tham so (vi du: /manufacture/plan/123 -> /manufacture/plan/:id)
-    let matchedPath = lookupPath;
+    const normalizePathForMatching = (p) => {
+      if (!p) return '';
+      return p.replace(/^\//, '').replace(/^(admin|manufacture)\//, '');
+    };
+
+    const lookupPathNormalized = normalizePathForMatching(lookupPath);
     
     // Xu ly phat hien va chuan hoa cac duong dan co :id hoac cac tham so dong khac
     const paths = Object.keys(screensMap);
     const found = paths.find(p => {
-      if (!p.includes(':')) return p === lookupPath;
-      // Chuyen '/manufacture/plan/:id' thanh regex '^/manufacture/plan/[^/]+$'
-      const regexPattern = '^' + p.replace(/:[a-zA-Z0-9_]+/g, '[^/]+') + '$';
+      const pNormalized = normalizePathForMatching(p);
+      if (!pNormalized.includes(':')) {
+        return pNormalized === lookupPathNormalized;
+      }
+      // Chuyen 'plan/:id' thanh regex '^plan/[^/]+$'
+      const regexPattern = '^' + pNormalized.replace(/:[a-zA-Z0-9_]+/g, '[^/]+') + '$';
       const regex = new RegExp(regexPattern);
-      return regex.test(lookupPath);
+      return regex.test(lookupPathNormalized);
     });
 
-    if (found) {
-      matchedPath = found;
-    }
-
-    const screen = screensMap[matchedPath];
+    const screen = found ? screensMap[found] : null;
     if (screen) {
       return {
         screenCode: screen.current_code,
         title: screen.title,
         subtitle: screen.subtitle,
         isActive: screen.is_active
-      };
-    }
-
-    // Dynamic fallback titles based on route
-    if (path.includes('defects')) {
-      return {
-        screenCode: 'AD12',
-        title: 'Quản lý danh mục lỗi',
-        subtitle: 'Cấu hình danh sách các lỗi kiểm tra chất lượng',
-        isActive: true
-      };
-    }
-    if (path.includes('screens')) {
-      return {
-        screenCode: 'HD02',
-        title: 'Danh sách màn hình',
-        subtitle: 'HD02: Hiển thị thông tin về các màn hình thuộc hệ thống',
-        isActive: true
-      };
-    }
-    if (path.includes('bugs')) {
-      return {
-        screenCode: 'HD04',
-        title: 'Khai báo lỗi',
-        subtitle: 'HD04: Khai báo và theo dõi các lỗi giao diện',
-        isActive: true
-      };
-    }
-    if (path.includes('users')) {
-      return {
-        screenCode: 'AD3',
-        title: 'Quản lý người dùng',
-        subtitle: 'Phân quyền cho tài khoản',
-        isActive: true
-      };
-    }
-    if (path.includes('dashboard')) {
-      return {
-        screenCode: 'AD2',
-        title: 'Trang chủ',
-        subtitle: 'Tổng quan hệ thống',
-        isActive: true
-      };
-    }
-    if (path.includes('handovers')) {
-      return {
-        screenCode: 'AD4',
-        title: 'Danh sách bàn giao',
-        subtitle: 'Quản lý tài sản và bàn giao',
-        isActive: true
-      };
-    }
-    if (path.includes('quality-records')) {
-      return {
-        screenCode: 'AD13',
-        title: 'Hồ sơ chất lượng',
-        subtitle: 'Nhật ký và hồ sơ kiểm soát chất lượng',
-        isActive: true
-      };
-    }
-    if (path.includes('monitor')) {
-      return {
-        screenCode: 'HD01',
-        title: 'Tổng quan hệ thống',
-        subtitle: 'HD01: Hiển thị các thông số giám sát về màn hình',
-        isActive: true
-      };
-    }
-    if (path.includes('claims')) {
-      return {
-        screenCode: 'CL1',
-        title: 'Khiếu nại khách hàng (Claim)',
-        subtitle: 'Quản lý và giải quyết các khiếu nại chất lượng sản phẩm',
-        isActive: true
-      };
-    }
-    if (path.includes('prices')) {
-      return {
-        screenCode: 'CL2',
-        title: 'Quản lý đơn giá',
-        subtitle: 'Quản lý đơn giá sản phẩm và cấu hình chi phí',
-        isActive: true
-      };
-    }
-    if (path.includes('shipments')) {
-      return {
-        screenCode: 'CL3',
-        title: 'Thông tin giao hàng (Claim)',
-        subtitle: 'Theo dõi thông tin xuất xưởng hàng hóa khiếu nại',
-        isActive: true
       };
     }
 

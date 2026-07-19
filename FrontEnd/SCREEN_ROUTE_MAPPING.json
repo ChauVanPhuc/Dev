@@ -1,0 +1,250 @@
+{
+  "comment": "Mapping giữa Screen Code và Route Path cho toàn bộ hệ thống ERP G7",
+  "version": "1.0.0",
+  "last_updated": "2026-07-16",
+  "mappings": {
+    "HD01": {
+      "route": "/admin/system-monitor",
+      "file": "System/Views/SystemMonitorView.jsx",
+      "title": "Tổng quan hệ thống",
+      "subtitle": "Hiển thị các thông số giám sát về màn hình",
+      "status": "migrated"
+    },
+    "HD02": {
+      "route": "/admin/screens",
+      "file": "System/Views/ScreenManagementView.jsx",
+      "title": "Danh sách màn hình",
+      "subtitle": "Hiển thị thông tin về các màn hình thuộc hệ thống"
+    },
+    "HD03": {
+      "route": "/admin/screens/:id",
+      "file": "System/Views/ScreenDetailView.jsx",
+      "title": "Đặc tả màn hình",
+      "subtitle": "Hiển thị thông tin thiết kế màn hình chi tiết",
+      "status": "migrated"
+    },
+    "AD11": {
+      "route": "/admin/backup-qr",
+      "file": "System/Views/BackupQRManagementView.jsx",
+      "title": "Quản lý mã QR Dự Phòng",
+      "subtitle": "Hệ thống quản lý trạng thái luân chuyển của các thẻ QR cố định trên xưởng",
+      "status": "migrated"
+    },
+    "AD13": {
+      "route": "/admin/quality-records",
+      "file": "QualityRecords/Views/QualityRecordsListView.jsx",
+      "title": "Hồ sơ chất lượng",
+      "subtitle": "Nhật ký và hồ sơ kiểm soát chất lượng",
+      "status": "migrated"
+    },
+    "AD13.1": {
+      "route": "/admin/quality-records/:id",
+      "file": "QualityRecords/Views/QualityRecordsDetailView.jsx",
+      "title": "Chi tiết hồ sơ chất lượng",
+      "subtitle": "Xem lịch sử bàn giao, kiểm tra đầu vào và kết quả QC chi tiết",
+      "status": "migrated"
+    },
+    "AD14": {
+      "route": "/admin/inspection-reports",
+      "file": "Inspection/Views/InspectionReportsView.jsx",
+      "title": "Báo cáo & Phiếu kiểm tra",
+      "subtitle": "Quản lý toàn bộ kết quả kiểm tra công đoạn, kiểm tra đầu vào, lỗi hàng ngày và quy trình sản xuất",
+      "status": "migrated"
+    },
+    "AD17": {
+      "route": "/admin/iso/forms",
+      "file": "ISO/Views/ISODocumentListView.jsx",
+      "title": "Quản lý mẫu tài liệu",
+      "subtitle": "Nhân sự",
+      "status": "migrated"
+    },
+    "AD17.1": {
+      "route": "/admin/iso/forms/:id",
+      "file": "ISO/Views/ISOFormEditorView.jsx",
+      "title": "Quản lý mẫu tài liệu",
+      "subtitle": "Nhân sự - Cập nhật mẫu tài liệu",
+      "status": "migrated"
+    },
+    "AD18": {
+      "route": "/admin/iso/processes",
+      "file": "ISO/Views/ISODocumentListView.jsx",
+      "title": "Quản lý quy trình",
+      "subtitle": "Nhân sự"
+    },
+    "AD55": {
+      "route": "/admin/iso/processes/:id",
+      "file": "ISO/Views/ISOProcessEditorView.jsx",
+      "title": "Quản lý quy trình",
+      "subtitle": "Nhân sự - Chỉnh sửa Quy trình",
+      "status": "migrated"
+    },
+    "AD7": {
+      "route": "/admin/kpi/reports",
+      "file": "KPI/Views/KPIReportsView.jsx",
+      "title": "Báo cáo KPI",
+      "subtitle": "Hệ thống tổng hợp đánh giá và theo dõi hiệu suất năng suất lao động",
+      "status": "migrated"
+    },
+    "AD7.2": {
+      "route": "/admin/kpi/checklist",
+      "file": "KPI/Views/KPIChecklistView.jsx",
+      "title": "Danh mục Checklist mẫu",
+      "subtitle": "Cấu hình danh mục các đầu việc mẫu để gán cho nhân viên"
+    },
+    "AD7.3": {
+      "route": "/admin/kpi/items",
+      "file": "KPI/Views/KPIItemsView.jsx",
+      "title": "Danh mục chỉ số KPI mẫu",
+      "subtitle": "Cấu hình danh mục KPI mẫu chung phục vụ đánh giá hiệu suất"
+    },
+    "AD7.4": {
+      "route": "/admin/kpi/rules",
+      "file": "KPI/Views/KPIRulesView.jsx",
+      "title": "Quy tắc cộng trừ điểm KPI",
+      "subtitle": "Thiết lập luật chung cho QC báo cáo lỗi hoặc đề xuất khen thưởng"
+    },
+    "AD7.5": {
+      "route": "/admin/kpi/feedback",
+      "file": "KPI/Views/KPIFeedbackView.jsx",
+      "title": "Ý kiến đóng góp & Nhận xét KPI",
+      "subtitle": "Nhật ký và cấu trúc ý kiến đóng góp của từng nhân viên"
+    },
+    "MA2.1": {
+      "route": "/admin/plans/:id",
+      "file": "Plan/Views/PlanDetailView.jsx",
+      "title": "Chi tiết Kế hoạch",
+      "subtitle": "Chi tiết kế hoạch sản xuất",
+      "status": "migrated"
+    },
+    "MA5": {
+      "route": "/admin/production-progress/:id",
+      "file": "Plan/Views/ProductionProgressView.jsx",
+      "title": "Tiến độ sản xuất",
+      "subtitle": "Theo dõi tiến độ sản xuất theo sản phẩm",
+      "status": "migrated"
+    },
+    "MC37": {
+      "route": "/admin/machines",
+      "file": "Equipment/Views/MachineManagementView.jsx",
+      "title": "Danh sách thiết bị máy móc",
+      "subtitle": "Hệ thống quản lý, lập lịch bảo trì và kiểm soát tình trạng thiết bị máy móc sản xuất",
+      "status": "migrated"
+    },
+    "MC37.2": {
+      "route": "/admin/machines/history",
+      "file": "Equipment/Views/MachineHistoryView.jsx",
+      "title": "Nhật ký & Lịch sử bảo trì máy móc",
+      "subtitle": "Nhật ký chi tiết các lần bảo trì thiết bị máy móc sản xuất định kỳ và sự cố phát sinh",
+      "status": "migrated"
+    },
+    "MC37.3": {
+      "route": "/admin/machines/training",
+      "file": "Equipment/Views/MachineTrainingView.jsx",
+      "title": "Hướng dẫn sử dụng máy móc",
+      "subtitle": "Thư viện quy trình hướng dẫn vận hành chuẩn (SOP) và tài liệu sử dụng máy móc sản xuất an toàn",
+      "status": "migrated"
+    },
+    "MC37.5": {
+      "route": "/admin/machines/:id",
+      "file": "Equipment/Views/MachineDetailView.jsx",
+      "title": "Thông tin thiết bị máy móc",
+      "subtitle": "Hồ sơ chi tiết thiết bị máy móc, lịch sử bảo dưỡng và hướng dẫn vận hành chuẩn",
+      "status": "migrated"
+    },
+    "AD37": {
+      "route": "/admin/equipment",
+      "file": "Equipment/Views/EquipmentManagementView.jsx",
+      "title": "Danh sách thiết bị",
+      "subtitle": "Quản lý thiết bị sản xuất",
+      "status": "migrated"
+    },
+    "AD37.2": {
+      "route": "/admin/equipment/history",
+      "file": "Equipment/Views/EquipmentHistoryView.jsx",
+      "title": "Lịch sử thiết bị",
+      "subtitle": "Nhật ký lịch sử thiết bị",
+      "status": "migrated"
+    },
+    "AD37.3": {
+      "route": "/admin/equipment/training",
+      "file": "Equipment/Views/EquipmentTrainingView.jsx",
+      "title": "Đào tạo vận hành thiết bị",
+      "subtitle": "Danh sách các lớp đào tạo và tài liệu hướng dẫn vận hành an toàn",
+      "status": "migrated"
+    },
+    "AD37.4": {
+      "route": "/admin/equipment/categories",
+      "file": "Equipment/Views/EquipmentCategoriesView.jsx",
+      "title": "Danh mục thiết bị",
+      "subtitle": "Quản lý danh mục thiết bị",
+      "status": "migrated"
+    },
+    "AD37.5": {
+      "route": "/admin/equipment/:id",
+      "file": "Equipment/Views/EquipmentDetailView.jsx",
+      "title": "Chi tiết thiết bị",
+      "subtitle": "Thông tin chi tiết thiết bị",
+      "status": "migrated"
+    },
+    "AD37.6": {
+      "route": "/admin/equipment/training/:id",
+      "file": "Equipment/Views/EquipmentTrainingDetailView.jsx",
+      "title": "Chi tiết đào tạo",
+      "subtitle": "Thông tin chi tiết khóa đào tạo",
+      "status": "migrated"
+    },
+    "AD37.7": {
+      "route": "/admin/equipment/handover",
+      "file": "Equipment/Views/EquipmentHandoverView.jsx",
+      "title": "Bàn giao thiết bị",
+      "subtitle": "Quản lý bàn giao thiết bị",
+      "status": "migrated"
+    },
+    "AD04": {
+      "route": "/admin/users",
+      "file": "Auth/Views/UserManagementView.jsx",
+      "title": "Quản lý người dùng",
+      "subtitle": "Danh sách tài khoản người dùng"
+    },
+    "AD04.1": {
+      "route": "/admin/users/create",
+      "file": "Auth/Views/UserCreateView.jsx",
+      "title": "Tạo người dùng mới",
+      "subtitle": "Thêm tài khoản người dùng",
+      "status": "migrated"
+    },
+    "AD04.2": {
+      "route": "/admin/users/:id/edit",
+      "file": "Auth/Views/UserEditView.jsx",
+      "title": "Chỉnh sửa người dùng",
+      "subtitle": "Cập nhật thông tin tài khoản",
+      "status": "migrated"
+    },
+    "AD04.3": {
+      "route": "/admin/users/:id/permissions",
+      "file": "Auth/Views/UserPermissionView.jsx",
+      "title": "Phân quyền người dùng",
+      "subtitle": "Quản lý quyền truy cập",
+      "status": "migrated"
+    },
+    "AD05": {
+      "route": "/admin/departments",
+      "file": "Auth/Views/DepartmentManagementView.jsx",
+      "title": "Quản lý phòng ban",
+      "subtitle": "Danh sách phòng ban",
+      "status": "migrated"
+    },
+    "AD06": {
+      "route": "/admin/positions",
+      "file": "Auth/Views/PositionManagementView.jsx",
+      "title": "Quản lý chức vụ",
+      "subtitle": "Danh sách chức vụ",
+      "status": "migrated"
+    }
+  },
+  "statistics": {
+    "total_screens": 37,
+    "migrated": 30,
+    "pending": 7
+  }
+}

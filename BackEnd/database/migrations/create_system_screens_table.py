@@ -855,11 +855,11 @@ def upgrade():
         print("[SUCCESS] Seeding completed!")
         
         # Run auto-registration of missing screens
-        try:
-            auto_register_missing_screens(db)
-        except Exception as e:
-            err_msg = str(e).encode('ascii', errors='ignore').decode('ascii')
-            print(f"[AUTO-REGISTER] Failed: {err_msg}")
+        # try:
+        #     auto_register_missing_screens(db)
+        # except Exception as e:
+        #     err_msg = str(e).encode('ascii', errors='ignore').decode('ascii')
+        #     print(f"[AUTO-REGISTER] Failed: {err_msg}")
         
     except Exception as e:
         db.rollback()
