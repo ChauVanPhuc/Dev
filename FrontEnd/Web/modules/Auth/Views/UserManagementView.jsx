@@ -751,10 +751,8 @@ const UserManagement = () => {
     setActionMenuId(null);
     if (action === 'edit') navigate(`/admin/users/edit/${user.id}`);
     if (action === 'permissions') navigate(`/admin/users/edit/${user.id}`);
-    if (action === 'suspend') toast('info', `Tính năng "Đình chỉ" cho ${user.full_name} đang được phát triển.`);
-    if (action === 'delete') {
-      setConfirmDeleteModal({ show: true, user });
-    }
+    if (action === 'lock') toast('info', `Tính năng "Khóa tài khoản" cho ${user.full_name} đang được phát triển.`);
+    if (action === 'reset_password') toast('info', `Tính năng "Reset mật khẩu" cho ${user.full_name} đang được phát triển.`);
   };
 
   const totalPages = Math.ceil(total / pageSize);
@@ -939,8 +937,8 @@ const UserManagement = () => {
                                   {actionMenuId === user.id && (
                                     <div className="action-menu">
                                       <button className="action-menu-item" onClick={() => handleAction('edit', user)}>Chỉnh sửa</button>
-                                      <button className="action-menu-item warn" onClick={() => handleAction('suspend', user)}>Đình chỉ</button>
-                                      <button className="action-menu-item danger" onClick={() => handleAction('delete', user)}>Xóa</button>
+                                      <button className="action-menu-item warn" onClick={() => handleAction('lock', user)}>Khóa tài khoản</button>
+                                      <button className="action-menu-item danger" onClick={() => handleAction('reset_password', user)}>Reset mật khẩu</button>
                                     </div>
                                   )}
                                 </td>
@@ -985,8 +983,8 @@ const UserManagement = () => {
                                   {actionMenuId === user.id && (
                                     <div className="action-menu">
                                       <button className="action-menu-item" onClick={() => handleAction('edit', user)}>Chỉnh sửa</button>
-                                      <button className="action-menu-item warn" onClick={() => handleAction('suspend', user)}>Đình chỉ</button>
-                                      <button className="action-menu-item danger" onClick={() => handleAction('delete', user)}>Xóa</button>
+                                      <button className="action-menu-item warn" onClick={() => handleAction('lock', user)}>Khóa tài khoản</button>
+                                      <button className="action-menu-item danger" onClick={() => handleAction('reset_password', user)}>Reset mật khẩu</button>
                                     </div>
                                   )}
                                 </td>
@@ -1044,8 +1042,8 @@ const UserManagement = () => {
                                 {actionMenuId === user.id && (
                                   <div className="action-menu">
                                     <button className="action-menu-item" onClick={() => handleAction('edit', user)}>Chỉnh sửa</button>
-                                    <button className="action-menu-item warn" onClick={() => handleAction('suspend', user)}>Đình chỉ</button>
-                                    <button className="action-menu-item danger" onClick={() => handleAction('delete', user)}>Xóa</button>
+                                    <button className="action-menu-item warn" onClick={() => handleAction('lock', user)}>Khóa tài khoản</button>
+                                    <button className="action-menu-item danger" onClick={() => handleAction('reset_password', user)}>Reset mật khẩu</button>
                                   </div>
                                 )}
                               </div>
@@ -1075,8 +1073,8 @@ const UserManagement = () => {
                                 {actionMenuId === user.id && (
                                   <div className="action-menu" style={{ right: 0, top: '100%' }}>
                                     <button className="action-menu-item" onClick={() => handleAction('edit', user)}>Chỉnh sửa</button>
-                                    <button className="action-menu-item warn" onClick={() => handleAction('suspend', user)}>Đình chỉ</button>
-                                    <button className="action-menu-item danger" onClick={() => handleAction('delete', user)}>Xóa</button>
+                                    <button className="action-menu-item warn" onClick={() => handleAction('lock', user)}>Khóa tài khoản</button>
+                                    <button className="action-menu-item danger" onClick={() => handleAction('reset_password', user)}>Reset mật khẩu</button>
                                   </div>
                                 )}
                               </div>

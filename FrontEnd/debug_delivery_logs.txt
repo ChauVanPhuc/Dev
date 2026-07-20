@@ -1,0 +1,448 @@
+[debug] [vite] connecting...
+[debug] [vite] connected.
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] SmartFlow App Loading...
+[log] SmartFlow App Loading...
+[RESPONSE ERROR] 304 http://localhost:5175/@vite/client
+[RESPONSE ERROR] 304 http://localhost:5175/Web/Shared/app/bootstrap.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/@react-refresh
+[RESPONSE ERROR] 304 http://localhost:5175/node_modules/vite/dist/client/env.mjs
+[debug] [vite] connecting...
+[RESPONSE ERROR] 304 http://localhost:5175/Web/Shared/styles/style.css
+[RESPONSE ERROR] 304 http://localhost:5175/Web/Shared/styles/components.css
+[RESPONSE ERROR] 304 http://localhost:5175/Web/Shared/styles/index.css
+[RESPONSE ERROR] 304 http://localhost:5175/Web/Shared/app/App.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Auth/Views/LoginView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/Shared/Views/components/layout/PortalLayout.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/Shared/Views/components/feedback/ToastContext.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Dashboard/Views/DashboardView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Auth/Views/UserManagementView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Auth/Views/UserCreateView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Auth/Views/UserEditView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Auth/Views/UserPermissionView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Auth/Views/DepartmentManagementView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Auth/Views/PositionManagementView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Auth/Views/EmployeeListView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Auth/Views/OrgChartView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Auth/Views/HierarchyChartView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Auth/Views/PersonnelChartView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Auth/Views/FactoryStructureView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Auth/Views/HRManagementView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Delivery/Views/HandoverListView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/IncidentLogsView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Inspection/Views/InspectionReportsView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/KPI/Views/KPIReportsView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/KPI/Views/KPIChecklistView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/KPI/Views/KPIItemsView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/KPI/Views/KPIRulesView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/KPI/Views/KPIFeedbackView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/CAPA/Views/ImprovementsView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/HotspotsView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/DataPackagingView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/BackupQRManagementView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/ScreenManagementView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/ScreenDetailView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/ScreenBugManagementView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/ProjectProgressView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Inspection/Views/DefectManagementView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/QualityRecords/Views/QualityRecordsListView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/QualityRecords/Views/QualityRecordsDetailView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/SystemMonitorView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Equipment/Views/EquipmentManagementView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Equipment/Views/EquipmentCategoriesView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Equipment/Views/EquipmentHistoryView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Equipment/Views/EquipmentTrainingView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Equipment/Views/EquipmentHandoverView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Equipment/Views/EquipmentDetailView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Equipment/Views/EquipmentTrainingDetailView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Equipment/Views/MachineManagementView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Equipment/Views/MachineHistoryView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Equipment/Views/MachineTrainingView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Equipment/Views/MachineDetailView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Claim/views/PortalLayout.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Claim/views/ClaimListView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Claim/views/PriceListView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Claim/views/ShipmentListView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Dashboard/Views/ManufactureDashboardView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Plan/Views/PlanListView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Plan/Views/PlanDetailView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Delivery/Views/DeliveryHandoverView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Delivery/Views/DeliveryReceiveView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Product/Views/ProductsListView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Product/Views/ProductDetailView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Product/Views/ProductCreateView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Order/Views/OrdersListView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Order/Views/OrderCreateView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Plan/Views/AddProductionPlanView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Plan/Views/ProductionProgressView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Delivery/Views/DeliveryTrackingView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Pallet/Views/PalletCardView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Purchasing/Views/PurchaseRequisitionListView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Purchasing/Views/PurchaseRequisitionDetailView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Purchasing/Views/PurchaseOrderItemListView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/ISO/Views/ISODocumentListView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/ISO/Views/ISOFormEditorView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/ISO/Views/ISOProcessEditorView.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Auth/Models/auth.service.js
+[RESPONSE ERROR] 304 http://localhost:5175/shared/context/ScreenContext.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/shared/hooks/useAuth.js
+[RESPONSE ERROR] 304 http://localhost:5175/Mobile/assets/background-1.png?import
+[RESPONSE ERROR] 304 http://localhost:5175/Mobile/assets/logo-no-bg.png?import
+[RESPONSE ERROR] 304 http://localhost:5175/Web/Shared/Views/components/layout/Sidebar.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/Shared/Views/components/feedback/BeautifulModal.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Dashboard/Views/components/ActivityFeed.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Claim/services/claim.service.js
+[RESPONSE ERROR] 304 http://localhost:5175/shared/store/uiStore.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/Shared/Services/api.service.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/Shared/Views/components/layout/PageToolbar.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/Shared/Views/components/feedback/BeautifulConfirmModal.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/Shared/hooks/useScreenMetadata.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Auth/Models/hr.service.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Auth/Views/EmployeeModal.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Auth/Views/OrgNodeModal.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Auth/Views/HierarchyNodeModal.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Auth/Views/PersonnelNodeModal.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Auth/Views/FactoryStructureModal.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Models/screen.service.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Models/bug.service.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenExportDetailModal.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/Shared/Views/components/modals/BugDetailModal.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/index.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/index.js
+[RESPONSE ERROR] 304 http://localhost:5175/shared/hooks/useWebSocket.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Plan/Models/plan.service.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/QualityRecords/Models/quality.service.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Claim/styles/claim.css
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Claim/utils/claimHelpers.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Claim/components/Table.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Claim/components/Pagination.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Claim/components/Modal.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Claim/components/DeleteConfirmationModal.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Order/Models/order.service.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/Shared/Views/components/feedback/PriorityManagerModal.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Product/Models/bom.service.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Delivery/Models/delivery.service.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Purchasing/Models/purchasing.service.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/ISO/Views/FlowchartTable.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/ISO/Views/FlowchartCanvas.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/Shared/assets/sidebar.css
+[RESPONSE ERROR] 304 http://localhost:5175/Web/Shared/Views/components/layout/PageToolbar.css
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/Auth/Views/SelectInfoModal.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/DeviceFrames.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/FallbackMockup.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/mocks/AD1_LoginMock.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/mocks/AD3_UserManagementMock.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/mocks/MA2_PlanMock.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/mocks/MB1_LoginMock.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/mocks/MB2_DeliveryInfoMock.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/mocks/MB21_DeliveryCreateMock.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/mocks/MB22_DeliveryReceiveMock.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/mocks/MB24_InputInspectionMock.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/mocks/MB4_PlanTrackingMock.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/mocks/MB5_DailyInspectionMock.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/mocks/MB6_StageInspectionMock.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/mocks/MB7_InspectionHistoryMock.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/mocks/MB8_KpiTrackingMock.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/mocks/MB81_StaffEvaluationMock.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/mocks/MB82_KpiStaffMock.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/mocks/MB9_AwardsMock.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/mocks/MB10_EquipmentListMock.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/mocks/MB11_QualityDetailMock.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/mocks/MB12_ThermalPrintMock.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/mocks/MB13_CapaListMock.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/mocks/MB14_CapaReportMock.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/mocks/MB15_CapaDetailMock.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/InteractiveBlock.jsx
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/ScreenSimulation/Simulation.css
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Mobile/Login.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Mobile/DeliveryInfo.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Mobile/DeliveryCreate.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Mobile/DeliveryReceive.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Mobile/InboundInspection.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Mobile/PlanTracking.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Mobile/DailyInspection.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Mobile/StageInspection.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Mobile/InspectionHistory.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Mobile/KPITracking.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Mobile/StaffEvaluation.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Mobile/KPIStaffList.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Mobile/AwardsDiscipline.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Mobile/EquipmentList.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Mobile/QualityInspectionDetail.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Mobile/ThermalPrint.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Mobile/CapaList.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Mobile/CapaReport.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Mobile/CapaDetail.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Admin/Login.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Admin/Dashboard.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Admin/UserManagement.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Admin/UserCreate.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Admin/UserEdit.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Admin/HandoverList.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Admin/IncidentLogs.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Admin/InspectionReports.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Admin/KPIReports.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Admin/Improvements.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Admin/Hotspots.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Admin/DataPackaging.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Admin/BackupQRManagement.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Manufacture/ProductionOverview.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Manufacture/ProductionPlan.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Manufacture/PlanDetail.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Manufacture/PlanCreate.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Manufacture/ProductionOrder.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Manufacture/OrderCreate.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Manufacture/ProductCatalog.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Manufacture/ProductDetail.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Manufacture/ProductCreate.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Manufacture/ProductionProgress.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Manufacture/DeliveryTracking.js
+[RESPONSE ERROR] 304 http://localhost:5175/Web/modules/System/Views/components/screenDocs/Manufacture/ExceptionDeliveries.js
+[RESPONSE ERROR] 304 http://localhost:5175/node_modules/@xyflow/react/dist/style.css
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] SmartFlow App Loading...
+[log] SmartFlow App Loading...
+[log] --- SMARTFLOW SIDEBAR DEBUG ---
+[log] User profile: {role_name: IT, permission_name: admin, username: admin}
+[log] Is Admin: true
+[log] Active Permissions count: 1
+[log] Active Permissions keys: [delivery-tracking]
+[log] Active Permissions Object: {delivery-tracking: write}
+[log] --- SMARTFLOW SIDEBAR DEBUG ---
+[log] User profile: {role_name: IT, permission_name: admin, username: admin}
+[log] Is Admin: true
+[log] Active Permissions count: 1
+[log] Active Permissions keys: [delivery-tracking]
+[log] Active Permissions Object: {delivery-tracking: write}
+[RESPONSE ERROR] 304 http://localhost:5175/Mobile/assets/logo-no-bg.png
+[log] --- SMARTFLOW SIDEBAR DEBUG ---
+[log] User profile: {role_name: IT, permission_name: admin, username: admin}
+[log] Is Admin: true
+[log] Active Permissions count: 1
+[log] Active Permissions keys: [delivery-tracking]
+[log] Active Permissions Object: {delivery-tracking: write}
+[log] --- SMARTFLOW SIDEBAR DEBUG ---
+[log] User profile: {role_name: IT, permission_name: admin, username: admin}
+[log] Is Admin: true
+[log] Active Permissions count: 1
+[log] Active Permissions keys: [delivery-tracking]
+[log] Active Permissions Object: {delivery-tracking: write}
+[debug] [vite] connected.
+[log] --- SMARTFLOW SIDEBAR DEBUG ---
+[log] User profile: {role_name: IT, permission_name: admin, username: admin}
+[log] Is Admin: true
+[log] Active Permissions count: 1
+[log] Active Permissions keys: [delivery-tracking]
+[log] Active Permissions Object: {delivery-tracking: write}
+[log] --- SMARTFLOW SIDEBAR DEBUG ---
+[log] User profile: {role_name: IT, permission_name: admin, username: admin}
+[log] Is Admin: true
+[log] Active Permissions count: 1
+[log] Active Permissions keys: [delivery-tracking]
+[log] Active Permissions Object: {delivery-tracking: write}
+
+ERRORS:
+
+
+PAGE HTML (first 5000 chars):
+<!DOCTYPE html><html lang="en"><head>
+    <script type="module">import { injectIntoGlobalHook } from "/@react-refresh";
+injectIntoGlobalHook(window);
+window.$RefreshReg$ = () => {};
+window.$RefreshSig$ = () => (type) => type;</script>
+
+    <script type="module" src="/@vite/client"></script>
+
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/png" href="/Web/Shared/assets/Logo remove bg.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartFlow ERP</title>
+    <style>
+      *, *::before, *::after {
+        transition: none !important;
+        animation: none !important;
+      }
+    </style>
+  <style type="text/css" data-vite-dev-id="C:/SmartFlow_v2_Test/FrontEnd/Web/Shared/styles/style.css">/* 
+  FILE: style.css
+  MÔ TẢ: File CSS tập trung cho hệ thống ERP G7.
+  THIẾT KẾ: Responsive, sạch sẽ, chuyên nghiệp.
+*/
+
+/* =========================================
+   1. KHỞI TẠO BIẾN (CSS VARIABLES)
+   ========================================= */
+:root {
+    --primary-color: #2c3e50;    /* Màu chính: Xanh đậm chuyên nghiệp */
+    --secondary-color: #34495e;  /* Màu phụ */
+    --accent-color: #3498db;     /* Màu nhấn: Xanh dương sáng */
+    --text-color: #333333;       /* Màu chữ chính */
+    --bg-color: #f4f7f6;         /* Màu nền tổng thể */
+    --white: #ffffff;
+    --login-bg: #FDF5EC;         /* Màu nền be sáng của trang login */
+    --login-btn: #4D3422;        /* Màu nâu đậm của nút đăng nhập */
+    --sidebar-width: 260px;
+    --header-height: 60px;
+    --transition: all 0.3s ease;
+}
+
+/* =========================================
+   2. RESET CSS CƠ BẢN
+   ========================================= */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+
+/* =========================================
+   3. BỐ CỤC CHÍNH (LAYOUT)
+   ========================================= */
+.app-container {
+    display: flex;
+    min-height: 100vh;
+}
+
+/* Sidebar - Cột bên trái */
+.sidebar {
+    width: var(--sidebar-width);
+    background-color: var(--primary-color);
+    color: var(--white);
+    padding: 20px;
+    height: 100vh;
+    position: fixed;
+    transition: var(--transition);
+    z-index: 1000;
+}
+
+/* Nội dung chính bên phải */
+.main-wrapper {
+    flex: 1;
+    margin-left: var(--sidebar-width);
+    display: flex;
+    flex-direction: column;
+    min-width: 0; /* Ngăn chặn flex item bị tràn */
+    transition: var(--transition);
+}
+
+/* Header - Thanh đầu trang */
+.header {
+    height: var(--header-height);
+    background-color: var(--white);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+/* Content Area - Vùng chứa nội dung trang */
+.content-area {
+    padding: 20px;
+    flex: 1;
+}
+
+/* =========================================
+   4. THIẾT KẾ ĐÁP ỨNG (RESPONSIVE)
+   ========================================= */
+
+/* Tablet (Dưới 992px) */
+@media (max-width: 992px) {
+    .sidebar {
+        width: 80px;
+        padding: 10px;
+    }
+    
+    .sidebar span {
+        display: none; /* Ẩn text menu trên tablet */
+    }
+    
+    .main-wrapper {
+        margin-left: 80px;
+    }
+}
+
+/* Mobile (Dưới 768px) */
+@media (max-width: 768px) {
+    .sidebar {
+        transform: translateX(-100%); /* Ẩn hoàn toàn sidebar trên mobile */
+    }
+    
+    .sidebar.active {
+        transform: translateX(0); /* Hiện sidebar khi có class active */
+    }
+    
+    .main-wrapper {
+        margin-left: 0;
+    }
+}
+
+/* =========================================
+   5. CÁC THÀNH PHẦN UI (COMPONENTS)
+   ========================================= */
+.card {
+    background: var(--white);
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    margin-bottom: 20px;
+}
+
+@media (max-width: 768px) {
+    .card {
+        padding: 10px !important;
+        margin-bottom: 8px !important;
+    }
+}
+
+.btn {
+    padding: 10px 20px;
+    border-radius: 5px;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    transition: var(--transition);
+}
+
+.btn-primary {
+    background-color: var(--accent-color);
+    color: var(--white);
+}
+
+.btn-primary:hover {
+    filter: brightness(1.1);
+}
+
+/* =========================================
+   6. TRANG ĐĂNG NHẬP (LOGIN PAGE)
+   ========================================= */
+.login-container {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+}
+
+/* Phần hình ảnh bên trái (Desktop) */
+.login-image-side {
+    flex: 1.2;
+    background-color: #000;
+}
+
+.login-bg-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Phần Form bên phải */
+.login-form-side {
+    flex: 0.8;
+    background-color: var(--login-bg);
+    display: flex;
+ 

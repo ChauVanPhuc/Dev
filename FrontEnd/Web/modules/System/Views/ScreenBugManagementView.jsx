@@ -1304,7 +1304,6 @@ const ScreenBugManagementView = () => {
               style={{
                 alignSelf: 'flex-end',
                 height: '38px',
-                border: 'none',
                 background: '#FAF6F0',
                 color: '#7B5233',
                 fontSize: '0.8rem',

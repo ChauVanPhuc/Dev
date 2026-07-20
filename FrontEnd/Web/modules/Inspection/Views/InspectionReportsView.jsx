@@ -479,12 +479,13 @@ const InspectionReports = () => {
   };
 
   const triggerFileDownload = async (workbook, fileName) => {
+    const safeFileName = fileName.replace(/[\/\\:*?"<>|]/g, '_');
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = window.URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = fileName;
+    anchor.download = safeFileName;
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);
@@ -676,6 +677,7 @@ const InspectionReports = () => {
       setShowExportModal(false);
     } catch (err) {
       console.error("Lỗi khi xuất excel:", err);
+      alert("Đã xảy ra lỗi khi tạo tệp Excel: " + (err.message || err));
     } finally {
       setIsExporting(false);
     }
@@ -750,7 +752,7 @@ const InspectionReports = () => {
         let rowCount = 5;
         adhesionInspections.forEach(item => {
           let parsed = {};
-          try { parsed = JSON.parse(item.data_json || '{}'); } catch(e){}
+          try { parsed = typeof item.data_json === 'string' ? JSON.parse(item.data_json || '{}') : (item.data_json || {}); } catch(e){}
           if (Array.isArray(parsed.detailsList)) {
             parsed.detailsList.forEach(det => {
               const addedRow = sheetAdh.addRow([
@@ -795,7 +797,7 @@ const InspectionReports = () => {
         let rowCount = 5;
         moistureInspections.forEach(item => {
           let parsed = {};
-          try { parsed = JSON.parse(item.data_json || '{}'); } catch(e){}
+          try { parsed = typeof item.data_json === 'string' ? JSON.parse(item.data_json || '{}') : (item.data_json || {}); } catch(e){}
           if (Array.isArray(parsed.samples)) {
             parsed.samples.forEach(s => {
               const moistVals = s.moisture?.values ? s.moisture.values.map(v => `${v}%`).join(', ') : 'Chưa đo';
@@ -916,6 +918,7 @@ const InspectionReports = () => {
       setShowExportModal(false);
     } catch (err) {
       console.error("Lỗi khi xuất excel PO:", err);
+      alert("Đã xảy ra lỗi khi tạo tệp Excel PO: " + (err.message || err));
     } finally {
       setIsExporting(false);
     }
@@ -1042,6 +1045,7 @@ const InspectionReports = () => {
       setShowExportModal(false);
     } catch (err) {
       console.error("Lỗi khi xuất excel tổng hợp:", err);
+      alert("Đã xảy ra lỗi khi tạo tệp Excel tổng hợp: " + (err.message || err));
     } finally {
       setIsExporting(false);
     }

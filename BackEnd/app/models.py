@@ -41,6 +41,8 @@ from modules.purchasing.models.purchase_order_item import PurchaseOrderItem
 from modules.equipment.models.machinery import Machine, MachineMaintenance, MachineDocument
 from modules.inspection.models.iso_models import ISODocument, ISORevisionLog, ISOSection, ISOProcessStep, ISOProcess, ISOProcessSection, ISOProcessStepInstance
 from modules.hr.models.hr_models import HRDepartment, HRPosition, HRSection, HREmployee, HROrgNode, HRNodeAssignment
+from modules.auth.models.org_structures import OrgStructure, OrgStructureKPI, OrgStructureTask
+from modules.auth.models.employees import Employee
 
 __all__ = [
     "Base", "Account", "Category", "Delivery", "DeliveryDetails", "DeliveryImage",
@@ -53,6 +55,7 @@ __all__ = [
     "PurchaseRequisition", "PurchaseOrderItem", "Machine", "MachineMaintenance", "MachineDocument",
     "ISODocument", "ISORevisionLog", "ISOSection", "ISOProcessStep",
     "ISOProcess", "ISOProcessSection", "ISOProcessStepInstance",
-    "HRDepartment", "HRPosition", "HRSection", "HREmployee", "HROrgNode", "HRNodeAssignment"
+    "HRDepartment", "HRPosition", "HRSection", "HREmployee", "HROrgNode", "HRNodeAssignment",
+    "OrgStructure", "OrgStructureKPI", "OrgStructureTask", "Employee"
 ]
 

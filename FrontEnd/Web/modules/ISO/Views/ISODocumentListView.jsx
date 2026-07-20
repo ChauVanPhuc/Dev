@@ -175,6 +175,10 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
     }
   };
 
+  useEffect(() => {
+    fetchDocuments();
+  }, [mode]);
+
   const openCreateModal = async () => {
     try {
       setLoading(true);

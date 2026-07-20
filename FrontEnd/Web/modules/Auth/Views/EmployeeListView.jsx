@@ -121,24 +121,25 @@ const EmployeeListView = () => {
   const activeFiltersCount = [selectedDept, selectedPos, selectedSec].filter(Boolean).length;
 
   return (
-    <div style={{ padding: '0', display: 'flex', flexDirection: 'column', flex: 1, height: '100%' }}>
-      {/* Page Toolbar component */}
-      <PageToolbar
-        searchValue={search}
-        onSearchChange={(val) => { setSearch(val); setPage(1); }}
-        searchPlaceholder="Nhập Mã, Tên màn"
-        showFilter={true}
-        isFilterOpen={filterOpen}
-        onFilterToggle={() => setFilterOpen(!filterOpen)}
-        activeFiltersCount={activeFiltersCount}
-        importActions={[
-          { label: 'Chọn file excel (.xlsx)', icon: <Upload size={16} />, onClick: handleImportClick }
-        ]}
-        onExport={handleExport}
-        onCreate={() => { setSelectedEmployee(null); setModalOpen(true); }}
-        createLabel="Thêm mới"
-        hasWritePermission={true}
-      />
+    <div className="mgmt-container">
+      <div className="mgmt-main">
+        {/* Page Toolbar component */}
+        <PageToolbar
+          searchValue={search}
+          onSearchChange={(val) => { setSearch(val); setPage(1); }}
+          searchPlaceholder="Nhập mã hoặc tên nhân viên..."
+          showFilter={true}
+          isFilterOpen={filterOpen}
+          onFilterToggle={() => setFilterOpen(!filterOpen)}
+          activeFiltersCount={activeFiltersCount}
+          importActions={[
+            { label: 'Chọn file excel (.xlsx)', icon: <Upload size={16} />, onClick: handleImportClick }
+          ]}
+          onExport={handleExport}
+          onCreate={() => { setSelectedEmployee(null); setModalOpen(true); }}
+          createLabel="Thêm mới"
+          hasWritePermission={true}
+        />
 
       <input
         type="file"
@@ -205,87 +206,101 @@ const EmployeeListView = () => {
         </div>
       )}
 
-      {/* Main Table Grid */}
-      <div className="card" style={{ flex: 1, overflowY: 'auto', backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', marginBottom: '16px' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
-          <thead>
-            <tr style={{ backgroundColor: '#7B5233', color: '#fff' }}>
-              <th style={{ padding: '12px 16px', fontWeight: 600 }}>Mã NV</th>
-              <th style={{ padding: '12px 16px', fontWeight: 600 }}>Họ tên</th>
-              <th style={{ padding: '12px 16px', fontWeight: 600 }}>Phòng ban</th>
-              <th style={{ padding: '12px 16px', fontWeight: 600 }}>Vị trí</th>
-              <th style={{ padding: '12px 16px', fontWeight: 600 }}>Bộ phận</th>
-              <th style={{ padding: '12px 16px', fontWeight: 600 }}>Ngày vào làm</th>
-              <th style={{ padding: '12px 16px', fontWeight: 600, textAlign: 'center' }}>Thao tác</th>
-            </tr>
-          </thead>
-          <tbody>
-            {employees.length === 0 ? (
-              <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: '#9CA3AF' }}>Không tìm thấy nhân sự nào.</td>
-              </tr>
-            ) : employees.map((emp) => (
-              <tr
-                key={emp.id}
-                style={{ borderBottom: '1px solid #F1F5F9', transition: 'background-color 0.2s' }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FDFBF7'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-              >
-                <td style={{ padding: '12px 16px', fontWeight: 700, color: '#7B5233' }}>{emp.employee_id}</td>
-                <td style={{ padding: '12px 16px', fontWeight: 600, color: '#1E293B' }}>{emp.full_name}</td>
-                <td style={{ padding: '12px 16px', color: '#475569' }}>{emp.department_name || '-'}</td>
-                <td style={{ padding: '12px 16px', color: '#475569' }}>{emp.position_name || '-'}</td>
-                <td style={{ padding: '12px 16px', color: '#475569' }}>{emp.section_name || '-'}</td>
-                <td style={{ padding: '12px 16px', color: '#64748B' }}>
-                  {emp.hire_date ? new Date(emp.hire_date).toLocaleDateString('vi-VN') : '-'}
-                </td>
-                <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                  <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
-                    <button
-                      onClick={() => handleEdit(emp)}
-                      style={{ background: 'none', border: 'none', color: '#4F46E5', cursor: 'pointer', padding: '4px' }}
-                      title="Sửa"
-                    >
-                      <Edit2 size={16} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(emp.id)}
-                      style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: '4px' }}
-                      title="Xóa"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Pagination Controls */}
-      {pages > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem', color: '#6B7280' }}>
-          <div>Hiển thị {(page-1)*size+1} - {Math.min(page*size, total)} trên tổng số {total} nhân sự</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <button
-              onClick={() => setPage(p => Math.max(p - 1, 1))}
-              disabled={page === 1}
-              style={{ padding: '6px 10px', border: '1px solid #D1D5DB', borderRadius: '6px', backgroundColor: '#fff', cursor: page === 1 ? 'not-allowed' : 'pointer' }}
-            >
-              <ChevronLeft size={16} />
-            </button>
-            <span style={{ fontWeight: 600, color: '#374151' }}>{page} / {pages}</span>
-            <button
-              onClick={() => setPage(p => Math.min(p + 1, pages))}
-              disabled={page === pages}
-              style={{ padding: '6px 10px', border: '1px solid #D1D5DB', borderRadius: '6px', backgroundColor: '#fff', cursor: page === pages ? 'not-allowed' : 'pointer' }}
-            >
-              <ChevronRight size={16} />
-            </button>
+      <div className="admin-list-layout">
+        <div className="mgmt-table card admin-table-card">
+          <div className="table-responsive desktop-only admin-table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Mã NV</th>
+                  <th>Họ tên</th>
+                  <th>Phòng ban</th>
+                  <th>Vị trí</th>
+                  <th>Bộ phận</th>
+                  <th>Ngày vào làm</th>
+                  <th style={{ textAlign: 'center' }}>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                {employees.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: '#9CA3AF' }}>Không tìm thấy nhân sự nào.</td>
+                  </tr>
+                ) : employees.map((emp) => (
+                  <tr key={emp.id}>
+                    <td style={{ fontWeight: 700, color: '#7B5233' }}>{emp.employee_id}</td>
+                    <td style={{ fontWeight: 600 }}>{emp.full_name}</td>
+                    <td>{emp.department_name || '-'}</td>
+                    <td>{emp.position_name || '-'}</td>
+                    <td>{emp.section_name || '-'}</td>
+                    <td>
+                      {emp.hire_date ? new Date(emp.hire_date).toLocaleDateString('vi-VN') : '-'}
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                        <button
+                          onClick={() => handleEdit(emp)}
+                          style={{ background: 'none', border: 'none', color: '#4F46E5', cursor: 'pointer', padding: '4px' }}
+                          title="Sửa"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(emp.id)}
+                          style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: '4px' }}
+                          title="Xóa"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
-      )}
+
+        {/* Phân trang */}
+        <div className="admin-pagination-desktop desktop-only" style={{ marginTop: '16px' }}>
+          <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
+            Hiển thị <b>{employees.length}</b> trên <b>{total}</b> nhân sự
+          </div>
+          {pages > 1 && (
+            <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+              <button
+                disabled={page === 1}
+                onClick={() => setPage(page - 1)}
+                className="page-btn"
+              >
+                &lt; Trước
+              </button>
+              {(() => {
+                const pageButtons = [];
+                for (let i = 1; i <= pages; i++) {
+                  pageButtons.push(
+                    <button
+                      key={i}
+                      className={`page-btn ${page === i ? 'active' : ''}`}
+                      onClick={() => setPage(i)}
+                    >
+                      {i}
+                    </button>
+                  );
+                }
+                return pageButtons;
+              })()}
+              <button
+                disabled={page >= pages}
+                onClick={() => setPage(page + 1)}
+                className="page-btn"
+              >
+                Sau &gt;
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Employee Modal popup NS05 */}
       <EmployeeModal
@@ -295,6 +310,7 @@ const EmployeeListView = () => {
         onSave={loadData}
       />
     </div>
+  </div>
   );
 };
 

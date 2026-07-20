@@ -1,0 +1,814 @@
+[
+  {
+    "id": 1,
+    "default_code": "AD1",
+    "current_code": "AD1",
+    "title": "Đăng nhập",
+    "has_cyrillic": false
+  },
+  {
+    "id": 2,
+    "default_code": "AD2",
+    "current_code": "AD2",
+    "title": "Trang chủ",
+    "has_cyrillic": false
+  },
+  {
+    "id": 3,
+    "default_code": "AD3",
+    "current_code": "AD3",
+    "title": "Quản lý người dùng",
+    "has_cyrillic": false
+  },
+  {
+    "id": 4,
+    "default_code": "AD3.1",
+    "current_code": "AD3.1",
+    "title": "Tạo người dùng mới",
+    "has_cyrillic": false
+  },
+  {
+    "id": 5,
+    "default_code": "AD4",
+    "current_code": "AD4",
+    "title": "Danh sách bàn giao",
+    "has_cyrillic": false
+  },
+  {
+    "id": 6,
+    "default_code": "AD5",
+    "current_code": "AD5",
+    "title": "Nhật ký sự cố",
+    "has_cyrillic": false
+  },
+  {
+    "id": 7,
+    "default_code": "AD6",
+    "current_code": "AD6",
+    "title": "Báo cáo kiểm tra",
+    "has_cyrillic": false
+  },
+  {
+    "id": 8,
+    "default_code": "AD7",
+    "current_code": "AD7",
+    "title": "Báo cáo KPI",
+    "has_cyrillic": false
+  },
+  {
+    "id": 9,
+    "default_code": "AD8",
+    "current_code": "AD8",
+    "title": "Góp ý cải tiến",
+    "has_cyrillic": false
+  },
+  {
+    "id": 10,
+    "default_code": "AD9",
+    "current_code": "AD9",
+    "title": "Điểm nóng cần chú ý",
+    "has_cyrillic": false
+  },
+  {
+    "id": 11,
+    "default_code": "AD10",
+    "current_code": "AD10",
+    "title": "Dữ liệu đóng gói",
+    "has_cyrillic": false
+  },
+  {
+    "id": 12,
+    "default_code": "AD11",
+    "current_code": "AD11",
+    "title": "Quản lý QR dự phòng",
+    "has_cyrillic": false
+  },
+  {
+    "id": 13,
+    "default_code": "MA1",
+    "current_code": "MA1",
+    "title": "Tổng quan sản xuất",
+    "has_cyrillic": false
+  },
+  {
+    "id": 14,
+    "default_code": "MA2",
+    "current_code": "MA2",
+    "title": "Kế hoạch sản xuất",
+    "has_cyrillic": false
+  },
+  {
+    "id": 15,
+    "default_code": "MA2.1",
+    "current_code": "MA2.1",
+    "title": "Chi tiết kế hoạch",
+    "has_cyrillic": false
+  },
+  {
+    "id": 16,
+    "default_code": "MA2.2",
+    "current_code": "MA2.2",
+    "title": "Thêm kế hoạch sản xuất",
+    "has_cyrillic": false
+  },
+  {
+    "id": 17,
+    "default_code": "MA3",
+    "current_code": "MA3",
+    "title": "Đơn hàng sản xuất",
+    "has_cyrillic": false
+  },
+  {
+    "id": 18,
+    "default_code": "MA3.1",
+    "current_code": "MA3.1",
+    "title": "Tạo đơn hàng",
+    "has_cyrillic": false
+  },
+  {
+    "id": 19,
+    "default_code": "MA4",
+    "current_code": "MA4",
+    "title": "Danh mục sản phẩm",
+    "has_cyrillic": false
+  },
+  {
+    "id": 20,
+    "default_code": "MA4.1",
+    "current_code": "MA4.1",
+    "title": "Chi tiết sản phẩm",
+    "has_cyrillic": false
+  },
+  {
+    "id": 21,
+    "default_code": "MA4.2",
+    "current_code": "MA4.2",
+    "title": "Thêm sản phẩm",
+    "has_cyrillic": false
+  },
+  {
+    "id": 22,
+    "default_code": "MA5",
+    "current_code": "MA5",
+    "title": "Tiến độ sản xuất",
+    "has_cyrillic": false
+  },
+  {
+    "id": 23,
+    "default_code": "MA6",
+    "current_code": "MA6",
+    "title": "Theo dõi giao hàng",
+    "has_cyrillic": false
+  },
+  {
+    "id": 24,
+    "default_code": "MA7",
+    "current_code": "MA7",
+    "title": "Thẻ Pallet ngoại lệ",
+    "has_cyrillic": false
+  },
+  {
+    "id": 25,
+    "default_code": "MB1",
+    "current_code": "MB1",
+    "title": "Đăng nhập",
+    "has_cyrillic": false
+  },
+  {
+    "id": 26,
+    "default_code": "MB2",
+    "current_code": "MB2",
+    "title": "Thông tin giao hàng",
+    "has_cyrillic": false
+  },
+  {
+    "id": 27,
+    "default_code": "MB2.1",
+    "current_code": "MB2.1",
+    "title": "Tạo phiếu giao hàng",
+    "has_cyrillic": false
+  },
+  {
+    "id": 28,
+    "default_code": "MB2.2",
+    "current_code": "MB2.2",
+    "title": "Nhận hàng",
+    "has_cyrillic": false
+  },
+  {
+    "id": 29,
+    "default_code": "MB2.4",
+    "current_code": "MB2.4",
+    "title": "Kiểm tra đầu vào",
+    "has_cyrillic": false
+  },
+  {
+    "id": 30,
+    "default_code": "MB4",
+    "current_code": "MB4",
+    "title": "Theo dõi kế hoạch",
+    "has_cyrillic": false
+  },
+  {
+    "id": 31,
+    "default_code": "MB5",
+    "current_code": "MB5",
+    "title": "Kiểm tra hàng ngày",
+    "has_cyrillic": false
+  },
+  {
+    "id": 32,
+    "default_code": "MB6",
+    "current_code": "MB6",
+    "title": "Kiểm tra nhập kho",
+    "has_cyrillic": false
+  },
+  {
+    "id": 33,
+    "default_code": "MB7",
+    "current_code": "MB7",
+    "title": "Lịch sử kiểm tra",
+    "has_cyrillic": false
+  },
+  {
+    "id": 34,
+    "default_code": "MB8",
+    "current_code": "MB8",
+    "title": "Theo dõi KPI",
+    "has_cyrillic": false
+  },
+  {
+    "id": 35,
+    "default_code": "MB8.1",
+    "current_code": "MB8.1",
+    "title": "Đánh giá nhân viên",
+    "has_cyrillic": false
+  },
+  {
+    "id": 36,
+    "default_code": "MB8.2",
+    "current_code": "MB8.2",
+    "title": "Danh sách KPI nhân viên",
+    "has_cyrillic": false
+  },
+  {
+    "id": 37,
+    "default_code": "MB9",
+    "current_code": "MB9",
+    "title": "Khen thưởng & Kỷ luật",
+    "has_cyrillic": false
+  },
+  {
+    "id": 38,
+    "default_code": "MB10",
+    "current_code": "MB10",
+    "title": "Danh sách thiết bị",
+    "has_cyrillic": false
+  },
+  {
+    "id": 39,
+    "default_code": "MB11",
+    "current_code": "MB11",
+    "title": "Chi tiết kiểm tra chất lượng",
+    "has_cyrillic": false
+  },
+  {
+    "id": 40,
+    "default_code": "MB12",
+    "current_code": "MB12",
+    "title": "In nhiệt",
+    "has_cyrillic": false
+  },
+  {
+    "id": 41,
+    "default_code": "MB13",
+    "current_code": "MB13",
+    "title": "Danh sách CAPA",
+    "has_cyrillic": false
+  },
+  {
+    "id": 42,
+    "default_code": "MB14",
+    "current_code": "MB14",
+    "title": "Báo cáo CAPA",
+    "has_cyrillic": false
+  },
+  {
+    "id": 43,
+    "default_code": "MB15",
+    "current_code": "MB15",
+    "title": "Chi tiết CAPA",
+    "has_cyrillic": false
+  },
+  {
+    "id": 44,
+    "default_code": "AD3.2",
+    "current_code": "AD3.2",
+    "title": "Chỉnh sửa người dùng",
+    "has_cyrillic": false
+  },
+  {
+    "id": 45,
+    "default_code": "AD12",
+    "current_code": "AD12",
+    "title": "Quản lý danh mục lỗi",
+    "has_cyrillic": false
+  },
+  {
+    "id": 46,
+    "default_code": "AD13",
+    "current_code": "AD13",
+    "title": "Hồ sơ chất lượng",
+    "has_cyrillic": false
+  },
+  {
+    "id": 47,
+    "default_code": "AD13.1",
+    "current_code": "AD13.1",
+    "title": "Chi tiết hồ sơ chất lượng",
+    "has_cyrillic": false
+  },
+  {
+    "id": 48,
+    "default_code": "AD14",
+    "current_code": "AD14",
+    "title": "Quản lý Màn hình",
+    "has_cyrillic": false
+  },
+  {
+    "id": 49,
+    "default_code": "AD14.1",
+    "current_code": "AD14.1",
+    "title": "Chi tiết thiết kế màn hình",
+    "has_cyrillic": false
+  },
+  {
+    "id": 50,
+    "default_code": "AD15",
+    "current_code": "AD15",
+    "title": "Giám sát hệ thống & CSDL",
+    "has_cyrillic": false
+  },
+  {
+    "id": 51,
+    "default_code": "CL1",
+    "current_code": "CL1",
+    "title": "Khiếu nại khách hàng (Claim)",
+    "has_cyrillic": false
+  },
+  {
+    "id": 52,
+    "default_code": "CL2",
+    "current_code": "CL2",
+    "title": "Quản lý đơn giá",
+    "has_cyrillic": false
+  },
+  {
+    "id": 53,
+    "default_code": "CL3",
+    "current_code": "CL3",
+    "title": "Thông tin giao hàng (Claim)",
+    "has_cyrillic": false
+  },
+  {
+    "id": 54,
+    "default_code": "AD16",
+    "current_code": "AD16",
+    "title": "Quản lý Bug",
+    "has_cyrillic": false
+  },
+  {
+    "id": 55,
+    "default_code": "COMMON",
+    "current_code": "COMMON",
+    "title": "Toolbar / Thanh công cụ",
+    "has_cyrillic": false
+  },
+  {
+    "id": 56,
+    "default_code": "AD17-Root",
+    "current_code": "AD17-Root",
+    "title": "Admin Admin",
+    "has_cyrillic": false
+  },
+  {
+    "id": 78,
+    "default_code": "AD37",
+    "current_code": "AD37",
+    "title": "Quản lý thiết bị",
+    "has_cyrillic": false
+  },
+  {
+    "id": 79,
+    "default_code": "MA8",
+    "current_code": "MA8",
+    "title": "Manufacture Manufacture Dashboard",
+    "has_cyrillic": false
+  },
+  {
+    "id": 95,
+    "default_code": "CL4",
+    "current_code": "CL4",
+    "title": "Admin Chatbot",
+    "has_cyrillic": false
+  },
+  {
+    "id": 96,
+    "default_code": "MB16",
+    "current_code": "MB16",
+    "title": "Lịch sử bàn giao",
+    "has_cyrillic": false
+  },
+  {
+    "id": 97,
+    "default_code": "MB17",
+    "current_code": "MB17",
+    "title": "Chi tiết bàn giao",
+    "has_cyrillic": false
+  },
+  {
+    "id": 98,
+    "default_code": "MB18",
+    "current_code": "MB18",
+    "title": "Trang chủ",
+    "has_cyrillic": false
+  },
+  {
+    "id": 99,
+    "default_code": "MB19",
+    "current_code": "MB19",
+    "title": "Góp ý cải tiến",
+    "has_cyrillic": false
+  },
+  {
+    "id": 100,
+    "default_code": "MB20",
+    "current_code": "MB20",
+    "title": "Báo cáo CTQ / SOS",
+    "has_cyrillic": false
+  },
+  {
+    "id": 101,
+    "default_code": "MB21",
+    "current_code": "MB21",
+    "title": "Cảnh báo lỗi",
+    "has_cyrillic": false
+  },
+  {
+    "id": 102,
+    "default_code": "MB22",
+    "current_code": "MB22",
+    "title": "Kiểm tra bám dính",
+    "has_cyrillic": false
+  },
+  {
+    "id": 103,
+    "default_code": "MB23",
+    "current_code": "MB23",
+    "title": "Kiểm tra sau đóng gói",
+    "has_cyrillic": false
+  },
+  {
+    "id": 104,
+    "default_code": "MB24",
+    "current_code": "MB24",
+    "title": "Kiểm tra định hình",
+    "has_cyrillic": false
+  },
+  {
+    "id": 105,
+    "default_code": "MB25",
+    "current_code": "MB25",
+    "title": "Kiểm tra lắp ráp",
+    "has_cyrillic": false
+  },
+  {
+    "id": 106,
+    "default_code": "MB26",
+    "current_code": "MB26",
+    "title": "Kiểm tra sơn",
+    "has_cyrillic": false
+  },
+  {
+    "id": 107,
+    "default_code": "MB27",
+    "current_code": "MB27",
+    "title": "Kiểm tra đóng gói",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1056,
+    "default_code": "MB28",
+    "current_code": "MB28",
+    "title": "Xem kế hoạch sản xuất",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1057,
+    "default_code": "MB29",
+    "current_code": "MB29",
+    "title": "Tạo kế hoạch sản xuất",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1060,
+    "default_code": "AD37.1",
+    "current_code": "AD37.1",
+    "title": "Danh sách thiết bị (Nhóm cây)",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1061,
+    "default_code": "AD37.2",
+    "current_code": "AD37.2",
+    "title": "Nhật ký kiểm tra & Hiệu chuẩn",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1062,
+    "default_code": "AD37.3",
+    "current_code": "AD37.3",
+    "title": "Đào tạo vận hành thiết bị",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1063,
+    "default_code": "AD37.4",
+    "current_code": "AD37.4",
+    "title": "Form Bàn giao & Khai báo thiết bị",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1064,
+    "default_code": "AD37.41",
+    "current_code": "AD37.41",
+    "title": "Cập nhật bàn giao thiết bị",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1065,
+    "default_code": "AD37.5",
+    "current_code": "AD37.5",
+    "title": "Chi tiết thiết bị máy móc",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1066,
+    "default_code": "AD37.6",
+    "current_code": "AD37.6",
+    "title": "Chi tiết đào tạo vận hành",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1074,
+    "default_code": "AD7.1",
+    "current_code": "AD7.1",
+    "title": "Checklist công việc",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1075,
+    "default_code": "AD7.2",
+    "current_code": "AD7.2",
+    "title": "Danh sách KPI",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1076,
+    "default_code": "AD7.3",
+    "current_code": "AD7.3",
+    "title": "Quy tắc cộng trừ điểm",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1077,
+    "default_code": "AD7.4",
+    "current_code": "AD7.4",
+    "title": "Phản hồi và nhận xét",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1083,
+    "default_code": "AD3.3",
+    "current_code": "AD3.3",
+    "title": "Chi tiết phân quyền người dùng",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1084,
+    "default_code": "AD3.4",
+    "current_code": "AD3.4",
+    "title": "Quản lý bộ phận",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1085,
+    "default_code": "AD3.5",
+    "current_code": "AD3.5",
+    "title": "Quản lý chức vụ",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1086,
+    "default_code": "AD3.2-P",
+    "current_code": "AD38",
+    "title": "Thông tin cá nhân",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1087,
+    "default_code": "MA9",
+    "current_code": "MA9",
+    "title": "Admin Manufacture Dashboard",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1088,
+    "default_code": "AD39",
+    "current_code": "AD39",
+    "title": "Admin Plan",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1089,
+    "default_code": "AD39.1",
+    "current_code": "AD39.1",
+    "title": "Admin Plan Detail",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1090,
+    "default_code": "AD40",
+    "current_code": "AD40",
+    "title": "Admin Create",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1091,
+    "default_code": "AD41",
+    "current_code": "AD41",
+    "title": "Admin Delivery Tracking",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1092,
+    "default_code": "AD42",
+    "current_code": "AD42",
+    "title": "Admin Products",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1093,
+    "default_code": "AD42.1",
+    "current_code": "AD42.1",
+    "title": "Admin Products Detail",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1094,
+    "default_code": "AD43",
+    "current_code": "AD43",
+    "title": "Admin Create",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1095,
+    "default_code": "AD44",
+    "current_code": "AD44",
+    "title": "Admin Progress Detail",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1096,
+    "default_code": "AD45",
+    "current_code": "AD45",
+    "title": "Admin Orders",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1097,
+    "default_code": "AD46",
+    "current_code": "AD46",
+    "title": "Admin Create",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1098,
+    "default_code": "AD47",
+    "current_code": "AD47",
+    "title": "Admin Backup Qrs",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1099,
+    "default_code": "AD48",
+    "current_code": "AD48",
+    "title": "Admin Exception Deliveries",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1100,
+    "default_code": "AD49",
+    "current_code": "AD49",
+    "title": "Admin Purchase Requisitions",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1101,
+    "default_code": "AD49.1",
+    "current_code": "AD49.1",
+    "title": "Admin Purchase Requisitions Detail",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1102,
+    "default_code": "AD50",
+    "current_code": "AD50",
+    "title": "Admin Purchase Order Items",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1103,
+    "default_code": "OTHER",
+    "current_code": "OTHER",
+    "title": "Khác",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1104,
+    "default_code": "AD17",
+    "current_code": "AD17",
+    "title": "Quản lý hồ sơ ISO",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1105,
+    "default_code": "AD18",
+    "current_code": "AD18",
+    "title": "Quản lý quy trình",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1106,
+    "default_code": "AD17.1",
+    "current_code": "AD17.1",
+    "title": "Cập nhật mẫu tài liệu",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1107,
+    "default_code": "AD51",
+    "current_code": "AD51",
+    "title": "Admin Machines",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1108,
+    "default_code": "AD52",
+    "current_code": "AD52",
+    "title": "Admin History",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1109,
+    "default_code": "AD53",
+    "current_code": "AD53",
+    "title": "Admin Training",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1110,
+    "default_code": "AD54",
+    "current_code": "AD54",
+    "title": "Admin Detail Detail",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1111,
+    "default_code": "MB30",
+    "current_code": "MB30",
+    "title": "Inspection First Article",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1112,
+    "default_code": "AD55",
+    "current_code": "AD55",
+    "title": "Admin Edit Detail",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1113,
+    "default_code": "MB6.1",
+    "current_code": "MB6.1",
+    "title": "Kiểm tra độ ẩm",
+    "has_cyrillic": false
+  },
+  {
+    "id": 1114,
+    "default_code": "MB31",
+    "current_code": "MB31",
+    "title": "Inspection Stage Process",
+    "has_cyrillic": false
+  }
+]

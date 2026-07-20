@@ -389,7 +389,6 @@ const ProjectProgressView = () => {
               style={{
                 alignSelf: 'flex-end',
                 height: '34px',
-                border: 'none',
                 background: '#FAF6F0',
                 color: '#7B5233',
                 fontSize: '0.8rem',
@@ -440,9 +439,10 @@ const ProjectProgressView = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {paginatedScreens.map((screen) => {
+                    {paginatedScreens.map((screen, index) => {
                       const bugData = getScreenBugsData(screen.id);
                       const progress = calculateScreenProgress(screen, bugData);
+                      const isLastFew = index >= paginatedScreens.length - 2 && paginatedScreens.length > 2;
 
                       // Calculate updater and updated_at based on latest screen bugs or screen update_at
                       const screenBugs = bugs.filter(b => b.screen_id === screen.id);
@@ -560,7 +560,15 @@ const ProjectProgressView = () => {
                               <MoreVertical size={16} style={{ pointerEvents: 'none' }} />
                             </button>
                             {actionMenuId === screen.id && (
-                              <div className="action-menu" style={{ right: '10px', opacity: 1, animation: 'none' }}>
+                              <div 
+                                className="action-menu" 
+                                style={{ 
+                                  right: '10px', 
+                                  opacity: 1, 
+                                  animation: 'none',
+                                  ...(isLastFew ? { top: 'auto', bottom: 'calc(100% + 4px)' } : {})
+                                }}
+                              >
                                 <button
                                   className="action-menu-item"
                                   onClick={(e) => {

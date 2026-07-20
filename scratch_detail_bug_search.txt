@@ -1,0 +1,177 @@
+Line 4: import { Bug, Play, Type, Table2, CheckSquare, List, Layout, Menu, CreditCard, Sliders, Bell, Component, MoreVertical } from 'lucide-react';
+Line 44: const getBugStatusLabel = (status) => {
+Line 54: import { bugService } from '@modules/System/Models/bug.service';
+Line 1177: const [expandedBugId, setExpandedBugId] = useState(null);
+Line 1178: const [isBugListCollapsed, setIsBugListCollapsed] = useState(false);
+Line 1180: const [showBugModal, setShowBugModal] = useState(false);
+Line 1181: const [bugModalData, setBugModalData] = useState({
+Line 1190: const [bugModalMode, setBugModalMode] = useState('create'); // 'create' | 'edit'
+Line 1191: const [selectedBug, setSelectedBug] = useState(null);
+Line 1192: const [bugImageUploading, setBugImageUploading] = useState(false);
+Line 1266: if (!e.target.closest('.comp-action-btn') && !e.target.closest('.action-menu')) {
+Line 1350: bugs: []
+Line 1367: bugs: []
+Line 1379: const bugsData = await bugService.getBugs();
+Line 1380: if (bugsData) {
+Line 1381: if (Array.isArray(bugsData)) {
+Line 1382: data.bugs = bugsData.filter(b => b.screen_id === data.id);
+Line 1383: } else if (Array.isArray(bugsData.items)) {
+Line 1384: data.bugs = bugsData.items.filter(b => b.screen_id === data.id);
+Line 1387: } catch (bugErr) {
+Line 1388: console.error('Failed to load bugs for screen detail:', bugErr);
+Line 1396: console.error('Lỗi khi tải chi tiết màn hình:', err);
+Line 1518: const res = await bugService.uploadImage(file);
+Line 1588: const handleBugImageUpload = async (e) => {
+Line 1592: setBugImageUploading(true);
+Line 1593: showToast('Đang tải lên ảnh lỗi...', 'info');
+Line 1594: const res = await bugService.uploadImage(file);
+Line 1596: setBugModalData(prev => ({ ...prev, imagePath: res.url }));
+Line 1597: showToast('Tải lên hình ảnh lỗi thành công!');
+Line 1603: showToast('Tải lên hình ảnh lỗi thất bại!', 'error');
+Line 1605: setBugImageUploading(false);
+Line 1609: const handleCreateBug = async () => {
+Line 1610: if (!bugModalData.description) {
+Line 1611: showToast('Vui lòng nhập mô tả lỗi!', 'error');
+Line 1615: if (bugModalData.targetDate && bugModalData.targetDate < todayStr) {
+Line 1622: description: `[${bugModalData.componentName}] ${bugModalData.description}`,
+Line 1623: severity: bugModalData.severity,
+Line 1625: reporter: bugModalData.reporter,
+Line 1626: assignee: bugModalData.assignee,
+Line 1627: requested_at: bugModalData.targetDate ? `${bugModalData.targetDate}T12:00:00Z` : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+Line 1628: image_paths: bugModalData.imagePath ? [bugModalData.imagePath] : [],
+Line 1632: await bugService.createBug(payload);
+Line 1633: showToast('Khai báo lỗi thành công!');
+Line 1634: setShowBugModal(false);
+Line 1638: showToast('Khai báo lỗi thất bại!', 'error');
+Line 1642: const handleDeleteBug = (bugId) => {
+Line 1645: 'Bạn có chắc chắn muốn xóa lỗi này khỏi cơ sở dữ liệu?',
+Line 1648: await bugService.deleteBug(bugId);
+Line 1649: showToast('Xóa lỗi thành công!');
+Line 1653: showToast('Xóa lỗi thất bại!', 'error');
+Line 1659: const handleOpenEditBugModal = (bug) => {
+Line 1660: setBugModalMode('edit');
+Line 1661: setSelectedBug(bug);
+Line 1663: const parsed = parseDescription(bug.description);
+Line 1665: setBugModalData({
+Line 1666: id: bug.id,
+Line 1668: severity: bug.severity || 'Medium',
+Line 1670: reporter: bug.reporter || '',
+Line 1671: assignee: bug.assignee || 'IT',
+Line 1672: targetDate: bug.requested_at ? bug.requested_at.split('T')[0] : '',
+Line 1673: imagePath: bug.images && bug.images.length > 0 ? bug.images[0].image_path : '',
+Line 1674: status: bug.status || 'New'
+Line 1681: setShowBugModal(true);
+Line 1684: const handleUpdateBug = async () => {
+Line 1690: let newStatus = bugModalData.status;
+Line 1691: const current = (bugModalData.status || '').toLowerCase();
+Line 1709: severity: bugModalData.severity,
+Line 1710: assignee: bugModalData.assignee,
+Line 1712: requested_at: bugModalData.targetDate ? `${bugModalData.targetDate}T12:00:00Z` : undefined
+Line 1714: await bugService.updateBug(bugModalData.id, updatePayload);
+Line 1721: assignee: bugModalData.assignee
+Line 1723: await bugService.addBugUpdate(bugModalData.id, replyPayload);
+Line 1725: showToast('Cập nhật tiến độ lỗi thành công!');
+Line 1726: setShowBugModal(false);
+Line 1730: showToast('Cập nhật tiến độ lỗi thất bại!', 'error');
+Line 1742: const res = await bugService.uploadImage(file);
+Line 1757: const handleSubmitReply = async (bug) => {
+Line 1763: let newStatus = bug.status;
+Line 1764: const current = (bug.status || '').toLowerCase();
+Line 1786: assignee: bug.assignee
+Line 1789: await bugService.addBugUpdate(bug.id, payload);
+Line 2339: setBugModalMode('create');
+Line 2340: setBugModalData({
+Line 2349: setShowBugModal(true);
+Line 2353: + Báo lỗi
+Line 2546: className="comp-action-btn"
+Line 2591: setBugModalMode('create');
+Line 2592: setBugModalData({
+Line 2601: setShowBugModal(true);
+Line 2613: Báo lỗi
+Line 3295: {/* 3. Bottom Card: Danh sách lỗi */}
+Line 3297: <div className="bugs-inline-section card" style={{
+Line 3306: className="bugs-section-header"
+Line 3307: onClick={() => setIsBugListCollapsed(!isBugListCollapsed)}
+Line 3320: <span style={{ fontSize: '0.88rem', fontWeight: '800', color: '#2D1A12', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Danh sách lỗi</span>
+Line 3328: }}>{(screen.bugs || []).length}</span>
+Line 3330: <div style={{ transform: isBugListCollapsed ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.2s', display: 'flex', alignItems: 'center' }}>
+Line 3335: {!isBugListCollapsed && (
+Line 3337: {(!screen.bugs || screen.bugs.length === 0) ? (
+Line 3339: Không có báo cáo lỗi nào cho màn hình này.
+Line 3358: {screen.bugs.map((bug) => {
+Line 3359: const isBugExpanded = expandedBugId === bug.id;
+Line 3360: const parsed = parseDescription(bug.description);
+Line 3368: <React.Fragment key={bug.id}>
+Line 3370: onClick={() => setExpandedBugId(isBugExpanded ? null : bug.id)}
+Line 3371: style={{ cursor: 'pointer', backgroundColor: isBugExpanded ? '#FAF6F0' : undefined }}
+Line 3374: <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }} className="font-mono font-bold">BUG-{bug.id}</td>
+Line 3378: <span style={{ color: severityColors[bug.severity] || '#7B5233', fontWeight: 'bold' }}>
+Line 3379: {bug.severity === 'Critical' ? 'Khẩn cấp' : (bug.severity === 'High' ? 'Cao' : (bug.severity === 'Medium' ? 'Trung bình' : 'Thấp'))}
+Line 3384: getBugStatusLabel(bug.status) === 'Hoàn thành'
+Line 3386: : (getBugStatusLabel(bug.status) === 'Đã sửa'
+Line 3390: {getBugStatusLabel(bug.status)}
+Line 3393: <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }}>{formatDate(bug.completed_at || bug.created_at)}</td>
+Line 3394: <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }}>{bug.assignee || '-'}</td>
+Line 3395: <td style={{ padding: '10px', border: '1px solid #E5E7EB', fontSize: '0.78rem' }}>{formatDate(bug.created_at)}</td>
+Line 3404: handleOpenEditBugModal(bug);
+Line 3422: handleDeleteBug(bug.id);
+Line 3441: {isBugExpanded && (
+Line 3446: {/* 1. Always display the original bug report */}
+Line 3450: {bug.images && bug.images.length > 0 ? (
+Line 3451: bug.images.map((img, idx) => (
+Line 3453: <img src={getImageUrl(img.image_path)} alt="Bug spec" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onClick={() => window.open(getImageUrl(img.image_path), '_blank')} />
+Line 3465: <span>Phản hồi từ [{getPositionByName(bug.reporter)} - {bug.reporter || 'Hệ thống'}]</span>
+Line 3466: <span>{formatDate(bug.created_at)}</span>
+Line 3475: {bug.updates && bug.updates.length > 0 && (
+Line 3477: {bug.updates.map((update, uIdx) => (
+Line 3478: <div key={uIdx} style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap', borderBottom: uIdx < bug.updates.length - 1 ? '1px dashed #FAF0E6' : 'none', paddingBottom: '12px' }}>
+Line 3484: <img src={getImageUrl(img.image_path)} alt="Bug update" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onClick={() => window.open(getImageUrl(img.image_path), '_blank')} />
+Line 4528: display: block; /* Đổi sang block để tránh lỗi co rúm chiều rộng flexbox */
+Line 6083: {showBugModal && (
+Line 6116: {bugModalMode === 'edit' ? `HD04: Chi tiết lỗi BUG-${bugModalData.id}` : `${screen?.current_code || 'AD'}: Khai báo lỗi`}
+Line 6120: onClick={() => setShowBugModal(false)}
+Line 6155: value={bugModalMode === 'edit' ? getBugStatusLabel(bugModalData.status) : 'Mới'}
+Line 6167: value={bugModalData.componentName}
+Line 6168: onChange={(e) => setBugModalData(prev => ({ ...prev, componentName: e.target.value }))}
+Line 6169: disabled={bugModalMode === 'edit'}
+Line 6170: style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: bugModalMode === 'edit' ? '#F1F5F9' : '#fff', color: bugModalMode === 'edit' ? '#64748B' : '#334155', fontWeight: '500', boxSizing: 'border-box', height: '36px', cursor: bugModalMode === 'edit' ? 'default' : 'pointer' }}
+Line 6181: value={bugModalData.severity}
+Line 6182: onChange={(e) => setBugModalData(prev => ({ ...prev, severity: e.target.value }))}
+Line 6183: disabled={bugModalMode === 'edit'}
+Line 6184: style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: bugModalMode === 'edit' ? '#F1F5F9' : '#fff', color: bugModalMode === 'edit' ? '#64748B' : '#334155', fontWeight: '500', boxSizing: 'border-box', height: '36px', cursor: bugModalMode === 'edit' ? 'default' : 'pointer' }}
+Line 6194: {/* Row 3: Mô tả lỗi */}
+Line 6196: <label className="required" style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.78rem', display: 'block', marginBottom: '6px' }}>Mô tả lỗi *</label>
+Line 6198: value={bugModalData.description}
+Line 6199: onChange={(e) => setBugModalData(prev => ({ ...prev, description: e.target.value }))}
+Line 6200: placeholder="Mô tả chi tiết hành vi lỗi hoặc sự khác biệt so với đặc tả..."
+Line 6202: disabled={bugModalMode === 'edit'}
+Line 6203: style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', color: bugModalMode === 'edit' ? '#64748B' : '#334155', backgroundColor: bugModalMode === 'edit' ? '#F1F5F9' : '#fff', boxSizing: 'border-box', minHeight: '60px', fontFamily: 'inherit', outline: 'none' }}
+Line 6211: id="bug-image-upload"
+Line 6213: onChange={handleBugImageUpload}
+Line 6214: disabled={bugModalMode === 'edit'}
+Line 6219: if (bugModalMode !== 'edit') {
+Line 6220: document.getElementById('bug-image-upload').click();
+Line 6233: cursor: bugModalMode === 'edit' ? 'default' : 'pointer',
+Line 6238: {bugImageUploading ? (
+Line 6240: ) : bugModalData.imagePath ? (
+Line 6243: src={getImageUrl(bugModalData.imagePath)}
+Line 6244: alt="Bug upload preview"
+Line 6247: {bugModalMode !== 'edit' && (
+Line 6252: setBugModalData(prev => ({ ...prev, imagePath: '' }));
+Line 6278: <span style={{ fontSize: '0.78rem', color: '#64748B', fontWeight: 'bold' }}>Thêm hình ảnh lỗi</span>
+Line 6291: value={bugModalData.reporter}
+Line 6312: value={bugModalData.assignee}
+Line 6313: onChange={(e) => setBugModalData(prev => ({ ...prev, assignee: e.target.value }))}
+Line 6314: disabled={bugModalMode === 'edit'}
+Line 6315: style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', backgroundColor: bugModalMode === 'edit' ? '#F1F5F9' : '#fff', color: bugModalMode === 'edit' ? '#64748B' : '#334155', fontWeight: '500', boxSizing: 'border-box', height: '36px', cursor: bugModalMode === 'edit' ? 'default' : 'pointer' }}
+Line 6326: value={bugModalData.targetDate}
+Line 6328: onChange={(e) => setBugModalData(prev => ({ ...prev, targetDate: e.target.value }))}
+Line 6329: disabled={bugModalMode === 'edit'}
+Line 6330: style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '0.82rem', color: bugModalMode === 'edit' ? '#64748B' : '#334155', backgroundColor: bugModalMode === 'edit' ? '#F1F5F9' : '#fff', boxSizing: 'border-box', height: '36px', cursor: bugModalMode === 'edit' ? 'default' : 'pointer' }}
+Line 6336: {bugModalMode === 'edit' ? (
+Line 6344: placeholder="Nhập nội dung phản hồi kết quả sửa lỗi..."
+Line 6354: {(getBugStatusLabel(bugModalData.status) === 'Mới' || getBugStatusLabel(bugModalData.status) === 'Sửa lại') ? (
+Line 6364: ) : getBugStatusLabel(bugModalData.status) === 'Đã sửa' ? (
+Line 6501: onClick={() => setShowBugModal(false)}
+Line 6518: onClick={bugModalMode === 'edit' ? handleUpdateBug : handleCreateBug}
+Line 6531: {bugModalMode === 'edit' ? 'Lưu thay đổi' : 'Tạo mới'}

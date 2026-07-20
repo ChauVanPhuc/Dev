@@ -754,11 +754,12 @@ def get_plan_detail(
             order_ids_list = [o.id for o in orders]
             if order_ids_list:
                 # [PERF] Sử dụng UNION SQL để lấy các order_id có dữ liệu từ cả deliveries và delivery_details trong 1 câu SQL
+                from sqlalchemy import bindparam
                 union_sql = text("""
                     SELECT DISTINCT order_id FROM deliveries WITH (NOLOCK) WHERE order_id IN :ids AND order_id IS NOT NULL
                     UNION
                     SELECT DISTINCT order_id FROM delivery_details WITH (NOLOCK) WHERE order_id IN :ids AND order_id IS NOT NULL
-                """)
+                """).bindparams(bindparam("ids", expanding=True))
                 has_data_ids = {r[0] for r in db.execute(union_sql, {"ids": tuple(order_ids_list)}).fetchall() if r[0] is not None}
             else:
                 has_data_ids = set()

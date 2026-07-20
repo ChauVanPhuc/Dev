@@ -15,11 +15,14 @@ import {
     AlertCircle,
     CheckCircle2,
     Eye,
-    Clock
+    Clock,
+    FileDown,
+    X
 } from 'lucide-react';
 import { qualityService } from '@modules/QualityRecords/Models/quality.service';
 import { API_ROOT } from '@webShared/Services/api.service';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
+import ExcelJS from 'exceljs';
 
 const QualityRecordsDetailView = () => {
     const { id } = useParams(); // poCode
@@ -42,6 +45,12 @@ const QualityRecordsDetailView = () => {
     const [imagePan, setImagePan] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+    
+    // State cho xuất file Excel
+    const [showExportModal, setShowExportModal] = useState(false);
+    const [selectedExportOption, setSelectedExportOption] = useState('all_tabs'); // 'all_tabs' | 'current_tab'
+    const [isExporting, setIsExporting] = useState(false);
+    
     const hasSetTitle = React.useRef(false);
 
 
@@ -79,6 +88,321 @@ const QualityRecordsDetailView = () => {
         
         loadData();
     }, [id]); 
+
+    // --- CÁC HÀM TRỢ GIÚP ĐỊNH DẠNG EXCEL ---
+    const formatExcelHeader = (worksheet, title, columnsCount) => {
+        worksheet.mergeCells(1, 1, 1, columnsCount);
+        const titleCell = worksheet.getCell(1, 1);
+        titleCell.value = title;
+        titleCell.font = { name: 'Arial', size: 16, bold: true, color: { argb: 'FFFFFF' } };
+        titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+        titleCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: '7B5233' }
+        };
+        worksheet.getRow(1).height = 40;
+
+        worksheet.mergeCells(2, 1, 2, columnsCount);
+        const subCell = worksheet.getCell(2, 1);
+        subCell.value = `Ngày xuất báo cáo: ${new Date().toLocaleDateString('vi-VN')} | Hệ thống SmartFlow`;
+        subCell.font = { name: 'Arial', size: 10, italic: true, color: { argb: '4B301E' } };
+        subCell.alignment = { vertical: 'middle', horizontal: 'center' };
+        subCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FAF6F0' }
+        };
+        worksheet.getRow(2).height = 24;
+        worksheet.getRow(3).height = 15;
+    };
+
+    const styleTableHeaderRow = (worksheet, rowNumber, columnsCount) => {
+        const row = worksheet.getRow(rowNumber);
+        row.height = 26;
+        for (let c = 1; c <= columnsCount; c++) {
+            const cell = worksheet.getCell(rowNumber, c);
+            cell.font = { name: 'Arial', size: 11, bold: true, color: { argb: 'FFFFFF' } };
+            cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: '7B5233' }
+            };
+            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+            cell.border = {
+                top: { style: 'thin', color: { argb: 'EADCC9' } },
+                bottom: { style: 'medium', color: { argb: '4B301E' } },
+                left: { style: 'thin', color: { argb: 'EADCC9' } },
+                right: { style: 'thin', color: { argb: 'EADCC9' } }
+            };
+        }
+    };
+
+    const applyDefaultBorders = (worksheet, startRow, endRow, colsCount) => {
+        for (let r = startRow; r <= endRow; r++) {
+            const row = worksheet.getRow(r);
+            row.height = 20;
+            const isEven = r % 2 === 0;
+            for (let c = 1; c <= colsCount; c++) {
+                const cell = worksheet.getCell(r, c);
+                cell.font = { name: 'Arial', size: 10 };
+                cell.border = {
+                    top: { style: 'thin', color: { argb: 'EADCC9' } },
+                    bottom: { style: 'thin', color: { argb: 'EADCC9' } },
+                    left: { style: 'thin', color: { argb: 'EADCC9' } },
+                    right: { style: 'thin', color: { argb: 'EADCC9' } }
+                };
+                if (isEven) {
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FAF9F6' }
+                    };
+                }
+            }
+        }
+    };
+
+    const triggerFileDownload = async (workbook, fileName) => {
+        const safeFileName = fileName.replace(/[\/\\:*?"<>|]/g, '_');
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = safeFileName;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        setTimeout(() => {
+            window.URL.revokeObjectURL(url);
+        }, 100);
+    };
+
+    // Hàm điền dữ liệu cho các sheet
+    const fillHandoverSheet = (sheet, data) => {
+        const cols = [
+            { header: 'STT', key: 'stt', width: 8 },
+            { header: 'Thời Gian Bàn Giao', key: 'time', width: 20 },
+            { header: 'Linh Kiện / Sản Phẩm', key: 'part', width: 25 },
+            { header: 'Công Đoạn Giao', key: 'stage_from', width: 20 },
+            { header: 'Công Đoạn Nhận', key: 'stage_to', width: 20 },
+            { header: 'Số Lượng', key: 'qty', width: 15 },
+            { header: 'Người Giao', key: 'sender', width: 20 },
+            { header: 'Người Nhận', key: 'receiver', width: 20 },
+            { header: 'Trạng Thái', key: 'status', width: 15 },
+            { header: 'Ghi Chú', key: 'note', width: 20 }
+        ];
+        sheet.columns = cols;
+        formatExcelHeader(sheet, `NHẬT KÝ BÀN GIAO CHI TIẾT PO: ${id}`, cols.length);
+        sheet.getRow(4).values = cols.map(c => c.header);
+        styleTableHeaderRow(sheet, 4, cols.length);
+
+        data.forEach((item, idx) => {
+            sheet.addRow({
+                stt: idx + 1,
+                time: item.created_at ? new Date(item.created_at).toLocaleString('vi-VN') : '---',
+                part: item.part_name || item.product_name || '---',
+                stage_from: item.delivery_stage || '---',
+                stage_to: item.receiving_stage || '---',
+                qty: item.quantity_total || 0,
+                sender: item.sx_delivery_name || '---',
+                receiver: item.sx_receipt_name || '---',
+                status: item.status || '---',
+                note: item.note || '---'
+            });
+        });
+
+        applyDefaultBorders(sheet, 5, data.length + 4, cols.length);
+        for (let r = 5; r <= data.length + 4; r++) {
+            sheet.getCell(r, 1).alignment = { horizontal: 'center' };
+            sheet.getCell(r, 2).alignment = { horizontal: 'center' };
+            sheet.getCell(r, 6).alignment = { horizontal: 'right' };
+            sheet.getCell(r, 6).numFmt = '#,##0';
+            sheet.getCell(r, 9).alignment = { horizontal: 'center' };
+        }
+    };
+
+    const fillInboundSheet = (sheet, data) => {
+        const cols = [
+            { header: 'STT', key: 'stt', width: 8 },
+            { header: 'Thời Gian Kiểm Tra', key: 'time', width: 20 },
+            { header: 'Linh Kiện', key: 'part', width: 25 },
+            { header: 'Kích Thước/Quy Cách', key: 'spec', width: 25 },
+            { header: 'Người Kiểm Tra', key: 'inspector', width: 20 },
+            { header: 'Kết Quả', key: 'result', width: 15 },
+            { header: 'Ghi Chú', key: 'note', width: 25 }
+        ];
+        sheet.columns = cols;
+        formatExcelHeader(sheet, `NHẬT KÝ KIỂM TRA ĐẦU VÀO PO: ${id}`, cols.length);
+        sheet.getRow(4).values = cols.map(c => c.header);
+        styleTableHeaderRow(sheet, 4, cols.length);
+
+        data.forEach((item, idx) => {
+            sheet.addRow({
+                stt: idx + 1,
+                time: item.created_at ? new Date(item.created_at).toLocaleString('vi-VN') : '---',
+                part: item.part_name || '---',
+                spec: item.specification || '---',
+                inspector: item.inspector_name || '---',
+                result: item.result === 'Pass' ? 'ĐẠT' : 'KHÔNG ĐẠT',
+                note: item.note || '---'
+            });
+        });
+
+        applyDefaultBorders(sheet, 5, data.length + 4, cols.length);
+        for (let r = 5; r <= data.length + 4; r++) {
+            sheet.getCell(r, 1).alignment = { horizontal: 'center' };
+            sheet.getCell(r, 2).alignment = { horizontal: 'center' };
+            sheet.getCell(r, 7).alignment = { horizontal: 'center' };
+        }
+    };
+
+    const fillQCSheet = (sheet, data) => {
+        const cols = [
+            { header: 'STT', key: 'stt', width: 8 },
+            { header: 'Thời Gian QC', key: 'time', width: 20 },
+            { header: 'Nhân Viên QC', key: 'inspector', width: 20 },
+            { header: 'Độ Ẩm (%)', key: 'moisture', width: 15 },
+            { header: 'Độ Cong (mm)', key: 'bend', width: 15 },
+            { header: 'Ngoại Quan', key: 'visual', width: 18 },
+            { header: 'Kết Cấu', key: 'structure', width: 18 },
+            { header: 'Kích Thước', key: 'size', width: 18 },
+            { header: 'Kết Luận QC', key: 'result', width: 18 },
+            { header: 'Ghi Chú', key: 'note', width: 25 }
+        ];
+        sheet.columns = cols;
+        formatExcelHeader(sheet, `NHẬT KÝ KIỂM TRA CHẤT LƯỢNG QC PO: ${id}`, cols.length);
+        sheet.getRow(4).values = cols.map(c => c.header);
+        styleTableHeaderRow(sheet, 4, cols.length);
+
+        data.forEach((item, idx) => {
+            const resData = item.results_data || {};
+            const renderQCSubValue = (value) => {
+                if (value === null || value === undefined) return '---';
+                if (typeof value === 'object') {
+                    if (value.value !== undefined) return value.value;
+                    return value.is_pass ? 'Đạt' : 'Lỗi';
+                }
+                return value;
+            };
+
+            const sizeObj = resData.size;
+            let sizeStr = '---';
+            if (sizeObj && typeof sizeObj === 'object') {
+                if (sizeObj.long || sizeObj.wide || sizeObj.thick) {
+                    sizeStr = `${sizeObj.long || 0}x${sizeObj.wide || 0}x${sizeObj.thick || 0} mm`;
+                }
+                if (sizeObj.is_pass !== undefined) {
+                    sizeStr += ` (${sizeObj.is_pass ? 'Đạt' : 'Lỗi'})`;
+                }
+            }
+
+            sheet.addRow({
+                stt: idx + 1,
+                time: item.created_at ? new Date(item.created_at).toLocaleString('vi-VN') : '---',
+                inspector: item.qc_inspector_name || '---',
+                moisture: renderQCSubValue(resData.moisture ?? item.moisture),
+                bend: renderQCSubValue(resData.bend ?? item.bend),
+                visual: resData.visual?.is_pass === undefined ? '---' : (resData.visual.is_pass ? 'Đạt' : 'Lỗi'),
+                structure: resData.structure?.is_pass === undefined ? '---' : (resData.structure.is_pass ? 'Đạt' : 'Lỗi'),
+                size: sizeStr,
+                result: item.result?.toUpperCase() || '---',
+                note: item.note || '---'
+            });
+        });
+
+        applyDefaultBorders(sheet, 5, data.length + 4, cols.length);
+        for (let r = 5; r <= data.length + 4; r++) {
+            sheet.getCell(r, 1).alignment = { horizontal: 'center' };
+            sheet.getCell(r, 2).alignment = { horizontal: 'center' };
+            sheet.getCell(r, 4).alignment = { horizontal: 'right' };
+            sheet.getCell(r, 5).alignment = { horizontal: 'right' };
+            sheet.getCell(r, 6).alignment = { horizontal: 'center' };
+            sheet.getCell(r, 7).alignment = { horizontal: 'center' };
+            sheet.getCell(r, 8).alignment = { horizontal: 'center' };
+            sheet.getCell(r, 9).alignment = { horizontal: 'center' };
+        }
+    };
+
+    // --- LOGIC XUẤT EXCEL CHO CHI TIẾT ---
+    const handleExportAllTabs = async () => {
+        setIsExporting(true);
+        try {
+            const workbook = new ExcelJS.Workbook();
+
+            // --- Sheet 1: Tổng quan ---
+            const sheetOverview = workbook.addWorksheet('Tổng Quan PO');
+            formatExcelHeader(sheetOverview, `HỒ SƠ CHẤT LƯỢNG PO: ${id}`, 4);
+
+            sheetOverview.addRow([]);
+            sheetOverview.addRow(['Mã Đơn Hàng / PO:', id]);
+            sheetOverview.addRow(['Khách Hàng:', orderInfo?.customer || '---']);
+            sheetOverview.addRow(['Tổng Số Lượng Yêu Cầu:', `${(orderInfo?.products || []).reduce((acc, p) => acc + (p.quantity || 0), 0)} chiếc`]);
+            sheetOverview.addRow([]);
+
+            const prodHeaders = ['STT', 'Mã SKU', 'Tên Sản Phẩm', 'Số Lượng Yêu Cầu'];
+            sheetOverview.addRow(prodHeaders);
+            styleTableHeaderRow(sheetOverview, 8, prodHeaders.length);
+
+            (orderInfo?.products || []).forEach((p, idx) => {
+                sheetOverview.addRow([idx + 1, p.sku || '---', p.name || '---', p.quantity || 0]);
+            });
+
+            applyDefaultBorders(sheetOverview, 9, (orderInfo?.products || []).length + 8, prodHeaders.length);
+            for (let r = 9; r <= (orderInfo?.products || []).length + 8; r++) {
+                sheetOverview.getCell(r, 1).alignment = { horizontal: 'center' };
+                sheetOverview.getCell(r, 4).alignment = { horizontal: 'right' };
+                sheetOverview.getCell(r, 4).numFmt = '#,##0';
+            }
+            sheetOverview.getColumn(1).width = 10;
+            sheetOverview.getColumn(2).width = 25;
+            sheetOverview.getColumn(3).width = 35;
+            sheetOverview.getColumn(4).width = 20;
+
+            // --- Sheet 2: Bàn giao ---
+            const sheetHandover = workbook.addWorksheet('Lịch Sử Bàn Giao');
+            fillHandoverSheet(sheetHandover, handoverData);
+
+            // --- Sheet 3: Đầu vào ---
+            const sheetInbound = workbook.addWorksheet('Kiểm Tra Đầu Vào');
+            fillInboundSheet(sheetInbound, inboundData);
+
+            // --- Sheet 4: QC ---
+            const sheetQC = workbook.addWorksheet('QC Kiểm Tra Hàng');
+            fillQCSheet(sheetQC, qcData);
+
+            await triggerFileDownload(workbook, `Ho_So_CL_PO_${id}.xlsx`);
+            setShowExportModal(false);
+        } catch (error) {
+            console.error("Lỗi khi xuất đầy đủ hồ sơ PO:", error);
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    const handleExportCurrentTab = async () => {
+        setIsExporting(true);
+        try {
+            const workbook = new ExcelJS.Workbook();
+            if (activeTab === 'handover') {
+                const sheet = workbook.addWorksheet('Lịch Sử Bàn Giao');
+                fillHandoverSheet(sheet, handoverData);
+            } else if (activeTab === 'inbound') {
+                const sheet = workbook.addWorksheet('Kiểm Tra Đầu Vào');
+                fillInboundSheet(sheet, inboundData);
+            } else if (activeTab === 'qc') {
+                const sheet = workbook.addWorksheet('QC Kiểm Tra Hàng');
+                fillQCSheet(sheet, qcData);
+            }
+            await triggerFileDownload(workbook, `Ho_So_CL_PO_${id}_${activeTab}.xlsx`);
+            setShowExportModal(false);
+        } catch (error) {
+            console.error("Lỗi khi xuất tab hiện tại:", error);
+        } finally {
+            setIsExporting(false);
+        }
+    }; 
 
     // Hàm mở modal an toàn
     const handleOpenModal = (e, item, type) => {
@@ -408,6 +732,29 @@ const QualityRecordsDetailView = () => {
                     color: #2D1A12;
                     font-weight: 600;
                 }
+
+                /* Hộp thoại & Tuỳ chọn Xuất Excel */
+                .export-option-card {
+                    border: 1.5px solid #EADCC9;
+                    border-radius: 12px;
+                    padding: 14px;
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 12px;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    background-color: #fff;
+                    text-align: left;
+                }
+                .export-option-card:hover {
+                    border-color: #7B5233;
+                    background-color: #FAF6F0;
+                }
+                .export-option-card.active {
+                    border-color: #7B5233;
+                    background-color: #FAF6F0;
+                    box-shadow: 0 0 0 3px rgba(123, 82, 51, 0.1);
+                }
             `}} />
 
             {/* Header Info */}
@@ -415,7 +762,7 @@ const QualityRecordsDetailView = () => {
                 {loading ? (
                     <div style={{ textAlign: 'center', padding: '1rem' }}>Đang tải thông tin đơn hàng...</div>
                 ) : (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', alignItems: 'center' }}>
                         <div>
                             <div style={{ fontSize: '0.75rem', color: '#8D6E63', fontWeight: '700' }}>MÃ ĐƠN HÀNG</div>
                             <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#7B5233' }}>#{orderInfo?.order_code || id}</div>
@@ -429,6 +776,31 @@ const QualityRecordsDetailView = () => {
                             <div style={{ fontSize: '1rem', fontWeight: '700', color: '#2D1A12' }}>
                                 {orderInfo?.products?.length || 0} loại ({orderInfo?.products?.reduce((acc, p) => acc + (p.quantity || 0), 0) || 0} chiếc)
                             </div>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                            <button
+                                onClick={() => setShowExportModal(true)}
+                                style={{
+                                    backgroundColor: '#7B5233',
+                                    color: '#fff',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    padding: '10px 16px',
+                                    fontWeight: 'bold',
+                                    fontSize: '0.9rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                    boxShadow: '0 2px 4px rgba(123, 82, 51, 0.1)'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#5D4037'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#7B5233'}
+                            >
+                                <FileDown size={18} />
+                                Xuất Excel
+                            </button>
                         </div>
                     </div>
                 )}
@@ -1132,6 +1504,145 @@ const QualityRecordsDetailView = () => {
                             <div>Double-click : Toggle</div>
                             <div>Drag : Pan (zoomed)</div>
                             <div>ESC : Close</div>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* EXPORT OPTIONS MODAL */}
+            {showExportModal && ReactDOM.createPortal(
+                <div className="modal-overlay" style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 999999,
+                    padding: '20px',
+                    backdropFilter: 'blur(3px)'
+                }}>
+                    <div className="modal-container" style={{
+                        backgroundColor: '#fff',
+                        borderRadius: '16px',
+                        width: '100%',
+                        maxWidth: '480px',
+                        padding: '24px',
+                        position: 'relative',
+                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+                        border: '1.5px solid #EADCC9',
+                        boxSizing: 'border-box',
+                        animation: 'modalFadeIn 0.3s ease-out'
+                    }}>
+                        <button 
+                            onClick={() => setShowExportModal(false)} 
+                            style={{ 
+                                position: 'absolute', 
+                                top: '16px', 
+                                right: '16px', 
+                                border: 'none', 
+                                background: '#F5F5F5', 
+                                cursor: 'pointer', 
+                                borderRadius: '50%', 
+                                width: '32px', 
+                                height: '32px', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center', 
+                                color: '#5D4037',
+                                transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FFEBEE'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#F5F5F5'}
+                        >
+                            <X size={18} />
+                        </button>
+
+                        <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#7B5233', margin: '0 0 20px 0', borderBottom: '1px solid #EADCC9', paddingBottom: '10px' }}>Lựa chọn xuất Excel PO</h3>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
+                            
+                            {/* Option 1 */}
+                            <div 
+                                className={`export-option-card ${selectedExportOption === 'all_tabs' ? 'active' : ''}`}
+                                onClick={() => setSelectedExportOption('all_tabs')}
+                            >
+                                <div style={{ marginTop: '2px' }}>
+                                    <input type="radio" checked={selectedExportOption === 'all_tabs'} readOnly style={{ accentColor: '#7B5233' }} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <span style={{ fontWeight: '800', color: '#2D1A12', fontSize: '0.9rem' }}>Xuất hồ sơ PO đầy đủ (Tất cả tabs)</span>
+                                    <span style={{ fontSize: '0.78rem', color: '#8D6E63' }}>
+                                        Xuất tệp Excel gồm 4 sheet: thông tin chung, lịch sử bàn giao, kiểm tra đầu vào và QC của PO này.
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Option 2 */}
+                            <div 
+                                className={`export-option-card ${selectedExportOption === 'current_tab' ? 'active' : ''}`}
+                                onClick={() => setSelectedExportOption('current_tab')}
+                            >
+                                <div style={{ marginTop: '2px' }}>
+                                    <input type="radio" checked={selectedExportOption === 'current_tab'} readOnly style={{ accentColor: '#7B5233' }} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <span style={{ fontWeight: '800', color: '#2D1A12', fontSize: '0.9rem' }}>Xuất dữ liệu Tab hiện tại</span>
+                                    <span style={{ fontSize: '0.78rem', color: '#8D6E63' }}>
+                                        Chỉ xuất dữ liệu của tab {activeTab === 'handover' ? 'Lịch sử bàn giao' : activeTab === 'inbound' ? 'Kiểm tra đầu vào' : 'QC kiểm tra hàng'} đang xem.
+                                    </span>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            <button 
+                                onClick={() => {
+                                    if (selectedExportOption === 'all_tabs') handleExportAllTabs();
+                                    else if (selectedExportOption === 'current_tab') handleExportCurrentTab();
+                                }}
+                                disabled={isExporting}
+                                style={{
+                                    flex: 1,
+                                    backgroundColor: '#7B5233',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    padding: '10px',
+                                    fontWeight: 'bold',
+                                    fontSize: '0.9rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '6px',
+                                    cursor: isExporting ? 'not-allowed' : 'pointer',
+                                    opacity: isExporting ? 0.7 : 1
+                                }}
+                            >
+                                <FileDown size={18} />
+                                {isExporting ? 'Đang xuất file...' : 'Tải xuống File Excel'}
+                            </button>
+                            <button 
+                                onClick={() => setShowExportModal(false)}
+                                disabled={isExporting}
+                                style={{
+                                    backgroundColor: '#FAF6F0',
+                                    color: '#7B5233',
+                                    border: '1px solid #EADCC9',
+                                    borderRadius: '8px',
+                                    padding: '10px 16px',
+                                    fontWeight: 'bold',
+                                    fontSize: '0.9rem',
+                                    cursor: isExporting ? 'not-allowed' : 'pointer'
+                                }}
+                            >
+                                Hủy
+                            </button>
                         </div>
                     </div>
                 </div>,

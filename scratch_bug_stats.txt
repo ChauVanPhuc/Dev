@@ -1,0 +1,5 @@
+Line 625: const stats = useMemo(() => {
+Line 911: <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0F172A', lineHeight: '1.2' }}>{stats.total}</div>
+Line 921: <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0F172A', lineHeight: '1.2' }}>{stats.inProgress}</div>
+Line 931: <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0F172A', lineHeight: '1.2' }}>{stats.resolvedOrVerified}</div>
+Line 941: <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#F43F5E', lineHeight: '1.2' }}>{stats.critical}</div>

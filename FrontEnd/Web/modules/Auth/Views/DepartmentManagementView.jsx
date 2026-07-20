@@ -352,7 +352,8 @@ const DepartmentManagement = () => {
   };
 
   return (
-    <div style={{ width: '100%', paddingBottom: '40px' }}>
+    <div className="mgmt-container">
+      <div className="mgmt-main">
       {/* ── Thanh công cụ (Toolbar) ── */}
       <PageToolbar
         searchValue={searchQuery}
@@ -419,186 +420,138 @@ const DepartmentManagement = () => {
         </div>
       )}
 
-      {/* ── Bảng Giao diện Bộ phận ── */}
-      <div className="mgmt-table card" style={{ padding: '0', overflow: 'hidden', border: '1px solid #EADCC9' }}>
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: '#7B5233', fontWeight: '600' }}>Đang tải dữ liệu...</div>
-        ) : filteredDepartments.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: '#9CA3AF' }}>Không tìm thấy bộ phận nào phù hợp.</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <div className="table-responsive">
-            <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ borderBottom: '2px solid #EADCC9', backgroundColor: '#FAF6F0' }}>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '700', color: '#7B5233', width: '80px' }}>ID</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '700', color: '#7B5233', width: '200px' }}>Tên bộ phận</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '700', color: '#7B5233' }}>Mô tả</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '700', color: '#7B5233', width: '250px' }}>Chức vụ trực thuộc</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '700', color: '#7B5233', width: '150px' }}>Trạng thái</th>
-                  {hasWritePermission && <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '700', color: '#7B5233', width: '120px' }}>Thao tác</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedDepartments.map((dept, index) => (
-                  <tr 
-                    key={dept.id} 
-                    style={{ 
-                      borderBottom: '1px solid #FAF0E6', 
-                      transition: 'background-color 0.2s',
-                      position: 'relative',
-                      zIndex: actionMenuId === dept.id ? 30 : 1
-                    }}
-                  >
-                    <td style={{ padding: '14px 16px', color: '#888', fontWeight: '600' }}>#{dept.id}</td>
-                    <td style={{ padding: '14px 16px', fontWeight: '700', color: '#2D1A12' }}>{dept.name}</td>
-                    <td style={{ padding: '14px 16px', color: '#666', fontSize: '0.85rem' }}>{dept.description || '-'}</td>
-                    <td style={{ padding: '14px 16px' }}>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-                        {dept.permissions && dept.permissions.length > 0 ? (
-                          dept.permissions.map(p => (
-                            <span 
-                              key={p.id} 
-                              style={{ 
-                                background: '#FAF6F0', 
-                                color: '#7B5233', 
-                                border: '1px solid #EADCC9', 
-                                padding: '2px 8px', 
-                                borderRadius: '4px', 
-                                fontSize: '0.75rem',
-                                fontWeight: '500'
-                              }}
-                            >
-                              {p.name}
-                            </span>
-                          ))
-                        ) : (
-                          <span style={{ color: '#C0C0C0', fontSize: '0.8rem', fontStyle: 'italic' }}>Chưa thiết lập</span>
-                        )}
-                      </div>
-                    </td>
-                    <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                      <span 
-                        style={{
-                          display: 'inline-block',
-                          padding: '3px 10px',
-                          borderRadius: '12px',
-                          fontSize: '0.75rem',
-                          fontWeight: '700',
-                          backgroundColor: dept.is_active ? '#ECFDF5' : '#FEF2F2',
-                          color: dept.is_active ? '#10B981' : '#EF4444',
-                          border: `1px solid ${dept.is_active ? '#A7F3D0' : '#FCA5A5'}`
-                        }}
-                      >
-                        {dept.is_active ? 'Đang sử dụng' : 'Dừng hoạt động'}
-                      </span>
-                    </td>
-                    {hasWritePermission && (
-                      (() => {
-                        const isLastRows = index >= filteredDepartments.length - 2 && filteredDepartments.length > 2;
-                        return (
-                          <td style={{ position: 'relative', padding: '14px 16px', textAlign: 'center', zIndex: actionMenuId === dept.id ? 40 : 1 }}>
-                            <button
-                              type="button"
-                              className="action-btn"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActionMenuId(actionMenuId === dept.id ? null : dept.id);
-                              }}
-                            ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
-                            {actionMenuId === dept.id && (
-                              <div className="action-menu" style={{ 
-                                right: '50%', 
-                                transform: 'translateX(50%)', 
-                                top: isLastRows ? 'auto' : '80%', 
-                                bottom: isLastRows ? '80%' : 'auto',
-                                boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
-                                zIndex: 1000
-                              }}>
+      <div className="admin-list-layout">
+        <div className="mgmt-table card admin-table-card">
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#7B5233', fontWeight: '600' }}>Đang tải dữ liệu...</div>
+          ) : filteredDepartments.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#9CA3AF' }}>Không tìm thấy bộ phận nào phù hợp.</div>
+          ) : (
+            <div className="table-responsive desktop-only admin-table-scroll">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Tên bộ phận</th>
+                    <th>Mô tả</th>
+                    <th>Chức vụ trực thuộc</th>
+                    <th style={{ textAlign: 'center' }}>Trạng thái</th>
+                    {hasWritePermission && <th style={{ textAlign: 'center' }}>Thao tác</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedDepartments.map((dept) => (
+                    <tr key={dept.id}>
+                      <td style={{ fontWeight: '600', color: '#888' }}>#{dept.id}</td>
+                      <td style={{ fontWeight: '700', color: '#2D1A12' }}>{dept.name}</td>
+                      <td>{dept.description || '-'}</td>
+                      <td>
+                        {dept.permissions && dept.permissions.length > 0 ? dept.permissions.map(p => (
+                          <span key={p.id} className="badge bg-beige-light text-beige-dark" style={{ fontSize: '0.75rem', padding: '4px 8px', borderRadius: '4px', display: 'inline-block', border: '1px solid #EADCC9', marginRight: '4px' }}>{p.name}</span>
+                        )) : '-'}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span className={`status-badge ${dept.is_active ? 'active' : 'inactive'}`}>
+                          {dept.is_active ? 'Đang sử dụng' : 'Dừng hoạt động'}
+                        </span>
+                      </td>
+                      {hasWritePermission && (
+                        <td style={{ textAlign: 'center', position: 'relative' }}>
+                          {(() => {
+                            const isLastRows = filteredDepartments.indexOf(dept) >= filteredDepartments.length - 2;
+                            return (
+                              <>
                                 <button 
                                   type="button"
-                                  className="action-menu-item" 
-                                  onClick={() => {
-                                    setActionMenuId(null);
-                                    openEditModal(dept);
+                                  className="action-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActionMenuId(actionMenuId === dept.id ? null : dept.id);
                                   }}
-                                >
-                                  Chỉnh sửa
-                                </button>
-                                {dept.is_active && (
-                                  <button 
-                                    type="button"
-                                    className="action-menu-item danger" 
-                                    onClick={() => {
-                                      setActionMenuId(null);
-                                      handleDelete(dept);
-                                    }}
-                                  >
-                                    Dừng hoạt động
-                                  </button>
+                                ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
+                                {actionMenuId === dept.id && (
+                                  <div className="action-menu" style={{ 
+                                    right: '50%', 
+                                    transform: 'translateX(50%)', 
+                                    top: isLastRows ? 'auto' : '80%', 
+                                    bottom: isLastRows ? '80%' : 'auto',
+                                    boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+                                    zIndex: 1000
+                                  }}>
+                                    <button 
+                                      type="button"
+                                      className="action-menu-item" 
+                                      onClick={() => {
+                                        setActionMenuId(null);
+                                        openEditModal(dept);
+                                      }}
+                                    >
+                                      Chỉnh sửa
+                                    </button>
+                                    {dept.is_active && (
+                                      <button 
+                                        type="button"
+                                        className="action-menu-item danger" 
+                                        onClick={() => {
+                                          setActionMenuId(null);
+                                          handleDelete(dept);
+                                        }}
+                                      >
+                                        Dừng hoạt động
+                                      </button>
+                                    )}
+                                  </div>
                                 )}
-                              </div>
-                            )}
-                          </td>
-                        );
-                      })()
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                              </>
+                            );
+                          })()}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Thanh phân trang đồng bộ */}
+        <div className="admin-pagination-desktop desktop-only" style={{ marginTop: '16px' }}>
+          <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
+            Hiển thị <b>{paginatedDepartments.length}</b> trên <b>{filteredDepartments.length}</b> bộ phận
           </div>
-          
-          {/* Thanh phân trang đồng bộ */}
           {(() => {
             const totalPages = Math.ceil(filteredDepartments.length / pageSize);
             return totalPages > 1 ? (
-              <div className="admin-pagination-desktop" style={{ borderTop: '1px solid #EADCC9', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff' }}>
-                <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
-                  Hiển thị <b>{paginatedDepartments.length}</b> trên <b>{filteredDepartments.length}</b> bộ phận
-                </div>
-                <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-                  <button 
-                    className="page-btn" 
-                    onClick={() => setPage(prev => Math.max(prev - 1, 1))} 
-                    disabled={page === 1}
-                    style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#7B5233', cursor: page === 1 ? 'not-allowed' : 'pointer', opacity: page === 1 ? 0.5 : 1 }}
+              <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                <button 
+                  className="page-btn" 
+                  onClick={() => setPage(prev => Math.max(prev - 1, 1))} 
+                  disabled={page === 1}
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p)}
+                    className={`page-btn ${page === p ? 'active' : ''}`}
                   >
-                    <ChevronLeft size={14} />
+                    {p}
                   </button>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-                    <button
-                      key={p}
-                      onClick={() => setPage(p)}
-                      style={{
-                        padding: '6px 10px',
-                        borderRadius: '8px',
-                        border: '1px solid #EADCC9',
-                        backgroundColor: page === p ? '#7B5233' : '#FAF6F0',
-                        color: page === p ? '#fff' : '#7B5233',
-                        fontWeight: '700',
-                        fontSize: '0.8rem',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                  <button 
-                    className="page-btn" 
-                    onClick={() => setPage(prev => Math.min(prev + 1, totalPages))} 
-                    disabled={page === totalPages}
-                    style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#7B5233', cursor: page === totalPages ? 'not-allowed' : 'pointer', opacity: page === totalPages ? 0.5 : 1 }}
-                  >
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
+                ))}
+                <button 
+                  className="page-btn" 
+                  onClick={() => setPage(prev => Math.min(prev + 1, totalPages))} 
+                  disabled={page === totalPages}
+                >
+                  <ChevronRight size={14} />
+                </button>
               </div>
             ) : null;
           })()}
         </div>
-      )}
-    </div>
+      </div>
 
       {/* ── Modal Thêm/Sửa Bộ phận ── */}
       {isModalOpen && (
@@ -814,6 +767,7 @@ const DepartmentManagement = () => {
         </div>
       )}
     </div>
+  </div>
   );
 };
 

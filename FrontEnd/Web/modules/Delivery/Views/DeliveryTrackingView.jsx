@@ -2401,7 +2401,8 @@ const DeliveryTracking = () => {
                             boxShadow: '0 25px 50px -12px rgba(45, 26, 18, 0.25)', 
                             display: 'flex', 
                             flexDirection: 'column', 
-                            overflow: 'hidden' 
+                            overflow: 'hidden',
+                            opacity: 1
                         }}
                         onClick={(e) => e.stopPropagation()}
                     >

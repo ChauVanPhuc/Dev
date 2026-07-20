@@ -8,6 +8,8 @@ const FactoryStructureView = ({ diagramDropdown }) => {
   const [structures, setStructures] = useState([]);
   const [viewMode, setViewMode] = useState('chart');
   const [search, setSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 15;
   
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedStructure, setSelectedStructure] = useState(null);
@@ -49,6 +51,9 @@ const FactoryStructureView = ({ diagramDropdown }) => {
       (struct.department_name && struct.department_name.toLowerCase().includes(term))
     );
   });
+
+  const totalPages = Math.ceil(filteredStructures.length / pageSize);
+  const paginatedStructures = filteredStructures.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const roots = filteredStructures.filter(n => !n.parent_id);
   const childrenMap = {};
@@ -182,8 +187,8 @@ const FactoryStructureView = ({ diagramDropdown }) => {
     <div style={{ padding: '0', display: 'flex', flexDirection: 'column', flex: 1, height: '100%' }}>
       <PageToolbar
         searchValue={search}
-        onSearchChange={(val) => setSearch(val)}
-        searchPlaceholder="Nhập Mã, Tên màn"
+        onSearchChange={(val) => { setSearch(val); setCurrentPage(1); }}
+        searchPlaceholder="Nhập mã, tên cấu trúc..."
         showSort={true}
         sortOptions={[
           { value: 'code_asc', label: 'Mã tăng dần' },
@@ -203,7 +208,7 @@ const FactoryStructureView = ({ diagramDropdown }) => {
       />
 
       {/* Toggle Mode selectors below toolbar on the right */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px', marginTop: '12px' }}>
         <div style={{
           display: 'inline-flex',
           backgroundColor: '#4A2E1B',
@@ -214,7 +219,7 @@ const FactoryStructureView = ({ diagramDropdown }) => {
           boxSizing: 'border-box'
         }}>
           <button
-            onClick={() => setViewMode('chart')}
+            onClick={() => { setViewMode('chart'); setCurrentPage(1); }}
             style={{
               padding: '0 12px',
               borderRadius: '3px',
@@ -233,7 +238,7 @@ const FactoryStructureView = ({ diagramDropdown }) => {
             Xem dạng sơ đồ
           </button>
           <button
-            onClick={() => setViewMode('table')}
+            onClick={() => { setViewMode('table'); setCurrentPage(1); }}
             style={{
               padding: '0 12px',
               borderRadius: '3px',
@@ -254,15 +259,15 @@ const FactoryStructureView = ({ diagramDropdown }) => {
         </div>
       </div>
 
-      <div style={{ flex: 1, marginTop: '16px' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, marginTop: '8px' }}>
         {viewMode === 'chart' ? (
           <div style={{
             backgroundColor: '#FAF8F5',
             border: '1px solid #EADCC9',
             borderRadius: '12px',
             padding: '32px 24px',
-            overflowX: 'auto',
-            minHeight: '480px',
+            overflow: 'auto',
+            flex: 1,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
@@ -286,75 +291,108 @@ const FactoryStructureView = ({ diagramDropdown }) => {
             </div>
           </div>
         ) : (
-          <div className="card" style={{ backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
-            {/* Dropdown inside table card aligned to right, matching Mockup Image 4 */}
-            {diagramDropdown && (
-              <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '16px 16px 0 16px' }}>
-                {diagramDropdown}
-              </div>
-            )}
+          <div className="admin-list-layout">
+            <div className="mgmt-table card admin-table-card">
+              {/* Dropdown inside table card aligned to right, matching Mockup Image 4 */}
+              {diagramDropdown && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '16px 16px 0 16px' }}>
+                  {diagramDropdown}
+                </div>
+              )}
 
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left', marginTop: '8px' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#7B5233', color: '#fff' }}>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Mã</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Tên cấu trúc</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Loại</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Phòng ban</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Cấu trúc cha</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600, textAlign: 'center' }}>Thao tác</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredStructures.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', padding: '30px', color: '#9CA3AF' }}>Không tìm thấy cấu trúc nhà máy nào.</td>
-                  </tr>
-                ) : filteredStructures.map(struct => (
-                  <tr
-                    key={struct.id}
-                    style={{ borderBottom: '1px solid #F1F5F9', transition: 'background-color 0.2s' }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FDFBF7'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              <div className="table-responsive desktop-only admin-table-scroll">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Mã</th>
+                      <th>Tên cấu trúc</th>
+                      <th>Loại</th>
+                      <th>Phòng ban</th>
+                      <th>Cấu trúc cha</th>
+                      <th style={{ textAlign: 'center' }}>Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedStructures.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: 'center', padding: '30px', color: '#9CA3AF' }}>Không tìm thấy cấu trúc nhà máy nào.</td>
+                      </tr>
+                    ) : paginatedStructures.map(struct => (
+                      <tr key={struct.id}>
+                        <td style={{ fontWeight: 700, color: '#7B5233' }}>{struct.structure_code}</td>
+                        <td style={{ fontWeight: 600, color: '#1E293B' }}>{struct.structure_name}</td>
+                        <td>
+                          <span style={{ 
+                            backgroundColor: '#FAF6F0', 
+                            color: getTypeColor(struct.structure_type), 
+                            padding: '2px 8px', 
+                            borderRadius: '6px',
+                            fontSize: '0.75rem',
+                            fontWeight: 600
+                          }}>
+                            {struct.structure_type}
+                          </span>
+                        </td>
+                        <td>{struct.department_name || '-'}</td>
+                        <td>{struct.parent_structure_name || 'Cấu trúc gốc'}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                            <button
+                              onClick={() => handleEdit(struct)}
+                              style={{ background: 'none', border: 'none', color: '#4F46E5', cursor: 'pointer', padding: '4px' }}
+                              title="Sửa"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(struct.id)}
+                              style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: '4px' }}
+                              title="Xóa"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Thanh phân trang đồng bộ */}
+            <div className="admin-pagination-desktop desktop-only" style={{ marginTop: '16px' }}>
+              <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
+                Hiển thị <b>{paginatedStructures.length}</b> trên <b>{filteredStructures.length}</b> cấu trúc
+              </div>
+              {totalPages > 1 && (
+                <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                  <button
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    className="page-btn"
                   >
-                    <td style={{ padding: '12px 16px', fontWeight: 700, color: '#7B5233' }}>{struct.structure_code}</td>
-                    <td style={{ padding: '12px 16px', fontWeight: 600, color: '#1E293B' }}>{struct.structure_name}</td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <span style={{ 
-                        backgroundColor: '#FAF6F0', 
-                        color: getTypeColor(struct.structure_type), 
-                        padding: '2px 8px', 
-                        borderRadius: '6px',
-                        fontSize: '0.75rem',
-                        fontWeight: 600
-                      }}>
-                        {struct.structure_type}
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px 16px', color: '#475569' }}>{struct.department_name || '-'}</td>
-                    <td style={{ padding: '12px 16px', color: '#64748B' }}>{struct.parent_structure_name || 'Cấu trúc gốc'}</td>
-                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                      <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
-                        <button
-                          onClick={() => handleEdit(struct)}
-                          style={{ background: 'none', border: 'none', color: '#4F46E5', cursor: 'pointer', padding: '4px' }}
-                          title="Sửa"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(struct.id)}
-                          style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: '4px' }}
-                          title="Xóa"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    &lt; Trước
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                    <button
+                      key={p}
+                      className={`page-btn ${currentPage === p ? 'active' : ''}`}
+                      onClick={() => setCurrentPage(p)}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                  <button
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    className="page-btn"
+                  >
+                    Sau &gt;
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

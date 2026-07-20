@@ -1,0 +1,52 @@
+{
+  "items": [
+    {
+      "employee_id": "1212",
+      "full_name": "Phúc Châu Văn",
+      "email": "chauvanphuc9102@gmail.com",
+      "phone": "0981206221",
+      "department": "a",
+      "position": "a",
+      "status": "Đang làm việc",
+      "note": "",
+      "id": 1
+    },
+    {
+      "employee_id": "a",
+      "full_name": "Phúc Châu Văn",
+      "email": "chauvanphuc9102@gmail.com",
+      "phone": "0981206221",
+      "department": "a",
+      "position": "a",
+      "status": "Đang làm việc",
+      "note": "",
+      "id": 2
+    },
+    {
+      "employee_id": "SF13",
+      "full_name": "Phúc Châu Văn",
+      "email": "chauvanphuc9102@gmail.com",
+      "phone": "",
+      "department": "",
+      "position": "",
+      "status": "Đang làm việc",
+      "note": "",
+      "id": 4
+    },
+    {
+      "employee_id": "testmb",
+      "full_name": "Phúc Châu Văn",
+      "email": "chauvanphuc9102@gmail.com",
+      "phone": "",
+      "department": "",
+      "position": "",
+      "status": "Đang làm việc",
+      "note": "",
+      "id": 3
+    }
+  ],
+  "total": 4,
+  "page": 1,
+  "size": 10,
+  "pages": 1
+}

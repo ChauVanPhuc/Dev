@@ -1,0 +1,9 @@
+Line 1074: if (!screen || !screen.current_code) return 'Quản lý hệ thống';
+Line 1075: const prefix = screen.current_code.substring(0, 2).toUpperCase();
+Line 1103: .map(s => s.current_code || s.default_code || '')
+Line 1139: if (setCustomSubtitle) setCustomSubtitle(`${screen.current_code}: ${screen.title}`);
+Line 1140: if (setCustomScreenCode) setCustomScreenCode(screen.current_code);
+Line 2266: value={isNew ? generatedCode : (screen?.current_code || '')}
+Line 2332: const isModified = screen.current_code !== screen.default_code;
+Line 5953: {bugModalMode === 'edit' ? `HD04: Chi tiết lỗi BUG-${bugModalData.id}` : `${screen?.current_code || 'AD'}: Khai báo lỗi`}
+Line 5985: <option value={screen?.id}>{screen?.current_code}: {screen?.title}</option>

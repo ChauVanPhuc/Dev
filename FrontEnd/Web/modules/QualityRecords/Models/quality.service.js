@@ -26,5 +26,20 @@ export const qualityService = {
     // Lấy lịch sử QC kiểm tra khi nhận hàng theo PO
     getQCReceivingHistory: async (poCode) => {
         return await api.get(`/qc/po/${poCode}`);
+    },
+
+    // Lấy lịch sử bàn giao theo Kế hoạch
+    getHandoverHistoryByPlan: async (planId) => {
+        return await api.get(`/deliveries/history?plan_id=${planId}&limit=100000`);
+    },
+
+    // Lấy lịch sử kiểm tra đầu vào theo Kế hoạch
+    getInboundHistoryByPlan: async (planId) => {
+        return await api.get(`/inspections/plan/${planId}`);
+    },
+
+    // Lấy lịch sử QC kiểm tra theo Kế hoạch
+    getQCReceivingHistoryByPlan: async (planId) => {
+        return await api.get(`/qc/plan/${planId}`);
     }
 };

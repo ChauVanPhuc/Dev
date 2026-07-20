@@ -3,6 +3,7 @@ import { useParams, useNavigate, useOutletContext, useLocation } from 'react-rou
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import { Bug, Play, Type, Table2, CheckSquare, List, Layout, Menu, CreditCard, Sliders, Bell, Component, MoreVertical, ChevronDown, Upload, FileText, X, Plus, Edit } from 'lucide-react';
 import api, { getBaseURL } from '@webShared/Services/api.service';
+import { menuStructure } from '@webShared/Views/components/layout/Sidebar';
 
 const renderComponentIcon = (type) => {
   const props = { size: 16, style: { color: '#7B5233' } };
@@ -1098,34 +1099,65 @@ const formatDate = (dateStr) => {
 };
 
 const getSubsystem = (screen) => {
-  if (!screen || !screen.current_code) return 'Quản lý hệ thống';
-  const prefix = screen.current_code.substring(0, 2).toUpperCase();
-  const mapping = {
-    'TC': 'Trang chủ',
-    'HT': 'Quản lý hệ thống',
-    'HD': 'Quản lý hệ thống',
-    'AD': 'Quản lý hệ thống',
-    'HS': 'Quản lý nhân sự',
-    'NS': 'Quản lý nhân sự',
-    'SX': 'Quản lý sản xuất',
-    'MA': 'Quản lý sản xuất',
-    'CL': 'Quản lý chất lượng',
-    'KD': 'Quản lý kinh doanh',
-    'KT': 'Quản lý kỹ thuật',
-    'BT': 'Bảo trì - cơ sở hạ tầng'
-  };
-  return mapping[prefix] || 'Quản lý hệ thống';
+  if (!screen) return 'Quản lý hệ thống';
+  const code = (screen.current_code || '').toUpperCase();
+  if (code.startsWith('TC')) return 'Trang chủ';
+  if (code.startsWith('ISO') || code.startsWith('AD17') || code.startsWith('AD18')) return 'Hồ sơ ISO';
+  if (code.startsWith('KPI') || code.startsWith('AD7')) return 'Quản lý KPI';
+  if (code.startsWith('HT') || code.startsWith('HD') || code.startsWith('AD')) return 'Quản lý hệ thống';
+  if (code.startsWith('HS') || code.startsWith('NS')) return 'Quản lý nhân sự';
+  if (code.startsWith('SX') || code.startsWith('MA')) return 'Quản lý sản xuất';
+  if (code.startsWith('CL')) return 'Quản lý chất lượng';
+  if (code.startsWith('KD')) return 'Quản lý kinh doanh';
+  if (code.startsWith('KT')) return 'Quản lý kỹ thuật';
+  if (code.startsWith('BT')) return 'Bảo trì - cơ sở hạ tầng';
+
+  // Fallback by route path
+  const path = screen.route_path || '';
+  if (path.includes('/kpi')) return 'Quản lý KPI';
+  if (path.includes('/iso-documents') || path.includes('/iso-processes')) return 'Hồ sơ ISO';
+  if (path.includes('/manufacture') || path.includes('/plan') || path.includes('/delivery-tracking') || path.includes('/orders')) {
+    return 'Quản lý sản xuất';
+  }
+  if (path.includes('/quality-records') || path.includes('/defects') || path.includes('/claims')) {
+    return 'Quản lý chất lượng';
+  }
+  if (path.includes('/prices') || path.includes('/shipments')) {
+    return 'Quản lý kinh doanh';
+  }
+  if (path.includes('/products')) {
+    return 'Quản lý kỹ thuật';
+  }
+  if (path.includes('/machines')) {
+    return 'Bảo trì - cơ sở hạ tầng';
+  }
+  return 'Quản lý hệ thống';
 };
 
 const SUBSYSTEM_PREFIXES = {
   'Trang chủ': 'TC',
   'Quản lý hệ thống': 'HT',
   'Quản lý nhân sự': 'HS',
+  'Hồ sơ ISO': 'ISO',
   'Quản lý sản xuất': 'SX',
   'Quản lý chất lượng': 'CL',
   'Quản lý kinh doanh': 'KD',
   'Quản lý kỹ thuật': 'KT',
-  'Bảo trì - cơ sở hạ tầng': 'BT'
+  'Bảo trì - cơ sở hạ tầng': 'BT',
+  'Quản lý KPI': 'KPI'
+};
+
+const MAP_SIDEBAR_GROUP_TO_SUBSYSTEM = {
+  'Trang chủ': 'Trang chủ',
+  'Quản lý hệ thống': 'Quản lý hệ thống',
+  'Quản lý nhân sự': 'Quản lý nhân sự',
+  'Hồ sơ ISO': 'Hồ sơ ISO',
+  'Quản lý sản xuất': 'Quản lý sản xuất',
+  'Quản lý chất lượng': 'Quản lý chất lượng',
+  'Quản lý KPI': 'Quản lý KPI',
+  'Quản lý kinh doanh': 'Quản lý kinh doanh',
+  'Quản lý kỹ thuật': 'Quản lý kỹ thuật',
+  'Bảo trì - cơ sở hạ tầng': 'Bảo trì - cơ sở hạ tầng'
 };
 
 const ROUTE_SUGGESTIONS = {
@@ -1133,15 +1165,21 @@ const ROUTE_SUGGESTIONS = {
     { title: 'Trang chủ', path: '/admin/dashboard' }
   ],
   'Quản lý hệ thống': [
-    { title: 'Quản lý hệ thống', path: '/admin/monitor' },
+    { title: 'Giám sát hệ thống', path: '/admin/monitor' },
     { title: 'Danh sách màn hình', path: '/admin/screens' },
-    { title: 'Quy trình nghiệp vụ', path: '/admin/iso-processes' },
     { title: 'Theo dõi góp ý', path: '/admin/feedback' },
-    { title: 'Đóng gói dữ liệu', path: '/admin/data' }
+    { title: 'Đóng gói dữ liệu', path: '/admin/data' },
+    { title: 'Quản lý tài khoản', path: '/admin/users' }
   ],
   'Quản lý nhân sự': [
+    { title: 'Sơ đồ tổ chức', path: '/admin/hr/org-chart' },
+    { title: 'Danh sách nhân viên', path: '/admin/hr/employees' },
+    { title: 'Quản lý chức vụ', path: '/admin/users/positions' },
+    { title: 'Quản lý phòng ban', path: '/admin/users/departments' }
+  ],
+  'Hồ sơ ISO': [
     { title: 'Quản lý mẫu tài liệu', path: '/admin/iso-documents' },
-    { title: 'Quản lý quy trình', path: '/admin/iso-processes' }
+    { title: 'Quy trình nghiệp vụ', path: '/admin/iso-processes' }
   ],
   'Quản lý sản xuất': [
     { title: 'Kế hoạch sản xuất', path: '/admin/plan' },
@@ -1158,7 +1196,8 @@ const ROUTE_SUGGESTIONS = {
     { title: 'Báo cáo kiểm tra', path: '/admin/reports' },
     { title: 'Danh sách bàn giao', path: '/admin/handovers' },
     { title: 'Điểm nóng cần chú ý', path: '/admin/hotspots' },
-    { title: 'Quản lý thiết bị', path: '/admin/equipment' }
+    { title: 'Quản lý thiết bị', path: '/admin/equipment' },
+    { title: 'Nhật ký sự cố', path: '/admin/logs' }
   ],
   'Quản lý kinh doanh': [
     { title: 'Thời gian xuất cont', path: '/admin/shipments' },
@@ -1172,7 +1211,17 @@ const ROUTE_SUGGESTIONS = {
   'Bảo trì - cơ sở hạ tầng': [
     { title: 'Danh sách thiết bị', path: '/admin/machines' },
     { title: 'Lịch sử bảo trì', path: '/admin/machines/history' },
-    { title: 'Hướng dẫn sử dụng', path: '/admin/machines/training' }
+    { title: 'Hướng dẫn sử dụng', path: '/admin/machines/training' },
+    { title: 'Danh mục thiết bị', path: '/admin/equipment/categories' },
+    { title: 'Lịch sử thiết bị', path: '/admin/equipment/history' },
+    { title: 'Đào tạo thiết bị', path: '/admin/equipment/training' }
+  ],
+  'Quản lý KPI': [
+    { title: 'Báo cáo KPI', path: '/admin/kpi' },
+    { title: 'Checklist KPI', path: '/admin/kpi/checklist' },
+    { title: 'Danh sách KPI', path: '/admin/kpi/list' },
+    { title: 'Quy tắc KPI', path: '/admin/kpi/rules' },
+    { title: 'Phản hồi KPI', path: '/admin/kpi/feedback' }
   ]
 };
 const slugify = (text) => {
@@ -1189,7 +1238,7 @@ const slugify = (text) => {
     .replace(/\-\-+/g, '-'); // Tránh nhiều dấu - liên tiếp
 };
 
-const parseRoutePath = (routePath, subsystem) => {
+const parseRoutePath = (routePath) => {
   if (!routePath) {
     return {
       frontendPath: '',
@@ -1198,25 +1247,18 @@ const parseRoutePath = (routePath, subsystem) => {
   }
 
   let clean = routePath.trim().replace(/\/+/g, '/');
-  const subPrefix = subsystem ? subsystem.trim().replace(/\/+/g, '') : '';
-  if (subPrefix && clean.startsWith(subPrefix)) {
-    clean = clean.substring(subPrefix.length);
-  }
+  const backend = clean;
 
   const lastSlashIdx = clean.lastIndexOf('/');
-  if (lastSlashIdx !== -1) {
-    const frontend = clean.substring(0, lastSlashIdx);
-    const backend = clean.substring(lastSlashIdx + 1);
-    return {
-      frontendPath: frontend || '',
-      backendPath: backend || ''
-    };
-  } else {
-    return {
-      frontendPath: '',
-      backendPath: clean
-    };
+  let frontend = '';
+  if (lastSlashIdx !== -1 && lastSlashIdx > 0) {
+    frontend = clean.substring(0, lastSlashIdx);
   }
+
+  return {
+    frontendPath: frontend,
+    backendPath: backend
+  };
 };
 
 const combineRoutePath = (dir, url) => {
@@ -1329,25 +1371,75 @@ const ScreenDetail = () => {
 
   const generatedCode = isNew ? generateNextScreenCode(formData.subsystem, allScreens) : '';
 
-  // Effect to automatically sync URL path from code and title
+  // Effect to automatically sync route path from frontend path and backend path
   useEffect(() => {
-    if (isBackendPathManuallyEdited) return; // Do not overwrite user's manual customization
-
-    const code = (formData.current_code || generatedCode || '').trim().toLowerCase();
-    const name = slugify(formData.title || '');
-    const newUrlPath = code && name ? `${code}-${name}` : (code || name);
+    const fPath = (formData.frontend_path || '').trim();
+    const bPath = (formData.backend_path || '').trim();
+    
+    let newRoutePath = '';
+    if (bPath) {
+      if (bPath.startsWith('/')) {
+        // If backend path is absolute (starts with /), use it directly
+        newRoutePath = bPath;
+      } else {
+        // Otherwise combine them
+        newRoutePath = combineRoutePath(fPath, bPath);
+      }
+    } else {
+      newRoutePath = fPath;
+    }
 
     setFormData(prev => {
-      if (prev.backend_path === newUrlPath) return prev; // Avoid unnecessary updates
-      const prefix = prev.subsystem ? `${prev.subsystem}/${prev.frontend_path}` : prev.frontend_path;
-      const newRoutePath = combineRoutePath(prefix, newUrlPath);
+      if (prev.route_path === newRoutePath) return prev;
       return {
         ...prev,
-        backend_path: newUrlPath,
         route_path: newRoutePath
       };
     });
-  }, [formData.current_code, generatedCode, formData.title, isBackendPathManuallyEdited]);
+  }, [formData.frontend_path, formData.backend_path]);
+
+  // Effect to automatically fill subsystem and title based on matching Sidebar menu path
+  useEffect(() => {
+    const bPath = (formData.backend_path || '').trim();
+    if (!bPath) return;
+
+    let foundItem = null;
+    let foundGroupName = '';
+
+    for (const group of menuStructure) {
+      if (group.type === 'link' && group.path === bPath) {
+        foundItem = group;
+        foundGroupName = 'Trang chủ';
+        break;
+      }
+      if (group.children) {
+        const child = group.children.find(c => c.path === bPath);
+        if (child) {
+          foundItem = child;
+          foundGroupName = group.text;
+          break;
+        }
+      }
+    }
+
+    if (foundItem) {
+      const targetSubsystem = MAP_SIDEBAR_GROUP_TO_SUBSYSTEM[foundGroupName] || 'Quản lý hệ thống';
+      
+      setFormData(prev => {
+        const updates = {};
+        if (prev.subsystem !== targetSubsystem) {
+          updates.subsystem = targetSubsystem;
+        }
+        if (!prev.title && foundItem.text) {
+          updates.title = foundItem.text;
+        }
+        if (Object.keys(updates).length > 0) {
+          return { ...prev, ...updates };
+        }
+        return prev;
+      });
+    }
+  }, [formData.backend_path]);
 
   // Dynamic metadata - chỉ dùng khi KHÔNG phải trang new và đã có screen
   const { screenCode, title, subtitle } = useScreenMetadataCached(
@@ -1741,11 +1833,13 @@ const ScreenDetail = () => {
     'Trang chủ',
     'Quản lý hệ thống',
     'Quản lý nhân sự',
+    'Hồ sơ ISO',
     'Quản lý sản xuất',
     'Quản lý chất lượng',
     'Quản lý kinh doanh',
     'Quản lý kỹ thuật',
-    'Bảo trì - cơ sở hạ tầng'
+    'Bảo trì - cơ sở hạ tầng',
+    'Quản lý KPI'
   ], []);
 
   const filteredScreens = React.useMemo(() => {
@@ -2038,7 +2132,7 @@ const ScreenDetail = () => {
         };
         setScreen(initialScreen);
         setIsBackendPathManuallyEdited(false);
-        const parsed = parseRoutePath(initialScreen.route_path, getSubsystem(initialScreen));
+        const parsed = parseRoutePath(initialScreen.route_path);
         setFormData({
           title: initialScreen.title,
           route_path: initialScreen.route_path,
@@ -2134,7 +2228,7 @@ const ScreenDetail = () => {
       }
 
       setScreen(data);
-      const parsed = parseRoutePath(data.route_path || '', getSubsystem(data));
+      const parsed = parseRoutePath(data.route_path || '');
       setFormData({
         title: data.title || '',
         route_path: data.route_path || '',
@@ -3686,14 +3780,9 @@ const ScreenDetail = () => {
                       transition: 'all 0.2s'
                     }}
                   >
-                    <option value="Trang chủ">Trang chủ</option>
-                    <option value="Quản lý hệ thống">Quản lý hệ thống</option>
-                    <option value="Quản lý nhân sự">Quản lý nhân sự</option>
-                    <option value="Quản lý sản xuất">Quản lý sản xuất</option>
-                    <option value="Quản lý chất lượng">Quản lý chất lượng</option>
-                    <option value="Quản lý kinh doanh">Quản lý kinh doanh</option>
-                    <option value="Quản lý kỹ thuật">Quản lý kỹ thuật</option>
-                    <option value="Bảo trì - cơ sở hạ tầng">Bảo trì - cơ sở hạ tầng</option>
+                    {subsystems.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -3991,14 +4080,10 @@ const ScreenDetail = () => {
                     onChange={(e) => {
                       const newBack = e.target.value;
                       setIsBackendPathManuallyEdited(true);
-                      setFormData(prev => {
-                        const prefix = prev.subsystem ? `${prev.subsystem}/${prev.frontend_path}` : prev.frontend_path;
-                        return {
-                          ...prev,
-                          backend_path: newBack,
-                          route_path: combineRoutePath(prefix, newBack)
-                        };
-                      });
+                      setFormData(prev => ({
+                        ...prev,
+                        backend_path: newBack
+                      }));
                     }}
                     placeholder="Đường dẫn backend"
                     style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box', width: '100%', color: '#111827', fontWeight: '500' }}

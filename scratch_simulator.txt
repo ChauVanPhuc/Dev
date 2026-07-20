@@ -1,0 +1,17 @@
+Line 57: import ScreenSimulator from '@modules/System/Views/components/ScreenSimulation';
+Line 1255: // States for interactive simulation
+Line 1267: const [mobilePane, setMobilePane] = useState('simulator'); // 'tree', 'simulator', or 'inspector' on mobile
+Line 1279: // States for Sandbox API simulation
+Line 2659: {/* Right Column: Simulator/Mockup & Spec Tab Pane */}
+Line 2662: {/* Mockup Simulator Frame Card */}
+Line 4078: /* 3-COLUMN LAYOUT: Components (trái) | Simulator (giữa) | Detail (phải) */
+Line 4084: .detail-layout-grid .detail-simulator-pane,
+Line 4090: .detail-layout-grid .detail-simulator-pane {
+Line 4107: .detail-layout-grid .detail-simulator-pane,
+Line 4317: /* ── Simulator Pane (Cột giữa) ── */
+Line 4318: .detail-simulator-pane {
+Line 4362: .simulator-wrapper {
+Line 4946: .simulation-blueprint-active [data-comp-name] {
+Line 4952: .simulation-blueprint-active [data-comp-name]::after {
+Line 5213: /* API Sandbox Simulator styling */
+Line 5904: .detail-simulator-pane {

@@ -1,0 +1,30 @@
+Line 44: const [actionMenuId, setActionMenuId] = useState(null);
+Line 73: // Close actions dropdown on outside click
+Line 76: if (!e.target.closest('.action-btn') && !e.target.closest('.action-menu')) {
+Line 77: setActionMenuId(null);
+Line 348: importActions={[
+Line 378: <button
+Line 405: </button>
+Line 435: <th style={{ position: 'sticky', top: 0, backgroundColor: '#FAF6F0', zIndex: 2, padding: '12px 16px', textAlign: 'center', width: '80px' }}>Thao tác</th>
+Line 532: {/* Thao tác */}
+Line 533: <td style={{ position: 'relative', zIndex: actionMenuId === screen.id ? 40 : 1, textAlign: 'center' }}>
+Line 534: <button
+Line 535: className="action-btn"
+Line 538: setActionMenuId(actionMenuId === screen.id ? null : screen.id);
+Line 554: </button>
+Line 555: {actionMenuId === screen.id && (
+Line 556: <div className="action-menu" style={{ right: '10px' }}>
+Line 557: <button
+Line 558: className="action-menu-item"
+Line 561: setActionMenuId(null);
+Line 566: </button>
+Line 567: <button
+Line 568: className="action-menu-item"
+Line 571: setActionMenuId(null);
+Line 576: </button>
+Line 594: <button
+Line 600: </button>
+Line 602: <button
+Line 617: </button>
+Line 619: <button
+Line 625: </button>

@@ -1,0 +1,11 @@
+{
+  "url": "http://localhost:5175/admin/delivery-tracking",
+  "tableVisible": true,
+  "errors": [],
+  "logs": [
+    "Navigating to http://localhost:5175/admin/delivery-tracking",
+    "Current URL: http://localhost:5175/admin/delivery-tracking",
+    "Table visible: true",
+    "Clicked detail button"
+  ]
+}

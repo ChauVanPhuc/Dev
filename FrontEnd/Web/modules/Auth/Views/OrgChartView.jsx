@@ -13,6 +13,14 @@ const OrgChartView = ({ diagramDropdown }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedNode, setSelectedNode] = useState(null);
 
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
+
   const loadData = async () => {
     try {
       const res = await hrService.getOrgNodes();
@@ -53,7 +61,12 @@ const OrgChartView = ({ diagramDropdown }) => {
     );
   });
 
-  // Construct Tree Map
+  const paginatedNodes = React.useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredNodes.slice(startIndex, startIndex + pageSize);
+  }, [filteredNodes, currentPage, pageSize]);
+
+  const totalPages = Math.ceil(filteredNodes.length / pageSize);
   const roots = filteredNodes.filter(n => !n.parent_id);
   const childrenMap = {};
   filteredNodes.forEach(node => {
@@ -191,7 +204,7 @@ const OrgChartView = ({ diagramDropdown }) => {
       <PageToolbar
         searchValue={search}
         onSearchChange={(val) => setSearch(val)}
-        searchPlaceholder="Nhập Mã, Tên màn"
+        searchPlaceholder="Nhập bộ phận, vị trí, họ tên..."
         showSort={true}
         sortOptions={[
           { value: 'level_asc', label: 'Cấp tăng dần' },
@@ -211,7 +224,7 @@ const OrgChartView = ({ diagramDropdown }) => {
       />
 
       {/* Toggle Mode selectors below toolbar on the right */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px', marginTop: '12px' }}>
         <div style={{
           display: 'inline-flex',
           backgroundColor: '#4A2E1B',
@@ -222,7 +235,7 @@ const OrgChartView = ({ diagramDropdown }) => {
           boxSizing: 'border-box'
         }}>
           <button
-            onClick={() => setViewMode('chart')}
+            onClick={() => { setViewMode('chart'); setCurrentPage(1); }}
             style={{
               padding: '0 12px',
               borderRadius: '3px',
@@ -241,7 +254,7 @@ const OrgChartView = ({ diagramDropdown }) => {
             Xem dạng sơ đồ
           </button>
           <button
-            onClick={() => setViewMode('table')}
+            onClick={() => { setViewMode('table'); setCurrentPage(1); }}
             style={{
               padding: '0 12px',
               borderRadius: '3px',
@@ -263,7 +276,7 @@ const OrgChartView = ({ diagramDropdown }) => {
       </div>
 
       {/* Main Workspace content */}
-      <div style={{ flex: 1, marginTop: '16px' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, marginTop: '8px' }}>
         {viewMode === 'chart' ? (
           /* Visual hierarchy diagram tree view */
           <div style={{
@@ -271,8 +284,8 @@ const OrgChartView = ({ diagramDropdown }) => {
             border: '1px solid #EADCC9',
             borderRadius: '12px',
             padding: '32px 24px',
-            overflowX: 'auto',
-            minHeight: '480px',
+            overflow: 'auto',
+            flex: 1,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
@@ -297,68 +310,107 @@ const OrgChartView = ({ diagramDropdown }) => {
           </div>
         ) : (
           /* Standard table grid view */
-          <div className="card" style={{ backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
-            {/* Dropdown inside table card aligned to right, matching Mockup Image 4 */}
-            {diagramDropdown && (
-              <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '16px 16px 0 16px' }}>
-                {diagramDropdown}
-              </div>
-            )}
+          <div className="admin-list-layout">
+            <div className="mgmt-table card admin-table-card">
+              {/* Dropdown inside table card aligned to right, matching Mockup Image 4 */}
+              {diagramDropdown && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '16px 16px 0 16px' }}>
+                  {diagramDropdown}
+                </div>
+              )}
 
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left', marginTop: '8px' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#7B5233', color: '#fff' }}>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Cấp</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Phòng ban</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Vị trí</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Bộ phận</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Họ tên đương nhiệm</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Cấp trên</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600, textAlign: 'center' }}>Thao tác</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredNodes.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: '#9CA3AF' }}>Không tìm thấy nút sơ đồ tổ chức nào.</td>
-                  </tr>
-                ) : filteredNodes.map(node => (
-                  <tr
-                    key={node.id}
-                    style={{ borderBottom: '1px solid #F1F5F9', transition: 'background-color 0.2s' }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FDFBF7'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              <div className="table-responsive desktop-only admin-table-scroll">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Cấp</th>
+                      <th>Phòng ban</th>
+                      <th>Vị trí</th>
+                      <th>Bộ phận</th>
+                      <th>Họ tên đương nhiệm</th>
+                      <th>Cấp trên</th>
+                      <th style={{ textAlign: 'center' }}>Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedNodes.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: '#9CA3AF' }}>Không tìm thấy nút sơ đồ tổ chức nào.</td>
+                      </tr>
+                    ) : paginatedNodes.map(node => (
+                      <tr key={node.id}>
+                        <td style={{ fontWeight: 700, color: '#7B5233' }}>{node.level_name}</td>
+                        <td style={{ fontWeight: 600 }}>{node.department_name || '-'}</td>
+                        <td>{node.position_name || '-'}</td>
+                        <td>{node.section_name || '-'}</td>
+                        <td style={{ fontWeight: 600 }}>
+                          {node.occupants && node.occupants.length > 0 ? node.occupants.map(o => o.full_name).join(', ') : 'Vị trí trống'}
+                        </td>
+                        <td>{node.parent_level_name || 'Nút gốc'}</td>
+                        <td>
+                          <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                            <button
+                              onClick={() => handleEdit(node)}
+                              style={{ background: 'none', border: 'none', color: '#4F46E5', cursor: 'pointer', padding: '4px' }}
+                              title="Sửa"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(node.id)}
+                              style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: '4px' }}
+                              title="Xóa"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Phân trang */}
+            <div className="admin-pagination-desktop desktop-only" style={{ marginTop: '16px' }}>
+              <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
+                Hiển thị <b>{paginatedNodes.length}</b> trên <b>{filteredNodes.length}</b> kết quả
+              </div>
+              {totalPages > 1 && (
+                <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                  <button
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    className="page-btn"
                   >
-                    <td style={{ padding: '12px 16px', fontWeight: 700, color: '#7B5233' }}>{node.level_name}</td>
-                    <td style={{ padding: '12px 16px', fontWeight: 600, color: '#1E293B' }}>{node.department_name || '-'}</td>
-                    <td style={{ padding: '12px 16px', color: '#475569' }}>{node.position_name || '-'}</td>
-                    <td style={{ padding: '12px 16px', color: '#475569' }}>{node.section_name || '-'}</td>
-                    <td style={{ padding: '12px 16px', color: '#2D1A12', fontWeight: 600 }}>
-                      {node.occupants && node.occupants.length > 0 ? node.occupants.map(o => o.full_name).join(', ') : 'Vị trí trống'}
-                    </td>
-                    <td style={{ padding: '12px 16px', color: '#64748B' }}>{node.parent_level_name || 'Nút gốc'}</td>
-                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                      <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                    &lt; Trước
+                  </button>
+                  {(() => {
+                    const pageButtons = [];
+                    for (let i = 1; i <= totalPages; i++) {
+                      pageButtons.push(
                         <button
-                          onClick={() => handleEdit(node)}
-                          style={{ background: 'none', border: 'none', color: '#4F46E5', cursor: 'pointer', padding: '4px' }}
-                          title="Sửa"
+                          key={i}
+                          className={`page-btn ${currentPage === i ? 'active' : ''}`}
+                          onClick={() => setCurrentPage(i)}
                         >
-                          <Edit2 size={16} />
+                          {i}
                         </button>
-                        <button
-                          onClick={() => handleDelete(node.id)}
-                          style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: '4px' }}
-                          title="Xóa"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      );
+                    }
+                    return pageButtons;
+                  })()}
+                  <button
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    className="page-btn"
+                  >
+                    Sau &gt;
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

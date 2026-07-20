@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from config.database import get_db
 from modules.kpi.models.kpi_management import KPIChecklist, KPIEmployeeItem, KPIViolation, KPIFeedback, KPIPointRule, KPIChecklistPool, KPIItemPool
 from modules.auth.models.accounts import Account
+from modules.auth.models.employees import Employee
 from modules.auth.models.departments import Department
 from modules.auth.models.role import Role
 from modules.auth.models.permissions import Permission
@@ -231,8 +232,7 @@ def get_kpi_employees(db: Session = Depends(get_db)):
     """
     [GET] Lấy danh sách nhân viên có mã nhân sự để phân quyền và quản lý KPI.
     """
-    # Lấy các tài khoản có mã nhân viên và không phải tài khoản ảo/test rác
-    employees = db.query(Account).filter(Account.employee_id != None).order_by(Account.id.desc()).all()
+    employees = db.query(Employee).order_by(Employee.id.desc()).all()
     
     # Đảm bảo gieo dữ liệu mẫu cho mỗi nhân viên để có dữ liệu trực quan
     for emp in employees:
@@ -240,34 +240,14 @@ def get_kpi_employees(db: Session = Depends(get_db)):
         
     res = []
     for emp in employees:
-        depts = db.query(Department).filter(Department.account_id == emp.id).all()
-        role_names = []
-        permission_names = []
-        for dept in depts:
-            if dept.role_id:
-                r = db.query(Role).filter(Role.id == dept.role_id).first()
-                if r:
-                    val = r.description or r.name
-                    if val not in role_names:
-                        role_names.append(val)
-            if dept.permission_id:
-                p = db.query(Permission).filter(Permission.id == dept.permission_id).first()
-                if p:
-                    val = p.description or p.name
-                    if val not in permission_names:
-                        permission_names.append(val)
-        
-        dept_str = ", ".join(role_names) if role_names else "QC"
-        pos_str = ", ".join(permission_names) if permission_names else (emp.permission_level or "Nhân Viên")
-        
         res.append({
             "employee_id": emp.employee_id,
-            "full_name": emp.full_name or emp.username,
-            "username": emp.username,
-            "department": dept_str,
-            "position": pos_str,
-            "status": emp.status or "Đang sử dụng",
-            "created_at": emp.created_at or "-"
+            "full_name": emp.full_name,
+            "username": emp.employee_id,
+            "department": emp.department or "Hành chính",
+            "position": emp.position or "Nhân Viên",
+            "status": emp.status or "Đang làm việc",
+            "created_at": "-"
         })
     return res
 
@@ -386,13 +366,11 @@ def get_violations(employee_id: str, db: Session = Depends(get_db)):
     ]
 
     # 2. Lấy dữ liệu đồng bộ từ báo cáo QC Mobile (award_disciplines)
-    emp = db.query(Account).filter(Account.employee_id == employee_id).first()
+    emp = db.query(Employee).filter(Employee.employee_id == employee_id).first()
     if emp:
         name_queries = []
         if emp.full_name:
             name_queries.append(emp.full_name)
-        if emp.username:
-            name_queries.append(emp.username)
         
         if name_queries:
             qc_records = db.query(AwardDiscipline).filter(AwardDiscipline.staff_name.in_(name_queries)).all()
@@ -685,7 +663,7 @@ def delete_kpi_pool_item(id: int, db: Session = Depends(get_db)):
 
 @router.get("/export-data", response_model=dict)
 def get_export_data(db: Session = Depends(get_db)):
-    employees = db.query(Account).all()
+    employees = db.query(Employee).all()
     emp_list = []
     
     checklists = db.query(KPIChecklist).all()
@@ -697,25 +675,8 @@ def get_export_data(db: Session = Depends(get_db)):
         if not e.employee_id:
             continue
             
-        depts = db.query(Department).filter(Department.account_id == e.id).all()
-        role_names = []
-        permission_names = []
-        for dept in depts:
-            if dept.role_id:
-                r = db.query(Role).filter(Role.id == dept.role_id).first()
-                if r:
-                    val = r.description or r.name
-                    if val not in role_names:
-                        role_names.append(val)
-            if dept.permission_id:
-                p = db.query(Permission).filter(Permission.id == dept.permission_id).first()
-                if p:
-                    val = p.description or p.name
-                    if val not in permission_names:
-                        permission_names.append(val)
-        
-        dept_str = ", ".join(role_names) if role_names else "QC"
-        pos_str = ", ".join(permission_names) if permission_names else (e.permission_level or "Nhân Viên")
+        dept_str = e.department or "Hành chính"
+        pos_str = e.position or "Nhân Viên"
 
         emp_checks = [c for c in checklists if c.employee_id == e.employee_id]
         emp_kpis = [k for k in kpis if k.employee_id == e.employee_id]
@@ -724,8 +685,6 @@ def get_export_data(db: Session = Depends(get_db)):
         name_queries = []
         if e.full_name:
             name_queries.append(e.full_name)
-        if e.username:
-            name_queries.append(e.username)
         emp_qc = [r for r in qc_records if r.staff_name in name_queries] if name_queries else []
 
         completed_checklist = sum(1 for c in emp_checks if c.status_today == 'Đã hoàn thành')

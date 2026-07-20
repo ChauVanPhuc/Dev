@@ -543,114 +543,114 @@ function App() {
     <ToastProvider>
       <ScreenProvider>
         <Router>
-        <Routes>
-          {/* Route Đăng nhập */}
-          <Route path="/login" element={<LoginRoute />} />
+          <Routes>
+            {/* Route Đăng nhập */}
+            <Route path="/login" element={<LoginRoute />} />
 
-          {/* Route Admin (Sử dụng Layout chung) */}
-          <Route path="/admin" element={<PortalLayout />}>
-            <Route index element={<Navigate to="/admin/dashboard" />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="profile" element={<UserEdit isProfile={true} />} />
-            <Route path="users" element={<ProtectedRoute permissionKey="users"><UserManagement /></ProtectedRoute>} />
-            <Route path="users/create" element={<ProtectedRoute permissionKey="users"><UserCreate /></ProtectedRoute>} />
-            <Route path="users/edit/:id" element={<ProtectedRoute permissionKey="users"><UserEdit /></ProtectedRoute>} />
-            <Route path="users/permissions/:id" element={<ProtectedRoute permissionKey="users"><UserEdit /></ProtectedRoute>} />
-            <Route path="users/departments" element={<ProtectedRoute permissionKey="users"><DepartmentManagement /></ProtectedRoute>} />
-            <Route path="users/positions" element={<ProtectedRoute permissionKey="users"><PositionManagement /></ProtectedRoute>} />
-            <Route path="hr" element={<Navigate to="hr/org-chart" />} />
-            <Route path="hr/org-chart" element={<ProtectedRoute permissionKey="users"><HRManagementView /></ProtectedRoute>} />
-            <Route path="hr/employees" element={<ProtectedRoute permissionKey="users"><EmployeeListView /></ProtectedRoute>} />
-            <Route path="handovers" element={<ProtectedRoute permissionKey="handovers"><HandoverList /></ProtectedRoute>} />
-            <Route path="logs" element={<ProtectedRoute permissionKey="logs"><IncidentLogs /></ProtectedRoute>} />
-            <Route path="defects" element={<ProtectedRoute permissionKey="defects"><DefectManagement /></ProtectedRoute>} />
-            <Route path="reports" element={<ProtectedRoute permissionKey="reports"><InspectionReports /></ProtectedRoute>} />
-            <Route path="quality-records" element={<ProtectedRoute permissionKey="quality-records"><QualityRecords /></ProtectedRoute>} />
-            <Route path="quality-records/:id" element={<ProtectedRoute permissionKey="quality-records"><QualityRecordsDetail /></ProtectedRoute>} />
-            <Route path="iso-documents" element={<ProtectedRoute permissionKey="iso-documents"><ISODocumentList mode="documents" /></ProtectedRoute>} />
-            <Route path="iso-processes" element={<ProtectedRoute permissionKey="iso-processes"><ISODocumentList mode="processes" /></ProtectedRoute>} />
-            <Route path="iso-documents/edit/:id" element={<ProtectedRoute permissionKey={["iso-documents", "iso-processes"]}><ISOFormEditor /></ProtectedRoute>} />
-            <Route path="iso-processes/edit/:id" element={<ProtectedRoute permissionKey="iso-processes"><ISOProcessEditor /></ProtectedRoute>} />
-            <Route path="kpi" element={<ProtectedRoute permissionKey="kpi"><KPIReports /></ProtectedRoute>} />
-            <Route path="kpi/checklist" element={<ProtectedRoute permissionKey="kpi-checklist"><KPIChecklist /></ProtectedRoute>} />
-            <Route path="kpi/list" element={<ProtectedRoute permissionKey="kpi-list"><KPIItems /></ProtectedRoute>} />
-            <Route path="kpi/rules" element={<ProtectedRoute permissionKey="kpi-rules"><KPIRules /></ProtectedRoute>} />
-            <Route path="kpi/feedback" element={<ProtectedRoute permissionKey="kpi-feedback"><KPIFeedback /></ProtectedRoute>} />
-            <Route path="feedback" element={<ProtectedRoute permissionKey="feedback"><Improvements /></ProtectedRoute>} />
-            <Route path="hotspots" element={<ProtectedRoute permissionKey="hotspots"><Hotspots /></ProtectedRoute>} />
-            <Route path="data" element={<ProtectedRoute permissionKey="data"><DataPackaging /></ProtectedRoute>} />
-            <Route path="screens" element={<ProtectedRoute permissionKey="screens"><ScreenManagement /></ProtectedRoute>} />
-            <Route path="screens/:id" element={<ProtectedRoute permissionKey="screens"><ScreenDetail /></ProtectedRoute>} />
-            <Route path="screens/bugs" element={<ProtectedRoute permissionKey="bugs"><ScreenBugManagement /></ProtectedRoute>} />
-            <Route path="screens/progress" element={<ProtectedRoute permissionKey="screens"><ProjectProgress /></ProtectedRoute>} />
-            <Route path="monitor" element={<ProtectedRoute permissionKey="monitor"><SystemMonitor /></ProtectedRoute>} />
-            <Route path="equipment" element={<ProtectedRoute permissionKey="equipment"><EquipmentManagement /></ProtectedRoute>} />
-            <Route path="equipment/categories" element={<ProtectedRoute permissionKey="equipment"><EquipmentCategories /></ProtectedRoute>} />
-            <Route path="equipment/history" element={<ProtectedRoute permissionKey="equipment"><EquipmentHistory /></ProtectedRoute>} />
-            <Route path="equipment/training" element={<ProtectedRoute permissionKey="equipment"><EquipmentTraining /></ProtectedRoute>} />
-            <Route path="equipment/handover" element={<ProtectedRoute permissionKey="equipment"><EquipmentHandoverRedirect /></ProtectedRoute>} />
-            <Route path="equipment/handover/:id" element={<ProtectedRoute permissionKey="equipment"><EquipmentHandoverRedirect /></ProtectedRoute>} />
-            <Route path="equipment/detail/:id" element={<ProtectedRoute permissionKey="equipment"><EquipmentDetail /></ProtectedRoute>} />
-            <Route path="equipment/training/detail/:id" element={<ProtectedRoute permissionKey="equipment"><EquipmentTrainingDetail /></ProtectedRoute>} />
+            {/* Route Admin (Sử dụng Layout chung) */}
+            <Route path="/admin" element={<PortalLayout />}>
+              <Route index element={<Navigate to="/admin/dashboard" />} />
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="profile" element={<UserEdit isProfile={true} />} />
+              <Route path="users" element={<ProtectedRoute permissionKey="users"><UserManagement /></ProtectedRoute>} />
+              <Route path="users/create" element={<ProtectedRoute permissionKey="users"><UserCreate /></ProtectedRoute>} />
+              <Route path="users/edit/:id" element={<ProtectedRoute permissionKey="users"><UserEdit /></ProtectedRoute>} />
+              <Route path="users/permissions/:id" element={<ProtectedRoute permissionKey="users"><UserEdit /></ProtectedRoute>} />
+              <Route path="users/departments" element={<ProtectedRoute permissionKey="users"><DepartmentManagement /></ProtectedRoute>} />
+              <Route path="users/positions" element={<ProtectedRoute permissionKey="users"><PositionManagement /></ProtectedRoute>} />
+              <Route path="hr" element={<Navigate to="hr/org-chart" />} />
+              <Route path="hr/org-chart" element={<ProtectedRoute permissionKey="users"><HRManagementView /></ProtectedRoute>} />
+              <Route path="hr/employees" element={<ProtectedRoute permissionKey="users"><EmployeeListView /></ProtectedRoute>} />
+              <Route path="handovers" element={<ProtectedRoute permissionKey="handovers"><HandoverList /></ProtectedRoute>} />
+              <Route path="logs" element={<ProtectedRoute permissionKey="logs"><IncidentLogs /></ProtectedRoute>} />
+              <Route path="defects" element={<ProtectedRoute permissionKey="defects"><DefectManagement /></ProtectedRoute>} />
+              <Route path="reports" element={<ProtectedRoute permissionKey="reports"><InspectionReports /></ProtectedRoute>} />
+              <Route path="quality-records" element={<ProtectedRoute permissionKey="quality-records"><QualityRecords /></ProtectedRoute>} />
+              <Route path="quality-records/:id" element={<ProtectedRoute permissionKey="quality-records"><QualityRecordsDetail /></ProtectedRoute>} />
+              <Route path="iso-documents" element={<ProtectedRoute permissionKey="iso-documents"><ISODocumentList mode="documents" /></ProtectedRoute>} />
+              <Route path="iso-processes" element={<ProtectedRoute permissionKey="iso-processes"><ISODocumentList mode="processes" /></ProtectedRoute>} />
+              <Route path="iso-documents/edit/:id" element={<ProtectedRoute permissionKey={["iso-documents", "iso-processes"]}><ISOFormEditor /></ProtectedRoute>} />
+              <Route path="iso-processes/edit/:id" element={<ProtectedRoute permissionKey="iso-processes"><ISOProcessEditor /></ProtectedRoute>} />
+              <Route path="kpi" element={<ProtectedRoute permissionKey="kpi"><KPIReports /></ProtectedRoute>} />
+              <Route path="kpi/checklist" element={<ProtectedRoute permissionKey="kpi"><KPIChecklist /></ProtectedRoute>} />
+              <Route path="kpi/list" element={<ProtectedRoute permissionKey="kpi"><KPIItems /></ProtectedRoute>} />
+              <Route path="kpi/rules" element={<ProtectedRoute permissionKey="kpi"><KPIRules /></ProtectedRoute>} />
+              <Route path="kpi/feedback" element={<ProtectedRoute permissionKey="kpi"><KPIFeedback /></ProtectedRoute>} />
+              <Route path="feedback" element={<ProtectedRoute permissionKey="feedback"><Improvements /></ProtectedRoute>} />
+              <Route path="hotspots" element={<ProtectedRoute permissionKey="hotspots"><Hotspots /></ProtectedRoute>} />
+              <Route path="data" element={<ProtectedRoute permissionKey="data"><DataPackaging /></ProtectedRoute>} />
+              <Route path="screens" element={<ProtectedRoute permissionKey="screens"><ScreenManagement /></ProtectedRoute>} />
+              <Route path="screens/:id" element={<ProtectedRoute permissionKey="screens"><ScreenDetail /></ProtectedRoute>} />
+              <Route path="screens/bugs" element={<ProtectedRoute permissionKey="bugs"><ScreenBugManagement /></ProtectedRoute>} />
+              <Route path="screens/progress" element={<ProtectedRoute permissionKey="screens"><ProjectProgress /></ProtectedRoute>} />
+              <Route path="monitor" element={<ProtectedRoute permissionKey="monitor"><SystemMonitor /></ProtectedRoute>} />
+              <Route path="equipment" element={<ProtectedRoute permissionKey="equipment"><EquipmentManagement /></ProtectedRoute>} />
+              <Route path="equipment/categories" element={<ProtectedRoute permissionKey="equipment"><EquipmentCategories /></ProtectedRoute>} />
+              <Route path="equipment/history" element={<ProtectedRoute permissionKey="equipment"><EquipmentHistory /></ProtectedRoute>} />
+              <Route path="equipment/training" element={<ProtectedRoute permissionKey="equipment"><EquipmentTraining /></ProtectedRoute>} />
+              <Route path="equipment/handover" element={<ProtectedRoute permissionKey="equipment"><EquipmentHandoverRedirect /></ProtectedRoute>} />
+              <Route path="equipment/handover/:id" element={<ProtectedRoute permissionKey="equipment"><EquipmentHandoverRedirect /></ProtectedRoute>} />
+              <Route path="equipment/detail/:id" element={<ProtectedRoute permissionKey="equipment"><EquipmentDetail /></ProtectedRoute>} />
+              <Route path="equipment/training/detail/:id" element={<ProtectedRoute permissionKey="equipment"><EquipmentTrainingDetail /></ProtectedRoute>} />
 
-            {/* Machinery (Máy móc) Module */}
-            <Route path="machines" element={<ProtectedRoute permissionKey="machines"><MachineManagement /></ProtectedRoute>} />
-            <Route path="machines/history" element={<ProtectedRoute permissionKey="machines"><MachineHistory /></ProtectedRoute>} />
-            <Route path="machines/training" element={<ProtectedRoute permissionKey="machines"><MachineTraining /></ProtectedRoute>} />
-            <Route path="machines/detail/:id" element={<ProtectedRoute permissionKey="machines"><MachineDetail /></ProtectedRoute>} />
+              {/* Machinery (Máy móc) Module */}
+              <Route path="machines" element={<ProtectedRoute permissionKey="machines"><MachineManagement /></ProtectedRoute>} />
+              <Route path="machines/history" element={<ProtectedRoute permissionKey="machine-history"><MachineHistory /></ProtectedRoute>} />
+              <Route path="machines/training" element={<ProtectedRoute permissionKey="machine-training"><MachineTraining /></ProtectedRoute>} />
+              <Route path="machines/detail/:id" element={<ProtectedRoute permissionKey="machines"><MachineDetail /></ProtectedRoute>} />
 
-            {/* Manufacture Routes merged under /admin */}
-            <Route path="manufacture-dashboard" element={<ProtectedRoute permissionKey="home"><ManufactureDashboard /></ProtectedRoute>} />
-            <Route path="plan" element={<ProtectedRoute permissionKey="plan"><ManufacturePlan /></ProtectedRoute>} />
-            <Route path="plan/:id" element={<ProtectedRoute permissionKey="plan"><PlanDetail /></ProtectedRoute>} />
-            <Route path="plan/create" element={<ProtectedRoute permissionKey="plan"><AddProductionPlan /></ProtectedRoute>} />
-            <Route path="delivery-tracking" element={<ProtectedRoute permissionKey="delivery-tracking"><DeliveryTracking /></ProtectedRoute>} />
-            <Route path="products" element={<ProtectedRoute permissionKey="products"><ManufactureProducts /></ProtectedRoute>} />
-            <Route path="products/:id" element={<ProtectedRoute permissionKey="products"><ProductDetail /></ProtectedRoute>} />
-            <Route path="products/create" element={<ProtectedRoute permissionKey="products"><ProductCreate /></ProtectedRoute>} />
-            <Route path="progress/:id" element={<ProtectedRoute permissionKey="plan"><ProductionProgress /></ProtectedRoute>} />
-            <Route path="orders" element={<ProtectedRoute permissionKey="orders"><ManufactureOrders /></ProtectedRoute>} />
-            <Route path="orders/create" element={<ProtectedRoute permissionKey="orders"><OrderCreate /></ProtectedRoute>} />
-            <Route path="backup-qrs" element={<ProtectedRoute permissionKey="backup-qrs"><BackupQRManagement /></ProtectedRoute>} />
-            <Route path="exception-deliveries" element={<ProtectedRoute permissionKey="exception-deliveries"><ExceptionDeliveries /></ProtectedRoute>} />
-            <Route path="purchase-requisitions" element={<ProtectedRoute permissionKey="purchase-requisitions"><PurchaseRequisitionList /></ProtectedRoute>} />
-            <Route path="purchase-requisitions/:id" element={<ProtectedRoute permissionKey="purchase-requisitions"><PurchaseRequisitionDetail /></ProtectedRoute>} />
-            <Route path="purchase-order-items" element={<ProtectedRoute permissionKey="purchase-order-items"><PurchaseOrderItemList /></ProtectedRoute>} />
-          </Route>
-
-          {/* Route Claim (Root level but with PortalLayout) */}
-          <Route path="/admin/claims" element={<ProtectedRoute permissionKey="claim"><PortalLayout /></ProtectedRoute>}>
-            <Route element={<ClaimPortalLayout />}>
-              <Route index element={<ClaimList />} />
+              {/* Manufacture Routes merged under /admin */}
+              <Route path="manufacture-dashboard" element={<ProtectedRoute permissionKey="home"><ManufactureDashboard /></ProtectedRoute>} />
+              <Route path="plan" element={<ProtectedRoute permissionKey="plan"><ManufacturePlan /></ProtectedRoute>} />
+              <Route path="plan/:id" element={<ProtectedRoute permissionKey="plan"><PlanDetail /></ProtectedRoute>} />
+              <Route path="plan/create" element={<ProtectedRoute permissionKey="plan"><AddProductionPlan /></ProtectedRoute>} />
+              <Route path="delivery-tracking" element={<ProtectedRoute permissionKey="delivery-tracking"><DeliveryTracking /></ProtectedRoute>} />
+              <Route path="products" element={<ProtectedRoute permissionKey="products"><ManufactureProducts /></ProtectedRoute>} />
+              <Route path="products/:id" element={<ProtectedRoute permissionKey="products"><ProductDetail /></ProtectedRoute>} />
+              <Route path="products/create" element={<ProtectedRoute permissionKey="products"><ProductCreate /></ProtectedRoute>} />
+              <Route path="progress/:id" element={<ProtectedRoute permissionKey="plan"><ProductionProgress /></ProtectedRoute>} />
+              <Route path="orders" element={<ProtectedRoute permissionKey="orders"><ManufactureOrders /></ProtectedRoute>} />
+              <Route path="orders/create" element={<ProtectedRoute permissionKey="orders"><OrderCreate /></ProtectedRoute>} />
+              <Route path="backup-qrs" element={<ProtectedRoute permissionKey="backup-qrs"><BackupQRManagement /></ProtectedRoute>} />
+              <Route path="exception-deliveries" element={<ProtectedRoute permissionKey="exception-deliveries"><ExceptionDeliveries /></ProtectedRoute>} />
+              <Route path="purchase-requisitions" element={<ProtectedRoute permissionKey="purchase-requisitions"><PurchaseRequisitionList /></ProtectedRoute>} />
+              <Route path="purchase-requisitions/:id" element={<ProtectedRoute permissionKey="purchase-requisitions"><PurchaseRequisitionDetail /></ProtectedRoute>} />
+              <Route path="purchase-order-items" element={<ProtectedRoute permissionKey="purchase-order-items"><PurchaseOrderItemList /></ProtectedRoute>} />
             </Route>
-          </Route>
 
-          {/* Route ChatBot - redirects to claims with chat open */}
-          <Route path="/admin/chatbot" element={<Navigate to="/admin/claims?chat=true" />} />
-          {/* Route Prices */}
-          <Route path="/admin/prices" element={<ProtectedRoute permissionKey="prices"><PortalLayout /></ProtectedRoute>}>
-            <Route element={<ClaimPortalLayout />}>
-              <Route index element={<PriceList />} />
+            {/* Route Claim (Root level but with PortalLayout) */}
+            <Route path="/admin/claims" element={<ProtectedRoute permissionKey="claim"><PortalLayout /></ProtectedRoute>}>
+              <Route element={<ClaimPortalLayout />}>
+                <Route index element={<ClaimList />} />
+              </Route>
             </Route>
-          </Route>
 
-          {/* Route Shipments */}
-          <Route path="/admin/shipments" element={<ProtectedRoute permissionKey="shipments"><PortalLayout /></ProtectedRoute>}>
-            <Route element={<ClaimPortalLayout />}>
-              <Route index element={<ShipmentList />} />
+            {/* Route ChatBot - redirects to claims with chat open */}
+            <Route path="/admin/chatbot" element={<Navigate to="/admin/claims?chat=true" />} />
+            {/* Route Prices */}
+            <Route path="/admin/prices" element={<ProtectedRoute permissionKey="prices"><PortalLayout /></ProtectedRoute>}>
+              <Route element={<ClaimPortalLayout />}>
+                <Route index element={<PriceList />} />
+              </Route>
             </Route>
-          </Route>
 
-          {/* Legacy Redirects */}
-          <Route path="/claim/*" element={<Navigate to="/admin/claims" />} />
-          <Route path="/admin/claim/*" element={<Navigate to="/admin/claims" />} />
+            {/* Route Shipments */}
+            <Route path="/admin/shipments" element={<ProtectedRoute permissionKey="shipments"><PortalLayout /></ProtectedRoute>}>
+              <Route element={<ClaimPortalLayout />}>
+                <Route index element={<ShipmentList />} />
+              </Route>
+            </Route>
 
-          {/* Chuyển hướng mặc định */}
-          <Route path="/" element={<RootRoute />} />
+            {/* Legacy Redirects */}
+            <Route path="/claim/*" element={<Navigate to="/admin/claims" />} />
+            <Route path="/admin/claim/*" element={<Navigate to="/admin/claims" />} />
 
-          {/* Catch-all route to prevent white screen */}
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
+            {/* Chuyển hướng mặc định */}
+            <Route path="/" element={<RootRoute />} />
+
+            {/* Catch-all route to prevent white screen */}
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
         </Router>
       </ScreenProvider>
     </ToastProvider>

@@ -1,0 +1,52 @@
+Line 1: import React, { useState, useEffect, useMemo, useRef } from 'react';
+Line 2: import { useNavigate, useOutletContext } from 'react-router-dom';
+Line 3: import { screenService } from '@modules/System/Models/screen.service';
+Line 4: import { bugService } from '@modules/System/Models/bug.service';
+Line 5: import { Search, Filter, ChevronLeft, ChevronRight, FileDown, Eye, Trash2, ArrowUpDown, Plus } from 'lucide-react';
+Line 6: import { useScreen } from '@shared/context/ScreenContext';
+Line 7: import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+Line 8: import '@styles/components.css';
+Line 9: import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
+Line 50: if (code.startsWith('SX') || code.startsWith('MA')) return 'Quản lý sản xuất';
+Line 59: return 'Quản lý sản xuất';
+Line 118: const [isExcelDropdownOpen, setIsExcelDropdownOpen] = useState(false);
+Line 141: setIsExcelDropdownOpen(false);
+Line 163: showToast('Không thể tải dữ liệu cấu hình hệ thống!', 'error');
+Line 222: const handleImportExcelClick = () => {
+Line 231: showToast(`Đang nhập dữ liệu từ tệp ${file.name}...`, 'info');
+Line 233: showToast(`Đã nhập dữ liệu thành công từ tệp ${file.name}!`, 'success');
+Line 238: const handleExportExcel = (exportAll = true) => {
+Line 239: const rows = exportAll ? filteredScreens : screens.filter(s => checkedScreenIds.includes(s.id));
+Line 241: showToast('Không có màn hình nào được chọn để xuất Excel!', 'error');
+Line 262: a.download = `Danh_sach_man_hinh_${exportAll ? 'toan_bo' : 'chon_loc'}_${new Date().toISOString().slice(0,10)}.csv`;
+Line 265: showToast('Xuất Excel thành công!');
+Line 268: const handleExportPDFSingle = (screenItem) => {
+Line 269: handleExportPDF(false, [screenItem.id]);
+Line 272: const handleExportPDF = (exportAll = true, specificIds = null) => {
+Line 277: rows = exportAll ? filteredScreens : screens.filter(s => checkedScreenIds.includes(s.id));
+Line 281: showToast('Không có màn hình nào được chọn để xuất PDF!', 'error');
+Line 295: <p style="margin: 2px 0 0 0;">Ngày xuất: ${new Date().toLocaleDateString('vi-VN')}</p>
+Line 378: showToast('Tải PDF đặc tả thành công!');
+Line 756: {/* Nút Nhập Excel */}
+Line 760: onClick={handleImportExcelClick}
+Line 775: <span>Nhập Excel</span>
+Line 780: accept=".xlsx, .xls, .csv"
+Line 786: {/* Nút Xuất Excel */}
+Line 790: onClick={() => setIsExcelDropdownOpen(!isExcelDropdownOpen)}
+Line 805: <span>Xuất Excel</span>
+Line 808: {isExcelDropdownOpen && (
+Line 822: onClick={() => { setIsExcelDropdownOpen(false); handleExportExcel(true); }}
+Line 826: Xuất toàn bộ
+Line 829: onClick={() => { setIsExcelDropdownOpen(false); handleExportExcel(false); }}
+Line 833: Xuất theo danh sách chọn
+Line 839: {/* Nút Xuất PDF */}
+Line 858: <span>Xuất PDF</span>
+Line 875: onClick={() => { setIsPdfDropdownOpen(false); handleExportPDF(true); }}
+Line 879: Xuất toàn bộ
+Line 882: onClick={() => { setIsPdfDropdownOpen(false); handleExportPDF(false); }}
+Line 886: Xuất theo danh sách chọn
+Line 942: <option value="Quản lý sản xuất">Quản lý sản xuất</option>
+Line 1058: <span>Đang tải cấu hình màn hình...</span>
+Line 1201: handleExportPDFSingle(screen);
+Line 1204: Tải xuống PDF
+Line 1552: export default ScreenManagement;

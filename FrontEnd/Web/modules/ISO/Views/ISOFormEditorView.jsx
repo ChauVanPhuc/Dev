@@ -29,6 +29,7 @@ const ISOFormEditorView = () => {
   const setCustomTitle = context ? context.setCustomTitle : null;
   const setCustomSubtitle = context ? context.setCustomSubtitle : null;
   const setCustomScreenCode = context ? context.setCustomScreenCode : null;
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/iso-documents/edit/:id');
   const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
 
   const isProcessMode = false;

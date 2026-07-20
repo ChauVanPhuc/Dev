@@ -30,3 +30,5 @@ from modules.master.schemas.master_category import *
 from modules.master.schemas.master_bom_detail import *
 from modules.system.schemas.system_component import *
 from modules.system.schemas.system_screen import *
+from modules.auth.schemas.org_structures import *
+from modules.auth.schemas.employees import *

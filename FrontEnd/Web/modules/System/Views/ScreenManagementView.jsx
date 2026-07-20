@@ -11,6 +11,20 @@ import BeautifulConfirmModal from '@webShared/Views/components/feedback/Beautifu
 import { useScreenMetadataCached, clearScreenMetadataCache } from '@webShared/hooks/useScreenMetadata';
 import * as XLSX from 'xlsx';
 import ScreenExportDetailModal from './components/ScreenExportDetailModal';
+import { menuStructure } from '@webShared/Views/components/layout/Sidebar';
+
+const SUBSYSTEMS = [
+  'Trang chủ',
+  'Quản lý hệ thống',
+  'Quản lý nhân sự',
+  'Hồ sơ ISO',
+  'Quản lý sản xuất',
+  'Quản lý chất lượng',
+  'Quản lý kinh doanh',
+  'Quản lý kỹ thuật',
+  'Bảo trì - cơ sở hạ tầng',
+  'Quản lý KPI'
+];
 
 const parseDescription = (desc) => {
   if (!desc) return { tag: '', text: '' };
@@ -61,8 +75,10 @@ const formatSimpleDate = (dateStr) => {
 };
 
 const getSubsystem = (screen) => {
-  const code = screen.current_code || '';
+  const code = (screen.current_code || '').toUpperCase();
   if (code.startsWith('TC')) return 'Trang chủ';
+  if (code.startsWith('ISO') || code.startsWith('AD17') || code.startsWith('AD18')) return 'Hồ sơ ISO';
+  if (code.startsWith('KPI') || code.startsWith('AD7')) return 'Quản lý KPI';
   if (code.startsWith('HT') || code.startsWith('HD') || code.startsWith('AD')) return 'Quản lý hệ thống';
   if (code.startsWith('HS') || code.startsWith('NS')) return 'Quản lý nhân sự';
   if (code.startsWith('SX') || code.startsWith('MA')) return 'Quản lý sản xuất';
@@ -73,11 +89,10 @@ const getSubsystem = (screen) => {
 
   // Fallback by route path
   const path = screen.route_path || '';
+  if (path.includes('/kpi')) return 'Quản lý KPI';
+  if (path.includes('/iso-documents') || path.includes('/iso-processes')) return 'Hồ sơ ISO';
   if (path.includes('/manufacture') || path.includes('/plan') || path.includes('/delivery-tracking') || path.includes('/orders')) {
     return 'Quản lý sản xuất';
-  }
-  if (path.includes('/iso-documents') || path.includes('/iso-processes')) {
-    return 'Quản lý nhân sự';
   }
   if (path.includes('/quality-records') || path.includes('/defects') || path.includes('/claims')) {
     return 'Quản lý chất lượng';
@@ -1117,14 +1132,9 @@ const ScreenManagement = () => {
                   style={{ border: '1px solid #D1D5DB', borderRadius: '6px', padding: '6px 10px', fontSize: '0.82rem', outline: 'none' }}
                 >
                   <option value="">Tất cả phân hệ</option>
-                  <option value="Trang chủ">Trang chủ</option>
-                  <option value="Quản lý hệ thống">Quản lý hệ thống</option>
-                  <option value="Quản lý nhân sự">Quản lý nhân sự</option>
-                  <option value="Quản lý sản xuất">Quản lý sản xuất</option>
-                  <option value="Quản lý chất lượng">Quản lý chất lượng</option>
-                  <option value="Quản lý kinh doanh">Quản lý kinh doanh</option>
-                  <option value="Quản lý kỹ thuật">Quản lý kỹ thuật</option>
-                  <option value="Bảo trì - cơ sở hạ tầng">Bảo trì - cơ sở hạ tầng</option>
+                  {SUBSYSTEMS.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
                 </select>
               </div>
 

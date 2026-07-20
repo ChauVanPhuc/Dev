@@ -402,9 +402,7 @@ const PortalLayout = () => {
     return localStorage.getItem('smartflow_sidebar_collapsed') === 'true';
   });
 
-  const [layoutMode, setLayoutMode] = useState(() => {
-    return localStorage.getItem('smartflow_layout_mode') || 'responsive';
-  });
+  const [layoutMode, setLayoutMode] = useState('fit-to-screen');
   const [scaleFactor, setScaleFactor] = useState(1);
 
   const toggleLayoutMode = () => {
@@ -434,6 +432,14 @@ const PortalLayout = () => {
     handleResize();
     return () => window.removeEventListener('resize', handleResize);
   }, [layoutMode]);
+
+  useEffect(() => {
+    const token = authService.getToken();
+    const isLoggedIn = token && token !== 'null' && token !== 'undefined' && token !== '';
+    if (!isLoggedIn) {
+      navigate('/login', { replace: true });
+    }
+  }, [navigate]);
 
   useEffect(() => {
     if (layoutMode === 'fit-to-screen') {
@@ -2126,8 +2132,28 @@ const PortalLayout = () => {
         .admin-layout.fit-to-screen-active .dashboard-content.allow-y-scroll {
           overflow-y: auto !important;
         }
+        .admin-layout.fit-to-screen-active .dashboard-content > div,
+        .admin-layout.fit-to-screen-active .mgmt-container,
+        .admin-layout.fit-to-screen-active .manufacture-plan-container,
+        .admin-layout.fit-to-screen-active .quality-records-container {
+          flex: 1 !important;
+          height: 100% !important;
+          min-height: 0 !important;
+          display: flex !important;
+          flex-direction: column !important;
+        }
+        .admin-layout.fit-to-screen-active .mgmt-main {
+          flex: 1 !important;
+          display: flex !important;
+          flex-direction: column !important;
+          min-height: 0 !important;
+          height: 100% !important;
+        }
         .admin-layout.fit-to-screen-active .admin-list-layout {
-          height: calc((100vh / var(--scale-factor, 1)) - 140px) !important;
+          flex: 1 !important;
+          height: auto !important;
+          min-height: 0 !important;
+          overflow: hidden !important;
         }
         .sidebar-backdrop {
           position: fixed;

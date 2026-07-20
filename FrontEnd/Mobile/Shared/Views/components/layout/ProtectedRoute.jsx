@@ -11,6 +11,8 @@ const mapPathToPermissionKey = (pathname) => {
   if (path.startsWith('/delivery-info')) return 'mobile_delivery-info';
   if (path.startsWith('/delivery-create')) return 'mobile_delivery-create';
   if (path.startsWith('/delivery-receive')) return 'mobile_delivery-receive';
+  if (path.startsWith('/delivery-history')) return 'mobile_delivery-info';
+  if (path.startsWith('/delivery-detail')) return 'mobile_delivery-info';
   if (path.startsWith('/plan')) return 'mobile_plan';
   if (path.startsWith('/inspection-daily')) return 'mobile_inspection-daily';
   if (path.startsWith('/inspection-stage-moisture')) return 'mobile_inspection-stage-moisture';

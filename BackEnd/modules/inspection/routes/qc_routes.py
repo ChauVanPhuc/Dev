@@ -262,3 +262,49 @@ def get_qc_results(delivery_id: int, db: Session = Depends(get_db)):
         "qc_info": qc_record,
         "images": qc_images
     }
+
+@router.get("/plan/{plan_id}")
+def get_qc_history_by_plan(plan_id: int, db: Session = Depends(get_db)):
+    """
+    [GET] Lấy lịch sử QC của toàn bộ kế hoạch dựa trên plan_id.
+    """
+    from modules.delivery.models.order import Order
+    from modules.auth.models.accounts import Account
+
+    # Tìm tất cả delivery_id liên quan đến plan_id này
+    delivery_ids = db.query(Delivery.id).filter(Delivery.plan_id == plan_id).all()
+    ids = [d.id for d in delivery_ids]
+    if not ids:
+        return []
+
+    qc_records = db.query(DeliveryQC).filter(DeliveryQC.delivery_id.in_(ids)).order_by(DeliveryQC.created_at.desc()).all()
+
+    results = []
+    for qc in qc_records:
+        delivery = db.query(Delivery).filter(Delivery.id == qc.delivery_id).first()
+        inspector = db.query(Account).filter(Account.id == delivery.qc_receipt).first() if delivery and delivery.qc_receipt else None
+        order = db.query(Order).filter(Order.id == delivery.order_id).first() if delivery else None
+
+        res_data = {}
+        try:
+            res_data = json.loads(qc.results_json) if qc.results_json else {}
+        except:
+            pass
+
+        result_text = "Đạt"
+        if delivery and (delivery.quantity_returned > 0 or delivery.status == "Trả Hàng"):
+            result_text = "Không Đạt"
+
+        results.append({
+            "id": qc.id,
+            "delivery_id": qc.delivery_id,
+            "po_code": order.order_code if order else (delivery.part_name if delivery else "---"),
+            "created_at": qc.created_at,
+            "qc_inspector_name": inspector.full_name if inspector else "---",
+            "result": result_text,
+            "note": qc.note,
+            "results_data": res_data
+        })
+
+    return results
+

@@ -827,12 +827,57 @@ const UserEdit = ({ isProfile = false }) => {
     }
   }, [searchQuery]);
 
+  const generateUsername = (fullName) => {
+    if (!fullName) return '';
+    const removeVietnameseTones = (str) => {
+      str = str.replace(/à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ/g,"a"); 
+      str = str.replace(/è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ/g,"e"); 
+      str = str.replace(/ì|í|ị|ỉ|ĩ/g,"i"); 
+      str = str.replace(/ò|ó|ọ|ỏ|õ|ô|ồ|ố|ộ|ổ|ỗ|ơ|ờ|ớ|ợ|ở|ỡ/g,"o"); 
+      str = str.replace(/ù|ú|ụ|ủ|ũ|ư|ừ|ứ|ự|ử|ữ/g,"u"); 
+      str = str.replace(/ỳ|ý|ỵ|ỷ|ỹ/g,"y"); 
+      str = str.replace(/đ/g,"d");
+      str = str.replace(/À|Á|Ạ|Ả|Ã|Â|Ầ|Ấ|Ậ|Ẩ|Ẫ|Ă|Ằ|Ắ|Ặ|Ẳ|Ẵ/g, "A");
+      str = str.replace(/È|É|Ẹ|Ẻ|Ẽ|Ê|Ề|Ế|Ệ|Ể|Ễ/g, "E");
+      str = str.replace(/Ì|Í|Ị|Ỉ|Ĩ/g, "I");
+      str = str.replace(/Ò|Ó|Ọ|Ỏ|Õ|Ô|Ồ|Ố|Ộ|Ổ|Ỗ|Ơ|Ờ|Ớ|Ợ|Ở|Ỡ/g, "O");
+      str = str.replace(/Ù|Ú|Ụ|Ủ|Ũ|Ư|Ừ|Ứ|Ự|Ử|Ữ/g, "U");
+      str = str.replace(/Ỳ|Ý|Ỵ|Ỷ|Ỹ/g, "Y");
+      str = str.replace(/Đ/g, "D");
+      return str;
+    };
+    
+    const cleanName = removeVietnameseTones(fullName).trim();
+    const parts = cleanName.split(/\s+/);
+    if (parts.length === 0) return '';
+    
+    const firstName = parts[parts.length - 1];
+    let middleAndLastName = '';
+    if (parts.length > 1) {
+      middleAndLastName += parts[0].charAt(0).toUpperCase();
+      for (let i = 1; i < parts.length - 1; i++) {
+        middleAndLastName += parts[i].charAt(0).toUpperCase();
+      }
+    }
+    
+    const formattedFirstName = firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase();
+    const randomNum = Math.floor(100 + Math.random() * 900); 
+    
+    return `${formattedFirstName}${middleAndLastName}${randomNum}`;
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => {
+      const updates = { [name]: value };
+      if (name === 'full_name') {
+        updates.username = generateUsername(value);
+      }
+      return {
+        ...prev,
+        ...updates
+      };
+    });
     setIsDirty(true);
   };
 
@@ -856,21 +901,35 @@ const UserEdit = ({ isProfile = false }) => {
     setIsDirty(true);
   };
 
-  // Hàm đồng bộ giả lập thông tin từ máy chấm công
-  const handleAutoSync = () => {
+  // Hàm đồng bộ thông tin từ danh mục nhân viên
+  const handleAutoSync = async () => {
+    if (!formData.employee_id) {
+      return;
+    }
     setSyncing(true);
-    setTimeout(() => {
-      setSyncing(false);
-      setFormData(prev => ({
-        ...prev,
-        employee_id: prev.employee_id || '9512',
-        full_name: prev.full_name || 'Nguyễn Văn Hùng',
-        phone: prev.phone || '0988776655',
-        email: prev.email || 'hungnv@smartflow.vn'
-      }));
+    try {
+      const response = await api.get(`/employees/by-code/${formData.employee_id}`);
+      const employee = response.data;
+      
+      setFormData(prev => {
+        const fetchedName = employee.full_name;
+        const generatedUser = generateUsername(fetchedName);
+        return {
+          ...prev,
+          full_name: fetchedName,
+          phone: prev.phone || employee.phone || '',
+          email: prev.email || employee.email || '',
+          username: generatedUser
+        };
+      });
       setIsDirty(true);
-      alert('Đồng bộ dữ liệu nhân sự thành công!');
-    }, 850);
+      toast('success', 'Đồng bộ dữ liệu nhân sự thành công!');
+    } catch (err) {
+      console.error(err);
+      toast('error', 'Lỗi khi đồng bộ hoặc mã nhân viên không tồn tại.');
+    } finally {
+      setSyncing(false);
+    }
   };
 
   // Logic kiểm soát checkbox độc lập
@@ -1414,6 +1473,7 @@ const UserEdit = ({ isProfile = false }) => {
                         placeholder="VD: 1245" 
                         value={formData.employee_id}
                         onChange={handleChange}
+                        onBlur={handleAutoSync}
                         required
                         disabled={isProfile}
                         className={isProfile ? "input-disabled" : ""}
@@ -1466,8 +1526,22 @@ const UserEdit = ({ isProfile = false }) => {
                       type="text" 
                       name="username" 
                       value={formData.username}
-                      disabled
-                      className="input-disabled"
+                      onChange={handleChange}
+                      disabled={isProfile}
+                      className={isProfile ? "input-disabled" : ""}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Password</label>
+                    <input 
+                      type="password" 
+                      name="password" 
+                      placeholder="*******"
+                      value={formData.password}
+                      onChange={handleChange}
+                      disabled={isProfile}
+                      className={isProfile ? "input-disabled" : ""}
                     />
                   </div>
 

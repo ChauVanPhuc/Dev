@@ -213,6 +213,20 @@ def seed_hr_data():
                 "section_id": None
             }
         ]
+        # Extended employee list to reach ~25 records
+        extra_emp_specs = [
+            ("NV0016", "Hoàng Thị P", "0901112222", "2023-09-01", "SX", "CN", "T1"),
+            ("NV0017", "Vũ Văn Q", "0902223333", "2023-09-15", "SX", "CN", "T1"),
+            ("NV0018", "Nguyễn Thị R", "0903334444", "2023-10-01", "SX", "CN", "T2"),
+            ("NV0019", "Lê Văn S", "0904445555", "2023-10-10", "QC", "CN", "TQC"),
+            ("NV0020", "Phạm Thị T", "0905556666", "2023-10-20", "KH", "CN", "TKH"),
+            ("NV0021", "Trần Văn U", "0906667777", "2023-11-01", "SX", "CN", "T2"),
+            ("NV0022", "Bùi Thị V", "0907778888", "2023-11-12", "QC", "CN", "TQC"),
+            ("NV0023", "Đỗ Văn W", "0908889999", "2023-11-25", "KH", "CN", "TKH"),
+            ("NV0024", "Ngô Thị X", "0909990000", "2023-12-01", "SX", "CN", "T1"),
+            ("NV0025", "Đặng Văn Y", "0910001111", "2023-12-15", "HCNS", "TP", None),
+        ]
+
         employees = {}
         for e in emp_data:
             emp = HREmployee(**e)
@@ -220,6 +234,22 @@ def seed_hr_data():
             db.flush()
             employees[e["employee_id"]] = emp
             print(f"Added Employee: {e['full_name']}")
+
+        for emp_id, name, phone, hire_date, dept_code, pos_code, sec_code in extra_emp_specs:
+            sec = sections.get(sec_code)
+            emp = HREmployee(
+                employee_id=emp_id,
+                full_name=name,
+                phone=phone,
+                hire_date=hire_date,
+                department_id=departments[dept_code].id,
+                position_id=positions[pos_code].id,
+                section_id=sec.id if sec else None
+            )
+            db.add(emp)
+            db.flush()
+            employees[emp_id] = emp
+            print(f"Added Employee: {name}")
                 
         # 5. Seed Org Nodes & Assignments (Sơ đồ tổ chức)
         # Root node: Giám Đốc (Cấp 1)
@@ -422,6 +452,33 @@ def seed_hr_data():
         p_qc_room = HRFactoryStructure(structure_code="P_QC", structure_name="Phòng Lab QC", structure_type="Phòng kiểm tra", parent_id=kv_vp.id, department_id=departments["QC"].id, description="Phòng thử nghiệm chất lượng cao")
         db.add(p_qc_room)
 
+
+        # Add Cấp 4 worker org nodes for the extra employees
+        section_to_node = {
+            "T1": tt1_node,
+            "T2": tt2_node,
+            "TQC": ttqc_node,
+            "TKH": ttkh_node,
+        }
+        for emp_id, name, phone, hire_date, dept_code, pos_code, sec_code in extra_emp_specs:
+            if not sec_code:
+                continue
+            parent_node = section_to_node.get(sec_code)
+            if not parent_node:
+                continue
+            sec = sections.get(sec_code)
+            worker_node = HROrgNode(
+                level_name="Cấp 4",
+                parent_id=parent_node.id,
+                department_id=departments[dept_code].id,
+                position_id=positions["CN"].id,
+                section_id=sec.id if sec else None,
+                note=f"Nhân viên {name}"
+            )
+            db.add(worker_node)
+            db.flush()
+            db.add(HRNodeAssignment(node_id=worker_node.id, employee_id=employees[emp_id].id, assigned_date=hire_date))
+            print(f"Added Org Node & Assignment: {name}")
 
         db.commit()
         print("[SUCCESS] Rich HR Seeder executed successfully.")
