@@ -74,8 +74,8 @@ const HRManagementView = () => {
   );
 
   return (
-    <div className="mgmt-container">
-      <div className="mgmt-main">
+    <div className="mgmt-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '8px', maxWidth: '100%', margin: '0', width: '100%', height: '100%', minHeight: 0, overflow: 'hidden' }}>
+      <div className="mgmt-main" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}>
         {/* Header with dynamic Title and Subtitle depending on active diagram */}
         <div className="page-header" style={{ marginBottom: '0', paddingBottom: '16px', borderBottom: '2px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#2D1A12', margin: 0 }}>
@@ -84,7 +84,7 @@ const HRManagementView = () => {
         </div>
 
         {/* Workspace content area with active chart/diagram */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', marginTop: '16px' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', marginTop: '16px', minHeight: 0 }}>
           {ActiveComponent && <ActiveComponent diagramDropdown={diagramDropdown} />}
         </div>
       </div>

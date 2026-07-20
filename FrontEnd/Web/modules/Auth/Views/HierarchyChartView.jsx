@@ -1,8 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { Network, List, Edit2, Trash2, Award } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Network, List, Plus, Minus, Edit2, Trash2, Award, ChevronDown, ChevronRight } from 'lucide-react';
 import { hrService } from '../Models/hr.service';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import HierarchyNodeModal from './HierarchyNodeModal';
+
+const getLevelNumber = (levelName) => {
+  const match = (levelName || '').match(/\d+/);
+  return match ? parseInt(match[0], 10) : 1;
+};
 
 const HierarchyChartView = ({ diagramDropdown }) => {
   const [nodes, setNodes] = useState([]);
@@ -11,6 +16,47 @@ const HierarchyChartView = ({ diagramDropdown }) => {
   
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedNode, setSelectedNode] = useState(null);
+
+  // Zoom and collapse states
+  const [collapsedIds, setCollapsedIds] = useState(new Set());
+  const [zoom, setZoom] = useState(1);
+
+  const containerRef = React.useRef(null);
+  const contentRef = React.useRef(null);
+  const [treeSize, setTreeSize] = useState({ width: 0, height: 0 });
+
+  const updateTreeSize = () => {
+    if (contentRef.current) {
+      const width = contentRef.current.scrollWidth || contentRef.current.offsetWidth;
+      const height = contentRef.current.scrollHeight || contentRef.current.offsetHeight;
+      if (width > 0 && height > 0) {
+        setTreeSize({ width, height });
+      }
+    }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(updateTreeSize, 100);
+    return () => clearTimeout(timer);
+  }, [nodes, collapsedIds, viewMode]);
+
+  const handleFitScreen = () => {
+    if (!containerRef.current || !contentRef.current) return;
+    const containerWidth = containerRef.current.clientWidth;
+    const containerHeight = containerRef.current.clientHeight;
+    const contentWidth = treeSize.width || contentRef.current.scrollWidth;
+    const contentHeight = treeSize.height || contentRef.current.scrollHeight;
+    if (contentWidth > 0 && contentHeight > 0) {
+      containerRef.current.scrollLeft = 0;
+      containerRef.current.scrollTop = 0;
+      const widthRatio = (containerWidth - 80) / contentWidth;
+      const heightRatio = (containerHeight - 80) / contentHeight;
+      let newZoom = Math.min(widthRatio, heightRatio);
+      newZoom = Math.floor(newZoom * 100) / 100;
+      newZoom = Math.max(0.3, Math.min(1.5, newZoom));
+      setZoom(newZoom);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -40,26 +86,58 @@ const HierarchyChartView = ({ diagramDropdown }) => {
     }
   };
 
-  const filteredNodes = nodes.filter(node => {
+  const filteredNodes = useMemo(() => {
     const term = search.toLowerCase();
-    return (
-      node.rank_level.toLowerCase().includes(term) ||
-      (node.position_name && node.position_name.toLowerCase().includes(term)) ||
-      (node.description && node.description.toLowerCase().includes(term))
-    );
-  });
+    return nodes.filter(node => {
+      return (
+        node.rank_level.toLowerCase().includes(term) ||
+        (node.position_name && node.position_name.toLowerCase().includes(term)) ||
+        (node.description && node.description.toLowerCase().includes(term))
+      );
+    });
+  }, [nodes, search]);
 
-  const roots = filteredNodes.filter(n => !n.parent_id);
-  const childrenMap = {};
-  filteredNodes.forEach(node => {
-    if (node.parent_id) {
-      if (!childrenMap[node.parent_id]) childrenMap[node.parent_id] = [];
-      childrenMap[node.parent_id].push(node);
+  const roots = useMemo(() => filteredNodes.filter(n => !n.parent_id), [filteredNodes]);
+  const childrenMap = useMemo(() => {
+    const map = {};
+    filteredNodes.forEach(node => {
+      if (node.parent_id) {
+        if (!map[node.parent_id]) map[node.parent_id] = [];
+        map[node.parent_id].push(node);
+      }
+    });
+    return map;
+  }, [filteredNodes]);
+
+  // Collapse Level 3+ nodes initially
+  const hasInitialized = React.useRef(false);
+  useEffect(() => {
+    if (nodes.length && !hasInitialized.current) {
+      hasInitialized.current = true;
+      const toCollapse = new Set();
+      nodes.forEach(node => {
+        if (getLevelNumber(node.rank_level) >= 3) {
+          toCollapse.add(node.id);
+        }
+      });
+      setCollapsedIds(toCollapse);
     }
-  });
+  }, [nodes]);
+
+  const toggleCollapse = (nodeId) => {
+    const next = new Set(collapsedIds);
+    if (next.has(nodeId)) next.delete(nodeId);
+    else next.add(nodeId);
+    setCollapsedIds(next);
+  };
+
+  const expandAll = () => setCollapsedIds(new Set());
+  const collapseAll = () => setCollapsedIds(new Set(filteredNodes.map(n => n.id)));
 
   const TreeNode = ({ node }) => {
     const children = childrenMap[node.id] || [];
+    const hasChildren = children.length > 0;
+    const isCollapsed = search.trim() ? false : collapsedIds.has(node.id);
     
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
@@ -119,12 +197,38 @@ const HierarchyChartView = ({ diagramDropdown }) => {
             <Award size={12} />
             <span style={{ fontWeight: 600 }}>Cấp bậc chức danh</span>
           </div>
+
+          {hasChildren && (
+            <div style={{ marginTop: '2px', display: 'flex', justifyContent: 'center' }}>
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleCollapse(node.id); }}
+                title={isCollapsed ? 'Mở rộng cấp dưới' : 'Thu gọn cấp dưới'}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  backgroundColor: isCollapsed ? '#FAF6F0' : '#F3F4F6',
+                  border: '1px solid #EADCC9',
+                  borderRadius: '12px',
+                  padding: '2px 8px',
+                  fontSize: '0.65rem',
+                  fontWeight: 600,
+                  color: '#7B5233',
+                  cursor: 'pointer',
+                  lineHeight: 1
+                }}
+              >
+                {isCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+                <span>{isCollapsed ? `${children.length} cấp dưới` : 'Thu gọn'}</span>
+              </button>
+            </div>
+          )}
         </div>
 
-        {children.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+        {hasChildren && !isCollapsed && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 'max-content', minWidth: '100%' }}>
             <div style={{ width: '2px', height: '24px', backgroundColor: '#C4B5A5', zIndex: 1 }} />
-            <div style={{ display: 'flex', position: 'relative', width: '100%', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', position: 'relative', width: 'max-content', justifyContent: 'center' }}>
               {children.map((child, index) => {
                 const isFirst = index === 0;
                 const isLast = index === children.length - 1;
@@ -140,7 +244,7 @@ const HierarchyChartView = ({ diagramDropdown }) => {
                       position: 'relative',
                       paddingLeft: '16px',
                       paddingRight: '16px',
-                      flex: 1
+                      flex: '0 0 auto'
                     }}
                   >
                     {!isSingle && (
@@ -171,7 +275,7 @@ const HierarchyChartView = ({ diagramDropdown }) => {
       <PageToolbar
         searchValue={search}
         onSearchChange={(val) => setSearch(val)}
-        searchPlaceholder="Nhập Mã, Tên màn"
+        searchPlaceholder="Nhập cấp bậc, vị trí, mô tả..."
         showSort={true}
         sortOptions={[
           { value: 'rank_asc', label: 'Cấp tăng dần' },
@@ -190,8 +294,73 @@ const HierarchyChartView = ({ diagramDropdown }) => {
         hasWritePermission={true}
       />
 
-      {/* Toggle Mode selectors below toolbar on the right */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+      {/* View controls: chart actions + toggle mode */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', marginTop: '12px' }}>
+        {viewMode === 'chart' && (
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              onClick={expandAll}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '6px',
+                border: '1px solid #EADCC9',
+                backgroundColor: '#FAF6F0',
+                color: '#7B5233',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Mở rộng tất cả
+            </button>
+            <button
+              onClick={collapseAll}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '6px',
+                border: '1px solid #EADCC9',
+                backgroundColor: '#FAF6F0',
+                color: '#7B5233',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Thu gọn tất cả
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #EADCC9', borderRadius: '6px', overflow: 'hidden', backgroundColor: '#fff' }}>
+              <button
+                onClick={() => setZoom(z => Math.max(0.3, parseFloat((z - 0.1).toFixed(1))))}
+                style={{ background: 'none', border: 'none', padding: '6px', cursor: 'pointer', color: '#7B5233', display: 'flex', alignItems: 'center' }}
+              >
+                <Minus size={14} />
+              </button>
+              <span style={{ padding: '0 6px', fontSize: '0.75rem', fontWeight: 600, color: '#4A2E1B', minWidth: '36px', textAlign: 'center' }}>
+                {Math.round(zoom * 100)}%
+              </span>
+              <button
+                onClick={() => setZoom(z => Math.min(2, parseFloat((z + 0.1).toFixed(1))))}
+                style={{ background: 'none', border: 'none', padding: '6px', cursor: 'pointer', color: '#7B5233', display: 'flex', alignItems: 'center' }}
+              >
+                <Plus size={14} />
+              </button>
+              <button
+                onClick={() => setZoom(1)}
+                style={{ background: 'none', border: 'none', borderLeft: '1px solid #EADCC9', padding: '0 8px', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, color: '#7B5233', height: '100%' }}
+              >
+                Reset
+              </button>
+              <button
+                onClick={handleFitScreen}
+                style={{ background: 'none', border: 'none', borderLeft: '1px solid #EADCC9', padding: '0 8px', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, color: '#7B5233', height: '100%' }}
+                title="Tự động phóng to/thu nhỏ sơ đồ vừa khung màn hình"
+              >
+                Vừa khung
+              </button>
+            </div>
+          </div>
+        )}
+
         <div style={{
           display: 'inline-flex',
           backgroundColor: '#4A2E1B',
@@ -199,7 +368,8 @@ const HierarchyChartView = ({ diagramDropdown }) => {
           borderRadius: '4px',
           border: '1px solid #4A2E1B',
           height: '28px',
-          boxSizing: 'border-box'
+          boxSizing: 'border-box',
+          marginLeft: 'auto'
         }}>
           <button
             onClick={() => setViewMode('chart')}
@@ -242,20 +412,25 @@ const HierarchyChartView = ({ diagramDropdown }) => {
         </div>
       </div>
 
-      <div style={{ flex: 1, marginTop: '16px' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, marginTop: '8px' }}>
         {viewMode === 'chart' ? (
-          <div style={{
-            backgroundColor: '#FAF8F5',
-            border: '1px solid #EADCC9',
-            borderRadius: '12px',
-            padding: '32px 24px',
-            overflowX: 'auto',
-            minHeight: '480px',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '24px'
-          }}>
+          <div 
+            ref={containerRef}
+            style={{
+              backgroundColor: '#FAF8F5',
+              border: '1px solid #EADCC9',
+              borderRadius: '12px',
+              padding: '32px 24px',
+              overflow: 'auto',
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'stretch',
+              width: '100%',
+              maxWidth: '100%',
+              boxSizing: 'border-box',
+              gap: '24px'
+            }}>
             {/* Dropdown inside diagram card aligned to right, matching Mockup Image 4 */}
             {diagramDropdown && (
               <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%', marginBottom: '8px' }}>
@@ -263,73 +438,93 @@ const HierarchyChartView = ({ diagramDropdown }) => {
               </div>
             )}
 
-            <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start', gap: '40px', width: '100%' }}>
-              {roots.length === 0 ? (
-                <div style={{ color: '#9CA3AF', textAlign: 'center', marginTop: '100px', fontSize: '0.9rem' }}>
-                  Không tìm thấy sơ đồ cấp bậc phù hợp. Nhấp "+ Thêm mới" để bắt đầu tạo sơ đồ.
-                </div>
-              ) : roots.map(root => (
-                <TreeNode key={root.id} node={root} />
-              ))}
+            {/* Wrapper that scales layout box according to visual zoom */}
+            <div style={{
+              width: treeSize.width ? `${treeSize.width * zoom}px` : 'auto',
+              height: treeSize.height ? `${treeSize.height * zoom}px` : 'auto',
+              margin: '0 auto',
+              overflow: 'hidden',
+              position: 'relative'
+            }}>
+              <div 
+                ref={contentRef}
+                style={{ 
+                  display: 'flex', 
+                  flexDirection: 'row', 
+                  justifyContent: 'center', 
+                  alignItems: 'flex-start', 
+                  gap: '40px', 
+                  width: 'max-content', 
+                  transform: `scale(${zoom})`, 
+                  transformOrigin: 'top left',
+                  flexShrink: 0
+                }}>
+                {roots.length === 0 ? (
+                  <div style={{ color: '#9CA3AF', textAlign: 'center', marginTop: '100px', fontSize: '0.9rem' }}>
+                    Không tìm thấy sơ đồ cấp bậc phù hợp. Nhấp "+ Thêm mới" để bắt đầu tạo sơ đồ.
+                  </div>
+                ) : roots.map(root => (
+                  <TreeNode key={root.id} node={root} />
+                ))}
+              </div>
             </div>
           </div>
         ) : (
-          <div className="card" style={{ backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
-            {/* Dropdown inside table card aligned to right, matching Mockup Image 4 */}
-            {diagramDropdown && (
-              <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '16px 16px 0 16px' }}>
-                {diagramDropdown}
-              </div>
-            )}
+          <div className="admin-list-layout" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+              {/* Dropdown inside table card aligned to right, matching Mockup Image 4 */}
+              {diagramDropdown && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '16px 16px 0 16px' }}>
+                  {diagramDropdown}
+                </div>
+              )}
 
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left', marginTop: '8px' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#7B5233', color: '#fff' }}>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Cấp bậc</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Vị trí</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Cấp trên</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Mô tả</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600, textAlign: 'center' }}>Thao tác</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredNodes.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} style={{ textAlign: 'center', padding: '30px', color: '#9CA3AF' }}>Không tìm thấy nút sơ đồ cấp bậc nào.</td>
-                  </tr>
-                ) : filteredNodes.map(node => (
-                  <tr
-                    key={node.id}
-                    style={{ borderBottom: '1px solid #F1F5F9', transition: 'background-color 0.2s' }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FDFBF7'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                  >
-                    <td style={{ padding: '12px 16px', fontWeight: 700, color: '#7B5233' }}>{node.rank_level}</td>
-                    <td style={{ padding: '12px 16px', fontWeight: 600, color: '#1E293B' }}>{node.position_name || '-'}</td>
-                    <td style={{ padding: '12px 16px', color: '#64748B' }}>{node.parent_rank_level || 'Nút gốc'}</td>
-                    <td style={{ padding: '12px 16px', color: '#475569' }}>{node.description || '-'}</td>
-                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                      <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
-                        <button
-                          onClick={() => handleEdit(node)}
-                          style={{ background: 'none', border: 'none', color: '#4F46E5', cursor: 'pointer', padding: '4px' }}
-                          title="Sửa"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(node.id)}
-                          style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: '4px' }}
-                          title="Xóa"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              <div className="table-responsive desktop-only admin-table-scroll" style={{ flex: 1, overflowY: 'auto' }}>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Cấp bậc</th>
+                      <th>Vị trí</th>
+                      <th>Cấp trên</th>
+                      <th>Mô tả</th>
+                      <th style={{ textAlign: 'center' }}>Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredNodes.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} style={{ textAlign: 'center', padding: '30px', color: '#9CA3AF' }}>Không tìm thấy nút sơ đồ cấp bậc nào.</td>
+                      </tr>
+                    ) : filteredNodes.map(node => (
+                      <tr key={node.id}>
+                        <td style={{ fontWeight: 700, color: '#7B5233' }}>{node.rank_level}</td>
+                        <td style={{ fontWeight: 600 }}>{node.position_name || '-'}</td>
+                        <td>{node.parent_rank_level || 'Nút gốc'}</td>
+                        <td>{node.description || '-'}</td>
+                        <td>
+                          <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                            <button
+                              onClick={() => handleEdit(node)}
+                              style={{ background: 'none', border: 'none', color: '#4F46E5', cursor: 'pointer', padding: '4px' }}
+                              title="Sửa"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(node.id)}
+                              style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: '4px' }}
+                              title="Xóa"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
       </div>

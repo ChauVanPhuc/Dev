@@ -1,8 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { Network, List, Plus, Edit2, Trash2, User, ChevronDown, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Network, List, Plus, Minus, Edit2, Trash2, User, ChevronDown, ChevronRight } from 'lucide-react';
 import { hrService } from '../Models/hr.service';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import OrgNodeModal from './OrgNodeModal';
+
+const getLevelNumber = (levelName) => {
+  const match = (levelName || '').match(/\d+/);
+  return match ? parseInt(match[0], 10) : 1;
+};
 
 const OrgChartView = ({ diagramDropdown }) => {
   const [nodes, setNodes] = useState([]);
@@ -12,6 +17,47 @@ const OrgChartView = ({ diagramDropdown }) => {
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedNode, setSelectedNode] = useState(null);
+
+  // Tree interaction state
+  const [collapsedIds, setCollapsedIds] = useState(new Set());
+  const [zoom, setZoom] = useState(1);
+
+  const containerRef = React.useRef(null);
+  const contentRef = React.useRef(null);
+  const [treeSize, setTreeSize] = useState({ width: 0, height: 0 });
+
+  const updateTreeSize = () => {
+    if (contentRef.current) {
+      const width = contentRef.current.scrollWidth || contentRef.current.offsetWidth;
+      const height = contentRef.current.scrollHeight || contentRef.current.offsetHeight;
+      if (width > 0 && height > 0) {
+        setTreeSize({ width, height });
+      }
+    }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(updateTreeSize, 100);
+    return () => clearTimeout(timer);
+  }, [nodes, collapsedIds, viewMode]);
+
+  const handleFitScreen = () => {
+    if (!containerRef.current || !contentRef.current) return;
+    const containerWidth = containerRef.current.clientWidth;
+    const containerHeight = containerRef.current.clientHeight;
+    const contentWidth = treeSize.width || contentRef.current.scrollWidth;
+    const contentHeight = treeSize.height || contentRef.current.scrollHeight;
+    if (contentWidth > 0 && contentHeight > 0) {
+      containerRef.current.scrollLeft = 0;
+      containerRef.current.scrollTop = 0;
+      const widthRatio = (containerWidth - 80) / contentWidth;
+      const heightRatio = (containerHeight - 80) / contentHeight;
+      let newZoom = Math.min(widthRatio, heightRatio);
+      newZoom = Math.floor(newZoom * 100) / 100;
+      newZoom = Math.max(0.3, Math.min(1.5, newZoom));
+      setZoom(newZoom);
+    }
+  };
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -50,36 +96,69 @@ const OrgChartView = ({ diagramDropdown }) => {
   };
 
   // Filter nodes for search query
-  const filteredNodes = nodes.filter(node => {
+  const filteredNodes = useMemo(() => {
     const term = search.toLowerCase();
-    return (
-      node.level_name.toLowerCase().includes(term) ||
-      (node.department_name && node.department_name.toLowerCase().includes(term)) ||
-      (node.position_name && node.position_name.toLowerCase().includes(term)) ||
-      (node.section_name && node.section_name.toLowerCase().includes(term)) ||
-      (node.occupants && node.occupants.some(o => o.full_name.toLowerCase().includes(term)))
-    );
-  });
+    return nodes.filter(node => {
+      return (
+        node.level_name.toLowerCase().includes(term) ||
+        (node.department_name && node.department_name.toLowerCase().includes(term)) ||
+        (node.position_name && node.position_name.toLowerCase().includes(term)) ||
+        (node.section_name && node.section_name.toLowerCase().includes(term)) ||
+        (node.occupants && node.occupants.some(o => o.full_name.toLowerCase().includes(term)))
+      );
+    });
+  }, [nodes, search]);
 
-  const paginatedNodes = React.useMemo(() => {
+  const paginatedNodes = useMemo(() => {
     const startIndex = (currentPage - 1) * pageSize;
     return filteredNodes.slice(startIndex, startIndex + pageSize);
   }, [filteredNodes, currentPage, pageSize]);
 
   const totalPages = Math.ceil(filteredNodes.length / pageSize);
-  const roots = filteredNodes.filter(n => !n.parent_id);
-  const childrenMap = {};
-  filteredNodes.forEach(node => {
-    if (node.parent_id) {
-      if (!childrenMap[node.parent_id]) childrenMap[node.parent_id] = [];
-      childrenMap[node.parent_id].push(node);
+
+  const roots = useMemo(() => filteredNodes.filter(n => !n.parent_id), [filteredNodes]);
+  const childrenMap = useMemo(() => {
+    const map = {};
+    filteredNodes.forEach(node => {
+      if (node.parent_id) {
+        if (!map[node.parent_id]) map[node.parent_id] = [];
+        map[node.parent_id].push(node);
+      }
+    });
+    return map;
+  }, [filteredNodes]);
+
+  // Default collapse nodes at level 3+ to keep chart compact on first load
+  const hasInitialized = React.useRef(false);
+  useEffect(() => {
+    if (nodes.length && !hasInitialized.current) {
+      hasInitialized.current = true;
+      const toCollapse = new Set();
+      nodes.forEach(node => {
+        if (getLevelNumber(node.level_name) >= 3) {
+          toCollapse.add(node.id);
+        }
+      });
+      setCollapsedIds(toCollapse);
     }
-  });
+  }, [nodes]);
+
+  const toggleCollapse = (nodeId) => {
+    const next = new Set(collapsedIds);
+    if (next.has(nodeId)) next.delete(nodeId);
+    else next.add(nodeId);
+    setCollapsedIds(next);
+  };
+
+  const expandAll = () => setCollapsedIds(new Set());
+  const collapseAll = () => setCollapsedIds(new Set(filteredNodes.map(n => n.id)));
 
   // Recursive Tree Node Renderer
   const TreeNode = ({ node }) => {
     const children = childrenMap[node.id] || [];
+    const hasChildren = children.length > 0;
     const hasOccupant = node.occupants && node.occupants.length > 0;
+    const isCollapsed = search.trim() ? false : collapsedIds.has(node.id);
     
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
@@ -142,16 +221,43 @@ const OrgChartView = ({ diagramDropdown }) => {
               {hasOccupant ? node.occupants.map(o => o.full_name).join(', ') : 'Vị trí trống'}
             </span>
           </div>
+
+          {/* Collapse/expand toggle when node has children */}
+          {hasChildren && (
+            <div style={{ marginTop: '2px', display: 'flex', justifyContent: 'center' }}>
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleCollapse(node.id); }}
+                title={isCollapsed ? 'Mở rộng cấp dưới' : 'Thu gọn cấp dưới'}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  backgroundColor: isCollapsed ? '#FAF6F0' : '#F3F4F6',
+                  border: '1px solid #EADCC9',
+                  borderRadius: '12px',
+                  padding: '2px 8px',
+                  fontSize: '0.65rem',
+                  fontWeight: 600,
+                  color: '#7B5233',
+                  cursor: 'pointer',
+                  lineHeight: 1
+                }}
+              >
+                {isCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+                <span>{isCollapsed ? `${children.length} cấp dưới` : 'Thu gọn'}</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Children Render block */}
-        {children.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+        {hasChildren && !isCollapsed && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 'max-content', minWidth: '100%' }}>
             {/* Vertical connector from parent to horizontal line */}
             <div style={{ width: '2px', height: '24px', backgroundColor: '#C4B5A5', zIndex: 1 }} />
 
             {/* Horizontal line and children rows */}
-            <div style={{ display: 'flex', position: 'relative', width: '100%', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', position: 'relative', width: 'max-content', justifyContent: 'center' }}>
               {children.map((child, index) => {
                 const isFirst = index === 0;
                 const isLast = index === children.length - 1;
@@ -167,7 +273,7 @@ const OrgChartView = ({ diagramDropdown }) => {
                       position: 'relative',
                       paddingLeft: '16px',
                       paddingRight: '16px',
-                      flex: 1
+                      flex: '0 0 auto'
                     }}
                   >
                     {/* Horizontal branch line */}
@@ -223,8 +329,73 @@ const OrgChartView = ({ diagramDropdown }) => {
         hasWritePermission={true}
       />
 
-      {/* Toggle Mode selectors below toolbar on the right */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px', marginTop: '12px' }}>
+      {/* View controls: chart actions + toggle mode */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', marginTop: '12px' }}>
+        {viewMode === 'chart' && (
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              onClick={expandAll}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '6px',
+                border: '1px solid #EADCC9',
+                backgroundColor: '#FAF6F0',
+                color: '#7B5233',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Mở rộng tất cả
+            </button>
+            <button
+              onClick={collapseAll}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '6px',
+                border: '1px solid #EADCC9',
+                backgroundColor: '#FAF6F0',
+                color: '#7B5233',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Thu gọn tất cả
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #EADCC9', borderRadius: '6px', overflow: 'hidden', backgroundColor: '#fff' }}>
+              <button
+                onClick={() => setZoom(z => Math.max(0.3, parseFloat((z - 0.1).toFixed(1))))}
+                style={{ background: 'none', border: 'none', padding: '6px', cursor: 'pointer', color: '#7B5233', display: 'flex', alignItems: 'center' }}
+              >
+                <Minus size={14} />
+              </button>
+              <span style={{ padding: '0 6px', fontSize: '0.75rem', fontWeight: 600, color: '#4A2E1B', minWidth: '36px', textAlign: 'center' }}>
+                {Math.round(zoom * 100)}%
+              </span>
+              <button
+                onClick={() => setZoom(z => Math.min(2, parseFloat((z + 0.1).toFixed(1))))}
+                style={{ background: 'none', border: 'none', padding: '6px', cursor: 'pointer', color: '#7B5233', display: 'flex', alignItems: 'center' }}
+              >
+                <Plus size={14} />
+              </button>
+              <button
+                onClick={() => setZoom(1)}
+                style={{ background: 'none', border: 'none', borderLeft: '1px solid #EADCC9', padding: '0 8px', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, color: '#7B5233', height: '100%' }}
+              >
+                Reset
+              </button>
+              <button
+                onClick={handleFitScreen}
+                style={{ background: 'none', border: 'none', borderLeft: '1px solid #EADCC9', padding: '0 8px', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, color: '#7B5233', height: '100%' }}
+                title="Tự động phóng to/thu nhỏ sơ đồ vừa khung màn hình"
+              >
+                Vừa khung
+              </button>
+            </div>
+          </div>
+        )}
+
         <div style={{
           display: 'inline-flex',
           backgroundColor: '#4A2E1B',
@@ -279,18 +450,23 @@ const OrgChartView = ({ diagramDropdown }) => {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, marginTop: '8px' }}>
         {viewMode === 'chart' ? (
           /* Visual hierarchy diagram tree view */
-          <div style={{
-            backgroundColor: '#FAF8F5',
-            border: '1px solid #EADCC9',
-            borderRadius: '12px',
-            padding: '32px 24px',
-            overflow: 'auto',
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '24px'
-          }}>
+          <div 
+            ref={containerRef}
+            style={{
+              backgroundColor: '#FAF8F5',
+              border: '1px solid #EADCC9',
+              borderRadius: '12px',
+              padding: '32px 24px',
+              overflow: 'auto',
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'stretch',
+              width: '100%',
+              maxWidth: '100%',
+              boxSizing: 'border-box',
+              gap: '24px'
+            }}>
             {/* Dropdown inside diagram card aligned to right, matching Mockup Image 4 */}
             {diagramDropdown && (
               <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%', marginBottom: '8px' }}>
@@ -298,14 +474,35 @@ const OrgChartView = ({ diagramDropdown }) => {
               </div>
             )}
 
-            <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start', gap: '40px', width: '100%' }}>
-              {roots.length === 0 ? (
-                <div style={{ color: '#9CA3AF', textAlign: 'center', marginTop: '100px', fontSize: '0.9rem' }}>
-                  Không tìm thấy sơ đồ tổ chức phù hợp. Nhấp "+ Thêm mới" để bắt đầu tạo sơ đồ.
-                </div>
-              ) : roots.map(root => (
-                <TreeNode key={root.id} node={root} />
-              ))}
+            {/* Wrapper that scales layout box according to visual zoom */}
+            <div style={{
+              width: treeSize.width ? `${treeSize.width * zoom}px` : 'auto',
+              height: treeSize.height ? `${treeSize.height * zoom}px` : 'auto',
+              margin: '0 auto',
+              overflow: 'hidden',
+              position: 'relative'
+            }}>
+              <div 
+                ref={contentRef}
+                style={{ 
+                  display: 'flex', 
+                  flexDirection: 'row', 
+                  justifyContent: 'center', 
+                  alignItems: 'flex-start', 
+                  gap: '40px', 
+                  width: 'max-content', 
+                  transform: `scale(${zoom})`, 
+                  transformOrigin: 'top left',
+                  flexShrink: 0
+                }}>
+                {roots.length === 0 ? (
+                  <div style={{ color: '#9CA3AF', textAlign: 'center', marginTop: '100px', fontSize: '0.9rem' }}>
+                    Không tìm thấy sơ đồ tổ chức phù hợp. Nhấp "+ Thêm mới" để bắt đầu tạo sơ đồ.
+                  </div>
+                ) : roots.map(root => (
+                  <TreeNode key={root.id} node={root} />
+                ))}
+              </div>
             </div>
           </div>
         ) : (

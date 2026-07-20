@@ -402,7 +402,9 @@ const PortalLayout = () => {
     return localStorage.getItem('smartflow_sidebar_collapsed') === 'true';
   });
 
-  const [layoutMode, setLayoutMode] = useState('fit-to-screen');
+  const [layoutMode, setLayoutMode] = useState(() => {
+    return localStorage.getItem('smartflow_layout_mode') || 'responsive';
+  });
   const [scaleFactor, setScaleFactor] = useState(1);
 
   const toggleLayoutMode = () => {

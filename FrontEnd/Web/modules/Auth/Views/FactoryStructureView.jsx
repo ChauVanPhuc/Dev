@@ -1,8 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { Network, List, Edit2, Trash2, Building2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Network, List, Plus, Minus, Edit2, Trash2, Building2, ChevronDown, ChevronRight } from 'lucide-react';
 import { hrService } from '../Models/hr.service';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import FactoryStructureModal from './FactoryStructureModal';
+
+const getLevelNumber = (code) => {
+  const match = (code || '').match(/\d+/);
+  return match ? parseInt(match[0], 10) : 1;
+};
 
 const FactoryStructureView = ({ diagramDropdown }) => {
   const [structures, setStructures] = useState([]);
@@ -13,6 +18,47 @@ const FactoryStructureView = ({ diagramDropdown }) => {
   
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedStructure, setSelectedStructure] = useState(null);
+
+  // Zoom and collapse states
+  const [collapsedIds, setCollapsedIds] = useState(new Set());
+  const [zoom, setZoom] = useState(1);
+
+  const containerRef = React.useRef(null);
+  const contentRef = React.useRef(null);
+  const [treeSize, setTreeSize] = useState({ width: 0, height: 0 });
+
+  const updateTreeSize = () => {
+    if (contentRef.current) {
+      const width = contentRef.current.scrollWidth || contentRef.current.offsetWidth;
+      const height = contentRef.current.scrollHeight || contentRef.current.offsetHeight;
+      if (width > 0 && height > 0) {
+        setTreeSize({ width, height });
+      }
+    }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(updateTreeSize, 100);
+    return () => clearTimeout(timer);
+  }, [structures, collapsedIds, viewMode]);
+
+  const handleFitScreen = () => {
+    if (!containerRef.current || !contentRef.current) return;
+    const containerWidth = containerRef.current.clientWidth;
+    const containerHeight = containerRef.current.clientHeight;
+    const contentWidth = treeSize.width || contentRef.current.scrollWidth;
+    const contentHeight = treeSize.height || contentRef.current.scrollHeight;
+    if (contentWidth > 0 && contentHeight > 0) {
+      containerRef.current.scrollLeft = 0;
+      containerRef.current.scrollTop = 0;
+      const widthRatio = (containerWidth - 80) / contentWidth;
+      const heightRatio = (containerHeight - 80) / contentHeight;
+      let newZoom = Math.min(widthRatio, heightRatio);
+      newZoom = Math.floor(newZoom * 100) / 100;
+      newZoom = Math.max(0.3, Math.min(1.5, newZoom));
+      setZoom(newZoom);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -42,27 +88,59 @@ const FactoryStructureView = ({ diagramDropdown }) => {
     }
   };
 
-  const filteredStructures = structures.filter(struct => {
+  const filteredStructures = useMemo(() => {
     const term = search.toLowerCase();
-    return (
-      struct.structure_code.toLowerCase().includes(term) ||
-      struct.structure_name.toLowerCase().includes(term) ||
-      struct.structure_type.toLowerCase().includes(term) ||
-      (struct.department_name && struct.department_name.toLowerCase().includes(term))
-    );
-  });
+    return structures.filter(struct => {
+      return (
+        struct.structure_code.toLowerCase().includes(term) ||
+        struct.structure_name.toLowerCase().includes(term) ||
+        struct.structure_type.toLowerCase().includes(term) ||
+        (struct.department_name && struct.department_name.toLowerCase().includes(term))
+      );
+    });
+  }, [structures, search]);
 
   const totalPages = Math.ceil(filteredStructures.length / pageSize);
-  const paginatedStructures = filteredStructures.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const paginatedStructures = useMemo(() => {
+    return filteredStructures.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  }, [filteredStructures, currentPage]);
 
-  const roots = filteredStructures.filter(n => !n.parent_id);
-  const childrenMap = {};
-  filteredStructures.forEach(struct => {
-    if (struct.parent_id) {
-      if (!childrenMap[struct.parent_id]) childrenMap[struct.parent_id] = [];
-      childrenMap[struct.parent_id].push(struct);
+  const roots = useMemo(() => filteredStructures.filter(n => !n.parent_id), [filteredStructures]);
+  const childrenMap = useMemo(() => {
+    const map = {};
+    filteredStructures.forEach(struct => {
+      if (struct.parent_id) {
+        if (!map[struct.parent_id]) map[struct.parent_id] = [];
+        map[struct.parent_id].push(struct);
+      }
+    });
+    return map;
+  }, [filteredStructures]);
+
+  // Collapse Level 3+ nodes initially
+  const hasInitialized = React.useRef(false);
+  useEffect(() => {
+    if (structures.length && !hasInitialized.current) {
+      hasInitialized.current = true;
+      const toCollapse = new Set();
+      structures.forEach(struct => {
+        if (getLevelNumber(struct.structure_code) >= 3) {
+          toCollapse.add(struct.id);
+        }
+      });
+      setCollapsedIds(toCollapse);
     }
-  });
+  }, [structures]);
+
+  const toggleCollapse = (nodeId) => {
+    const next = new Set(collapsedIds);
+    if (next.has(nodeId)) next.delete(nodeId);
+    else next.add(nodeId);
+    setCollapsedIds(next);
+  };
+
+  const expandAll = () => setCollapsedIds(new Set());
+  const collapseAll = () => setCollapsedIds(new Set(filteredStructures.map(n => n.id)));
 
   const getTypeColor = (type) => {
     if (type === 'Nhà máy') return '#059669';
@@ -72,6 +150,8 @@ const FactoryStructureView = ({ diagramDropdown }) => {
 
   const TreeNode = ({ node }) => {
     const children = childrenMap[node.id] || [];
+    const hasChildren = children.length > 0;
+    const isCollapsed = search.trim() ? false : collapsedIds.has(node.id);
     
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
@@ -95,7 +175,7 @@ const FactoryStructureView = ({ diagramDropdown }) => {
         onClick={() => handleEdit(node)}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.65rem', fontWeight: 700, backgroundColor: '#FAF6F0', color: getTypeColor(node.structure_type), padding: '2px 8px', borderRadius: '12px' }}>
+            <span style={{ fontSize: '0.65rem', fontWeight: 700, backgroundColor: '#FAF6F0', color: getTypeColor(node.structure_type), padding: '2px 8px', borderRadius: '12px', textTransform: 'uppercase' }}>
               {node.structure_type}
             </span>
             <div style={{ display: 'flex', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
@@ -136,12 +216,38 @@ const FactoryStructureView = ({ diagramDropdown }) => {
             <Building2 size={12} />
             <span style={{ fontWeight: 600 }}>Cấu trúc nhà máy</span>
           </div>
+
+          {hasChildren && (
+            <div style={{ marginTop: '2px', display: 'flex', justifyContent: 'center' }}>
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleCollapse(node.id); }}
+                title={isCollapsed ? 'Mở rộng cấp dưới' : 'Thu gọn cấp dưới'}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  backgroundColor: isCollapsed ? '#FAF6F0' : '#F3F4F6',
+                  border: '1px solid #EADCC9',
+                  borderRadius: '12px',
+                  padding: '2px 8px',
+                  fontSize: '0.65rem',
+                  fontWeight: 600,
+                  color: '#7B5233',
+                  cursor: 'pointer',
+                  lineHeight: 1
+                }}
+              >
+                {isCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+                <span>{isCollapsed ? `${children.length} cấp dưới` : 'Thu gọn'}</span>
+              </button>
+            </div>
+          )}
         </div>
 
-        {children.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+        {hasChildren && !isCollapsed && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 'max-content', minWidth: '100%' }}>
             <div style={{ width: '2px', height: '24px', backgroundColor: '#C4B5A5', zIndex: 1 }} />
-            <div style={{ display: 'flex', position: 'relative', width: '100%', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', position: 'relative', width: 'max-content', justifyContent: 'center' }}>
               {children.map((child, index) => {
                 const isFirst = index === 0;
                 const isLast = index === children.length - 1;
@@ -157,7 +263,7 @@ const FactoryStructureView = ({ diagramDropdown }) => {
                       position: 'relative',
                       paddingLeft: '16px',
                       paddingRight: '16px',
-                      flex: 1
+                      flex: '0 0 auto'
                     }}
                   >
                     {!isSingle && (
@@ -207,8 +313,73 @@ const FactoryStructureView = ({ diagramDropdown }) => {
         hasWritePermission={true}
       />
 
-      {/* Toggle Mode selectors below toolbar on the right */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px', marginTop: '12px' }}>
+      {/* View controls: chart actions + toggle mode */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', marginTop: '12px' }}>
+        {viewMode === 'chart' && (
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              onClick={expandAll}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '6px',
+                border: '1px solid #EADCC9',
+                backgroundColor: '#FAF6F0',
+                color: '#7B5233',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Mở rộng tất cả
+            </button>
+            <button
+              onClick={collapseAll}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '6px',
+                border: '1px solid #EADCC9',
+                backgroundColor: '#FAF6F0',
+                color: '#7B5233',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Thu gọn tất cả
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #EADCC9', borderRadius: '6px', overflow: 'hidden', backgroundColor: '#fff' }}>
+              <button
+                onClick={() => setZoom(z => Math.max(0.3, parseFloat((z - 0.1).toFixed(1))))}
+                style={{ background: 'none', border: 'none', padding: '6px', cursor: 'pointer', color: '#7B5233', display: 'flex', alignItems: 'center' }}
+              >
+                <Minus size={14} />
+              </button>
+              <span style={{ padding: '0 6px', fontSize: '0.75rem', fontWeight: 600, color: '#4A2E1B', minWidth: '36px', textAlign: 'center' }}>
+                {Math.round(zoom * 100)}%
+              </span>
+              <button
+                onClick={() => setZoom(z => Math.min(2, parseFloat((z + 0.1).toFixed(1))))}
+                style={{ background: 'none', border: 'none', padding: '6px', cursor: 'pointer', color: '#7B5233', display: 'flex', alignItems: 'center' }}
+              >
+                <Plus size={14} />
+              </button>
+              <button
+                onClick={() => setZoom(1)}
+                style={{ background: 'none', border: 'none', borderLeft: '1px solid #EADCC9', padding: '0 8px', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, color: '#7B5233', height: '100%' }}
+              >
+                Reset
+              </button>
+              <button
+                onClick={handleFitScreen}
+                style={{ background: 'none', border: 'none', borderLeft: '1px solid #EADCC9', padding: '0 8px', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, color: '#7B5233', height: '100%' }}
+                title="Tự động phóng to/thu nhỏ sơ đồ vừa khung màn hình"
+              >
+                Vừa khung
+              </button>
+            </div>
+          </div>
+        )}
+
         <div style={{
           display: 'inline-flex',
           backgroundColor: '#4A2E1B',
@@ -216,7 +387,8 @@ const FactoryStructureView = ({ diagramDropdown }) => {
           borderRadius: '4px',
           border: '1px solid #4A2E1B',
           height: '28px',
-          boxSizing: 'border-box'
+          boxSizing: 'border-box',
+          marginLeft: 'auto'
         }}>
           <button
             onClick={() => { setViewMode('chart'); setCurrentPage(1); }}
@@ -261,18 +433,23 @@ const FactoryStructureView = ({ diagramDropdown }) => {
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, marginTop: '8px' }}>
         {viewMode === 'chart' ? (
-          <div style={{
-            backgroundColor: '#FAF8F5',
-            border: '1px solid #EADCC9',
-            borderRadius: '12px',
-            padding: '32px 24px',
-            overflow: 'auto',
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '24px'
-          }}>
+          <div 
+            ref={containerRef}
+            style={{
+              backgroundColor: '#FAF8F5',
+              border: '1px solid #EADCC9',
+              borderRadius: '12px',
+              padding: '32px 24px',
+              overflow: 'auto',
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'stretch',
+              width: '100%',
+              maxWidth: '100%',
+              boxSizing: 'border-box',
+              gap: '24px'
+            }}>
             {/* Dropdown inside diagram card aligned to right, matching Mockup Image 4 */}
             {diagramDropdown && (
               <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%', marginBottom: '8px' }}>
@@ -280,19 +457,40 @@ const FactoryStructureView = ({ diagramDropdown }) => {
               </div>
             )}
 
-            <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start', gap: '40px', width: '100%' }}>
-              {roots.length === 0 ? (
-                <div style={{ color: '#9CA3AF', textAlign: 'center', marginTop: '100px', fontSize: '0.9rem' }}>
-                  Không tìm thấy cấu trúc nhà máy phù hợp. Nhấp "+ Thêm mới" để bắt đầu tạo cấu trúc.
-                </div>
-              ) : roots.map(root => (
-                <TreeNode key={root.id} node={root} />
-              ))}
+            {/* Wrapper that scales layout box according to visual zoom */}
+            <div style={{
+              width: treeSize.width ? `${treeSize.width * zoom}px` : 'auto',
+              height: treeSize.height ? `${treeSize.height * zoom}px` : 'auto',
+              margin: '0 auto',
+              overflow: 'hidden',
+              position: 'relative'
+            }}>
+              <div 
+                ref={contentRef}
+                style={{ 
+                  display: 'flex', 
+                  flexDirection: 'row', 
+                  justifyContent: 'center', 
+                  alignItems: 'flex-start', 
+                  gap: '40px', 
+                  width: 'max-content', 
+                  transform: `scale(${zoom})`, 
+                  transformOrigin: 'top left',
+                  flexShrink: 0
+                }}>
+                {roots.length === 0 ? (
+                  <div style={{ color: '#9CA3AF', textAlign: 'center', marginTop: '100px', fontSize: '0.9rem' }}>
+                    Không tìm thấy cấu trúc nhà máy phù hợp. Nhấp "+ Thêm mới" để bắt đầu tạo cấu trúc.
+                  </div>
+                ) : roots.map(root => (
+                  <TreeNode key={root.id} node={root} />
+                ))}
+              </div>
             </div>
           </div>
         ) : (
-          <div className="admin-list-layout">
-            <div className="mgmt-table card admin-table-card">
+          <div className="admin-list-layout" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
               {/* Dropdown inside table card aligned to right, matching Mockup Image 4 */}
               {diagramDropdown && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '16px 16px 0 16px' }}>
@@ -300,7 +498,7 @@ const FactoryStructureView = ({ diagramDropdown }) => {
                 </div>
               )}
 
-              <div className="table-responsive desktop-only admin-table-scroll">
+              <div className="table-responsive desktop-only admin-table-scroll" style={{ flex: 1, overflowY: 'auto' }}>
                 <table className="data-table">
                   <thead>
                     <tr>
@@ -335,7 +533,7 @@ const FactoryStructureView = ({ diagramDropdown }) => {
                         </td>
                         <td>{struct.department_name || '-'}</td>
                         <td>{struct.parent_structure_name || 'Cấu trúc gốc'}</td>
-                        <td style={{ textAlign: 'center' }}>
+                        <td>
                           <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
                             <button
                               onClick={() => handleEdit(struct)}

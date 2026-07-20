@@ -20,6 +20,7 @@
 .mgmt-main {
   flex: 1;
   min-width: 0; /* Prevents flex item overflow */
+  width: 100%;
 }
 
 .mgmt-aside {
