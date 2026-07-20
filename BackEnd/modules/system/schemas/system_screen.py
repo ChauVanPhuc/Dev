@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
 from modules.system.schemas.system_component import SystemComponent as SystemComponentSchema, SystemComponentCreate
@@ -65,4 +65,25 @@ class SystemScreen(SystemScreenBase):
 
     class Config:
         from_attributes = True
+
+
+class ScreenExportOptions(BaseModel):
+    """
+    Tuy chon noi dung xuat trong dac ta chi tiet.
+    """
+    include_basic_info: bool = True
+    include_mockup: bool = True
+    include_components: bool = True
+    include_guides: bool = True
+    include_bugs: bool = True
+    include_history: bool = False
+
+
+class ScreenExportDetailRequest(BaseModel):
+    """
+    Request body cho API xuat dac ta chi tiet man hinh.
+    """
+    format: str = Field(..., pattern="^(pdf|docx|excel)$")
+    options: ScreenExportOptions = ScreenExportOptions()
+    template_style: str = Field("standard", pattern="^(standard|detailed|minimal)$")
 

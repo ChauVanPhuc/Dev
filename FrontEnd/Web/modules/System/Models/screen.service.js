@@ -109,6 +109,19 @@ export const screenService = {
     }, {
       responseType: 'blob'
     });
+  },
+
+  /**
+   * Xuat dac ta chi tiet man hinh voi tuy chon
+   */
+  exportScreenDetail: async (screenId, format, options, templateStyle) => {
+    return api.post(`/screens/${screenId}/export-detail`, {
+      format,
+      options,
+      template_style: templateStyle
+    }, {
+      responseType: 'blob'
+    });
   }
 
 };

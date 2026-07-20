@@ -77,27 +77,32 @@ def fill_docx(input_path: str, mode: str, data: Union[Dict, List[Dict]], context
 def _docx_replace_context(document, context: Dict[str, Any], data_row: Optional[Dict[str, Any]] = None):
     for p in document.paragraphs:
         _docx_replace_paragraph(p, context, data_row)
+        _docx_insert_image_if_needed(p, context, data_row)
     for table in document.tables:
         for row in table.rows:
             for cell in row.cells:
                 for p in cell.paragraphs:
                     _docx_replace_paragraph(p, context, data_row)
+                    _docx_insert_image_if_needed(p, context, data_row)
                 for t in cell.tables:
                     for r in t.rows:
                         for c in r.cells:
                             for p in c.paragraphs:
                                 _docx_replace_paragraph(p, context, data_row)
+                                _docx_insert_image_if_needed(p, context, data_row)
     for sec in document.sections:
         for h_type in ["header", "footer"]:
             header_footer = getattr(sec, h_type, None)
             if header_footer:
                 for p in header_footer.paragraphs:
                     _docx_replace_paragraph(p, context, data_row)
+                    _docx_insert_image_if_needed(p, context, data_row)
                 for t in header_footer.tables:
                     for r in t.rows:
                         for c in r.cells:
                             for p in c.paragraphs:
                                 _docx_replace_paragraph(p, context, data_row)
+                                _docx_insert_image_if_needed(p, context, data_row)
 
 
 def _docx_replace_paragraph(paragraph, context: Dict[str, Any], data_row: Optional[Dict[str, Any]] = None):
@@ -111,6 +116,89 @@ def _docx_replace_paragraph(paragraph, context: Dict[str, Any], data_row: Option
     paragraph.runs[0].text = new_text
     for run in paragraph.runs[1:]:
         run.text = ""
+
+
+def _docx_insert_image_if_needed(paragraph, context: Dict[str, Any], data_row: Optional[Dict[str, Any]] = None):
+    """
+    Kiem tra neu paragraph chua placeholder {{mockup_image}}, 
+    thay the bang anh tu mockup_path.
+    """
+    if not paragraph.runs:
+        return
+    
+    full_text = "".join(run.text for run in paragraph.runs)
+    
+    # Kiem tra co placeholder {{mockup_image}} khong
+    if "{{mockup_image}}" not in full_text:
+        return
+    
+    # Lay duong dan anh tu context hoac data_row
+    image_path = None
+    if context and "mockup_path" in context:
+        image_path = context["mockup_path"]
+    elif data_row and "mockup_path" in data_row:
+        image_path = data_row["mockup_path"]
+    
+    if not image_path:
+        # Khong co anh, xoa placeholder
+        paragraph.runs[0].text = full_text.replace("{{mockup_image}}", "[Không có ảnh mockup]")
+        for run in paragraph.runs[1:]:
+            run.text = ""
+        return
+    
+    # Resolve physical path
+    image_full_path = _resolve_image_path(image_path)
+    
+    if not os.path.exists(image_full_path):
+        paragraph.runs[0].text = full_text.replace("{{mockup_image}}", f"[Không tìm thấy ảnh: {image_path}]")
+        for run in paragraph.runs[1:]:
+            run.text = ""
+        return
+    
+    try:
+        from docx.shared import Inches
+        
+        # Xoa tat ca runs
+        for run in paragraph.runs:
+            run.text = ""
+        
+        # Them anh vao paragraph
+        # Width 6 inches (khoang 15cm), height auto
+        run = paragraph.runs[0] if paragraph.runs else paragraph.add_run()
+        run.add_picture(image_full_path, width=Inches(6))
+        
+    except Exception as e:
+        # Neu loi, hien thi thong bao loi
+        paragraph.runs[0].text = full_text.replace("{{mockup_image}}", f"[Lỗi nhúng ảnh: {str(e)}]")
+        for run in paragraph.runs[1:]:
+            run.text = ""
+
+
+def _resolve_image_path(relative_path: str) -> str:
+    """
+    Chuyen duong dan tuong doi thanh duong dan tuyet doi.
+    Vi du: /static/uploads/mockups/abc.png -> M:/ERP/BackEnd/static/uploads/mockups/abc.png
+    """
+    if os.path.isabs(relative_path):
+        return relative_path
+    
+    # Loai bo dau / dau tien neu co
+    if relative_path.startswith("/"):
+        relative_path = relative_path[1:]
+    
+    # Base dir la BackEnd/
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    
+    # Neu path bat dau bang "static/", join truc tiep
+    if relative_path.startswith("static/"):
+        return os.path.join(base_dir, relative_path)
+    
+    # Neu path la "/static/...", bo dau /
+    if relative_path.startswith("static"):
+        return os.path.join(base_dir, relative_path)
+    
+    # Mac dinh join vao static/
+    return os.path.join(base_dir, "static", relative_path)
 
 
 def _docx_fill_list_table(table, rows: List[Dict[str, Any]], context: Dict[str, Any]):

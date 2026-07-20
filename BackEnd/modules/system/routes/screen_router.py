@@ -15,9 +15,11 @@ from modules.system.models.system_guide import SystemGuide as SystemGuideModel
 from modules.system.schemas.system_screen import (
     SystemScreen as SystemScreenSchema, 
     SystemScreenCreate,
-    SystemScreenUpdate
+    SystemScreenUpdate,
+    ScreenExportDetailRequest
 )
 from modules.system.services.export_service import export_screen_component_file
+from modules.system.services.screen_export_detail_service import export_screen_detail_service
 import re
 import unicodedata
 
@@ -557,6 +559,27 @@ async def export_component_file(
         data=req.data,
         context=req.context,
         user_name=current_user.full_name or current_user.username,
+    )
+
+
+@router.post("/{screen_id}/export-detail")
+async def export_screen_detail(
+    screen_id: int,
+    req: ScreenExportDetailRequest,
+    db: Session = Depends(get_db),
+    current_user: AccountModel = Depends(get_current_user)
+):
+    """
+    Xuat dac ta chi tiet cua 1 man hinh voi day du tuy chon.
+    Ho tro 3 dinh dang: PDF, DOCX, Excel.
+    """
+    return export_screen_detail_service(
+        db=db,
+        screen_id=screen_id,
+        format=req.format,
+        options=req.options,
+        template_style=req.template_style,
+        user_name=current_user.full_name or current_user.username
     )
 
 

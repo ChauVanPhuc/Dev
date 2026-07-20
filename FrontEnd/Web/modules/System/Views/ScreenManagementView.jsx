@@ -10,6 +10,7 @@ import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
 import { useScreenMetadataCached, clearScreenMetadataCache } from '@webShared/hooks/useScreenMetadata';
 import * as XLSX from 'xlsx';
+import ScreenExportDetailModal from './components/ScreenExportDetailModal';
 
 const parseDescription = (desc) => {
   if (!desc) return { tag: '', text: '' };
@@ -142,6 +143,8 @@ const ScreenManagement = () => {
     docsSelected: false,
     docsAll: false
   });
+  const [showExportDetailModal, setShowExportDetailModal] = useState(false);
+  const [selectedScreenForExport, setSelectedScreenForExport] = useState(null);
 
   const { toast } = useToast();
   const [actionMenuId, setActionMenuId] = useState(null);
@@ -482,6 +485,43 @@ const ScreenManagement = () => {
 
   const handleExportPDFSingle = (screenItem) => {
     handleExportPDF(false, [screenItem.id]);
+  };
+
+  const handleOpenExportDetailModal = (screen) => {
+    setSelectedScreenForExport(screen);
+    setShowExportDetailModal(true);
+  };
+
+  const handleExportDetail = async (format, options, templateStyle) => {
+    try {
+      setLoading(true);
+      const response = await screenService.exportScreenDetail(
+        selectedScreenForExport.id,
+        format,
+        options,
+        templateStyle
+      );
+      
+      const blob = new Blob([response], { 
+        type: response.type || 'application/octet-stream'
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const ext = format === 'excel' ? 'xlsx' : format;
+      a.download = `${selectedScreenForExport.current_code || selectedScreenForExport.default_code}_detail_${Date.now()}.${ext}`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      
+      showToast('Xuất đặc tả thành công!');
+      setShowExportDetailModal(false);
+      setSelectedScreenForExport(null);
+    } catch (error) {
+      console.error('Export error:', error);
+      showToast('Xuất đặc tả thất bại! Vui lòng thử lại.', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleExportPDF = (exportAll = true, specificIds = null) => {
@@ -1342,10 +1382,10 @@ const ScreenManagement = () => {
                                     className="action-menu-item"
                                     onClick={() => {
                                       setActionMenuId(null);
-                                      handleExportPDFSingle(screen);
+                                      handleOpenExportDetailModal(screen);
                                     }}
                                   >
-                                    Tải xuống PDF
+                                    Xuất đặc tả chi tiết
                                   </button>
                                   <button
                                     className="action-menu-item"
@@ -1804,6 +1844,16 @@ const ScreenManagement = () => {
           </div>
         </div>
       )}
+
+      <ScreenExportDetailModal
+        visible={showExportDetailModal}
+        screen={selectedScreenForExport}
+        onClose={() => {
+          setShowExportDetailModal(false);
+          setSelectedScreenForExport(null);
+        }}
+        onExport={handleExportDetail}
+      />
 
       <BeautifulConfirmModal
         visible={confirmModal.visible}
