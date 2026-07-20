@@ -906,10 +906,10 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
         <nav className="sidebar-nav" style={{ padding: '15px 10px', overflowY: 'auto', flex: 1 }}>
           {menuStructure.map(item => {
             if (item.type === 'link') {
-              if (isBlocked(item.id)) return null;
+              if (isBlocked(item)) return null;
               return item;
             } else if (item.type === 'group') {
-              const visibleChildren = item.children.filter(child => !isBlocked(child.id));
+              const visibleChildren = item.children.filter(child => !isBlocked(child));
               if (visibleChildren.length === 0) return null;
               return { ...item, children: visibleChildren };
             }

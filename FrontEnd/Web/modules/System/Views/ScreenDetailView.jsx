@@ -1375,7 +1375,7 @@ const ScreenDetail = () => {
   useEffect(() => {
     const fPath = (formData.frontend_path || '').trim();
     const bPath = (formData.backend_path || '').trim();
-    
+
     let newRoutePath = '';
     if (bPath) {
       if (bPath.startsWith('/')) {
@@ -1424,7 +1424,7 @@ const ScreenDetail = () => {
 
     if (foundItem) {
       const targetSubsystem = MAP_SIDEBAR_GROUP_TO_SUBSYSTEM[foundGroupName] || 'Quản lý hệ thống';
-      
+
       setFormData(prev => {
         const updates = {};
         if (prev.subsystem !== targetSubsystem) {
@@ -1576,7 +1576,7 @@ const ScreenDetail = () => {
       if (isNewScreen) {
         // Xác định mã màn hình cho màn hình mới
         const codeToUse = data.current_code || generateNextScreenCode(data.subsystem || 'Quản lý hệ thống', allScreens);
-        
+
         await screenService.createScreen({
           title: data.title,
           route_path: normalizeRoutePath(data.route_path),
@@ -2288,7 +2288,7 @@ const ScreenDetail = () => {
     if (finalCode && finalCode.trim()) {
       // Đối với màn hình mới hoặc màn hình đang edit có thay đổi mã
       const isCodeChanged = isNew || (formData.current_code && formData.current_code !== screen?.current_code);
-      
+
       if (isCodeChanged) {
         // Check trùng lặp mã màn hình
         try {
@@ -3664,7 +3664,7 @@ const ScreenDetail = () => {
     return (
       <div style={{
         position: 'sticky',
-        top: '60px',
+        /*top: '60px',*/
         zIndex: 890,
         background: '#F8FAFC',
         marginLeft: '-15px',
@@ -3682,7 +3682,7 @@ const ScreenDetail = () => {
           background: '#fff',
           border: '1px solid #E2E8F0',
           borderRadius: '12px',
-          padding: '16px 20px',
+          padding: (isHeaderCollapsed || isScreenInfoCollapsed) ? '12px 20px' : '16px 20px',
           boxShadow: isHeaderCollapsed ? '0 4px 12px rgba(0, 0, 0, 0.08)' : '0 1px 3px rgba(0, 0, 0, 0.05)',
           marginBottom: (isHeaderCollapsed || isScreenInfoCollapsed) ? '12px' : '20px',
           boxSizing: 'border-box',
@@ -3694,10 +3694,11 @@ const ScreenDetail = () => {
             justifyContent: 'space-between',
             alignItems: 'center',
             borderBottom: (isHeaderCollapsed || isScreenInfoCollapsed) ? 'none' : '1px solid #CBD5E1',
-            paddingBottom: (isHeaderCollapsed || isScreenInfoCollapsed) ? '0' : '12px',
+            paddingBottom: (isHeaderCollapsed || isScreenInfoCollapsed) ? '4px' : '12px',
             marginBottom: (isHeaderCollapsed || isScreenInfoCollapsed) ? '0' : '16px',
             flexWrap: 'wrap',
-            gap: '12px'
+            gap: '12px',
+            minHeight: '36px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: '800', color: '#2D1A12' }}>
@@ -5034,7 +5035,7 @@ const ScreenDetail = () => {
                                   'File mẫu': 'sample'
                                 };
                                 const isActive = viewMode === modeMap[tab];
-                                
+
                                 // Kiểm tra xem tab có dữ liệu không
                                 let hasData = false;
                                 if (tab === 'Frontend') {
@@ -5046,7 +5047,7 @@ const ScreenDetail = () => {
                                 } else if (tab === 'File mẫu') {
                                   hasData = !!(specSampleFileUrl && specSampleFileUrl.trim());
                                 }
-                                
+
                                 return (
                                   <button
                                     key={tab}
