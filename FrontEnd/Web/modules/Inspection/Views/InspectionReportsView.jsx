@@ -18,7 +18,7 @@ import {
   FileDown,
   Download
 } from 'lucide-react';
-import api from '@webShared/Services/api.service';
+import api, { API_ROOT } from '@webShared/Services/api.service';
 import ExcelJS from 'exceljs';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
@@ -369,10 +369,24 @@ const InspectionReports = () => {
   // Safe Image URL getter
   const getImageUrl = (path) => {
     if (!path) return '';
-    if (path.startsWith('http')) return path;
-    const cleanPath = path.startsWith('/') ? path.slice(1) : path;
-    const host = window.location.port === '3000' ? `http://${window.location.hostname}:8000` : window.location.origin;
-    return `${host}/${cleanPath}`;
+    if (typeof path !== 'string') return '';
+    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) return path;
+
+    let cleanPath = path.replace(/\\/g, '/');
+    if (cleanPath.startsWith('/')) {
+      cleanPath = cleanPath.slice(1);
+    }
+    if (cleanPath.startsWith('uploads/')) {
+      cleanPath = `static/${cleanPath}`;
+    }
+
+    const root = API_ROOT ? (API_ROOT.endsWith('/') ? API_ROOT : `${API_ROOT}/`) : '/';
+    return `${root}${cleanPath}`;
+  };
+
+  const handleImageError = (e) => {
+    e.target.onerror = null;
+    e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 24 24" fill="none" stroke="%2394a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>';
   };
 
   // Reset all filters
@@ -2492,6 +2506,7 @@ const InspectionReports = () => {
                                 className="gallery-thumb"
                                 style={{ width: '36px', height: '36px', borderRadius: '4px', margin: 0 }}
                                 onClick={() => setLightboxImage(det.image)}
+                                onError={handleImageError}
                               />
                             ) : '-'}
                           </td>
@@ -2531,6 +2546,7 @@ const InspectionReports = () => {
                               className="gallery-thumb"
                               style={{ width: '36px', height: '36px', borderRadius: '4px', margin: 0 }}
                               onClick={() => setLightboxImage(val.photo)}
+                              onError={handleImageError}
                             />
                           )}
                         </div>
@@ -2710,6 +2726,7 @@ const InspectionReports = () => {
                         alt="Inspection Attachment"
                         className="gallery-thumb"
                         onClick={() => setLightboxImage(img)}
+                        onError={handleImageError}
                       />
                     ))}
                   </div>
@@ -2881,6 +2898,7 @@ const InspectionReports = () => {
                         alt="IQC Evidence"
                         className="gallery-thumb"
                         onClick={() => setLightboxImage(img)}
+                        onError={handleImageError}
                       />
                     ))}
                   </div>
@@ -2910,6 +2928,7 @@ const InspectionReports = () => {
           <img 
             src={getImageUrl(lightboxImage)} 
             alt="Full Preview"
+            onError={handleImageError}
             style={{
               maxWidth: '95%',
               maxHeight: '95%',

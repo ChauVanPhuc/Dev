@@ -414,6 +414,10 @@ STATIC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "stat
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+UPLOADS_DIR = os.path.join(STATIC_DIR, "uploads")
+if os.path.exists(UPLOADS_DIR):
+    app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
+
 
 
 # [NEW] Cấu hình Production Mode: Phân phối giao diện từ Backend
