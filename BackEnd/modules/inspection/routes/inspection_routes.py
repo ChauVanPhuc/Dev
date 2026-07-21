@@ -649,8 +649,32 @@ async def upload_ocr_image(
                 print(f"Lỗi gọi OpenRouter Llama Vision OCR: {or_llama_err}")
 
         # 4. Groq Cloud Vision
-                print(f"[OCR] OpenRouter error: {or_err}")
->>>>>>> d7ef662 (refactor: update inspection defects sync, handovers layout, and fit-to-screen UI fixes)
+        groq_key = os.getenv("GROQ_API_KEY")
+        if extracted_value is None and groq_key:
+            try:
+                from groq import Groq
+                client = Groq(api_key=groq_key)
+                chat_completion = client.chat.completions.create(
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": smart_prompt},
+                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                            ]
+                        }
+                    ],
+                    model="llama-3.2-11b-vision-preview",
+                    temperature=0.0,
+                    max_tokens=10
+                )
+                ai_text = chat_completion.choices[0].message.content.strip()
+                print(f"[OCR DEBUG] Groq text: {ai_text}")
+                extracted_value = parse_ocr_number(ai_text)
+                if extracted_value is not None:
+                    print(f"[OCR DEBUG] Groq extracted: {extracted_value}")
+            except Exception as groq_err:
+                print(f"Lỗi gọi Groq AI OCR: {groq_err}")
 
         # 5. Fallback Pytesseract / PIL
         if extracted_value is None:
