@@ -344,31 +344,46 @@ async def upload_ocr_image(
 ):
     """
     [POST] Nhận file ảnh thước kẹp/máy đo độ ẩm, thực hiện AI OCR nhận diện số LCD (in-memory) và trả về kết quả số.
+    Hỗ trợ cả AI Local (Local Gemini Proxy / Ollama / Cloud Local AI), OpenRouter, Groq Cloud và Fallback Pytesseract.
     """
     import base64
     import requests
     import re
     from groq import Groq
 
-    def is_valid_ocr_response(text: str) -> bool:
+    def parse_ocr_number(text: str) -> float | None:
         if not text:
-            return False
-        # Lọc bỏ các text chứa các từ khóa báo lỗi hoặc từ chối của AI
-        bad_keywords = ["cannot see", "can't see", "don't have eyes", "text-based", "unable to parse", "error", "status", "sorry", "assist", "impossible"]
+            return None
+        bad_keywords = ["cannot see", "can't see", "don't have eyes", "text-based", "unable to parse", "error", "sorry", "assist", "impossible"]
         for kw in bad_keywords:
             if kw in text.lower():
-                return False
-        # Kiểm tra xem có chứa số nào hay không
-        match = re.search(r"[-+]?\d*\.\d+|\d+", text)
-        if not match:
-            return False
-        val = float(match.group())
-        # Nếu kết quả trùng khớp hoàn toàn với 200 mà nội dung có vẻ dài (như "Status: 200")
-        if val == 200.0 and len(text.strip()) > 6:
-            return False
-        return True
+                return None
 
-    # Prompt nâng cao cung cấp Context Hints
+        clean_text = text.replace('`', '').replace('*', '').strip()
+
+        # 1. Ưu tiên tìm số thực có dấu chấm thập phân (VD: 11.0, 10.5, 12.3)
+        floats = re.findall(r"\b\d+\.\d+\b", clean_text)
+        if floats:
+            for f in reversed(floats):
+                try:
+                    val = float(f)
+                    if 0.0 <= val <= 999.0:
+                        return val
+                except ValueError:
+                    pass
+
+        # 2. Tìm tất cả chữ số bất kỳ
+        nums = re.findall(r"[-+]?\d*\.\d+|\d+", clean_text)
+        if nums:
+            for n in reversed(nums):
+                try:
+                    val = float(n)
+                    if 0.0 <= val <= 999.0 and val != 200.0:
+                        return val
+                except ValueError:
+                    pass
+        return None
+
     smart_prompt = (
         "You are a high-precision OCR AI. Read the display on this industrial measurement tool (caliper or moisture meter). "
         "Focus ONLY on the primary large digits showing the measurement result. Ignore auxiliary digits like temperature (e.g., '32 C', '20 C'), target/set points (e.g., '12.0'), and hands/fingers. "
@@ -379,57 +394,69 @@ async def upload_ocr_image(
     try:
         contents = await file.read()
         base64_image = base64.b64encode(contents).decode('utf-8')
-        
         extracted_value = None
-        
-        # 1. Thử gọi Local AI trước (nếu có cấu hình)
-        local_ai_url = os.getenv("LOCAL_GEMINI_URL")
-        local_ai_model = os.getenv("LOCAL_GEMINI_MODEL", "gemini-3.5-flash-thinking")
-        local_ai_key = os.getenv("LOCAL_GEMINI_API_KEY", "")
-        
-        if local_ai_url:
+
+        # 1. Local AI & Cloud Local AI Endpoints
+        local_candidates = [
+            # Candidate 1: Local Gemini Proxy (PC C:\AI)
+            (
+                os.getenv("LOCAL_GEMINI_URL", "http://localhost:8081/v1/chat/completions"),
+                os.getenv("LOCAL_GEMINI_MODEL", "gemini-3.5-flash-thinking"),
+                os.getenv("LOCAL_GEMINI_API_KEY", "sk-gemini")
+            ),
+            # Candidate 2: Cloud Local AI / Ollama
+            (
+                os.getenv("LOCAL_AI_URL", "https://ai.smartflowg7.cloud/v1/chat/completions"),
+                os.getenv("LOCAL_AI_MODEL", "qwen2.5:3b"),
+                os.getenv("LOCAL_AI_API_KEY", "")
+            ),
+            # Candidate 3: Ollama Local Default
+            (
+                "http://localhost:11434/v1/chat/completions",
+                "llama3.2-vision",
+                ""
+            )
+        ]
+
+        for url, model, api_key in local_candidates:
+            if extracted_value is not None:
+                break
+            if not url:
+                continue
             try:
                 headers = {"Content-Type": "application/json"}
-                if local_ai_key:
-                    headers["Authorization"] = f"Bearer {local_ai_key}"
-                
+                if api_key:
+                    headers["Authorization"] = f"Bearer {api_key}"
+
                 payload = {
-                    "model": local_ai_model,
+                    "model": model,
                     "messages": [
                         {
                             "role": "user",
                             "content": [
-                                {
-                                    "type": "text",
-                                    "text": smart_prompt
-                                },
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": f"data:image/jpeg;base64,{base64_image}"
-                                    }
-                                }
+                                {"type": "text", "text": smart_prompt},
+                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
                             ]
                         }
                     ],
                     "temperature": 0.0,
-                    "max_tokens": 15
+                    "max_tokens": 20
                 }
-                
-                res = requests.post(local_ai_url, json=payload, headers=headers, timeout=10)
+
+                res = requests.post(url, json=payload, headers=headers, timeout=5)
                 if res.status_code == 200:
                     data = res.json()
-                    ai_text = data["choices"][0]["message"]["content"].strip()
-                    print(f"[OCR DEBUG] Local AI text: {ai_text}")
-                    if is_valid_ocr_response(ai_text):
-                        match = re.search(r"[-+]?\d*\.\d+|\d+", ai_text)
-                        if match:
-                            extracted_value = float(match.group())
-                            print(f"[OCR DEBUG] Local AI extracted: {extracted_value}")
+                    choices = data.get("choices", [])
+                    if choices:
+                        ai_text = choices[0].get("message", {}).get("content", "").strip()
+                        print(f"[OCR DEBUG] Local AI ({url}) text: {ai_text}")
+                        extracted_value = parse_ocr_number(ai_text)
+                        if extracted_value is not None:
+                            print(f"[OCR DEBUG] Extracted from Local AI: {extracted_value}")
             except Exception as local_err:
-                print(f"Lỗi gọi Local AI OCR: {local_err}")
-                
-        # 2. Thử gọi OpenRouter với google/gemini-2.5-flash
+                print(f"[OCR DEBUG] Local AI ({url}) skipped: {local_err}")
+
+        # 2. OpenRouter - google/gemini-2.5-flash
         openrouter_key = os.getenv("OPENROUTER_API_KEY")
         if extracted_value is None and openrouter_key:
             try:
@@ -444,37 +471,28 @@ async def upload_ocr_image(
                         {
                             "role": "user",
                             "content": [
-                                {
-                                    "type": "text",
-                                    "text": smart_prompt
-                                },
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": f"data:image/jpeg;base64,{base64_image}"
-                                    }
-                                }
+                                {"type": "text", "text": smart_prompt},
+                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
                             ]
                         }
                     ],
                     "max_tokens": 15,
                     "temperature": 0.0
                 }
-                res = requests.post(url, json=payload, headers=headers, timeout=12)
+                res = requests.post(url, json=payload, headers=headers, timeout=10)
                 if res.status_code == 200:
                     data = res.json()
-                    if "choices" in data and len(data["choices"]) > 0:
-                        ai_text = data["choices"][0]["message"]["content"].strip()
+                    choices = data.get("choices", [])
+                    if choices:
+                        ai_text = choices[0].get("message", {}).get("content", "").strip()
                         print(f"[OCR DEBUG] OpenRouter Gemini text: {ai_text}")
-                        if is_valid_ocr_response(ai_text):
-                            match = re.search(r"[-+]?\d*\.\d+|\d+", ai_text)
-                            if match:
-                                extracted_value = float(match.group())
-                                print(f"[OCR DEBUG] OpenRouter Gemini extracted: {extracted_value}")
+                        extracted_value = parse_ocr_number(ai_text)
+                        if extracted_value is not None:
+                            print(f"[OCR DEBUG] OpenRouter Gemini extracted: {extracted_value}")
             except Exception as or_err:
                 print(f"Lỗi gọi OpenRouter OCR: {or_err}")
 
-        # 3. Fallback sang OpenRouter meta-llama/llama-3.2-11b-vision-instruct
+        # 3. OpenRouter - meta-llama/llama-3.2-11b-vision-instruct
         if extracted_value is None and openrouter_key:
             try:
                 url = "https://openrouter.ai/api/v1/chat/completions"
@@ -488,37 +506,28 @@ async def upload_ocr_image(
                         {
                             "role": "user",
                             "content": [
-                                {
-                                    "type": "text",
-                                    "text": smart_prompt
-                                },
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": f"data:image/jpeg;base64,{base64_image}"
-                                    }
-                                }
+                                {"type": "text", "text": smart_prompt},
+                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
                             ]
                         }
                     ],
                     "max_tokens": 15,
                     "temperature": 0.0
                 }
-                res = requests.post(url, json=payload, headers=headers, timeout=12)
+                res = requests.post(url, json=payload, headers=headers, timeout=10)
                 if res.status_code == 200:
                     data = res.json()
-                    if "choices" in data and len(data["choices"]) > 0:
-                        ai_text = data["choices"][0]["message"]["content"].strip()
+                    choices = data.get("choices", [])
+                    if choices:
+                        ai_text = choices[0].get("message", {}).get("content", "").strip()
                         print(f"[OCR DEBUG] OpenRouter Llama text: {ai_text}")
-                        if is_valid_ocr_response(ai_text):
-                            match = re.search(r"[-+]?\d*\.\d+|\d+", ai_text)
-                            if match:
-                                extracted_value = float(match.group())
-                                print(f"[OCR DEBUG] OpenRouter Llama extracted: {extracted_value}")
+                        extracted_value = parse_ocr_number(ai_text)
+                        if extracted_value is not None:
+                            print(f"[OCR DEBUG] OpenRouter Llama extracted: {extracted_value}")
             except Exception as or_llama_err:
                 print(f"Lỗi gọi OpenRouter Llama Vision OCR: {or_llama_err}")
 
-        # 4. Fallback sang Groq Cloud (nếu vẫn lỗi và có key)
+        # 4. Groq Cloud Vision
         if extracted_value is None:
             groq_key = os.getenv("GROQ_API_KEY")
             if groq_key:
@@ -529,16 +538,8 @@ async def upload_ocr_image(
                             {
                                 "role": "user",
                                 "content": [
-                                    {
-                                        "type": "text", 
-                                        "text": smart_prompt
-                                    },
-                                    {
-                                        "type": "image_url",
-                                        "image_url": {
-                                            "url": f"data:image/jpeg;base64,{base64_image}"
-                                        }
-                                    }
+                                    {"type": "text", "text": smart_prompt},
+                                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
                                 ]
                             }
                         ],
@@ -548,15 +549,13 @@ async def upload_ocr_image(
                     )
                     ai_text = chat_completion.choices[0].message.content.strip()
                     print(f"[OCR DEBUG] Groq text: {ai_text}")
-                    if is_valid_ocr_response(ai_text):
-                        match = re.search(r"[-+]?\d*\.\d+|\d+", ai_text)
-                        if match:
-                            extracted_value = float(match.group())
-                            print(f"[OCR DEBUG] Groq extracted: {extracted_value}")
+                    extracted_value = parse_ocr_number(ai_text)
+                    if extracted_value is not None:
+                        print(f"[OCR DEBUG] Groq extracted: {extracted_value}")
                 except Exception as groq_err:
                     print(f"Lỗi gọi Groq AI OCR: {groq_err}")
 
-        # 5. Fallback sang pytesseract / PIL nếu AI Vision không trả kết quả
+        # 5. Fallback Pytesseract / PIL
         if extracted_value is None:
             try:
                 import pytesseract
@@ -566,22 +565,18 @@ async def upload_ocr_image(
                 img = Image.open(io.BytesIO(contents)).convert('L')
                 enhancer = ImageEnhance.Contrast(img)
                 img_contrast = enhancer.enhance(2.0)
-                
+
                 ocr_text = pytesseract.image_to_string(img_contrast, config='--psm 6 -c tessedit_char_whitelist=0123456789.')
                 print(f"[OCR DEBUG] Pytesseract text: {ocr_text}")
-                if ocr_text:
-                    match = re.search(r"[-+]?\d*\.\d+|\d+", ocr_text)
-                    if match:
-                        val = float(match.group())
-                        if 0 <= val <= 999:
-                            extracted_value = val
-                            print(f"[OCR DEBUG] Pytesseract extracted: {extracted_value}")
+                extracted_value = parse_ocr_number(ocr_text)
+                if extracted_value is not None:
+                    print(f"[OCR DEBUG] Pytesseract extracted: {extracted_value}")
             except Exception as tess_err:
                 print(f"Lỗi pytesseract fallback: {tess_err}")
 
         print(f"[OCR DEBUG] Final Extracted Value: {extracted_value}")
         return {"value": extracted_value}
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi xử lý OCR: {str(e)}")
 
