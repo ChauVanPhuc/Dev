@@ -47,10 +47,17 @@ const InspectionDetailPopup = ({ item, onClose }) => {
   } catch (e) { images = {}; }
 
   const typeInfo = {
-    'dau-vao': { icon: <ClipboardCheck size={20} />, color: '#3b82f6', label: 'KIỂM TRA ĐẦU VÀO' },
+    'nhap-kho': { icon: <ClipboardCheck size={20} />, color: '#3b82f6', label: 'KIỂM TRA NHẬP KHO' },
+    'dau-vao': { icon: <ClipboardCheck size={20} />, color: '#3b82f6', label: 'KIỂM TRA NHẬP KHO' },
+    'do-am': { icon: <ClipboardCheck size={20} />, color: '#f59e0b', label: 'KIỂM TRA ĐỘ ẨM' },
+    'kich-thuoc': { icon: <ClipboardCheck size={20} />, color: '#10b981', label: 'KIỂM TRA KÍCH THƯỚC' },
+    'ngoai-quan': { icon: <ClipboardCheck size={20} />, color: '#ec4899', label: 'KIỂM TRA NGOẠI QUAN' },
+    'chuc-nang': { icon: <ClipboardCheck size={20} />, color: '#8b5cf6', label: 'KIỂM TRA CHỨC NĂNG' },
+    'cong-doan': { icon: <ClipboardCheck size={20} />, color: '#f59e0b', label: 'KIỂM TRA CÔNG ĐOẠN' },
+    'quy-trinh': { icon: <ClipboardCheck size={20} />, color: '#06b6d4', label: 'KIỂM TRA QUY TRÌNH' },
     'bam-dinh': { icon: <FileText size={20} />, color: '#8b5cf6', label: 'KIỂM TRA BÁM DÍNH' },
     'sau-dong-goi': { icon: <Package size={20} />, color: '#10b981', label: 'KIỂM TRA SAU ĐÓNG GÓI' }
-  }[item.inspection_type] || { icon: <ClipboardCheck size={20} />, color: '#64748b', label: 'KIỂM TRA NHẬP KHO' };
+  }[item.inspection_type] || { icon: <ClipboardCheck size={20} />, color: '#64748b', label: 'KIỂM TRA CÔNG ĐOẠN' };
 
   const getActionLabel = (action) => {
     switch (action) {
@@ -484,7 +491,11 @@ const InspectionDetailPopup = ({ item, onClose }) => {
               onClick={() => {
                 onClose();
                 let targetRoute = '/inspection-stage';
-                if (item.inspection_type === 'bam-dinh') {
+                if (['do-am', 'kich-thuoc', 'ngoai-quan', 'chuc-nang', 'cong-doan'].includes(item.inspection_type)) {
+                  targetRoute = '/inspection-stage-moisture';
+                } else if (item.inspection_type === 'quy-trinh') {
+                  targetRoute = '/inspection-stage-process';
+                } else if (item.inspection_type === 'bam-dinh') {
                   targetRoute = '/inspection-stage-adhesion';
                 } else if (item.inspection_type === 'sau-dong-goi') {
                   targetRoute = '/inspection-stage-packaging';

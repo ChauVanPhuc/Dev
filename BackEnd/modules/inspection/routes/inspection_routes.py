@@ -4,7 +4,7 @@ import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, or_
+from sqlalchemy import func, and_, or_, Date, cast
 from config.database import get_db
 from modules.inspection.models.input_inspection import InputInspection
 from modules.inspection.schemas.input_inspection import InputInspection as InspectionSchema, InputInspectionRead
@@ -75,7 +75,7 @@ def get_daily_inspections(
     """
     [GET] Lấy danh sách phiếu kiểm tra hàng ngày.
     """
-    records = db.query(DailyInspectionRecord).order_by(DailyInspectionRecord.inspection_date.desc()).offset(skip).limit(limit).all()
+    records = db.query(DailyInspectionRecord).order_by(DailyInspectionRecord.inspection_date.desc(), DailyInspectionRecord.id.desc()).offset(skip).limit(limit).all()
     
     # [PERF] Batch load tên người kiểm tra — 1 query thay vì N queries
     inspector_ids = list({r.inspector_id for r in records if r.inspector_id})
@@ -84,9 +84,24 @@ def get_daily_inspections(
         name_map = {a.id: a.full_name for a in accounts}
     else:
         name_map = {}
+    default_account = db.query(Account.full_name).filter(Account.is_active == True).first()
+    default_qc_name = default_account[0] if default_account else "QC Hệ thống"
+
     for r in records:
-        if r.inspector_id:
-            r.inspector_name = name_map.get(r.inspector_id)
+        if r.inspector_id and r.inspector_id in name_map:
+            r.inspector_name = name_map[r.inspector_id]
+        else:
+            # Tra cứu fallback từ phiếu stage_inspections trong ngày ở công đoạn này
+            stage_rec = db.query(StageInspection.inspector_name).filter(
+                StageInspection.data_json.like(f'%"stage": "{r.stage_name}"%'),
+                cast(StageInspection.inspection_date, Date) == r.inspection_date,
+                StageInspection.inspector_name.isnot(None),
+                StageInspection.inspector_name != ''
+            ).first()
+            if stage_rec and stage_rec[0]:
+                r.inspector_name = stage_rec[0]
+            else:
+                r.inspector_name = default_qc_name
     return records
 
 @router.get("/inbound", response_model=List[InputInspectionRead])
@@ -98,7 +113,7 @@ def get_all_inbound_inspections(
     """
     [GET] Lấy danh sách toàn bộ phiếu kiểm tra đầu vào.
     """
-    records = db.query(InputInspection).order_by(InputInspection.inspected_at.desc()).offset(skip).limit(limit).all()
+    records = db.query(InputInspection).order_by(InputInspection.inspected_at.desc(), InputInspection.id.desc()).offset(skip).limit(limit).all()
     
     # [PERF] Batch load tên người kiểm tra — 1 query thay vì N queries
     inspector_ids = list({r.inspector_id for r in records if r.inspector_id})
@@ -114,14 +129,95 @@ def get_all_inbound_inspections(
             r.inspector_name = "N/A"
     return records
 
+def sync_defects_to_daily_inspection(stage_name: str, defects_list: list, inspector_name: str, db: Session, inspected_qty: int = 0):
+    import json
+    if not stage_name:
+        return
+    
+    today = datetime.date.today()
+    total_added_defects = sum(int(d.get('quantity', 1)) for d in defects_list if isinstance(d, dict) and d.get('defect_id'))
+    
+    if total_added_defects <= 0 and inspected_qty <= 0:
+        return
+
+    # Tìm Account ID dựa trên inspector_name
+    found_inspector_id = None
+    if inspector_name and inspector_name.strip():
+        acc = db.query(Account).filter(
+            or_(
+                Account.full_name.ilike(inspector_name.strip()),
+                Account.username.ilike(inspector_name.strip())
+            )
+        ).first()
+        if acc:
+            found_inspector_id = acc.id
+
+    # 1. Tìm hoặc tạo bản ghi DailyInspectionRecord trong ngày ở công đoạn này
+    daily_rec = db.query(DailyInspectionRecord).filter(
+        DailyInspectionRecord.stage_name == stage_name,
+        cast(DailyInspectionRecord.inspection_date, Date) == today
+    ).first()
+
+    if not daily_rec:
+        daily_rec = DailyInspectionRecord(
+            inspection_date = today,
+            stage_name      = stage_name,
+            inspector_id    = found_inspector_id,
+            total_products  = inspected_qty,
+            total_defects   = total_added_defects,
+            defect_rate     = round((total_added_defects / inspected_qty * 100), 2) if inspected_qty > 0 else 0.0
+        )
+        db.add(daily_rec)
+        db.flush()
+    else:
+        if not daily_rec.inspector_id and found_inspector_id:
+            daily_rec.inspector_id = found_inspector_id
+        if inspected_qty > 0:
+            daily_rec.total_products = (daily_rec.total_products or 0) + inspected_qty
+        daily_rec.total_defects = (daily_rec.total_defects or 0) + total_added_defects
+        if daily_rec.total_products and daily_rec.total_products > 0:
+            daily_rec.defect_rate = round((daily_rec.total_defects / daily_rec.total_products) * 100, 2)
+
+    # 2. Đồng bộ các lỗi chi tiết vào DailyInspectionDefect
+    for d in defects_list:
+        if not isinstance(d, dict):
+            continue
+        raw_defect_id = d.get('defect_id')
+        if not raw_defect_id:
+            continue
+        try:
+            defect_id = int(raw_defect_id)
+        except (ValueError, TypeError):
+            continue
+        
+        qty = int(d.get('quantity', 1))
+        if qty <= 0:
+            continue
+        
+        defect_item = db.query(DailyInspectionDefect).filter(
+            DailyInspectionDefect.record_id == daily_rec.id,
+            DailyInspectionDefect.defect_id == defect_id
+        ).first()
+        
+        if defect_item:
+            defect_item.quantity = (defect_item.quantity or 0) + qty
+        else:
+            defect_item = DailyInspectionDefect(
+                record_id = daily_rec.id,
+                defect_id = defect_id,
+                quantity  = qty
+            )
+            db.add(defect_item)
+
 @router.post("/stage", response_model=StageInspectionRead)
 def create_stage_inspection(
     data: StageInspectionCreate,
     db: Session = Depends(get_db)
 ):
     """
-    [POST] Lưu kết quả kiểm tra theo công đoạn (Stage Inspection).
+    [POST] Lưu kết quả kiểm tra theo công đoạn (Stage Inspection) & Tự động đồng bộ lỗi vào Daily Defects.
     """
+    import json
     try:
         new_record = StageInspection(
             inspection_type = data.inspection_type,
@@ -134,6 +230,32 @@ def create_stage_inspection(
             images_json     = data.images_json
         )
         db.add(new_record)
+        
+        # Đồng bộ lỗi nếu có defects trong data_json hoặc tự nhận diện theo công đoạn
+        if data.data_json:
+            try:
+                parsed_data = json.loads(data.data_json) if isinstance(data.data_json, str) else data.data_json
+                if isinstance(parsed_data, dict):
+                    stage_name = parsed_data.get('stage')
+                    if not stage_name:
+                        stage_map = {
+                            'do-am': 'Phôi gỗ',
+                            'kich-thuoc': 'Định hình',
+                            'ngoai-quan': 'Lắp ráp',
+                            'chuc-nang': 'Thành phẩm',
+                            'bam-dinh': 'Sơn',
+                            'quy-trinh': 'Sản xuất'
+                        }
+                        stage_name = stage_map.get(data.inspection_type, 'Phôi gỗ')
+
+                    defects_list = parsed_data.get('defects', [])
+                    inspected_qty = parsed_data.get('inspected_qty') or parsed_data.get('total_qty', 0)
+
+                    if stage_name and (isinstance(defects_list, list) and len(defects_list) > 0 or inspected_qty > 0):
+                        sync_defects_to_daily_inspection(stage_name, defects_list, data.inspector_name, db, inspected_qty=inspected_qty)
+            except Exception as sync_err:
+                print(f"[STAGE SYNC ERROR] {sync_err}")
+
         db.commit()
         db.refresh(new_record)
         return new_record
@@ -233,7 +355,7 @@ def get_stage_inspections(
             (StageInspection.product_sku.ilike(search_term)) |
             (StageInspection.inspector_name.ilike(search_term))
         )
-    return query.order_by(StageInspection.inspection_date.desc()).offset(skip).limit(limit).all()
+    return query.order_by(StageInspection.created_at.desc(), StageInspection.id.desc()).offset(skip).limit(limit).all()
 
 UPLOAD_DIR = "static/uploads/inspections"
 if not os.path.exists(UPLOAD_DIR):
@@ -349,7 +471,6 @@ async def upload_ocr_image(
     import base64
     import requests
     import re
-    from groq import Groq
 
     def parse_ocr_number(text: str) -> float | None:
         if not text:
@@ -528,32 +649,8 @@ async def upload_ocr_image(
                 print(f"Lỗi gọi OpenRouter Llama Vision OCR: {or_llama_err}")
 
         # 4. Groq Cloud Vision
-        if extracted_value is None:
-            groq_key = os.getenv("GROQ_API_KEY")
-            if groq_key:
-                try:
-                    client = Groq(api_key=groq_key)
-                    chat_completion = client.chat.completions.create(
-                        messages=[
-                            {
-                                "role": "user",
-                                "content": [
-                                    {"type": "text", "text": smart_prompt},
-                                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-                                ]
-                            }
-                        ],
-                        model="llama-3.2-11b-vision-preview",
-                        temperature=0.0,
-                        max_tokens=10
-                    )
-                    ai_text = chat_completion.choices[0].message.content.strip()
-                    print(f"[OCR DEBUG] Groq text: {ai_text}")
-                    extracted_value = parse_ocr_number(ai_text)
-                    if extracted_value is not None:
-                        print(f"[OCR DEBUG] Groq extracted: {extracted_value}")
-                except Exception as groq_err:
-                    print(f"Lỗi gọi Groq AI OCR: {groq_err}")
+                print(f"[OCR] OpenRouter error: {or_err}")
+>>>>>>> d7ef662 (refactor: update inspection defects sync, handovers layout, and fit-to-screen UI fixes)
 
         # 5. Fallback Pytesseract / PIL
         if extracted_value is None:
@@ -777,6 +874,125 @@ def create_defect_type(data: DefectTypeCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(defect)
     return defect
+
+@router.post("/defect-types/import")
+async def import_defect_types_from_excel(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """
+    [POST] Import danh mục phân loại lỗi từ file Excel (sheets: 'Lỗi G7', 'Lỗi khách', 'Bảng phân loại').
+    """
+    import pandas as pd
+    import json
+    from io import BytesIO
+
+    STAGE_MAPPINGS = {
+        "MAT": ["NM1 - Định hình 1", "NM1 - Định hình ván 1", "NM2 - Định hình mặt tiền 2", "NM2 - Định hình tủ 2", "NM3 - Tạo phôi 3", "NM3 - Định hình 3"],
+        "STR": ["NM1 - Lắp ráp, chà nhám 1", "NM2 - Lắp ráp mặt tiền 2", "NM2 - Lắp ráp tủ 2", "NM3 - Lắp ráp 3"],
+        "PAI": ["NM1 - Sơn 1", "NM2 - Sơn Pallet 2", "NM2 - Sơn treo 2", "NM3 - Sơn 3"],
+        "APP": ["NM1 - Đóng gói 1", "NM2 - Đóng gói 2", "NM3 - Đóng gói 3"]
+    }
+    CATEGORY_MAPPINGS = {
+        "MAT": "material",
+        "STR": "structure",
+        "PAI": "paint",
+        "APP": "visual"
+    }
+
+    def clean_val(val):
+        if pd.isna(val) or val is None:
+            return None
+        s = str(val).strip()
+        return s if s else None
+
+    try:
+        contents = await file.read()
+        excel_file = BytesIO(contents)
+        
+        xl = pd.ExcelFile(excel_file)
+        g7_count = 0
+        client_count = 0
+
+        if "Lỗi G7" in xl.sheet_names:
+            df_g7 = pd.read_excel(xl, sheet_name="Lỗi G7")
+            for idx, row in df_g7.iterrows():
+                code = clean_val(row.get("Mã Lỗi"))
+                name = clean_val(row.get("Tên Lỗi Ngắn Gọn"))
+                aql = clean_val(row.get("Phân Loại AQL"))
+                desc = clean_val(row.get("Mô Tả Chi Tiết Tiêu Chuẩn Ghi Nhật Ký"))
+                raw_cat = clean_val(row.get("Phân loại"))
+
+                if not code or not name:
+                    continue
+
+                category = CATEGORY_MAPPINGS.get(raw_cat, "other")
+                stages_list = STAGE_MAPPINGS.get(raw_cat, [])
+                stages_json = json.dumps(stages_list, ensure_ascii=False)
+
+                defect = db.query(DefectType).filter(DefectType.code == code).first()
+                if not defect:
+                    defect = DefectType(code=code)
+                    db.add(defect)
+
+                defect.name = name
+                defect.category = category
+                defect.stage = stages_json
+                defect.description = desc
+                defect.aql_class = aql
+                defect.is_active = True
+                if aql in ["Critical", "Major"]:
+                    defect.needs_tracking = True
+                
+                g7_count += 1
+            db.commit()
+
+        if "Lỗi khách" in xl.sheet_names:
+            df_client = pd.read_excel(xl, sheet_name="Lỗi khách")
+            for idx, row in df_client.iterrows():
+                c_code = clean_val(row.get("MÃ LỖI"))
+                c_name = clean_val(row.get("TÊN LỖI"))
+                c_name_en = clean_val(row.get("TÊN TIẾNG ANH"))
+                minor = clean_val(row.get("MINOR"))
+                major = clean_val(row.get("MAJOR"))
+                critical = clean_val(row.get("CRITICAL"))
+                method = clean_val(row.get("PHƯƠNG PHÁP XÁC ĐỊNH"))
+                g7_code = clean_val(row.get("Mã lỗi tại G7"))
+
+                if not c_code or not c_name:
+                    continue
+
+                g7_defect = None
+                if g7_code:
+                    g7_defect = db.query(DefectType).filter(DefectType.code == g7_code).first()
+
+                client_def = db.query(ClientDefect).filter(ClientDefect.code == c_code).first()
+                if not client_def:
+                    client_def = ClientDefect(code=c_code)
+                    db.add(client_def)
+
+                client_def.name = c_name
+                client_def.name_en = c_name_en
+                client_def.minor_criteria = minor
+                client_def.major_criteria = major
+                client_def.critical_criteria = critical
+                client_def.detection_method = method
+                client_def.g7_code = g7_code
+                if g7_defect:
+                    client_def.defect_type_id = g7_defect.id
+                client_def.is_active = True
+                client_count += 1
+            db.commit()
+
+        return {
+            "message": f"Nhập dữ liệu thành công! {g7_count} lỗi G7, {client_count} lỗi khách hàng.",
+            "g7_count": g7_count,
+            "client_count": client_count
+        }
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Lỗi khi import file Excel: {str(e)}")
 
 @router.put("/defect-types/{defect_id}", response_model=DefectTypeSchema)
 def update_defect_type(defect_id: int, data: DefectTypeCreate, db: Session = Depends(get_db)):

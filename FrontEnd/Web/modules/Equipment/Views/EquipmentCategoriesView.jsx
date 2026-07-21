@@ -109,6 +109,11 @@ const EquipmentCategoriesView = () => {
   };
 
   useEffect(() => {
+    fetchEquipments();
+    fetchSystemUsersAndRoles();
+  }, []);
+
+  useEffect(() => {
     if (screenCode && title) {
       if (setCustomTitle) setCustomTitle(title);
       if (setCustomSubtitle) setCustomSubtitle(subtitle || '');

@@ -29,6 +29,10 @@ const MachineTrainingView = () => {
   };
 
   useEffect(() => {
+    fetchMachines();
+  }, []);
+
+  useEffect(() => {
     if (screenCode && title) {
       if (setCustomTitle) setCustomTitle(title);
       if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
@@ -36,18 +40,13 @@ const MachineTrainingView = () => {
     }
   }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
-  const filteredMachines = useMemo(() => {
+  const filteredMachines = React.useMemo(() => {
     return machines.filter(m => 
-      m.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (m.code && m.code.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (m.name && m.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (m.department && m.department.toLowerCase().includes(searchTerm.toLowerCase()))
     );
   }, [machines, searchTerm]);
-
-  // Helper useMemo for filtering to solve React dependency check warning
-  function useMemo(fn, deps) {
-    return React.useMemo(fn, deps);
-  }
 
   return (
     <div style={{ padding: '5px 20px 20px', fontFamily: 'Inter, sans-serif' }}>

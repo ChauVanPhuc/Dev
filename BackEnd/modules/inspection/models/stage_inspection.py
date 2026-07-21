@@ -22,9 +22,9 @@ class StageInspection(Base):
     
     # Dữ liệu đặc thù của từng loại phiếu (JSON string)
     # VD: supplier, check_type, intended_use, detail_bam_dinh, results chi tiết...
-    data_json = Column(Text, nullable=True) 
+    data_json = Column(NVARCHAR(None), nullable=True) 
     
     # Danh sách đường dẫn ảnh (JSON array string)
-    images_json = Column(Text, nullable=True)
+    images_json = Column(NVARCHAR(None), nullable=True)
 
     created_at = Column(DateTime, default=datetime.datetime.now)

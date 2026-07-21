@@ -42,6 +42,26 @@ const EquipmentManagementView = () => {
     docsAll: false
   });
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
+
+  const fetchEquipments = async () => {
+    setLoading(true);
+    try {
+      const data = await api.get('/equipments/');
+      setEquipments(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Lỗi khi tải danh sách thiết bị:', error);
+      setMessage({ type: 'error', text: 'Không thể tải danh sách thiết bị.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchEquipments();
+  }, []);
+
   useEffect(() => {
     if (screenCode && title) {
       if (setCustomTitle) setCustomTitle(title);

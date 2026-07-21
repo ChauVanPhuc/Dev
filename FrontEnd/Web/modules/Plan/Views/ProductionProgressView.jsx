@@ -80,13 +80,32 @@ const ProductionProgress = () => {
     const [loading, setLoading] = useState(true);
     const [productData, setProductData] = useState(null);
 
+    const fetchProgress = async () => {
+        setLoading(true);
+        try {
+            const data = await planService.getProductProgress(id);
+            setProductData(data);
+        } catch (error) {
+            console.error('Lỗi khi tải tiến độ sản xuất:', error);
+            setProductData({ error: 'Không thể tải tiến độ sản xuất.' });
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
-    if (screenCode && title) {
-      if (setCustomTitle) setCustomTitle(title);
-      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
-      if (setCustomScreenCode) setCustomScreenCode(screenCode);
-    }
-  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+        if (id) {
+            fetchProgress();
+        }
+    }, [id]);
+
+    useEffect(() => {
+        if (screenCode && title) {
+            if (setCustomTitle) setCustomTitle(title);
+            if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+            if (setCustomScreenCode) setCustomScreenCode(screenCode);
+        }
+    }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
     if (loading) return (
         <div className="progress-loading-container">

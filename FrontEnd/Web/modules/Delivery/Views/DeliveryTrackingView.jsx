@@ -361,36 +361,39 @@ const DeliveryTracking = () => {
         // Helper function to fetch image as base64
         const fetchImageAsBase64 = async (imageUrl) => {
             try {
-                // If it's the image-proxy endpoint, append as_base64=true
                 const fetchUrl = imageUrl.includes('image-proxy') 
-                    ? `${imageUrl}&as_base64=true` 
+                    ? (imageUrl.includes('as_base64=true') ? imageUrl : `${imageUrl}&as_base64=true`)
                     : imageUrl;
                 
                 const response = await fetch(fetchUrl);
-                if (!response.ok) {
-                    return null;
-                }
+                if (!response.ok) return null;
 
                 if (fetchUrl.includes('as_base64=true')) {
-                    const data = await response.json();
-                    return data.base64;
+                    try {
+                        const data = await response.json();
+                        if (data && data.base64) return data.base64;
+                    } catch (e) {
+                        // Fallback to blob if JSON parsing fails
+                    }
                 }
                 
                 const blob = await response.blob();
-                
-                try {
-                    const arrayBuffer = await blob.arrayBuffer();
-                    const uint8Array = new Uint8Array(arrayBuffer);
-                    let binary = '';
-                    for (let i = 0; i < uint8Array.length; i++) {
-                        binary += String.fromCharCode(uint8Array[i]);
-                    }
-                    const base64 = btoa(binary);
-                    return base64;
-                } catch (error) {
-                    return null;
-                }
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        const res = reader.result;
+                        if (res && typeof res === 'string') {
+                            const base64Data = res.split(',')[1] || null;
+                            resolve(base64Data);
+                        } else {
+                            resolve(null);
+                        }
+                    };
+                    reader.onerror = () => resolve(null);
+                    reader.readAsDataURL(blob);
+                });
             } catch (error) {
+                console.error("Lỗi khi fetch image as base64:", error);
                 return null;
             }
         };
@@ -410,7 +413,7 @@ const DeliveryTracking = () => {
         };
 
         // Helper function to fit image inside maximum dimensions while maintaining aspect ratio
-        const fitImage = (naturalWidth, naturalHeight, maxWidth = 150, maxHeight = 100) => {
+        const fitImage = (naturalWidth, naturalHeight, maxWidth = 310, maxHeight = 160) => {
             const ratio = Math.min(maxWidth / naturalWidth, maxHeight / naturalHeight);
             return {
                 width: Math.round(naturalWidth * ratio),
@@ -459,7 +462,7 @@ const DeliveryTracking = () => {
 
             // Width mapping in pixels: A=80, B=260, C=170, D=170, E=220, F=120
             const colWidths = [80, 260, 170, 170, 220, 120];
-            const rowHeightPx = 100 * 1.33; // ~133px
+            const rowHeightPx = 150 * 1.33; // ~200px
 
             // Column ranges for different layouts
             const getColumnRanges = (index, totalPerRow) => {
@@ -558,16 +561,16 @@ const DeliveryTracking = () => {
                             const base64 = imgToBase64.get(img);
                             if (base64) {
                                 const dims = await getImageDimensions(base64);
-                                fittedSizes.push(fitImage(dims.width, dims.height, 150, 100));
+                                fittedSizes.push(fitImage(dims.width, dims.height, 310, 150));
                             } else {
-                                fittedSizes.push({ width: 150, height: 100 });
+                                fittedSizes.push({ width: 310, height: 150 });
                             }
                         }
 
                         // Add image row
                         const imgRow = wsSheet.addRow([]);
                         const imgR = imgRow.number;
-                        imgRow.height = 100;
+                        imgRow.height = 150;
 
                         // Fill white background
                         for (let c = 1; c <= 6; c++) {
@@ -686,16 +689,16 @@ const DeliveryTracking = () => {
                         const base64 = rowBase64s[j];
                         if (base64) {
                             const dims = await getImageDimensions(base64);
-                            const size = fitImage(dims.width, dims.height, 150, 100);
+                            const size = fitImage(dims.width, dims.height, 310, 150);
                             fittedSizes.push(size);
                         } else {
-                            fittedSizes.push({ width: 150, height: 100 });
+                            fittedSizes.push({ width: 310, height: 150 });
                         }
                     }
 
                     const imgRow = wsSheet.addRow([]);
                     const imgR = imgRow.number;
-                    imgRow.height = 100; // Height for image
+                    imgRow.height = 150; // Height for image
 
                     // Note: We do NOT call wsSheet.mergeCells for the image row cells anymore.
                     // This allows Excel to respect the precise colOff target positioning of getCellAndOffset.
@@ -1306,11 +1309,22 @@ const DeliveryTracking = () => {
                 const cleanPath = imagePath.replace(/^\//, '');
                 const response = await fetch(`${API_ROOT}api/v1/deliveries/image-proxy?path=${encodeURIComponent(cleanPath)}&as_base64=true`);
                 if (!response.ok) return null;
-                const data = await response.json();
-                if (data && data.base64) {
-                    const ext = data.extension || 'png';
-                    return `data:image/${ext};base64,${data.base64}`;
+                try {
+                    const data = await response.json();
+                    if (data && data.base64) {
+                        const ext = data.extension || 'png';
+                        return `data:image/${ext};base64,${data.base64}`;
+                    }
+                } catch (e) {
+                    // Fallback if not JSON
                 }
+                const blob = await response.blob();
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result || null);
+                    reader.onerror = () => resolve(null);
+                    reader.readAsDataURL(blob);
+                });
             } catch (error) {
                 console.error("Lỗi khi tải ảnh dạng base64:", error);
             }
@@ -2161,19 +2175,19 @@ const DeliveryTracking = () => {
                         <table className="manufacture-table data-table" style={{ minWidth: '1300px' }}>
                             <thead>
                                 <tr>
-                                    <th style={{ textAlign: 'center' }}>STT</th>
-                                    <th>Mã phiếu</th>
-                                    <th>Tên chi tiết</th>
-                                    <th>Công đoạn vào</th>
-                                    <th>Công đoạn ra</th>
-                                    <th>SL Giao</th>
-                                    <th>SL Nhận</th>
-                                    <th>SL Trả</th>
-                                    <th>Trạng thái</th>
-                                    <th>Thời gian</th>
-                                    <th>Người giao</th>
-                                    <th>Người nhận</th>
-                                    <th>Thao tác</th>
+                                    <th style={{ textAlign: 'center', width: '50px', whiteSpace: 'nowrap' }}>STT</th>
+                                    <th style={{ width: '80px', whiteSpace: 'nowrap' }}>Mã phiếu</th>
+                                    <th style={{ width: '240px', whiteSpace: 'nowrap' }}>Tên chi tiết</th>
+                                    <th style={{ width: '160px', whiteSpace: 'nowrap' }}>Công đoạn vào</th>
+                                    <th style={{ width: '160px', whiteSpace: 'nowrap' }}>Công đoạn ra</th>
+                                    <th style={{ width: '80px', textAlign: 'center', whiteSpace: 'nowrap' }}>SL Giao</th>
+                                    <th style={{ width: '80px', textAlign: 'center', whiteSpace: 'nowrap' }}>SL Nhận</th>
+                                    <th style={{ width: '80px', textAlign: 'center', whiteSpace: 'nowrap' }}>SL Trả</th>
+                                    <th style={{ width: '120px', textAlign: 'center', whiteSpace: 'nowrap' }}>Trạng thái</th>
+                                    <th style={{ width: '140px', whiteSpace: 'nowrap' }}>Thời gian</th>
+                                    <th style={{ width: '110px', whiteSpace: 'nowrap' }}>Người giao</th>
+                                    <th style={{ width: '110px', whiteSpace: 'nowrap' }}>Người nhận</th>
+                                    <th style={{ width: '70px', textAlign: 'center', whiteSpace: 'nowrap' }}>Thao tác</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -2192,14 +2206,16 @@ const DeliveryTracking = () => {
                                                 zIndex: actionMenuId === row.id ? 30 : 1
                                             }}
                                         >
-                                            <td data-label="STT" style={{ textAlign: 'center' }}>{(currentPage - 1) * itemsPerPage + idx + 1}</td>
-                                            <td data-label="Mã phiếu" style={{ fontWeight: '700', color: '#3E2723' }}>BG-{row.id}</td>
-                                            <td data-label="Tên chi tiết" style={{ color: '#424242' }}>{row.part_name || 'N/A'}</td>
-                                            <td data-label="Công đoạn vào">{row.delivery_stage}</td>
-                                            <td data-label="Công đoạn ra">{row.receiving_stage}</td>
-                                            <td data-label="SL Giao" style={{ fontWeight: '800' }}>{row.quantity_total}</td>
-                                            <td data-label="SL Nhận" style={{ fontWeight: '800', color: '#2E7D32' }}>{row.quantity_received}</td>
-                                            <td data-label="SL Trả" style={{ color: row.quantity_returned > 0 ? '#C62828' : '#757575' }}>{row.quantity_returned}</td>
+                                            <td data-label="STT" style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>{(currentPage - 1) * itemsPerPage + idx + 1}</td>
+                                            <td data-label="Mã phiếu" style={{ fontWeight: '700', color: '#3E2723', whiteSpace: 'nowrap' }}>BG-{row.id}</td>
+                                            <td data-label="Tên chi tiết" style={{ color: '#424242', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.part_name || 'N/A'}>
+                                                {row.part_name || 'N/A'}
+                                            </td>
+                                            <td data-label="Công đoạn vào" style={{ whiteSpace: 'nowrap', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis' }} title={row.delivery_stage || ''}>{row.delivery_stage}</td>
+                                            <td data-label="Công đoạn ra" style={{ whiteSpace: 'nowrap', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis' }} title={row.receiving_stage || ''}>{row.receiving_stage}</td>
+                                            <td data-label="SL Giao" style={{ fontWeight: '800', textAlign: 'center', whiteSpace: 'nowrap' }}>{row.quantity_total}</td>
+                                            <td data-label="SL Nhận" style={{ fontWeight: '800', color: '#2E7D32', textAlign: 'center', whiteSpace: 'nowrap' }}>{row.quantity_received}</td>
+                                            <td data-label="SL Trả" style={{ color: row.quantity_returned > 0 ? '#C62828' : '#757575', textAlign: 'center', whiteSpace: 'nowrap' }}>{row.quantity_returned}</td>
                                             <td data-label="Trạng thái" style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                                                 <span style={{ 
                                                     padding: '5px 10px', 
@@ -2224,12 +2240,12 @@ const DeliveryTracking = () => {
                                                     {statusInfo.label}
                                                 </span>
                                             </td>
-                                            <td data-label="Thời gian" style={{ fontSize: '12px', color: '#757575' }}>
+                                            <td data-label="Thời gian" style={{ fontSize: '12px', color: '#757575', whiteSpace: 'nowrap' }}>
                                                 {row.created_at ? new Date(row.created_at).toLocaleString('vi-VN', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}) : 'N/A'}
                                             </td>
-                                            <td data-label="Người giao">{row.sx_delivery_name || 'N/A'}</td>
-                                            <td data-label="Người nhận">{row.sx_receipt_name || '---'}</td>
-                                            <td data-label="Thao tác" style={{ position: 'relative', textAlign: 'center', zIndex: actionMenuId === row.id ? 40 : 1 }}>
+                                            <td data-label="Người giao" style={{ whiteSpace: 'nowrap' }}>{row.sx_delivery_name || 'N/A'}</td>
+                                            <td data-label="Người nhận" style={{ whiteSpace: 'nowrap' }}>{row.sx_receipt_name || '---'}</td>
+                                            <td data-label="Thao tác" style={{ position: 'relative', textAlign: 'center', zIndex: actionMenuId === row.id ? 40 : 1, whiteSpace: 'nowrap' }}>
                                                 <button
                                                     className="action-btn"
                                                     onClick={(e) => {

@@ -144,39 +144,6 @@ const ExceptionDeliveries = () => {
     return (
         <div className="manufacture-plan-container" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
             
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                <div>
-                    <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#3E2723', margin: 0 }}>QUẢN LÝ PHIẾU NGOẠI LỆ</h1>
-                    <p style={{ fontSize: '13px', color: '#8D6E63', marginTop: '4px', marginBottom: 0 }}>
-                        Hệ thống tự động phát hiện và cảnh báo các phiếu bàn giao sai lệch số lượng hoặc có lỗi chất lượng
-                    </p>
-                </div>
-                <button 
-                    onClick={fetchData} 
-                    style={{ 
-                        background: '#7B5233', 
-                        border: 'none', 
-                        borderRadius: '12px', 
-                        padding: '10px 16px', 
-                        color: 'white', 
-                        cursor: 'pointer', 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: '8px',
-                        fontSize: '14px',
-                        fontWeight: '600',
-                        boxShadow: '0 2px 6px rgba(123, 82, 51, 0.2)',
-                        transition: 'all 0.2s'
-                    }}
-                    onMouseOver={(e) => e.currentTarget.style.background = '#644128'}
-                    onMouseOut={(e) => e.currentTarget.style.background = '#7B5233'}
-                >
-                    <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-                    Làm mới dữ liệu
-                </button>
-            </div>
-
             {/* Thống Kê Tổng Quan */}
             <div className="stats-grid five-cols animate-card-entrance" style={{ marginBottom: '8px', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '8px' }}>
                 {[
@@ -239,6 +206,13 @@ const ExceptionDeliveries = () => {
               onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
               activeFiltersCount={filterType !== 'ALL' ? 1 : 0}
               hasWritePermission={true}
+              extraActions={[
+                {
+                  label: 'Làm mới dữ liệu',
+                  icon: <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />,
+                  onClick: fetchData
+                }
+              ]}
             />
 
             {/* INLINE EXPANDABLE FILTER BAR */}

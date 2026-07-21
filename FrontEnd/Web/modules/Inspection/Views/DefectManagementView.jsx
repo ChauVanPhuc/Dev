@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import api from '@webShared/Services/api.service';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
@@ -359,6 +359,41 @@ const DefectManagement = () => {
   // ─── Trạng thái Toast thông báo ────────────────────────────
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
 
+  // ─── Import Excel Ref & Handler ──────────────────────────
+  const fileInputRef = useRef(null);
+  const [isImporting, setIsImporting] = useState(false);
+
+  const handleImportExcelClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setIsImporting(true);
+    showToast('Đang tiến hành import danh mục lỗi từ Excel...', 'info');
+
+    try {
+      const res = await api.post('/inspections/defect-types/import', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      showToast(res.message || res.data?.message || 'Import thành công!', 'success');
+      fetchDefects();
+    } catch (err) {
+      console.error('Lỗi khi import Excel:', err);
+      showToast(err.response?.data?.detail || 'Import Excel thất bại', 'error');
+    } finally {
+      setIsImporting(false);
+      e.target.value = '';
+    }
+  };
+
   // Hiển thị thông báo nhanh
   const showToast = (message, type = 'success') => {
     setToast({ show: true, message, type });
@@ -659,6 +694,14 @@ const DefectManagement = () => {
     <>
       <div className="mgmt-container defect-mgmt-container">
       <style dangerouslySetInnerHTML={{ __html: `
+        .defect-mgmt-tabs {
+          flex-shrink: 0 !important;
+        }
+        .analytics-view, .list-view {
+          flex: 1;
+          min-height: 0;
+          overflow-y: auto;
+        }
         .defect-list-layout {
           display: flex;
           flex-direction: column;
@@ -887,10 +930,21 @@ const DefectManagement = () => {
                 (selectedStage ? 1 : 0) +
                 (!showInactive ? 1 : 0)
               }
+              importActions={[
+                { label: 'Import Bảng phân loại lỗi (.xlsx)', onClick: handleImportExcelClick }
+              ]}
               onCreate={handleOpenCreate}
               createLabel="Thêm lỗi"
               hasWritePermission={true}
-            />
+            >
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                style={{ display: 'none' }} 
+                accept=".xlsx, .xls"
+                onChange={handleFileChange}
+              />
+            </PageToolbar>
 
             {/* INLINE EXPANDABLE FILTER BAR */}
             {isFilterBarOpen && (

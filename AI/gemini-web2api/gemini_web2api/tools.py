@@ -88,10 +88,20 @@ def messages_to_prompt(messages: list, tools: list = None, tool_choice=None) -> 
             for c in content:
                 if c.get("type") in ("text", "input_text"):
                     text_parts.append(c.get("text", ""))
-                elif c.get("type") == "image_url":
-                    text_parts.append("[Note: Image input not supported in this API. Please describe the image in text.]")
-                elif c.get("type") == "image":
-                    text_parts.append("[Note: Image input not supported in this API. Please describe the image in text.]")
+                elif c.get("type") in ("image_url", "image"):
+                    img_obj = c.get("image_url", c.get("image", {}))
+                    url_str = img_obj.get("url", "") if isinstance(img_obj, dict) else str(img_obj)
+                    if url_str:
+                        if url_str.startswith("data:image/"):
+                            try:
+                                header, data_b64 = url_str.split(",", 1)
+                                mime_type = header.split(";")[0].replace("data:", "") or "image/jpeg"
+                                img_bytes = base64.b64decode(data_b64)
+                                images.append((img_bytes, mime_type))
+                            except Exception as img_err:
+                                print(f"[gemini_web2api] Base64 image parse error: {img_err}")
+                        else:
+                            images.append((url_str, "image/jpeg"))
             content = " ".join(text_parts)
 
         if role == "system":

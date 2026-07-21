@@ -17,6 +17,21 @@ const EquipmentTrainingDetailView = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const fetchTrainingData = async () => {
+      setLoading(true);
+      try {
+        const data = await api.get(`/equipments/trainings/${id}`);
+        setTraining(data);
+      } catch (error) {
+        console.error('Lỗi khi tải thông tin đào tạo:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    if (id) fetchTrainingData();
+  }, [id]);
+
+  useEffect(() => {
     if (screenCode && title) {
       if (setCustomTitle) setCustomTitle(title);
       if (setCustomSubtitle) setCustomSubtitle(subtitle || '');

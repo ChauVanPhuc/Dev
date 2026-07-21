@@ -8,6 +8,8 @@ import pandas as pd
 backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(backend_dir)
 sys.path.append(os.path.abspath(os.path.join(backend_dir, "..")))
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
 
 # Load dotenv to resolve environment variables
 from dotenv import load_dotenv
@@ -20,7 +22,9 @@ else:
 from config.database import SessionLocal
 from modules.inspection.models.defect_type import DefectType, ClientDefect, DefectGlossary
 
-EXCEL_PATH = r"C:\Tool_Get_Data\bảng phân loại lỗi.xlsx"
+EXCEL_PATH = os.path.abspath(os.path.join(backend_dir, "..", "bảng phân loại lỗi.xlsx"))
+if not os.path.exists(EXCEL_PATH):
+    EXCEL_PATH = r"M:\ERP\bảng phân loại lỗi.xlsx"
 
 # Định nghĩa danh sách công đoạn theo nhóm lỗi theo quy tắc người dùng xác nhận
 STAGE_MAPPINGS = {

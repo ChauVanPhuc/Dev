@@ -67,7 +67,21 @@ const InspectionLogs = () => {
           originalId: item.id,
           date: new Date(item.inspection_date).toLocaleDateString('vi-VN'),
           timestamp: new Date(item.inspection_date).getTime(),
-          type: `Kiểm tra ${item.inspection_type === 'dau-vao' || item.inspection_type === 'phu-kien' ? 'Đầu vào' : (item.inspection_type === 'bam-dinh' ? 'Bám dính' : 'Đóng gói')}`,
+          type: (() => {
+            const map = {
+              'nhap-kho': 'Kiểm tra Nhập kho',
+              'dau-vao': 'Kiểm tra Nhập kho',
+              'do-am': 'Kiểm tra Độ ẩm',
+              'kich-thuoc': 'Kiểm tra Kích thước',
+              'ngoai-quan': 'Kiểm tra Ngoại quan',
+              'chuc-nang': 'Kiểm tra Chức năng',
+              'cong-doan': 'Kiểm tra Công đoạn',
+              'quy-trinh': 'Kiểm tra Quy trình',
+              'bam-dinh': 'Kiểm tra Bám dính',
+              'sau-dong-goi': 'Kiểm tra Sau đóng gói'
+            };
+            return map[item.inspection_type] || `Kiểm tra ${item.inspection_type}`;
+          })(),
           target: item.batch_no || 'N/A',
           inspector: item.inspector_name,
           result: item.conclusion === 'pass' ? 'Đạt' : 'Không đạt',

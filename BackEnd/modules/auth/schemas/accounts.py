@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional, List
+from typing import Optional, List, Union
 from datetime import datetime
 
 class AccountBase(BaseModel):
@@ -7,27 +7,27 @@ class AccountBase(BaseModel):
     Schema cơ bản cho Tài khoản người dùng (Account).
     Chứa các thông tin định danh và trạng thái hoạt động.
     """
-    username: str                  # Tên đăng nhập
-    phone: Optional[str] = None    # Số điện thoại
-    email: Optional[EmailStr] = None # Địa chỉ Email (phải đúng định dạng)
-    is_active: bool = True         # Trạng thái tài khoản (Đang hoạt động hay không)
+    username: str                          # Tên đăng nhập
+    phone: Union[str, None] = None          # Số điện thoại
+    email: Union[EmailStr, str, None] = None # Địa chỉ Email
+    is_active: bool = True                 # Trạng thái tài khoản (Đang hoạt động hay không)
 
 class AccountCreate(AccountBase):
     """
     Schema dùng để tạo mới một tài khoản.
     Yêu cầu mật khẩu và các thông tin liên kết nhân sự/phòng ban.
     """
-    password: str                  # Mật khẩu
-    phone: str                     # Số điện thoại (bắt buộc khi tạo)
-    employee_id: Optional[str] = None # Mã nhân viên (từ HRM)
-    employee_code: Optional[str] = None # Mã nhân viên (phương án 2)
-    full_name: Optional[str] = None # Họ và tên
-    name: Optional[str] = None     # Họ và tên (phương án 2)
-    role_id: Optional[int] = None   # ID vai trò (Role)
-    permission_id: Optional[int] = None # ID quyền hạn (Permission)
-    stage_id: Optional[int] = None  # ID công đoạn (Stage) phụ trách
-    stage_ids: Optional[List[int]] = None # [NEW] Danh sách ID các công đoạn phụ trách
-    permission_level: Optional[str] = None # Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
+    password: str                          # Mật khẩu
+    phone: Union[str, None] = None          # Số điện thoại (tùy chọn)
+    employee_id: Union[str, None] = None    # Mã nhân viên (từ HRM)
+    employee_code: Union[str, None] = None  # Mã nhân viên (phương án 2)
+    full_name: Union[str, None] = None      # Họ và tên
+    name: Union[str, None] = None           # Họ và tên (phương án 2)
+    role_id: Union[int, None] = None        # ID vai trò (Role)
+    permission_id: Union[int, None] = None  # ID quyền hạn (Permission)
+    stage_id: Union[int, None] = None       # ID công đoạn (Stage) phụ trách
+    stage_ids: Union[List[int], None] = None # Danh sách ID các công đoạn phụ trách
+    permission_level: Union[str, None] = None # Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
 
 
 class AccountUpdate(BaseModel):
@@ -35,16 +35,16 @@ class AccountUpdate(BaseModel):
     Schema dùng để cập nhật thông tin tài khoản.
     Tất cả các trường đều là tùy chọn.
     """
-    email: Optional[EmailStr] = None
-    phone: Optional[str] = None
-    password: Optional[str] = None
-    is_active: Optional[bool] = None
-    full_name: Optional[str] = None
-    name: Optional[str] = None
-    employee_id: Optional[str] = None
-    employee_code: Optional[str] = None
-    status: Optional[str] = None
-    permission_level: Optional[str] = None # Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
+    email: Union[EmailStr, str, None] = None
+    phone: Union[str, None] = None
+    password: Union[str, None] = None
+    is_active: Union[bool, None] = None
+    full_name: Union[str, None] = None
+    name: Union[str, None] = None
+    employee_id: Union[str, None] = None
+    employee_code: Union[str, None] = None
+    status: Union[str, None] = None
+    permission_level: Union[str, None] = None # Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
 
 class Account(AccountBase):
     """
@@ -63,16 +63,16 @@ class AccountInfo(AccountBase):
     Thường dùng cho các bảng danh sách người dùng.
     """
     id: int
-    employee_id: Optional[str] = None
-    full_name: Optional[str] = None
-    status: Optional[str] = None
-    created_at: Optional[datetime] = None # Thời gian tạo
+    employee_id: Union[str, None] = None
+    full_name: Union[str, None] = None
+    status: Union[str, None] = None
+    created_at: Union[str, datetime, None] = None # Thời gian tạo
     
     # Thông tin mở rộng từ các phép Join (Role, Stage)
-    role_name: Optional[str] = None # Tên vai trò
-    permission_name: Optional[str] = None # Tên chức vụ
-    stage_name: Optional[str] = None # Tên công đoạn phụ trách
-    permission_level: Optional[str] = None # Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
+    role_name: Union[str, None] = None # Tên vai trò
+    permission_name: Union[str, None] = None # Tên chức vụ
+    stage_name: Union[str, None] = None # Tên công đoạn phụ trách
+    permission_level: Union[str, None] = None # Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
 
     class Config:
         from_attributes = True
@@ -94,26 +94,26 @@ class Token(BaseModel):
     """
     access_token: str   # JWT Token chuỗi
     token_type: str     # Loại token (thường là "bearer")
-    username: Optional[str] = None
-    full_name: Optional[str] = None
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    employee_id: Optional[str] = None
-    role_name: Optional[str] = None
-    role_description: Optional[str] = None
-    permission_name: Optional[str] = None
-    permission_description: Optional[str] = None
-    stage_name: Optional[str] = None
-    stage_description: Optional[str] = None
-    id: Optional[int] = None
-    screen_permissions: Optional[str] = None
-    permission_level: Optional[str] = None # Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
+    username: Union[str, None] = None
+    full_name: Union[str, None] = None
+    email: Union[str, None] = None
+    phone: Union[str, None] = None
+    employee_id: Union[str, None] = None
+    role_name: Union[str, None] = None
+    role_description: Union[str, None] = None
+    permission_name: Union[str, None] = None
+    permission_description: Union[str, None] = None
+    stage_name: Union[str, None] = None
+    stage_description: Union[str, None] = None
+    id: Union[int, None] = None
+    screen_permissions: Union[str, None] = None
+    permission_level: Union[str, None] = None # Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
 
 class TokenData(BaseModel):
     """
     Schema chứa dữ liệu giải mã từ JWT token (sub/username).
     """
-    username: Optional[str] = None
+    username: Union[str, None] = None
 
 class FCMTokenUpdate(BaseModel):
     """
@@ -123,5 +123,8 @@ class FCMTokenUpdate(BaseModel):
     fcm_token: str
 
 class PasswordChange(BaseModel):
+    """
+    Schema dùng để thay đổi mật khẩu tài khoản người dùng.
+    """
     old_password: str
     new_password: str

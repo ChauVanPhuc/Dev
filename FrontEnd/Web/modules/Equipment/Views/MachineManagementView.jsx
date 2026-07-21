@@ -76,6 +76,10 @@ const MachineManagementView = () => {
   };
 
   useEffect(() => {
+    fetchMachines();
+  }, []);
+
+  useEffect(() => {
     if (screenCode && title) {
       if (setCustomTitle) setCustomTitle(title);
       if (setCustomSubtitle) setCustomSubtitle(subtitle || '');

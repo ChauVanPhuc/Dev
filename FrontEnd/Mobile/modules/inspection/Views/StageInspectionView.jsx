@@ -255,7 +255,7 @@ const StageInspection = () => {
   }, [user]);
 
   const filteredHistory = useMemo(() => {
-    return historyList.filter(item => item.inspection_type === 'dau-vao').slice(0, 3);
+    return historyList.filter(item => item.inspection_type === 'nhap-kho' || item.inspection_type === 'dau-vao').slice(0, 3);
   }, [historyList]);
 
   // Load PO directly on search
@@ -782,7 +782,8 @@ const StageInspection = () => {
         ocrFormData.append('file', files[0]);
 
         const res = await apiClient.post('inspections/upload-ocr', ocrFormData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 35000
         });
 
         if (res.data && res.data.value !== undefined) {
@@ -970,7 +971,7 @@ const StageInspection = () => {
         }
 
         const payload = {
-          inspection_type: 'dau-vao',
+          inspection_type: 'nhap-kho',
           batch_no: poHeader.po_code,
           product_sku: item?.item_code || itemCode,
           inspector_name: user?.full_name || "Người kiểm tra",

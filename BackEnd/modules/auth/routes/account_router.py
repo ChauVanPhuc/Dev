@@ -256,12 +256,12 @@ def update_user(account_id: int, account: AccountUpdate, db: Session = Depends(g
     """
     [PUT] Cập nhật thông tin cơ bản của một tài khoản.
     """
-    if account.phone is not None:
-        if account.phone.strip() == "":
-            raise HTTPException(status_code=400, detail="Số điện thoại không được để trống")
-        existing_phone = account_controller.get_account_by_phone(db, phone=account.phone)
-        if existing_phone and existing_phone.id != account_id:
-            raise HTTPException(status_code=400, detail="Số điện thoại đã được đăng ký bởi tài khoản khác")
+    if account.phone:
+        phone_val = account.phone.strip()
+        if phone_val:
+            existing_phone = account_controller.get_account_by_phone(db, phone=phone_val)
+            if existing_phone and existing_phone.id != account_id:
+                raise HTTPException(status_code=400, detail="Số điện thoại đã được đăng ký bởi tài khoản khác")
 
     db_account = account_controller.update_account(db=db, account_id=account_id, account=account)
     if not db_account:

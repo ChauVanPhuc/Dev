@@ -24,6 +24,7 @@ const EquipmentDetailView = () => {
   const [pdfFileName, setPdfFileName] = useState('');
   const [pdfBase64Data, setPdfBase64Data] = useState('');
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [imageError, setImageError] = useState({});
 
   const loadData = async () => {
     setLoading(true);
@@ -42,6 +43,12 @@ const EquipmentDetailView = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (id) {
+      loadData();
+    }
+  }, [id]);
 
   useEffect(() => {
     if (screenCode && title) {
@@ -122,13 +129,26 @@ const EquipmentDetailView = () => {
           {(() => {
             const parseImages = (imagesStr) => {
               if (!imagesStr || !imagesStr.trim()) return [];
+              let list = [];
               try {
                 const parsed = JSON.parse(imagesStr);
-                if (Array.isArray(parsed)) return parsed.filter(img => img && img.trim());
-              } catch {}
-              return [imagesStr];
+                if (Array.isArray(parsed)) list = parsed;
+                else if (typeof parsed === 'string') list = [parsed];
+              } catch {
+                if (imagesStr.includes(',')) {
+                  list = imagesStr.split(',');
+                } else {
+                  list = [imagesStr];
+                }
+              }
+              return list
+                .map(item => String(item).trim())
+                .filter(item => item && item !== 'null' && item !== 'undefined' && item !== 'none')
+                .map(item => (item.startsWith('/') && !item.startsWith('//')) ? getBaseURL() + item : item);
             };
             const activeImages = parseImages(equipment.images);
+            const currentImgSrc = activeImages[activeImageIndex] || activeImages[0];
+            const hasValidImage = activeImages.length > 0 && currentImgSrc && !imageError[currentImgSrc];
 
             return (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
@@ -137,14 +157,17 @@ const EquipmentDetailView = () => {
                   display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center',
                   color: '#fff', fontSize: '48px', fontWeight: '800', overflow: 'hidden'
                 }}>
-                  {activeImages.length > 0 ? (
+                  {hasValidImage ? (
                     <img 
-                      src={activeImages[activeImageIndex] || activeImages[0]} 
+                      src={currentImgSrc} 
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
                       alt={equipment.name} 
+                      onError={() => {
+                        setImageError(prev => ({ ...prev, [currentImgSrc]: true }));
+                      }}
                     />
                   ) : (
-                    equipment.name ? equipment.name.charAt(0).toUpperCase() : 'E'
+                    <span>{equipment.name ? equipment.name.charAt(0).toUpperCase() : 'E'}</span>
                   )}
                 </div>
 

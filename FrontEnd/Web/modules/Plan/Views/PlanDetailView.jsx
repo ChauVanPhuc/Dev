@@ -160,13 +160,35 @@ const PlanDetail = () => {
 
 
 
+    const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/plan/:id');
+
+    const fetchPlanDetail = async () => {
+        setLoading(true);
+        try {
+            const data = await planService.getPlanById(id, page * limit, limit, searchTerm);
+            setPlan(data);
+            setTotalOrders(data.total_orders || (data.orders ? data.orders.length : 0));
+        } catch (error) {
+            console.error('Lỗi khi tải chi tiết kế hoạch sản xuất:', error);
+            toast('error', 'Không thể tải chi tiết kế hoạch sản xuất.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
-    if (screenCode && title) {
-      if (setCustomTitle) setCustomTitle(title);
-      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
-      if (setCustomScreenCode) setCustomScreenCode(screenCode);
-    }
-  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+        if (id) {
+            fetchPlanDetail();
+        }
+    }, [id, page, limit, searchTerm]);
+
+    useEffect(() => {
+        if (screenCode && title) {
+            if (setCustomTitle) setCustomTitle(title);
+            if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+            if (setCustomScreenCode) setCustomScreenCode(screenCode);
+        }
+    }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
 
 

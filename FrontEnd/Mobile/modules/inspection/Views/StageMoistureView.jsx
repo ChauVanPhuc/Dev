@@ -106,7 +106,7 @@ const StageMoistureView = () => {
   }, []);
 
   const filteredHistory = useMemo(() => {
-    return historyList.filter(item => item.inspection_type === 'dau-vao').slice(0, 3);
+    return historyList.filter(item => ['do-am', 'kich-thuoc', 'ngoai-quan', 'chuc-nang', 'cong-doan'].includes(item.inspection_type)).slice(0, 3);
   }, [historyList]);
 
   const filteredPOs = useMemo(() => {
@@ -341,7 +341,8 @@ const StageMoistureView = () => {
       const ocrFormData = new FormData();
       ocrFormData.append('file', file);
       const ocrRes = await apiClient.post('inspections/upload-ocr', ocrFormData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 35000
       });
 
       if (ocrRes.data && ocrRes.data.value !== undefined && ocrRes.data.value !== null) {
@@ -453,8 +454,45 @@ const StageMoistureView = () => {
 
       const overallConclusion = (failedQty > 0 || samples.some(s => s.result === 'fail')) ? 'fail' : 'pass';
 
+      const paramToTypeMap = {
+        moisture: 'do-am',
+        size: 'kich-thuoc',
+        visual: 'ngoai-quan',
+        functional: 'chuc-nang'
+      };
+
+      const stageMap = {
+        moisture: 'Phôi gỗ',
+        size: 'Định hình',
+        visual: 'Lắp ráp',
+        functional: 'Thành phẩm'
+      };
+
+      const stageName = stageMap[activeParameter] || 'Phôi gỗ';
+      const calcFailedQty = parseInt(failedQty) || samples.filter(s => s.result === 'fail').length;
+
+      // Tự tạo danh sách lỗi để đồng bộ tự động vào Ghi nhận lỗi hàng ngày
+      const defectsList = [];
+      if (overallConclusion === 'fail' || calcFailedQty > 0) {
+        let defectId = 108; // Gỗ cao ẩm
+        let defectName = 'Gỗ cao ẩm';
+        if (activeParameter === 'size') {
+          defectId = 131; // Sai kích thước
+          defectName = 'Sai kích thước';
+        } else if (activeParameter === 'visual') {
+          defectId = 208; // Nứt tét
+          defectName = 'Nứt tét';
+        }
+
+        defectsList.push({
+          defect_id: defectId,
+          defect_name: defectName,
+          quantity: calcFailedQty > 0 ? calcFailedQty : 1
+        });
+      }
+
       const payload = {
-        inspection_type: 'dau-vao',
+        inspection_type: paramToTypeMap[activeParameter] || 'do-am',
         batch_no: poHeader.po_code,
         product_sku: selectedItem.item_code,
         inspector_name: user?.full_name || "Người kiểm tra",
@@ -467,10 +505,12 @@ const StageMoistureView = () => {
           total_qty: selectedItem.quantity || 0,
           sample_qty: samples.length,
           is_wood: true,
+          stage: stageName,
+          defects: defectsList,
           action: overallConclusion === 'pass' ? 'luu-kho' : 'tra-ve',
           samples: samples,
           inspected_qty: parseInt(inspectedQty) || 0,
-          failed_qty: parseInt(failedQty) || 0
+          failed_qty: calcFailedQty
         }),
         images_json: JSON.stringify({ "Ảnh kiểm tra": allImages })
       };

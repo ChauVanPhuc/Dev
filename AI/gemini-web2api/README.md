@@ -95,6 +95,76 @@ gemini-3.5-flash-thinking@think=2   # medium
 gemini-3.5-flash-thinking@think=4   # shallowest
 ```
 
+## Vision/Multimodal Support
+
+**All models support image input** via OpenAI-compatible `image_url` format. Cookie authentication is **required** for image upload.
+
+### Quick Setup for Vision
+
+```bash
+# 1. Extract cookies (helper script)
+python extract_cookie.py
+
+# 2. Update config.json
+# Add: "cookie_file": "cookie.txt"
+
+# 3. Test vision
+python test_vision.py your_image.jpg
+```
+
+### Example: Image Analysis
+
+```python
+from openai import OpenAI
+import base64
+
+client = OpenAI(base_url="http://localhost:8081/v1", api_key="sk-gemini")
+
+# Read and encode image
+with open("image.jpg", "rb") as f:
+    image_data = base64.b64encode(f.read()).decode()
+
+response = client.chat.completions.create(
+    model="gemini-3.5-flash",
+    messages=[{
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "What's in this image?"},
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{image_data}"
+                }
+            }
+        ]
+    }]
+)
+print(response.choices[0].message.content)
+```
+
+### curl Example
+
+```bash
+curl http://localhost:8081/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-gemini" \
+  -d '{
+    "model": "gemini-3.5-flash",
+    "messages": [{
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "Describe this image"},
+        {
+          "type": "image_url",
+          "image_url": {"url": "data:image/jpeg;base64,/9j/4AAQ..."}
+        }
+      ]
+    }]
+  }'
+```
+
+**📚 Detailed setup guide**: See [SETUP_VISION.md](SETUP_VISION.md)
+
 ## Optional: Cookie for Pro
 
 Anonymous access works for all models, but `gemini-3.1-pro` routes to Flash without authentication. To get real Pro routing, you need a **Gemini Advanced (paid subscription)** account cookie:

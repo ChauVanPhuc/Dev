@@ -747,9 +747,9 @@ const FirstArticleInspectionView = () => {
         .map(d => {
           const found = defectTypes.find(t => t.id.toString() === d.defectId.toString());
           return {
-            defect_id: d.defectId,
+            defect_id: parseInt(d.defectId, 10),
             defect_name: found ? found.name : `Lỗi #${d.defectId}`,
-            quantity: d.quantity
+            quantity: parseInt(d.quantity, 10) || 1
           };
         });
 
@@ -795,7 +795,7 @@ const FirstArticleInspectionView = () => {
       setMessageConfig({
         type: 'success',
         title: 'Thành công',
-        message: 'Đã lưu kết quả kiểm tra mẫu đầu tiên thành công!'
+        message: 'Đã lưu phiếu mẫu đầu tiên & tự động cộng dồn lỗi vào thống kê lỗi hằng ngày!'
       });
       setIsMessageOpen(true);
 

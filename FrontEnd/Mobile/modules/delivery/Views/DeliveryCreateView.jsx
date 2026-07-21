@@ -467,24 +467,51 @@ const DeliveryCreate = () => {
         // Lấy tất cả KT của KHSX này theo công đoạn
         const allInsps = await fetchInspectionsByPlan(selectedPlanId, stageParam)
 
+        const clean = (str) => {
+          if (!str) return '';
+          return str
+            .replace(/^\[[^\]]+\]\s*/, '') // Loại bỏ tiền tố mã PO như [FOL-0430]
+            .trim()
+            .toLowerCase()
+            .normalize('NFC')
+            .replace(/\s+/g, ' ');
+        };
+
+        const cleanSpec = (s) => {
+          const val = (s || '').trim().toLowerCase().normalize('NFC').replace(/\s+/g, ' ');
+          if (!val || val === 'không có' || val === 'n/a' || val === 'none' || val === 'null') return 'không có';
+          return val;
+        };
+
+        const pName1 = clean(selectedPartKey);
+        const pName2 = clean(selectedPart?.name);
+        const pName3 = clean(selectedPart?.displayName);
+        const pName4 = clean(selectedPart?.sku);
+        const spec2 = cleanSpec(selectedSpecification);
+
         // Lọc đúng chi tiết và quy cách đang chọn
         const partInsps = allInsps.filter(i => {
-          const iName = (i.part_name || '').trim().toLowerCase().normalize('NFC').replace(/\s+/g, ' ')
-          const pName = (selectedPartKey || '').trim().toLowerCase().normalize('NFC').replace(/\s+/g, ' ')
-          const nameMatches = iName === pName
+          const iName = clean(i.part_name);
+          const nameMatches = (
+            iName === pName1 ||
+            (pName2 && iName === pName2) ||
+            (pName3 && iName === pName3) ||
+            (pName4 && iName === pName4) ||
+            (iName && pName1.includes(iName)) ||
+            (iName && pName2 && pName2.includes(iName))
+          );
 
-          const spec1 = (i.specification || '').trim().toLowerCase().normalize('NFC').replace(/\s+/g, ' ') || 'không có'
-          const spec2 = (selectedSpecification || '').trim().toLowerCase().normalize('NFC').replace(/\s+/g, ' ') || 'không có'
-          return nameMatches && spec1 === spec2
-        })
-        setInspections(partInsps)
+          const spec1 = cleanSpec(i.specification);
+          return nameMatches && spec1 === spec2;
+        });
+        setInspections(partInsps);
       } catch (err) {
-        console.error("Lỗi khi kiểm tra dữ liệu KT:", err)
-        setInspections([])
+        console.error("Lỗi khi kiểm tra dữ liệu KT:", err);
+        setInspections([]);
       }
-    }
-    checkInspection()
-  }, [selectedPlanId, selectedPartKey, selectedSpecification, user, fetchInspectionsByPlan])
+    };
+    checkInspection();
+  }, [selectedPlanId, selectedPartKey, selectedSpecification, selectedPart, user, fetchInspectionsByPlan]);
 
   const handleAddPhoto = () => {
     if (photos.length < 3 && fileInputRef.current) {

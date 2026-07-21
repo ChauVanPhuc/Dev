@@ -36,6 +36,10 @@ const EquipmentHistoryView = () => {
   };
 
   useEffect(() => {
+    fetchInspections();
+  }, []);
+
+  useEffect(() => {
     if (screenCode && title) {
       if (setCustomTitle) setCustomTitle(title);
       if (setCustomSubtitle) setCustomSubtitle(subtitle || '');

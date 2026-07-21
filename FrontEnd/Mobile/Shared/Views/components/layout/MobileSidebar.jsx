@@ -124,7 +124,7 @@ const Sidebar = () => {
       hasSub: true,
       items: [
         { label: 'Kiểm tra nhập kho', path: '/inspection-stage' },
-        { label: 'Kiểm tra độ ẩm', path: '/inspection-stage-moisture' },
+        { label: 'Kiểm tra công đoạn', path: '/inspection-stage-moisture' },
         { label: 'Kiểm tra quy trình', path: '/inspection-stage-process' },
         { label: 'Kiểm tra mẫu đầu tiên', path: '/inspection-first-article' },
         { label: 'Kiểm tra bám dính', path: '/inspection-stage-adhesion' },

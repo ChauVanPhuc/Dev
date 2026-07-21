@@ -263,7 +263,7 @@ const StageProcessView = () => {
   return (
     <Layout>
       <div style={{ padding: '16px', backgroundColor: '#f8fafc', minHeight: '100vh', paddingBottom: '100px' }}>
-        <PageHeader title="G7 - Smart Flow" subTitle="Phiếu kiểm tra theo công đoạn" />
+        <PageHeader title="G7 - Smart Flow" subTitle="Phiếu kiểm tra quy trình" />
 
         {/* Process Selection (Quy trình) */}
         <div style={{ marginBottom: '16px' }}>

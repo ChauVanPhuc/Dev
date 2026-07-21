@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import api from '@webShared/Services/api.service';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
+import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 
 // Icons mapping for screens
 const SCREEN_ICONS = {
@@ -582,6 +583,7 @@ const permissionLevels = [
  */
 const UserCreate = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const outletContext = useOutletContext();
   const setCustomTitle = outletContext?.setCustomTitle;
   const setCustomSubtitle = outletContext?.setCustomSubtitle;
@@ -641,9 +643,9 @@ const UserCreate = () => {
   const [selectedFactory, setSelectedFactory] = useState('');
 
   const getFactoryCode = (stageName) => {
-    if (!stageName) return 'Khác';
+    if (!stageName) return 'NM1';
     const match = stageName.match(/^(NM\d+)/i);
-    return match ? match[1].toUpperCase() : 'Khác';
+    return match ? match[1].toUpperCase() : 'NM1';
   };
 
   const uniqueFactories = useMemo(() => {
@@ -729,7 +731,20 @@ const UserCreate = () => {
 
   const filteredStages = useMemo(() => {
     if (!selectedFactory) return stages;
-    return stages.filter(s => getFactoryCode(s.name) === selectedFactory);
+    const matching = stages.filter(s => getFactoryCode(s.name) === selectedFactory);
+    const seen = new Set();
+    const result = [];
+    for (const s of matching) {
+      const cleanName = s.name.replace(/^NM\d+\s*[-:]\s*/i, '').trim();
+      if (!seen.has(cleanName)) {
+        seen.add(cleanName);
+        result.push({
+          ...s,
+          displayName: cleanName
+        });
+      }
+    }
+    return result;
   }, [stages, selectedFactory]);
 
   // 1. Lấy danh sách Roles khi mount
@@ -782,17 +797,23 @@ const UserCreate = () => {
     }
   }, [formData.role_id]);
 
-  // 3. Khi Permission thay đổi -> Lấy danh sách Stages
+  // 3. Khi Permission thay đổi -> Lấy danh sách Stages (có fallback tự động nếu trống)
   useEffect(() => {
     if (formData.permission_id) {
       const fetchStages = async () => {
         try {
-          const data = await api.get(`/permissions/${formData.permission_id}/stages`);
-          setStages(data);
-          // Reset Stage
+          let data = await api.get(`/permissions/${formData.permission_id}/stages`);
+          if (!data || data.length === 0) {
+            data = await api.get('/stages/');
+          }
+          setStages(Array.isArray(data) ? data : []);
           setFormData(prev => ({ ...prev, stage_ids: [] }));
         } catch (err) {
           console.error('Lỗi khi tải Stages:', err);
+          try {
+            const fallback = await api.get('/stages/');
+            setStages(Array.isArray(fallback) ? fallback : []);
+          } catch (e) {}
         }
       };
       fetchStages();
@@ -1119,6 +1140,9 @@ const UserCreate = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (!formData.phone || !formData.phone.trim()) {
+      toast('warning', 'Nhắc nhở: Chưa nhập Số điện thoại cho tài khoản (không bắt buộc).');
+    }
     setShowConfirmModal(true);
   };
 
@@ -1130,12 +1154,20 @@ const UserCreate = () => {
       // Làm sạch dữ liệu trước khi gửi
       const dataToSend = { 
         ...formData,
+        username: (formData.username && formData.username.trim()) ? formData.username.trim() : (formData.full_name ? generateUsername(formData.full_name) : ''),
+        full_name: (formData.full_name && formData.full_name.trim()) ? formData.full_name.trim() : null,
+        email: (formData.email && formData.email.trim()) ? formData.email.trim() : null,
+        phone: (formData.phone && formData.phone.trim()) ? formData.phone.trim() : null,
         is_active: formData.status === 'Đang sử dụng'
       };
+
+      if (!dataToSend.phone) delete dataToSend.phone;
+      if (!dataToSend.email) delete dataToSend.email;
+      if (!dataToSend.employee_id) delete dataToSend.employee_id;
       
       // Chuyển các trường ID từ chuỗi rỗng thành số hoặc null
       ['role_id', 'permission_id'].forEach(field => {
-        if (dataToSend[field] === '') {
+        if (!dataToSend[field] || dataToSend[field] === '') {
           dataToSend[field] = null;
         } else {
           dataToSend[field] = parseInt(dataToSend[field], 10);
@@ -1159,14 +1191,9 @@ const UserCreate = () => {
       } else {
         dataToSend.stage_ids = null;
         dataToSend.stage_id = null;
-        if (dataToSend.permission_level === '') {
+        if (!dataToSend.permission_level || dataToSend.permission_level === '') {
           dataToSend.permission_level = null;
         }
-      }
-
-      // Nếu email rỗng, chuyển thành null để tránh lỗi EmailStr
-      if (dataToSend.email === '') {
-        dataToSend.email = null;
       }
 
       console.log('Gửi dữ liệu tạo tài khoản:', dataToSend);
@@ -1194,7 +1221,15 @@ const UserCreate = () => {
       }, 2000);
     } catch (err) {
       console.error('Lỗi khi tạo tài khoản:', err);
-      setError(err.response?.data?.detail || 'Có lỗi xảy ra khi tạo tài khoản. Hãy kiểm tra lại dữ liệu.');
+      let detail = err.response?.data?.detail;
+      if (Array.isArray(detail)) {
+        detail = detail.map(item => `${item.loc?.[item.loc?.length - 1] || 'Trường'}: ${item.msg}`).join(', ');
+      } else if (typeof detail === 'object' && detail !== null) {
+        detail = JSON.stringify(detail);
+      }
+      const errMsg = detail || 'Có lỗi xảy ra khi tạo tài khoản. Hãy kiểm tra lại dữ liệu.';
+      setError(errMsg);
+      toast('error', errMsg);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setLoading(false);
@@ -1204,7 +1239,7 @@ const UserCreate = () => {
   return (
     <div className="user-create-container">
       <div className="create-content-wrapper">
-        {error && <div className="error-message">{error}</div>}
+        {error && <div className="error-message">{typeof error === 'string' ? error : JSON.stringify(error)}</div>}
         {toastMessage && <div className="success-message" style={{ backgroundColor: '#EBFDF5', color: '#047857', padding: '10px 16px', borderRadius: '8px', marginBottom: '14px', fontSize: '0.82rem', border: '1px solid #A7F3D0', fontWeight: '600' }}>{toastMessage}</div>}
         
         <form onSubmit={handleSubmit} className="create-form-vertical-layout">
@@ -1333,14 +1368,13 @@ const UserCreate = () => {
                   </div>
 
                   <div className="form-group">
-                    <label>Số điện thoại</label>
+                    <label>Số điện thoại <span style={{ fontSize: '0.75rem', color: '#8C7B72', fontWeight: 'normal' }}>(Không bắt buộc)</span></label>
                     <input 
                       type="tel" 
                       name="phone" 
                       placeholder="VD: 0987654321 hoặc +84987654321" 
                       value={formData.phone}
                       onChange={handleChange}
-                      required
                       inputMode="tel"
                     />
                   </div>
@@ -1496,7 +1530,7 @@ const UserCreate = () => {
                                     onChange={(e) => handleStageCheckboxChange(s.id, e.target.checked)}
                                     style={{ margin: 0, width: '15px', height: '15px', accentColor: '#7B5233', cursor: 'pointer' }}
                                   />
-                                  <span>{s.name}</span>
+                                  <span>{s.displayName || s.name}</span>
                                 </label>
                               ))}
                             </div>

@@ -16,7 +16,10 @@ import {
   CheckCircle2,
   AlertTriangle,
   FileDown,
-  Download
+  Download,
+  FileSpreadsheet,
+  Printer,
+  MoreVertical
 } from 'lucide-react';
 import api, { API_ROOT } from '@webShared/Services/api.service';
 import ExcelJS from 'exceljs';
@@ -25,24 +28,31 @@ import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const getInspectionTypeLabel = (type) => {
   switch (type) {
+    case 'dau-vao':
+    case 'nhap-kho': return 'Nhập kho';
+    case 'do-am': return 'Độ ẩm';
+    case 'kich-thuoc': return 'Kích thước';
+    case 'ngoai-quan': return 'Ngoại quan';
+    case 'chuc-nang': return 'Chức năng';
+    case 'cong-doan': return 'Công đoạn';
     case 'bam-dinh': return 'Bám dính';
     case 'sau-dong-goi': return 'Sau đóng gói';
     case 'phu-kien': return 'Phụ kiện';
     case 'quy-trinh': return 'Quy trình';
-    case 'do-am': return 'Độ ẩm / Kích thước';
     case 'mau-dau-tien': return 'Mẫu đầu tiên';
     default: return type || 'N/A';
   }
 };
 
 const InspectionReports = () => {
-  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
   
   // Lấy metadata từ database thay vì hardcode
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/inspection-reports');
   
   // Tab control: 'stage' | 'input' | 'daily' | 'process'
   const [activeTab, setActiveTab] = useState('stage');
+  const [activeActionMenu, setActiveActionMenu] = useState(null);
   
   // Data lists
   const [stageInspections, setStageInspections] = useState([]);
@@ -100,6 +110,137 @@ const InspectionReports = () => {
     }
   }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
+  // Close action dropdown menu on global click
+  useEffect(() => {
+    const handleGlobalClick = () => setActiveActionMenu(null);
+    window.addEventListener('click', handleGlobalClick);
+    return () => window.removeEventListener('click', handleGlobalClick);
+  }, []);
+
+  const renderActionDropdown = (item, tabType) => {
+    const menuKey = `${tabType}-${item.id}`;
+    const isOpen = activeActionMenu === menuKey;
+
+    return (
+      <div style={{ position: 'relative', display: 'inline-block' }} onClick={(e) => e.stopPropagation()}>
+        <button
+          onClick={() => setActiveActionMenu(isOpen ? null : menuKey)}
+          style={{
+            border: 'none',
+            background: isOpen ? '#EADCC9' : 'transparent',
+            cursor: 'pointer',
+            color: '#7B5233',
+            padding: '6px 8px',
+            borderRadius: '6px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.2s'
+          }}
+          title="Thao tác"
+        >
+          <MoreVertical size={18} />
+        </button>
+
+        {isOpen && (
+          <div 
+            style={{
+              position: 'absolute',
+              right: 0,
+              top: '100%',
+              marginTop: '4px',
+              backgroundColor: '#ffffff',
+              borderRadius: '8px',
+              boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+              border: '1px solid #EADCC9',
+              zIndex: 1000,
+              minWidth: '150px',
+              padding: '4px 0',
+              textAlign: 'left'
+            }}
+          >
+            <button
+              onClick={() => {
+                setActiveActionMenu(null);
+                if (tabType === 'daily') setSelectedDaily(item);
+                else if (tabType === 'input') setSelectedInbound(item);
+                else setSelectedInspection(item);
+              }}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: 'none',
+                background: 'transparent',
+                textAlign: 'left',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '0.82rem',
+                color: '#2D1A12',
+                fontWeight: '600'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF6F0'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <Eye size={15} style={{ color: '#7B5233' }} /> Xem chi tiết
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveActionMenu(null);
+                handleExportSingleExcel(item, tabType);
+              }}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: 'none',
+                background: 'transparent',
+                textAlign: 'left',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '0.82rem',
+                color: '#15803d',
+                fontWeight: '600'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F0FDF4'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <FileSpreadsheet size={15} /> Xuất Excel
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveActionMenu(null);
+                handleExportSinglePDF(item, tabType);
+              }}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: 'none',
+                background: 'transparent',
+                textAlign: 'left',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '0.82rem',
+                color: '#0284c7',
+                fontWeight: '600'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F0F9FF'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <Printer size={15} /> In / Xuất PDF
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // Load all data on mount / refresh
   const fetchData = async () => {
     setLoading(true);
@@ -138,8 +279,8 @@ const InspectionReports = () => {
 
   // --- FILTERING & SORTING STAGE INSPECTIONS (Excludes 'quy-trinh', 'mau-dau-tien', and 'do-am') ---
   const filteredStageList = useMemo(() => {
-    // Filter out quy-trinh, mau-dau-tien, and do-am
-    let result = stageInspections.filter(item => item.inspection_type !== 'quy-trinh' && item.inspection_type !== 'mau-dau-tien' && item.inspection_type !== 'do-am');
+    // Filter out quy-trinh and mau-dau-tien (which have dedicated tabs)
+    let result = stageInspections.filter(item => item.inspection_type !== 'quy-trinh' && item.inspection_type !== 'mau-dau-tien');
 
     // Search filter (PO, SKU, Inspector)
     if (stageSearch.trim()) {
@@ -154,7 +295,11 @@ const InspectionReports = () => {
 
     // Type filter
     if (stageTypeFilter !== 'all') {
-      result = result.filter(item => item.inspection_type === stageTypeFilter);
+      if (stageTypeFilter === 'nhap-kho') {
+        result = result.filter(item => item.inspection_type === 'nhap-kho' || item.inspection_type === 'dau-vao');
+      } else {
+        result = result.filter(item => item.inspection_type === stageTypeFilter);
+      }
     }
 
     // Conclusion/Status filter
@@ -176,9 +321,17 @@ const InspectionReports = () => {
 
     // Sort logic
     if (stageSort === 'date_desc') {
-      result.sort((a, b) => new Date(b.inspection_date) - new Date(a.inspection_date));
+      result.sort((a, b) => {
+        const timeDiff = new Date(b.created_at || b.inspection_date) - new Date(a.created_at || a.inspection_date);
+        if (timeDiff !== 0) return timeDiff;
+        return (b.id || 0) - (a.id || 0);
+      });
     } else if (stageSort === 'date_asc') {
-      result.sort((a, b) => new Date(a.inspection_date) - new Date(b.inspection_date));
+      result.sort((a, b) => {
+        const timeDiff = new Date(a.created_at || a.inspection_date) - new Date(b.created_at || b.inspection_date);
+        if (timeDiff !== 0) return timeDiff;
+        return (a.id || 0) - (b.id || 0);
+      });
     } else if (stageSort === 'po_asc') {
       result.sort((a, b) => (a.batch_no || '').localeCompare(b.batch_no || ''));
     } else if (stageSort === 'po_desc') {
@@ -221,9 +374,17 @@ const InspectionReports = () => {
 
     // Sort logic
     if (stageSort === 'date_desc') {
-      result.sort((a, b) => new Date(b.inspection_date) - new Date(a.inspection_date));
+      result.sort((a, b) => {
+        const timeDiff = new Date(b.created_at || b.inspection_date) - new Date(a.created_at || a.inspection_date);
+        if (timeDiff !== 0) return timeDiff;
+        return (b.id || 0) - (a.id || 0);
+      });
     } else if (stageSort === 'date_asc') {
-      result.sort((a, b) => new Date(a.inspection_date) - new Date(b.inspection_date));
+      result.sort((a, b) => {
+        const timeDiff = new Date(a.created_at || a.inspection_date) - new Date(b.created_at || b.inspection_date);
+        if (timeDiff !== 0) return timeDiff;
+        return (a.id || 0) - (b.id || 0);
+      });
     } else if (stageSort === 'po_asc') {
       result.sort((a, b) => (a.batch_no || '').localeCompare(b.batch_no || ''));
     } else if (stageSort === 'po_desc') {
@@ -266,9 +427,17 @@ const InspectionReports = () => {
 
     // Sort logic
     if (inboundSort === 'date_desc') {
-      result.sort((a, b) => new Date(b.inspection_date) - new Date(a.inspection_date));
+      result.sort((a, b) => {
+        const timeDiff = new Date(b.created_at || b.inspection_date) - new Date(a.created_at || a.inspection_date);
+        if (timeDiff !== 0) return timeDiff;
+        return (b.id || 0) - (a.id || 0);
+      });
     } else if (inboundSort === 'date_asc') {
-      result.sort((a, b) => new Date(a.inspection_date) - new Date(b.inspection_date));
+      result.sort((a, b) => {
+        const timeDiff = new Date(a.created_at || a.inspection_date) - new Date(b.created_at || b.inspection_date);
+        if (timeDiff !== 0) return timeDiff;
+        return (a.id || 0) - (b.id || 0);
+      });
     } else if (inboundSort === 'part_asc') {
       result.sort((a, b) => (a.product_sku || '').localeCompare(b.product_sku || ''));
     } else if (inboundSort === 'part_desc') {
@@ -305,9 +474,17 @@ const InspectionReports = () => {
 
     // Sort logic
     if (dailySort === 'date_desc') {
-      result.sort((a, b) => new Date(b.inspection_date) - new Date(a.inspection_date));
+      result.sort((a, b) => {
+        const timeDiff = new Date(b.created_at || b.inspection_date) - new Date(a.created_at || a.inspection_date);
+        if (timeDiff !== 0) return timeDiff;
+        return (b.id || 0) - (a.id || 0);
+      });
     } else if (dailySort === 'date_asc') {
-      result.sort((a, b) => new Date(a.inspection_date) - new Date(b.inspection_date));
+      result.sort((a, b) => {
+        const timeDiff = new Date(a.created_at || a.inspection_date) - new Date(b.created_at || b.inspection_date);
+        if (timeDiff !== 0) return timeDiff;
+        return (a.id || 0) - (b.id || 0);
+      });
     } else if (dailySort === 'defects_desc') {
       result.sort((a, b) => (b.total_defects || 0) - (a.total_defects || 0));
     } else if (dailySort === 'defects_asc') {
@@ -1065,6 +1242,529 @@ const InspectionReports = () => {
     }
   };
 
+  // ----------------------------------------------------
+  // EXPORT SINGLE RECORD TO EXCEL
+  // ----------------------------------------------------
+  const fetchImageBase64 = async (url) => {
+    try {
+      if (!url) return null;
+      const fullUrl = getImageUrl(url);
+      const res = await fetch(fullUrl);
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) {
+      return null;
+    }
+  };
+
+  // ----------------------------------------------------
+  // EXPORT SINGLE RECORD TO EXCEL
+  // ----------------------------------------------------
+  const handleExportSingleExcel = async (item, tabType) => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet('Chi tiết phiếu');
+
+      let parsed = {};
+      try {
+        parsed = typeof item.data_json === 'string' ? JSON.parse(item.data_json || '{}') : (item.data_json || {});
+      } catch (e) {}
+
+      if (tabType === 'daily') {
+        const title = `PHIẾU GHI NHẬN LỖI HÀNG NGÀY - ${item.stage_name || ''}`;
+        formatExcelHeader(sheet, title, 4);
+
+        sheet.getRow(4).values = ['Công đoạn:', item.stage_name || 'N/A', 'Ngày kiểm:', formatDisplayDate(item.inspection_date)];
+        sheet.getRow(5).values = ['QC kiểm tra:', item.inspector_name || 'N/A', 'Tổng SP kiểm:', item.total_products || 0];
+        sheet.getRow(6).values = ['Tổng số lỗi:', item.total_defects || 0, 'Tỉ lệ lỗi (%):', `${(item.defect_rate || 0).toFixed(2)}%`];
+        sheet.getRow(7).values = [];
+
+        const cols = [
+          { header: 'STT', width: 8 },
+          { header: 'Mã lỗi (Defect ID)', width: 25 },
+          { header: 'Số lượng lỗi', width: 20 },
+          { header: 'Ghi chú', width: 30 }
+        ];
+        sheet.getRow(8).values = cols.map(c => c.header);
+        cols.forEach((c, idx) => sheet.getColumn(idx + 1).width = c.width);
+        styleTableHeaderRow(sheet, 8, cols.length);
+
+        let rowIdx = 9;
+        if (Array.isArray(item.defects) && item.defects.length > 0) {
+          item.defects.forEach((def, i) => {
+            sheet.addRow([i + 1, `Mã lỗi #${def.defect_id}`, def.quantity || 0, '']);
+            rowIdx++;
+          });
+        }
+        applyDefaultBorders(sheet, 9, rowIdx - 1, cols.length);
+        await triggerFileDownload(workbook, `Phieu_Loi_Hang_Ngay_${item.stage_name || 'QC'}_${item.id}.xlsx`);
+
+      } else if (tabType === 'input') {
+        const title = `PHIẾU KIỂM TRA ĐẦU VÀO (IQC) - ${item.part_name || ''}`;
+        formatExcelHeader(sheet, title, 5);
+
+        sheet.getRow(4).values = ['Linh kiện:', item.part_name || 'N/A', '', 'Ngày kiểm:', formatDisplayDateTime(item.inspected_at)];
+        sheet.mergeCells('B4:C4');
+        sheet.getRow(5).values = ['Quy cách:', item.specification || 'N/A', '', 'Cont / PO:', item.cont_name || 'N/A'];
+        sheet.mergeCells('B5:C5');
+        sheet.getRow(6).values = ['QC kiểm tra:', item.inspector_name || 'N/A', '', 'Kết luận:', item.result || 'N/A'];
+        sheet.mergeCells('B6:C6');
+        sheet.getRow(7).values = ['Ghi chú:', item.note || 'N/A', '', '', ''];
+        sheet.mergeCells('B7:E7');
+        sheet.getRow(8).values = [];
+
+        const cols = [
+          { header: 'Chỉ số đo', width: 25 },
+          { header: 'Chiều dài (mm)', width: 20 },
+          { header: 'Chiều rộng (mm)', width: 20 },
+          { header: 'Chiều dày (mm)', width: 20 },
+          { header: 'Hình ảnh', width: 35 }
+        ];
+        sheet.getRow(9).values = cols.map(c => c.header);
+        cols.forEach((c, idx) => sheet.getColumn(idx + 1).width = c.width);
+        styleTableHeaderRow(sheet, 9, cols.length);
+
+        sheet.addRow(['Kích thước thực tế', item.measured_length || '---', item.measured_width || '---', item.measured_height || '---', '']);
+        
+        // Nhúng hình ảnh IQC nếu có
+        const imgPaths = [item.image_path_1, item.image_path_2, item.image_path_3].filter(Boolean);
+        if (imgPaths.length > 0) {
+          sheet.getRow(10).height = 80;
+          for (let pIdx = 0; pIdx < imgPaths.length; pIdx++) {
+            const b64 = await fetchImageBase64(imgPaths[pIdx]);
+            if (b64) {
+              const imgId = workbook.addImage({ base64: b64, extension: 'jpeg' });
+              sheet.addImage(imgId, {
+                tl: { col: 4 + pIdx, row: 9 },
+                ext: { width: 100, height: 75 }
+              });
+            }
+          }
+        }
+        applyDefaultBorders(sheet, 9, 10, cols.length);
+        await triggerFileDownload(workbook, `Phieu_IQC_${(item.part_name || 'LinhKien').replace(/[/\\?%*:|"<>]/g, '_')}_${item.id}.xlsx`);
+
+      } else {
+        const typeLabel = getInspectionTypeLabel(item.inspection_type);
+        const title = `PHIẾU KIỂM TRA ${typeLabel.toUpperCase()} - PO: ${item.batch_no || ''}`;
+        formatExcelHeader(sheet, title, 5);
+
+        // Grid thông tin chung (5 cột)
+        sheet.getRow(4).values = ['Mã PO:', item.batch_no || 'N/A', '', 'Ngày kiểm:', formatDisplayDateTime(item.inspection_date)];
+        sheet.mergeCells('B4:C4');
+
+        sheet.getRow(5).values = ['Mã sản phẩm:', item.product_sku || 'N/A', '', 'QC thực hiện:', item.inspector_name || 'N/A'];
+        sheet.mergeCells('B5:C5');
+
+        sheet.getRow(6).values = ['Loại kiểm tra:', typeLabel, '', 'Kết luận:', item.conclusion === 'pass' ? 'ĐẠT' : 'LỖI'];
+        sheet.mergeCells('B6:C6');
+
+        sheet.getRow(7).values = ['Ghi chú:', item.notes || 'Không có ghi chú', '', '', ''];
+        sheet.mergeCells('B7:E7');
+        sheet.getRow(8).values = [];
+
+        // Định dạng font / màu cho phần header thông tin chung
+        [4, 5, 6, 7].forEach(rIdx => {
+          sheet.getCell(rIdx, 1).font = { bold: true, color: { argb: '7B5233' } };
+          sheet.getCell(rIdx, 4).font = { bold: true, color: { argb: '7B5233' } };
+        });
+        const resultCell = sheet.getCell(6, 5);
+        if (item.conclusion === 'pass') {
+          resultCell.font = { bold: true, color: { argb: '059669' } };
+        } else {
+          resultCell.font = { bold: true, color: { argb: 'DC2626' } };
+        }
+
+        // Bảng chi tiết
+        const cols = [
+          { header: 'STT', width: 8 },
+          { header: 'Hạng mục / Mẫu kiểm', width: 32 },
+          { header: 'Giá trị đo / Kết quả', width: 28 },
+          { header: 'Trạng thái', width: 14 },
+          { header: 'Hình ảnh minh chứng', width: 28 }
+        ];
+        sheet.getRow(9).values = cols.map(c => c.header);
+        cols.forEach((c, idx) => sheet.getColumn(idx + 1).width = c.width);
+        styleTableHeaderRow(sheet, 9, cols.length);
+
+        const usedImages = new Set();
+        let rowIdx = 10;
+
+        if (Array.isArray(parsed.detailsList)) {
+          for (let i = 0; i < parsed.detailsList.length; i++) {
+            const det = parsed.detailsList[i];
+            const isPass = det.conclusion === 'pass';
+            const addedRow = sheet.addRow([
+              i + 1,
+              det.name || 'Chi tiết',
+              isPass ? 'Đạt' : 'Không đạt',
+              isPass ? 'Đạt' : 'Lỗi',
+              ''
+            ]);
+            const stCell = addedRow.getCell(4);
+            stCell.font = { bold: true, color: { argb: isPass ? '059669' : 'DC2626' } };
+
+            if (det.image) {
+              const b64 = await fetchImageBase64(det.image);
+              if (b64) {
+                usedImages.add(det.image);
+                const imgId = workbook.addImage({ base64: b64, extension: 'jpeg' });
+                sheet.addImage(imgId, {
+                  tl: { col: 4, row: rowIdx - 1 },
+                  ext: { width: 95, height: 62 }
+                });
+                addedRow.height = 70;
+              }
+            }
+            rowIdx++;
+          }
+        } else if (Array.isArray(parsed.samples)) {
+          for (let i = 0; i < parsed.samples.length; i++) {
+            const s = parsed.samples[i];
+            const isPass = s.result === 'pass';
+            const mVal = s.moisture?.values ? s.moisture.values.map(v => `${v}%`).join(', ') : '';
+            const szVal = s.size?.thickness ? `${s.size.thickness}x${s.size.width}x${s.size.length}mm` : '';
+            const addedRow = sheet.addRow([
+              i + 1,
+              `Mẫu #${s.stt}`,
+              `${mVal} ${szVal}`.trim() || 'N/A',
+              isPass ? 'Đạt' : 'Lỗi',
+              ''
+            ]);
+            const stCell = addedRow.getCell(4);
+            stCell.font = { bold: true, color: { argb: isPass ? '059669' : 'DC2626' } };
+
+            const photo = s.moisture?.photo || s.size?.photo;
+            if (photo) {
+              const b64 = await fetchImageBase64(photo);
+              if (b64) {
+                usedImages.add(photo);
+                const imgId = workbook.addImage({ base64: b64, extension: 'jpeg' });
+                sheet.addImage(imgId, {
+                  tl: { col: 4, row: rowIdx - 1 },
+                  ext: { width: 95, height: 62 }
+                });
+                addedRow.height = 70;
+              }
+            }
+            rowIdx++;
+          }
+        } else if (parsed.steps) {
+          const entries = Object.entries(parsed.steps);
+          for (let i = 0; i < entries.length; i++) {
+            const [k, val] = entries[i];
+            const isPass = val.result === 'pass';
+            const addedRow = sheet.addRow([
+              i + 1,
+              k,
+              val.value || 'N/A',
+              isPass ? 'Đạt' : 'Lỗi',
+              ''
+            ]);
+            const stCell = addedRow.getCell(4);
+            stCell.font = { bold: true, color: { argb: isPass ? '059669' : 'DC2626' } };
+
+            if (val.photo) {
+              const b64 = await fetchImageBase64(val.photo);
+              if (b64) {
+                usedImages.add(val.photo);
+                const imgId = workbook.addImage({ base64: b64, extension: 'jpeg' });
+                sheet.addImage(imgId, {
+                  tl: { col: 4, row: rowIdx - 1 },
+                  ext: { width: 95, height: 62 }
+                });
+                addedRow.height = 70;
+              }
+            }
+            rowIdx++;
+          }
+        } else {
+          sheet.addRow([1, 'Kết quả đánh giá chung', item.conclusion === 'pass' ? 'Đạt' : 'Lỗi', item.conclusion === 'pass' ? 'Đạt' : 'Lỗi', '']);
+          rowIdx++;
+        }
+
+        // Tải ảnh tổng hợp nếu chưa được hiển thị ở các dòng chi tiết
+        let generalImages = [];
+        try {
+          const parsedImages = typeof item.images_json === 'string' ? JSON.parse(item.images_json || '{}') : (item.images_json || {});
+          Object.values(parsedImages).forEach(val => {
+            if (Array.isArray(val)) generalImages.push(...val);
+          });
+        } catch (e) {}
+
+        const remainingImages = Array.from(new Set(generalImages)).filter(img => img && !usedImages.has(img));
+        if (remainingImages.length > 0) {
+          rowIdx += 1;
+          sheet.getCell(rowIdx, 1).value = "THƯ VIỆN HÌNH ẢNH BỔ SUNG";
+          sheet.getCell(rowIdx, 1).font = { bold: true, size: 11, color: { argb: '7B5233' } };
+          rowIdx += 1;
+
+          let colIdx = 0;
+          for (let gIdx = 0; gIdx < remainingImages.length; gIdx++) {
+            const b64 = await fetchImageBase64(remainingImages[gIdx]);
+            if (b64) {
+              const imgId = workbook.addImage({ base64: b64, extension: 'jpeg' });
+              sheet.addImage(imgId, {
+                tl: { col: colIdx % 3 * 2, row: rowIdx - 1 },
+                ext: { width: 130, height: 85 }
+              });
+              if ((colIdx + 1) % 3 === 0) {
+                rowIdx += 6;
+              }
+              colIdx++;
+            }
+          }
+        }
+
+        applyDefaultBorders(sheet, 9, Math.max(rowIdx - 1, 10), cols.length);
+        await triggerFileDownload(workbook, `Phieu_KT_${item.inspection_type}_${(item.batch_no || '').replace(/[/\\?%*:|"<>]/g, '_')}_${item.id}.xlsx`);
+      }
+    } catch (err) {
+      console.error("Lỗi khi xuất tệp Excel lẻ:", err);
+      alert("Lỗi khi xuất tệp Excel: " + err.message);
+    }
+  };
+
+  // ----------------------------------------------------
+  // EXPORT SINGLE RECORD TO PDF / PRINT
+  // ----------------------------------------------------
+  const handleExportSinglePDF = (item, tabType) => {
+    let parsed = {};
+    try {
+      parsed = typeof item.data_json === 'string' ? JSON.parse(item.data_json || '{}') : (item.data_json || {});
+    } catch (e) {}
+
+    const isDaily = tabType === 'daily';
+    const isInput = tabType === 'input';
+    const typeLabel = isDaily ? 'Ghi Nhận Lỗi Hàng Ngày' : isInput ? 'Kiểm Tra Đầu Vào (IQC)' : getInspectionTypeLabel(item.inspection_type);
+
+    let detailsHtml = '';
+    if (isDaily) {
+      detailsHtml = `
+        <table style="width:100%; border-collapse:collapse; margin-top:15px;">
+          <thead>
+            <tr style="background:#7B5233; color:#fff;">
+              <th style="padding:8px; border:1px solid #ddd;">STT</th>
+              <th style="padding:8px; border:1px solid #ddd;">Mã Lỗi</th>
+              <th style="padding:8px; border:1px solid #ddd;">Số Lượng Lỗi</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(item.defects || []).map((d, i) => `
+              <tr>
+                <td style="padding:8px; border:1px solid #ddd; text-align:center;">${i+1}</td>
+                <td style="padding:8px; border:1px solid #ddd; text-align:center; font-weight:bold;">Mã lỗi #${d.defect_id}</td>
+                <td style="padding:8px; border:1px solid #ddd; text-align:center; color:#dc2626; font-weight:bold;">${d.quantity}</td>
+              </tr>
+            `).join('') || '<tr><td colspan="3" style="text-align:center; padding:10px;">Không có danh sách lỗi</td></tr>'}
+          </tbody>
+        </table>
+      `;
+    } else if (isInput) {
+      detailsHtml = `
+        <div style="margin-top:15px; font-weight:bold; color:#7B5233;">Bảng kích thước thực tế (mm):</div>
+        <table style="width:100%; border-collapse:collapse; margin-top:8px;">
+          <thead>
+            <tr style="background:#7B5233; color:#fff;">
+              <th style="padding:8px; border:1px solid #ddd;">Chiều Dài (mm)</th>
+              <th style="padding:8px; border:1px solid #ddd;">Chiều Rộng (mm)</th>
+              <th style="padding:8px; border:1px solid #ddd;">Chiều Dày (mm)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding:10px; border:1px solid #ddd; text-align:center; font-size:1.1em; font-weight:bold;">${item.measured_length || '---'}</td>
+              <td style="padding:10px; border:1px solid #ddd; text-align:center; font-size:1.1em; font-weight:bold;">${item.measured_width || '---'}</td>
+              <td style="padding:10px; border:1px solid #ddd; text-align:center; font-size:1.1em; font-weight:bold;">${item.measured_height || '---'}</td>
+            </tr>
+          </tbody>
+        </table>
+      `;
+    } else {
+      if (Array.isArray(parsed.detailsList)) {
+        detailsHtml = `
+          <table style="width:100%; border-collapse:collapse; margin-top:15px;">
+            <thead>
+              <tr style="background:#7B5233; color:#fff;">
+                <th style="padding:8px; border:1px solid #ddd; width:40px;">STT</th>
+                <th style="padding:8px; border:1px solid #ddd;">Tên Chi Tiết / Hạng Mục</th>
+                <th style="padding:8px; border:1px solid #ddd; width:100px;">Kết Quả</th>
+                <th style="padding:8px; border:1px solid #ddd; width:120px;">Hình Ảnh</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${parsed.detailsList.map((d, i) => `
+                <tr>
+                  <td style="padding:8px; border:1px solid #ddd; text-align:center;">${i+1}</td>
+                  <td style="padding:8px; border:1px solid #ddd;">${d.name || 'N/A'}</td>
+                  <td style="padding:8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:${d.conclusion === 'pass' ? '#16a34a' : '#dc2626'};">
+                    ${d.conclusion === 'pass' ? 'ĐẠT' : 'LỖI'}
+                  </td>
+                  <td style="padding:8px; border:1px solid #ddd; text-align:center;">
+                    ${d.image ? `<img src="${getImageUrl(d.image)}" style="width:60px; height:45px; object-fit:cover; border-radius:4px;" />` : '---'}
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+      } else if (Array.isArray(parsed.samples)) {
+        detailsHtml = `
+          <table style="width:100%; border-collapse:collapse; margin-top:15px;">
+            <thead>
+              <tr style="background:#7B5233; color:#fff;">
+                <th style="padding:8px; border:1px solid #ddd; width:50px;">Mẫu</th>
+                <th style="padding:8px; border:1px solid #ddd;">Độ Ẩm (%)</th>
+                <th style="padding:8px; border:1px solid #ddd;">Kích Thước (mm)</th>
+                <th style="padding:8px; border:1px solid #ddd; width:80px;">Kết Quả</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${parsed.samples.map((s) => `
+                <tr>
+                  <td style="padding:8px; border:1px solid #ddd; text-align:center; font-weight:bold;">#${s.stt}</td>
+                  <td style="padding:8px; border:1px solid #ddd;">${s.moisture?.values?.join(', ') || 'Chưa đo'}%</td>
+                  <td style="padding:8px; border:1px solid #ddd;">${s.size?.thickness ? `${s.size.thickness} x ${s.size.width} x ${s.size.length}` : 'Chưa đo'}</td>
+                  <td style="padding:8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:${s.result === 'pass' ? '#16a34a' : '#dc2626'};">
+                    ${s.result === 'pass' ? 'ĐẠT' : 'LỖI'}
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+      }
+    }
+
+    let imagesHtml = '';
+    const imagesList = [];
+    if (parsed.steps) {
+      Object.values(parsed.steps).forEach(st => { if (st.photo) imagesList.push(st.photo); });
+    }
+    if (Array.isArray(parsed.detailsList)) {
+      parsed.detailsList.forEach(det => { if (det.image) imagesList.push(det.image); });
+    }
+    if (Array.isArray(parsed.samples)) {
+      parsed.samples.forEach(s => {
+        if (s.moisture?.photo) imagesList.push(s.moisture.photo);
+        if (s.size?.photo) imagesList.push(s.size.photo);
+      });
+    }
+    try {
+      const parsedImages = typeof item.images_json === 'string' ? JSON.parse(item.images_json || '{}') : (item.images_json || {});
+      Object.values(parsedImages).forEach(val => {
+        if (Array.isArray(val)) imagesList.push(...val);
+      });
+    } catch (e) {}
+
+    const uniqueImages = Array.from(new Set(imagesList)).filter(Boolean);
+    if (uniqueImages.length > 0) {
+      imagesHtml = `
+        <div style="margin-top:20px;">
+          <div style="font-weight:bold; color:#7B5233; margin-bottom:10px; font-size:14px;">THƯ VIỆN HÌNH ẢNH MINH CHỨNG PHIẾU:</div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            ${uniqueImages.map(img => `<img src="${getImageUrl(img)}" style="width:140px; height:100px; object-fit:cover; border-radius:6px; border:1px solid #ddd;" />`).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    const printWin = window.open('', '_blank');
+    if (!printWin) return alert('Vui lòng cho phép bật cửa sổ popup để in PDF!');
+
+    printWin.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Phiếu Kiểm Tra QC - ${item.batch_no || item.part_name || item.stage_name || ''}</title>
+        <style>
+          body { font-family: 'Segoe UI', Arial, sans-serif; margin: 20px; color: #1e293b; }
+          .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #7B5233; padding-bottom: 12px; margin-bottom: 20px; }
+          .title { font-size: 20px; font-weight: bold; color: #7B5233; text-transform: uppercase; }
+          .sub { font-size: 13px; color: #64748b; }
+          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: #faf6f0; padding: 15px; border-radius: 8px; border: 1px solid #eadcc9; margin-bottom: 20px; }
+          .info-item { font-size: 14px; }
+          .info-item label { color: #78350f; font-weight: bold; }
+          .signatures { display: flex; justify-content: space-between; margin-top: 50px; text-align: center; }
+          .sig-box { width: 45%; }
+          .sig-title { font-weight: bold; font-size: 14px; margin-bottom: 60px; }
+          @media print {
+            body { margin: 0; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="no-print" style="margin-bottom: 15px; text-align: right;">
+          <button onclick="window.print()" style="padding: 10px 20px; background: #7B5233; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">
+            🖨️ In / Xuất PDF
+          </button>
+        </div>
+        <div class="header">
+          <div>
+            <div class="title">G7 SMARTFLOW ERP</div>
+            <div class="sub">HỆ THỐNG QUẢN LÝ CHẤT LƯỢNG SẢN XUẤT</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 16px; font-weight: bold; color: #7B5233;">PHIẾU KIỂM TRA CHẤT LƯỢNG</div>
+            <div style="font-size: 12px; color: #64748b;">Mã phiếu: QC-${item.id} | Ngày: ${formatDisplayDate(item.inspection_date || item.inspected_at)}</div>
+          </div>
+        </div>
+
+        <div class="info-grid">
+          <div class="info-item"><label>Loại kiểm tra:</label> ${typeLabel}</div>
+          <div class="info-item"><label>QC Thực Hiện:</label> ${item.inspector_name || 'N/A'}</div>
+          ${isDaily ? `
+            <div class="info-item"><label>Công đoạn:</label> ${item.stage_name || 'N/A'}</div>
+            <div class="info-item"><label>Tổng SP kiểm:</label> ${item.total_products || 0}</div>
+            <div class="info-item"><label>Tổng lỗi:</label> ${item.total_defects || 0}</div>
+            <div class="info-item"><label>Tỉ lệ lỗi:</label> ${(item.defect_rate || 0).toFixed(2)}%</div>
+          ` : isInput ? `
+            <div class="info-item"><label>Tên linh kiện:</label> ${item.part_name || 'N/A'}</div>
+            <div class="info-item"><label>Quy cách:</label> ${item.specification || 'N/A'}</div>
+            <div class="info-item"><label>Container/PO:</label> ${item.cont_name || 'N/A'}</div>
+            <div class="info-item"><label>Kết luận:</label> <span style="font-weight:bold; color:${item.result === 'Đạt' ? '#16a34a':'#dc2626'}">${item.result || 'N/A'}</span></div>
+          ` : `
+            <div class="info-item"><label>Mã PO (Lệnh SX):</label> ${item.batch_no || 'N/A'}</div>
+            <div class="info-item"><label>Mã Sản Phẩm:</label> ${item.product_sku || 'N/A'}</div>
+            <div class="info-item"><label>Kết Luận:</label> <span style="font-weight:bold; color:${item.conclusion === 'pass' ? '#16a34a':'#dc2626'}">${item.conclusion === 'pass' ? 'ĐẠT' : 'LỖI'}</span></div>
+          `}
+        </div>
+
+        ${item.notes || item.note ? `<div style="background:#fffbeb; padding:10px; border-radius:6px; border:1px solid #fef3c7; margin-bottom:15px; font-size:13px; color:#92400e;"><b>Ghi chú:</b> ${item.notes || item.note}</div>` : ''}
+
+        ${detailsHtml}
+
+        ${imagesHtml}
+
+        <div class="signatures">
+          <div class="sig-box">
+            <div class="sig-title">NGƯỜI LẬP PHIẾU (QC)</div>
+            <div>${item.inspector_name || 'Ký tên'}</div>
+          </div>
+          <div class="sig-box">
+            <div class="sig-title">TRƯỞNG BỘ PHẬN QUẢN LÝ CHẤT LƯỢNG</div>
+            <div>Ký tên & Đóng dấu</div>
+          </div>
+        </div>
+
+        <script>
+          window.onload = function() {
+            setTimeout(function() { window.print(); }, 500);
+          }
+        </script>
+      </body>
+      </html>
+    `);
+    printWin.document.close();
+  };
+
   return (
     <div className="quality-records-container">
       <style dangerouslySetInnerHTML={{ __html: `
@@ -1348,6 +2048,12 @@ const InspectionReports = () => {
                 onChange={(e) => { setStageTypeFilter(e.target.value); setStagePage(1); }}
               >
                 <option value="all">Tất cả</option>
+                <option value="nhap-kho">Nhập kho</option>
+                <option value="do-am">Độ ẩm</option>
+                <option value="kich-thuoc">Kích thước</option>
+                <option value="ngoai-quan">Ngoại quan</option>
+                <option value="chuc-nang">Chức năng</option>
+                <option value="cong-doan">Công đoạn</option>
                 <option value="bam-dinh">Bám dính</option>
                 <option value="sau-dong-goi">Sau đóng gói</option>
                 <option value="phu-kien">Phụ kiện</option>
@@ -1540,13 +2246,7 @@ const InspectionReports = () => {
                               </span>
                             </td>
                             <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                              <button 
-                                className="action-btn"
-                                onClick={() => setSelectedInspection(item)}
-                                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#7B5233' }}
-                              >
-                                <Eye size={16} />
-                              </button>
+                              {renderActionDropdown(item, 'stage')}
                             </td>
                           </tr>
                         );
@@ -1836,13 +2536,7 @@ const InspectionReports = () => {
                               </span>
                             </td>
                             <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                              <button 
-                                className="action-btn"
-                                onClick={() => setSelectedInspection(item)}
-                                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#7B5233' }}
-                              >
-                                <Eye size={16} />
-                              </button>
+                              {renderActionDropdown(item, 'input')}
                             </td>
                           </tr>
                         );
@@ -1980,13 +2674,7 @@ const InspectionReports = () => {
                             <td style={{ textAlign: 'right', paddingRight: '20px', fontWeight: '700', color: '#EF4444' }}>{item.total_defects?.toLocaleString() || 0}</td>
                             <td style={{ textAlign: 'right', paddingRight: '20px', fontWeight: '700', color: item.defect_rate > 0 ? '#F59E0B' : '#10B981' }}>{item.defect_rate?.toFixed(2) || '0.00'}%</td>
                             <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                              <button 
-                                className="action-btn"
-                                onClick={() => setSelectedDaily(item)}
-                                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#7B5233' }}
-                              >
-                                <Eye size={16} />
-                              </button>
+                              {renderActionDropdown(item, 'daily')}
                             </td>
                           </tr>
                         );
@@ -2121,13 +2809,7 @@ const InspectionReports = () => {
                               </span>
                             </td>
                             <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                              <button 
-                                className="action-btn"
-                                onClick={() => setSelectedInspection(item)}
-                                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#7B5233' }}
-                              >
-                                <Eye size={16} />
-                              </button>
+                              {renderActionDropdown(item, 'process')}
                             </td>
                           </tr>
                         );
@@ -2419,7 +3101,8 @@ const InspectionReports = () => {
             else if (typeof val === 'string') generalImages.push(val);
           });
         } catch(e){}
-        const finalImages = Array.from(new Set([...imagesList, ...generalImages])).filter(Boolean);
+        const usedDetailImages = new Set(imagesList);
+        const remainingModalImages = Array.from(new Set(generalImages)).filter(img => img && !usedDetailImages.has(img));
 
         return (
           <div className="modal-overlay">
@@ -2432,7 +3115,23 @@ const InspectionReports = () => {
                 <X size={18} />
               </button>
 
-              <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#7B5233', margin: '0 0 20px 0' }}>Chi tiết phiếu kiểm tra công đoạn</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingRight: '40px' }}>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#7B5233', margin: 0 }}>Chi tiết phiếu kiểm tra công đoạn</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    onClick={() => handleExportSingleExcel(item, 'stage')}
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', backgroundColor: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer' }}
+                  >
+                    <FileSpreadsheet size={15} /> Excel
+                  </button>
+                  <button
+                    onClick={() => handleExportSinglePDF(item, 'stage')}
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', backgroundColor: '#F0F9FF', color: '#0284C7', border: '1px solid #BAE6FD', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer' }}
+                  >
+                    <Printer size={15} /> PDF / In
+                  </button>
+                </div>
+              </div>
 
               {/* General details grid */}
               <div className="detail-grid-info">
@@ -2713,13 +3412,13 @@ const InspectionReports = () => {
               )}
 
               {/* IMAGE GALLERY */}
-              {finalImages.length > 0 && (
+              {remainingModalImages.length > 0 && (
                 <div style={{ marginTop: '20px' }}>
                   <h4 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#7B5233', margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <ImageIcon size={18} /> Thư viện hình ảnh ({finalImages.length} ảnh)
+                    <ImageIcon size={18} /> Thư viện hình ảnh bổ sung ({remainingModalImages.length} ảnh)
                   </h4>
                   <div className="grid-gallery">
-                    {finalImages.map((img, index) => (
+                    {remainingModalImages.map((img, index) => (
                       <img 
                         key={index}
                         src={getImageUrl(img)} 
@@ -2751,7 +3450,23 @@ const InspectionReports = () => {
                 <X size={18} />
               </button>
 
-              <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#7B5233', margin: '0 0 20px 0' }}>Chi tiết ghi nhận lỗi hàng ngày</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingRight: '40px' }}>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#7B5233', margin: 0 }}>Chi tiết ghi nhận lỗi hàng ngày</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    onClick={() => handleExportSingleExcel(item, 'daily')}
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', backgroundColor: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer' }}
+                  >
+                    <FileSpreadsheet size={15} /> Excel
+                  </button>
+                  <button
+                    onClick={() => handleExportSinglePDF(item, 'daily')}
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', backgroundColor: '#F0F9FF', color: '#0284C7', border: '1px solid #BAE6FD', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer' }}
+                  >
+                    <Printer size={15} /> PDF / In
+                  </button>
+                </div>
+              </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
                 <div className="detail-row-item">
@@ -2821,7 +3536,23 @@ const InspectionReports = () => {
                 <X size={18} />
               </button>
 
-              <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#7B5233', margin: '0 0 20px 0' }}>Chi tiết phiếu kiểm tra đầu vào (IQC)</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingRight: '40px' }}>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#7B5233', margin: 0 }}>Chi tiết phiếu kiểm tra đầu vào (IQC)</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    onClick={() => handleExportSingleExcel(item, 'input')}
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', backgroundColor: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer' }}
+                  >
+                    <FileSpreadsheet size={15} /> Excel
+                  </button>
+                  <button
+                    onClick={() => handleExportSinglePDF(item, 'input')}
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', backgroundColor: '#F0F9FF', color: '#0284C7', border: '1px solid #BAE6FD', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer' }}
+                  >
+                    <Printer size={15} /> PDF / In
+                  </button>
+                </div>
+              </div>
 
               {/* General details grid */}
               <div className="detail-grid-info">

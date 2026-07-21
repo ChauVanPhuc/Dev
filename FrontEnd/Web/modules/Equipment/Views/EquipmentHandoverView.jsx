@@ -111,6 +111,24 @@ const EquipmentHandoverView = ({ id: propId, onClose, onSaved }) => {
   };
 
   useEffect(() => {
+    fetchSystemUsersAndRoles();
+    if (id) {
+      const fetchEquip = async () => {
+        try {
+          const res = await api.get('/equipments/');
+          if (Array.isArray(res)) {
+            const found = res.find(e => e.id === parseInt(id));
+            if (found) setFormData({ ...found });
+          }
+        } catch (e) {
+          console.error('Lỗi khi tải thông tin thiết bị bàn giao:', e);
+        }
+      };
+      fetchEquip();
+    }
+  }, [id]);
+
+  useEffect(() => {
     if (screenCode && title) {
       if (setCustomTitle) setCustomTitle(title);
       if (setCustomSubtitle) setCustomSubtitle(subtitle || '');

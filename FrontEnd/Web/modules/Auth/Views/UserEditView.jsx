@@ -645,9 +645,9 @@ const UserEdit = ({ isProfile = false }) => {
   const hasAutoSelectedFactory = React.useRef(false);
 
   const getFactoryCode = (stageName) => {
-    if (!stageName) return 'Khác';
+    if (!stageName) return 'NM1';
     const match = stageName.match(/^(NM\d+)/i);
-    return match ? match[1].toUpperCase() : 'Khác';
+    return match ? match[1].toUpperCase() : 'NM1';
   };
 
   const uniqueFactories = useMemo(() => {
@@ -684,7 +684,20 @@ const UserEdit = ({ isProfile = false }) => {
 
   const filteredStages = useMemo(() => {
     if (!selectedFactory) return stages;
-    return stages.filter(s => getFactoryCode(s.name) === selectedFactory);
+    const matching = stages.filter(s => getFactoryCode(s.name) === selectedFactory);
+    const seen = new Set();
+    const result = [];
+    for (const s of matching) {
+      const cleanName = s.name.replace(/^NM\d+\s*[-:]\s*/i, '').trim();
+      if (!seen.has(cleanName)) {
+        seen.add(cleanName);
+        result.push({
+          ...s,
+          displayName: cleanName
+        });
+      }
+    }
+    return result;
   }, [stages, selectedFactory]);
 
   // Mở rộng nhóm accordion và tìm kiếm
@@ -782,15 +795,22 @@ const UserEdit = ({ isProfile = false }) => {
     }
   }, [formData.role_id]);
 
-  // 4. Khi Permission thay đổi -> Lấy danh sách Stages tương ứng
+  // 4. Khi Permission thay đổi -> Lấy danh sách Stages tương ứng (có fallback tự động)
   useEffect(() => {
     if (formData.permission_id) {
       const fetchStages = async () => {
         try {
-          const data = await api.get(`/permissions/${formData.permission_id}/stages`);
-          setStages(data);
+          let data = await api.get(`/permissions/${formData.permission_id}/stages`);
+          if (!data || data.length === 0) {
+            data = await api.get('/stages/');
+          }
+          setStages(Array.isArray(data) ? data : []);
         } catch (err) {
           console.error('Lỗi khi tải Stages:', err);
+          try {
+            const fallback = await api.get('/stages/');
+            setStages(Array.isArray(fallback) ? fallback : []);
+          } catch (e) {}
         }
       };
       fetchStages();
@@ -1205,6 +1225,9 @@ const UserEdit = ({ isProfile = false }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (!formData.phone || !formData.phone.trim()) {
+      toast('warning', 'Nhắc nhở: Chưa nhập Số điện thoại cho tài khoản (không bắt buộc).');
+    }
     setShowConfirmModal(true);
   };
 
@@ -1223,7 +1246,7 @@ const UserEdit = ({ isProfile = false }) => {
         employee_code: formData.employee_id,
         name: formData.full_name,
         email: formData.email || null,
-        phone: formData.phone || null,
+        phone: formData.phone && formData.phone.trim() ? formData.phone.trim() : null,
         status: formData.status,
         is_active: formData.status === 'Đang sử dụng',
         permission_level: isProductionOrQC ? null : (formData.permission_level || null)
@@ -1291,7 +1314,15 @@ const UserEdit = ({ isProfile = false }) => {
       }
     } catch (err) {
       console.error('Lỗi khi cập nhật tài khoản toàn diện:', err);
-      setError(err.response?.data?.detail || 'Có lỗi xảy ra khi lưu thông tin. Vui lòng kiểm tra lại.');
+      let detail = err.response?.data?.detail;
+      if (Array.isArray(detail)) {
+        detail = detail.map(item => `${item.loc?.[item.loc?.length - 1] || 'Trường'}: ${item.msg}`).join(', ');
+      } else if (typeof detail === 'object' && detail !== null) {
+        detail = JSON.stringify(detail);
+      }
+      const errMsg = detail || 'Có lỗi xảy ra khi lưu thông tin. Vui lòng kiểm tra lại.';
+      setError(errMsg);
+      toast('error', errMsg);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setLoading(false);
@@ -1509,14 +1540,13 @@ const UserEdit = ({ isProfile = false }) => {
                   </div>
 
                   <div className="form-group">
-                    <label>Số điện thoại</label>
+                    <label>Số điện thoại <span style={{ fontSize: '0.75rem', color: '#8C7B72', fontWeight: 'normal' }}>(Không bắt buộc)</span></label>
                     <input 
                       type="text" 
                       name="phone" 
                       placeholder="VD: 0987654321" 
                       value={formData.phone}
                       onChange={handleChange}
-                      required
                     />
                   </div>
 
@@ -1712,7 +1742,7 @@ const UserEdit = ({ isProfile = false }) => {
                                           disabled={isProfile}
                                           style={{ margin: 0, width: '15px', height: '15px', accentColor: '#7B5233', cursor: isProfile ? 'default' : 'pointer' }}
                                         />
-                                        <span>{s.name}</span>
+                                        <span>{s.displayName || s.name}</span>
                                       </label>
                                     ))}
                                   </div>

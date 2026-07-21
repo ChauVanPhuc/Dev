@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader';
 import FormInput from '@mobile/Shared/Views/components/form/FormInput';
@@ -9,10 +9,20 @@ import SearchableSelect from '@mobile/Shared/Views/components/form/SearchableSel
 import PassFailSelector from '@mobile/Shared/Views/components/ui/PassFailSelector';
 import InspectionDetailPopup, { formatDateTime, getTypeName } from './components/InspectionDetailPopup';
 import { Camera, X, Check, RotateCcw } from 'lucide-react';
-import apiClient from '@shared/services/api';
+import apiClient, { API_ROOT } from '@shared/services/api';
 import useAuthStore from '@modules/auth/Models/authModel';
 import ConfirmModal from '@mobile/Shared/Views/components/feedback/ConfirmModal';
 import MessageModal from '@mobile/Shared/Views/components/feedback/MessageModal';
+
+const getImageUrl = (path) => {
+  if (!path) return '';
+  if (path.startsWith('http') || path.startsWith('blob:') || path.startsWith('data:')) {
+    return path;
+  }
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const root = API_ROOT.endsWith('/') ? API_ROOT.slice(0, -1) : API_ROOT;
+  return `${root}${cleanPath}`;
+};
 
 const StageAdhesionView = () => {
   const location = useLocation();
@@ -20,6 +30,56 @@ const StageAdhesionView = () => {
   const { logId } = location.state || {};
   const { user } = useAuthStore();
   const inspectionType = 'bam-dinh';
+
+  const fileInputRef = useRef(null);
+  const [activeDetailIndex, setActiveDetailIndex] = useState(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+
+  const handleTriggerCapture = (idx) => {
+    setActiveDetailIndex(idx);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileChange = async (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || activeDetailIndex === null) return;
+    const file = files[0];
+    
+    const localUrl = URL.createObjectURL(file);
+    setDetailsList(prev => {
+      const next = [...prev];
+      if (next[activeDetailIndex]) {
+        next[activeDetailIndex].image = localUrl;
+      }
+      return next;
+    });
+
+    try {
+      setIsUploadingPhoto(true);
+      const formDataUpload = new FormData();
+      formDataUpload.append('files', file);
+      const res = await apiClient.post('inspections/upload', formDataUpload, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      if (res.data && res.data.paths && res.data.paths.length > 0) {
+        const serverPath = res.data.paths[0];
+        setDetailsList(prev => {
+          const next = [...prev];
+          if (next[activeDetailIndex]) {
+            next[activeDetailIndex].image = serverPath;
+          }
+          return next;
+        });
+      }
+    } catch (err) {
+      console.error("Lỗi khi upload ảnh bám dính:", err);
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
 
   const [orders, setOrders] = useState([]);
   const [formData, setFormData] = useState({
@@ -251,12 +311,11 @@ const StageAdhesionView = () => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-
-
   const handleSave = async () => {
     setIsConfirmOpen(false);
     setIsSaving(true);
     try {
+      const allPhotos = detailsList.map(d => d.image).filter(Boolean);
       const payload = {
         inspection_type: inspectionType,
         batch_no: formData.batch_no,
@@ -268,7 +327,7 @@ const StageAdhesionView = () => {
           detailsList: detailsList,
           action: formData.action
         }),
-        images_json: JSON.stringify({})
+        images_json: JSON.stringify({ 'Ảnh bám dính': allPhotos })
       };
 
       if (logId) {
@@ -302,6 +361,14 @@ const StageAdhesionView = () => {
 
   return (
     <Layout>
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        accept="image/*" 
+        capture="environment" 
+        style={{ display: 'none' }} 
+        onChange={handleFileChange} 
+      />
       <div style={{ backgroundColor: 'var(--bg-cream)', minHeight: '100vh', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '100px' }}>
         <PageHeader title="G7 - Smart Flow" subTitle="MB22 | Kiểm tra bám dính" />
 
@@ -409,9 +476,35 @@ const StageAdhesionView = () => {
                           </td>
                           <td style={{ padding: '10px', textAlign: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                              <div style={{ width: '28px', height: '28px', backgroundColor: '#f1f5f9', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <Camera size={14} color="#94a3b8" />
-                              </div>
+                              {detail.image ? (
+                                <div style={{ position: 'relative', width: '32px', height: '32px' }}>
+                                  <img 
+                                    src={getImageUrl(detail.image)} 
+                                    alt="detail" 
+                                    style={{ width: '32px', height: '32px', borderRadius: '4px', objectFit: 'cover', cursor: 'pointer' }}
+                                    onClick={() => handleTriggerCapture(idx)}
+                                  />
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const newList = [...detailsList];
+                                      newList[idx].image = null;
+                                      setDetailsList(newList);
+                                    }}
+                                    style={{ position: 'absolute', top: '-4px', right: '-4px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '50%', width: '14px', height: '14px', fontSize: '9px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleTriggerCapture(idx)}
+                                  style={{ width: '32px', height: '32px', backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                                >
+                                  <Camera size={16} color="#64748b" />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>

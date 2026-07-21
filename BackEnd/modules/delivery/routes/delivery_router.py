@@ -669,7 +669,7 @@ def get_exception_deliveries(
 
 
 @router.get("/image-proxy")
-async def get_image_proxy(path: str):
+async def get_image_proxy(path: str, as_base64: bool = False):
     log_file = os.path.abspath(os.path.join(os.getcwd(), "proxy_error.log"))
     try:
         # Bảo mật: Chỉ cho phép truy cập tệp trong thư mục static/uploads
@@ -692,6 +692,13 @@ async def get_image_proxy(path: str):
                 f.write(f"{datetime.datetime.now()}: File NOT FOUND: {full_path}\n")
             raise HTTPException(status_code=404, detail="Không tìm thấy ảnh")
             
+        if as_base64:
+            import base64
+            with open(full_path, "rb") as image_file:
+                encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
+            ext = full_path.split('.')[-1].lower() if '.' in full_path else 'png'
+            return {"base64": encoded_string, "extension": ext}
+
         return FileResponse(full_path)
     except Exception as e:
         import traceback

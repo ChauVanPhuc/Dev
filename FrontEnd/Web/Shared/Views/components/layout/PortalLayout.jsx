@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Menu, ArrowLeft, Bell, Sparkles, Plus, Trash2, MessageSquare, Send, X, History, RotateCcw, Monitor } from 'lucide-react';
-import { 
-  ResponsiveContainer, ComposedChart, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, 
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend 
+import {
+  ResponsiveContainer, ComposedChart, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend
 } from 'recharts';
 import Sidebar from './Sidebar';
 import BeautifulModal from '../feedback/BeautifulModal';
@@ -305,7 +305,7 @@ const renderMessageText = (text) => {
               let subLastIndex = 0;
               let subMatch;
               mdImageRegex.lastIndex = 0;
-              
+
               while ((subMatch = mdImageRegex.exec(part.content)) !== null) {
                 if (subMatch.index > subLastIndex) {
                   subparts.push(part.content.substring(subLastIndex, subMatch.index));
@@ -314,16 +314,16 @@ const renderMessageText = (text) => {
                 const src = subMatch[2];
                 subparts.push(
                   <div key={`img-${subMatch.index}`} className="chat-rendered-image-container" style={{ margin: '12px 0' }}>
-                    <img 
-                      src={src} 
-                      alt={alt} 
-                      style={{ 
-                        maxWidth: '100%', 
-                        borderRadius: '10px', 
+                    <img
+                      src={src}
+                      alt={alt}
+                      style={{
+                        maxWidth: '100%',
+                        borderRadius: '10px',
                         border: '1px solid rgba(160, 48, 27, 0.15)',
                         boxShadow: '0 6px 16px rgba(45, 26, 18, 0.12)',
                         display: 'block'
-                      }} 
+                      }}
                     />
                     {alt && <div style={{ fontSize: '0.76rem', color: '#8D6E63', textAlign: 'center', marginTop: '6px', fontStyle: 'italic' }}>{alt}</div>}
                   </div>
@@ -371,11 +371,11 @@ const PortalLayout = () => {
   const location = useLocation();
   const { getScreenInfo } = useScreen();
   const isAdmin = location.pathname.startsWith('/admin');
-  const isFormOrEditView = 
-    location.pathname.includes('/edit') || 
-    location.pathname.includes('/create') || 
-    location.pathname.includes('/new') || 
-    location.pathname.includes('/permission') || 
+  const isFormOrEditView =
+    location.pathname.includes('/edit') ||
+    location.pathname.includes('/create') ||
+    location.pathname.includes('/new') ||
+    location.pathname.includes('/permission') ||
     location.pathname.includes('/detail');
 
   const [sidebarActive, setSidebarActive] = useState(false);
@@ -1023,7 +1023,7 @@ const PortalLayout = () => {
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (
-        chatbotDrawerRef.current && 
+        chatbotDrawerRef.current &&
         !chatbotDrawerRef.current.contains(e.target) &&
         !e.target.closest('.chatbot-ai-emoji-btn')
       ) {
@@ -1057,8 +1057,8 @@ const PortalLayout = () => {
           text: h.content,
           items: h.items || [],
           suggestions: h.suggestions || [],
-          time: h.created_at 
-            ? new Date(h.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) 
+          time: h.created_at
+            ? new Date(h.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
             : new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
         }));
         setChatMessages(formattedMessages);
@@ -1311,7 +1311,7 @@ const PortalLayout = () => {
               removeUpload(uploadId);
               return;
             }
-          } catch (e) {}
+          } catch (e) { }
         }
       }
       throw new Error('Kết nối bị đóng đột ngột trước khi nhận được trạng thái hoàn thành.');
@@ -1325,10 +1325,10 @@ const PortalLayout = () => {
 
   // --- MEMOIZE CONTEXT TO PREVENT UNNECESSARY CHILD RE-RENDERS ---
   const outletContext = React.useMemo(() => ({
-    setCustomTitle, 
-    setCustomSubtitle, 
+    setCustomTitle,
+    setCustomSubtitle,
     setCustomScreenCode,
-    setHeaderExtra, 
+    setHeaderExtra,
     showModal,
     startGlobalUpload,
     activeUploads: uploads.length
@@ -1341,13 +1341,13 @@ const PortalLayout = () => {
   if (isPreview) {
     return (
       <div className="preview-mode-layout" style={{ background: '#FAF6F0', minHeight: '100vh', padding: '15px' }}>
-        <Outlet context={{ 
-          setCustomTitle: () => {}, 
-          setCustomSubtitle: () => {}, 
-          setCustomScreenCode: () => {},
-          setHeaderExtra: () => {}, 
+        <Outlet context={{
+          setCustomTitle: () => { },
+          setCustomSubtitle: () => { },
+          setCustomScreenCode: () => { },
+          setHeaderExtra: () => { },
           showModal,
-          startGlobalUpload: () => {},
+          startGlobalUpload: () => { },
           activeUploads: 0
         }} />
       </div>
@@ -1357,10 +1357,10 @@ const PortalLayout = () => {
   // --- DYNAMIC HEADER TITLE MANAGEMENT ---
   const getPageTitles = () => {
     if (customTitle) {
-      return { 
-        screenCode: customScreenCode || '', 
-        title: customTitle, 
-        subtitle: customSubtitle || (isAdmin ? 'ERP G7 Admin' : 'ERP G7 Manufacture') 
+      return {
+        screenCode: customScreenCode || '',
+        title: customTitle,
+        subtitle: customSubtitle || (isAdmin ? 'ERP G7 Admin' : 'ERP G7 Manufacture')
       };
     }
     return getScreenInfo(location.pathname);
@@ -1380,7 +1380,7 @@ const PortalLayout = () => {
   const showBackButton = pathSegments.length >= 3;
 
   return (
-    <div 
+    <div
       className={`admin-layout ${layoutMode === 'fit-to-screen' ? 'fit-to-screen-active' : ''}`}
       style={layoutMode === 'fit-to-screen' ? {
         transform: `scale(${scaleFactor})`,
@@ -1394,18 +1394,18 @@ const PortalLayout = () => {
     >
       {/* Backdrop for Mobile Sidebar */}
       {sidebarActive && (
-        <div 
-          className="sidebar-backdrop" 
+        <div
+          className="sidebar-backdrop"
           onClick={() => setSidebarActive(false)}
         ></div>
       )}
 
       {/* Unified State-Aware Sidebar */}
-      <Sidebar 
-        active={sidebarActive} 
+      <Sidebar
+        active={sidebarActive}
         collapsed={sidebarCollapsed}
         onToggleCollapse={toggleSidebarCollapse}
-        onLogout={handleLogout} 
+        onLogout={handleLogout}
         onClose={() => setSidebarActive(false)}
         uploads={uploads}
       />
@@ -1416,7 +1416,7 @@ const PortalLayout = () => {
         <header className="admin-header">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
             <div className="header-left">
-              <button 
+              <button
                 className="toggle-sidebar-btn"
                 onClick={() => {
                   if (window.innerWidth >= 993) {
@@ -1442,7 +1442,7 @@ const PortalLayout = () => {
 
               {/* Back button logic */}
               {showBackButton && (
-                <button 
+                <button
                   onClick={handleBackClick}
                   style={{
                     background: 'none',
@@ -1473,7 +1473,7 @@ const PortalLayout = () => {
               )}
 
               {/* Layout Mode Settings Toggle Button */}
-              <button 
+              <button
                 className="header-layout-toggle-btn"
                 onClick={toggleLayoutMode}
                 title={layoutMode === 'responsive' ? "Chuyển sang chế độ Vừa màn hình (Fit to Screen)" : "Chuyển sang chế độ Co giãn (Responsive)"}
@@ -1509,7 +1509,7 @@ const PortalLayout = () => {
               {/* Notification dropdown (Only for Admin dashboard/pages) */}
               {isAdmin && (
                 <div className="header-notification-wrapper" ref={notificationRef}>
-                  <button 
+                  <button
                     className="header-notification-bell"
                     onClick={() => setShowNotifications(!showNotifications)}
                     style={{
@@ -1557,7 +1557,7 @@ const PortalLayout = () => {
           pointerEvents: 'auto'
         }}>
           {/* Minimized Pill */}
-          <div 
+          <div
             className="compact-progress-pill"
             onClick={() => navigate('/admin/claims')}
             style={{
@@ -1877,7 +1877,7 @@ const PortalLayout = () => {
 
       {/* Floating Chatbot Button */}
       {!isChatOpen && (
-        <button 
+        <button
           className="chatbot-ai-emoji-btn"
           style={{ right: `${btnPosition.right}px`, bottom: `${btnPosition.bottom}px`, touchAction: 'none' }}
           onMouseDown={handleMouseDown}
@@ -1891,8 +1891,8 @@ const PortalLayout = () => {
 
       {/* Claim AI Assistant Chatbot Panel */}
       {isChatOpen && (
-        <div 
-          className="claim-chat-panel" 
+        <div
+          className="claim-chat-panel"
           ref={chatbotDrawerRef}
           style={{
             right: `${btnPosition.right}px`,
@@ -1904,7 +1904,7 @@ const PortalLayout = () => {
           }}
         >
           {/* Resize Handle at Top-Left */}
-          <div 
+          <div
             className="chat-panel-resize-handle"
             onMouseDown={handleResizeMouseDown}
             onTouchStart={handleResizeTouchStart}
@@ -1943,8 +1943,8 @@ const PortalLayout = () => {
               </div>
               <div className="chat-sessions-list">
                 {sessions.map((s) => (
-                  <div 
-                    key={s.session_id} 
+                  <div
+                    key={s.session_id}
                     className={`session-item ${currentSessionId === s.session_id ? 'active' : ''}`}
                     onClick={() => handleSwitchSession(s.session_id)}
                   >
@@ -1953,8 +1953,8 @@ const PortalLayout = () => {
                       {s.session_title || 'Cuộc hội thoại'}
                     </span>
                     {s.session_id !== 'default' && (
-                      <button 
-                        className="session-delete-btn" 
+                      <button
+                        className="session-delete-btn"
                         onClick={(e) => handleDeleteSession(s.session_id, e)}
                         title="Xóa phiên"
                       >
@@ -1968,7 +1968,7 @@ const PortalLayout = () => {
           )}
 
           <div className="claim-chat-main-area">
-            <div 
+            <div
               className="claim-chat-header"
               style={{ cursor: 'grab', userSelect: 'none', touchAction: 'none' }}
               onMouseDown={handlePanelHeaderMouseDown}
@@ -1979,23 +1979,23 @@ const PortalLayout = () => {
                 Trợ lý AI SmartFlow
               </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <button 
+                <button
                   className={`claim-chat-header-btn ${showSessionsPanel ? 'active' : ''}`}
-                  title="Danh sách cuộc hội thoại" 
+                  title="Danh sách cuộc hội thoại"
                   onClick={() => setShowSessionsPanel(prev => !prev)}
                 >
                   <History size={15} />
                 </button>
-                <button 
-                  className="claim-chat-header-btn" 
-                  title="Đặt lại kích thước mặc định" 
+                <button
+                  className="claim-chat-header-btn"
+                  title="Đặt lại kích thước mặc định"
                   onClick={() => setPanelSize({ width: 500, height: 750 })}
                 >
                   <RotateCcw size={15} />
                 </button>
-                <button 
-                  className="claim-chat-header-btn" 
-                  title="Xóa lịch sử chat trong phiên" 
+                <button
+                  className="claim-chat-header-btn"
+                  title="Xóa lịch sử chat trong phiên"
                   onClick={handleClearChat}
                 >
                   <Trash2 size={15} />
@@ -2003,13 +2003,13 @@ const PortalLayout = () => {
                 <button className="claim-chat-close" onClick={() => setIsChatOpen(false)}>✕</button>
               </div>
             </div>
-            
+
             <div className="claim-chat-messages">
               {chatMessages.map((msg, idx) => (
                 <div key={idx} className="chat-message-row">
                   <div className={`chat-message-bubble ${msg.role === 'user' ? 'chat-message-user' : 'chat-message-bot'}`}>
                     {renderMessageText(msg.text)}
-                    
+
                     {/* Suggestions */}
                     {msg.role === 'bot' && msg.suggestions && msg.suggestions.length > 0 && (
                       <div className="chat-suggestions-container">
@@ -2048,8 +2048,8 @@ const PortalLayout = () => {
                             )}
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
                               <span><strong>Action:</strong> {item.action || item.penalty || 'N/A'}</span>
-                              <span 
-                                className="chat-item-photo-link" 
+                              <span
+                                className="chat-item-photo-link"
                                 onClick={() => handleViewPhoto(item)}
                                 title="Xem chi tiết khiếu nại"
                               >
@@ -2067,7 +2067,7 @@ const PortalLayout = () => {
                     <span className="chat-message-time">{msg.time}</span>
                   </div>
                   {idx > 0 && (
-                    <button 
+                    <button
                       className="chat-msg-delete-btn"
                       title="Xóa tin nhắn này"
                       onClick={() => handleDeleteMessage(idx)}
@@ -2088,10 +2088,10 @@ const PortalLayout = () => {
             </div>
 
             <div className="claim-chat-input-area">
-              <input 
-                type="text" 
-                className="claim-chat-input" 
-                placeholder="Hỏi bất kỳ điều gì..." 
+              <input
+                type="text"
+                className="claim-chat-input"
+                placeholder="Hỏi bất kỳ điều gì..."
                 ref={chatInputRef}
                 defaultValue=""
                 onKeyDown={(e) => {
@@ -2107,7 +2107,8 @@ const PortalLayout = () => {
       )}
 
       {/* Inline styles for Portal Layout structure */}
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .admin-layout {
           display: flex;
           min-height: 100vh;
@@ -2151,9 +2152,27 @@ const PortalLayout = () => {
           min-height: 0 !important;
           height: 100% !important;
         }
-        .admin-layout.fit-to-screen-active .admin-list-layout {
+        .admin-layout.fit-to-screen-active .main-tabs,
+        .admin-layout.fit-to-screen-active .defect-mgmt-tabs {
+          flex-shrink: 0 !important;
+          position: relative !important;
+          top: 0 !important;
+          margin-top: 0 !important;
+          margin-bottom: 0 !important;
+          z-index: 10 !important;
+        }
+        .admin-layout.fit-to-screen-active .analytics-view,
+        .admin-layout.fit-to-screen-active .list-view {
           flex: 1 !important;
-          height: auto !important;
+          min-height: 0 !important;
+          overflow-y: auto !important;
+          display: flex !important;
+          flex-direction: column !important;
+        }
+        .admin-layout.fit-to-screen-active .admin-list-layout,
+        .admin-layout.fit-to-screen-active .defect-list-layout {
+          flex: 1 !important;
+          height: 100% !important;
           min-height: 0 !important;
           overflow: hidden !important;
         }

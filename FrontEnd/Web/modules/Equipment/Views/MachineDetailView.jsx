@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api, { getBaseURL } from '@webShared/Services/api.service';
 import { useOutletContext, useNavigate, useParams } from 'react-router-dom';
 import { 
-  ArrowLeft, Edit, FileText, X, Plus, Download, Trash2, ChevronDown, ChevronRight, Settings, Eye, Check
+  ArrowLeft, Edit, FileText, X, Plus, Download, Trash2, ChevronDown, ChevronRight, Settings, Eye, Check, Upload, Camera
 } from 'lucide-react';
 import axios from 'axios';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
@@ -39,6 +39,28 @@ const MachineDetailView = () => {
   
   // Dropdown action menus for file items
   const [activeFileMenuId, setActiveFileMenuId] = useState(null);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [imageError, setImageError] = useState({});
+  const avatarInputRef = React.useRef(null);
+
+  const handleAvatarUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64Data = reader.result;
+      try {
+        await api.put(`/machines/${id}`, { ...machine, images: base64Data });
+        setMachine(prev => ({ ...prev, images: base64Data }));
+        setImageError({});
+        setMessage({ type: 'success', text: 'Đã cập nhật ảnh máy móc thành công.' });
+      } catch (err) {
+        console.error('Lỗi cập nhật ảnh máy:', err);
+        setMessage({ type: 'error', text: 'Không thể cập nhật ảnh máy.' });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
 
 
@@ -58,6 +80,12 @@ const MachineDetailView = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (id) {
+      loadMachineData();
+    }
+  }, [id]);
 
   useEffect(() => {
     if (screenCode && title) {
@@ -353,24 +381,106 @@ const MachineDetailView = () => {
         </h3>
 
         <div style={{ display: 'flex', gap: '30px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-          {/* Column Left: Large Circular Avatar */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '130px', flexShrink: 0 }}>
-            <div style={{
-              width: '120px', height: '120px', borderRadius: '60px', backgroundColor: '#7B5233',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#fff', fontSize: '48px', fontWeight: '800', overflow: 'hidden'
-            }}>
-              {machine.images ? (
-                <img 
-                  src={machine.images} 
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                  alt="" 
+          {/* Column Left: Large Circular Avatar with Thumbnails & Upload Trigger */}
+          {(() => {
+            const parseImages = (imagesStr) => {
+              if (!imagesStr || !imagesStr.trim()) return [];
+              let list = [];
+              try {
+                const parsed = JSON.parse(imagesStr);
+                if (Array.isArray(parsed)) list = parsed;
+                else if (typeof parsed === 'string') list = [parsed];
+              } catch {
+                if (imagesStr.includes(',')) {
+                  list = imagesStr.split(',');
+                } else {
+                  list = [imagesStr];
+                }
+              }
+              return list
+                .map(item => String(item).trim())
+                .filter(item => item && item !== 'null' && item !== 'undefined' && item !== 'none')
+                .map(item => (item.startsWith('/') && !item.startsWith('//')) ? getBaseURL() + item : item);
+            };
+
+            const activeImages = parseImages(machine.images);
+            const currentImgSrc = activeImages[activeImageIndex] || activeImages[0];
+            const hasValidImage = activeImages.length > 0 && currentImgSrc && !imageError[currentImgSrc];
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', width: '130px', flexShrink: 0 }}>
+                <input 
+                  type="file" 
+                  ref={avatarInputRef} 
+                  accept="image/*" 
+                  onChange={handleAvatarUpload} 
+                  style={{ display: 'none' }} 
                 />
-              ) : (
-                machine.name ? machine.name.charAt(0).toUpperCase() : 'M'
-              )}
-            </div>
-          </div>
+                <div 
+                  onClick={() => avatarInputRef.current?.click()}
+                  title="Nhấp để tải lên / đổi ảnh máy"
+                  style={{
+                    width: '120px', height: '120px', borderRadius: '60px', backgroundColor: '#7B5233',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#fff', fontSize: '48px', fontWeight: '800', overflow: 'hidden',
+                    position: 'relative', cursor: 'pointer', border: '3px solid #EADCC9',
+                    boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
+                  }}
+                >
+                  {hasValidImage ? (
+                    <img 
+                      src={currentImgSrc} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                      alt={machine.name || ''} 
+                      onError={() => {
+                        setImageError(prev => ({ ...prev, [currentImgSrc]: true }));
+                      }}
+                    />
+                  ) : (
+                    <span>{machine.name ? machine.name.charAt(0).toUpperCase() : 'M'}</span>
+                  )}
+
+                  {/* Camera overlay */}
+                  <div style={{
+                    position: 'absolute', bottom: 0, left: 0, right: 0, height: '30px',
+                    backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', color: '#fff'
+                  }}>
+                    <Camera size={14} />
+                  </div>
+                </div>
+
+                <button 
+                  type="button"
+                  onClick={() => avatarInputRef.current?.click()}
+                  style={{
+                    border: 'none', background: 'none', color: '#7B5233', fontSize: '11px',
+                    fontWeight: '800', cursor: 'pointer', textDecoration: 'underline'
+                  }}
+                >
+                  Tải ảnh máy lên
+                </button>
+
+                {activeImages.length > 1 && (
+                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap', marginTop: '4px' }}>
+                    {activeImages.map((imgUrl, idx) => (
+                      <div 
+                        key={idx} 
+                        onClick={() => setActiveImageIndex(idx)}
+                        style={{ 
+                          width: '32px', height: '32px', borderRadius: '6px', overflow: 'hidden', 
+                          border: idx === activeImageIndex ? '2px solid #7B5233' : '1px solid #cbd5e1',
+                          cursor: 'pointer', transition: 'all 0.2s ease', opacity: idx === activeImageIndex ? 1 : 0.7
+                        }}
+                      >
+                        <img src={imgUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Column Right: Field Grids */}
           <div style={{ flex: 1, minWidth: '350px' }}>
