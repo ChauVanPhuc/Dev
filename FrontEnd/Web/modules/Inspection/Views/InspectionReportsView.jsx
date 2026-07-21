@@ -57,6 +57,7 @@ const InspectionReports = () => {
   // Data lists
   const [stageInspections, setStageInspections] = useState([]);
   const [dailyInspections, setDailyInspections] = useState([]);
+  const [defectTypesMap, setDefectTypesMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
 
@@ -100,6 +101,22 @@ const InspectionReports = () => {
   const [inboundLimit, setInboundLimit] = useState(15);
   const [dailyPage, setDailyPage] = useState(1);
   const [dailyLimit, setDailyLimit] = useState(15);
+
+  const getDisplayInspector = (item) => {
+    if (!item) return 'N/A';
+    if (item.inspector_name && item.inspector_name.trim() && item.inspector_name !== 'N/A') {
+      return item.inspector_name;
+    }
+    if (item.data_json) {
+      try {
+        const parsed = typeof item.data_json === 'string' ? JSON.parse(item.data_json) : item.data_json;
+        if (parsed && (parsed.created_by || parsed.inspector_name)) {
+          return parsed.inspector_name || parsed.created_by;
+        }
+      } catch (e) {}
+    }
+    return 'N/A';
+  };
 
   // Set Header Title / Subtitle
   useEffect(() => {
@@ -246,13 +263,22 @@ const InspectionReports = () => {
     setLoading(true);
     try {
       // Fetch up to 1000 items to support rich frontend search/filter/pagination
-      const [stageRes, dailyRes] = await Promise.all([
+      const [stageRes, dailyRes, defectTypesRes] = await Promise.all([
         api.get('/inspections/stage?limit=1000'),
-        api.get('/inspections/daily?limit=1000')
+        api.get('/inspections/daily?limit=1000'),
+        api.get('/inspections/defect-types').catch(() => [])
       ]);
       
       setStageInspections(Array.isArray(stageRes) ? stageRes : []);
       setDailyInspections(Array.isArray(dailyRes) ? dailyRes : []);
+
+      const dMap = {};
+      if (Array.isArray(defectTypesRes)) {
+        defectTypesRes.forEach(d => {
+          if (d.id) dMap[d.id] = d.name;
+        });
+      }
+      setDefectTypesMap(dMap);
     } catch (err) {
       console.error('Lỗi khi tải dữ liệu kiểm tra:', err);
     } finally {
@@ -282,10 +308,12 @@ const InspectionReports = () => {
     // Filter out quy-trinh and mau-dau-tien (which have dedicated tabs)
     let result = stageInspections.filter(item => item.inspection_type !== 'quy-trinh' && item.inspection_type !== 'mau-dau-tien');
 
-    // Search filter (PO, SKU, Inspector)
+    // Search filter (PO, SKU, Inspector, ID)
     if (stageSearch.trim()) {
       const term = stageSearch.toLowerCase().trim();
       result = result.filter(item => 
+        String(item.id).includes(term) ||
+        `#${item.id}`.includes(term) ||
         (item.batch_no || '').toLowerCase().includes(term) ||
         (item.product_sku || '').toLowerCase().includes(term) ||
         (item.inspector_name || '').toLowerCase().includes(term) ||
@@ -345,10 +373,12 @@ const InspectionReports = () => {
   const filteredProcessList = useMemo(() => {
     let result = stageInspections.filter(item => item.inspection_type === 'quy-trinh');
 
-    // Search filter (PO, SKU, Inspector)
+    // Search filter (PO, SKU, Inspector, ID)
     if (stageSearch.trim()) {
       const term = stageSearch.toLowerCase().trim();
       result = result.filter(item => 
+        String(item.id).includes(term) ||
+        `#${item.id}`.includes(term) ||
         (item.batch_no || '').toLowerCase().includes(term) ||
         (item.product_sku || '').toLowerCase().includes(term) ||
         (item.inspector_name || '').toLowerCase().includes(term)
@@ -398,10 +428,12 @@ const InspectionReports = () => {
   const filteredInboundList = useMemo(() => {
     let result = stageInspections.filter(item => item.inspection_type === 'mau-dau-tien');
 
-    // Search filter (PO, SKU, Inspector)
+    // Search filter (PO, SKU, Inspector, ID)
     if (inboundSearch.trim()) {
       const term = inboundSearch.toLowerCase().trim();
       result = result.filter(item => 
+        String(item.id).includes(term) ||
+        `#${item.id}`.includes(term) ||
         (item.batch_no || '').toLowerCase().includes(term) ||
         (item.product_sku || '').toLowerCase().includes(term) ||
         (item.inspector_name || '').toLowerCase().includes(term)
@@ -451,10 +483,12 @@ const InspectionReports = () => {
   const filteredDailyList = useMemo(() => {
     let result = [...dailyInspections];
 
-    // Search filter (Stage, Inspector)
+    // Search filter (Stage, Inspector, ID)
     if (dailySearch.trim()) {
       const term = dailySearch.toLowerCase().trim();
       result = result.filter(item => 
+        String(item.id).includes(term) ||
+        `#${item.id}`.includes(term) ||
         (item.stage_name || '').toLowerCase().includes(term) ||
         (item.inspector_name || '').toLowerCase().includes(term)
       );
@@ -696,7 +730,7 @@ const InspectionReports = () => {
       if (activeTab === 'stage') {
         const sheet = workbook.addWorksheet('Phiếu Kiểm Tra Công Đoạn');
         const cols = [
-          { header: 'STT', key: 'stt', width: 8 },
+          { header: 'Mã Phiếu', key: 'code', width: 12 },
           { header: 'Ngày Kiểm Tra', key: 'date', width: 22 },
           { header: 'Mã PO / Batch No', key: 'po', width: 22 },
           { header: 'Mã Sản Phẩm / Công Đoạn', key: 'sku', width: 26 },
@@ -716,7 +750,7 @@ const InspectionReports = () => {
 
         filteredStageList.forEach((item, index) => {
           const rowData = {
-            stt: index + 1,
+            code: `#${item.id}`,
             date: formatDisplayDateTime(item.inspection_date),
             po: item.batch_no || 'N/A',
             sku: item.product_sku || 'N/A',
@@ -741,7 +775,7 @@ const InspectionReports = () => {
       } else if (activeTab === 'input') {
         const sheet = workbook.addWorksheet('Kiểm Tra Đầu Vào');
         const cols = [
-          { header: 'STT', key: 'stt', width: 8 },
+          { header: 'Mã Phiếu', key: 'code', width: 12 },
           { header: 'Ngày Kiểm Tra', key: 'date', width: 22 },
           { header: 'Mã PO / Batch No', key: 'po', width: 22 },
           { header: 'Mã Sản Phẩm / Công Đoạn', key: 'sku', width: 26 },
@@ -759,7 +793,7 @@ const InspectionReports = () => {
 
         filteredInboundList.forEach((item, index) => {
           const rowData = {
-            stt: index + 1,
+            code: `#${item.id}`,
             date: formatDisplayDateTime(item.inspection_date),
             po: item.batch_no || 'N/A',
             sku: item.product_sku || 'N/A',
@@ -782,7 +816,7 @@ const InspectionReports = () => {
       } else if (activeTab === 'process') {
         const sheet = workbook.addWorksheet('Kiểm Tra Quy Trình');
         const cols = [
-          { header: 'STT', key: 'stt', width: 8 },
+          { header: 'Mã Phiếu', key: 'code', width: 12 },
           { header: 'Ngày Kiểm Tra', key: 'date', width: 22 },
           { header: 'Mã PO / Batch No', key: 'po', width: 22 },
           { header: 'Mã Sản Phẩm / Công Đoạn', key: 'sku', width: 26 },
@@ -800,7 +834,7 @@ const InspectionReports = () => {
 
         filteredProcessList.forEach((item, index) => {
           const rowData = {
-            stt: index + 1,
+            code: `#${item.id}`,
             date: formatDisplayDateTime(item.inspection_date),
             po: item.batch_no || 'N/A',
             sku: item.product_sku || 'N/A',
@@ -823,7 +857,7 @@ const InspectionReports = () => {
       } else {
         const sheet = workbook.addWorksheet('Ghi Nhận Lỗi Hàng Ngày');
         const cols = [
-          { header: 'STT', key: 'stt', width: 8 },
+          { header: 'Mã Phiếu', key: 'code', width: 12 },
           { header: 'Ngày Ghi Nhận', key: 'date', width: 18 },
           { header: 'Tên Công Đoạn', key: 'stage', width: 26 },
           { header: 'QC Thực Hiện', key: 'inspector', width: 24 },
@@ -841,7 +875,7 @@ const InspectionReports = () => {
 
         filteredDailyList.forEach((item, index) => {
           const rowData = {
-            stt: index + 1,
+            code: `#${item.id}`,
             date: formatDisplayDate(item.inspection_date),
             stage: item.stage_name || 'N/A',
             inspector: item.inspector_name || 'N/A',
@@ -1547,11 +1581,12 @@ const InspectionReports = () => {
     let detailsHtml = '';
     if (isDaily) {
       detailsHtml = `
-        <table style="width:100%; border-collapse:collapse; margin-top:15px;">
+        <div style="margin-top:15px; font-weight:bold; color:#7B5233;">Danh sách chi tiết các lỗi:</div>
+        <table style="width:100%; border-collapse:collapse; margin-top:8px;">
           <thead>
             <tr style="background:#7B5233; color:#fff;">
               <th style="padding:8px; border:1px solid #ddd;">STT</th>
-              <th style="padding:8px; border:1px solid #ddd;">Mã Lỗi</th>
+              <th style="padding:8px; border:1px solid #ddd;">Tên Loại Lỗi</th>
               <th style="padding:8px; border:1px solid #ddd;">Số Lượng Lỗi</th>
             </tr>
           </thead>
@@ -1559,7 +1594,7 @@ const InspectionReports = () => {
             ${(item.defects || []).map((d, i) => `
               <tr>
                 <td style="padding:8px; border:1px solid #ddd; text-align:center;">${i+1}</td>
-                <td style="padding:8px; border:1px solid #ddd; text-align:center; font-weight:bold;">Mã lỗi #${d.defect_id}</td>
+                <td style="padding:8px; border:1px solid #ddd; font-weight:bold;">${d.defect_name || d.name || `Mã lỗi #${d.defect_id}`}</td>
                 <td style="padding:8px; border:1px solid #ddd; text-align:center; color:#dc2626; font-weight:bold;">${d.quantity}</td>
               </tr>
             `).join('') || '<tr><td colspan="3" style="text-align:center; padding:10px;">Không có danh sách lỗi</td></tr>'}
@@ -2218,7 +2253,7 @@ const InspectionReports = () => {
                   <table className="data-table">
                     <thead>
                       <tr>
-                        <th style={{ width: '60px', textAlign: 'center' }}>STT</th>
+                        <th style={{ width: '90px', textAlign: 'center' }}>MÃ PHIẾU</th>
                         <th style={{ width: '150px' }}>Ngày kiểm tra</th>
                         <th>Mã PO</th>
                         <th>Mã sản phẩm / Công đoạn</th>
@@ -2230,11 +2265,10 @@ const InspectionReports = () => {
                     </thead>
                     <tbody>
                       {paginatedStageList.map((item, idx) => {
-                        const stt = (stagePage - 1) * stageLimit + idx + 1;
                         const isPass = item.conclusion === 'pass';
                         return (
                           <tr key={item.id} onClick={() => setSelectedInspection(item)} style={{ cursor: 'pointer' }}>
-                            <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>#{stt}</td>
+                            <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>#{item.id}</td>
                             <td style={{ fontWeight: '600' }}>{formatDisplayDateTime(item.inspection_date)}</td>
                             <td style={{ color: '#7B5233', fontWeight: 'bold' }}>{item.batch_no || 'N/A'}</td>
                             <td style={{ fontWeight: '700' }}>{item.product_sku || 'N/A'}</td>
@@ -2258,7 +2292,6 @@ const InspectionReports = () => {
                 {/* Mobile View Card Grid */}
                 <div className="mobile-only mgmt-cards-container" style={{ padding: '10px' }}>
                   {paginatedStageList.map((item, idx) => {
-                    const stt = (stagePage - 1) * stageLimit + idx + 1;
                     const isPass = item.conclusion === 'pass';
                     return (
                       <div 
@@ -2268,156 +2301,7 @@ const InspectionReports = () => {
                         onClick={() => setSelectedInspection(item)}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                          <span style={{ fontWeight: 'bold', color: '#8D6E63' }}>#{stt}</span>
-                          <span className={`status-badge ${isPass ? 'pass' : 'fail'}`}>
-                            {isPass ? 'ĐẠT' : 'LỖI'}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#7B5233', marginBottom: '4px' }}>
-                          PO: {item.batch_no || 'N/A'}
-                        </div>
-                        <div style={{ fontSize: '0.85rem', color: '#2D1A12', marginBottom: '4px' }}>
-                          Sản phẩm: <strong>{item.product_sku || 'N/A'}</strong>
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: '#6B7280', display: 'flex', justifyContent: 'space-between' }}>
-                          <span>QC: {item.inspector_name || 'N/A'}</span>
-                          <span>{formatDisplayDate(item.inspection_date)}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Pagination Controls */}
-                <div className="admin-pagination-desktop" style={{ borderTop: '1px solid #EADCC9', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', borderBottomLeftRadius: '12px', borderBottomRightRadius: '12px' }}>
-                  <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
-                    Hiển thị <b>{paginatedStageList.length}</b> trên <b>{filteredStageList.length}</b> phiếu kiểm tra
-                  </div>
-                  {totalStagePages > 1 && (
-                    <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-                      <button 
-                        className="page-btn" 
-                        onClick={() => setStagePage(prev => Math.max(prev - 1, 1))} 
-                        disabled={stagePage === 1}
-                        style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#7B5233', cursor: stagePage === 1 ? 'not-allowed' : 'pointer', opacity: stagePage === 1 ? 0.5 : 1 }}
-                      >
-                        <ChevronLeft size={14} />
-                      </button>
-                      {(() => {
-                        const pages = [];
-                        const maxVisible = 5;
-                        let start = Math.max(1, stagePage - Math.floor(maxVisible / 2));
-                        let end = Math.min(totalStagePages, start + maxVisible - 1);
-                        if (end - start + 1 < maxVisible) {
-                          start = Math.max(1, end - maxVisible + 1);
-                        }
-                        for (let p = start; p <= end; p++) {
-                          pages.push(
-                            <button
-                              key={p}
-                              onClick={() => setStagePage(p)}
-                              style={{
-                                padding: '6px 10px',
-                                borderRadius: '8px',
-                                border: '1px solid #EADCC9',
-                                backgroundColor: stagePage === p ? '#7B5233' : '#FAF6F0',
-                                color: stagePage === p ? '#fff' : '#7B5233',
-                                fontWeight: '700',
-                                fontSize: '0.8rem',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              {p}
-                            </button>
-                          );
-                        }
-                        return pages;
-                      })()}
-                      <button 
-                        className="page-btn" 
-                        onClick={() => setStagePage(prev => Math.min(prev + 1, totalStagePages))} 
-                        disabled={stagePage === totalStagePages}
-                        style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#7B5233', cursor: stagePage === totalStagePages ? 'not-allowed' : 'pointer', opacity: stagePage === totalStagePages ? 0.5 : 1 }}
-                      >
-                        <ChevronRight size={14} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </>
-            )
-          ) : activeTab === 'stage' ? (
-            // TAB 1: KIỂM TRA CÔNG ĐOẠN TABLE
-            paginatedStageList.length === 0 ? (
-              <div style={{ padding: '5rem', textAlign: 'center', backgroundColor: '#fff', borderRadius: '12px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                  <FileText size={48} opacity={0.3} style={{ color: '#8D6E63' }} />
-                  <span>Không tìm thấy phiếu kiểm tra công đoạn nào phù hợp.</span>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="table-responsive desktop-only admin-table-scroll" style={{ flex: 1, overflowY: 'auto' }}>
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th style={{ width: '60px', textAlign: 'center' }}>STT</th>
-                        <th style={{ width: '150px' }}>Ngày kiểm tra</th>
-                        <th>Mã PO</th>
-                        <th>Mã sản phẩm / Công đoạn</th>
-                        <th>Loại công đoạn</th>
-                        <th>Người kiểm QC</th>
-                        <th style={{ width: '120px', textAlign: 'center' }}>Kết luận</th>
-                        <th style={{ width: '100px', textAlign: 'center' }}>Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paginatedStageList.map((item, idx) => {
-                        const stt = (stagePage - 1) * stageLimit + idx + 1;
-                        const isPass = item.conclusion === 'pass';
-                        return (
-                          <tr key={item.id} onClick={() => setSelectedInspection(item)} style={{ cursor: 'pointer' }}>
-                            <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>#{stt}</td>
-                            <td style={{ fontWeight: '600' }}>{formatDisplayDateTime(item.inspection_date)}</td>
-                            <td style={{ color: '#7B5233', fontWeight: 'bold' }}>{item.batch_no || 'N/A'}</td>
-                            <td style={{ fontWeight: '700' }}>{item.product_sku || 'N/A'}</td>
-                            <td style={{ fontWeight: '500' }}>{getInspectionTypeLabel(item.inspection_type)}</td>
-                            <td>{item.inspector_name || 'N/A'}</td>
-                            <td style={{ textAlign: 'center' }}>
-                              <span className={`status-badge ${isPass ? 'pass' : 'fail'}`}>
-                                {isPass ? 'Đạt' : 'Lỗi'}
-                              </span>
-                            </td>
-                            <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                              <button 
-                                className="action-btn"
-                                onClick={() => setSelectedInspection(item)}
-                                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#7B5233' }}
-                              >
-                                <Eye size={16} />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Mobile View Card Grid */}
-                <div className="mobile-only mgmt-cards-container" style={{ padding: '10px' }}>
-                  {paginatedStageList.map((item, idx) => {
-                    const stt = (stagePage - 1) * stageLimit + idx + 1;
-                    const isPass = item.conclusion === 'pass';
-                    return (
-                      <div 
-                        key={item.id} 
-                        className="mgmt-card animate-card-entrance" 
-                        style={{ backgroundColor: '#fff', borderRadius: '10px', border: '1px solid #EADCC9', padding: '12px', marginBottom: '10px', cursor: 'pointer' }}
-                        onClick={() => setSelectedInspection(item)}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                          <span style={{ fontWeight: 'bold', color: '#8D6E63' }}>#{stt}</span>
+                          <span style={{ fontWeight: 'bold', color: '#8D6E63' }}>Mã: #{item.id}</span>
                           <span className={`status-badge ${isPass ? 'pass' : 'fail'}`}>
                             {isPass ? 'ĐẠT' : 'LỖI'}
                           </span>
@@ -2510,7 +2394,7 @@ const InspectionReports = () => {
                   <table className="data-table">
                     <thead>
                       <tr>
-                        <th style={{ width: '60px', textAlign: 'center' }}>STT</th>
+                        <th style={{ width: '90px', textAlign: 'center' }}>MÃ PHIẾU</th>
                         <th style={{ width: '150px' }}>Ngày kiểm tra</th>
                         <th>Mã PO</th>
                         <th>Mã sản phẩm / Công đoạn</th>
@@ -2521,11 +2405,10 @@ const InspectionReports = () => {
                     </thead>
                     <tbody>
                       {paginatedInboundList.map((item, idx) => {
-                        const stt = (inboundPage - 1) * inboundLimit + idx + 1;
                         const isPass = item.conclusion === 'pass';
                         return (
                           <tr key={item.id} onClick={() => setSelectedInspection(item)} style={{ cursor: 'pointer' }}>
-                            <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>#{stt}</td>
+                            <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>#{item.id}</td>
                             <td style={{ fontWeight: '600' }}>{formatDisplayDateTime(item.inspection_date)}</td>
                             <td style={{ color: '#7B5233', fontWeight: 'bold' }}>{item.batch_no || 'N/A'}</td>
                             <td style={{ fontWeight: '700' }}>{item.product_sku || 'N/A'}</td>
@@ -2548,7 +2431,6 @@ const InspectionReports = () => {
                 {/* Mobile View Card Grid */}
                 <div className="mobile-only mgmt-cards-container" style={{ padding: '10px' }}>
                   {paginatedInboundList.map((item, idx) => {
-                    const stt = (inboundPage - 1) * inboundLimit + idx + 1;
                     const isPass = item.conclusion === 'pass';
                     return (
                       <div 
@@ -2558,7 +2440,7 @@ const InspectionReports = () => {
                         onClick={() => setSelectedInspection(item)}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                          <span style={{ fontWeight: 'bold', color: '#8D6E63' }}>#{stt}</span>
+                          <span style={{ fontWeight: 'bold', color: '#8D6E63' }}>Mã: #{item.id}</span>
                           <span className={`status-badge ${isPass ? 'pass' : 'fail'}`}>
                             {isPass ? 'ĐẠT' : 'LỖI'}
                           </span>
@@ -2651,7 +2533,7 @@ const InspectionReports = () => {
                   <table className="data-table">
                     <thead>
                       <tr>
-                        <th style={{ width: '60px', textAlign: 'center' }}>STT</th>
+                        <th style={{ width: '90px', textAlign: 'center' }}>MÃ PHIẾU</th>
                         <th style={{ width: '150px' }}>Ngày ghi nhận</th>
                         <th>Tên công đoạn</th>
                         <th>Người ghi QC</th>
@@ -2663,10 +2545,9 @@ const InspectionReports = () => {
                     </thead>
                     <tbody>
                       {paginatedDailyList.map((item, idx) => {
-                        const stt = (dailyPage - 1) * dailyLimit + idx + 1;
                         return (
                           <tr key={item.id} onClick={() => setSelectedDaily(item)} style={{ cursor: 'pointer' }}>
-                            <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>#{stt}</td>
+                            <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>#{item.id}</td>
                             <td style={{ fontWeight: '600' }}>{formatDisplayDate(item.inspection_date)}</td>
                             <td style={{ color: '#7B5233', fontWeight: 'bold' }}>{item.stage_name || 'N/A'}</td>
                             <td>{item.inspector_name || 'N/A'}</td>
@@ -2686,7 +2567,6 @@ const InspectionReports = () => {
                 {/* Mobile View Card Grid for Daily Defects */}
                 <div className="mobile-only mgmt-cards-container" style={{ padding: '10px' }}>
                   {paginatedDailyList.map((item, idx) => {
-                    const stt = (dailyPage - 1) * dailyLimit + idx + 1;
                     return (
                       <div 
                         key={item.id} 
@@ -2695,7 +2575,7 @@ const InspectionReports = () => {
                         onClick={() => setSelectedDaily(item)}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                          <span style={{ fontWeight: 'bold', color: '#8D6E63' }}>#{stt}</span>
+                          <span style={{ fontWeight: 'bold', color: '#8D6E63' }}>Mã: #{item.id}</span>
                           <span style={{ color: '#EF4444', fontWeight: 'bold', fontSize: '0.85rem' }}>{item.total_defects} lỗi</span>
                         </div>
                         <div style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#7B5233', marginBottom: '4px' }}>
@@ -2783,9 +2663,8 @@ const InspectionReports = () => {
                   <table className="data-table">
                     <thead>
                       <tr>
-                        <th style={{ width: '60px', textAlign: 'center' }}>STT</th>
+                        <th style={{ width: '90px', textAlign: 'center' }}>MÃ PHIẾU</th>
                         <th style={{ width: '150px' }}>Ngày kiểm tra</th>
-                        <th>Mã PO</th>
                         <th>Mã sản phẩm / Công đoạn</th>
                         <th>Người kiểm QC</th>
                         <th style={{ width: '120px', textAlign: 'center' }}>Kết luận</th>
@@ -2794,15 +2673,13 @@ const InspectionReports = () => {
                     </thead>
                     <tbody>
                       {paginatedProcessList.map((item, idx) => {
-                        const stt = (stagePage - 1) * stageLimit + idx + 1; // Reusing stagePage
                         const isPass = item.conclusion === 'pass';
                         return (
                           <tr key={item.id} onClick={() => setSelectedInspection(item)} style={{ cursor: 'pointer' }}>
-                            <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>#{stt}</td>
+                            <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>#{item.id}</td>
                             <td style={{ fontWeight: '600' }}>{formatDisplayDateTime(item.inspection_date)}</td>
-                            <td style={{ color: '#7B5233', fontWeight: 'bold' }}>{item.batch_no || 'N/A'}</td>
                             <td style={{ fontWeight: '700' }}>{item.product_sku || 'N/A'}</td>
-                            <td>{item.inspector_name || 'N/A'}</td>
+                            <td>{getDisplayInspector(item)}</td>
                             <td style={{ textAlign: 'center' }}>
                               <span className={`status-badge ${isPass ? 'pass' : 'fail'}`}>
                                 {isPass ? 'Đạt' : 'Lỗi'}
@@ -2821,7 +2698,6 @@ const InspectionReports = () => {
                 {/* Mobile View Card Grid */}
                 <div className="mobile-only mgmt-cards-container" style={{ padding: '10px' }}>
                   {paginatedProcessList.map((item, idx) => {
-                    const stt = (stagePage - 1) * stageLimit + idx + 1;
                     const isPass = item.conclusion === 'pass';
                     return (
                       <div 
@@ -2831,19 +2707,16 @@ const InspectionReports = () => {
                         onClick={() => setSelectedInspection(item)}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                          <span style={{ fontWeight: 'bold', color: '#8D6E63' }}>#{stt}</span>
+                          <span style={{ fontWeight: 'bold', color: '#8D6E63' }}>Mã: #{item.id}</span>
                           <span className={`status-badge ${isPass ? 'pass' : 'fail'}`}>
                             {isPass ? 'ĐẠT' : 'LỖI'}
                           </span>
-                        </div>
-                        <div style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#7B5233', marginBottom: '4px' }}>
-                          PO: {item.batch_no || 'N/A'}
                         </div>
                         <div style={{ fontSize: '0.85rem', color: '#2D1A12', marginBottom: '4px' }}>
                           Sản phẩm: <strong>{item.product_sku || 'N/A'}</strong>
                         </div>
                         <div style={{ fontSize: '0.8rem', color: '#6B7280', display: 'flex', justifyContent: 'space-between' }}>
-                          <span>QC: {item.inspector_name || 'N/A'}</span>
+                          <span>QC: {getDisplayInspector(item)}</span>
                           <span>{formatDisplayDate(item.inspection_date)}</span>
                         </div>
                       </div>
@@ -3502,7 +3375,9 @@ const InspectionReports = () => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {item.defects.map((def, idx) => (
                       <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: '#fff', border: '1px solid #EADCC9', borderRadius: '8px', fontSize: '0.85rem' }}>
-                        <span style={{ fontWeight: 'bold', color: '#7B5233' }}>Mã lỗi #{def.defect_id}</span>
+                        <span style={{ fontWeight: 'bold', color: '#7B5233' }}>
+                          {def.defect_name || def.name || defectTypesMap[def.defect_id] || (def.defect_code ? `${def.defect_code} (Mã #${def.defect_id})` : `Mã lỗi #${def.defect_id}`)}
+                        </span>
                         <span style={{ color: '#EF4444', fontWeight: 'bold' }}>Số lượng: {def.quantity}</span>
                       </div>
                     ))}

@@ -226,16 +226,19 @@ const StageProcessView = () => {
     const payload = {
       inspection_type: inspectionType,
       product_sku: processCode,
+      inspector_name: user?.full_name || user?.username || 'QC',
+      conclusion: overallConclusion,
       process_id: selectedProcessId,
       step_id: selectedStepId,
       data_json: JSON.stringify({
         process_code: processCode,
         steps: stepData,
         general_notes: notes,
-        general_evidence: generalEvidence
+        general_evidence: generalEvidence,
+        created_by: user?.full_name || user?.username || 'QC'
       }),
       overall_result: overallConclusion,
-      created_by: user?.username || 'QC'
+      created_by: user?.full_name || user?.username || 'QC'
     };
 
     try {

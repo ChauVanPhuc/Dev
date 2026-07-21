@@ -21,13 +21,118 @@ const DefectAnalytics = ({ stage }) => {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedWeek, setSelectedWeek] = useState(1); // 1-52
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [allDailyRecords, setAllDailyRecords] = useState([]);
 
-  // Tính toán số tuần trong năm
-  const weeksInYear = useMemo(() => {
-    const weeks = [];
-    for (let i = 1; i <= 52; i++) weeks.push(i);
-    return weeks;
+  useEffect(() => {
+    const fetchAllRecords = async () => {
+      try {
+        const res = await api.get('/inspections/daily?limit=1000');
+        if (Array.isArray(res)) setAllDailyRecords(res);
+      } catch (err) {
+        console.error("Error fetching all daily records for filter options:", err);
+      }
+    };
+    fetchAllRecords();
   }, []);
+
+  // 1. Available Years (NĂM có dữ liệu)
+  const availableYears = useMemo(() => {
+    const yearsSet = new Set();
+    allDailyRecords.forEach(item => {
+      if (item.inspection_date) {
+        const y = new Date(item.inspection_date).getFullYear();
+        if (!isNaN(y)) yearsSet.add(y);
+      }
+    });
+    const currentYear = new Date().getFullYear();
+    yearsSet.add(currentYear);
+    return Array.from(yearsSet).sort((a, b) => b - a);
+  }, [allDailyRecords]);
+
+  useEffect(() => {
+    if (availableYears.length > 0 && !availableYears.includes(selectedYear)) {
+      setSelectedYear(availableYears[0]);
+    }
+  }, [availableYears]);
+
+  // 2. Available Months (THÁNG có dữ liệu trong năm đã chọn)
+  const availableMonths = useMemo(() => {
+    const monthsSet = new Set();
+    allDailyRecords.forEach(item => {
+      if (item.inspection_date) {
+        const d = new Date(item.inspection_date);
+        if (d.getFullYear() === selectedYear) {
+          monthsSet.add(d.getMonth() + 1);
+        }
+      }
+    });
+    if (monthsSet.size === 0) {
+      const currentMonth = new Date().getMonth() + 1;
+      monthsSet.add(currentMonth);
+    }
+    return Array.from(monthsSet).sort((a, b) => a - b);
+  }, [allDailyRecords, selectedYear]);
+
+  useEffect(() => {
+    if (availableMonths.length > 0 && !availableMonths.includes(selectedMonth)) {
+      setSelectedMonth(availableMonths[0]);
+    }
+  }, [availableMonths]);
+
+  // 3. Available Weeks (TUẦN có dữ liệu trong năm đã chọn)
+  const availableWeeks = useMemo(() => {
+    const weeksSet = new Set();
+    const getWeekNumber = (date) => {
+      const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+      const dayNum = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+      const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+      return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    };
+
+    allDailyRecords.forEach(item => {
+      if (item.inspection_date) {
+        const d = new Date(item.inspection_date);
+        if (d.getFullYear() === selectedYear) {
+          const w = getWeekNumber(d);
+          if (w >= 1 && w <= 52) weeksSet.add(w);
+        }
+      }
+    });
+    if (weeksSet.size === 0) weeksSet.add(1);
+    return Array.from(weeksSet).sort((a, b) => a - b);
+  }, [allDailyRecords, selectedYear]);
+
+  useEffect(() => {
+    if (availableWeeks.length > 0 && !availableWeeks.includes(selectedWeek)) {
+      setSelectedWeek(availableWeeks[0]);
+    }
+  }, [availableWeeks]);
+
+  // 4. Available Categories (NHÓM LỖI có dữ liệu)
+  const availableCategories = useMemo(() => {
+    const categoryLabels = {
+      'visual': 'Ngoại quan',
+      'paint': 'Sơn',
+      'structure': 'Kết cấu',
+      'material': 'Nguyên liệu',
+      'other': 'Khác'
+    };
+    const catSet = new Set();
+    allDailyRecords.forEach(item => {
+      if (Array.isArray(item.defects)) {
+        item.defects.forEach(def => {
+          if (def.defect_type && def.defect_type.category) {
+            catSet.add(def.defect_type.category);
+          }
+        });
+      }
+    });
+    if (catSet.size === 0) {
+      return Object.keys(categoryLabels).map(k => ({ key: k, label: categoryLabels[k] }));
+    }
+    return Array.from(catSet).map(k => ({ key: k, label: categoryLabels[k] || k }));
+  }, [allDailyRecords]);
 
   useEffect(() => {
     const fetchAnalytics = async () => {
@@ -148,7 +253,7 @@ const DefectAnalytics = ({ stage }) => {
                 onChange={(e) => setSelectedYear(parseInt(e.target.value))}
                 style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', fontWeight: '600' }}
               >
-                {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+                {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
 
@@ -161,7 +266,7 @@ const DefectAnalytics = ({ stage }) => {
                   onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
                   style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', fontWeight: '600' }}
                 >
-                  {Array.from({length: 12}, (_, i) => i + 1).map(m => <option key={m} value={m}>Tháng {m}</option>)}
+                  {availableMonths.map(m => <option key={m} value={m}>Tháng {m}</option>)}
                 </select>
               </div>
             )}
@@ -175,7 +280,7 @@ const DefectAnalytics = ({ stage }) => {
                   onChange={(e) => setSelectedWeek(parseInt(e.target.value))}
                   style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', fontWeight: '600' }}
                 >
-                  {weeksInYear.map(w => <option key={w} value={w}>Tuần {w}</option>)}
+                  {availableWeeks.map(w => <option key={w} value={w}>Tuần {w}</option>)}
                 </select>
               </div>
             )}
@@ -189,10 +294,7 @@ const DefectAnalytics = ({ stage }) => {
                 style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', fontWeight: '600', minWidth: '150px' }}
               >
                 <option value="">Tất cả nhóm</option>
-                <option value="visual">Ngoại quan</option>
-                <option value="structure">Kết cấu</option>
-                <option value="material">Nguyên liệu</option>
-                <option value="other">Khác</option>
+                {availableCategories.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
               </select>
             </div>
           </div>

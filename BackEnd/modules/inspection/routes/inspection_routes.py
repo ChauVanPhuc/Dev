@@ -3,7 +3,7 @@ import uuid
 import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_, or_, Date, cast
 from config.database import get_db
 from modules.inspection.models.input_inspection import InputInspection
@@ -77,7 +77,7 @@ def get_daily_inspections(
     """
     records = db.query(DailyInspectionRecord).order_by(DailyInspectionRecord.inspection_date.desc(), DailyInspectionRecord.id.desc()).offset(skip).limit(limit).all()
     
-    # [PERF] Batch load tên người kiểm tra — 1 query thay vì N queries
+    # [PERF] Batch load tên người kiểm tra & tên loại lỗi — 1-2 queries thay vì N queries
     inspector_ids = list({r.inspector_id for r in records if r.inspector_id})
     if inspector_ids:
         accounts = db.query(Account.id, Account.full_name).filter(Account.id.in_(inspector_ids)).all()
@@ -219,12 +219,25 @@ def create_stage_inspection(
     """
     import json
     try:
+        inspector_name = data.inspector_name
+        if not inspector_name or not inspector_name.strip():
+            if data.data_json:
+                try:
+                    p = json.loads(data.data_json) if isinstance(data.data_json, str) else data.data_json
+                    if isinstance(p, dict):
+                        inspector_name = p.get('inspector_name') or p.get('created_by')
+                except Exception:
+                    pass
+        if not inspector_name or not inspector_name.strip():
+            default_acc = db.query(Account.full_name).filter(Account.is_active == True).first()
+            inspector_name = default_acc[0] if default_acc else "QC Hệ thống"
+
         new_record = StageInspection(
             inspection_type = data.inspection_type,
             batch_no        = data.batch_no,
             product_sku     = data.product_sku,
-            inspector_name  = data.inspector_name,
-            conclusion      = data.conclusion,
+            inspector_name  = inspector_name,
+            conclusion      = data.conclusion or getattr(data, 'overall_result', 'pass'),
             notes           = data.notes,
             data_json       = data.data_json,
             images_json     = data.images_json
@@ -252,7 +265,7 @@ def create_stage_inspection(
                     inspected_qty = parsed_data.get('inspected_qty') or parsed_data.get('total_qty', 0)
 
                     if stage_name and (isinstance(defects_list, list) and len(defects_list) > 0 or inspected_qty > 0):
-                        sync_defects_to_daily_inspection(stage_name, defects_list, data.inspector_name, db, inspected_qty=inspected_qty)
+                        sync_defects_to_daily_inspection(stage_name, defects_list, inspector_name, db, inspected_qty=inspected_qty)
             except Exception as sync_err:
                 print(f"[STAGE SYNC ERROR] {sync_err}")
 
@@ -308,8 +321,8 @@ def do_update_stage(id: int, data: StageInspectionCreate, db: Session):
         record.inspection_type = data.inspection_type
         record.batch_no        = data.batch_no
         record.product_sku     = data.product_sku
-        record.inspector_name  = data.inspector_name
-        record.conclusion      = data.conclusion
+        record.inspector_name  = data.inspector_name or getattr(data, 'created_by', None) or record.inspector_name
+        record.conclusion      = data.conclusion or getattr(data, 'overall_result', 'pass')
         record.notes           = data.notes
         record.data_json       = data.data_json
         record.images_json     = data.images_json
@@ -320,7 +333,7 @@ def do_update_stage(id: int, data: StageInspectionCreate, db: Session):
         return record
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Lỗi khi cập nhật phiếu kiểm tra công đoạn: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Lỗi khi cập nhật phiếu kiểm tra: {str(e)}")
 
 @router.get("/stage", response_model=List[StageInspectionRead])
 def get_stage_inspections(
@@ -337,6 +350,7 @@ def get_stage_inspections(
     [GET] Lấy danh sách phiếu kiểm tra công đoạn.
     Hỗ trợ filter theo batch_no, product_sku, month/year, và tìm kiếm text.
     """
+    import json
     query = db.query(StageInspection)
     if batch_no:
         query = query.filter(StageInspection.batch_no == batch_no)
@@ -355,7 +369,18 @@ def get_stage_inspections(
             (StageInspection.product_sku.ilike(search_term)) |
             (StageInspection.inspector_name.ilike(search_term))
         )
-    return query.order_by(StageInspection.created_at.desc(), StageInspection.id.desc()).offset(skip).limit(limit).all()
+    records = query.order_by(StageInspection.created_at.desc(), StageInspection.id.desc()).offset(skip).limit(limit).all()
+    
+    for r in records:
+        if not r.inspector_name or not r.inspector_name.strip():
+            if r.data_json:
+                try:
+                    p = json.loads(r.data_json) if isinstance(r.data_json, str) else r.data_json
+                    if isinstance(p, dict) and (p.get('created_by') or p.get('inspector_name')):
+                        r.inspector_name = p.get('inspector_name') or p.get('created_by')
+                except Exception:
+                    pass
+    return records
 
 UPLOAD_DIR = "static/uploads/inspections"
 if not os.path.exists(UPLOAD_DIR):

@@ -20,6 +20,8 @@ class DailyInspectionDefectRead(BaseModel):
     record_id: int
     defect_id: int
     quantity: int
+    defect_name: Optional[str] = None
+    defect_code: Optional[str] = None
     
     class Config:
         from_attributes = True

@@ -30,3 +30,11 @@ class DailyInspectionDefect(Base):
     # Relationships
     record = relationship("DailyInspectionRecord", back_populates="defects")
     defect_type = relationship("DefectType")
+
+    @property
+    def defect_name(self):
+        return self.defect_type.name if self.defect_type else None
+
+    @property
+    def defect_code(self):
+        return self.defect_type.code if self.defect_type else None
