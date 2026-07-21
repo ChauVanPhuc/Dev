@@ -556,6 +556,29 @@ async def upload_ocr_image(
                 except Exception as groq_err:
                     print(f"Lỗi gọi Groq AI OCR: {groq_err}")
 
+        # 5. Fallback sang pytesseract / PIL nếu AI Vision không trả kết quả
+        if extracted_value is None:
+            try:
+                import pytesseract
+                from PIL import Image, ImageEnhance
+                import io
+
+                img = Image.open(io.BytesIO(contents)).convert('L')
+                enhancer = ImageEnhance.Contrast(img)
+                img_contrast = enhancer.enhance(2.0)
+                
+                ocr_text = pytesseract.image_to_string(img_contrast, config='--psm 6 -c tessedit_char_whitelist=0123456789.')
+                print(f"[OCR DEBUG] Pytesseract text: {ocr_text}")
+                if ocr_text:
+                    match = re.search(r"[-+]?\d*\.\d+|\d+", ocr_text)
+                    if match:
+                        val = float(match.group())
+                        if 0 <= val <= 999:
+                            extracted_value = val
+                            print(f"[OCR DEBUG] Pytesseract extracted: {extracted_value}")
+            except Exception as tess_err:
+                print(f"Lỗi pytesseract fallback: {tess_err}")
+
         print(f"[OCR DEBUG] Final Extracted Value: {extracted_value}")
         return {"value": extracted_value}
         
