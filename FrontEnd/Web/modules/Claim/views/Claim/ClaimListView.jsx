@@ -39,6 +39,9 @@ const ClaimListView = () => {
         setIsAnalyticsOpen={list.setIsAnalyticsOpen}
         exceptionData={list.exceptionData}
         setIsExceptionModalOpen={list.setIsExceptionModalOpen}
+        claims={list.claims}
+        setIsReviewModalOpen={list.setIsReviewModalOpen}
+        setReviewCurrentPage={list.setReviewCurrentPage}
       />
 
       {/* SECTION 3: DETAILED REPORT HEADER */}
@@ -431,6 +434,22 @@ const ClaimListView = () => {
         applyFilters={list.applyFilters}
         clearAllFilters={list.clearAllFilters}
         removeFilterKey={list.removeFilterKey}
+        rowsPerPage={list.rowsPerPage}
+        setRowsPerPage={list.setRowsPerPage}
+        setCurrentPage={list.setCurrentPage}
+        handleYearChange={list.handleYearChange}
+        handleMonthChange={list.handleMonthChange}
+        handleStartDateChange={list.handleStartDateChange}
+        handleEndDateChange={list.handleEndDateChange}
+        isDateFilterValid={list.isDateFilterValid}
+        editKpiShowAllTime={list.editKpiShowAllTime}
+        setEditKpiShowAllTime={list.setEditKpiShowAllTime}
+        uniqueContainerOptions={list.uniqueContainerOptions}
+        showContainerSuggestions={list.showContainerSuggestions}
+        setShowContainerSuggestions={list.setShowContainerSuggestions}
+        uniqueLpnOptions={list.uniqueLpnOptions}
+        showLpnSuggestions={list.showLpnSuggestions}
+        setShowLpnSuggestions={list.setShowLpnSuggestions}
       />
 
       {/* SECTION 4: MAIN DETAILED TABLE */}

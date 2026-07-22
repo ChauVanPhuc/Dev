@@ -319,7 +319,8 @@ def read_cabinet_prices(
         skip = 0
         limit = None
 
-    items, total = controllers.get_cabinet_prices(db, skip=skip, limit=limit, search=search)
+    db_items, total = controllers.get_cabinet_prices(db, skip=skip, limit=limit, search=search)
+    items = [schemas.CabinetPriceResponse.model_validate(item) for item in db_items]
     return {"items": items, "total": total, "page": page, "size": size or total}
 
 @router.post("/cabinet-prices/temp")
@@ -381,7 +382,8 @@ def read_shipments(
     db: Session = Depends(get_db)
 ):
     skip = (page - 1) * size
-    items, total = controllers.get_shipments(db, skip=skip, limit=size, search=search, status=status)
+    db_items, total = controllers.get_shipments(db, skip=skip, limit=size, search=search, status=status)
+    items = [schemas.ContainerShipmentResponse.model_validate(item) for item in db_items]
     return {"items": items, "total": total, "page": page, "size": size}
 
 @router.get("/shipments/{shipment_id}", response_model=schemas.ContainerShipmentResponse)

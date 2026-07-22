@@ -50,7 +50,23 @@ const ClaimFilterBar = ({
   activeFiltersCount,
   applyFilters,
   clearAllFilters,
-  removeFilterKey
+  removeFilterKey,
+  rowsPerPage,
+  setRowsPerPage,
+  setCurrentPage,
+  handleYearChange,
+  handleMonthChange,
+  handleStartDateChange,
+  handleEndDateChange,
+  isDateFilterValid,
+  editKpiShowAllTime,
+  setEditKpiShowAllTime,
+  uniqueContainerOptions,
+  showContainerSuggestions,
+  setShowContainerSuggestions,
+  uniqueLpnOptions,
+  showLpnSuggestions,
+  setShowLpnSuggestions
 }) => {
   if (!isOpen) return null;
 

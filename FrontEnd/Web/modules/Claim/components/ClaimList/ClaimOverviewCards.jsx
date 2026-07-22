@@ -4,7 +4,10 @@ const ClaimOverviewCards = ({
   kpiData,
   setIsAnalyticsOpen,
   exceptionData,
-  setIsExceptionModalOpen
+  setIsExceptionModalOpen,
+  claims = [],
+  setIsReviewModalOpen,
+  setReviewCurrentPage
 }) => {
   return (
 <div className="overview-cards-grid">

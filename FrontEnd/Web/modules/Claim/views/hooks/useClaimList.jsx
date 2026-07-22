@@ -1223,6 +1223,8 @@ export const useClaimList = () => {
   const [isImportDropdownOpen, setIsImportDropdownOpen] = useState(false);
   const pdfInputRef = useRef(null);
   const folderInputRef = useRef(null);
+  const excelInputRef = useRef(null);
+  const [isExcelImporting, setIsExcelImporting] = useState(false);
 
   // PDF Archive states
   const [isPdfFolderModalOpen, setIsPdfFolderModalOpen] = useState(false);
@@ -1346,31 +1348,75 @@ export const useClaimList = () => {
     if (folderInputRef.current) folderInputRef.current.value = '';
   };
 
+  const handleImportExcelClick = () => {
+    if (excelInputRef.current) excelInputRef.current.click();
+  };
+
+  const handleExcelFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsExcelImporting(true);
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await claimService.importExcel(formData);
+      if (res && res.success) {
+        showModal('Thành công', `Đã nhập thành công ${res.imported_count} khiếu nại!`, 'success');
+        fetchClaims();
+      } else {
+        showModal('Thất bại', res.message || 'Lỗi khi nhập file Excel', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showModal('Thất bại', err.message || 'Lỗi hệ thống khi nhập Excel', 'error');
+    } finally {
+      setIsExcelImporting(false);
+      if (excelInputRef.current) excelInputRef.current.value = '';
+    }
+  };
+
+  const handleMarkClaimProcessed = async (claimId) => {
+    try {
+      const res = await claimService.updateClaimStatus(claimId, 'Resolved');
+      if (res) {
+        showModal('Thành công', 'Đã đánh dấu khiếu nại là đã xử lý!', 'success');
+        fetchClaims();
+      }
+    } catch (err) {
+      console.error(err);
+      showModal('Thất bại', err.message || 'Lỗi khi cập nhật trạng thái', 'error');
+    }
+  };
+
+  const applyFilters = () => {};
+
+  const handleSuccessRefresh = (e) => {
+    const response = e.detail;
+    fetchClaims();
+    // Scroll to top of table and window
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const tableContainer = document.querySelector('.report-table-container');
+    if (tableContainer) tableContainer.scrollTop = 0;
+
+    // Highlight row animation
+    setHighlightBatchId(response.batch_id);
+    setTimeout(() => {
+      setHighlightBatchId(null);
+    }, 4000);
+
+    // Update latest import metadata banner
+    setLatestImport({
+      batch_id: response.batch_id,
+      period: response.period,
+      total_records: response.total_records,
+      warnings_count: response.parse_warnings ? response.parse_warnings.length : 0,
+      imported_at: new Date().toLocaleString('vi-VN')
+    });
+  };
+
   useEffect(() => {
-    const handleSuccessRefresh = (e) => {
-      const response = e.detail;
-      fetchClaims();
-      // Scroll to top of table and window
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      const tableContainer = document.querySelector('.report-table-container');
-      if (tableContainer) tableContainer.scrollTop = 0;
-
-      // Highlight row animation
-      setHighlightBatchId(response.batch_id);
-      setTimeout(() => {
-        setHighlightBatchId(null);
-      }, 4000);
-
-      // Update latest import metadata banner
-      setLatestImport({
-        batch_id: response.batch_id,
-        period: response.period,
-        total_records: response.total_records,
-        warnings_count: response.parse_warnings ? response.parse_warnings.length : 0,
-        imported_at: new Date().toLocaleString('vi-VN')
-      });
-    };
-
     window.addEventListener('pdf-import-success-refresh', handleSuccessRefresh);
     return () => window.removeEventListener('pdf-import-success-refresh', handleSuccessRefresh);
   }, []);
@@ -2313,6 +2359,7 @@ export const useClaimList = () => {
       prevCount,
       prevPenaltySum,
       countDiff,
+      penaltyDiff,
     };
   }, [claims, filteredClaimsToDisplay, appliedFilters]);
 
@@ -2557,6 +2604,14 @@ export const useClaimList = () => {
     handlePdfFileChange,
     handleFolderFileChange,
     handleSuccessRefresh,
+    handleImportExcelClick,
+    handleExcelFileChange,
+    handleMarkClaimProcessed,
+    applyFilters,
+    excelInputRef,
+    isExcelImporting,
+    getAddTotalPenaltyPreview,
+    getProcessTotalPenaltyPreview,
     removeFilterKey,
     clearAllFilters,
     fetchClaims,
@@ -2577,6 +2632,19 @@ export const useClaimList = () => {
     reviewTotalPages,
     reviewStartIndex,
     reviewPaginatedClaims,
+    handleYearChange,
+    handleMonthChange,
+    handleStartDateChange,
+    handleEndDateChange,
+    isDateFilterValid,
+    editKpiShowAllTime,
+    setEditKpiShowAllTime,
+    uniqueContainerOptions,
+    showContainerSuggestions,
+    setShowContainerSuggestions,
+    uniqueLpnOptions,
+    showLpnSuggestions,
+    setShowLpnSuggestions,
     uniqueSkuOptions,
     uniqueClaimItemOptions,
     uniqueDefectCodeOptions,
