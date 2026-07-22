@@ -24,6 +24,7 @@ const DeliveryTrackingView = () => {
     cleanPath,
     completed,
     conclusionBg,
+    currentPage,
     conclusionColor,
     conclusionText,
     data,

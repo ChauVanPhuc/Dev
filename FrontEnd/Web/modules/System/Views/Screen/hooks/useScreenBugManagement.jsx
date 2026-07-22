@@ -43,7 +43,7 @@ const getCurrentUserName = () => {
   return 'Admin';
 };
 
-const parseDescription = (desc) => {
+export const parseDescription = (desc) => {
   if (!desc) return { tag: '', text: '' };
   const match = desc.match(/^\[([^\]]+)\]\s*(.*)$/s);
   if (match) {
@@ -1060,6 +1060,8 @@ export const useScreenBugManagement = () => {
     bugs,
     commentImages,
     commentText,
+    setCommentImages,
+    setCommentText,
     confirmDeleteBug,
     createdDateFilter,
     editForm,
@@ -1093,7 +1095,12 @@ export const useScreenBugManagement = () => {
     loading,
     location,
     navigate,
+    currentPage,
+    totalPages,
+    getCurrentUserName,
+    getImageUrl,
     pageSize,
+    parseDescription,
     paginatedBugs,
     platformFilter,
     proofImages,

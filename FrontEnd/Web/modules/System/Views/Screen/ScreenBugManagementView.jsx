@@ -8,7 +8,7 @@ import {
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 
 // Import custom hook
-import { useScreenBugManagement } from './hooks/useScreenBugManagement';
+import { useScreenBugManagement, parseDescription } from './hooks/useScreenBugManagement';
 
 import BugDetailsPanel from './components/BugDetailsPanel';
 import AddBugModal from './components/AddBugModal';
@@ -44,6 +44,9 @@ const ScreenBugManagementView = () => {
     file,
     fileInputRef,
     files,
+    currentPage,
+    totalPages,
+    getImageUrl,
     filteredBugs,
     finalDescription,
     fixProgress,
