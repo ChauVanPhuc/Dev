@@ -7,7 +7,7 @@ import apiClient from '@shared/services/api';
 import useAuthStore from '@modules/auth/Models/authModel';
 import ConfirmModal from '@mobile/Shared/Views/components/feedback/ConfirmModal';
 import MessageModal from '@mobile/Shared/Views/components/feedback/MessageModal';
-import FlowchartTable from '../../../../Web/modules/ISO/Views/FlowchartTable';
+import FlowchartTable from '../../../../Web/modules/ISO/Views/Process/FlowchartTable';
 
 const FirstArticleInspectionView = () => {
   const { user } = useAuthStore();

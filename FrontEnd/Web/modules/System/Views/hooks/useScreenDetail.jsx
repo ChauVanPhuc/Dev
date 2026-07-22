@@ -2467,8 +2467,8 @@ export const useScreenDetail = () => {
     showToast,
     zoomScale,
     setZoomScale,
-    zoomPosition,
-    setZoomPosition,
+    zoomPosition: zoomOffset,
+    setZoomPosition: setZoomOffset,
     isPanning,
     setIsPanning,
     panStart,
@@ -2495,6 +2495,10 @@ export const useScreenDetail = () => {
     getDisplayRoutePath,
     normalizeRoutePath,
     parseRoutePath,
-    slugify
+    slugify,
+    isHeaderCollapsed,
+    setIsHeaderCollapsed,
+    isScreenInfoCollapsed,
+    setIsScreenInfoCollapsed
   };
 };

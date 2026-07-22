@@ -21,7 +21,11 @@ const ScreenMetadataForm = ({
   screen,
   isModified,
   showToast,
-  setShowLinkModal
+  setShowLinkModal,
+  isHeaderCollapsed,
+  setIsHeaderCollapsed,
+  isScreenInfoCollapsed,
+  setIsScreenInfoCollapsed
 }) => {
     return (
       <div style={{

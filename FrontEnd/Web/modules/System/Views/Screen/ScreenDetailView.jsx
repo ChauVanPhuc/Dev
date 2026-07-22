@@ -62,9 +62,13 @@ const ScreenDetail = () => {
         handleRefresh={detail.handleRefresh}
         navigate={detail.navigate}
         screen={detail.screen}
-        isModified={isModified}
         showToast={detail.showToast}
         setShowLinkModal={detail.setShowLinkModal}
+        isHeaderCollapsed={detail.isHeaderCollapsed}
+        setIsHeaderCollapsed={detail.setIsHeaderCollapsed}
+        isScreenInfoCollapsed={detail.isScreenInfoCollapsed}
+        setIsScreenInfoCollapsed={detail.setIsScreenInfoCollapsed}
+        isModified={isModified}
       />
 
       {/* 02. MAIN ROW WORKSPACE */}
