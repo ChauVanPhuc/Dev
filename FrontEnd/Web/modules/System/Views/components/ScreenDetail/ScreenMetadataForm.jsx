@@ -1,4 +1,5 @@
 import React from 'react';
+import { Plus, Edit, ChevronDown } from 'lucide-react';
 
 const ScreenMetadataForm = ({
   formData,
