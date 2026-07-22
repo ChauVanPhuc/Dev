@@ -26,7 +26,7 @@ import ExcelJS from 'exceljs';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
-const getInspectionTypeLabel = (type) => {
+export const getInspectionTypeLabel = (type) => {
   switch (type) {
     case 'dau-vao':
     case 'nhap-kho': return 'Nhập kho';
@@ -1849,6 +1849,7 @@ export const useInspectionReports = () => {
     paginatedInboundList,
     paginatedProcessList,
     paginatedStageList,
+    renderActionDropdown,
     screenCode,
     selectedDaily,
     selectedExportOption,

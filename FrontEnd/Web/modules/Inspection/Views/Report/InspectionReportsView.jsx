@@ -24,7 +24,7 @@ import {
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 
 // Import custom hook
-import { useInspectionReports } from './hooks/useInspectionReports';
+import { useInspectionReports, getInspectionTypeLabel } from './hooks/useInspectionReports';
 
 import '@styles/components.css';
 
