@@ -50,30 +50,35 @@ const BugModal = ({ isOpen, onClose, bugModalMode, bugModalData: initialData, sc
   const [bugImageUploading, setBugImageUploading] = useState(false);
   const [replyUploading, setReplyUploading] = useState(false);
 
-  const { showToast } = useToast();
+  const { toast } = useToast();
+  const showToast = React.useCallback((message, type = 'success') => {
+    toast(type, message);
+  }, [toast]);
 
   useEffect(() => {
-    if (initialData) {
-      setBugModalData(initialData);
-    } else {
-      setBugModalData({
-        id: '',
-        componentName: 'Chung',
-        severity: 'Medium',
-        description: '',
-        reporter: getLoggedInUser(),
-        assignee: itAccounts[0] || 'IT',
-        targetDate: '',
-        imagePaths: [],
-        status: 'New'
-      });
+    if (isOpen) {
+      if (initialData) {
+        setBugModalData(initialData);
+      } else {
+        setBugModalData({
+          id: '',
+          componentName: 'Chung',
+          severity: 'Medium',
+          description: '',
+          reporter: getLoggedInUser(),
+          assignee: itAccounts[0] || 'IT',
+          targetDate: '',
+          imagePaths: [],
+          status: 'New'
+        });
+      }
+      setReplyNotes('');
+      setReplyImages([]);
+      setReplyStatusVal('');
+      setBugImageUploading(false);
+      setReplyUploading(false);
     }
-    setReplyNotes('');
-    setReplyImages([]);
-    setReplyStatusVal('');
-    setBugImageUploading(false);
-    setReplyUploading(false);
-  }, [initialData, isOpen, itAccounts]);
+  }, [initialData, isOpen]);
 
   if (!isOpen) return null;
 
@@ -481,34 +486,9 @@ const BugModal = ({ isOpen, onClose, bugModalMode, bugModalData: initialData, sc
 
           {/* Row 4: Image Preview List */}
           <div className="form-group" style={{ margin: 0 }}>
-            {bugModalMode !== 'edit' && (
+            {bugModalMode !== 'edit' && bugImageUploading && (
               <div style={{ marginBottom: '8px' }}>
-                <input
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={handleManualImageUpload}
-                  style={{ display: 'none' }}
-                  id="bug-manual-image-upload"
-                />
-                <label
-                  htmlFor="bug-manual-image-upload"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    padding: '6px 12px',
-                    backgroundColor: '#FAF6F0',
-                    border: '1px solid #EADCC9',
-                    borderRadius: '6px',
-                    fontSize: '0.78rem',
-                    color: '#7B5233',
-                    fontWeight: 'bold',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Chọn ảnh lỗi...
-                </label>
-                {bugImageUploading && <span style={{ marginLeft: '10px', fontSize: '0.74rem', color: '#666' }}>Đang tải ảnh...</span>}
+                <span style={{ fontSize: '0.74rem', color: '#666' }}>Đang tải ảnh...</span>
               </div>
             )}
             

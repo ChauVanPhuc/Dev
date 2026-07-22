@@ -1,5 +1,6 @@
 import React from 'react';
 import { Plus, Edit, ChevronDown } from 'lucide-react';
+import { getLoggedInUser, getSubsystem } from '../../hooks/screenDetailUtils';
 
 const ScreenMetadataForm = ({
   formData,
@@ -26,7 +27,14 @@ const ScreenMetadataForm = ({
   isHeaderCollapsed,
   setIsHeaderCollapsed,
   isScreenInfoCollapsed,
-  setIsScreenInfoCollapsed
+  setIsScreenInfoCollapsed,
+  itAccounts,
+  setBugModalMode,
+  setBugModalData,
+  setShowBugModal,
+  setLinkSubsystem,
+  setLinkScreenId,
+  setLinkComponentId
 }) => {
     return (
       <div style={{
@@ -280,7 +288,7 @@ const ScreenMetadataForm = ({
                     Sao chép
                   </button>
                 )}
-                {!isNew && !isHeaderCollapsed && formData.status === 'Hoàn thành' && (
+                {!isNew && !isHeaderCollapsed && (
                   <button
                     type="button"
                     onClick={() => {
@@ -331,7 +339,7 @@ const ScreenMetadataForm = ({
           {/* Card Body - 5 columns (hidden when collapsed) */}
           {!isHeaderCollapsed && !isScreenInfoCollapsed && (
             <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '120px 1.5fr 1.5fr 1.5fr 1.2fr', gap: '16px' }}>
                 <div className="form-group" style={{ margin: 0 }}>
                   <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Mã màn hình</label>
                   <input

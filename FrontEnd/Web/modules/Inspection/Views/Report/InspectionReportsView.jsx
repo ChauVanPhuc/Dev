@@ -77,7 +77,6 @@ const InspectionReportsView = () => {
     handleExportQualitySummary,
     handleExportSingleExcel,
     handleExportSinglePDF,
-    handleExportSummaryPDF,
     handleGlobalClick,
     handleImageError,
     handleResetFilters,
@@ -199,8 +198,7 @@ const InspectionReportsView = () => {
     typeLabel,
     uniqueImages,
     uniquePoList,
-    useInspectionReports,
-    usedImages
+    usedImages,
   } = reports;
 
   return (
@@ -1973,4 +1971,4 @@ const InspectionReportsView = () => {
   );
 };
 
-export default InspectionReports;
+export default InspectionReportsView;

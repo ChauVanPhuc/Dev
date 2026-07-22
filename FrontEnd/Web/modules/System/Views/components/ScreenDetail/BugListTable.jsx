@@ -67,9 +67,9 @@ const BugListTable = ({
         className="bugs-section-header"
         onClick={() => setIsBugListCollapsed(!isBugListCollapsed)}
         style={{
-          padding: '12px 20px',
-          backgroundColor: '#FAF6F0',
-          borderBottom: '1px solid #D1D5DB',
+          padding: '16px 20px',
+          backgroundColor: '#fff',
+          borderBottom: isBugListCollapsed ? 'none' : '1px solid #E2E8F0',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
@@ -77,48 +77,19 @@ const BugListTable = ({
           userSelect: 'none'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span style={{ fontSize: '0.88rem', fontWeight: '800', color: '#2D1A12', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Danh sách lỗi</span>
-          <span style={{
-            fontSize: '0.72rem',
-            backgroundColor: '#7B5233',
-            color: '#fff',
-            padding: '2px 8px',
-            borderRadius: '10px',
-            fontWeight: 'bold'
-          }}>{(screen.bugs || []).length}</span>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <span style={{ fontSize: '1.1rem', fontWeight: '800', color: '#2D1A12' }}>Danh sách lỗi</span>
         </div>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsBugListCollapsed(!isBugListCollapsed);
-          }}
+        <ChevronDown
+          size={20}
           style={{
-            background: '#F1F5F9',
-            border: 'none',
-            color: '#64748B',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '6px',
-            borderRadius: '8px',
-            transition: 'all 0.2s',
-            outline: 'none',
-            width: '32px',
-            height: '32px'
+            color: '#2D1A12',
+            transform: isBugListCollapsed ? 'rotate(0deg)' : 'rotate(180deg)',
+            transition: 'transform 0.2s',
+            strokeWidth: 2.5,
+            cursor: 'pointer'
           }}
-        >
-          <ChevronDown
-            size={18}
-            style={{
-              transform: isBugListCollapsed ? 'rotate(0deg)' : 'rotate(180deg)',
-              transition: 'transform 0.2s',
-              strokeWidth: 2.5
-            }}
-          />
-        </button>
+        />
       </div>
 
       {!isBugListCollapsed && (

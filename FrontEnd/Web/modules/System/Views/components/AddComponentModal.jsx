@@ -16,7 +16,10 @@ const AddComponentModal = ({ isOpen, onClose, editingComponent, onConfirm }) => 
   const [isUploadingSample, setIsUploadingSample] = useState(false);
   const sampleFileInputRef = useRef(null);
   
-  const { showToast } = useToast();
+  const { toast } = useToast();
+  const showToast = React.useCallback((message, type = 'success') => {
+    toast(type, message);
+  }, [toast]);
 
   useEffect(() => {
     if (editingComponent) {

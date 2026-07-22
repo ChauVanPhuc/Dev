@@ -1,5 +1,6 @@
 import React from 'react';
 import { Play, Type, Table2, CheckSquare, List, Layout, Menu, CreditCard, Sliders, Bell, Component, MoreVertical } from 'lucide-react';
+import { getLoggedInUser } from '../../hooks/screenDetailUtils';
 
 const renderComponentIcon = (type) => {
   const props = { size: 16, style: { color: '#7B5233' } };
@@ -53,14 +54,13 @@ const ComponentTreePane = ({
   COMPONENT_COLORS,
   getComponentHint,
   itAccounts,
-  getLoggedInUser,
   setBugModalMode,
   setBugModalData,
   setShowBugModal,
   formData
 }) => {
   return (
-    <div className="card component-list-card" style={{
+    <div className="card component-list-card component-tree-pane" style={{
       background: '#fff',
       border: '1px solid #D1D5DB',
       borderRadius: '12px',

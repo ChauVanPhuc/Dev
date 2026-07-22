@@ -13,7 +13,7 @@ const SimulatorPane = ({
   handleDeleteMockup
 }) => {
   return (
-    <div className="card mockup-carousel-card" style={{
+    <div className="card mockup-carousel-card detail-simulator-pane" style={{
       background: '#fff',
       border: '1px solid #D1D5DB',
       borderRadius: '12px',

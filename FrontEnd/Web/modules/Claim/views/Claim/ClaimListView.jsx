@@ -565,11 +565,11 @@ const ClaimListView = () => {
         uniqueCompanyErrorNameOptions={list.uniqueCompanyErrorNameOptions}
         handleSelectG7Name={list.handleSelectG7Name}
         addLpn={list.addLpn}
-        setAddLpn={setAddLpn}
+        setAddLpn={list.setAddLpn}
         addMaCont={list.addMaCont}
-        setAddMaCont={setAddMaCont}
+        setAddMaCont={list.setAddMaCont}
         addNgayXuat={list.addNgayXuat}
-        setAddNgayXuat={setAddNgayXuat}
+        setAddNgayXuat={list.setAddNgayXuat}
         addTrangThaiXuLy={list.addTrangThaiXuLy}
         setAddTrangThaiXuLy={list.setAddTrangThaiXuLy}
         addLinkCapa={list.addLinkCapa}

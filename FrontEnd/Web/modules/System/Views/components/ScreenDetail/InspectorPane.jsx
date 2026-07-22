@@ -1,5 +1,6 @@
 import React from 'react';
 import { ChevronDown, Upload, FileText, X } from 'lucide-react';
+import { getBaseURL } from '@webShared/Services/api.service';
 
 const InspectorPane = ({
   activeTab,
@@ -21,7 +22,6 @@ const InspectorPane = ({
   isSpecUploadingSample,
   specSampleFileUrl,
   setSpecSampleFileUrl,
-  getBaseURL,
   specExportData,
   setSpecExportData,
   isSpecExporting,
@@ -29,14 +29,8 @@ const InspectorPane = ({
   showToast
 }) => {
   return (
-    <div className="card spec-tabs-card" style={{
-      background: '#fff',
-      border: '1px solid #D1D5DB',
-      borderRadius: '12px',
-      padding: '16px',
-      display: 'flex',
-      flexDirection: 'column',
-      boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+    <div className="card detail-inspector-pane" style={{
+      padding: '16px'
     }}>
       {activeTab === 'guides' ? (
         <>

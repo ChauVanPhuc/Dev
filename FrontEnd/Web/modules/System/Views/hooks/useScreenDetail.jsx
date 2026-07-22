@@ -2419,6 +2419,7 @@ export const useScreenDetail = () => {
     setActiveBugMenu,
     showAddComponentModal,
     setShowAddComponentModal,
+    itAccounts,
     editingComponent,
     setEditingComponent,
     showBugModal,

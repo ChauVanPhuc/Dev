@@ -69,65 +69,93 @@ const ScreenDetail = () => {
         isScreenInfoCollapsed={detail.isScreenInfoCollapsed}
         setIsScreenInfoCollapsed={detail.setIsScreenInfoCollapsed}
         isModified={isModified}
+        itAccounts={detail.itAccounts || []}
+        setBugModalMode={detail.setBugModalMode}
+        setBugModalData={detail.setBugModalData}
+        setShowBugModal={detail.setShowBugModal}
+        setLinkSubsystem={detail.setLinkSubsystem}
+        setLinkScreenId={detail.setLinkScreenId}
+        setLinkComponentId={detail.setLinkComponentId}
       />
 
       {/* 02. MAIN ROW WORKSPACE */}
       <div className="main-workspace-row" ref={detail.scrollBodyRef} style={{ display: 'flex', flex: 1, overflowY: 'auto', flexDirection: 'column', minHeight: 0 }}>
-        <div style={{ display: 'flex', flex: 1, minHeight: '500px' }}>
+        <div className="detail-layout-grid" style={{ minHeight: '500px' }}>
           {/* CỘT 1: COMPONENT TREE PANE */}
           <ComponentTreePane
+            activeTab={detail.activeTab}
+            setActiveTab={detail.setActiveTab}
             screen={detail.screen}
+            setScreen={detail.setScreen}
             activeComponent={detail.activeComponent}
-            onSelectComponent={detail.setActiveComponent}
-          />
-
-          {/* CỘT 2: SIMULATOR PANE */}
-          <SimulatorPane
-            screen={detail.screen}
-            activeComponent={detail.activeComponent}
-            zoomScale={detail.zoomScale}
-            zoomPosition={detail.zoomPosition}
-            setZoomScale={detail.setZoomScale}
-            setZoomPosition={detail.setZoomPosition}
-            isPanning={detail.isPanning}
-            setIsPanning={detail.setIsPanning}
-            panStart={detail.panStart}
-            setPanStart={detail.setPanStart}
-            handleZoomIn={detail.handleZoomIn}
-            handleZoomOut={detail.handleZoomOut}
-            handleZoomReset={detail.handleZoomReset}
-            handleMouseDown={detail.handleMouseDown}
-            handleMouseMove={detail.handleMouseMove}
-            handleMouseUp={detail.handleMouseUp}
-            handleWheel={detail.handleWheel}
-            handlePasteMockup={detail.handlePasteMockup}
-            handleDeleteMockup={detail.handleDeleteMockup}
-            handlePasteMockupFromClipboard={detail.handlePasteMockupFromClipboard}
-            getImageUrl={detail.getImageUrl}
-          />
-
-          {/* CỘT 3: INSPECTOR PANE */}
-          <InspectorPane
-            screen={detail.screen}
-            activeComponent={detail.activeComponent}
-            specDescriptions={detail.specDescriptions}
+            setActiveComponent={detail.setActiveComponent}
             setSpecDescriptions={detail.setSpecDescriptions}
-            specFileInputRef={detail.specFileInputRef}
-            handleSpecSampleFileChange={detail.handleSpecSampleFileChange}
-            specSampleFile={detail.specSampleFile}
-            specSampleFileUrl={detail.specSampleFileUrl}
-            isSpecUploadingSample={detail.isSpecUploadingSample}
-            handleRemoveSpecSampleFile={detail.handleRemoveSpecSampleFile}
-            handleSpecExportTest={detail.handleSpecExportTest}
-            isSpecExporting={detail.isSpecExporting}
-            specExportData={detail.specExportData}
-            handleSave={detail.handleSave}
-            handleDeleteComponent={detail.handleDeleteComponent}
+            setSpecSampleFile={detail.setSpecSampleFile}
+            setSpecSampleFileUrl={detail.setSpecSampleFileUrl}
+            setIsSpecUploadingSample={detail.setIsSpecUploadingSample}
+            activeComponentMenu={detail.activeComponentMenu}
+            setActiveComponentMenu={detail.setActiveComponentMenu}
             handleEditComponentClick={detail.handleEditComponentClick}
+            handleDeleteComponent={detail.handleDeleteComponent}
             handleSetComponentColor={detail.handleSetComponentColor}
+            handleAddComponent={detail.handleAddComponent}
+            selectedGuideIdx={detail.selectedGuideIdx}
+            setSelectedGuideIdx={detail.setSelectedGuideIdx}
+            showConfirm={detail.showConfirm}
+            showToast={detail.showToast}
             COMPONENT_COLORS={detail.COMPONENT_COLORS}
             getComponentHint={detail.getComponentHint}
+            itAccounts={detail.itAccounts || []}
+            setBugModalMode={detail.setBugModalMode}
+            setBugModalData={detail.setBugModalData}
+            setShowBugModal={detail.setShowBugModal}
+            formData={detail.formData}
           />
+
+          {/* CỘT 2: RIGHT DETAIL PANEL (SIMULATOR + INSPECTOR STACKED) */}
+          <div className="detail-right-column">
+            {/* SIMULATOR PANE */}
+            <SimulatorPane
+              screen={detail.screen}
+              isMockupExpanded={detail.isMockupExpanded}
+              setIsMockupExpanded={detail.setIsMockupExpanded}
+              handlePasteMockupFromClipboard={detail.handlePasteMockupFromClipboard}
+              handlePasteMockup={detail.handlePasteMockup}
+              getImageUrl={detail.getImageUrl}
+              setShowZoomModal={detail.setShowZoomModal}
+              currentMockupIdx={detail.currentMockupIdx}
+              setCurrentMockupIdx={detail.setCurrentMockupIdx}
+              handleDeleteMockup={detail.handleDeleteMockup}
+            />
+
+            {/* INSPECTOR PANE */}
+            <InspectorPane
+              activeTab={detail.activeTab}
+              screen={detail.screen}
+              setScreen={detail.setScreen}
+              selectedGuideIdx={detail.selectedGuideIdx}
+              setSelectedGuideIdx={detail.setSelectedGuideIdx}
+              isGuideCompDropdownOpen={detail.isGuideCompDropdownOpen}
+              setIsGuideCompDropdownOpen={detail.setIsGuideCompDropdownOpen}
+              activeComponent={detail.activeComponent}
+              viewMode={detail.viewMode}
+              setViewMode={detail.setViewMode}
+              specDescriptions={detail.specDescriptions}
+              setSpecDescriptions={detail.setSpecDescriptions}
+              isSpecCardCollapsed={detail.isSpecCardCollapsed}
+              setIsSpecCardCollapsed={detail.setIsSpecCardCollapsed}
+              specFileInputRef={detail.specFileInputRef}
+              handleSpecSampleFileChange={detail.handleSpecSampleFileChange}
+              isSpecUploadingSample={detail.isSpecUploadingSample}
+              specSampleFileUrl={detail.specSampleFileUrl}
+              setSpecSampleFileUrl={detail.setSpecSampleFileUrl}
+              specExportData={detail.specExportData}
+              setSpecExportData={detail.setSpecExportData}
+              isSpecExporting={detail.isSpecExporting}
+              handleSpecExportTest={detail.handleSpecExportTest}
+              showToast={detail.showToast}
+            />
+          </div>
         </div>
 
         {/* 03. BUG & FEEDBACK ACCORDION TABLE */}
