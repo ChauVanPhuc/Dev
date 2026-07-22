@@ -2490,6 +2490,11 @@ export const useScreenDetail = () => {
     getImageUrl,
     handleBugModalConfirm,
     screenService,
-    outletContext
+    outletContext,
+    ROUTE_SUGGESTIONS,
+    getDisplayRoutePath,
+    normalizeRoutePath,
+    parseRoutePath,
+    slugify
   };
 };
