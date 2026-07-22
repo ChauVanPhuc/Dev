@@ -1,86 +1,86 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
-import LoginPage from '@modules/Auth/Views/LoginView';
+import LoginPage from '@modules/Auth/Views/Login/LoginView';
 import PortalLayout from '@webShared/Views/components/layout/PortalLayout';
 import { ToastProvider } from '@webShared/Views/components/feedback/ToastContext';
 
-// Import các trang Admin
-import Dashboard from '@modules/Dashboard/Views/DashboardView';
-import UserManagement from '@modules/Auth/Views/UserManagementView';
-import UserCreate from '@modules/Auth/Views/UserCreateView';
-import UserEdit from '@modules/Auth/Views/UserEditView';
-import UserPermissionView from '@modules/Auth/Views/UserPermissionView';
-import DepartmentManagement from '@modules/Auth/Views/DepartmentManagementView';
-import PositionManagement from '@modules/Auth/Views/PositionManagementView';
-import EmployeeListView from '@modules/Auth/Views/EmployeeListView';
-import OrgChartView from '@modules/Auth/Views/OrgChartView';
-import HierarchyChartView from '@modules/Auth/Views/HierarchyChartView';
-import PersonnelChartView from '@modules/Auth/Views/PersonnelChartView';
-import FactoryStructureView from '@modules/Auth/Views/FactoryStructureView';
-import HRManagementView from '@modules/Auth/Views/HRManagementView';
-import HandoverList from '@modules/Delivery/Views/HandoverListView';
-import IncidentLogs from '@modules/System/Views/IncidentLogsView';
-import InspectionReports from '@modules/Inspection/Views/InspectionReportsView';
-import KPIReports from '@modules/KPI/Views/KPIReportsView';
-import KPIChecklist from '@modules/KPI/Views/KPIChecklistView';
-import KPIItems from '@modules/KPI/Views/KPIItemsView';
-import KPIRules from '@modules/KPI/Views/KPIRulesView';
-import KPIFeedback from '@modules/KPI/Views/KPIFeedbackView';
-import Improvements from '@modules/CAPA/Views/ImprovementsView';
-import Hotspots from '@modules/System/Views/HotspotsView';
-import DataPackaging from '@modules/System/Views/DataPackagingView';
-import BackupQRManagement from '@modules/System/Views/BackupQRManagementView';
-import ScreenManagement from '@modules/System/Views/ScreenManagementView';
-import ScreenDetail from '@modules/System/Views/ScreenDetailView';
-import ScreenBugManagement from '@modules/System/Views/ScreenBugManagementView';
-import ProjectProgress from '@modules/System/Views/ProjectProgressView';
-import DefectManagement from '@modules/Inspection/Views/DefectManagementView';
-import QualityRecords from '@modules/QualityRecords/Views/QualityRecordsListView';
-import QualityRecordsDetail from '@modules/QualityRecords/Views/QualityRecordsDetailView';
-import SystemMonitor from '@modules/System/Views/SystemMonitorView';
-import EquipmentManagement from '@modules/Equipment/Views/EquipmentManagementView';
-import EquipmentCategories from '@modules/Equipment/Views/EquipmentCategoriesView';
-import EquipmentHistory from '@modules/Equipment/Views/EquipmentHistoryView';
-import EquipmentTraining from '@modules/Equipment/Views/EquipmentTrainingView';
-import EquipmentHandover from '@modules/Equipment/Views/EquipmentHandoverView';
-import EquipmentDetail from '@modules/Equipment/Views/EquipmentDetailView';
-import EquipmentTrainingDetail from '@modules/Equipment/Views/EquipmentTrainingDetailView';
-import MachineManagement from '@modules/Equipment/Views/MachineManagementView';
-import MachineHistory from '@modules/Equipment/Views/MachineHistoryView';
-import MachineTraining from '@modules/Equipment/Views/MachineTrainingView';
-import MachineDetail from '@modules/Equipment/Views/MachineDetailView';
+// Import các trang Admin (Tải động)
+const Dashboard = lazy(() => import('@modules/Dashboard/Views/System/DashboardView'));
+const UserManagement = lazy(() => import('@modules/Auth/Views/User/UserManagementView'));
+const UserCreate = lazy(() => import('@modules/Auth/Views/User/UserCreateView'));
+const UserEdit = lazy(() => import('@modules/Auth/Views/User/UserEditView'));
+const UserPermissionView = lazy(() => import('@modules/Auth/Views/User/UserPermissionView'));
+const DepartmentManagement = lazy(() => import('@modules/Auth/Views/Department/DepartmentManagementView'));
+const PositionManagement = lazy(() => import('@modules/Auth/Views/User/PositionManagementView'));
+const EmployeeListView = lazy(() => import('@modules/Auth/Views/Employee/EmployeeListView'));
+const OrgChartView = lazy(() => import('@modules/Auth/Views/HR/OrgChartView'));
+const HierarchyChartView = lazy(() => import('@modules/Auth/Views/HR/HierarchyChartView'));
+const PersonnelChartView = lazy(() => import('@modules/Auth/Views/HR/PersonnelChartView'));
+const FactoryStructureView = lazy(() => import('@modules/Auth/Views/HR/FactoryStructureView'));
+const HRManagementView = lazy(() => import('@modules/Auth/Views/HR/HRManagementView'));
+const HandoverList = lazy(() => import('@modules/Delivery/Views/Handover/HandoverListView'));
+const IncidentLogs = lazy(() => import('@modules/System/Views/Monitor/IncidentLogsView'));
+const InspectionReports = lazy(() => import('@modules/Inspection/Views/Report/InspectionReportsView'));
+const KPIReports = lazy(() => import('@modules/KPI/Views/Report/KPIReportsView'));
+const KPIChecklist = lazy(() => import('@modules/KPI/Views/Checklist/KPIChecklistView'));
+const KPIItems = lazy(() => import('@modules/KPI/Views/Item/KPIItemsView'));
+const KPIRules = lazy(() => import('@modules/KPI/Views/Rule/KPIRulesView'));
+const KPIFeedback = lazy(() => import('@modules/KPI/Views/Feedback/KPIFeedbackView'));
+const Improvements = lazy(() => import('@modules/CAPA/Views/Improvement/ImprovementsView'));
+const Hotspots = lazy(() => import('@modules/System/Views/Monitor/HotspotsView'));
+const DataPackaging = lazy(() => import('@modules/System/Views/Data/DataPackagingView'));
+const BackupQRManagement = lazy(() => import('@modules/System/Views/Backup/BackupQRManagementView'));
+const ScreenManagement = lazy(() => import('@modules/System/Views/Screen/ScreenManagementView'));
+const ScreenDetail = lazy(() => import('@modules/System/Views/Screen/ScreenDetailView'));
+const ScreenBugManagement = lazy(() => import('@modules/System/Views/Screen/ScreenBugManagementView'));
+const ProjectProgress = lazy(() => import('@modules/System/Views/Project/ProjectProgressView'));
+const DefectManagement = lazy(() => import('@modules/Inspection/Views/Defect/DefectManagementView'));
+const QualityRecords = lazy(() => import('@modules/QualityRecords/Views/Record/QualityRecordsListView'));
+const QualityRecordsDetail = lazy(() => import('@modules/QualityRecords/Views/Record/QualityRecordsDetailView'));
+const SystemMonitor = lazy(() => import('@modules/System/Views/Monitor/SystemMonitorView'));
+const EquipmentManagement = lazy(() => import('@modules/Equipment/Views/Equipment/EquipmentManagementView'));
+const EquipmentCategories = lazy(() => import('@modules/Equipment/Views/Equipment/EquipmentCategoriesView'));
+const EquipmentHistory = lazy(() => import('@modules/Equipment/Views/Equipment/EquipmentHistoryView'));
+const EquipmentTraining = lazy(() => import('@modules/Equipment/Views/Equipment/EquipmentTrainingView'));
+const EquipmentHandover = lazy(() => import('@modules/Equipment/Views/Equipment/EquipmentHandoverView'));
+const EquipmentDetail = lazy(() => import('@modules/Equipment/Views/Equipment/EquipmentDetailView'));
+const EquipmentTrainingDetail = lazy(() => import('@modules/Equipment/Views/Equipment/EquipmentTrainingDetailView'));
+const MachineManagement = lazy(() => import('@modules/Equipment/Views/Machine/MachineManagementView'));
+const MachineHistory = lazy(() => import('@modules/Equipment/Views/Machine/MachineHistoryView'));
+const MachineTraining = lazy(() => import('@modules/Equipment/Views/Machine/MachineTrainingView'));
+const MachineDetail = lazy(() => import('@modules/Equipment/Views/Machine/MachineDetailView'));
 
-// Import Claim module
-import ClaimPortalLayout from '../../modules/Claim/views/PortalLayout';
-import ClaimList from '../../modules/Claim/views/ClaimListView';
-import PriceList from '../../modules/Claim/views/PriceListView';
-import ShipmentList from '../../modules/Claim/views/ShipmentListView';
+// Import Claim module (Tải động)
+const ClaimPortalLayout = lazy(() => import('../../modules/Claim/views/Portal/PortalLayout'));
+const ClaimList = lazy(() => import('../../modules/Claim/views/Claim/ClaimListView'));
+const PriceList = lazy(() => import('../../modules/Claim/views/Price/PriceListView'));
+const ShipmentList = lazy(() => import('../../modules/Claim/views/Shipment/ShipmentListView'));
 
-// Import Manufacture module
-import ManufactureDashboard from '@modules/Dashboard/Views/ManufactureDashboardView';
-import ManufacturePlan from '@modules/Plan/Views/PlanListView';
-import PlanDetail from '@modules/Plan/Views/PlanDetailView';
-import ManufactureHandover from '@modules/Delivery/Views/DeliveryHandoverView';
-import ManufactureReceive from '@modules/Delivery/Views/DeliveryReceiveView';
-import ManufactureProducts from '@modules/Product/Views/ProductsListView';
-import ProductDetail from '@modules/Product/Views/ProductDetailView';
-import ProductCreate from '@modules/Product/Views/ProductCreateView';
-import ManufactureOrders from '@modules/Order/Views/OrdersListView';
-import OrderCreate from '@modules/Order/Views/OrderCreateView';
-import AddProductionPlan from '@modules/Plan/Views/AddProductionPlanView';
-import ProductionProgress from '@modules/Plan/Views/ProductionProgressView';
-import DeliveryTracking from '@modules/Delivery/Views/DeliveryTrackingView';
-import ExceptionDeliveries from '@modules/Pallet/Views/PalletCardView';
+// Import Manufacture module (Tải động)
+const ManufactureDashboard = lazy(() => import('@modules/Dashboard/Views/Manufacture/ManufactureDashboardView'));
+const ManufacturePlan = lazy(() => import('@modules/Plan/Views/Plan/PlanListView'));
+const PlanDetail = lazy(() => import('@modules/Plan/Views/Plan/PlanDetailView'));
+const ManufactureHandover = lazy(() => import('@modules/Delivery/Views/Handover/DeliveryHandoverView'));
+const ManufactureReceive = lazy(() => import('@modules/Delivery/Views/Receive/DeliveryReceiveView'));
+const ManufactureProducts = lazy(() => import('@modules/Product/Views/List/ProductsListView'));
+const ProductDetail = lazy(() => import('@modules/Product/Views/Detail/ProductDetailView'));
+const ProductCreate = lazy(() => import('@modules/Product/Views/Create/ProductCreateView'));
+const ManufactureOrders = lazy(() => import('@modules/Order/Views/List/OrdersListView'));
+const OrderCreate = lazy(() => import('@modules/Order/Views/Create/OrderCreateView'));
+const AddProductionPlan = lazy(() => import('@modules/Plan/Views/Plan/AddProductionPlanView'));
+const ProductionProgress = lazy(() => import('@modules/Plan/Views/Progress/ProductionProgressView'));
+const DeliveryTracking = lazy(() => import('@modules/Delivery/Views/Tracking/DeliveryTrackingView'));
+const ExceptionDeliveries = lazy(() => import('@modules/Pallet/Views/Card/PalletCardView'));
 
-// Import Purchasing module
-import PurchaseRequisitionList from '@modules/Purchasing/Views/PurchaseRequisitionListView';
-import PurchaseRequisitionDetail from '@modules/Purchasing/Views/PurchaseRequisitionDetailView';
-import PurchaseOrderItemList from '@modules/Purchasing/Views/PurchaseOrderItemListView';
+// Import Purchasing module (Tải động)
+const PurchaseRequisitionList = lazy(() => import('@modules/Purchasing/Views/Requisition/PurchaseRequisitionListView'));
+const PurchaseRequisitionDetail = lazy(() => import('@modules/Purchasing/Views/Requisition/PurchaseRequisitionDetailView'));
+const PurchaseOrderItemList = lazy(() => import('@modules/Purchasing/Views/Order/PurchaseOrderItemListView'));
 
-// Import ISO module
-import ISODocumentList from '@modules/ISO/Views/ISODocumentListView';
-import ISOFormEditor from '@modules/ISO/Views/ISOFormEditorView';
-import ISOProcessEditor from '@modules/ISO/Views/ISOProcessEditorView';
+// Import ISO module (Tải động)
+const ISODocumentList = lazy(() => import('@modules/ISO/Views/Document/ISODocumentListView'));
+const ISOFormEditor = lazy(() => import('@modules/ISO/Views/Form/ISOFormEditorView'));
+const ISOProcessEditor = lazy(() => import('@modules/ISO/Views/Process/ISOProcessEditorView'));
 
 import { authService } from '@modules/Auth/Models/auth.service';
 import { ScreenProvider } from '@shared/context/ScreenContext';
@@ -543,114 +543,130 @@ function App() {
     <ToastProvider>
       <ScreenProvider>
         <Router>
-          <Routes>
-            {/* Route Đăng nhập */}
-            <Route path="/login" element={<LoginRoute />} />
+          <Suspense fallback={
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '100vh',
+              fontFamily: 'Inter, sans-serif',
+              color: '#7B5233',
+              fontWeight: 'bold',
+              fontSize: '1.1rem',
+              backgroundColor: '#FAF8F6'
+            }}>
+              Đang tải trang...
+            </div>
+          }>
+            <Routes>
+              {/* Route Đăng nhập */}
+              <Route path="/login" element={<LoginRoute />} />
 
-            {/* Route Admin (Sử dụng Layout chung) */}
-            <Route path="/admin" element={<PortalLayout />}>
-              <Route index element={<Navigate to="/admin/dashboard" />} />
-              <Route path="dashboard" element={<Dashboard />} />
-              <Route path="profile" element={<UserEdit isProfile={true} />} />
-              <Route path="users" element={<ProtectedRoute permissionKey="users"><UserManagement /></ProtectedRoute>} />
-              <Route path="users/create" element={<ProtectedRoute permissionKey="users"><UserCreate /></ProtectedRoute>} />
-              <Route path="users/edit/:id" element={<ProtectedRoute permissionKey="users"><UserEdit /></ProtectedRoute>} />
-              <Route path="users/permissions/:id" element={<ProtectedRoute permissionKey="users"><UserEdit /></ProtectedRoute>} />
-              <Route path="users/departments" element={<ProtectedRoute permissionKey="users"><DepartmentManagement /></ProtectedRoute>} />
-              <Route path="users/positions" element={<ProtectedRoute permissionKey="users"><PositionManagement /></ProtectedRoute>} />
-              <Route path="hr" element={<Navigate to="hr/org-chart" />} />
-              <Route path="hr/org-chart" element={<ProtectedRoute permissionKey="users"><HRManagementView /></ProtectedRoute>} />
-              <Route path="hr/employees" element={<ProtectedRoute permissionKey="users"><EmployeeListView /></ProtectedRoute>} />
-              <Route path="handovers" element={<ProtectedRoute permissionKey="handovers"><HandoverList /></ProtectedRoute>} />
-              <Route path="logs" element={<ProtectedRoute permissionKey="logs"><IncidentLogs /></ProtectedRoute>} />
-              <Route path="defects" element={<ProtectedRoute permissionKey="defects"><DefectManagement /></ProtectedRoute>} />
-              <Route path="reports" element={<ProtectedRoute permissionKey="reports"><InspectionReports /></ProtectedRoute>} />
-              <Route path="quality-records" element={<ProtectedRoute permissionKey="quality-records"><QualityRecords /></ProtectedRoute>} />
-              <Route path="quality-records/:id" element={<ProtectedRoute permissionKey="quality-records"><QualityRecordsDetail /></ProtectedRoute>} />
-              <Route path="iso-documents" element={<ProtectedRoute permissionKey="iso-documents"><ISODocumentList mode="documents" /></ProtectedRoute>} />
-              <Route path="iso-processes" element={<ProtectedRoute permissionKey="iso-processes"><ISODocumentList mode="processes" /></ProtectedRoute>} />
-              <Route path="iso-documents/edit/:id" element={<ProtectedRoute permissionKey={["iso-documents", "iso-processes"]}><ISOFormEditor /></ProtectedRoute>} />
-              <Route path="iso-processes/edit/:id" element={<ProtectedRoute permissionKey="iso-processes"><ISOProcessEditor /></ProtectedRoute>} />
-              <Route path="kpi" element={<ProtectedRoute permissionKey="kpi"><KPIReports /></ProtectedRoute>} />
-              <Route path="kpi/checklist" element={<ProtectedRoute permissionKey="kpi"><KPIChecklist /></ProtectedRoute>} />
-              <Route path="kpi/list" element={<ProtectedRoute permissionKey="kpi"><KPIItems /></ProtectedRoute>} />
-              <Route path="kpi/rules" element={<ProtectedRoute permissionKey="kpi"><KPIRules /></ProtectedRoute>} />
-              <Route path="kpi/feedback" element={<ProtectedRoute permissionKey="kpi"><KPIFeedback /></ProtectedRoute>} />
-              <Route path="feedback" element={<ProtectedRoute permissionKey="feedback"><Improvements /></ProtectedRoute>} />
-              <Route path="hotspots" element={<ProtectedRoute permissionKey="hotspots"><Hotspots /></ProtectedRoute>} />
-              <Route path="data" element={<ProtectedRoute permissionKey="data"><DataPackaging /></ProtectedRoute>} />
-              <Route path="screens" element={<ProtectedRoute permissionKey="screens"><ScreenManagement /></ProtectedRoute>} />
-              <Route path="screens/:id" element={<ProtectedRoute permissionKey="screens"><ScreenDetail /></ProtectedRoute>} />
-              <Route path="screens/bugs" element={<ProtectedRoute permissionKey="bugs"><ScreenBugManagement /></ProtectedRoute>} />
-              <Route path="screens/progress" element={<ProtectedRoute permissionKey="screens"><ProjectProgress /></ProtectedRoute>} />
-              <Route path="monitor" element={<ProtectedRoute permissionKey="monitor"><SystemMonitor /></ProtectedRoute>} />
-              <Route path="equipment" element={<ProtectedRoute permissionKey="equipment"><EquipmentManagement /></ProtectedRoute>} />
-              <Route path="equipment/categories" element={<ProtectedRoute permissionKey="equipment"><EquipmentCategories /></ProtectedRoute>} />
-              <Route path="equipment/history" element={<ProtectedRoute permissionKey="equipment"><EquipmentHistory /></ProtectedRoute>} />
-              <Route path="equipment/training" element={<ProtectedRoute permissionKey="equipment"><EquipmentTraining /></ProtectedRoute>} />
-              <Route path="equipment/handover" element={<ProtectedRoute permissionKey="equipment"><EquipmentHandoverRedirect /></ProtectedRoute>} />
-              <Route path="equipment/handover/:id" element={<ProtectedRoute permissionKey="equipment"><EquipmentHandoverRedirect /></ProtectedRoute>} />
-              <Route path="equipment/detail/:id" element={<ProtectedRoute permissionKey="equipment"><EquipmentDetail /></ProtectedRoute>} />
-              <Route path="equipment/training/detail/:id" element={<ProtectedRoute permissionKey="equipment"><EquipmentTrainingDetail /></ProtectedRoute>} />
+              {/* Route Admin (Sử dụng Layout chung) */}
+              <Route path="/admin" element={<PortalLayout />}>
+                <Route index element={<Navigate to="/admin/dashboard" />} />
+                <Route path="dashboard" element={<Dashboard />} />
+                <Route path="profile" element={<UserEdit isProfile={true} />} />
+                <Route path="users" element={<ProtectedRoute permissionKey="users"><UserManagement /></ProtectedRoute>} />
+                <Route path="users/create" element={<ProtectedRoute permissionKey="users"><UserCreate /></ProtectedRoute>} />
+                <Route path="users/edit/:id" element={<ProtectedRoute permissionKey="users"><UserEdit /></ProtectedRoute>} />
+                <Route path="users/permissions/:id" element={<ProtectedRoute permissionKey="users"><UserEdit /></ProtectedRoute>} />
+                <Route path="users/departments" element={<ProtectedRoute permissionKey="users"><DepartmentManagement /></ProtectedRoute>} />
+                <Route path="users/positions" element={<ProtectedRoute permissionKey="users"><PositionManagement /></ProtectedRoute>} />
+                <Route path="hr" element={<Navigate to="hr/org-chart" />} />
+                <Route path="hr/org-chart" element={<ProtectedRoute permissionKey="users"><HRManagementView /></ProtectedRoute>} />
+                <Route path="hr/employees" element={<ProtectedRoute permissionKey="users"><EmployeeListView /></ProtectedRoute>} />
+                <Route path="handovers" element={<ProtectedRoute permissionKey="handovers"><HandoverList /></ProtectedRoute>} />
+                <Route path="logs" element={<ProtectedRoute permissionKey="logs"><IncidentLogs /></ProtectedRoute>} />
+                <Route path="defects" element={<ProtectedRoute permissionKey="defects"><DefectManagement /></ProtectedRoute>} />
+                <Route path="reports" element={<ProtectedRoute permissionKey="reports"><InspectionReports /></ProtectedRoute>} />
+                <Route path="quality-records" element={<ProtectedRoute permissionKey="quality-records"><QualityRecords /></ProtectedRoute>} />
+                <Route path="quality-records/:id" element={<ProtectedRoute permissionKey="quality-records"><QualityRecordsDetail /></ProtectedRoute>} />
+                <Route path="iso-documents" element={<ProtectedRoute permissionKey="iso-documents"><ISODocumentList mode="documents" /></ProtectedRoute>} />
+                <Route path="iso-processes" element={<ProtectedRoute permissionKey="iso-processes"><ISODocumentList mode="processes" /></ProtectedRoute>} />
+                <Route path="iso-documents/edit/:id" element={<ProtectedRoute permissionKey={["iso-documents", "iso-processes"]}><ISOFormEditor /></ProtectedRoute>} />
+                <Route path="iso-processes/edit/:id" element={<ProtectedRoute permissionKey="iso-processes"><ISOProcessEditor /></ProtectedRoute>} />
+                <Route path="kpi" element={<ProtectedRoute permissionKey="kpi"><KPIReports /></ProtectedRoute>} />
+                <Route path="kpi/checklist" element={<ProtectedRoute permissionKey="kpi"><KPIChecklist /></ProtectedRoute>} />
+                <Route path="kpi/list" element={<ProtectedRoute permissionKey="kpi"><KPIItems /></ProtectedRoute>} />
+                <Route path="kpi/rules" element={<ProtectedRoute permissionKey="kpi"><KPIRules /></ProtectedRoute>} />
+                <Route path="kpi/feedback" element={<ProtectedRoute permissionKey="kpi"><KPIFeedback /></ProtectedRoute>} />
+                <Route path="feedback" element={<ProtectedRoute permissionKey="feedback"><Improvements /></ProtectedRoute>} />
+                <Route path="hotspots" element={<ProtectedRoute permissionKey="hotspots"><Hotspots /></ProtectedRoute>} />
+                <Route path="data" element={<ProtectedRoute permissionKey="data"><DataPackaging /></ProtectedRoute>} />
+                <Route path="screens" element={<ProtectedRoute permissionKey="screens"><ScreenManagement /></ProtectedRoute>} />
+                <Route path="screens/:id" element={<ProtectedRoute permissionKey="screens"><ScreenDetail /></ProtectedRoute>} />
+                <Route path="screens/bugs" element={<ProtectedRoute permissionKey="bugs"><ScreenBugManagement /></ProtectedRoute>} />
+                <Route path="screens/progress" element={<ProtectedRoute permissionKey="screens"><ProjectProgress /></ProtectedRoute>} />
+                <Route path="monitor" element={<ProtectedRoute permissionKey="monitor"><SystemMonitor /></ProtectedRoute>} />
+                <Route path="equipment" element={<ProtectedRoute permissionKey="equipment"><EquipmentManagement /></ProtectedRoute>} />
+                <Route path="equipment/categories" element={<ProtectedRoute permissionKey="equipment"><EquipmentCategories /></ProtectedRoute>} />
+                <Route path="equipment/history" element={<ProtectedRoute permissionKey="equipment"><EquipmentHistory /></ProtectedRoute>} />
+                <Route path="equipment/training" element={<ProtectedRoute permissionKey="equipment"><EquipmentTraining /></ProtectedRoute>} />
+                <Route path="equipment/handover" element={<ProtectedRoute permissionKey="equipment"><EquipmentHandoverRedirect /></ProtectedRoute>} />
+                <Route path="equipment/handover/:id" element={<ProtectedRoute permissionKey="equipment"><EquipmentHandoverRedirect /></ProtectedRoute>} />
+                <Route path="equipment/detail/:id" element={<ProtectedRoute permissionKey="equipment"><EquipmentDetail /></ProtectedRoute>} />
+                <Route path="equipment/training/detail/:id" element={<ProtectedRoute permissionKey="equipment"><EquipmentTrainingDetail /></ProtectedRoute>} />
 
-              {/* Machinery (Máy móc) Module */}
-              <Route path="machines" element={<ProtectedRoute permissionKey="machines"><MachineManagement /></ProtectedRoute>} />
-              <Route path="machines/history" element={<ProtectedRoute permissionKey="machine-history"><MachineHistory /></ProtectedRoute>} />
-              <Route path="machines/training" element={<ProtectedRoute permissionKey="machine-training"><MachineTraining /></ProtectedRoute>} />
-              <Route path="machines/detail/:id" element={<ProtectedRoute permissionKey="machines"><MachineDetail /></ProtectedRoute>} />
+                {/* Machinery (Máy móc) Module */}
+                <Route path="machines" element={<ProtectedRoute permissionKey="machines"><MachineManagement /></ProtectedRoute>} />
+                <Route path="machines/history" element={<ProtectedRoute permissionKey="machine-history"><MachineHistory /></ProtectedRoute>} />
+                <Route path="machines/training" element={<ProtectedRoute permissionKey="machine-training"><MachineTraining /></ProtectedRoute>} />
+                <Route path="machines/detail/:id" element={<ProtectedRoute permissionKey="machines"><MachineDetail /></ProtectedRoute>} />
 
-              {/* Manufacture Routes merged under /admin */}
-              <Route path="manufacture-dashboard" element={<ProtectedRoute permissionKey="home"><ManufactureDashboard /></ProtectedRoute>} />
-              <Route path="plan" element={<ProtectedRoute permissionKey="plan"><ManufacturePlan /></ProtectedRoute>} />
-              <Route path="plan/:id" element={<ProtectedRoute permissionKey="plan"><PlanDetail /></ProtectedRoute>} />
-              <Route path="plan/create" element={<ProtectedRoute permissionKey="plan"><AddProductionPlan /></ProtectedRoute>} />
-              <Route path="delivery-tracking" element={<ProtectedRoute permissionKey="delivery-tracking"><DeliveryTracking /></ProtectedRoute>} />
-              <Route path="products" element={<ProtectedRoute permissionKey="products"><ManufactureProducts /></ProtectedRoute>} />
-              <Route path="products/:id" element={<ProtectedRoute permissionKey="products"><ProductDetail /></ProtectedRoute>} />
-              <Route path="products/create" element={<ProtectedRoute permissionKey="products"><ProductCreate /></ProtectedRoute>} />
-              <Route path="progress/:id" element={<ProtectedRoute permissionKey="plan"><ProductionProgress /></ProtectedRoute>} />
-              <Route path="orders" element={<ProtectedRoute permissionKey="orders"><ManufactureOrders /></ProtectedRoute>} />
-              <Route path="orders/create" element={<ProtectedRoute permissionKey="orders"><OrderCreate /></ProtectedRoute>} />
-              <Route path="backup-qrs" element={<ProtectedRoute permissionKey="backup-qrs"><BackupQRManagement /></ProtectedRoute>} />
-              <Route path="exception-deliveries" element={<ProtectedRoute permissionKey="exception-deliveries"><ExceptionDeliveries /></ProtectedRoute>} />
-              <Route path="purchase-requisitions" element={<ProtectedRoute permissionKey="purchase-requisitions"><PurchaseRequisitionList /></ProtectedRoute>} />
-              <Route path="purchase-requisitions/:id" element={<ProtectedRoute permissionKey="purchase-requisitions"><PurchaseRequisitionDetail /></ProtectedRoute>} />
-              <Route path="purchase-order-items" element={<ProtectedRoute permissionKey="purchase-order-items"><PurchaseOrderItemList /></ProtectedRoute>} />
-            </Route>
-
-            {/* Route Claim (Root level but with PortalLayout) */}
-            <Route path="/admin/claims" element={<ProtectedRoute permissionKey="claim"><PortalLayout /></ProtectedRoute>}>
-              <Route element={<ClaimPortalLayout />}>
-                <Route index element={<ClaimList />} />
+                {/* Manufacture Routes merged under /admin */}
+                <Route path="manufacture-dashboard" element={<ProtectedRoute permissionKey="home"><ManufactureDashboard /></ProtectedRoute>} />
+                <Route path="plan" element={<ProtectedRoute permissionKey="plan"><ManufacturePlan /></ProtectedRoute>} />
+                <Route path="plan/:id" element={<ProtectedRoute permissionKey="plan"><PlanDetail /></ProtectedRoute>} />
+                <Route path="plan/create" element={<ProtectedRoute permissionKey="plan"><AddProductionPlan /></ProtectedRoute>} />
+                <Route path="delivery-tracking" element={<ProtectedRoute permissionKey="delivery-tracking"><DeliveryTracking /></ProtectedRoute>} />
+                <Route path="products" element={<ProtectedRoute permissionKey="products"><ManufactureProducts /></ProtectedRoute>} />
+                <Route path="products/:id" element={<ProtectedRoute permissionKey="products"><ProductDetail /></ProtectedRoute>} />
+                <Route path="products/create" element={<ProtectedRoute permissionKey="products"><ProductCreate /></ProtectedRoute>} />
+                <Route path="progress/:id" element={<ProtectedRoute permissionKey="plan"><ProductionProgress /></ProtectedRoute>} />
+                <Route path="orders" element={<ProtectedRoute permissionKey="orders"><ManufactureOrders /></ProtectedRoute>} />
+                <Route path="orders/create" element={<ProtectedRoute permissionKey="orders"><OrderCreate /></ProtectedRoute>} />
+                <Route path="backup-qrs" element={<ProtectedRoute permissionKey="backup-qrs"><BackupQRManagement /></ProtectedRoute>} />
+                <Route path="exception-deliveries" element={<ProtectedRoute permissionKey="exception-deliveries"><ExceptionDeliveries /></ProtectedRoute>} />
+                <Route path="purchase-requisitions" element={<ProtectedRoute permissionKey="purchase-requisitions"><PurchaseRequisitionList /></ProtectedRoute>} />
+                <Route path="purchase-requisitions/:id" element={<ProtectedRoute permissionKey="purchase-requisitions"><PurchaseRequisitionDetail /></ProtectedRoute>} />
+                <Route path="purchase-order-items" element={<ProtectedRoute permissionKey="purchase-order-items"><PurchaseOrderItemList /></ProtectedRoute>} />
               </Route>
-            </Route>
 
-            {/* Route ChatBot - redirects to claims with chat open */}
-            <Route path="/admin/chatbot" element={<Navigate to="/admin/claims?chat=true" />} />
-            {/* Route Prices */}
-            <Route path="/admin/prices" element={<ProtectedRoute permissionKey="prices"><PortalLayout /></ProtectedRoute>}>
-              <Route element={<ClaimPortalLayout />}>
-                <Route index element={<PriceList />} />
+              {/* Route Claim (Root level but with PortalLayout) */}
+              <Route path="/admin/claims" element={<ProtectedRoute permissionKey="claim"><PortalLayout /></ProtectedRoute>}>
+                <Route element={<ClaimPortalLayout />}>
+                  <Route index element={<ClaimList />} />
+                </Route>
               </Route>
-            </Route>
 
-            {/* Route Shipments */}
-            <Route path="/admin/shipments" element={<ProtectedRoute permissionKey="shipments"><PortalLayout /></ProtectedRoute>}>
-              <Route element={<ClaimPortalLayout />}>
-                <Route index element={<ShipmentList />} />
+              {/* Route ChatBot - redirects to claims with chat open */}
+              <Route path="/admin/chatbot" element={<Navigate to="/admin/claims?chat=true" />} />
+              {/* Route Prices */}
+              <Route path="/admin/prices" element={<ProtectedRoute permissionKey="prices"><PortalLayout /></ProtectedRoute>}>
+                <Route element={<ClaimPortalLayout />}>
+                  <Route index element={<PriceList />} />
+                </Route>
               </Route>
-            </Route>
 
-            {/* Legacy Redirects */}
-            <Route path="/claim/*" element={<Navigate to="/admin/claims" />} />
-            <Route path="/admin/claim/*" element={<Navigate to="/admin/claims" />} />
+              {/* Route Shipments */}
+              <Route path="/admin/shipments" element={<ProtectedRoute permissionKey="shipments"><PortalLayout /></ProtectedRoute>}>
+                <Route element={<ClaimPortalLayout />}>
+                  <Route index element={<ShipmentList />} />
+                </Route>
+              </Route>
 
-            {/* Chuyển hướng mặc định */}
-            <Route path="/" element={<RootRoute />} />
+              {/* Legacy Redirects */}
+              <Route path="/claim/*" element={<Navigate to="/admin/claims" />} />
+              <Route path="/admin/claim/*" element={<Navigate to="/admin/claims" />} />
 
-            {/* Catch-all route to prevent white screen */}
-            <Route path="*" element={<Navigate to="/" />} />
-          </Routes>
+              {/* Chuyển hướng mặc định */}
+              <Route path="/" element={<RootRoute />} />
+
+              {/* Catch-all route to prevent white screen */}
+              <Route path="*" element={<Navigate to="/" />} />
+            </Routes>
+          </Suspense>
         </Router>
       </ScreenProvider>
     </ToastProvider>

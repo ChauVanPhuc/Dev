@@ -1,0 +1,500 @@
+import React from 'react';
+import {
+  Plus, Trash2, Edit, ChevronDown, ChevronUp, Upload, HelpCircle, Save, FileText
+} from 'lucide-react';
+
+const ProcessInstructionsTab = ({ editor }) => {
+  const {
+    Icon, activeTab, file, formData, handleAddWorkInstruction, handleOpenAddStepPopup,
+    handleOpenEditStepPopup, handlePopupImageUpload, handleRemoveWorkInstruction, handleReorderStepInPopup, handleSaveStep, handleUpdateWorkInstructionNote,
+    handleUpdateWorkInstructionScope, handleUpdateWorkInstructionTitle, height, idx, img, instructions,
+    isActive, isEditingStep, isProcessMode, label, selectedInstructionId, setActiveTab,
+    setSelectedInstructionId, setShowPdfPreview, setShowStepPopup, setStepForm, showStepPopup, step,
+    stepForm, steps, systemScreens, table, td, tr,
+    width,
+  } = editor;
+
+  return (
+    <>
+            const activeInst = (formData.work_instructions || []).find(inst => inst.id === selectedInstructionId);
+            return (
+              <div style={{ display: 'flex', gap: '20px', width: '100%', minHeight: '60vh', boxSizing: 'border-box' }}>
+                {/* Cột trái: Danh sách hướng dẫn */}
+                <div style={{ width: '22%', minWidth: '200px', backgroundColor: 'white', borderRadius: '10px', padding: '16px', border: '1.5px solid #EADCC9', display: 'flex', flexDirection: 'column', gap: '12px', boxSizing: 'border-box' }}>
+                  <h3 style={{ fontSize: '0.72rem', fontWeight: 'bold', color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>
+                    Danh sách hướng dẫn
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, overflowY: 'auto' }}>
+                    {(formData.work_instructions || []).length === 0 ? (
+                      <div style={{ padding: '20px 10px', textAlign: 'center', color: '#9CA3AF', fontStyle: 'italic', fontSize: '0.82rem' }}>
+                        Chưa có hướng dẫn nào
+                      </div>
+                    ) : (
+                      (formData.work_instructions || []).map((inst, idx) => {
+                        const isActive = inst.id === selectedInstructionId;
+                        const codePart = inst.code ? inst.code.split('-').pop() : `HD${String(idx + 1).padStart(2, '0')}`;
+                        const label = `${codePart} - ${inst.title || `hướng dẫn ${idx + 1}`}`;
+                        return (
+                          <div
+                            key={inst.id}
+                            onClick={() => setSelectedInstructionId(inst.id)}
+                            style={{
+                              padding: '10px 14px',
+                              borderRadius: '8px',
+                              backgroundColor: isActive ? '#FAF6F0' : 'transparent',
+                              color: isActive ? '#7B5233' : '#374151',
+                              fontWeight: isActive ? 'bold' : 'normal',
+                              border: isActive ? '1.5px solid #7B5233' : '1.5px solid transparent',
+                              cursor: 'pointer',
+                              fontSize: '0.85rem',
+                              transition: 'all 0.2s',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              boxSizing: 'border-box'
+                            }}
+                          >
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '6px' }}>
+                              {label}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveWorkInstruction(inst.id);
+                              }}
+                              style={{
+                                border: 'none',
+                                background: 'none',
+                                color: '#EF4444',
+                                cursor: 'pointer',
+                                opacity: 0.6,
+                                padding: '2px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                flexShrink: 0
+                              }}
+                              title="Xóa hướng dẫn"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                  
+                  <button
+                    type="button"
+                    onClick={handleAddWorkInstruction}
+                    style={{
+                      width: '100%',
+                      padding: '9px',
+                      backgroundColor: 'white',
+                      border: '1.5px dashed #7B5233',
+                      color: '#7B5233',
+                      borderRadius: '8px',
+                      fontSize: '0.82rem',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    <Plus size={14} /> Thêm hướng dẫn mới
+                  </button>
+                </div>
+
+                {/* Cột phải: Chi tiết hướng dẫn đang chọn */}
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px', boxSizing: 'border-box' }}>
+                  {!activeInst ? (
+                    <div style={{ backgroundColor: 'white', borderRadius: '10px', padding: '40px 20px', border: '1.5px solid #EADCC9', textAlign: 'center', color: '#9CA3AF', fontStyle: 'italic', fontSize: '0.88rem' }}>
+                      {(formData.work_instructions || []).length === 0
+                        ? 'Vui lòng thêm hướng dẫn mới ở cột bên trái để bắt đầu.'
+                        : 'Chọn một hướng dẫn ở cột bên trái để xem chi tiết.'}
+                    </div>
+                  ) : (
+                    <>
+                      {/* Header */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h2 style={{ fontSize: '1.15rem', fontWeight: 'bold', color: '#1F2937', margin: 0 }}>Hướng dẫn kiểm tra</h2>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setShowPdfPreview(true)}
+                            style={{
+                              padding: '7px 18px',
+                              backgroundColor: '#5C3D24',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              fontSize: '0.85rem',
+                              fontWeight: '700',
+                              cursor: 'pointer',
+                              transition: 'background-color 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4A301C'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#5C3D24'}
+                          >
+                            Xem trước
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveTab('content');
+                            }}
+                            style={{
+                              padding: '7px 18px',
+                              backgroundColor: 'white',
+                              color: '#374151',
+                              border: '1px solid #D1D5DB',
+                              borderRadius: '6px',
+                              fontSize: '0.85rem',
+                              fontWeight: '700',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Quay lại
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Form chi tiết */}
+                      <div style={{ backgroundColor: 'white', borderRadius: '10px', padding: '20px', border: '1.5px solid #EADCC9', display: 'flex', flexDirection: 'column', gap: '16px', boxSizing: 'border-box' }}>
+                        {/* Hàng 1: Mã tài liệu, Tên tài liệu, Phạm vi áp dụng */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1.5fr', gap: '14px' }}>
+                          <div>
+                            <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 'bold', color: '#4B5563', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              Mã tài liệu
+                            </label>
+                            <input
+                              type="text"
+                              value={activeInst.code || ''}
+                              readOnly
+                              style={{
+                                width: '100%',
+                                height: '36px',
+                                padding: '7px 10px',
+                                borderRadius: '6px',
+                                border: '1px solid #E5E7EB',
+                                outline: 'none',
+                                fontSize: '0.85rem',
+                                fontWeight: '600',
+                                backgroundColor: '#F3F4F6',
+                                color: '#4B5563',
+                                cursor: 'not-allowed',
+                                boxSizing: 'border-box'
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 'bold', color: '#4B5563', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              Tên tài liệu
+                            </label>
+                            <input
+                              type="text"
+                              value={activeInst.title || ''}
+                              onChange={(e) => handleUpdateWorkInstructionTitle(activeInst.id, e.target.value)}
+                              placeholder="Nhập tên tài liệu..."
+                              style={{
+                                width: '100%',
+                                height: '36px',
+                                padding: '7px 10px',
+                                borderRadius: '6px',
+                                border: '1px solid #D1D5DB',
+                                outline: 'none',
+                                fontSize: '0.85rem',
+                                color: '#1F2937',
+                                boxSizing: 'border-box'
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 'bold', color: '#4B5563', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              Phạm vi áp dụng
+                            </label>
+                            <select
+                              value={activeInst.scope || 'Tất cả'}
+                              onChange={(e) => handleUpdateWorkInstructionScope(activeInst.id, e.target.value)}
+                              style={{
+                                width: '100%',
+                                height: '36px',
+                                padding: '7px 10px',
+                                borderRadius: '6px',
+                                border: '1px solid #D1D5DB',
+                                outline: 'none',
+                                fontSize: '0.85rem',
+                                backgroundColor: 'white',
+                                color: '#1F2937',
+                                boxSizing: 'border-box',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <option value="Tất cả">Tất cả</option>
+                              {systemScreens
+                                .filter(scr => scr.platform && scr.platform.toLowerCase() === 'mobile')
+                                .map(scr => (
+                                  <option key={scr.id} value={scr.route_path}>
+                                    {scr.title || scr.route_path}
+                                  </option>
+                                ))
+                              }
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Ghi chú */}
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 'bold', color: '#4B5563', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            Ghi chú
+                          </label>
+                          <textarea
+                            value={activeInst.note || ''}
+                            onChange={(e) => handleUpdateWorkInstructionNote(activeInst.id, e.target.value)}
+                            placeholder="Nhập ghi chú..."
+                            rows="2"
+                            style={{
+                              width: '100%',
+                              padding: '7px 10px',
+                              borderRadius: '6px',
+                              border: '1px solid #D1D5DB',
+                              outline: 'none',
+                              fontSize: '0.85rem',
+                              color: '#1F2937',
+                              fontFamily: 'inherit',
+                              resize: 'vertical',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                        </div>
+
+                        {/* Bảng danh sách bước */}
+                        <div style={{ marginTop: '6px', overflowX: 'auto' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                            <thead>
+                              <tr style={{ backgroundColor: '#F9FAFB', borderBottom: '2px solid #E5E7EB' }}>
+                                <th style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: '700', color: '#374151', textTransform: 'uppercase', width: '70px', textAlign: 'center' }}>Bước</th>
+                                <th style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: '700', color: '#374151', textTransform: 'uppercase' }}>Nội dung thực hiện</th>
+                                <th style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: '700', color: '#374151', textTransform: 'uppercase' }}>Lưu ý</th>
+                                <th style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: '700', color: '#374151', textTransform: 'uppercase' }}>Tiêu chuẩn chấp nhận</th>
+                                <th style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: '700', color: '#374151', textTransform: 'uppercase', width: '70px', textAlign: 'center' }}>Icon</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(!activeInst.steps || activeInst.steps.length === 0) ? (
+                                <tr>
+                                  <td colSpan="5" style={{ padding: '28px 14px', textAlign: 'center', color: '#9CA3AF', fontStyle: 'italic', fontSize: '0.85rem' }}>
+                                    Chưa có bước hướng dẫn nào. Hãy bấm "Thêm bước mới" ở dưới để bắt đầu.
+                                  </td>
+                                </tr>
+                              ) : (
+                                activeInst.steps.map((step, idx) => {
+                                  const imgUrl = step.image_url || (step.image_urls && step.image_urls[0]) || '';
+                                  return (
+                                    <tr
+                                      key={step.id || idx}
+                                      style={{ borderBottom: '1px solid #F3F4F6', transition: 'background-color 0.15s' }}
+                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F9FAFB'}
+                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                    >
+                                      <td style={{ padding: '12px 14px', fontSize: '0.85rem', fontWeight: 'bold', color: '#374151', textAlign: 'center' }}>
+                                        Bước {step.step_number}
+                                      </td>
+                                      <td style={{ padding: '12px 14px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                          {imgUrl ? (
+                                            <img src={imgUrl} style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #E5E7EB' }} alt="" />
+                                          ) : (
+                                            <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#F3F4F6', border: '1px solid #E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF', flexShrink: 0 }}>
+                                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
+                                            </div>
+                                          )}
+                                          <span style={{ fontSize: '0.85rem', color: '#374151', fontWeight: '500' }}>
+                                            {step.name || <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>Chưa nhập nội dung</span>}
+                                          </span>
+                                        </div>
+                                      </td>
+                                      <td style={{ padding: '12px 14px', fontSize: '0.85rem', color: '#6B7280' }}>
+                                        {step.note || <span style={{ color: '#D1D5DB' }}>---</span>}
+                                      </td>
+                                      <td style={{ padding: '12px 14px' }}>
+                                        {step.standard ? (
+                                          <span style={{ 
+                                            display: 'inline-flex', 
+                                            alignItems: 'center',
+                                            backgroundColor: '#FAF6F0', 
+                                            color: '#7B5233', 
+                                            fontSize: '0.75rem', 
+                                            fontWeight: 'bold', 
+                                            padding: '4px 10px', 
+                                            borderRadius: '12px', 
+                                            border: '1px solid #EADCC9' 
+                                          }}>
+                                            {step.standard}
+                                          </span>
+                                        ) : (
+                                          <span style={{ color: '#D1D5DB' }}>---</span>
+                                        )}
+                                      </td>
+                                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenEditStepPopup(activeInst, idx)}
+                                          style={{ border: 'none', background: 'none', color: '#4B5563', cursor: 'pointer', padding: '6px', display: 'inline-flex', alignItems: 'center', transition: 'color 0.2s', margin: '0 auto' }}
+                                          title="Sửa bước này"
+                                          onMouseEnter={(e) => e.currentTarget.style.color = '#7B5233'}
+                                          onMouseLeave={(e) => e.currentTarget.style.color = '#4B5563'}
+                                        >
+                                          <Edit size={15} />
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Nút thêm bước mới */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenAddStepPopup(activeInst)}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            backgroundColor: 'transparent',
+                            border: 'none',
+                            color: '#7B5233',
+                            fontSize: '0.88rem',
+                            fontWeight: 'bold',
+                            cursor: 'pointer',
+                            padding: '6px 0',
+                            transition: 'color 0.2s',
+                            alignSelf: 'flex-start'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.color = '#5C3D24'}
+                          onMouseLeave={(e) => e.currentTarget.style.color = '#7B5233'}
+                        >
+                          <Plus size={16} /> Thêm bước mới
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Popup Thêm/Sửa bước */}
+                {showStepPopup && activeInst && (
+                  <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.5)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    zIndex: 2000
+                  }}>
+                    <div style={{
+                      backgroundColor: 'white', borderRadius: '12px', padding: '24px',
+                      width: '90%', maxWidth: '620px',
+                      boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
+                      maxHeight: '90vh', overflowY: 'auto', boxSizing: 'border-box'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', borderBottom: '1px solid #F3F4F6', paddingBottom: '10px' }}>
+                        <h2 style={{ fontSize: '1.15rem', fontWeight: 'bold', color: '#1F2937', margin: 0 }}>
+                          {isEditingStep ? 'Cập nhật bước hướng dẫn' : 'Thêm bước hướng dẫn'}
+                        </h2>
+                        <button type="button" onClick={() => setShowStepPopup(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: '1.5rem', lineHeight: 1 }}>&times;</button>
+                      </div>
+                      <form onSubmit={handleSaveStep} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                        <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap' }}>
+                          {/* Ảnh */}
+                          <div style={{ width: '200px' }}>
+                            <div
+                              onClick={() => {
+                                const input = document.createElement('input');
+                                input.type = 'file'; input.accept = 'image/*';
+                                input.onchange = (ev) => handlePopupImageUpload(ev.target.files[0]);
+                                input.click();
+                              }}
+                              style={{
+                                width: '200px', height: '200px',
+                                border: '1.5px dashed #D1D5DB', borderRadius: '8px',
+                                backgroundColor: '#F9FAFB',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                cursor: 'pointer', overflow: 'hidden', transition: 'all 0.2s', boxSizing: 'border-box'
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#7B5233'; e.currentTarget.style.backgroundColor = '#FAF6F0'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#D1D5DB'; e.currentTarget.style.backgroundColor = '#F9FAFB'; }}
+                            >
+                              {stepForm.image_url ? (
+                                <img src={stepForm.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                              ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', color: '#9CA3AF' }}>
+                                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
+                                  <span style={{ fontSize: '0.75rem', fontWeight: '600' }}>Tải hình ảnh lên</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          {/* Bước + Nội dung */}
+                          <div style={{ flex: 1, minWidth: '220px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                            <div>
+                              <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 'bold', color: '#4B5563', marginBottom: '5px', textTransform: 'uppercase' }}>Bước:</label>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <select
+                                  value={stepForm.step_number}
+                                  onChange={(e) => setStepForm(prev => ({ ...prev, step_number: parseInt(e.target.value, 10) }))}
+                                  style={{ flex: 1, height: '36px', padding: '7px 10px', borderRadius: '6px', border: '1px solid #D1D5DB', outline: 'none', fontSize: '0.85rem', color: '#1F2937', backgroundColor: 'white', cursor: 'pointer' }}
+                                >
+                                  {Array.from({ length: isEditingStep ? (activeInst.steps || []).length : (activeInst.steps || []).length + 1 }, (_, i) => (
+                                    <option key={i + 1} value={i + 1}>TL{String(i + 1).padStart(2, '0')}</option>
+                                  ))}
+                                </select>
+                                <button type="button" onClick={() => handleReorderStepInPopup(stepForm.step_number)}
+                                  style={{ height: '36px', padding: '0 14px', backgroundColor: '#4B301E', color: 'white', border: 'none', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', transition: 'background-color 0.2s' }}
+                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#362114'}
+                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4B301E'}
+                                >Đổi bước</button>
+                              </div>
+                            </div>
+                            <div>
+                              <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 'bold', color: '#4B5563', marginBottom: '5px', textTransform: 'uppercase' }}>Nội dung thực hiện</label>
+                              <textarea value={stepForm.name} onChange={(e) => setStepForm(prev => ({ ...prev, name: e.target.value }))} placeholder="Nhập nội dung thực hiện..." required rows="4"
+                                style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: '1px solid #D1D5DB', outline: 'none', fontSize: '0.85rem', color: '#1F2937', fontFamily: 'inherit', resize: 'none', boxSizing: 'border-box' }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 'bold', color: '#4B5563', marginBottom: '5px', textTransform: 'uppercase' }}>Lưu ý</label>
+                          <input type="text" value={stepForm.note} onChange={(e) => setStepForm(prev => ({ ...prev, note: e.target.value }))} placeholder="Nhập lưu ý..."
+                            style={{ width: '100%', height: '36px', padding: '7px 10px', borderRadius: '6px', border: '1px solid #D1D5DB', outline: 'none', fontSize: '0.85rem', color: '#1F2937', boxSizing: 'border-box' }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 'bold', color: '#4B5563', marginBottom: '5px', textTransform: 'uppercase' }}>Tiêu chuẩn chấp nhận</label>
+                          <input type="text" value={stepForm.standard} onChange={(e) => setStepForm(prev => ({ ...prev, standard: e.target.value }))} placeholder="Nhập tiêu chuẩn..."
+                            style={{ width: '100%', height: '36px', padding: '7px 10px', borderRadius: '6px', border: '1px solid #D1D5DB', outline: 'none', fontSize: '0.85rem', color: '#1F2937', boxSizing: 'border-box' }}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px', borderTop: '1px solid #F3F4F6', paddingTop: '14px' }}>
+                          <button type="button" onClick={() => setShowStepPopup(false)}
+                            style={{ padding: '8px 18px', borderRadius: '6px', border: '1px solid #7B5233', backgroundColor: 'white', color: '#7B5233', fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer' }}
+                          >Hủy bỏ</button>
+                          <button type="submit"
+                            style={{ padding: '8px 18px', borderRadius: '6px', border: 'none', backgroundColor: '#4B301E', color: 'white', fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer' }}
+                          >{isEditingStep ? 'Cập nhật' : 'Tạo mới'}</button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+    </>
+  );
+};
+
+export default ProcessInstructionsTab;
