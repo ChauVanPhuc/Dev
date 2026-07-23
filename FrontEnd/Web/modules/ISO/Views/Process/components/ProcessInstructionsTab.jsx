@@ -14,11 +14,10 @@ const ProcessInstructionsTab = ({ editor }) => {
     width,
   } = editor;
 
+  const activeInst = (formData.work_instructions || []).find(inst => inst.id === selectedInstructionId);
+
   return (
-    <>
-            const activeInst = (formData.work_instructions || []).find(inst => inst.id === selectedInstructionId);
-            return (
-              <div style={{ display: 'flex', gap: '20px', width: '100%', minHeight: '60vh', boxSizing: 'border-box' }}>
+    <div style={{ display: 'flex', gap: '20px', width: '100%', minHeight: '60vh', boxSizing: 'border-box' }}>
                 {/* Cột trái: Danh sách hướng dẫn */}
                 <div style={{ width: '22%', minWidth: '200px', backgroundColor: 'white', borderRadius: '10px', padding: '16px', border: '1.5px solid #EADCC9', display: 'flex', flexDirection: 'column', gap: '12px', boxSizing: 'border-box' }}>
                   <h3 style={{ fontSize: '0.72rem', fontWeight: 'bold', color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>
@@ -491,9 +490,7 @@ const ProcessInstructionsTab = ({ editor }) => {
                     </div>
                   </div>
                 )}
-              </div>
-            );
-    </>
+    </div>
   );
 };
 

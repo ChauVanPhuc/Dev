@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthController } from '@modules/auth/Controllers/authController'
 import useAuthStore from '@modules/auth/Models/authModel'
+import PushNotificationService from '@shared/services/pushNotificationService';
 import Button from '@mobile/Shared/Views/components/ui/Button'
 import Input from '@mobile/Shared/Views/components/ui/Input'
 
@@ -53,7 +54,6 @@ const Login = () => {
 
             // [KEEP] Khởi tạo Push Notification cho Auto-login
             try {
-              const PushNotificationService = (await import('@shared/services/pushNotificationService')).default;
               PushNotificationService.init(userState.id);
             } catch (err) { }
 
@@ -116,7 +116,6 @@ const Login = () => {
 
       // [KEEP] Khởi tạo Push Notification sau khi login thành công
       try {
-        const PushNotificationService = (await import('@shared/services/pushNotificationService')).default;
         PushNotificationService.init(userState.id);
       } catch (err) {
         console.error("Lỗi khởi tạo Push:", err);

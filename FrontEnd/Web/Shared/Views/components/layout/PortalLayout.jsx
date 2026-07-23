@@ -12,6 +12,7 @@ import { authService } from '@modules/Auth/Models/auth.service';
 import { useScreen } from '@shared/context/ScreenContext';
 import { claimService } from '@modules/Claim/services/claim.service';
 import useUiStore from '@shared/store/uiStore';
+import api, { API_URL } from '@webShared/Services/api.service';
 
 const renderChartComponent = (type, title, data, key) => {
   if (!data || data.length === 0) return null;
@@ -1256,7 +1257,6 @@ const PortalLayout = () => {
     formData.append('file', file);
 
     try {
-      const { API_URL } = await import('@webShared/Services/api.service');
       const token = localStorage.getItem('token');
       const authHeaders = { 'ngrok-skip-browser-warning': 'true' };
       if (token && token !== 'null' && token !== 'undefined') {

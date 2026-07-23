@@ -42,12 +42,10 @@ export default defineConfig({
     }
   },
   build: {
+    chunkSizeWarningLimit: 3000,
     rollupOptions: {
-      output: {
-        // Trả về cấu hình mặc định để tránh lỗi React undefined
-      }
-    },
-    chunkSizeWarningLimit: 1000,
+      output: {}
+    }
   },
   // Nhúng version vào bundle - đảm bảo luôn đồng bộ với package.json
   define: {

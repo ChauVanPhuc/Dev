@@ -38,5 +38,20 @@ export default defineConfig({
     watch: {
       usePolling: true
     }
+  },
+  build: {
+    chunkSizeWarningLimit: 2000,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('xlsx') || id.includes('exceljs')) {
+              return 'vendor-excel';
+            }
+            return 'vendor';
+          }
+        }
+      }
+    }
   }
 })

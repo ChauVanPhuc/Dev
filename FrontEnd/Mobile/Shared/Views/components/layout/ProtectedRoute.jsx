@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import useAuthStore from '@modules/auth/Models/authModel';
+import apiClient from '@shared/services/api';
 
 /**
  * Mapped path to mobile permission key
@@ -52,19 +53,15 @@ const ProtectedRoute = () => {
 
   React.useEffect(() => {
     if (isAuthenticated && user?.id) {
-      import('@shared/services/api').then(({ default: apiClient }) => {
-        apiClient.get(`accounts/${user.id}/permissions?resolved=true`)
-          .then(response => {
-            if (response.data && response.data.permissions) {
-              setUser(user, null, response.data.permissions);
-            }
-          })
-          .catch(err => {
-            console.error("Failed to sync permissions:", err);
-          });
-      }).catch(err => {
-        console.error("Failed to load apiClient:", err);
-      });
+      apiClient.get(`accounts/${user.id}/permissions?resolved=true`)
+        .then(response => {
+          if (response.data && response.data.permissions) {
+            setUser(user, null, response.data.permissions);
+          }
+        })
+        .catch(err => {
+          console.error("Failed to sync permissions:", err);
+        });
     }
   }, [isAuthenticated, user?.id, setUser]);
 
