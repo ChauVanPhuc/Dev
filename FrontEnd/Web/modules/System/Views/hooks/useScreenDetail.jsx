@@ -47,7 +47,7 @@ export const useScreenDetail = () => {
     frontend_path: '',
     backend_path: '',
     platform: 'Web',
-    subsystem: 'Quản lý hệ thống',
+    subsystem: localStorage.getItem('last_selected_subsystem') || 'Quản lý hệ thống',
     status: 'Mới thiết kế',
     target_date: new Date().toISOString().split('T')[0],
     subtitle: '',
@@ -84,6 +84,13 @@ export const useScreenDetail = () => {
       };
     });
   }, [formData.frontend_path, formData.backend_path]);
+
+  // Effect to automatically save the last selected subsystem to localStorage
+  useEffect(() => {
+    if (formData.subsystem) {
+      localStorage.setItem('last_selected_subsystem', formData.subsystem);
+    }
+  }, [formData.subsystem]);
 
   // Effect to automatically fill subsystem and title based on matching Sidebar menu path
   useEffect(() => {
@@ -845,13 +852,14 @@ export const useScreenDetail = () => {
         };
         setScreen(initialScreen);
         setIsBackendPathManuallyEdited(false);
+        const lastSubsystem = localStorage.getItem('last_selected_subsystem') || 'Quản lý hệ thống';
         setFormData({
           title: '',
           route_path: '',
           frontend_path: '',
           backend_path: '',
           platform: 'Web',
-          subsystem: 'Quản lý hệ thống',
+          subsystem: lastSubsystem,
           status: 'Mới thiết kế',
           target_date: new Date().toISOString().split('T')[0],
           subtitle: '',
@@ -861,7 +869,7 @@ export const useScreenDetail = () => {
           title: '',
           route_path: '',
           platform: 'Web',
-          subsystem: 'Quản lý hệ thống',
+          subsystem: lastSubsystem,
           status: 'Mới thiết kế',
           target_date: new Date().toISOString().split('T')[0],
           subtitle: '',
