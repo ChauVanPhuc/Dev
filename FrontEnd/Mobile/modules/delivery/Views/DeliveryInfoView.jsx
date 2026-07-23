@@ -50,6 +50,16 @@ const deliveryInfoCache = {};
  * DeliveryInfo Screen
  * Màn hình Thông tin bàn giao làm theo thiết kế mới.
  */
+
+const getInspectionRoute = (insp) => {
+  if (!insp) return '/inspection-first-article';
+  const stageNorm = (insp.stage || '').toLowerCase();
+  if (stageNorm.includes('đầu vào') || stageNorm.includes('inbound') || stageNorm.includes('dau vao')) {
+    return '/input-inspection';
+  }
+  return '/inspection-first-article';
+};
+
 const DeliveryInfo = () => {
   const { plans, fetchPlans, fetchDeliveriesByPlan, fetchPlanDetail } = usePlanController()
   const { fetchReturnsByPlan, fetchInspectionsByPlan, fetchPartProducts, fetchDeliveryDetail } = useDeliveryController()
@@ -937,11 +947,15 @@ const DeliveryInfo = () => {
               return getContName(insp.cont_name) === selectedCont;
             });
 
+        const resolvedFallbackCont = isAllCont
+          ? (row.specifications?.[0]?.orderNames?.[0] || currentPlan?.orders?.[0]?.name || currentPlan?.name || '')
+          : selectedCont;
+        
         const navState = { 
           partName, 
           planId: selectedPlanId, 
           stage: stageToFilter,
-          contName: isAllCont ? '' : selectedCont,
+          contName: resolvedFallbackCont,
           specifications: row.specifications || [],
           inspections: insps
         };
@@ -1051,7 +1065,7 @@ const DeliveryInfo = () => {
                     const isDat = newestInsp.result === 'Đạt';
                     return (
                       <button
-                        onClick={() => navigate('/input-inspection', { state: { ...navState, viewOnly: true, inspection: newestInsp } })}
+                        onClick={() => navigate(getInspectionRoute(newestInsp), { state: { ...navState, viewOnly: true, inspection: newestInsp } })}
                         style={{ ...btnBase, background: isDat ? '#86efac' : '#fca5a5', color: isDat ? '#14532d' : '#7f1d1d' }}
                       >
                         {isDat ? '✓ Đạt' : '✗ KĐ'}
@@ -1072,7 +1086,7 @@ const DeliveryInfo = () => {
               const isDat = newestInsp.result === 'Đạt';
               return (
                 <button
-                  onClick={() => navigate('/input-inspection', { state: { ...navState, viewOnly: true, inspection: newestInsp } })}
+                  onClick={() => navigate(getInspectionRoute(newestInsp), { state: { ...navState, viewOnly: true, inspection: newestInsp } })}
                   style={{ ...btnBase, background: isDat ? '#86efac' : '#fca5a5', color: isDat ? '#14532d' : '#7f1d1d' }}
                 >
                   {isDat ? '✓ Đạt' : '✗ KĐ'}
@@ -1084,7 +1098,7 @@ const DeliveryInfo = () => {
             {showMoreBtn}
             
             <button
-              onClick={() => navigate('/input-inspection', { state: navState })}
+              onClick={() => { console.log('[DEBUG DeliveryInfoView navState]', navState); navigate('/inspection-first-article', { state: navState }); }}
               style={{ 
                 ...btnBase, 
                 background: insps.length > 0 ? 'transparent' : '#93c5fd', 
@@ -1304,7 +1318,7 @@ const DeliveryInfo = () => {
                     const isDat = newestInsp.result === 'Đạt';
                     return (
                       <button
-                        onClick={() => navigate('/input-inspection', { state: { ...navState, viewOnly: true, inspection: newestInsp } })}
+                        onClick={() => navigate(getInspectionRoute(newestInsp), { state: { ...navState, viewOnly: true, inspection: newestInsp } })}
                         style={{ ...btnBase, background: isDat ? '#86efac' : '#fca5a5', color: isDat ? '#14532d' : '#7f1d1d' }}
                       >
                         {isDat ? '✓ Đạt' : '✗ KĐ'}
@@ -1325,7 +1339,7 @@ const DeliveryInfo = () => {
               const isDat = newestInsp.result === 'Đạt';
               return (
                 <button
-                  onClick={() => navigate('/input-inspection', { state: { ...navState, viewOnly: true, inspection: newestInsp } })}
+                  onClick={() => navigate(getInspectionRoute(newestInsp), { state: { ...navState, viewOnly: true, inspection: newestInsp } })}
                   style={{ ...btnBase, background: isDat ? '#86efac' : '#fca5a5', color: isDat ? '#14532d' : '#7f1d1d' }}
                 >
                   {isDat ? '✓ Đạt' : '✗ KĐ'}
@@ -1337,7 +1351,7 @@ const DeliveryInfo = () => {
             {showMoreBtn}
             
             <button
-              onClick={() => navigate('/input-inspection', { state: navState })}
+              onClick={() => { console.log('[DEBUG DeliveryInfoView navState]', navState); navigate('/inspection-first-article', { state: navState }); }}
               style={{ 
                 ...btnBase, 
                 background: insps.length > 0 ? 'transparent' : '#93c5fd', 
@@ -2112,7 +2126,7 @@ const DeliveryInfo = () => {
                       key={insp.id || idx}
                       onClick={() => {
                         setInspectionsModal({ isOpen: false, partName: '', insps: [], navState: {} });
-                        navigate('/input-inspection', { state: { ...inspectionsModal.navState, viewOnly: true, inspection: insp } });
+                        navigate(getInspectionRoute(insp), { state: { ...inspectionsModal.navState, viewOnly: true, inspection: insp } });
                       }}
                       style={{
                         width: '100%',

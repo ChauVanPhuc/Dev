@@ -279,7 +279,7 @@ const InputInspection = () => {
         subTitle={effectiveViewOnly ? 'MB2.4 | Kết quả kiểm tra' : 'MB2.4 | Kiểm tra đầu vào'}
       />
 
-      <div className="page-content" style={{ padding: '12px', flex: 1, backgroundColor: 'var(--bg-cream)', overflowY: 'auto' }}>
+      <div className="page-content" style={{ padding: '12px', paddingBottom: '90px', flex: 1, backgroundColor: 'var(--bg-cream)', overflowY: 'auto' }}>
 
         {/* Header chi tiết */}
         <div id="input-info-card" style={{ ...card, background: 'linear-gradient(135deg, #4a2c1d 0%, #78523b 100%)', border: 'none', padding: '12px 16px', marginBottom: '10px' }}>
@@ -556,33 +556,85 @@ const InputInspection = () => {
           </div>
         )}
 
-        {/* Nút hành động */}
+        {/* Nút hành động (Ghim cố định ở đáy màn hình) */}
         {effectiveViewOnly ? (
-          <button
-            onClick={() => navigate(-1)}
-            style={{
-              width: '100%', padding: '14px', borderRadius: '14px',
-              border: '1.5px solid #e2e8f0', background: '#fff',
-              color: '#475569', fontWeight: '800', fontSize: '0.92rem',
-              cursor: 'pointer', marginBottom: '20px'
-            }}
-          >
-            ← Quay lại
-          </button>
+          <div style={{
+            position: 'fixed',
+            bottom: 0,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: '100%',
+            maxWidth: '450px',
+            backgroundColor: '#ffffff',
+            borderTop: '1px solid #e2e8f0',
+            padding: '16px 20px',
+            zIndex: 990,
+            boxShadow: '0 -8px 24px rgba(0, 0, 0, 0.06)',
+            boxSizing: 'border-box',
+            borderTopLeftRadius: '16px',
+            borderTopRightRadius: '16px'
+          }}>
+            <button
+              onClick={() => navigate(-1)}
+              style={{
+                width: '100%',
+                backgroundColor: '#ffffff',
+                color: '#4b5563',
+                border: '1.5px solid #d1d5db',
+                borderRadius: '12px',
+                padding: '14px',
+                fontSize: '0.95rem',
+                fontWeight: '700',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              ← Quay lại
+            </button>
+          </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'row', gap: '10px', marginBottom: '20px' }}>
+          <div style={{
+            position: 'fixed',
+            bottom: 0,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: '100%',
+            maxWidth: '450px',
+            backgroundColor: '#ffffff',
+            borderTop: '1px solid #e2e8f0',
+            padding: '16px 20px',
+            display: 'flex',
+            gap: '16px',
+            zIndex: 990,
+            boxShadow: '0 -8px 24px rgba(0, 0, 0, 0.06)',
+            boxSizing: 'border-box',
+            borderTopLeftRadius: '16px',
+            borderTopRightRadius: '16px'
+          }}>
             <button
               id="input-submit-btn"
               onClick={triggerSubmitConfirm}
               disabled={loading || compressing}
               style={{
-                flex: 1, padding: '14px', borderRadius: '14px', border: 'none',
-                background: (loading || compressing) ? '#94a3b8' : 'linear-gradient(135deg, #4a2c1d 0%, #78523b 100%)',
-                color: '#fff', fontWeight: '800', fontSize: '0.95rem',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                boxShadow: (loading || compressing) ? 'none' : '0 4px 14px rgba(74,44,29,0.3)',
+                flex: 1,
+                background: (loading || compressing) ? '#94a3b8' : 'linear-gradient(135deg, #4A2C1D 0%, #7B5233 100%)',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '14px',
+                fontSize: '0.95rem',
+                fontWeight: '800',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
                 cursor: (loading || compressing) ? 'not-allowed' : 'pointer',
-                transition: 'boxShadow 0.2s ease, cursor 0.2s ease'
+                boxShadow: (loading || compressing) ? 'none' : '0 4px 12px rgba(123, 82, 51, 0.25)',
+                transition: 'all 0.2s ease'
               }}
             >
               {loading ? <Loader2 size={17} style={{ animation: 'spin 1s linear infinite' }} /> : <CheckCircle2 size={17} />}
@@ -591,10 +643,20 @@ const InputInspection = () => {
             <button
               onClick={() => navigate(-1)}
               style={{
-                flex: 1, padding: '14px', borderRadius: '14px',
-                border: '1.5px solid #e2e8f0', background: '#fff',
-                color: '#475569', fontWeight: '800', fontSize: '0.92rem',
-                cursor: 'pointer'
+                flex: 1,
+                backgroundColor: '#ffffff',
+                color: '#4b5563',
+                border: '1.5px solid #d1d5db',
+                borderRadius: '12px',
+                padding: '14px',
+                fontSize: '0.95rem',
+                fontWeight: '700',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
               }}
             >
               Hủy

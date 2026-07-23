@@ -44,6 +44,7 @@ from modules.inspection.models.iso_models import ISODocument, ISORevisionLog, IS
 from modules.hr.models.hr_models import HRDepartment, HRPosition, HRSection, HREmployee, HROrgNode, HRNodeAssignment
 from modules.auth.models.org_structures import OrgStructure, OrgStructureKPI, OrgStructureTask
 from modules.auth.models.employees import Employee
+from modules.inspection.models.stage_inspection import StageInspection
 
 __all__ = [
     "Base", "Account", "Category", "Delivery", "DeliveryDetails", "DeliveryImage",
@@ -58,6 +59,6 @@ __all__ = [
     "ISODocument", "ISORevisionLog", "ISOSection", "ISOProcessStep",
     "ISOProcess", "ISOProcessSection", "ISOProcessStepInstance",
     "HRDepartment", "HRPosition", "HRSection", "HREmployee", "HROrgNode", "HRNodeAssignment",
-    "OrgStructure", "OrgStructureKPI", "OrgStructureTask", "Employee"
+    "OrgStructure", "OrgStructureKPI", "OrgStructureTask", "Employee", "StageInspection"
 ]
 

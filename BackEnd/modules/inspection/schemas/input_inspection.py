@@ -24,6 +24,7 @@ class InputInspection(InputInspectionBase):
     image_path_1: Optional[str] = None
     image_path_2: Optional[str] = None
     image_path_3: Optional[str] = None
+    inspection_type: Optional[str] = None
 
     class Config:
         from_attributes = True

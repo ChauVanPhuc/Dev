@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader';
 import CollapsibleCard from '@mobile/Shared/Views/components/ui/CollapsibleCard';
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout';
@@ -10,8 +11,43 @@ import MessageModal from '@mobile/Shared/Views/components/feedback/MessageModal'
 import FlowchartTable from '../../../../Web/modules/ISO/Views/Process/FlowchartTable';
 
 const FirstArticleInspectionView = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuthStore();
   const fileInputRef = useRef(null);
+  console.log('[DEBUG FirstArticleInspectionView] location.state:', location.state);
+
+  // Parse location state for parameters
+  const { 
+    viewOnly = false, 
+    inspection = null,
+    partName = '',
+    contName = '',
+    planId = null,
+    stage = '',
+    specifications = []
+  } = location.state || {};
+
+  // Resolve contName from specifications if it is empty
+  const resolvedContName = useMemo(() => {
+    if (contName) return contName;
+    if (specifications && specifications.length > 0) {
+      for (const specObj of specifications) {
+        if (specObj.orderNames && specObj.orderNames.length > 0) {
+          return specObj.orderNames[0];
+        }
+      }
+    }
+    return '';
+  }, [contName, specifications]);
+
+  const uRole = (user?.role_name || '').toLowerCase();
+  const uPerm = (user?.permission_name || '').toLowerCase();
+  const isQC = uRole.includes('qc') || uRole.includes('chất lượng') || 
+               uPerm.includes('qc') || uPerm.includes('chất lượng') || 
+               uRole.includes('admin') || uRole.includes('it');
+  
+  const effectiveViewOnly = viewOnly || (!isQC && inspection);
 
   // Core states
   const [activeStage, setActiveStage] = useState('');
@@ -26,6 +62,8 @@ const FirstArticleInspectionView = () => {
   const [poHeader, setPoHeader] = useState(null);
   const [poItems, setPoItems] = useState([]);
   const [selectedItemCode, setSelectedItemCode] = useState('');
+  const [selectedSpec, setSelectedSpec] = useState('');
+
 
   // Equipments / Machines
   const [machines, setMachines] = useState([]);
@@ -47,7 +85,7 @@ const FirstArticleInspectionView = () => {
 
   // Quantities
   const [producedQty, setProducedQty] = useState(10);
-  const [sampledQty, setSampledQty] = useState(5);
+  const [sampledQty, setSampledQty] = useState(1);
   const [rejectedQty, setRejectedQty] = useState(0);
 
   // Defect Tracking
@@ -145,22 +183,24 @@ const FirstArticleInspectionView = () => {
   // 1. Initial configuration & fetches
   useEffect(() => {
     // Determine default stage from user account stage_name or department/role
-    if (user?.stage_name) {
-      setActiveStage(user.stage_name);
-    } else {
-      const userDept = (user?.department_name || user?.role_name || '').toLowerCase();
-      if (userDept.includes('định hình') || userDept.includes('shaping')) {
-        setActiveStage('Định hình');
-      } else if (userDept.includes('lắp ráp') || userDept.includes('assembly')) {
-        setActiveStage('Lắp ráp');
-      } else if (userDept.includes('sơn') || userDept.includes('paint')) {
-        setActiveStage('Sơn');
-      } else if (userDept.includes('đóng gói') || userDept.includes('pack')) {
-        setActiveStage('Đóng gói');
-      } else if (userDept.includes('sau đóng gói')) {
-        setActiveStage('Sau đóng gói');
+    if (!effectiveViewOnly) {
+      if (user?.stage_name) {
+        setActiveStage(user.stage_name);
       } else {
-        setActiveStage('Định hình'); // Default choice
+        const userDept = (user?.department_name || user?.role_name || '').toLowerCase();
+        if (userDept.includes('định hình') || userDept.includes('shaping')) {
+          setActiveStage('Định hình');
+        } else if (userDept.includes('lắp ráp') || userDept.includes('assembly')) {
+          setActiveStage('Lắp ráp');
+        } else if (userDept.includes('sơn') || userDept.includes('paint')) {
+          setActiveStage('Sơn');
+        } else if (userDept.includes('đóng gói') || userDept.includes('pack')) {
+          setActiveStage('Đóng gói');
+        } else if (userDept.includes('sau đóng gói')) {
+          setActiveStage('Sau đóng gói');
+        } else {
+          setActiveStage('Định hình'); // Default choice
+        }
       }
     }
 
@@ -237,6 +277,91 @@ const FirstArticleInspectionView = () => {
     fetchTodayHistory();
   }, [user]);
 
+  // Fetch full stage inspection details if we only have the mapped/partial inspection object
+  const [fullInspection, setFullInspection] = useState(null);
+  const [isLoadingInspection, setIsLoadingInspection] = useState(false);
+
+  useEffect(() => {
+    if (effectiveViewOnly && inspection?.id) {
+      setIsLoadingInspection(true);
+      apiClient.get(`inspections/stage/${inspection.id}`)
+        .then(res => {
+          if (res.data) {
+            setFullInspection(res.data);
+          }
+        })
+        .catch(err => {
+          console.error('Lỗi khi tải chi tiết phiếu kiểm tra:', err);
+        })
+        .finally(() => {
+          setIsLoadingInspection(false);
+        });
+    }
+  }, [inspection?.id, effectiveViewOnly]);
+
+  // Load old inspection record if in viewOnly mode
+  useEffect(() => {
+    const targetInspection = fullInspection || inspection;
+    if (effectiveViewOnly && targetInspection) {
+      try {
+        const pj = typeof targetInspection.data_json === 'string'
+          ? JSON.parse(targetInspection.data_json)
+          : targetInspection.data_json;
+
+        if (pj) {
+          if (pj.stage) setActiveStage(pj.stage);
+          if (pj.machine_code) setSelectedMachineCode(pj.machine_code);
+          if (pj.machine_name) setSelectedMachineName(pj.machine_name);
+          if (pj.quantity_produced !== undefined) setProducedQty(pj.quantity_produced);
+          if (pj.quantity_sampled !== undefined) setSampledQty(pj.quantity_sampled);
+          if (pj.quantity_rejected !== undefined) setRejectedQty(pj.quantity_rejected);
+          if (pj.specification) setSelectedSpec(pj.specification);
+          if (pj.checklist_results) setChecklistResults(pj.checklist_results);
+          if (pj.defects) {
+            const mapped = pj.defects.map(d => ({
+              defectId: d.defect_id ? d.defect_id.toString() : '',
+              quantity: d.quantity || 1
+            }));
+            setActiveDefects(mapped.length > 0 ? mapped : [{ defectId: '', quantity: 1 }]);
+          }
+        }
+      } catch (err) {
+        console.error('Lỗi phân tích data_json khi xem phiếu:', err);
+      }
+
+      // Populate mock/header info for display
+      setPoHeader({
+        po_code: targetInspection.batch_no || '',
+        supplier_name: 'Đang tải...',
+        order_date: '',
+        delivery_date: ''
+      });
+
+      setSelectedItemCode(targetInspection.product_sku || '');
+      setPoItems([{
+        item_code: targetInspection.product_sku || '',
+        item_name: 'Sản phẩm đang chọn',
+        quantity: targetInspection.data_json?.quantity_produced || 10,
+        specifications: targetInspection.specification ? [{ spec: targetInspection.specification }] : []
+      }]);
+    }
+  }, [fullInspection, inspection, effectiveViewOnly]);
+
+  // Fetch PO items in the background if PO code is present in viewOnly mode, 
+  // or handle search PO and auto-fill for new inspections
+  useEffect(() => {
+    const batchNo = fullInspection?.batch_no || inspection?.batch_no;
+    if (effectiveViewOnly && batchNo) {
+      handleSearchPO(batchNo);
+    } else if (!effectiveViewOnly && resolvedContName) {
+      setPoSearchTerm(resolvedContName);
+      handleSearchPO(resolvedContName);
+      if (location.state?.stage) {
+        setActiveStage(location.state.stage);
+      }
+    }
+  }, [fullInspection?.batch_no, inspection?.batch_no, resolvedContName, effectiveViewOnly]);
+
   // Hook to match process based on machine selection or current page route
   useEffect(() => {
     if (isoProcesses.length === 0) {
@@ -280,6 +405,7 @@ const FirstArticleInspectionView = () => {
 
   // Hook to dynamically synchronize checklistResults (samples) with sampledQty (min 1, max 5) and matching process steps
   useEffect(() => {
+    if (effectiveViewOnly) return;
     // Determine the steps source
     let stepsSource = [];
     if (selectedProcessDetails) {
@@ -434,12 +560,16 @@ const FirstArticleInspectionView = () => {
 
         // Bỏ các loại ván ghép, ván ép, ván MDF, ván HMR (nguyên vật liệu thô)
         const nameLower = key.toLowerCase();
+        const isRawBoard = nameLower.startsWith('ván ghép') || 
+                           nameLower.startsWith('ván ép') || 
+                           nameLower.startsWith('ván mdf') || 
+                           nameLower.startsWith('ván hmr') || 
+                           nameLower.startsWith('ván hdf') || 
+                           nameLower.startsWith('ván thô') ||
+                           nameLower.startsWith('ván dán');
         if (opts.is_raw_material || 
             opts.exclude_production || 
-            nameLower.startsWith('ván') || 
-            nameLower.includes('veneer') ||
-            nameLower.includes('mdf') ||
-            nameLower.includes('hmr')) {
+            isRawBoard) {
           return;
         }
 
@@ -447,10 +577,24 @@ const FirstArticleInspectionView = () => {
           aggregated[key] = {
             item_code: key,
             item_name: key,
-            quantity: qty || 0
+            quantity: qty || 0,
+            specifications: opts.specification ? [{ spec: opts.specification, orderNames: opts.orderNames || [] }] : []
           };
         } else {
           aggregated[key].quantity = Math.max(aggregated[key].quantity, qty || 0);
+          if (opts.specification) {
+            const exists = aggregated[key].specifications.find(s => s.spec === opts.specification);
+            if (exists) {
+              const newNames = opts.orderNames || [];
+              newNames.forEach(name => {
+                if (!exists.orderNames.includes(name)) {
+                  exists.orderNames.push(name);
+                }
+              });
+            } else {
+              aggregated[key].specifications.push({ spec: opts.specification, orderNames: opts.orderNames || [] });
+            }
+          }
         }
       };
 
@@ -459,7 +603,9 @@ const FirstArticleInspectionView = () => {
         addPart(it.item_code, it.item_name, it.quantity || 0, {
           is_raw_material: it.is_raw_material,
           exclude_production: it.exclude_production,
-          isFromPO: true
+          isFromPO: true,
+          specification: it.specification,
+          orderNames: it.order_code ? [it.order_code] : []
         });
       });
 
@@ -476,7 +622,9 @@ const FirstArticleInspectionView = () => {
             filteredHandover.forEach(it => {
               addPart(it.name, it.name, it.quantity || 0, {
                 is_raw_material: it.is_raw_material,
-                exclude_production: it.exclude_production
+                exclude_production: it.exclude_production,
+                specification: it.specification,
+                orderNames: it.order_names || []
               });
             });
           }
@@ -501,7 +649,8 @@ const FirstArticleInspectionView = () => {
                 p.elements.forEach(el => {
                   addPart(el.sku, el.name, el.quantity || 0, {
                     is_raw_material: el.is_raw_material,
-                    exclude_production: el.exclude_production
+                    exclude_production: el.exclude_production,
+                    specification: el.specification
                   });
                 });
               }
@@ -522,23 +671,43 @@ const FirstArticleInspectionView = () => {
         setPoItems([]);
         setPoHeader(null);
         setSelectedItemCode('');
+        setSelectedSpec('');
         return;
       }
 
       // Populate PO details
       setPoHeader({
         po_code: searchCode,
-        supplier_name: order.customer || 'N/A',
-        order_date: order.create_date || '',
-        delivery_date: order.estimated_date || ''
+        supplier_name: order ? (order.customer || 'N/A') : 'N/A',
+        order_date: order ? (order.create_date || '') : '',
+        delivery_date: order ? (order.estimated_date || '') : ''
       });
       setPoItems(items);
-      if (items.length > 0) {
-        setSelectedItemCode(items[0].item_code || '');
-        if (items[0].quantity) {
-          setProducedQty(items[0].quantity);
+      if (!effectiveViewOnly) {
+        if (items.length > 0) {
+          // Find matching item from state
+          const targetPart = location.state?.partName;
+          let matchedItem = null;
+          if (targetPart) {
+            matchedItem = items.find(it => 
+              (it.item_code && it.item_code.trim().toUpperCase() === targetPart.trim().toUpperCase()) ||
+              (it.item_name && it.item_name.trim().toLowerCase().includes(targetPart.trim().toLowerCase()))
+            );
+          }
+          const selectedItem = matchedItem || items[0];
+          setSelectedItemCode(selectedItem.item_code || '');
+          if (selectedItem.quantity) {
+            setProducedQty(selectedItem.quantity);
+          }
+          // Auto select first specification if exists
+          if (selectedItem.specifications && selectedItem.specifications.length > 0) {
+            setSelectedSpec(selectedItem.specifications[0].spec);
+          } else {
+            setSelectedSpec('');
+          }
         }
       }
+
 
       // Add to recent search histories
       let list = JSON.parse(localStorage.getItem('recent_po_searches') || '[]');
@@ -757,40 +926,47 @@ const FirstArticleInspectionView = () => {
       const hasStepFailure = checklistResults.some(r => r.status === 'fail');
       const isConclusionPass = (rejectedQty === 0) && !hasStepFailure;
 
-      const payload = {
-        inspection_type: 'mau-dau-tien',
-        batch_no: poHeader.po_code,
-        product_sku: selectedItemCode,
-        inspector_name: user?.full_name || 'Người kiểm tra Mobile',
-        conclusion: isConclusionPass ? 'pass' : 'fail',
-        notes: `Phiếu kiểm tra mẫu đầu tiên công đoạn ${activeStage}`,
-        data_json: JSON.stringify({
-          stage: activeStage,
-          machine_code: selectedMachineCode,
-          machine_name: selectedMachineName,
-          quantity_produced: producedQty,
-          quantity_sampled: sampledQty,
-          quantity_rejected: rejectedQty,
-          checklist_results: checklistResults.map(r => ({
-            sampleNum: r.sampleNum,
-            title: r.title,
-            status: r.status,
-            note: r.note,
-            images: r.images,
-            steps: r.steps.map(s => ({
-              step: s.step,
-              title: s.title,
-              status: s.status,
-              note: s.note,
-              images: s.images
-            }))
-          })),
-          defects: validDefects
-        }),
-        images_json: JSON.stringify({ 'Ảnh kiểm tra mẫu': allPhotos })
+      const dataJsonObj = {
+        stage: activeStage,
+        machine_code: selectedMachineCode,
+        machine_name: selectedMachineName,
+        quantity_produced: producedQty,
+        quantity_sampled: sampledQty,
+        quantity_rejected: rejectedQty,
+        specification: selectedSpec || "",
+        checklist_results: checklistResults.map(r => ({
+          sampleNum: r.sampleNum,
+          title: r.title,
+          status: r.status,
+          note: r.note,
+          images: r.images,
+          steps: r.steps.map(s => ({
+            step: s.step,
+            title: s.title,
+            status: s.status,
+            note: s.note,
+            images: s.images
+          }))
+        })),
+        defects: validDefects
       };
 
-      await apiClient.post('inspections/stage', payload);
+      const fd = new FormData();
+      fd.append('inspection_type', 'mau-dau-tien');
+      if (poHeader?.po_code) fd.append('batch_no', poHeader.po_code);
+      if (selectedItemCode) fd.append('product_sku', selectedItemCode);
+      if (selectedSpec) fd.append('specification', selectedSpec);
+      fd.append('inspector_name', user?.full_name || 'Người kiểm tra Mobile');
+      fd.append('conclusion', isConclusionPass ? 'pass' : 'fail');
+      fd.append('notes', `Phiếu kiểm tra mẫu đầu tiên công đoạn ${activeStage}`);
+      fd.append('data_json', JSON.stringify(dataJsonObj));
+
+      // Do ảnh của checklist đã được upload trước đó và lưu dạng url string, 
+      // ta không cần upload lại file nhị phân nữa, chỉ cần gửi qua data_json hoặc files rỗng.
+
+      await apiClient.post('inspections/stage', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
 
       setMessageConfig({
         type: 'success',
@@ -822,10 +998,11 @@ const FirstArticleInspectionView = () => {
     setSelectedMachineName('');
     setChecklistResults([]);
     setProducedQty(10);
-    setSampledQty(5);
+    setSampledQty(1);
     setRejectedQty(0);
     setActiveDefects([{ defectId: '', quantity: 1 }]);
     setPoSearchTerm('');
+    setSelectedSpec('');
   };
 
   const formatDisplayTime = (dateTimeStr) => {
@@ -840,19 +1017,20 @@ const FirstArticleInspectionView = () => {
 
   return (
     <Layout>
-      <div style={{ backgroundColor: '#FAF6F0', minHeight: '100vh', paddingBottom: '100px', display: 'flex', flexDirection: 'column' }}>
-        <PageHeader title="G7 - Smart Flow" subTitle="Kiểm tra mẫu đầu tiên" />
+      <div style={{ backgroundColor: '#FAF6F0', minHeight: '100vh', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+        <PageHeader title="G7 - Smart Flow" subTitle={effectiveViewOnly ? "MB30 | Kết quả kiểm tra mẫu" : "MB30 | Kiểm tra mẫu đầu tiên"} />
 
-        <div style={{ padding: '16px', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ padding: '16px', paddingBottom: '90px', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
           {/* 1. Khung Tìm Kiếm PO & Trình chọn Công đoạn */}
-          <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '16px', border: '1.5px solid #7B5233', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {!effectiveViewOnly && (
+          <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '12px', border: '1.5px solid #7B5233', display: 'flex', flexDirection: 'column', gap: '8px' }}>
 
 
             {/* Ô tìm kiếm PO */}
             <div style={{ position: 'relative' }}>
-              <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7B5233', display: 'block', marginBottom: '4px' }}>Mã PO</label>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#7B5233', display: 'block', marginBottom: '3px' }}>Mã PO</label>
+              <div style={{ display: 'flex', gap: '6px' }}>
                 <div style={{ flex: 1, position: 'relative' }}>
                   <input
                     type="text"
@@ -863,7 +1041,7 @@ const FirstArticleInspectionView = () => {
                     }}
                     onFocus={() => setIsDropdownOpen(true)}
                     placeholder="Chọn hoặc nhập tìm kiếm mã PO..."
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #7B5233', fontSize: '13px', outline: 'none', boxSizing: 'border-box', backgroundColor: '#fff' }}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #7B5233', fontSize: '12px', outline: 'none', boxSizing: 'border-box', backgroundColor: '#fff' }}
                   />
                   {poSearchTerm && (
                     <button
@@ -874,18 +1052,18 @@ const FirstArticleInspectionView = () => {
                         setPoItems([]);
                         setSelectedItemCode('');
                       }}
-                      style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', backgroundColor: 'transparent', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                      style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', border: 'none', backgroundColor: 'transparent', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                     >
-                      <X size={16} />
+                      <X size={14} />
                     </button>
                   )}
                 </div>
                 <button
                   onClick={() => handleSearchPO()}
                   disabled={isPoSearching}
-                  style={{ width: '42px', height: '38px', borderRadius: '8px', border: 'none', backgroundColor: '#7B5233', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                  style={{ width: '38px', height: '33px', borderRadius: '6px', border: 'none', backgroundColor: '#7B5233', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                 >
-                  <Search size={18} color="#fff" />
+                  <Search size={16} color="#fff" />
                 </button>
               </div>
 
@@ -903,15 +1081,15 @@ const FirstArticleInspectionView = () => {
                     right: 0,
                     backgroundColor: '#fff',
                     border: '1px solid #7B5233',
-                    borderRadius: '8px',
-                    marginTop: '4px',
-                    maxHeight: '220px',
+                    borderRadius: '6px',
+                    marginTop: '3px',
+                    maxHeight: '200px',
                     overflowY: 'auto',
                     zIndex: 999,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                    boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
                   }}>
                     {filteredPOs.length === 0 ? (
-                      <div style={{ padding: '10px', fontSize: '12px', color: '#94a3b8', fontStyle: 'italic', textAlign: 'center' }}>
+                      <div style={{ padding: '8px', fontSize: '11px', color: '#94a3b8', fontStyle: 'italic', textAlign: 'center' }}>
                         Không tìm thấy PO nào
                       </div>
                     ) : (
@@ -924,8 +1102,8 @@ const FirstArticleInspectionView = () => {
                             setIsDropdownOpen(false);
                           }}
                           style={{
-                            padding: '10px 12px',
-                            fontSize: '12px',
+                            padding: '8px 10px',
+                            fontSize: '11px',
                             borderBottom: '1px solid #f1f5f9',
                             cursor: 'pointer',
                             color: '#4B301E'
@@ -944,12 +1122,12 @@ const FirstArticleInspectionView = () => {
                   </div>
                 </>
               )}
-              {poNotFound && <div style={{ color: '#ef4444', fontSize: '11px', fontWeight: 'bold', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}><AlertCircle size={13} /> Không tìm thấy mã PO nào trùng khớp</div>}
+              {poNotFound && <div style={{ color: '#ef4444', fontSize: '10px', fontWeight: 'bold', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}><AlertCircle size={12} /> Không tìm thấy mã PO nào trùng khớp</div>}
             </div>
 
             {/* Pills 5 lịch sử PO tìm kiếm gần nhất */}
             {recentPOs.length > 0 && (
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '2px' }}>
                 {recentPOs.map((code) => (
                   <button
                     key={code}
@@ -957,7 +1135,7 @@ const FirstArticleInspectionView = () => {
                       setPoSearchTerm(code);
                       handleSearchPO(code);
                     }}
-                    style={{ padding: '4px 10px', borderRadius: '12px', border: '1px solid #7B5233', backgroundColor: '#FAF6F0', color: '#7B5233', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}
+                    style={{ padding: '3px 8px', borderRadius: '10px', border: '1px solid #7B5233', backgroundColor: '#FAF6F0', color: '#7B5233', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer' }}
                   >
                     {code}
                   </button>
@@ -965,12 +1143,21 @@ const FirstArticleInspectionView = () => {
               </div>
             )}
           </div>
+          )}
 
           {/* 2. Thẻ Thông tin kiểm tra */}
-          <div style={{ backgroundColor: '#fff', borderRadius: '16px', border: '1.5px solid #7B5233', overflow: 'visible' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: '16px', border: '1.5px solid #7B5233', overflow: 'hidden' }}>
             <div
               onClick={() => setExpandedInfoCard(!expandedInfoCard)}
-              style={{ padding: '12px 16px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #7B5233', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+              style={{ 
+                padding: '12px 16px', 
+                backgroundColor: '#FAF6F0', 
+                borderBottom: expandedInfoCard ? '1px solid #7B5233' : 'none', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                cursor: 'pointer' 
+              }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '14px', fontWeight: '900', color: '#4B301E' }}>Thông tin kiểm tra</span>
@@ -1045,6 +1232,7 @@ const FirstArticleInspectionView = () => {
                     <select
                       value={selectedMachineCode}
                       onChange={(e) => handleSelectMachine(e.target.value)}
+                      disabled={effectiveViewOnly}
                       style={{ width: '100%', height: '40px', boxSizing: 'border-box', padding: '0 10px', borderRadius: '8px', border: '1px solid #7B5233', fontSize: '13px', outline: 'none', backgroundColor: '#fff' }}
                     >
                       <option value="">-- Chọn mã --</option>
@@ -1074,12 +1262,19 @@ const FirstArticleInspectionView = () => {
                       const val = e.target.value;
                       setSelectedItemCode(val);
                       const found = poItems.find(x => x.item_code === val);
-                      if (found && found.quantity) {
-                        setProducedQty(found.quantity);
+                      if (found) {
+                        if (found.quantity) {
+                          setProducedQty(found.quantity);
+                        }
+                        if (found.specifications && found.specifications.length > 0) {
+                          setSelectedSpec(found.specifications[0].spec);
+                        } else {
+                          setSelectedSpec('');
+                        }
                       }
                     }}
-                    disabled={!poHeader}
-                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #7B5233', fontSize: '13px', outline: 'none', backgroundColor: !poHeader ? '#f1f5f9' : '#fff' }}
+                    disabled={!poHeader || effectiveViewOnly}
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #7B5233', fontSize: '13px', outline: 'none', backgroundColor: (!poHeader || effectiveViewOnly) ? '#f1f5f9' : '#fff' }}
                   >
                     {!poHeader ? (
                       <option value="">-- Vui lòng tìm kiếm PO trước --</option>
@@ -1096,20 +1291,115 @@ const FirstArticleInspectionView = () => {
                   </select>
                 </div>
 
+                {/* Chọn Quy cách */}
+                {(() => {
+                  const currentItem = poItems.find(x => x.item_code === selectedItemCode);
+                  const specList = currentItem?.specifications || [];
+                  if (specList.length === 0) return null;
+
+                  return (
+                    <div style={{
+                      backgroundColor: '#fff',
+                      borderRadius: '8px',
+                      padding: '6px 8px',
+                      border: '1px solid #f1f5f9',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                    }}>
+                      <span style={{
+                        fontSize: '0.68rem',
+                        fontWeight: '800',
+                        color: '#7B5233',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px',
+                        marginBottom: '6px',
+                        display: 'block'
+                      }}>📐 Chọn Quy cách</span>
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(85px, 1fr))',
+                        gap: '6px',
+                        maxHeight: '150px',
+                        overflowY: 'auto',
+                        paddingRight: '4px'
+                      }}>
+                        {specList.map(({ spec, orderNames }) => {
+                          const isSelected = selectedSpec === spec;
+
+                          // Trích Cont number từ order name (VD: "APT-0073" → "73")
+                          const contLabels = Array.from(
+                            new Set(
+                              (orderNames || []).map(name => {
+                                const parts = name.split('-');
+                                return parts.length >= 2 ? parseInt(parts[1], 10) || parts[1] : name;
+                              })
+                            )
+                          );
+
+                          return (
+                            <button
+                              key={spec}
+                              type="button"
+                              onClick={() => !effectiveViewOnly && setSelectedSpec(spec)}
+                              disabled={effectiveViewOnly}
+                              style={{
+                                position: 'relative',
+                                padding: '8px 4px 6px 4px',
+                                borderRadius: '8px',
+                                border: isSelected ? '1.5px solid #7B5233' : '1px solid #e2e8f0',
+                                backgroundColor: isSelected ? '#fdf8f5' : '#fafafa',
+                                color: isSelected ? '#7B5233' : '#64748b',
+                                fontWeight: '800',
+                                fontSize: '0.75rem',
+                                textAlign: 'center',
+                                cursor: effectiveViewOnly ? 'default' : 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              {contLabels.length > 0 && (
+                                <span style={{
+                                  position: 'absolute',
+                                  top: '1px',
+                                  right: '2px',
+                                  backgroundColor: isSelected ? '#7B5233' : '#94a3b8',
+                                  color: '#fff',
+                                  fontSize: '0.45rem',
+                                  fontWeight: '900',
+                                  borderRadius: '3px',
+                                  padding: '0.5px 2px',
+                                  lineHeight: '1',
+                                  maxWidth: '90%',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap'
+                                }}>
+                                  {contLabels.join(',')}
+                                </span>
+                              )}
+                              {spec}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+
                 {/* SL Sản xuất - SL Lấy mẫu - SL Loại */}
                 <div style={{ display: 'flex', gap: '8px' }}>
                   {/* SL Sản xuất */}
                   <div style={{ flex: 1 }}>
                     <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7B5233', display: 'block', marginBottom: '4px' }}>SL sản xuất</label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                      <button onClick={() => setProducedQty(Math.max(1, producedQty - 1))} style={{ width: '28px', height: '32px', borderRadius: '6px 0 0 6px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>-</button>
+                      <button onClick={() => !effectiveViewOnly && setProducedQty(Math.max(1, producedQty - 1))} disabled={effectiveViewOnly} style={{ width: '28px', height: '32px', borderRadius: '6px 0 0 6px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', fontWeight: 'bold', fontSize: '16px', cursor: effectiveViewOnly ? 'default' : 'pointer' }}>-</button>
                       <input
                         type="number"
                         value={producedQty}
-                        onChange={(e) => setProducedQty(Math.max(1, parseInt(e.target.value) || 1))}
-                        style={{ flex: 1, height: '32px', borderTop: '1px solid #cbd5e1', borderBottom: '1px solid #cbd5e1', borderLeft: 'none', borderRight: 'none', textAlign: 'center', fontSize: '13px', fontWeight: 'bold', width: '30px' }}
+                        onChange={(e) => !effectiveViewOnly && setProducedQty(Math.max(1, parseInt(e.target.value) || 1))}
+                        readOnly={effectiveViewOnly}
+                        style={{ flex: 1, height: '32px', borderTop: '1px solid #cbd5e1', borderBottom: '1px solid #cbd5e1', borderLeft: 'none', borderRight: 'none', textAlign: 'center', fontSize: '13px', fontWeight: 'bold', width: '30px', backgroundColor: effectiveViewOnly ? '#f8fafc' : '#fff' }}
                       />
-                      <button onClick={() => setProducedQty(producedQty + 1)} style={{ width: '28px', height: '32px', borderRadius: '0 6px 6px 0', border: 'none', backgroundColor: '#7B5233', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>+</button>
+                      <button onClick={() => !effectiveViewOnly && setProducedQty(producedQty + 1)} disabled={effectiveViewOnly} style={{ width: '28px', height: '32px', borderRadius: '0 6px 6px 0', border: 'none', backgroundColor: '#7B5233', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: effectiveViewOnly ? 'default' : 'pointer' }}>+</button>
                     </div>
                   </div>
 
@@ -1117,14 +1407,15 @@ const FirstArticleInspectionView = () => {
                   <div style={{ flex: 1 }}>
                     <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7B5233', display: 'block', marginBottom: '4px' }}>SL lấy mẫu</label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                      <button onClick={() => setSampledQty(Math.max(1, sampledQty - 1))} style={{ width: '28px', height: '32px', borderRadius: '6px 0 0 6px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>-</button>
+                      <button onClick={() => !effectiveViewOnly && setSampledQty(Math.max(1, sampledQty - 1))} disabled={effectiveViewOnly} style={{ width: '28px', height: '32px', borderRadius: '6px 0 0 6px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', fontWeight: 'bold', fontSize: '16px', cursor: effectiveViewOnly ? 'default' : 'pointer' }}>-</button>
                       <input
                         type="number"
                         value={sampledQty}
-                        onChange={(e) => setSampledQty(Math.max(1, parseInt(e.target.value) || 1))}
-                        style={{ flex: 1, height: '32px', borderTop: '1px solid #cbd5e1', borderBottom: '1px solid #cbd5e1', borderLeft: 'none', borderRight: 'none', textAlign: 'center', fontSize: '13px', fontWeight: 'bold', width: '30px' }}
+                        onChange={(e) => !effectiveViewOnly && setSampledQty(Math.max(1, parseInt(e.target.value) || 1))}
+                        readOnly={effectiveViewOnly}
+                        style={{ flex: 1, height: '32px', borderTop: '1px solid #cbd5e1', borderBottom: '1px solid #cbd5e1', borderLeft: 'none', borderRight: 'none', textAlign: 'center', fontSize: '13px', fontWeight: 'bold', width: '30px', backgroundColor: effectiveViewOnly ? '#f8fafc' : '#fff' }}
                       />
-                      <button onClick={() => setSampledQty(sampledQty + 1)} style={{ width: '28px', height: '32px', borderRadius: '0 6px 6px 0', border: 'none', backgroundColor: '#7B5233', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>+</button>
+                      <button onClick={() => !effectiveViewOnly && setSampledQty(sampledQty + 1)} disabled={effectiveViewOnly} style={{ width: '28px', height: '32px', borderRadius: '0 6px 6px 0', border: 'none', backgroundColor: '#7B5233', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: effectiveViewOnly ? 'default' : 'pointer' }}>+</button>
                     </div>
                   </div>
 
@@ -1132,14 +1423,15 @@ const FirstArticleInspectionView = () => {
                   <div style={{ flex: 1 }}>
                     <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7B5233', display: 'block', marginBottom: '4px' }}>SL loại</label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                      <button onClick={() => setRejectedQty(Math.max(0, rejectedQty - 1))} style={{ width: '28px', height: '32px', borderRadius: '6px 0 0 6px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>-</button>
+                      <button onClick={() => !effectiveViewOnly && setRejectedQty(Math.max(0, rejectedQty - 1))} disabled={effectiveViewOnly} style={{ width: '28px', height: '32px', borderRadius: '6px 0 0 6px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', fontWeight: 'bold', fontSize: '16px', cursor: effectiveViewOnly ? 'default' : 'pointer' }}>-</button>
                       <input
                         type="number"
                         value={rejectedQty}
-                        onChange={(e) => setRejectedQty(Math.max(0, parseInt(e.target.value) || 0))}
-                        style={{ flex: 1, height: '32px', borderTop: '1px solid #cbd5e1', borderBottom: '1px solid #cbd5e1', borderLeft: 'none', borderRight: 'none', textAlign: 'center', fontSize: '13px', fontWeight: 'bold', width: '30px' }}
+                        onChange={(e) => !effectiveViewOnly && setRejectedQty(Math.max(0, parseInt(e.target.value) || 0))}
+                        readOnly={effectiveViewOnly}
+                        style={{ flex: 1, height: '32px', borderTop: '1px solid #cbd5e1', borderBottom: '1px solid #cbd5e1', borderLeft: 'none', borderRight: 'none', textAlign: 'center', fontSize: '13px', fontWeight: 'bold', width: '30px', backgroundColor: effectiveViewOnly ? '#f8fafc' : '#fff' }}
                       />
-                      <button onClick={() => setRejectedQty(rejectedQty + 1)} style={{ width: '28px', height: '32px', borderRadius: '0 6px 6px 0', border: 'none', backgroundColor: '#7B5233', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>+</button>
+                      <button onClick={() => !effectiveViewOnly && setRejectedQty(rejectedQty + 1)} disabled={effectiveViewOnly} style={{ width: '28px', height: '32px', borderRadius: '0 6px 6px 0', border: 'none', backgroundColor: '#7B5233', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: effectiveViewOnly ? 'default' : 'pointer' }}>+</button>
                     </div>
                   </div>
                 </div>
@@ -1180,25 +1472,27 @@ const FirstArticleInspectionView = () => {
                                         onClick={() => {
                                           if (imgPath) {
                                             setPreviewUrl(fullUrl);
-                                          } else {
+                                          } else if (!effectiveViewOnly) {
                                             triggerCamera(idx, stepIdx, 0); // sampleIndex, stepIndex, imgIndex
                                           }
                                         }}
-                                        style={{ width: '38px', height: '38px', borderRadius: '6px', border: '1px dashed #cbd5e1', backgroundColor: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer', position: 'relative' }}
+                                        style={{ width: '38px', height: '38px', borderRadius: '6px', border: '1px dashed #cbd5e1', backgroundColor: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: (imgPath || !effectiveViewOnly) ? 'pointer' : 'default', position: 'relative' }}
                                         title={`Bước ${step.step}: ${step.title}`}
                                       >
                                         {fullUrl ? (
                                           <>
                                             <img src={fullUrl} alt={`Step ${step.step}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                            <button
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                removePhoto(idx, stepIdx, 0); // sampleIndex, stepIndex, imgIndex
-                                              }}
-                                              style={{ position: 'absolute', top: '1px', right: '1px', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', fontSize: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                                            >
-                                              <X size={8} />
-                                            </button>
+                                            {!effectiveViewOnly && (
+                                              <button
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  removePhoto(idx, stepIdx, 0); // sampleIndex, stepIndex, imgIndex
+                                                }}
+                                                style={{ position: 'absolute', top: '1px', right: '1px', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', fontSize: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                                              >
+                                                <X size={8} />
+                                              </button>
+                                            )}
                                           </>
                                         ) : (
                                           <Camera size={14} color="#94a3b8" />
@@ -1218,14 +1512,24 @@ const FirstArticleInspectionView = () => {
                               <td style={{ padding: '8px', textAlign: 'center', verticalAlign: 'middle' }}>
                                 <button
                                   onClick={() => {
+                                    if (effectiveViewOnly) return;
                                     setChecklistResults(prev => {
-                                      const next = [...prev];
-                                      next[idx].status = next[idx].status === 'pass' ? 'fail' : 'pass';
-                                      return next;
+                                      return prev.map((item, i) => {
+                                        if (i !== idx) return item;
+                                        const targetStatus = item.status === 'pass' ? 'fail' : 'pass';
+                                        return {
+                                          ...item,
+                                          status: targetStatus,
+                                          steps: item.steps ? item.steps.map(s => ({
+                                            ...s,
+                                            status: targetStatus
+                                          })) : []
+                                        };
+                                      });
                                     });
                                   }}
                                   style={{
-                                    padding: '4px 8px', borderRadius: '6px', border: 'none', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer',
+                                    padding: '4px 8px', borderRadius: '6px', border: 'none', fontSize: '10px', fontWeight: 'bold', cursor: effectiveViewOnly ? 'default' : 'pointer',
                                     backgroundColor: row.status === 'pass' ? '#e8f5e9' : '#ffebee',
                                     color: row.status === 'pass' ? '#2e7d32' : '#c62828'
                                   }}
@@ -1241,87 +1545,162 @@ const FirstArticleInspectionView = () => {
                   )}
                 </div>
 
-                {/* Thẻ Theo dõi xu hướng lỗi */}
-                <div style={{ backgroundColor: '#FAF6F0', borderRadius: '12px', padding: '12px', border: '1px solid #7B5233', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#4B301E', display: 'block' }}>Theo dõi xu hướng lỗi</label>
+                {/* Thẻ Theo dõi xu hướng lỗi - Chỉ hiển thị khi có ít nhất 1 mẫu Không Đạt (fail) hoặc SL loại > 0 */}
+                {(checklistResults.some(r => r.status === 'fail' || (r.steps && r.steps.some(s => s.status === 'fail'))) || rejectedQty > 0) && (
+                  <div style={{ backgroundColor: '#FAF6F0', borderRadius: '12px', padding: '12px', border: '1px solid #7B5233', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#4B301E', display: 'block' }}>Theo dõi xu hướng lỗi</label>
 
-                  {activeDefects.map((def, idx) => {
-                    // Lọc ra những lỗi chưa được chọn ở các dòng khác
-                    const usedIds = activeDefects
-                      .filter((_, i) => i !== idx)
-                      .map(d => String(d.defectId))
-                      .filter(Boolean);
+                    {activeDefects.map((def, idx) => {
+                      // Lọc ra những lỗi chưa được chọn ở các dòng khác
+                      const usedIds = activeDefects
+                        .filter((_, i) => i !== idx)
+                        .map(d => String(d.defectId))
+                        .filter(Boolean);
 
-                    // Dòng đầu tiên (idx === 0) chỉ hiện các lỗi QA track (needs_tracking === true)
-                    // Các dòng sau (idx > 0) hiện các lỗi còn lại
-                    const sourceList = idx === 0 ? qaTrackedDefects : remainingDefects;
-                    const availableDefects = sourceList.filter(t => !usedIds.includes(String(t.id)));
+                      // Dòng đầu tiên (idx === 0) chỉ hiện các lỗi QA track (needs_tracking === true)
+                      // Các dòng sau (idx > 0) hiện các lỗi còn lại
+                      const sourceList = idx === 0 ? qaTrackedDefects : remainingDefects;
+                      const availableDefects = sourceList.filter(t => !usedIds.includes(String(t.id)));
 
-                    return (
-                      <div key={idx} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <select
-                          value={def.defectId}
-                          onChange={(e) => handleUpdateDefect(idx, 'defectId', e.target.value)}
-                          style={{ flex: 2, padding: '8px', borderRadius: '6px', border: `1px solid ${def.defectId ? '#7B5233' : '#cbd5e1'}`, fontSize: '12px', outline: 'none', backgroundColor: '#fff' }}
-                        >
-                          <option value="">-- {idx === 0 ? 'Chọn lỗi QA track' : 'Chọn lỗi khác'} --</option>
-                          {/* Hiện lỗi đang được chọn + những lỗi chưa chọn */}
-                          {def.defectId && !availableDefects.find(t => String(t.id) === String(def.defectId)) && (() => {
-                            const current = defectTypes.find(t => String(t.id) === String(def.defectId));
-                            return current ? <option key={current.id} value={current.id}>{current.name} ({current.code || 'N/A'})</option> : null;
-                          })()}
-                          {availableDefects.map(t => (
-                            <option key={t.id} value={t.id}>{t.name} ({t.code || 'N/A'})</option>
-                          ))}
-                        </select>
-
-                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '2px' }}>
-                          <button onClick={() => handleUpdateDefect(idx, 'quantity', Math.max(1, def.quantity - 1))} style={{ width: '22px', height: '26px', borderRadius: '4px 0 0 4px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', cursor: 'pointer', fontSize: '12px' }}>-</button>
-                          <div style={{ flex: 1, height: '26px', borderTop: '1px solid #cbd5e1', borderBottom: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold', backgroundColor: '#fff' }}>{def.quantity}</div>
-                          <button onClick={() => handleUpdateDefect(idx, 'quantity', def.quantity + 1)} style={{ width: '22px', height: '26px', borderRadius: '0 4px 4px 0', border: 'none', backgroundColor: '#7B5233', color: '#fff', cursor: 'pointer', fontSize: '12px' }}>+</button>
-                        </div>
-
-                        {activeDefects.length > 1 && (
-                          <button
-                            onClick={() => handleRemoveDefect(idx)}
-                            style={{ border: 'none', backgroundColor: 'transparent', color: '#ef4444', padding: '2px', cursor: 'pointer' }}
+                      return (
+                        <div key={idx} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <select
+                            value={def.defectId}
+                            onChange={(e) => handleUpdateDefect(idx, 'defectId', e.target.value)}
+                            style={{ flex: 2, padding: '8px', borderRadius: '6px', border: `1px solid ${def.defectId ? '#7B5233' : '#cbd5e1'}`, fontSize: '12px', outline: 'none', backgroundColor: '#fff' }}
                           >
-                            <X size={16} />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
+                            <option value="">-- {idx === 0 ? 'Chọn lỗi QA track' : 'Chọn lỗi khác'} --</option>
+                            {/* Hiện lỗi đang được chọn + những lỗi chưa chọn */}
+                            {def.defectId && !availableDefects.find(t => String(t.id) === String(def.defectId)) && (() => {
+                              const current = defectTypes.find(t => String(t.id) === String(def.defectId));
+                              return current ? <option key={current.id} value={current.id}>{current.name} ({current.code || 'N/A'})</option> : null;
+                            })()}
+                            {availableDefects.map(t => (
+                              <option key={t.id} value={t.id}>{t.name} ({t.code || 'N/A'})</option>
+                            ))}
+                          </select>
 
-                  {/* Chỉ hiện nút "Ghi nhận lỗi khác" nếu còn lỗi còn lại chưa được chọn */}
-                  {remainingDefects.length > 0 && activeDefects.slice(1).filter(d => d.defectId).length < remainingDefects.length && (
-                    <button
-                      onClick={handleAddDefect}
-                      style={{ border: 'none', backgroundColor: 'transparent', color: '#7B5233', fontSize: '11px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '3px', cursor: 'pointer', width: 'fit-content', marginTop: '4px' }}
-                    >
-                      <Plus size={12} /> Ghi nhận lỗi khác
-                    </button>
-                  )}
-                </div>
+                          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '2px' }}>
+                            <button onClick={() => handleUpdateDefect(idx, 'quantity', Math.max(1, def.quantity - 1))} style={{ width: '22px', height: '26px', borderRadius: '4px 0 0 4px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', cursor: 'pointer', fontSize: '12px' }}>-</button>
+                            <div style={{ flex: 1, height: '26px', borderTop: '1px solid #cbd5e1', borderBottom: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold', backgroundColor: '#fff' }}>{def.quantity}</div>
+                            <button onClick={() => handleUpdateDefect(idx, 'quantity', def.quantity + 1)} style={{ width: '22px', height: '26px', borderRadius: '0 4px 4px 0', border: 'none', backgroundColor: '#7B5233', color: '#fff', cursor: 'pointer', fontSize: '12px' }}>+</button>
+                            {activeDefects.length > 1 && (
+                              <button
+                                onClick={() => handleRemoveDefect(idx)}
+                                style={{ border: 'none', backgroundColor: 'transparent', color: '#ef4444', padding: '2px', cursor: 'pointer' }}
+                              >
+                                <X size={16} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
 
-                {/* Nút Xác nhận / Hủy */}
-                <div style={{ display: 'flex', gap: '12px', marginTop: '6px' }}>
-                  <button
-                    onClick={handleSaveInspection}
-                    disabled={isSaving}
-                    style={{ flex: 1, backgroundColor: '#7B5233', color: '#fff', border: 'none', borderRadius: '8px', padding: '12px', fontSize: '14px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer' }}
-                  >
-                    <Check size={16} /> Xác nhận
-                  </button>
-                  <button
-                    onClick={handleResetForm}
-                    style={{ flex: 1, backgroundColor: '#fff', color: '#94a3b8', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '12px', fontSize: '14px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer' }}
-                  >
-                    <RotateCcw size={16} /> Hủy
-                  </button>
-                </div>
+                    {/* Chỉ hiện nút "Ghi nhận lỗi khác" nếu còn lỗi còn lại chưa được chọn */}
+                    {!effectiveViewOnly && remainingDefects.length > 0 && activeDefects.slice(1).filter(d => d.defectId).length < remainingDefects.length && (
+                      <button
+                        onClick={handleAddDefect}
+                        style={{ border: 'none', backgroundColor: 'transparent', color: '#7B5233', fontSize: '11px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '3px', cursor: 'pointer', width: 'fit-content', marginTop: '4px' }}
+                      >
+                        <Plus size={12} /> Ghi nhận lỗi khác
+                      </button>
+                    )}
+                  </div>
+                )}
 
               </div>
+            )}
+          </div>
+
+          {/* Nút Xác nhận / Hủy hoặc Quay lại (Ghim cố định ở đáy màn hình) */}
+          <div style={{
+            position: 'fixed',
+            bottom: 0,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: '100%',
+            maxWidth: '450px',
+            backgroundColor: '#ffffff',
+            borderTop: '1px solid #e2e8f0',
+            padding: '16px 20px',
+            display: 'flex',
+            gap: '16px',
+            zIndex: 990,
+            boxShadow: '0 -8px 24px rgba(0, 0, 0, 0.06)',
+            boxSizing: 'border-box',
+            borderTopLeftRadius: '16px',
+            borderTopRightRadius: '16px'
+          }}>
+            {effectiveViewOnly ? (
+              <button
+                onClick={() => navigate(-1)}
+                style={{
+                  width: '100%',
+                  backgroundColor: '#ffffff',
+                  color: '#4b5563',
+                  border: '1.5px solid #d1d5db',
+                  borderRadius: '12px',
+                  padding: '14px',
+                  fontSize: '0.95rem',
+                  fontWeight: '700',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                ← Quay lại
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={handleSaveInspection}
+                  disabled={isSaving}
+                  style={{
+                    flex: 1,
+                    background: 'linear-gradient(135deg, #4A2C1D 0%, #7B5233 100%)',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '12px',
+                    padding: '14px',
+                    fontSize: '0.95rem',
+                    fontWeight: '800',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(123, 82, 51, 0.25)',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <Check size={16} /> Xác nhận
+                </button>
+                <button
+                  onClick={() => navigate(-1)}
+                  style={{
+                    flex: 1,
+                    backgroundColor: '#ffffff',
+                    color: '#4b5563',
+                    border: '1.5px solid #d1d5db',
+                    borderRadius: '12px',
+                    padding: '14px',
+                    fontSize: '0.95rem',
+                    fontWeight: '700',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <RotateCcw size={16} /> Hủy
+                </button>
+              </>
             )}
           </div>
 
@@ -1472,6 +1851,7 @@ const FirstArticleInspectionView = () => {
                           
                           <button
                             onClick={() => {
+                              if (effectiveViewOnly) return;
                               setDetailSteps(prev => {
                                 const next = [...prev];
                                 next[stepIdx] = {
@@ -1487,7 +1867,7 @@ const FirstArticleInspectionView = () => {
                               fontSize: '10px',
                               fontWeight: 'bold',
                               padding: '2px 8px',
-                              cursor: 'pointer',
+                              cursor: effectiveViewOnly ? 'default' : 'pointer',
                               backgroundColor: stepRow.status === 'pass' ? '#e6f4ea' : '#fce8e6',
                               color: stepRow.status === 'pass' ? '#137333' : '#c5221f',
                               marginLeft: '8px'
@@ -1502,7 +1882,7 @@ const FirstArticleInspectionView = () => {
                             onClick={() => {
                               if (imgPath) {
                                 setPreviewUrl(fullUrl);
-                              } else {
+                              } else if (!effectiveViewOnly) {
                                 setUploadTarget({ isDetail: true, stepIndex: stepIdx, imgIndex: 0 });
                                 fileInputRef.current.click();
                               }
@@ -1517,44 +1897,46 @@ const FirstArticleInspectionView = () => {
                               alignItems: 'center',
                               justifyContent: 'center',
                               position: 'relative',
-                              cursor: 'pointer',
+                              cursor: (imgPath || !effectiveViewOnly) ? 'pointer' : 'default',
                               flexShrink: 0
                             }}
                           >
                             {fullUrl ? (
                               <>
                                 <img src={fullUrl} alt="step" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }} />
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setDetailSteps(prev => {
-                                      const next = [...prev];
-                                      next[stepIdx] = {
-                                        ...next[stepIdx],
-                                        images: []
-                                      };
-                                      return next;
-                                    });
-                                  }}
-                                  style={{
-                                    position: 'absolute',
-                                    top: '-2px',
-                                    right: '-2px',
-                                    width: '14px',
-                                    height: '14px',
-                                    borderRadius: '50%',
-                                    backgroundColor: 'rgba(0,0,0,0.6)',
-                                    color: '#fff',
-                                    border: 'none',
-                                    fontSize: '8px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    cursor: 'pointer'
-                                  }}
-                                >
-                                  <X size={8} />
-                                </button>
+                                {!effectiveViewOnly && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setDetailSteps(prev => {
+                                        const next = [...prev];
+                                        next[stepIdx] = {
+                                          ...next[stepIdx],
+                                          images: []
+                                        };
+                                        return next;
+                                      });
+                                    }}
+                                    style={{
+                                      position: 'absolute',
+                                      top: '-2px',
+                                      right: '-2px',
+                                      width: '14px',
+                                      height: '14px',
+                                      borderRadius: '50%',
+                                      backgroundColor: 'rgba(0,0,0,0.6)',
+                                      color: '#fff',
+                                      border: 'none',
+                                      fontSize: '8px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    <X size={8} />
+                                  </button>
+                                )}
                               </>
                             ) : (
                               <Camera size={16} color="#94a3b8" />
@@ -1566,6 +1948,7 @@ const FirstArticleInspectionView = () => {
                               type="text"
                               value={stepRow.note || ''}
                               onChange={(e) => {
+                                if (effectiveViewOnly) return;
                                 const val = e.target.value;
                                 setDetailSteps(prev => {
                                   const next = [...prev];
@@ -1576,7 +1959,8 @@ const FirstArticleInspectionView = () => {
                                   return next;
                                 });
                               }}
-                              placeholder="Nhập ghi chú cho bước này..."
+                              readOnly={effectiveViewOnly}
+                              placeholder={effectiveViewOnly ? 'Không có ghi chú' : 'Nhập ghi chú cho bước này...'}
                               style={{
                                 width: '100%',
                                 padding: '4px 8px',
@@ -1584,7 +1968,8 @@ const FirstArticleInspectionView = () => {
                                 borderRadius: '4px',
                                 fontSize: '12px',
                                 outline: 'none',
-                                boxSizing: 'border-box'
+                                boxSizing: 'border-box',
+                                backgroundColor: effectiveViewOnly ? '#f8fafc' : '#fff'
                               }}
                             />
                           </div>

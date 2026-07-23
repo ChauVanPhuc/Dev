@@ -2,6 +2,7 @@ import os
 import uuid
 import datetime
 from typing import List, Optional
+import app.models
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_, or_, Date, cast
@@ -210,44 +211,66 @@ def sync_defects_to_daily_inspection(stage_name: str, defects_list: list, inspec
             db.add(defect_item)
 
 @router.post("/stage", response_model=StageInspectionRead)
-def create_stage_inspection(
-    data: StageInspectionCreate,
+async def create_stage_inspection(
+    inspection_type: str = Form(...),
+    batch_no: Optional[str] = Form(None),
+    product_sku: Optional[str] = Form(None),
+    specification: Optional[str] = Form(None),
+    inspector_name: Optional[str] = Form(None),
+    conclusion: str = Form("pass"),
+    notes: Optional[str] = Form(None),
+    data_json: Optional[str] = Form(None),
+    files: List[UploadFile] = File([]),
     db: Session = Depends(get_db)
 ):
     """
-    [POST] Lưu kết quả kiểm tra theo công đoạn (Stage Inspection) & Tự động đồng bộ lỗi vào Daily Defects.
+    [POST] Lưu kết quả kiểm tra theo công đoạn (Stage Inspection) hỗ trợ upload ảnh trực tiếp & đồng bộ lỗi.
     """
     import json
     try:
-        inspector_name = data.inspector_name
-        if not inspector_name or not inspector_name.strip():
-            if data.data_json:
+        # Xử lý lưu ảnh tải lên trực tiếp (tối đa 3 ảnh)
+        image_paths = []
+        for file in files[:3]:
+            ext = os.path.splitext(file.filename)[1]
+            filename = f"{uuid.uuid4()}{ext}"
+            filepath = os.path.join(UPLOAD_DIR, filename)
+            with open(filepath, "wb") as buffer:
+                buffer.write(await file.read())
+            image_paths.append(f"/static/uploads/inspections/{filename}")
+
+        final_inspector_name = inspector_name
+        if not final_inspector_name or not final_inspector_name.strip():
+            if data_json:
                 try:
-                    p = json.loads(data.data_json) if isinstance(data.data_json, str) else data.data_json
+                    p = json.loads(data_json) if isinstance(data_json, str) else data_json
                     if isinstance(p, dict):
-                        inspector_name = p.get('inspector_name') or p.get('created_by')
+                        final_inspector_name = p.get('inspector_name') or p.get('created_by')
                 except Exception:
                     pass
-        if not inspector_name or not inspector_name.strip():
+        if not final_inspector_name or not final_inspector_name.strip():
             default_acc = db.query(Account.full_name).filter(Account.is_active == True).first()
-            inspector_name = default_acc[0] if default_acc else "QC Hệ thống"
+            final_inspector_name = default_acc[0] if default_acc else "QC Hệ thống"
 
         new_record = StageInspection(
-            inspection_type = data.inspection_type,
-            batch_no        = data.batch_no,
-            product_sku     = data.product_sku,
-            inspector_name  = inspector_name,
-            conclusion      = data.conclusion or getattr(data, 'overall_result', 'pass'),
-            notes           = data.notes,
-            data_json       = data.data_json,
-            images_json     = data.images_json
+            inspection_type = inspection_type,
+            batch_no        = batch_no,
+            product_sku     = product_sku,
+            specification   = specification,
+            inspector_name  = final_inspector_name,
+            conclusion      = conclusion,
+            notes           = notes,
+            data_json       = data_json,
+            image_path_1    = image_paths[0] if len(image_paths) > 0 else None,
+            image_path_2    = image_paths[1] if len(image_paths) > 1 else None,
+            image_path_3    = image_paths[2] if len(image_paths) > 2 else None,
+            images_json     = json.dumps({"Ảnh kiểm tra mẫu": image_paths}) if image_paths else None
         )
         db.add(new_record)
         
         # Đồng bộ lỗi nếu có defects trong data_json hoặc tự nhận diện theo công đoạn
-        if data.data_json:
+        if data_json:
             try:
-                parsed_data = json.loads(data.data_json) if isinstance(data.data_json, str) else data.data_json
+                parsed_data = json.loads(data_json) if isinstance(data_json, str) else data_json
                 if isinstance(parsed_data, dict):
                     stage_name = parsed_data.get('stage')
                     if not stage_name:
@@ -259,17 +282,19 @@ def create_stage_inspection(
                             'bam-dinh': 'Sơn',
                             'quy-trinh': 'Sản xuất'
                         }
-                        stage_name = stage_map.get(data.inspection_type, 'Phôi gỗ')
+                        stage_name = stage_map.get(inspection_type, 'Phôi gỗ')
 
                     defects_list = parsed_data.get('defects', [])
                     inspected_qty = parsed_data.get('inspected_qty') or parsed_data.get('total_qty', 0)
 
                     if stage_name and (isinstance(defects_list, list) and len(defects_list) > 0 or inspected_qty > 0):
-                        sync_defects_to_daily_inspection(stage_name, defects_list, inspector_name, db, inspected_qty=inspected_qty)
+                        sync_defects_to_daily_inspection(stage_name, defects_list, final_inspector_name, db, inspected_qty=inspected_qty)
             except Exception as sync_err:
                 print(f"[STAGE SYNC ERROR] {sync_err}")
 
         db.commit()
+        if '_inspections_swr_cache' in globals():
+            _inspections_swr_cache.clear()
         db.refresh(new_record)
         return new_record
     except Exception as e:
@@ -831,12 +856,103 @@ _inspections_swr_cache = SWRCache(ttl=5.0)
 @_inspections_swr_cache
 def get_inspections_by_plan(plan_id: int, stage: Optional[str] = None, db: Session = Depends(get_db)):
     """
-    [GET] Lấy tất cả kết quả KT đầu vào theo KHSX. Có thể lọc theo công đoạn.
+    [GET] Lấy tất cả kết quả KT đầu vào & kiểm tra mẫu đầu tiên theo KHSX. Có thể lọc theo công đoạn.
     """
-    query = db.query(InputInspection).with_hint(InputInspection, 'WITH (NOLOCK)').filter(InputInspection.plan_id == plan_id)
+    # 1. Lấy kết quả từ bảng InputInspection (Kiểm tra đầu vào)
+    query_inbound = db.query(InputInspection).with_hint(InputInspection, 'WITH (NOLOCK)').filter(InputInspection.plan_id == plan_id)
     if stage:
-        query = query.filter(InputInspection.stage == stage)
-    return query.order_by(InputInspection.inspected_at.desc()).all()
+        query_inbound = query_inbound.filter(InputInspection.stage == stage)
+    inbound_inspections = query_inbound.all()
+    for insp in inbound_inspections:
+        insp.inspection_type = "dau-vao" 
+
+    # 2. Tìm các PO (order_code) tương ứng với plan_id này để lấy kết quả Kiểm tra mẫu đầu tiên (StageInspection)
+    from modules.delivery.models.order import Order
+    orders = db.query(Order.order_code).filter(Order.plan_id == plan_id).all()
+    po_codes = [o[0] for o in orders if o[0]]
+
+    stage_inspections = []
+    if po_codes:
+        query_stage = db.query(StageInspection).filter(
+            StageInspection.inspection_type == 'mau-dau-tien',
+            StageInspection.batch_no.in_(po_codes)
+        )
+        raw_stages = query_stage.all()
+        
+        for si in raw_stages:
+            actual_stage = ""
+            if si.data_json:
+                try:
+                    import json
+                    pj = json.loads(si.data_json) if isinstance(si.data_json, str) else si.data_json
+                    if isinstance(pj, dict):
+                        actual_stage = pj.get("stage", "")
+                except Exception:
+                    pass
+
+            # Lọc theo công đoạn nếu có truyền tham số
+            if stage and stage.strip():
+                def fuzzy_stage_match(filter_str, actual_str):
+                    if not filter_str or not actual_str:
+                        return False
+                    import re
+                    import unicodedata
+                    
+                    def get_words(s):
+                        # Thay thế thủ công ký tự Đ/đ và Ð
+                        s_clean = s.replace('đ', 'd').replace('Đ', 'd').replace('Ð', 'd').replace('ð', 'd')
+                        nfkd = unicodedata.normalize('NFKD', s_clean)
+                        # Giữ lại các ký tự không phải dấu phụ (non-spacing marks)
+                        clean_str = "".join([c for c in nfkd if not unicodedata.combining(c)]).lower()
+                        # Lấy danh sách các từ có chữ và số dài từ 2 ký tự trở lên
+                        return re.findall(r'[a-z0-9]{2,}', clean_str)
+
+                    words_filter = set(get_words(filter_str))
+                    words_actual = set(get_words(actual_str))
+                    
+                    # Nếu có bất kỳ sự giao nhau nào (trùng khớp từ)
+                    common = words_filter.intersection(words_actual)
+                    if len(common) >= 2:
+                        return True
+                    if 'nm2' in words_filter and 'nm2' in words_actual:
+                        return True
+                    if 'nm1' in words_filter and 'nm1' in words_actual:
+                        return True
+                    
+                    # Fallback cho so khớp chứa
+                    s_f = "".join(words_filter)
+                    s_a = "".join(words_actual)
+                    return s_f in s_a or s_a in s_f
+
+                if not fuzzy_stage_match(stage, actual_stage):
+                    print(f"[DEBUG] Skipped due to stage mismatch: filter='{stage}' vs actual='{actual_stage}'")
+                    continue
+
+            mock_insp = InputInspection(
+                id              = si.id,
+                plan_id         = plan_id,
+                part_name       = si.product_sku or "Không xác định",
+                specification   = si.specification,
+                cont_name       = si.batch_no, # Mã PO
+                stage           = actual_stage or stage or "Kiểm tra mẫu",
+                inspector_id    = None,
+                inspected_at    = si.created_at,
+                measured_length = None,
+                measured_width  = None,
+                measured_height = None,
+                result          = "Đạt" if si.conclusion == "pass" else "Không đạt",
+                note            = si.notes,
+                image_path_1    = si.image_path_1,
+                image_path_2    = si.image_path_2,
+                image_path_3    = si.image_path_3
+            )
+            mock_insp.inspection_type = "mau-dau-tien"
+            stage_inspections.append(mock_insp)
+
+    # Gộp cả 2 danh sách lại và sắp xếp theo thời gian kiểm tra mới nhất giảm dần
+    all_inspections = list(inbound_inspections) + stage_inspections
+    all_inspections.sort(key=lambda x: x.inspected_at or datetime.datetime.min, reverse=True)
+    return all_inspections
 
 
 @router.get("/plan/{plan_id}/part", response_model=Optional[InspectionSchema])

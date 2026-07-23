@@ -250,7 +250,8 @@ def read_order_products_by_code(order_code: str, db: Session = Depends(get_db)):
                 "name": bom.name,
                 "quantity": int(bom_qty * prod_qty),
                 "is_raw_material": bom.is_raw_material,
-                "exclude_production": bom.exclude_production
+                "exclude_production": bom.exclude_production,
+                "specification": bom.specification
             })
 
         product_list.append({

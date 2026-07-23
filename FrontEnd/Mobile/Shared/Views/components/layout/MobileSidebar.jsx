@@ -225,7 +225,7 @@ const Sidebar = () => {
             position: 'absolute',
             inset: 0,
             backgroundColor: 'rgba(0,0,0,0.4)',
-            zIndex: 100
+            zIndex: 15000
           }}
         />
       )}
@@ -239,7 +239,7 @@ const Sidebar = () => {
           bottom: 0,
           width: '280px',
           backgroundColor: '#fff',
-          zIndex: 101,
+          zIndex: 15001,
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '4px 0 15px rgba(0,0,0,0.1)',

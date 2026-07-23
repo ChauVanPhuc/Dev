@@ -92,7 +92,7 @@ const NotificationSidebar = () => {
             position: 'absolute',
             inset: 0,
             backgroundColor: 'rgba(0,0,0,0.4)',
-            zIndex: 1000
+            zIndex: 15000
           }}
         />
       )}
@@ -107,7 +107,7 @@ const NotificationSidebar = () => {
           width: '85%',
           maxWidth: '350px',
           backgroundColor: '#fff',
-          zIndex: 1001,
+          zIndex: 15001,
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '-4px 0 15px rgba(0,0,0,0.1)',
