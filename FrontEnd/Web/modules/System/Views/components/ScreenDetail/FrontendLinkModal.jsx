@@ -45,7 +45,7 @@ const FrontendLinkModal = ({
       </h3>
       <button
         type="button"
-        onClick={() => setShowLinkModal(false)}
+        onClick={onClose}
         style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       >
         <X size={18} />
@@ -121,7 +121,7 @@ const FrontendLinkModal = ({
     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
       <button
         type="button"
-        onClick={() => setShowLinkModal(false)}
+        onClick={onClose}
         style={{
           padding: '8px 20px',
           borderRadius: '8px',
