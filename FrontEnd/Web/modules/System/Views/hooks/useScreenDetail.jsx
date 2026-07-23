@@ -1855,15 +1855,16 @@ export const useScreenDetail = () => {
     }
   };
 
-  const confirmAddComponent = () => {
-    if (!newComponentName.trim()) {
+  const confirmAddComponent = (comp) => {
+    const compName = comp?.name?.trim();
+    if (!compName) {
       showToast('Tên component không được để trống!', 'error');
       return;
     }
 
     if (editingComponent) {
       const oldName = editingComponent.name;
-      const newName = newComponentName.trim();
+      const newName = compName;
 
       setScreen(prev => {
         if (!prev) return null;
@@ -1881,17 +1882,17 @@ export const useScreenDetail = () => {
             return {
               ...c,
               name: newName,
-              type: newComponentType,
-              description: newComponentFrontend.trim() || 'Thành phần đặc tả giao diện',
-              file_path: newComponentSampleFileUrl,
+              type: comp.type,
+              description: comp.frontend_description || 'Thành phần đặc tả giao diện',
+              file_path: comp.sample_file_url,
               technical_details: JSON.stringify({
                 ...techObj,
-                frontend_description: newComponentFrontend.trim(),
-                workflow_description: newComponentWorkflow.trim(),
-                backend_description: newComponentBackend.trim(),
-                button_id: newComponentButtonId.trim(),
-                export_mode: newComponentExportMode,
-                sample_file_url: newComponentSampleFileUrl
+                frontend_description: comp.frontend_description,
+                workflow_description: comp.workflow_description,
+                backend_description: comp.backend_description,
+                button_id: comp.button_id,
+                export_mode: comp.export_mode,
+                sample_file_url: comp.sample_file_url
               })
             };
           }
@@ -1923,17 +1924,17 @@ export const useScreenDetail = () => {
     } else {
       const newComp = {
         id: Date.now(),
-        name: newComponentName.trim(),
-        type: newComponentType,
-        description: newComponentFrontend.trim() || 'Thành phần đặc tả giao diện',
-        file_path: newComponentSampleFileUrl,
+        name: compName,
+        type: comp.type,
+        description: comp.frontend_description || 'Thành phần đặc tả giao diện',
+        file_path: comp.sample_file_url,
         technical_details: JSON.stringify({
-          frontend_description: newComponentFrontend.trim(),
-          workflow_description: newComponentWorkflow.trim(),
-          backend_description: newComponentBackend.trim(),
-          button_id: newComponentButtonId.trim(),
-          export_mode: newComponentExportMode,
-          sample_file_url: newComponentSampleFileUrl
+          frontend_description: comp.frontend_description,
+          workflow_description: comp.workflow_description,
+          backend_description: comp.backend_description,
+          button_id: comp.button_id,
+          export_mode: comp.export_mode,
+          sample_file_url: comp.sample_file_url
         })
       };
 
@@ -2454,6 +2455,7 @@ export const useScreenDetail = () => {
     handleOpenEditBugModal,
     handleSubmitReply,
     handleAddComponent,
+    confirmAddComponent,
     handleEditComponentClick,
     handleSetComponentColor,
     handleSampleFileChange,
@@ -2500,6 +2502,10 @@ export const useScreenDetail = () => {
     isHeaderCollapsed,
     setIsHeaderCollapsed,
     isScreenInfoCollapsed,
-    setIsScreenInfoCollapsed
+    setIsScreenInfoCollapsed,
+    showBlockerModal,
+    handleSaveAndLeave,
+    handleDiscardAndLeave,
+    handleCancelLeave
   };
 };
