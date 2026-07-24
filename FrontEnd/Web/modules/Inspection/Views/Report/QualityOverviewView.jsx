@@ -133,42 +133,35 @@ const QualityOverviewView = () => {
         }
       ` }} />
 
-      {/* TOOLBAR */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
-        {/* Search Input */}
-        <div style={{ position: 'relative', width: '320px' }}>
-          <input 
-            type="text" 
-            placeholder="Mã phiếu, tên phiếu" 
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setCurrentPage(1);
-            }}
-            style={{
-              width: '100%',
-              padding: '10px 16px 10px 40px',
-              borderRadius: '8px',
-              border: '1px solid #EADCC9',
-              outline: 'none',
-              fontSize: '0.85rem',
-              fontFamily: 'inherit'
-            }}
-          />
-          <Search size={16} style={{ position: 'absolute', left: '14px', top: '13px', color: '#8D6E63' }} />
-        </div>
-
-        {/* Action Buttons */}
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <button className="btn-toolbar-custom btn-secondary-custom">
-            <Filter size={16} /> Lọc
-          </button>
-          <button className="btn-toolbar-custom btn-secondary-custom">Khác</button>
-          <button className="btn-toolbar-custom btn-secondary-custom">Nhập dữ liệu</button>
-          <button className="btn-toolbar-custom btn-secondary-custom">Xuất dữ liệu</button>
-          <button className="btn-toolbar-custom">+ Thêm tài liệu</button>
-        </div>
-      </div>
+      {/* TOOLBAR: Search & Actions */}
+      <PageToolbar
+        searchValue={searchQuery}
+        onSearchChange={(val) => {
+          setSearchQuery(val);
+          setCurrentPage(1);
+        }}
+        searchPlaceholder="Mã phiếu, tên phiếu"
+        showSort={true}
+        sortOptions={[
+          { value: 'name_asc', label: 'Tên: A-Z' },
+          { value: 'name_desc', label: 'Tên: Z-A' }
+        ]}
+        sortValue="name_asc"
+        onSortChange={() => {}}
+        showFilter={true}
+        isFilterOpen={false}
+        onFilterToggle={() => {}}
+        extraActions={[
+          { label: 'Hành động khác', onClick: () => {} }
+        ]}
+        importActions={[
+          { label: 'Nhập excel', onClick: () => {} }
+        ]}
+        onExport={() => {}}
+        onCreate={() => {}}
+        createLabel="Thêm tài liệu"
+        hasWritePermission={true}
+      />
 
       {/* TABLE */}
       <div className="admin-list-layout" style={{ display: 'flex', flexDirection: 'column' }}>
