@@ -1273,7 +1273,7 @@ const ScreenManagement = () => {
                           />
                         </th>
                         <th>Mã</th>
-                        <th>Tên màn hình</th>
+                        <th>Mô tả</th>
                         <th>Phân hệ</th>
                         <th>Nền tảng</th>
                         <th>Trạng thái</th>
@@ -1281,7 +1281,7 @@ const ScreenManagement = () => {
                         <th>Ngày cập nhật</th>
                         <th>Ngày dự kiến</th>
                         <th style={{ textAlign: 'center' }}>Lỗi</th>
-                        <th>Mô tả</th>
+                        <th>Mô tả chi tiết</th>
                         <th style={{ textAlign: 'center', width: '100px' }}>THAO TÁC</th>
                       </tr>
                     </thead>
