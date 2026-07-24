@@ -33,9 +33,9 @@ export const menuStructure = [
       </svg>
     ),
     children: [
-      { 
-        id: 'monitor', 
-        path: '/admin/monitor', 
+      {
+        id: 'monitor',
+        path: '/admin/monitor',
         text: 'Giám sát hệ thống',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -45,9 +45,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'screens', 
-        path: '/admin/screens', 
+      {
+        id: 'screens',
+        path: '/admin/screens',
         text: 'Danh sách màn hình',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -56,10 +56,10 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'screen-bugs', 
+      {
+        id: 'screen-bugs',
         permissionKey: 'bugs',
-        path: '/admin/screens/bugs', 
+        path: '/admin/screens/bugs',
         text: 'Quản lý lỗi màn hình',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -72,10 +72,10 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'screen-progress', 
+      {
+        id: 'screen-progress',
         permissionKey: 'screens',
-        path: '/admin/screens/progress', 
+        path: '/admin/screens/progress',
         text: 'Tiến độ dự án',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -83,9 +83,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'feedback', 
-        path: '/admin/feedback', 
+      {
+        id: 'feedback',
+        path: '/admin/feedback',
         text: 'Theo dõi góp ý',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -94,9 +94,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'data', 
-        path: '/admin/data', 
+      {
+        id: 'data',
+        path: '/admin/data',
         text: 'Đóng gói dữ liệu',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -105,10 +105,10 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'accounts', 
+      {
+        id: 'accounts',
         permissionKey: 'users',
-        path: '/admin/users', 
+        path: '/admin/users',
         text: 'Quản lý tài khoản',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -132,10 +132,10 @@ export const menuStructure = [
       </svg>
     ),
     children: [
-      { 
-        id: 'hr-org-chart', 
+      {
+        id: 'hr-org-chart',
         permissionKey: 'users',
-        path: '/admin/hr/org-chart', 
+        path: '/admin/hr/org-chart',
         text: 'Sơ đồ tổ chức',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -146,10 +146,10 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'hr-employees', 
+      {
+        id: 'hr-employees',
         permissionKey: 'users',
-        path: '/admin/hr/employees', 
+        path: '/admin/hr/employees',
         text: 'Danh sách nhân viên',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -158,10 +158,10 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'hr-positions', 
+      {
+        id: 'hr-positions',
         permissionKey: 'users',
-        path: '/admin/users/positions', 
+        path: '/admin/users/positions',
         text: 'Quản lý chức vụ',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -171,10 +171,10 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'hr-departments', 
+      {
+        id: 'hr-departments',
         permissionKey: 'users',
-        path: '/admin/users/departments', 
+        path: '/admin/users/departments',
         text: 'Quản lý phòng ban',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -199,9 +199,9 @@ export const menuStructure = [
       </svg>
     ),
     children: [
-      { 
-        id: 'iso-documents', 
-        path: '/admin/iso-documents', 
+      {
+        id: 'iso-documents',
+        path: '/admin/iso-documents',
         text: 'Quản lý mẫu tài liệu',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -212,9 +212,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'iso-processes', 
-        path: '/admin/iso-processes', 
+      {
+        id: 'iso-processes',
+        path: '/admin/iso-processes',
         text: 'Quy trình nghiệp vụ',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -237,9 +237,9 @@ export const menuStructure = [
       </svg>
     ),
     children: [
-      { 
-        id: 'plan', 
-        path: '/admin/plan', 
+      {
+        id: 'plan',
+        path: '/admin/plan',
         text: 'Kế hoạch sản xuất',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -251,9 +251,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'delivery-tracking', 
-        path: '/admin/delivery-tracking', 
+      {
+        id: 'delivery-tracking',
+        path: '/admin/delivery-tracking',
         text: 'Kế hoạch bàn giao',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -264,9 +264,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'exception-deliveries', 
-        path: '/admin/exception-deliveries', 
+      {
+        id: 'exception-deliveries',
+        path: '/admin/exception-deliveries',
         text: 'Phiếu ngoại lệ',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -276,9 +276,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'home', 
-        path: '/admin/manufacture-dashboard', 
+      {
+        id: 'home',
+        path: '/admin/manufacture-dashboard',
         text: 'Trang chủ sản xuất',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -287,9 +287,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'backup-qrs', 
-        path: '/admin/backup-qrs', 
+      {
+        id: 'backup-qrs',
+        path: '/admin/backup-qrs',
         text: 'Quản lý mã QR',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -314,9 +314,9 @@ export const menuStructure = [
       </svg>
     ),
     children: [
-      { 
-        id: 'quality-records', 
-        path: '/admin/quality-records', 
+      {
+        id: 'quality-records',
+        path: '/admin/quality-records',
         text: 'Hồ sơ chất lượng',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -328,9 +328,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'defects', 
-        path: '/admin/defects', 
+      {
+        id: 'defects',
+        path: '/admin/defects',
         text: 'Danh sách lỗi',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -340,9 +340,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'claim', 
-        path: '/admin/claims', 
+      {
+        id: 'claim',
+        path: '/admin/claims',
         text: 'Claim khách hàng',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -352,9 +352,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'feedback', 
-        path: '/admin/feedback?type=quality', 
+      {
+        id: 'feedback',
+        path: '/admin/feedback?type=quality',
         text: 'Quản lý CAPA',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -363,9 +363,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'reports', 
-        path: '/admin/reports', 
+      {
+        id: 'reports',
+        path: '/admin/reports',
         text: 'Báo cáo kiểm tra',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -375,9 +375,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'handovers', 
-        path: '/admin/handovers', 
+      {
+        id: 'handovers',
+        path: '/admin/handovers',
         text: 'Danh sách bàn giao',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -390,9 +390,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'hotspots', 
-        path: '/admin/hotspots', 
+      {
+        id: 'hotspots',
+        path: '/admin/hotspots',
         text: 'Điểm nóng cần chú ý',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -401,9 +401,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'equipment', 
-        path: '/admin/equipment', 
+      {
+        id: 'equipment',
+        path: '/admin/equipment',
         text: 'Quản lý thiết bị',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -411,9 +411,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'logs', 
-        path: '/admin/logs', 
+      {
+        id: 'logs',
+        path: '/admin/logs',
         text: 'Nhật ký sự cố',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -435,9 +435,9 @@ export const menuStructure = [
       </svg>
     ),
     children: [
-      { 
-        id: 'shipments', 
-        path: '/admin/shipments', 
+      {
+        id: 'shipments',
+        path: '/admin/shipments',
         text: 'Thời gian xuất cont',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -449,9 +449,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'prices', 
-        path: '/admin/prices', 
+      {
+        id: 'prices',
+        path: '/admin/prices',
         text: 'Quản lý giá tủ',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -460,9 +460,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'purchase-requisitions', 
-        path: '/admin/purchase-requisitions', 
+      {
+        id: 'purchase-requisitions',
+        path: '/admin/purchase-requisitions',
         text: 'Đơn đặt mua',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -474,9 +474,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'purchase-order-items', 
-        path: '/admin/purchase-order-items', 
+      {
+        id: 'purchase-order-items',
+        path: '/admin/purchase-order-items',
         text: 'Đơn mua hàng',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -500,9 +500,9 @@ export const menuStructure = [
       </svg>
     ),
     children: [
-      { 
-        id: 'products', 
-        path: '/admin/products', 
+      {
+        id: 'products',
+        path: '/admin/products',
         text: 'Bom sản phẩm',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -525,9 +525,9 @@ export const menuStructure = [
       </svg>
     ),
     children: [
-      { 
-        id: 'machines', 
-        path: '/admin/machines', 
+      {
+        id: 'machines',
+        path: '/admin/machines',
         text: 'Danh sách thiết bị',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -538,9 +538,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'machines-history', 
-        path: '/admin/machines/history', 
+      {
+        id: 'machines-history',
+        path: '/admin/machines/history',
         text: 'Lịch sử bảo trì',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -549,9 +549,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'machines-training', 
-        path: '/admin/machines/training', 
+      {
+        id: 'machines-training',
+        path: '/admin/machines/training',
         text: 'Hướng dẫn sử dụng',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -560,9 +560,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'equipment-categories', 
-        path: '/admin/equipment/categories', 
+      {
+        id: 'equipment-categories',
+        path: '/admin/equipment/categories',
         text: 'Danh mục thiết bị',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -573,9 +573,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'equipment-history', 
-        path: '/admin/equipment/history', 
+      {
+        id: 'equipment-history',
+        path: '/admin/equipment/history',
         text: 'Lịch sử thiết bị',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -584,9 +584,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'equipment-training', 
-        path: '/admin/equipment/training', 
+      {
+        id: 'equipment-training',
+        path: '/admin/equipment/training',
         text: 'Đào tạo thiết bị',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -607,9 +607,9 @@ export const menuStructure = [
       </svg>
     ),
     children: [
-      { 
-        id: 'kpi-reports', 
-        path: '/admin/kpi', 
+      {
+        id: 'kpi-reports',
+        path: '/admin/kpi',
         text: 'Báo cáo KPI',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -619,9 +619,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'kpi-checklist', 
-        path: '/admin/kpi/checklist', 
+      {
+        id: 'kpi-checklist',
+        path: '/admin/kpi/checklist',
         text: 'Checklist KPI',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -630,9 +630,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'kpi-list', 
-        path: '/admin/kpi/list', 
+      {
+        id: 'kpi-list',
+        path: '/admin/kpi/list',
         text: 'Danh sách KPI',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -645,9 +645,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'kpi-rules', 
-        path: '/admin/kpi/rules', 
+      {
+        id: 'kpi-rules',
+        path: '/admin/kpi/rules',
         text: 'Quy tắc KPI',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -655,9 +655,9 @@ export const menuStructure = [
           </svg>
         )
       },
-      { 
-        id: 'kpi-feedback', 
-        path: '/admin/kpi/feedback', 
+      {
+        id: 'kpi-feedback',
+        path: '/admin/kpi/feedback',
         text: 'Phản hồi KPI',
         icon: (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -709,23 +709,58 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     return perm === undefined || perm === null;
   };
 
+  // Helper to check if a route is active
+  const checkIsActive = (item) => {
+    const hasQuery = item.path.includes('?');
+    if (hasQuery) {
+      return (location.pathname + location.search) === item.path;
+    }
+
+    // 1. Exact match
+    if (location.pathname === item.path) {
+      return true;
+    }
+
+    // 2. Prefix match
+    if (item.path !== '/admin/dashboard' && 
+        item.path !== '/admin/manufacture-dashboard' && 
+        (location.pathname.startsWith(item.path + '/') || location.pathname.startsWith(item.path + '?'))) {
+
+      // Check if there is another item in the sidebar that matches the pathname exactly
+      let hasExactMatchSibling = false;
+      for (const group of menuStructure) {
+        if (group.type === 'link') {
+          if (location.pathname === group.path) {
+            hasExactMatchSibling = true;
+            break;
+          }
+        } else if (group.type === 'group' && group.children) {
+          for (const child of group.children) {
+            if (location.pathname === child.path) {
+              hasExactMatchSibling = true;
+              break;
+            }
+          }
+        }
+        if (hasExactMatchSibling) break;
+      }
+
+      return !hasExactMatchSibling;
+    }
+
+    return false;
+  };
+
   // Helper check xem group co child nao dang active ko
   const hasActiveChild = (group) => {
     if (!group.children) return false;
-    return group.children.some(child => {
-      const hasQuery = child.path.includes('?');
-      if (hasQuery) {
-        return (location.pathname + location.search) === child.path;
-      }
-      return location.pathname === child.path || 
-             (child.path !== '/admin/dashboard' && child.path !== '/admin/manufacture-dashboard' && location.pathname.startsWith(child.path));
-    });
+    return group.children.some(child => checkIsActive(child));
   };
 
   // Khoi tao state expand cho cac group
   const getInitialExpandedState = () => {
     const initialState = {};
-    
+
     // Mặc định expand theo bộ phận của tài khoản người dùng
     const role = user.role_name;
     if (role === 'IT' || user.username === 'admin') {
@@ -784,15 +819,11 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
   };
 
   const renderDirectLink = (item) => {
-    const hasQuery = item.path.includes('?');
-    const isActive = hasQuery
-      ? (location.pathname + location.search) === item.path
-      : (location.pathname === item.path || 
-        (item.path !== '/admin/dashboard' && item.path !== '/admin/manufacture-dashboard' && location.pathname.startsWith(item.path)));
+    const isActive = checkIsActive(item);
 
     return (
       <div key={item.id} className="nav-item" style={{ marginBottom: '4px' }}>
-        <Link 
+        <Link
           to={item.path}
           onClick={handleLinkClick}
           className={`nav-link-direct ${isActive ? 'active' : ''}`}
@@ -828,11 +859,11 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
 
       <aside className={`admin-sidebar ${active ? 'active' : ''} ${collapsed ? 'collapsed' : ''}`} style={{ backgroundColor: '#FFFFFF', borderRight: '1px solid #E5E7EB' }}>
         {/* User profile section */}
-        <div 
+        <div
           onClick={collapsed ? onToggleCollapse : undefined}
-          style={{ 
-            padding: '20px', 
-            display: 'flex', 
+          style={{
+            padding: '20px',
+            display: 'flex',
             alignItems: 'center',
             gap: '12px',
             backgroundColor: '#7B5233',
@@ -843,16 +874,16 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
           title={collapsed ? 'Mở rộng menu' : undefined}
         >
           {/* Circular avatar logo */}
-          <div 
+          <div
             onClick={(e) => {
               e.stopPropagation();
               navigate('/admin/profile');
               if (onClose) onClose();
             }}
-            style={{ 
-              width: '45px', 
-              height: '45px', 
-              backgroundColor: '#FFFFFF', 
+            style={{
+              width: '45px',
+              height: '45px',
+              backgroundColor: '#FFFFFF',
               borderRadius: '50%',
               display: 'flex',
               alignItems: 'center',
@@ -869,7 +900,7 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
 
           {/* Account info */}
           {!collapsed && (
-            <div 
+            <div
               onClick={(e) => {
                 e.stopPropagation();
                 navigate('/admin/profile');
@@ -885,12 +916,12 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
                 {user.email || 'smartflow@mail.com'}
               </span>
               <div style={{ marginTop: '4px', display: 'flex' }}>
-                <span style={{ 
-                  fontSize: '0.65rem', 
-                  color: '#FFFFFF', 
-                  fontWeight: '800', 
-                  backgroundColor: 'rgba(255, 255, 255, 0.2)', 
-                  padding: '2px 6px', 
+                <span style={{
+                  fontSize: '0.65rem',
+                  color: '#FFFFFF',
+                  fontWeight: '800',
+                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                  padding: '2px 6px',
                   borderRadius: '4px'
                 }}>
                   Vai trò: {user.role_name || 'N/A'}{isAdmin ? ' (Admin)' : ''}
@@ -920,10 +951,10 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
             } else if (item.type === 'group') {
               const isExpanded = !!expandedGroups[item.id];
               const isGroupActive = hasActiveChild(item);
-              
+
               return (
                 <div key={item.id} className="sidebar-group-container" style={{ marginBottom: '6px' }}>
-                  <button 
+                  <button
                     onClick={() => {
                       toggleGroup(item.id);
                       if (item.id === 'system') {
@@ -931,6 +962,9 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
                       }
                       if (item.id === 'hr-management') {
                         navigate('/admin/hr/org-chart');
+                      }
+                      if (item.id === 'quality') {
+                        navigate('/admin/quality');
                       }
                     }}
                     className={`sidebar-group-header ${isGroupActive ? 'active' : ''}`}
@@ -958,10 +992,10 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
                       </span>
                       <span className="nav-text" style={{ fontSize: '0.9rem' }}>{item.text}</span>
                     </div>
-                    <span className="chevron-icon" style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', 
+                    <span className="chevron-icon" style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
                       transition: 'transform 0.2s ease',
                       color: isGroupActive ? '#5D3B32' : '#A0A3A8'
                     }}>
@@ -973,15 +1007,11 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
                   {isExpanded && (
                     <ul className="sidebar-group-children" style={{ listStyle: 'none', padding: '2px 0 6px 0', margin: 0 }}>
                       {item.children.map(child => {
-                        const hasQuery = child.path.includes('?');
-                        const isChildActive = hasQuery
-                          ? (location.pathname + location.search) === child.path
-                          : (location.pathname === child.path || 
-                            (child.path !== '/admin/dashboard' && child.path !== '/admin/manufacture-dashboard' && location.pathname.startsWith(child.path)));
+                        const isChildActive = checkIsActive(child);
 
                         return (
                           <li key={child.id} className="nav-item" style={{ marginBottom: '2px' }}>
-                            <Link 
+                            <Link
                               to={child.path}
                               onClick={handleLinkClick}
                               className={`nav-link-child ${isChildActive ? 'active' : ''}`}
@@ -1042,25 +1072,25 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
                   </span>
                   <span style={{ fontSize: '10px', color: '#A0301B', fontWeight: '900' }}>{upload.progress}%</span>
                 </div>
-                
+
                 <div style={{ height: '5px', backgroundColor: 'rgba(160, 48, 27, 0.1)', borderRadius: '3px', overflow: 'hidden', marginBottom: '8px' }}>
-                  <div style={{ 
-                    width: `${upload.progress}%`, 
-                    height: '100%', 
-                    backgroundColor: upload.status === 'error' ? '#EF4444' : '#A0301B', 
+                  <div style={{
+                    width: `${upload.progress}%`,
+                    height: '100%',
+                    backgroundColor: upload.status === 'error' ? '#EF4444' : '#A0301B',
                     transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
                     boxShadow: upload.status === 'error' ? 'none' : '0 0 8px rgba(160, 48, 27, 0.2)'
                   }} />
                 </div>
-                
+
                 <div style={{ fontSize: '9px', color: '#7B5233', display: 'flex', justifyContent: 'space-between', fontWeight: '700' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                     {upload.status === 'uploading' && (
                       <div style={{ width: '8px', height: '8px', border: '1.5px solid #A0301B', borderTopColor: 'transparent', borderRadius: '50%', animation: 'mgmtSpin 0.8s linear infinite' }} />
                     )}
                     <span>
-                      {upload.status === 'uploading' ? 'Đang xử lý...' : 
-                       upload.status === 'completed' ? 'Hoàn thành' : 'Lỗi'}
+                      {upload.status === 'uploading' ? 'Đang xử lý...' :
+                        upload.status === 'completed' ? 'Hoàn thành' : 'Lỗi'}
                     </span>
                   </div>
                   <span>{upload.processed}/{upload.total || '?'}</span>

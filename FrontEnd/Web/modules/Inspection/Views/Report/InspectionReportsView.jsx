@@ -1,5 +1,5 @@
 import React from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useNavigate } from 'react-router-dom';
 import { 
   Search, 
   Filter, 
@@ -30,9 +30,11 @@ import '@styles/components.css';
 
 const InspectionReportsView = () => {
   const reports = useInspectionReports();
+  const navigate = useNavigate();
   const {
     activeActionMenu,
     activeTab,
+    filterPending24h,
     adhesionInspections,
     aggData,
     applyDefaultBorders,
@@ -131,6 +133,13 @@ const InspectionReportsView = () => {
     selectedExportOption,
     selectedInbound,
     selectedInspection,
+    filteredUnifiedList,
+    paginatedUnifiedList,
+    totalUnifiedPages,
+    unifiedPage,
+    setUnifiedPage,
+    unifiedLimit,
+    setUnifiedLimit,
     setActiveActionMenu,
     setActiveTab,
     setCustomScreenCode,
@@ -357,117 +366,34 @@ const InspectionReportsView = () => {
         }
       `}} />
 
-      {/* Tabs Selection */}
-      <div className="inspection-tabs">
-        <button 
-          className={`inspection-tab-item ${activeTab === 'stage' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('stage'); handleResetFilters(); }}
-        >
-          Phiếu kiểm tra công đoạn
-        </button>
-        <button 
-          className={`inspection-tab-item ${activeTab === 'input' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('input'); handleResetFilters(); }}
-        >
-          Kiểm tra đầu vào
-        </button>
-        <button 
-          className={`inspection-tab-item ${activeTab === 'daily' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('daily'); handleResetFilters(); }}
-        >
-          Ghi nhận lỗi hàng ngày
-        </button>
-        <button 
-          className={`inspection-tab-item ${activeTab === 'process' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('process'); handleResetFilters(); }}
-        >
-          Kiểm tra quy trình
-        </button>
-      </div>
-
       {/* TOOLBAR: Search & Filters */}
       <PageToolbar
-        searchValue={
-          activeTab === 'stage' || activeTab === 'process'
-            ? stageSearch
-            : activeTab === 'input'
-              ? inboundSearch
-              : dailySearch
-        }
+        searchValue={stageSearch}
         onSearchChange={(val) => {
-          if (activeTab === 'stage' || activeTab === 'process') {
-            setStageSearch(val);
-            setStagePage(1);
-          } else if (activeTab === 'input') {
-            setInboundSearch(val);
-            setInboundPage(1);
-          } else {
-            setDailySearch(val);
-            setDailyPage(1);
-          }
+          setStageSearch(val);
+          setUnifiedPage(1);
         }}
-        searchPlaceholder={
-          activeTab === 'stage' || activeTab === 'process'
-            ? "Tìm PO, sản phẩm, QC..." 
-            : activeTab === 'input'
-              ? "Tìm chi tiết, cont, QC..."
-              : "Tìm công đoạn, QC..."
-        }
+        searchPlaceholder="Tìm PO, sản phẩm, QC, phân loại..."
         showSort={true}
-        sortOptions={
-          activeTab === 'stage' || activeTab === 'process'
-            ? [
-                { value: 'date_desc', label: 'Ngày: Mới nhất' },
-                { value: 'date_asc', label: 'Ngày: Cũ nhất' },
-                { value: 'po_asc', label: 'Mã PO: A-Z' },
-                { value: 'po_desc', label: 'Mã PO: Z-A' }
-              ]
-            : activeTab === 'input'
-              ? [
-                  { value: 'date_desc', label: 'Ngày: Mới nhất' },
-                  { value: 'date_asc', label: 'Ngày: Cũ nhất' },
-                  { value: 'part_asc', label: 'Tên chi tiết: A-Z' },
-                  { value: 'part_desc', label: 'Tên chi tiết: Z-A' }
-                ]
-              : [
-                  { value: 'date_desc', label: 'Ngày: Mới nhất' },
-                  { value: 'date_asc', label: 'Ngày: Cũ nhất' },
-                  { value: 'defects_desc', label: 'Số lỗi: Nhiều nhất' },
-                  { value: 'defects_asc', label: 'Số lỗi: Ít nhất' }
-                ]
-        }
-        sortValue={
-          activeTab === 'stage' || activeTab === 'process'
-            ? stageSort 
-            : activeTab === 'input'
-              ? inboundSort
-              : dailySort
-        }
+        sortOptions={[
+          { value: 'date_desc', label: 'Ngày: Mới nhất' },
+          { value: 'date_asc', label: 'Ngày: Cũ nhất' },
+          { value: 'po_asc', label: 'Mã PO: A-Z' },
+          { value: 'po_desc', label: 'Mã PO: Z-A' }
+        ]}
+        sortValue={stageSort}
         onSortChange={(val) => {
-          if (activeTab === 'stage' || activeTab === 'process') {
-            setStageSort(val);
-            setStagePage(1);
-          } else if (activeTab === 'input') {
-            setInboundSort(val);
-            setInboundPage(1);
-          } else {
-            setDailySort(val);
-            setDailyPage(1);
-          }
+          setStageSort(val);
+          setUnifiedPage(1);
         }}
         showFilter={true}
         isFilterOpen={isFilterBarOpen}
         onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
         activeFiltersCount={
-          (activeTab === 'stage' && stageTypeFilter !== 'all' ? 1 : 0) +
-          ((activeTab === 'stage' || activeTab === 'process' || activeTab === 'input') &&
-          (activeTab === 'input' ? inboundStatusFilter : stageStatusFilter) !== 'all' ? 1 : 0) +
-          (
-            (activeTab === 'stage' || activeTab === 'process' ? stageStartDate : activeTab === 'input' ? inboundStartDate : dailyStartDate) ? 1 : 0
-          ) +
-          (
-            (activeTab === 'stage' || activeTab === 'process' ? stageEndDate : activeTab === 'input' ? inboundEndDate : dailyEndDate) ? 1 : 0
-          )
+          (stageTypeFilter !== 'all' ? 1 : 0) +
+          (stageStatusFilter !== 'all' ? 1 : 0) +
+          (stageStartDate ? 1 : 0) +
+          (stageEndDate ? 1 : 0)
         }
         onExport={() => setShowExportModal(true)}
         hasWritePermission={true}
@@ -476,71 +402,46 @@ const InspectionReportsView = () => {
       {/* INLINE EXPANDABLE FILTER BAR */}
       {isFilterBarOpen && (
         <div className="filter-inline-bar">
-          {activeTab === 'stage' && (
-            <div className="filter-field-group">
-              <label className="filter-field-label">Loại công đoạn</label>
-              <select
-                value={stageTypeFilter}
-                onChange={(e) => { setStageTypeFilter(e.target.value); setStagePage(1); }}
-              >
-                <option value="all">Tất cả</option>
-                <option value="nhap-kho">Nhập kho</option>
-                <option value="do-am">Độ ẩm</option>
-                <option value="kich-thuoc">Kích thước</option>
-                <option value="ngoai-quan">Ngoại quan</option>
-                <option value="chuc-nang">Chức năng</option>
-                <option value="cong-doan">Công đoạn</option>
-                <option value="bam-dinh">Bám dính</option>
-                <option value="sau-dong-goi">Sau đóng gói</option>
-                <option value="phu-kien">Phụ kiện</option>
-              </select>
-            </div>
-          )}
+          <div className="filter-field-group">
+            <label className="filter-field-label">Phân loại</label>
+            <select
+              value={stageTypeFilter}
+              onChange={(e) => {
+                setStageTypeFilter(e.target.value);
+                setUnifiedPage(1);
+              }}
+            >
+              <option value="all">Tất cả</option>
+              <option value="stage">Kiểm tra công đoạn</option>
+              <option value="input">Kiểm tra đầu vào (IQC)</option>
+              <option value="process">Kiểm tra quy trình</option>
+              <option value="daily">Ghi nhận lỗi hàng ngày</option>
+            </select>
+          </div>
 
-          {(activeTab === 'stage' || activeTab === 'process' || activeTab === 'input') && (
-            <div className="filter-field-group">
-              <label className="filter-field-label">Kết luận</label>
-              <select
-                value={activeTab === 'input' ? inboundStatusFilter : stageStatusFilter}
-                onChange={(e) => { 
-                  if (activeTab === 'input') {
-                    setInboundStatusFilter(e.target.value);
-                    setInboundPage(1);
-                  } else {
-                    setStageStatusFilter(e.target.value);
-                    setStagePage(1);
-                  }
-                }}
-              >
-                <option value="all">Tất cả</option>
-                <option value="pass">Đạt (Pass)</option>
-                <option value="fail">Lỗi (Fail)</option>
-              </select>
-            </div>
-          )}
+          <div className="filter-field-group">
+            <label className="filter-field-label">Kết luận</label>
+            <select
+              value={stageStatusFilter}
+              onChange={(e) => {
+                setStageStatusFilter(e.target.value);
+                setUnifiedPage(1);
+              }}
+            >
+              <option value="all">Tất cả</option>
+              <option value="pass">Đạt (Pass)</option>
+              <option value="fail">Lỗi (Fail)</option>
+            </select>
+          </div>
 
           <div className="filter-field-group">
             <label className="filter-field-label">Từ ngày</label>
             <input 
               type="date"
-              value={
-                activeTab === 'stage' || activeTab === 'process'
-                  ? stageStartDate 
-                  : activeTab === 'input'
-                    ? inboundStartDate
-                    : dailyStartDate
-              }
+              value={stageStartDate}
               onChange={(e) => {
-                if (activeTab === 'stage' || activeTab === 'process') {
-                  setStageStartDate(e.target.value);
-                  setStagePage(1);
-                } else if (activeTab === 'input') {
-                  setInboundStartDate(e.target.value);
-                  setInboundPage(1);
-                } else {
-                  setDailyStartDate(e.target.value);
-                  setDailyPage(1);
-                }
+                setStageStartDate(e.target.value);
+                setUnifiedPage(1);
               }}
               className="filter-dropdown-input"
             />
@@ -550,51 +451,22 @@ const InspectionReportsView = () => {
             <label className="filter-field-label">Đến ngày</label>
             <input 
               type="date"
-              value={
-                activeTab === 'stage' || activeTab === 'process'
-                  ? stageEndDate 
-                  : activeTab === 'input'
-                    ? inboundEndDate
-                    : dailyEndDate
-              }
+              value={stageEndDate}
               onChange={(e) => {
-                if (activeTab === 'stage' || activeTab === 'process') {
-                  setStageEndDate(e.target.value);
-                  setStagePage(1);
-                } else if (activeTab === 'input') {
-                  setInboundEndDate(e.target.value);
-                  setInboundPage(1);
-                } else {
-                  setDailyEndDate(e.target.value);
-                  setDailyPage(1);
-                }
+                setStageEndDate(e.target.value);
+                setUnifiedPage(1);
               }}
               className="filter-dropdown-input"
             />
           </div>
 
           <div className="filter-field-group">
-            <label className="filter-field-label">Số dòng hiển thị</label>
-            <select 
-              value={
-                activeTab === 'stage' || activeTab === 'process'
-                  ? stageLimit 
-                  : activeTab === 'input'
-                    ? inboundLimit
-                    : dailyLimit
-              } 
+            <label className="filter-field-label">Hiển thị</label>
+            <select
+              value={unifiedLimit}
               onChange={(e) => {
-                const val = parseInt(e.target.value);
-                if (activeTab === 'stage' || activeTab === 'process') {
-                  setStageLimit(val);
-                  setStagePage(1);
-                } else if (activeTab === 'input') {
-                  setInboundLimit(val);
-                  setInboundPage(1);
-                } else {
-                  setDailyLimit(val);
-                  setDailyPage(1);
-                }
+                setUnifiedLimit(parseInt(e.target.value));
+                setUnifiedPage(1);
               }}
             >
               <option value={15}>15 dòng</option>
@@ -630,6 +502,19 @@ const InspectionReportsView = () => {
 
       {/* MAIN CONTENT AREA */}
       <div className="admin-list-layout" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {filterPending24h && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '8px', marginBottom: '16px', color: '#EF4444', fontWeight: '600', fontSize: '0.9rem' }}>
+            <span>⚠️ Đang hiển thị danh sách phiếu chưa xác nhận trong 24 giờ qua.</span>
+            <button 
+              onClick={() => navigate('/admin/reports')}
+              style={{ backgroundColor: '#EF4444', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '6px', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 'bold', transition: 'background-color 0.2s' }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#DC2626'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#EF4444'}
+            >
+              Hiển thị tất cả
+            </button>
+          </div>
+        )}
         <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0 }}>
           
           {loading ? (
@@ -639,550 +524,197 @@ const InspectionReportsView = () => {
                 <span>Đang tải dữ liệu kiểm tra...</span>
               </div>
             </div>
-          ) : activeTab === 'stage' ? (
-            // TAB 1: KIỂM TRA CÔNG ĐOẠN TABLE
-            paginatedStageList.length === 0 ? (
-              <div style={{ padding: '5rem', textAlign: 'center', backgroundColor: '#fff', borderRadius: '12px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                  <FileText size={48} opacity={0.3} style={{ color: '#8D6E63' }} />
-                  <span>Không tìm thấy phiếu kiểm tra công đoạn nào phù hợp.</span>
-                </div>
+          ) : paginatedUnifiedList.length === 0 ? (
+            <div style={{ padding: '5rem', textAlign: 'center', backgroundColor: '#fff', borderRadius: '12px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                <FileText size={48} opacity={0.3} style={{ color: '#8D6E63' }} />
+                <span>Không tìm thấy phiếu kiểm tra nào phù hợp.</span>
               </div>
-            ) : (
-              <>
-                <div className="table-responsive desktop-only admin-table-scroll" style={{ flex: 1, overflowY: 'auto' }}>
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th style={{ width: '90px', textAlign: 'center' }}>MÃ PHIẾU</th>
-                        <th style={{ width: '150px' }}>Ngày kiểm tra</th>
-                        <th>Mã PO</th>
-                        <th>Mã sản phẩm / Công đoạn</th>
-                        <th>Loại công đoạn</th>
-                        <th>Người kiểm QC</th>
-                        <th style={{ width: '120px', textAlign: 'center' }}>Kết luận</th>
-                        <th style={{ width: '100px', textAlign: 'center' }}>Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paginatedStageList.map((item, idx) => {
-                        const isPass = item.conclusion === 'pass';
-                        return (
-                          <tr key={item.id} onClick={() => setSelectedInspection(item)} style={{ cursor: 'pointer' }}>
-                            <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>#{item.id}</td>
-                            <td style={{ fontWeight: '600' }}>{formatDisplayDateTime(item.inspection_date)}</td>
-                            <td style={{ color: '#7B5233', fontWeight: 'bold' }}>{item.batch_no || 'N/A'}</td>
-                            <td style={{ fontWeight: '700' }}>{item.product_sku || 'N/A'}</td>
-                            <td style={{ fontWeight: '500' }}>{getInspectionTypeLabel(item.inspection_type)}</td>
-                            <td>{item.inspector_name || 'N/A'}</td>
-                            <td style={{ textAlign: 'center' }}>
-                              <span className={`status-badge ${isPass ? 'pass' : 'fail'}`}>
-                                {isPass ? 'Đạt' : 'Lỗi'}
-                              </span>
-                            </td>
-                            <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                              {renderActionDropdown(item, 'stage')}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Mobile View Card Grid */}
-                <div className="mobile-only mgmt-cards-container" style={{ padding: '10px' }}>
-                  {paginatedStageList.map((item, idx) => {
-                    const isPass = item.conclusion === 'pass';
-                    return (
-                      <div 
-                        key={item.id} 
-                        className="mgmt-card animate-card-entrance" 
-                        style={{ backgroundColor: '#fff', borderRadius: '10px', border: '1px solid #EADCC9', padding: '12px', marginBottom: '10px', cursor: 'pointer' }}
-                        onClick={() => setSelectedInspection(item)}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                          <span style={{ fontWeight: 'bold', color: '#8D6E63' }}>Mã: #{item.id}</span>
-                          <span className={`status-badge ${isPass ? 'pass' : 'fail'}`}>
-                            {isPass ? 'ĐẠT' : 'LỖI'}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#7B5233', marginBottom: '4px' }}>
-                          PO: {item.batch_no || 'N/A'}
-                        </div>
-                        <div style={{ fontSize: '0.85rem', color: '#2D1A12', marginBottom: '4px' }}>
-                          Sản phẩm: <strong>{item.product_sku || 'N/A'}</strong>
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: '#6B7280', display: 'flex', justifyContent: 'space-between' }}>
-                          <span>QC: {item.inspector_name || 'N/A'}</span>
-                          <span>{formatDisplayDate(item.inspection_date)}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Pagination Controls */}
-                <div className="admin-pagination-desktop" style={{ borderTop: '1px solid #EADCC9', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', borderBottomLeftRadius: '12px', borderBottomRightRadius: '12px' }}>
-                  <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
-                    Hiển thị <b>{paginatedStageList.length}</b> trên <b>{filteredStageList.length}</b> phiếu kiểm tra
-                  </div>
-                  {totalStagePages > 1 && (
-                    <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-                      <button 
-                        className="page-btn" 
-                        onClick={() => setStagePage(prev => Math.max(prev - 1, 1))} 
-                        disabled={stagePage === 1}
-                        style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#7B5233', cursor: stagePage === 1 ? 'not-allowed' : 'pointer', opacity: stagePage === 1 ? 0.5 : 1 }}
-                      >
-                        <ChevronLeft size={14} />
-                      </button>
-                      {(() => {
-                        const pages = [];
-                        const maxVisible = 5;
-                        let start = Math.max(1, stagePage - Math.floor(maxVisible / 2));
-                        let end = Math.min(totalStagePages, start + maxVisible - 1);
-                        if (end - start + 1 < maxVisible) {
-                          start = Math.max(1, end - maxVisible + 1);
-                        }
-                        for (let p = start; p <= end; p++) {
-                          pages.push(
-                            <button
-                              key={p}
-                              onClick={() => setStagePage(p)}
-                              style={{
-                                padding: '6px 10px',
-                                borderRadius: '8px',
-                                border: '1px solid #EADCC9',
-                                backgroundColor: stagePage === p ? '#7B5233' : '#FAF6F0',
-                                color: stagePage === p ? '#fff' : '#7B5233',
-                                fontWeight: '700',
-                                fontSize: '0.8rem',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              {p}
-                            </button>
-                          );
-                        }
-                        return pages;
-                      })()}
-                      <button 
-                        className="page-btn" 
-                        onClick={() => setStagePage(prev => Math.min(prev + 1, totalStagePages))} 
-                        disabled={stagePage === totalStagePages}
-                        style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#7B5233', cursor: stagePage === totalStagePages ? 'not-allowed' : 'pointer', opacity: stagePage === totalStagePages ? 0.5 : 1 }}
-                      >
-                        <ChevronRight size={14} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </>
-            )
-          ) : activeTab === 'input' ? (
-            // TAB 2: KIỂM TRA ĐẦU VÀO TABLE (Mẫu đầu tiên - first article)
-            paginatedInboundList.length === 0 ? (
-              <div style={{ padding: '5rem', textAlign: 'center', backgroundColor: '#fff', borderRadius: '12px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                  <FileText size={48} opacity={0.3} style={{ color: '#8D6E63' }} />
-                  <span>Không tìm thấy phiếu kiểm tra đầu vào (mẫu đầu tiên) nào phù hợp.</span>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="table-responsive desktop-only admin-table-scroll" style={{ flex: 1, overflowY: 'auto' }}>
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th style={{ width: '90px', textAlign: 'center' }}>MÃ PHIẾU</th>
-                        <th style={{ width: '150px' }}>Ngày kiểm tra</th>
-                        <th>Mã PO</th>
-                        <th>Mã sản phẩm / Công đoạn</th>
-                        <th>Người kiểm QC</th>
-                        <th style={{ width: '120px', textAlign: 'center' }}>Kết luận</th>
-                        <th style={{ width: '100px', textAlign: 'center' }}>Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paginatedInboundList.map((item, idx) => {
-                        const isPass = item.conclusion === 'pass';
-                        return (
-                          <tr key={item.id} onClick={() => setSelectedInspection(item)} style={{ cursor: 'pointer' }}>
-                            <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>#{item.id}</td>
-                            <td style={{ fontWeight: '600' }}>{formatDisplayDateTime(item.inspection_date)}</td>
-                            <td style={{ color: '#7B5233', fontWeight: 'bold' }}>{item.batch_no || 'N/A'}</td>
-                            <td style={{ fontWeight: '700' }}>{item.product_sku || 'N/A'}</td>
-                            <td>{item.inspector_name || 'N/A'}</td>
-                            <td style={{ textAlign: 'center' }}>
-                              <span className={`status-badge ${isPass ? 'pass' : 'fail'}`}>
-                                {isPass ? 'Đạt' : 'Lỗi'}
-                              </span>
-                            </td>
-                            <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                              {renderActionDropdown(item, 'input')}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Mobile View Card Grid */}
-                <div className="mobile-only mgmt-cards-container" style={{ padding: '10px' }}>
-                  {paginatedInboundList.map((item, idx) => {
-                    const isPass = item.conclusion === 'pass';
-                    return (
-                      <div 
-                        key={item.id} 
-                        className="mgmt-card animate-card-entrance" 
-                        style={{ backgroundColor: '#fff', borderRadius: '10px', border: '1px solid #EADCC9', padding: '12px', marginBottom: '10px', cursor: 'pointer' }}
-                        onClick={() => setSelectedInspection(item)}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                          <span style={{ fontWeight: 'bold', color: '#8D6E63' }}>Mã: #{item.id}</span>
-                          <span className={`status-badge ${isPass ? 'pass' : 'fail'}`}>
-                            {isPass ? 'ĐẠT' : 'LỖI'}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#7B5233', marginBottom: '4px' }}>
-                          PO: {item.batch_no || 'N/A'}
-                        </div>
-                        <div style={{ fontSize: '0.85rem', color: '#2D1A12', marginBottom: '4px' }}>
-                          Sản phẩm: <strong>{item.product_sku || 'N/A'}</strong>
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: '#6B7280', display: 'flex', justifyContent: 'space-between' }}>
-                          <span>QC: {item.inspector_name || 'N/A'}</span>
-                          <span>{formatDisplayDate(item.inspection_date)}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Pagination Controls */}
-                <div className="admin-pagination-desktop" style={{ borderTop: '1px solid #EADCC9', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', borderBottomLeftRadius: '12px', borderBottomRightRadius: '12px' }}>
-                  <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
-                    Hiển thị <b>{paginatedInboundList.length}</b> trên <b>{filteredInboundList.length}</b> phiếu kiểm tra
-                  </div>
-                  {totalInboundPages > 1 && (
-                    <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-                      <button 
-                        className="page-btn" 
-                        onClick={() => setInboundPage(prev => Math.max(prev - 1, 1))} 
-                        disabled={inboundPage === 1}
-                        style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#7B5233', cursor: inboundPage === 1 ? 'not-allowed' : 'pointer', opacity: inboundPage === 1 ? 0.5 : 1 }}
-                      >
-                        <ChevronLeft size={14} />
-                      </button>
-                      {(() => {
-                        const pages = [];
-                        const maxVisible = 5;
-                        let start = Math.max(1, inboundPage - Math.floor(maxVisible / 2));
-                        let end = Math.min(totalInboundPages, start + maxVisible - 1);
-                        if (end - start + 1 < maxVisible) {
-                          start = Math.max(1, end - maxVisible + 1);
-                        }
-                        for (let p = start; p <= end; p++) {
-                          pages.push(
-                            <button
-                              key={p}
-                              onClick={() => setInboundPage(p)}
-                              style={{
-                                padding: '6px 10px',
-                                borderRadius: '8px',
-                                border: '1px solid #EADCC9',
-                                backgroundColor: inboundPage === p ? '#7B5233' : '#FAF6F0',
-                                color: inboundPage === p ? '#fff' : '#7B5233',
-                                fontWeight: '700',
-                                fontSize: '0.8rem',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              {p}
-                            </button>
-                          );
-                        }
-                        return pages;
-                      })()}
-                      <button 
-                        className="page-btn" 
-                        onClick={() => setInboundPage(prev => Math.min(prev + 1, totalInboundPages))} 
-                        disabled={inboundPage === totalInboundPages}
-                        style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#7B5233', cursor: inboundPage === totalInboundPages ? 'not-allowed' : 'pointer', opacity: inboundPage === totalInboundPages ? 0.5 : 1 }}
-                      >
-                        <ChevronRight size={14} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </>
-            )
-          ) : activeTab === 'daily' ? (
-            // TAB 3: GHI NHẬN LỖI HÀNG NGÀY TABLE
-            paginatedDailyList.length === 0 ? (
-              <div style={{ padding: '5rem', textAlign: 'center', backgroundColor: '#fff', borderRadius: '12px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                  <FileText size={48} opacity={0.3} style={{ color: '#8D6E63' }} />
-                  <span>Không tìm thấy ghi nhận lỗi hàng ngày nào phù hợp.</span>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="table-responsive desktop-only admin-table-scroll" style={{ flex: 1, overflowY: 'auto' }}>
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th style={{ width: '90px', textAlign: 'center' }}>MÃ PHIẾU</th>
-                        <th style={{ width: '150px' }}>Ngày ghi nhận</th>
-                        <th>Tên công đoạn</th>
-                        <th>Người ghi QC</th>
-                        <th style={{ textAlign: 'right', paddingRight: '20px' }}>Tổng SP kiểm</th>
-                        <th style={{ textAlign: 'right', paddingRight: '20px' }}>Tổng số lỗi</th>
-                        <th style={{ textAlign: 'right', paddingRight: '20px' }}>Tỉ lệ lỗi (%)</th>
-                        <th style={{ width: '100px', textAlign: 'center' }}>Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paginatedDailyList.map((item, idx) => {
-                        return (
-                          <tr key={item.id} onClick={() => setSelectedDaily(item)} style={{ cursor: 'pointer' }}>
-                            <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>#{item.id}</td>
-                            <td style={{ fontWeight: '600' }}>{formatDisplayDate(item.inspection_date)}</td>
-                            <td style={{ color: '#7B5233', fontWeight: 'bold' }}>{item.stage_name || 'N/A'}</td>
-                            <td>{item.inspector_name || 'N/A'}</td>
-                            <td style={{ textAlign: 'right', paddingRight: '20px', fontWeight: '600' }}>{item.total_products?.toLocaleString() || 0}</td>
-                            <td style={{ textAlign: 'right', paddingRight: '20px', fontWeight: '700', color: '#EF4444' }}>{item.total_defects?.toLocaleString() || 0}</td>
-                            <td style={{ textAlign: 'right', paddingRight: '20px', fontWeight: '700', color: item.defect_rate > 0 ? '#F59E0B' : '#10B981' }}>{item.defect_rate?.toFixed(2) || '0.00'}%</td>
-                            <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                              {renderActionDropdown(item, 'daily')}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Mobile View Card Grid for Daily Defects */}
-                <div className="mobile-only mgmt-cards-container" style={{ padding: '10px' }}>
-                  {paginatedDailyList.map((item, idx) => {
-                    return (
-                      <div 
-                        key={item.id} 
-                        className="mgmt-card animate-card-entrance" 
-                        style={{ backgroundColor: '#fff', borderRadius: '10px', border: '1px solid #EADCC9', padding: '12px', marginBottom: '10px', cursor: 'pointer' }}
-                        onClick={() => setSelectedDaily(item)}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                          <span style={{ fontWeight: 'bold', color: '#8D6E63' }}>Mã: #{item.id}</span>
-                          <span style={{ color: '#EF4444', fontWeight: 'bold', fontSize: '0.85rem' }}>{item.total_defects} lỗi</span>
-                        </div>
-                        <div style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#7B5233', marginBottom: '4px' }}>
-                          {item.stage_name || 'N/A'}
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: '#6B7280', display: 'flex', justifyContent: 'space-between' }}>
-                          <span>QC: {item.inspector_name || 'N/A'}</span>
-                          <span>{formatDisplayDate(item.inspection_date)}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Pagination Controls */}
-                <div className="admin-pagination-desktop" style={{ borderTop: '1px solid #EADCC9', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', borderBottomLeftRadius: '12px', borderBottomRightRadius: '12px' }}>
-                  <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
-                    Hiển thị <b>{paginatedDailyList.length}</b> trên <b>{filteredDailyList.length}</b> ghi nhận lỗi
-                  </div>
-                  {totalDailyPages > 1 && (
-                    <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-                      <button 
-                        className="page-btn" 
-                        onClick={() => setDailyPage(prev => Math.max(prev - 1, 1))} 
-                        disabled={dailyPage === 1}
-                        style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#7B5233', cursor: dailyPage === 1 ? 'not-allowed' : 'pointer', opacity: dailyPage === 1 ? 0.5 : 1 }}
-                      >
-                        <ChevronLeft size={14} />
-                      </button>
-                      {(() => {
-                        const pages = [];
-                        const maxVisible = 5;
-                        let start = Math.max(1, dailyPage - Math.floor(maxVisible / 2));
-                        let end = Math.min(totalDailyPages, start + maxVisible - 1);
-                        if (end - start + 1 < maxVisible) {
-                          start = Math.max(1, end - maxVisible + 1);
-                        }
-                        for (let p = start; p <= end; p++) {
-                          pages.push(
-                            <button
-                              key={p}
-                              onClick={() => setDailyPage(p)}
-                              style={{
-                                padding: '6px 10px',
-                                borderRadius: '8px',
-                                border: '1px solid #EADCC9',
-                                backgroundColor: dailyPage === p ? '#7B5233' : '#FAF6F0',
-                                color: dailyPage === p ? '#fff' : '#7B5233',
-                                fontWeight: '700',
-                                fontSize: '0.8rem',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              {p}
-                            </button>
-                          );
-                        }
-                        return pages;
-                      })()}
-                      <button 
-                        className="page-btn" 
-                        onClick={() => setDailyPage(prev => Math.min(prev + 1, totalDailyPages))} 
-                        disabled={dailyPage === totalDailyPages}
-                        style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#7B5233', cursor: dailyPage === totalDailyPages ? 'not-allowed' : 'pointer', opacity: dailyPage === totalDailyPages ? 0.5 : 1 }}
-                      >
-                        <ChevronRight size={14} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </>
-            )
+            </div>
           ) : (
-            // TAB 4: KIỂM TRA QUY TRÌNH TABLE (quy-trinh stage inspections)
-            paginatedProcessList.length === 0 ? (
-              <div style={{ padding: '5rem', textAlign: 'center', backgroundColor: '#fff', borderRadius: '12px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                  <FileText size={48} opacity={0.3} style={{ color: '#8D6E63' }} />
-                  <span>Không tìm thấy phiếu kiểm tra quy trình nào phù hợp.</span>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="table-responsive desktop-only admin-table-scroll" style={{ flex: 1, overflowY: 'auto' }}>
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th style={{ width: '90px', textAlign: 'center' }}>MÃ PHIẾU</th>
-                        <th style={{ width: '150px' }}>Ngày kiểm tra</th>
-                        <th>Mã sản phẩm / Công đoạn</th>
-                        <th>Người kiểm QC</th>
-                        <th style={{ width: '120px', textAlign: 'center' }}>Kết luận</th>
-                        <th style={{ width: '100px', textAlign: 'center' }}>Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paginatedProcessList.map((item, idx) => {
-                        const isPass = item.conclusion === 'pass';
-                        return (
-                          <tr key={item.id} onClick={() => setSelectedInspection(item)} style={{ cursor: 'pointer' }}>
-                            <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>#{item.id}</td>
-                            <td style={{ fontWeight: '600' }}>{formatDisplayDateTime(item.inspection_date)}</td>
-                            <td style={{ fontWeight: '700' }}>{item.product_sku || 'N/A'}</td>
-                            <td>{getDisplayInspector(item)}</td>
-                            <td style={{ textAlign: 'center' }}>
+            <>
+              <div className="table-responsive desktop-only admin-table-scroll" style={{ flex: 1, overflowY: 'auto' }}>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '90px', textAlign: 'center' }}>MÃ PHIẾU</th>
+                      <th>Phân loại</th>
+                      <th style={{ width: '150px' }}>Ngày kiểm tra</th>
+                      <th>Mã PO</th>
+                      <th>Mã sản phẩm / Công đoạn</th>
+                      <th>Người kiểm QC</th>
+                      <th style={{ width: '120px', textAlign: 'center' }}>Xác nhận</th>
+                      <th style={{ width: '140px', textAlign: 'center' }}>Kết quả</th>
+                      <th style={{ width: '100px', textAlign: 'center' }}>Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedUnifiedList.map((item, idx) => {
+                      const isDaily = item.type === 'daily';
+                      const isPass = item.conclusion === 'pass';
+                      
+                      const handleRowClick = () => {
+                        if (isDaily) {
+                          setSelectedDaily(item.raw_item);
+                        } else {
+                          navigate(`/admin/reports/detail/${item.type}/${item.id}`);
+                        }
+                      };
+
+                      return (
+                        <tr key={`${item.type}-${item.id}`} onClick={handleRowClick} style={{ cursor: 'pointer' }}>
+                          <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>#{item.id}</td>
+                          <td style={{ fontWeight: '600', color: '#7B5233' }}>{item.category}</td>
+                          <td style={{ fontWeight: '600' }}>{formatDisplayDateTime(item.inspection_date)}</td>
+                          <td style={{ color: '#7B5233', fontWeight: 'bold' }}>{item.batch_no || '---'}</td>
+                          <td style={{ fontWeight: '700' }}>{item.product_sku || '---'}</td>
+                          <td>{item.inspector_name || 'N/A'}</td>
+                          <td style={{ textAlign: 'center' }}>
+                            {isDaily ? (
+                              <span style={{ color: '#9CA3AF', fontSize: '0.85rem' }}>---</span>
+                            ) : (
+                              <span className={`status-badge ${item.is_confirmed ? 'pass' : 'fail'}`} style={{ backgroundColor: item.is_confirmed ? '#ECFDF5' : '#FEF2F2', color: item.is_confirmed ? '#10B981' : '#EF4444', borderColor: item.is_confirmed ? '#A7F3D0' : '#FCA5A5' }}>
+                                {item.is_confirmed ? 'Đã xác nhận' : 'Chưa'}
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            {isDaily ? (
+                              <span style={{ fontWeight: '700', color: '#EF4444', fontSize: '0.85rem' }}>
+                                {item.result_label}
+                              </span>
+                            ) : (
                               <span className={`status-badge ${isPass ? 'pass' : 'fail'}`}>
                                 {isPass ? 'Đạt' : 'Lỗi'}
                               </span>
-                            </td>
-                            <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                              {renderActionDropdown(item, 'process')}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                            )}
+                          </td>
+                          <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                            {renderActionDropdown(item.raw_item, item.type)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
 
-                {/* Mobile View Card Grid */}
-                <div className="mobile-only mgmt-cards-container" style={{ padding: '10px' }}>
-                  {paginatedProcessList.map((item, idx) => {
-                    const isPass = item.conclusion === 'pass';
-                    return (
-                      <div 
-                        key={item.id} 
-                        className="mgmt-card animate-card-entrance" 
-                        style={{ backgroundColor: '#fff', borderRadius: '10px', border: '1px solid #EADCC9', padding: '12px', marginBottom: '10px', cursor: 'pointer' }}
-                        onClick={() => setSelectedInspection(item)}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                          <span style={{ fontWeight: 'bold', color: '#8D6E63' }}>Mã: #{item.id}</span>
-                          <span className={`status-badge ${isPass ? 'pass' : 'fail'}`}>
-                            {isPass ? 'ĐẠT' : 'LỖI'}
+              {/* Mobile View Card Grid */}
+              <div className="mobile-only mgmt-cards-container" style={{ padding: '10px' }}>
+                {paginatedUnifiedList.map((item, idx) => {
+                  const isDaily = item.type === 'daily';
+                  const isPass = item.conclusion === 'pass';
+                  
+                  const handleRowClick = () => {
+                    if (isDaily) {
+                      setSelectedDaily(item.raw_item);
+                    } else {
+                      navigate(`/admin/reports/detail/${item.type}/${item.id}`);
+                    }
+                  };
+
+                  return (
+                    <div 
+                      key={`${item.type}-${item.id}`} 
+                      className="mgmt-card animate-card-entrance" 
+                      style={{ backgroundColor: '#fff', borderRadius: '10px', border: '1px solid #EADCC9', padding: '12px', marginBottom: '10px', cursor: 'pointer' }}
+                      onClick={handleRowClick}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                        <span style={{ fontWeight: 'bold', color: '#8D6E63' }}>Mã: #{item.id}</span>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          {!isDaily && (
+                            <span className={`status-badge ${item.is_confirmed ? 'pass' : 'fail'}`} style={{ backgroundColor: item.is_confirmed ? '#ECFDF5' : '#FEF2F2', color: item.is_confirmed ? '#10B981' : '#EF4444', borderColor: item.is_confirmed ? '#A7F3D0' : '#FCA5A5' }}>
+                              {item.is_confirmed ? 'ĐÃ XN' : 'CHƯA XN'}
+                            </span>
+                          )}
+                          <span className={`status-badge ${isDaily ? 'fail' : (isPass ? 'pass' : 'fail')}`}>
+                            {isDaily ? 'LỖI' : (isPass ? 'ĐẠT' : 'LỖI')}
                           </span>
                         </div>
-                        <div style={{ fontSize: '0.85rem', color: '#2D1A12', marginBottom: '4px' }}>
-                          Sản phẩm: <strong>{item.product_sku || 'N/A'}</strong>
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: '#6B7280', display: 'flex', justifyContent: 'space-between' }}>
-                          <span>QC: {getDisplayInspector(item)}</span>
-                          <span>{formatDisplayDate(item.inspection_date)}</span>
-                        </div>
                       </div>
-                    );
-                  })}
-                </div>
-
-                {/* Pagination Controls */}
-                <div className="admin-pagination-desktop" style={{ borderTop: '1px solid #EADCC9', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', borderBottomLeftRadius: '12px', borderBottomRightRadius: '12px' }}>
-                  <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
-                    Hiển thị <b>{paginatedProcessList.length}</b> trên <b>{filteredProcessList.length}</b> phiếu kiểm tra
-                  </div>
-                  {totalProcessPages > 1 && (
-                    <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-                      <button 
-                        className="page-btn" 
-                        onClick={() => setStagePage(prev => Math.max(prev - 1, 1))} 
-                        disabled={stagePage === 1}
-                        style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#7B5233', cursor: stagePage === 1 ? 'not-allowed' : 'pointer', opacity: stagePage === 1 ? 0.5 : 1 }}
-                      >
-                        <ChevronLeft size={14} />
-                      </button>
-                      {(() => {
-                        const pages = [];
-                        const maxVisible = 5;
-                        let start = Math.max(1, stagePage - Math.floor(maxVisible / 2));
-                        let end = Math.min(totalProcessPages, start + maxVisible - 1);
-                        if (end - start + 1 < maxVisible) {
-                          start = Math.max(1, end - maxVisible + 1);
-                        }
-                        for (let p = start; p <= end; p++) {
-                          pages.push(
-                            <button
-                              key={p}
-                              onClick={() => setStagePage(p)}
-                              style={{
-                                padding: '6px 10px',
-                                borderRadius: '8px',
-                                border: '1px solid #EADCC9',
-                                backgroundColor: stagePage === p ? '#7B5233' : '#FAF6F0',
-                                color: stagePage === p ? '#fff' : '#7B5233',
-                                fontWeight: '700',
-                                fontSize: '0.8rem',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              {p}
-                            </button>
-                          );
-                        }
-                        return pages;
-                      })()}
-                      <button 
-                        className="page-btn" 
-                        onClick={() => setStagePage(prev => Math.min(prev + 1, totalProcessPages))} 
-                        disabled={stagePage === totalProcessPages}
-                        style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#7B5233', cursor: stagePage === totalProcessPages ? 'not-allowed' : 'pointer', opacity: stagePage === totalProcessPages ? 0.5 : 1 }}
-                      >
-                        <ChevronRight size={14} />
-                      </button>
+                      <div style={{ fontSize: '0.85rem', color: '#8D6E63', fontWeight: 'bold', marginBottom: '4px' }}>
+                        {item.category}
+                      </div>
+                      {item.batch_no && item.batch_no !== 'N/A' && item.batch_no !== '---' && (
+                        <div style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#7B5233', marginBottom: '4px' }}>
+                          PO: {item.batch_no}
+                        </div>
+                      )}
+                      <div style={{ fontSize: '0.85rem', color: '#2D1A12', marginBottom: '4px' }}>
+                        Sản phẩm/C.Đoạn: <strong>{item.product_sku || 'N/A'}</strong>
+                      </div>
+                      {isDaily && (
+                        <div style={{ fontSize: '0.85rem', color: '#EF4444', fontWeight: 'bold', marginBottom: '4px' }}>
+                          {item.result_label}
+                        </div>
+                      )}
+                      <div style={{ fontSize: '0.8rem', color: '#6B7280', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>QC: {item.inspector_name || 'N/A'}</span>
+                        <span>{formatDisplayDate(item.inspection_date)}</span>
+                      </div>
                     </div>
-                  )}
+                  );
+                })}
+              </div>
+
+              {/* Pagination Controls */}
+              <div className="admin-pagination-desktop" style={{ borderTop: '1px solid #EADCC9', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', borderBottomLeftRadius: '12px', borderBottomRightRadius: '12px' }}>
+                <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
+                  Hiển thị <b>{paginatedUnifiedList.length}</b> trên <b>{filteredUnifiedList.length}</b> phiếu kiểm tra
                 </div>
-              </>
-            )
+                {totalUnifiedPages > 1 && (
+                  <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                    <button 
+                      className="page-btn" 
+                      onClick={() => setUnifiedPage(prev => Math.max(prev - 1, 1))} 
+                      disabled={unifiedPage === 1}
+                      style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#7B5233', cursor: unifiedPage === 1 ? 'not-allowed' : 'pointer', opacity: unifiedPage === 1 ? 0.5 : 1 }}
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+                    {(() => {
+                      const pages = [];
+                      const maxVisible = 5;
+                      let start = Math.max(1, unifiedPage - Math.floor(maxVisible / 2));
+                      let end = Math.min(totalUnifiedPages, start + maxVisible - 1);
+                      if (end - start + 1 < maxVisible) {
+                        start = Math.max(1, end - maxVisible + 1);
+                      }
+                      for (let p = start; p <= end; p++) {
+                        pages.push(
+                          <button
+                            key={p}
+                            onClick={() => setUnifiedPage(p)}
+                            style={{
+                              padding: '6px 10px',
+                              borderRadius: '8px',
+                              border: '1px solid #EADCC9',
+                              backgroundColor: unifiedPage === p ? '#7B5233' : '#FAF6F0',
+                              color: unifiedPage === p ? '#fff' : '#7B5233',
+                              fontWeight: '700',
+                              fontSize: '0.8rem',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {p}
+                          </button>
+                        );
+                      }
+                      return pages;
+                    })()}
+                    <button 
+                      className="page-btn" 
+                      onClick={() => setUnifiedPage(prev => Math.min(prev + 1, totalUnifiedPages))} 
+                      disabled={unifiedPage === totalUnifiedPages}
+                      style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#7B5233', cursor: unifiedPage === totalUnifiedPages ? 'not-allowed' : 'pointer', opacity: unifiedPage === totalUnifiedPages ? 0.5 : 1 }}
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
           )}
 
         </div>
@@ -1214,7 +746,7 @@ const InspectionReportsView = () => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                   <span style={{ fontWeight: '800', color: '#2D1A12', fontSize: '0.9rem' }}>Xuất danh sách đang hiển thị</span>
                   <span style={{ fontSize: '0.78rem', color: '#8D6E63' }}>
-                    Xuất các dòng hiện tại của tab {activeTab === 'stage' ? 'Kiểm tra công đoạn' : activeTab === 'input' ? 'Kiểm tra đầu vào' : activeTab === 'process' ? 'Kiểm tra quy trình' : 'Lỗi hàng ngày'} theo các bộ lọc đang chọn ({activeTab === 'stage' ? filteredStageList.length : activeTab === 'input' ? filteredInboundList.length : activeTab === 'process' ? filteredProcessList.length : filteredDailyList.length} dòng).
+                    Xuất các dòng hiện tại của danh sách theo các bộ lọc đang chọn ({filteredUnifiedList.length} dòng).
                   </span>
                 </div>
               </div>

@@ -25,6 +25,9 @@ class InputInspection(InputInspectionBase):
     image_path_2: Optional[str] = None
     image_path_3: Optional[str] = None
     inspection_type: Optional[str] = None
+    is_confirmed: Optional[bool] = False
+    confirmed_at: Optional[datetime] = None
+    confirmed_by: Optional[int] = None
 
     class Config:
         from_attributes = True

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useNavigate, useLocation } from 'react-router-dom';
 import { 
   Search, 
   Filter, 
@@ -46,6 +46,10 @@ export const getInspectionTypeLabel = (type) => {
 
 
 export const useInspectionReports = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const filterPending24h = queryParams.get('unconfirmed_24h') === 'true';
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
   
   // Lấy metadata từ database thay vì hardcode
@@ -102,6 +106,9 @@ export const useInspectionReports = () => {
   const [inboundLimit, setInboundLimit] = useState(15);
   const [dailyPage, setDailyPage] = useState(1);
   const [dailyLimit, setDailyLimit] = useState(15);
+
+  const [unifiedPage, setUnifiedPage] = useState(1);
+  const [unifiedLimit, setUnifiedLimit] = useState(15);
 
   const getDisplayInspector = (item) => {
     if (!item) return 'N/A';
@@ -181,7 +188,8 @@ export const useInspectionReports = () => {
               onClick={() => {
                 setActiveActionMenu(null);
                 if (tabType === 'daily') setSelectedDaily(item);
-                else if (tabType === 'input') setSelectedInbound(item);
+                else if (tabType === 'input') navigate(`/admin/reports/detail/input/${item.id}`);
+                else if (tabType === 'stage' || tabType === 'process') navigate(`/admin/reports/detail/stage/${item.id}`);
                 else setSelectedInspection(item);
               }}
               style={{
@@ -309,6 +317,11 @@ export const useInspectionReports = () => {
     // Filter out quy-trinh and mau-dau-tien (which have dedicated tabs)
     let result = stageInspections.filter(item => item.inspection_type !== 'quy-trinh' && item.inspection_type !== 'mau-dau-tien');
 
+    if (filterPending24h) {
+      const limitTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      result = result.filter(item => !item.is_confirmed && new Date(item.created_at || item.inspection_date) >= limitTime);
+    }
+
     // Search filter (PO, SKU, Inspector, ID)
     if (stageSearch.trim()) {
       const term = stageSearch.toLowerCase().trim();
@@ -374,6 +387,11 @@ export const useInspectionReports = () => {
   const filteredProcessList = useMemo(() => {
     let result = stageInspections.filter(item => item.inspection_type === 'quy-trinh');
 
+    if (filterPending24h) {
+      const limitTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      result = result.filter(item => !item.is_confirmed && new Date(item.created_at || item.inspection_date) >= limitTime);
+    }
+
     // Search filter (PO, SKU, Inspector, ID)
     if (stageSearch.trim()) {
       const term = stageSearch.toLowerCase().trim();
@@ -428,6 +446,11 @@ export const useInspectionReports = () => {
   // --- FILTERING & SORTING FIRST ARTICLE INSPECTIONS (mau-dau-tien) ---
   const filteredInboundList = useMemo(() => {
     let result = stageInspections.filter(item => item.inspection_type === 'mau-dau-tien');
+
+    if (filterPending24h) {
+      const limitTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      result = result.filter(item => !item.is_confirmed && new Date(item.created_at || item.inspection_date) >= limitTime);
+    }
 
     // Search filter (PO, SKU, Inspector, ID)
     if (inboundSearch.trim()) {
@@ -528,6 +551,125 @@ export const useInspectionReports = () => {
 
     return result;
   }, [dailyInspections, dailySearch, dailyStartDate, dailyEndDate, dailySort]);
+
+  // --- FILTERING & SORTING UNIFIED LIST (Stage, Inbound, Process, Daily) ---
+  const filteredUnifiedList = useMemo(() => {
+    let list = [];
+    
+    // 1. Stage Inspections
+    stageInspections.forEach(item => {
+      let cat = "Kiểm tra công đoạn";
+      let typeLabel = "stage";
+      if (item.inspection_type === 'quy-trinh') {
+        cat = "Kiểm tra quy trình";
+        typeLabel = "process";
+      } else if (item.inspection_type === 'mau-dau-tien') {
+        cat = "Kiểm tra đầu vào";
+        typeLabel = "input";
+      }
+      
+      list.push({
+        id: item.id,
+        raw_item: item,
+        type: typeLabel,
+        category: cat,
+        inspection_date: item.inspection_date,
+        created_at: item.created_at,
+        batch_no: item.batch_no,
+        product_sku: item.product_sku || "N/A",
+        inspector_name: item.inspector_name || getDisplayInspector(item),
+        is_confirmed: item.is_confirmed,
+        confirmed_at: item.confirmed_at,
+        confirmed_by: item.confirmed_by,
+        conclusion: item.conclusion,
+        result_label: item.conclusion === 'pass' ? 'Đạt' : 'Lỗi',
+        notes: item.notes || item.notes_json || ""
+      });
+    });
+    
+    // 2. Daily Inspections
+    dailyInspections.forEach(item => {
+      list.push({
+        id: item.id,
+        raw_item: item,
+        type: "daily",
+        category: "Ghi nhận lỗi hàng ngày",
+        inspection_date: item.created_at || item.inspection_date,
+        created_at: item.created_at,
+        batch_no: item.batch_no || "N/A",
+        product_sku: item.stage_name || item.product_sku || "N/A",
+        inspector_name: item.inspector_name || getDisplayInspector(item),
+        is_confirmed: null,
+        conclusion: null,
+        result_label: `Lỗi: ${item.total_defects || 0}/${item.total_inspected || 0} (${item.defect_rate || 0}%)`,
+        notes: item.notes || ""
+      });
+    });
+
+    // 24h filter
+    if (filterPending24h) {
+      const limitTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      list = list.filter(item => item.type !== 'daily' && !item.is_confirmed && new Date(item.created_at || item.inspection_date) >= limitTime);
+    }
+    
+    // Search query
+    if (stageSearch.trim()) {
+      const term = stageSearch.toLowerCase().trim();
+      list = list.filter(item => 
+        String(item.id).includes(term) ||
+        `#${item.id}`.includes(term) ||
+        (item.batch_no || '').toLowerCase().includes(term) ||
+        (item.product_sku || '').toLowerCase().includes(term) ||
+        (item.inspector_name || '').toLowerCase().includes(term) ||
+        (item.category || '').toLowerCase().includes(term)
+      );
+    }
+    
+    // Type filter
+    if (stageTypeFilter !== 'all') {
+      list = list.filter(item => item.type === stageTypeFilter);
+    }
+    
+    // Status filter
+    if (stageStatusFilter !== 'all') {
+      list = list.filter(item => {
+        if (item.type === 'daily') return false;
+        return item.conclusion === stageStatusFilter;
+      });
+    }
+    
+    // Date range filter
+    if (stageStartDate) {
+      const start = new Date(stageStartDate);
+      start.setHours(0, 0, 0, 0);
+      list = list.filter(item => new Date(item.inspection_date) >= start);
+    }
+    if (stageEndDate) {
+      const end = new Date(stageEndDate);
+      end.setHours(23, 59, 59, 999);
+      list = list.filter(item => new Date(item.inspection_date) <= end);
+    }
+    
+    // Sort logic
+    if (stageSort === 'date_desc') {
+      list.sort((a, b) => new Date(b.inspection_date) - new Date(a.inspection_date) || (b.id - a.id));
+    } else if (stageSort === 'date_asc') {
+      list.sort((a, b) => new Date(a.inspection_date) - new Date(b.inspection_date) || (a.id - b.id));
+    } else if (stageSort === 'po_asc') {
+      list.sort((a, b) => (a.batch_no || '').localeCompare(b.batch_no || ''));
+    } else if (stageSort === 'po_desc') {
+      list.sort((a, b) => (b.batch_no || '').localeCompare(a.batch_no || ''));
+    }
+    
+    return list;
+  }, [stageInspections, dailyInspections, filterPending24h, stageSearch, stageTypeFilter, stageStatusFilter, stageStartDate, stageEndDate, stageSort]);
+
+  const paginatedUnifiedList = useMemo(() => {
+    const startIdx = (unifiedPage - 1) * unifiedLimit;
+    return filteredUnifiedList.slice(startIdx, startIdx + unifiedLimit);
+  }, [filteredUnifiedList, unifiedPage, unifiedLimit]);
+
+  const totalUnifiedPages = Math.ceil(filteredUnifiedList.length / unifiedLimit);
 
   // Pagination helper slices
   const paginatedStageList = useMemo(() => {
@@ -721,185 +863,60 @@ export const useInspectionReports = () => {
   };
 
   // ----------------------------------------------------
-  // EXPORT FUNCTION 1: CURRENT LIST (STAGE OR DAILY)
+  // EXPORT FUNCTION 1: CURRENT LIST (UNIFIED LIST)
   // ----------------------------------------------------
   const handleExportCurrentList = async () => {
     setIsExporting(true);
     try {
       const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet('Danh Sách Phiếu Kiểm Tra');
+      const cols = [
+        { header: 'Mã Phiếu', key: 'code', width: 12 },
+        { header: 'Phân Loại', key: 'category', width: 22 },
+        { header: 'Ngày Kiểm/Ghi Nhận', key: 'date', width: 22 },
+        { header: 'Mã PO', key: 'po', width: 22 },
+        { header: 'Sản Phẩm / C.Đoạn', key: 'sku', width: 26 },
+        { header: 'QC Thực Hiện', key: 'inspector', width: 24 },
+        { header: 'Trạng Thái XN', key: 'confirmation', width: 16 },
+        { header: 'Kết Luận / Kết Quả', key: 'conclusion', width: 20 },
+        { header: 'Ghi Chú', key: 'notes', width: 35 }
+      ];
+      sheet.columns = cols;
+      formatExcelHeader(sheet, 'BÁO CÁO TỔNG HỢP PHIẾU KIỂM TRA CHẤT LƯỢNG', cols.length);
+
+      cols.forEach((col, idx) => {
+        sheet.getCell(4, idx + 1).value = col.header;
+      });
+      styleTableHeaderRow(sheet, 4, cols.length);
+
+      filteredUnifiedList.forEach((item, index) => {
+        const rowData = {
+          code: `#${item.id}`,
+          category: item.category,
+          date: formatDisplayDateTime(item.inspection_date),
+          po: item.batch_no || '---',
+          sku: item.product_sku || '---',
+          inspector: item.inspector_name || 'N/A',
+          confirmation: item.type === 'daily' ? '---' : (item.is_confirmed ? 'Đã xác nhận' : 'Chưa'),
+          conclusion: item.result_label,
+          notes: item.notes || ''
+        };
+        const addedRow = sheet.addRow(rowData);
+        
+        // Highlight conclusion cells
+        const conclusionCell = addedRow.getCell(8);
+        if (item.type === 'daily') {
+          conclusionCell.font = { color: { argb: 'D97706' }, bold: true };
+        } else if (item.conclusion === 'pass') {
+          conclusionCell.font = { color: { argb: '059669' }, bold: true };
+        } else {
+          conclusionCell.font = { color: { argb: 'DC2626' }, bold: true };
+        }
+      });
+
+      applyDefaultBorders(sheet, 5, filteredUnifiedList.length + 4, cols.length);
       
-      if (activeTab === 'stage') {
-        const sheet = workbook.addWorksheet('Phiếu Kiểm Tra Công Đoạn');
-        const cols = [
-          { header: 'Mã Phiếu', key: 'code', width: 12 },
-          { header: 'Ngày Kiểm Tra', key: 'date', width: 22 },
-          { header: 'Mã PO / Batch No', key: 'po', width: 22 },
-          { header: 'Mã Sản Phẩm / Công Đoạn', key: 'sku', width: 26 },
-          { header: 'Loại Công Đoạn', key: 'type', width: 20 },
-          { header: 'QC Thực Hiện', key: 'inspector', width: 24 },
-          { header: 'Kết Luận', key: 'conclusion', width: 14 },
-          { header: 'Ghi Chú', key: 'notes', width: 35 }
-        ];
-        sheet.columns = cols;
-        formatExcelHeader(sheet, 'BÁO CÁO PHIẾU KIỂM TRA CHẤT LƯỢNG CÔNG ĐOẠN', cols.length);
-
-        // Add header names in row 4
-        cols.forEach((col, idx) => {
-          sheet.getCell(4, idx + 1).value = col.header;
-        });
-        styleTableHeaderRow(sheet, 4, cols.length);
-
-        filteredStageList.forEach((item, index) => {
-          const rowData = {
-            code: `#${item.id}`,
-            date: formatDisplayDateTime(item.inspection_date),
-            po: item.batch_no || 'N/A',
-            sku: item.product_sku || 'N/A',
-            type: getInspectionTypeLabel(item.inspection_type),
-            inspector: item.inspector_name || 'N/A',
-            conclusion: item.conclusion === 'pass' ? 'Đạt' : 'Lỗi',
-            notes: item.notes || ''
-          };
-          const addedRow = sheet.addRow(rowData);
-          // Highlight conclusion cells
-          const conclusionCell = addedRow.getCell(7);
-          if (item.conclusion === 'pass') {
-            conclusionCell.font = { color: { argb: '059669' }, bold: true };
-          } else {
-            conclusionCell.font = { color: { argb: 'DC2626' }, bold: true };
-          }
-        });
-
-        applyDefaultBorders(sheet, 5, filteredStageList.length + 4, cols.length);
-        
-        await triggerFileDownload(workbook, `Bao_Cao_Kiem_Tra_Cong_Doan_${new Date().toISOString().split('T')[0]}.xlsx`);
-      } else if (activeTab === 'input') {
-        const sheet = workbook.addWorksheet('Kiểm Tra Đầu Vào');
-        const cols = [
-          { header: 'Mã Phiếu', key: 'code', width: 12 },
-          { header: 'Ngày Kiểm Tra', key: 'date', width: 22 },
-          { header: 'Mã PO / Batch No', key: 'po', width: 22 },
-          { header: 'Mã Sản Phẩm / Công Đoạn', key: 'sku', width: 26 },
-          { header: 'QC Thực Hiện', key: 'inspector', width: 24 },
-          { header: 'Kết Luận', key: 'conclusion', width: 14 },
-          { header: 'Ghi Chú', key: 'notes', width: 35 }
-        ];
-        sheet.columns = cols;
-        formatExcelHeader(sheet, 'BÁO CÁO KIỂM TRA ĐẦU VÀO (MẪU ĐẦU TIÊN)', cols.length);
-
-        cols.forEach((col, idx) => {
-          sheet.getCell(4, idx + 1).value = col.header;
-        });
-        styleTableHeaderRow(sheet, 4, cols.length);
-
-        filteredInboundList.forEach((item, index) => {
-          const rowData = {
-            code: `#${item.id}`,
-            date: formatDisplayDateTime(item.inspection_date),
-            po: item.batch_no || 'N/A',
-            sku: item.product_sku || 'N/A',
-            inspector: item.inspector_name || 'N/A',
-            conclusion: item.conclusion === 'pass' ? 'Đạt' : 'Lỗi',
-            notes: item.notes || ''
-          };
-          const addedRow = sheet.addRow(rowData);
-          const conclusionCell = addedRow.getCell(6);
-          if (item.conclusion === 'pass') {
-            conclusionCell.font = { color: { argb: '059669' }, bold: true };
-          } else {
-            conclusionCell.font = { color: { argb: 'DC2626' }, bold: true };
-          }
-        });
-
-        applyDefaultBorders(sheet, 5, filteredInboundList.length + 4, cols.length);
-        
-        await triggerFileDownload(workbook, `Bao_Cao_Kiem_Tra_Dau_Vao_${new Date().toISOString().split('T')[0]}.xlsx`);
-      } else if (activeTab === 'process') {
-        const sheet = workbook.addWorksheet('Kiểm Tra Quy Trình');
-        const cols = [
-          { header: 'Mã Phiếu', key: 'code', width: 12 },
-          { header: 'Ngày Kiểm Tra', key: 'date', width: 22 },
-          { header: 'Mã PO / Batch No', key: 'po', width: 22 },
-          { header: 'Mã Sản Phẩm / Công Đoạn', key: 'sku', width: 26 },
-          { header: 'QC Thực Hiện', key: 'inspector', width: 24 },
-          { header: 'Kết Luận', key: 'conclusion', width: 14 },
-          { header: 'Ghi Chú', key: 'notes', width: 35 }
-        ];
-        sheet.columns = cols;
-        formatExcelHeader(sheet, 'BÁO CÁO PHIẾU KIỂM TRA QUY TRÌNH', cols.length);
-
-        cols.forEach((col, idx) => {
-          sheet.getCell(4, idx + 1).value = col.header;
-        });
-        styleTableHeaderRow(sheet, 4, cols.length);
-
-        filteredProcessList.forEach((item, index) => {
-          const rowData = {
-            code: `#${item.id}`,
-            date: formatDisplayDateTime(item.inspection_date),
-            po: item.batch_no || 'N/A',
-            sku: item.product_sku || 'N/A',
-            inspector: item.inspector_name || 'N/A',
-            conclusion: item.conclusion === 'pass' ? 'Đạt' : 'Lỗi',
-            notes: item.notes || ''
-          };
-          const addedRow = sheet.addRow(rowData);
-          const conclusionCell = addedRow.getCell(6);
-          if (item.conclusion === 'pass') {
-            conclusionCell.font = { color: { argb: '059669' }, bold: true };
-          } else {
-            conclusionCell.font = { color: { argb: 'DC2626' }, bold: true };
-          }
-        });
-
-        applyDefaultBorders(sheet, 5, filteredProcessList.length + 4, cols.length);
-        
-        await triggerFileDownload(workbook, `Bao_Cao_Kiem_Tra_Quy_Trinh_${new Date().toISOString().split('T')[0]}.xlsx`);
-      } else {
-        const sheet = workbook.addWorksheet('Ghi Nhận Lỗi Hàng Ngày');
-        const cols = [
-          { header: 'Mã Phiếu', key: 'code', width: 12 },
-          { header: 'Ngày Ghi Nhận', key: 'date', width: 18 },
-          { header: 'Tên Công Đoạn', key: 'stage', width: 26 },
-          { header: 'QC Thực Hiện', key: 'inspector', width: 24 },
-          { header: 'Tổng SP Kiểm', key: 'total_products', width: 16 },
-          { header: 'Tổng Số Lỗi', key: 'total_defects', width: 16 },
-          { header: 'Tỉ Lệ Lỗi (%)', key: 'defect_rate', width: 16 }
-        ];
-        sheet.columns = cols;
-        formatExcelHeader(sheet, 'BÁO CÁO GHI NHẬN LỖI HÀNG NGÀY', cols.length);
-
-        cols.forEach((col, idx) => {
-          sheet.getCell(4, idx + 1).value = col.header;
-        });
-        styleTableHeaderRow(sheet, 4, cols.length);
-
-        filteredDailyList.forEach((item, index) => {
-          const rowData = {
-            code: `#${item.id}`,
-            date: formatDisplayDate(item.inspection_date),
-            stage: item.stage_name || 'N/A',
-            inspector: item.inspector_name || 'N/A',
-            total_products: item.total_products || 0,
-            total_defects: item.total_defects || 0,
-            defect_rate: `${(item.defect_rate || 0).toFixed(2)}%`
-          };
-          const addedRow = sheet.addRow(rowData);
-          // Highlight defect rate
-          const rateCell = addedRow.getCell(7);
-          rateCell.font = { bold: true };
-          if (item.total_defects > 0) {
-            rateCell.font = { color: { argb: 'D97706' }, bold: true };
-          } else {
-            rateCell.font = { color: { argb: '059669' }, bold: true };
-          }
-        });
-
-        applyDefaultBorders(sheet, 5, filteredDailyList.length + 4, cols.length);
-
-        await triggerFileDownload(workbook, `Bao_Cao_Ghi_Nhan_Loi_Hang_Ngay_${new Date().toISOString().split('T')[0]}.xlsx`);
-      }
-
+      await triggerFileDownload(workbook, `Bao_Cao_Tong_Hop_Kiem_Tra_${new Date().toISOString().split('T')[0]}.xlsx`);
       setShowExportModal(false);
     } catch (err) {
       console.error("Lỗi khi xuất excel:", err);
@@ -1808,6 +1825,7 @@ export const useInspectionReports = () => {
     activeTab,
     applyDefaultBorders,
     dailyEndDate,
+    filterPending24h,
     dailyInspections,
     dailyLimit,
     dailyPage,
@@ -1913,5 +1931,12 @@ export const useInspectionReports = () => {
     totalStagePages,
     triggerFileDownload,
     uniquePoList,
+    filteredUnifiedList,
+    paginatedUnifiedList,
+    totalUnifiedPages,
+    unifiedPage,
+    setUnifiedPage,
+    unifiedLimit,
+    setUnifiedLimit,
   };
 };

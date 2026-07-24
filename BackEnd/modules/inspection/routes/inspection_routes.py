@@ -1425,3 +1425,140 @@ def get_daily_inspection_analytics(
         distribution = distribution_data
     )
 
+
+# --- TRẠNG THÁI XÁC NHẬN PHIẾU KIỂM TRA (NEW ENDPOINTS) ---
+from fastapi import Body
+
+def get_inspectionTypeLabel_local(t: str) -> str:
+    mapping = {
+        'dau-vao': 'Nhập kho',
+        'nhap-kho': 'Nhập kho',
+        'do-am': 'Độ ẩm',
+        'kich-thuoc': 'Kích thước',
+        'ngoai-quan': 'Ngoại quan',
+        'chuc-nang': 'Chức năng',
+        'cong-doan': 'Kiểm tra công đoạn',
+        'bam-dinh': 'Kiểm tra bám dính',
+        'sau-dong-goi': 'Kiểm tra sau đóng gói',
+        'phu-kien': 'Kiểm tra phụ kiện',
+        'quy-trinh': 'Kiểm tra quy trình',
+        'mau-dau-tien': 'Kiểm tra mẫu đầu tiên'
+    }
+    return mapping.get(t, t or 'Kiểm tra công đoạn')
+
+@router.get("/input/{id}", response_model=InputInspectionRead)
+def get_input_inspection(id: int, db: Session = Depends(get_db)):
+    """
+    [GET] Lấy chi tiết một phiếu kiểm tra đầu vào.
+    """
+    record = db.query(InputInspection).filter(InputInspection.id == id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu kiểm tra đầu vào")
+    
+    # Lấy tên QC
+    if record.inspector_id:
+        inspector = db.query(Account).filter(Account.id == record.inspector_id).first()
+        record.inspector_name = inspector.full_name if inspector else "N/A"
+    else:
+        record.inspector_name = "N/A"
+        
+    return record
+
+@router.get("/pending")
+def get_pending_inspections(db: Session = Depends(get_db)):
+    """
+    [GET] Lấy danh sách phiếu kiểm tra chưa xác nhận trong 24 giờ qua.
+    Gộp cả phiếu đầu vào (Input) và phiếu công đoạn (Stage).
+    """
+    time_limit = datetime.datetime.now() - datetime.timedelta(hours=24)
+    
+    # 1. Truy vấn các phiếu StageInspection chưa xác nhận trong 24h
+    stage_query = db.query(StageInspection).filter(
+        StageInspection.is_confirmed == False,
+        StageInspection.created_at >= time_limit
+    ).order_by(StageInspection.created_at.desc()).all()
+    
+    # 2. Truy vấn các phiếu InputInspection chưa xác nhận trong 24h
+    inbound_query = db.query(InputInspection).filter(
+        InputInspection.is_confirmed == False,
+        InputInspection.inspected_at >= time_limit
+    ).order_by(InputInspection.inspected_at.desc()).all()
+    
+    pending_tasks = []
+    
+    # Map StageInspections
+    for item in stage_query:
+        type_label = get_inspectionTypeLabel_local(item.inspection_type)
+        pending_tasks.append({
+            "id": item.id,
+            "type": "stage",
+            "task_name": f"Xác nhận phiếu kiểm tra công đoạn #{item.id} - PO: {item.batch_no or 'N/A'}",
+            "category": type_label,
+            "priority": 3,
+            "status": "Chưa Làm",
+            "recorded_date": item.created_at,
+            "completion_date": item.created_at,
+            "notes": item.notes or "Chờ xác nhận kết quả kiểm tra công đoạn"
+        })
+        
+    # Map InputInspections
+    for item in inbound_query:
+        pending_tasks.append({
+            "id": item.id,
+            "type": "input",
+            "task_name": f"Xác nhận phiếu kiểm tra đầu vào #{item.id} - Linh kiện: {item.part_name}",
+            "category": "Kiểm tra đầu vào (IQC)",
+            "priority": 3,
+            "status": "Chưa Làm",
+            "recorded_date": item.inspected_at,
+            "completion_date": item.inspected_at,
+            "notes": item.note or "Chờ xác nhận kích thước linh kiện nhập kho"
+        })
+        
+    # Sắp xếp theo ngày ghi nhận giảm dần
+    pending_tasks.sort(key=lambda x: x["recorded_date"], reverse=True)
+    
+    # Thêm số thứ tự STT sau khi sắp xếp
+    for i, task in enumerate(pending_tasks):
+        task["stt"] = f"{(i+1):02d}"
+        
+    return pending_tasks
+
+
+@router.post("/confirm/{type}/{id}")
+def confirm_inspection(type: str, id: int, confirmed_by: Optional[int] = Body(None, embed=True), db: Session = Depends(get_db)):
+    """
+    [POST] Xác nhận phiếu kiểm tra.
+    type: 'stage' hoặc 'input'.
+    """
+    if type == "stage":
+        record = db.query(StageInspection).filter(StageInspection.id == id).first()
+    elif type == "input":
+        record = db.query(InputInspection).filter(InputInspection.id == id).first()
+    else:
+        raise HTTPException(status_code=400, detail="Loại phiếu kiểm tra không hợp lệ. Chỉ chấp nhận 'stage' hoặc 'input'")
+        
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy phiếu kiểm tra {type} có ID {id}")
+        
+    record.is_confirmed = True
+    record.confirmed_at = datetime.datetime.now()
+    if confirmed_by:
+        record.confirmed_by = confirmed_by
+        
+    try:
+        db.commit()
+        db.refresh(record)
+        return {
+            "message": "Xác nhận phiếu kiểm tra thành công",
+            "type": type,
+            "id": id,
+            "is_confirmed": record.is_confirmed,
+            "confirmed_at": record.confirmed_at,
+            "confirmed_by": record.confirmed_by
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Lỗi khi lưu xác nhận: {str(e)}")
+
+

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Float, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, Float, ForeignKey, DateTime, Boolean
 from sqlalchemy.dialects.mssql import NVARCHAR
 from config.database import Base
 from shared.utils.timezone import get_vietnam_time
@@ -34,3 +34,8 @@ class InputInspection(Base):
     image_path_1    = Column(NVARCHAR(500), nullable=True)
     image_path_2    = Column(NVARCHAR(500), nullable=True)
     image_path_3    = Column(NVARCHAR(500), nullable=True)
+
+    # Trạng thái xác nhận (Thêm mới)
+    is_confirmed    = Column(Boolean, default=False, nullable=False)
+    confirmed_at    = Column(DateTime, nullable=True)
+    confirmed_by    = Column(Integer, nullable=True)

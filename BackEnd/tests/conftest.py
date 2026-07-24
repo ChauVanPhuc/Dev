@@ -28,6 +28,9 @@ def clean_sqlite_unicode_literals(conn, cursor, statement, parameters, context, 
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_database():
+    # Import models to register them on Base.metadata
+    from modules.inspection.models.input_inspection import InputInspection
+    from modules.inspection.models.stage_inspection import StageInspection
     Base.metadata.create_all(bind=engine)
     yield
 

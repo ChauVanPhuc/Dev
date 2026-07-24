@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text
+from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean
 from sqlalchemy.dialects.mssql import NVARCHAR
 from config.database import Base
 import datetime
@@ -34,3 +34,8 @@ class StageInspection(Base):
     images_json = Column(NVARCHAR(None), nullable=True)
 
     created_at = Column(DateTime, default=datetime.datetime.now)
+
+    # Trạng thái xác nhận (Thêm mới)
+    is_confirmed = Column(Boolean, default=False, nullable=False)
+    confirmed_at = Column(DateTime, nullable=True)
+    confirmed_by = Column(Integer, nullable=True)

@@ -348,7 +348,7 @@ const ScreenManagement = () => {
         const workbook = XLSX.read(fileData, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        
+
         // Convert sheet to JSON array of arrays
         const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         if (rows.length < 2) {
@@ -389,7 +389,7 @@ const ScreenManagement = () => {
           if (!title) continue; // Must have at least a title
 
           // Match existing screen by current_code or default_code
-          const existing = screens.find(s => 
+          const existing = screens.find(s =>
             (currentCode && s.current_code === currentCode) ||
             (defaultCode && s.default_code === defaultCode)
           );
@@ -516,8 +516,8 @@ const ScreenManagement = () => {
         options,
         templateStyle
       );
-      
-      const blob = new Blob([response], { 
+
+      const blob = new Blob([response], {
         type: response.type || 'application/octet-stream'
       });
       const url = window.URL.createObjectURL(blob);
@@ -527,7 +527,7 @@ const ScreenManagement = () => {
       a.download = `${selectedScreenForExport.current_code || selectedScreenForExport.default_code}_detail_${Date.now()}.${ext}`;
       a.click();
       window.URL.revokeObjectURL(url);
-      
+
       showToast('Xuất đặc tả thành công!');
       setShowExportDetailModal(false);
       setSelectedScreenForExport(null);
@@ -1770,7 +1770,7 @@ const ScreenManagement = () => {
             <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '900', color: '#7B5233', textAlign: 'center' }}>
               Tùy chọn xuất dữ liệu
             </h3>
-            
+
             <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #E5E7EB' }}>
@@ -1782,21 +1782,21 @@ const ScreenManagement = () => {
                 <tr style={{ borderBottom: '1px solid #F3F4F6' }}>
                   <td style={{ padding: '14px 8px' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', fontWeight: '600', color: '#475569', cursor: 'pointer' }}>
-                      <input 
-                        type="checkbox" 
-                        checked={exportOptions.listSelected} 
-                        onChange={(e) => setExportOptions({ ...exportOptions, listSelected: e.target.checked })} 
+                      <input
+                        type="checkbox"
+                        checked={exportOptions.listSelected}
+                        onChange={(e) => setExportOptions({ ...exportOptions, listSelected: e.target.checked })}
                         style={{ accentColor: '#7B5233', width: '15px', height: '15px' }}
                       />
                       Xuất danh sách (Excel)
                     </label>
                   </td>
                   <td style={{ padding: '14px 8px', textAlign: 'center' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={exportOptions.listAll} 
+                    <input
+                      type="checkbox"
+                      checked={exportOptions.listAll}
                       disabled={!exportOptions.listSelected}
-                      onChange={(e) => setExportOptions({ ...exportOptions, listAll: e.target.checked })} 
+                      onChange={(e) => setExportOptions({ ...exportOptions, listAll: e.target.checked })}
                       style={{ accentColor: '#7B5233', width: '15px', height: '15px', cursor: exportOptions.listSelected ? 'pointer' : 'default' }}
                     />
                   </td>
@@ -1804,21 +1804,21 @@ const ScreenManagement = () => {
                 <tr style={{ borderBottom: '1px solid #F3F4F6' }}>
                   <td style={{ padding: '14px 8px' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', fontWeight: '600', color: '#475569', cursor: 'pointer' }}>
-                      <input 
-                        type="checkbox" 
-                        checked={exportOptions.docsSelected} 
-                        onChange={(e) => setExportOptions({ ...exportOptions, docsSelected: e.target.checked })} 
+                      <input
+                        type="checkbox"
+                        checked={exportOptions.docsSelected}
+                        onChange={(e) => setExportOptions({ ...exportOptions, docsSelected: e.target.checked })}
                         style={{ accentColor: '#7B5233', width: '15px', height: '15px' }}
                       />
                       Xuất tài liệu (PDF)
                     </label>
                   </td>
                   <td style={{ padding: '14px 8px', textAlign: 'center' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={exportOptions.docsAll} 
+                    <input
+                      type="checkbox"
+                      checked={exportOptions.docsAll}
                       disabled={!exportOptions.docsSelected}
-                      onChange={(e) => setExportOptions({ ...exportOptions, docsAll: e.target.checked })} 
+                      onChange={(e) => setExportOptions({ ...exportOptions, docsAll: e.target.checked })}
                       style={{ accentColor: '#7B5233', width: '15px', height: '15px', cursor: exportOptions.docsSelected ? 'pointer' : 'default' }}
                     />
                   </td>
@@ -1827,25 +1827,25 @@ const ScreenManagement = () => {
             </table>
 
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-              <button 
+              <button
                 onClick={handleConfirmExport}
                 disabled={!exportOptions.listSelected && !exportOptions.docsSelected}
-                style={{ 
-                  display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 20px', 
-                  backgroundColor: (!exportOptions.listSelected && !exportOptions.docsSelected) ? '#cbd5e1' : '#7B5233', 
-                  color: '#fff', border: 'none', borderRadius: '8px', cursor: (!exportOptions.listSelected && !exportOptions.docsSelected) ? 'default' : 'pointer', 
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 20px',
+                  backgroundColor: (!exportOptions.listSelected && !exportOptions.docsSelected) ? '#cbd5e1' : '#7B5233',
+                  color: '#fff', border: 'none', borderRadius: '8px', cursor: (!exportOptions.listSelected && !exportOptions.docsSelected) ? 'default' : 'pointer',
                   fontWeight: '700', fontSize: '13px'
                 }}
               >
                 <FileDown size={16} />
                 Xuất dữ liệu
               </button>
-              <button 
+              <button
                 onClick={() => setShowExportModal(false)}
-                style={{ 
-                  display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 20px', 
-                  backgroundColor: '#7B5233', color: '#fff', border: 'none', borderRadius: '8px', 
-                  cursor: 'pointer', fontWeight: '700', fontSize: '13px' 
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 20px',
+                  backgroundColor: '#7B5233', color: '#fff', border: 'none', borderRadius: '8px',
+                  cursor: 'pointer', fontWeight: '700', fontSize: '13px'
                 }}
               >
                 Hủy

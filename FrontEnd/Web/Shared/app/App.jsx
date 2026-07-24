@@ -21,6 +21,8 @@ const HRManagementView = lazy(() => import('@modules/Auth/Views/HR/HRManagementV
 const HandoverList = lazy(() => import('@modules/Delivery/Views/Handover/HandoverListView'));
 const IncidentLogs = lazy(() => import('@modules/System/Views/Monitor/IncidentLogsView'));
 const InspectionReports = lazy(() => import('@modules/Inspection/Views/Report/InspectionReportsView'));
+const QualityOverview = lazy(() => import('@modules/Inspection/Views/Report/QualityOverviewView'));
+const InspectionDetail = lazy(() => import('@modules/Inspection/Views/Report/InspectionDetailView'));
 const KPIReports = lazy(() => import('@modules/KPI/Views/Report/KPIReportsView'));
 const KPIChecklist = lazy(() => import('@modules/KPI/Views/Checklist/KPIChecklistView'));
 const KPIItems = lazy(() => import('@modules/KPI/Views/Item/KPIItemsView'));
@@ -580,6 +582,8 @@ function App() {
                 <Route path="logs" element={<ProtectedRoute permissionKey="logs"><IncidentLogs /></ProtectedRoute>} />
                 <Route path="defects" element={<ProtectedRoute permissionKey="defects"><DefectManagement /></ProtectedRoute>} />
                 <Route path="reports" element={<ProtectedRoute permissionKey="reports"><InspectionReports /></ProtectedRoute>} />
+                <Route path="reports/detail/:type/:id" element={<ProtectedRoute permissionKey="reports"><InspectionDetail /></ProtectedRoute>} />
+                <Route path="quality" element={<ProtectedRoute permissionKey="quality-records"><QualityOverview /></ProtectedRoute>} />
                 <Route path="quality-records" element={<ProtectedRoute permissionKey="quality-records"><QualityRecords /></ProtectedRoute>} />
                 <Route path="quality-records/:id" element={<ProtectedRoute permissionKey="quality-records"><QualityRecordsDetail /></ProtectedRoute>} />
                 <Route path="iso-documents" element={<ProtectedRoute permissionKey="iso-documents"><ISODocumentList mode="documents" /></ProtectedRoute>} />
