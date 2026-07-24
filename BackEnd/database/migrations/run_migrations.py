@@ -134,6 +134,35 @@ def run_iso_process_revision_logs_migration():
         print(f"[ERROR] iso_revision_logs migration failed: {str(e)}")
         raise
 
+def run_stage_inspection_new_columns_migration():
+    """Add specification, image_path_1, image_path_2, image_path_3 columns to stage_inspections table"""
+    db = next(get_db())
+    try:
+        columns_to_add = {
+            'specification': 'NVARCHAR(255) NULL',
+            'image_path_1': 'NVARCHAR(500) NULL',
+            'image_path_2': 'NVARCHAR(500) NULL',
+            'image_path_3': 'NVARCHAR(500) NULL'
+        }
+        for col_name, col_type in columns_to_add.items():
+            check_sql = text(f"""
+                SELECT COUNT(*) as count 
+                FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_NAME = 'stage_inspections' 
+                AND COLUMN_NAME = '{col_name}'
+            """)
+            result = db.execute(check_sql).fetchone()
+            if result[0] == 0:
+                db.execute(text(f"ALTER TABLE stage_inspections ADD {col_name} {col_type}"))
+                db.commit()
+                print(f"[OK] Added {col_name} column to stage_inspections table")
+            else:
+                print(f"[SKIP] {col_name} column already exists in stage_inspections")
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] stage_inspection new columns migration failed: {str(e)}")
+        raise
+
 if __name__ == "__main__":
     print("Running database migrations...")
     print("-" * 50)
@@ -146,6 +175,7 @@ if __name__ == "__main__":
         run_account_migration()
         run_screen_bug_reporter_migration()
         run_iso_process_revision_logs_migration()
+        run_stage_inspection_new_columns_migration()
         run_inspection_confirmation_migration()
         print("-" * 50)
         print("[SUCCESS] All migrations completed successfully!")
