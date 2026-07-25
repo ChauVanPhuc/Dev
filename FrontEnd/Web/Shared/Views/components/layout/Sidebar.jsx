@@ -51,14 +51,26 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
   }, []);
 
   const isBlocked = (item) => {
-    if (isAdmin) return false;
-    const key = item.permission_key;
+    let key = item.permission_key;
+    if (!key) {
+      key = item.route_path || `sb_${item.id}`;
+    }
     if (!key) return false;
     const perm = activePermissions[key];
+    
+    // 1. Kiểm tra chặn rõ ràng (Explicit block)
     if (perm === 'none') return true;
     if (Array.isArray(perm)) {
       return perm.length === 0 || perm.includes('none');
     }
+    if (typeof perm === 'string' && perm.split(',').map(s => s.trim()).includes('none')) {
+      return true;
+    }
+    
+    // 2. Mặc định đối với admin/IT/BGD (nếu không bị chặn rõ ràng ở trên)
+    if (isAdmin) return false;
+    
+    // 3. Với các tài khoản thường, nếu chưa cấu hình (undefined/null) thì mặc định chặn
     return perm === undefined || perm === null;
   };
 

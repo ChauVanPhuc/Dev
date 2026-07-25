@@ -7,14 +7,12 @@ import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 // Icons mapping for screens
 import {
   SCREEN_ICONS,
-  SCREEN_GROUPS,
-  MOBILE_SCREEN_GROUPS,
-  GROUP_ICONS,
-  MOBILE_GROUP_ICONS,
   PERM_RANK,
   LEGACY_RANK_MAP,
-  parseDbPermission
+  parseDbPermission,
+  permissionLevels
 } from './components/UserScreenConfig';
+import { buildPermissionGroupsFromSidebar, getGroupIcon } from './utils/permissionUtils';
 
 const UserCreate = () => {
   const navigate = useNavigate();
@@ -65,6 +63,19 @@ const UserCreate = () => {
 
   // Trạng thái phân quyền chi tiết (screen_key -> [action, action, ...])
   const [screenPermissions, setScreenPermissions] = useState({});
+  const [sidebarItems, setSidebarItems] = useState([]);
+  const [screens, setScreens] = useState([]);
+  // Lưu trữ phân quyền resolved ban đầu từ API để so sánh khi save
+  const initialResolvedPerms = React.useRef({});
+
+  const dynamicWebGroups = useMemo(() => {
+    return buildPermissionGroupsFromSidebar(sidebarItems, 'web', screens);
+  }, [sidebarItems, screens]);
+
+  const dynamicMobileGroups = useMemo(() => {
+    return buildPermissionGroupsFromSidebar(sidebarItems, 'mobile', screens);
+  }, [sidebarItems, screens]);
+
   const [activeTab, setActiveTab] = useState('web');
   const [expandedGroups, setExpandedGroups] = useState({ 'web_0': true, 'mobile_0': true });
   const [searchQuery, setSearchQuery] = useState('');
@@ -182,34 +193,79 @@ const UserCreate = () => {
     return result;
   }, [stages, selectedFactory]);
 
-  // 1. Lấy danh sách Roles khi mount
+  // 1. Tải danh mục Roles, Sidebar và Screens khi mount
   useEffect(() => {
-    const fetchRoles = async () => {
+    const initData = async () => {
       try {
-        const data = await api.get('/roles/');
-        setRoles(data);
+        const [rolesRes, sidebarRes, screensRes] = await Promise.all([
+          api.get('/roles/'),
+          api.get('/system/sidebar/all'),
+          api.get('/screens')
+        ]);
+        setRoles(rolesRes || []);
+        setSidebarItems(sidebarRes || []);
+        setScreens(screensRes || []);
+
+        // Khởi tạo phân quyền ban đầu: mặc định là 'none' (Chặn)
+        const webGroups = buildPermissionGroupsFromSidebar(sidebarRes || [], 'web', screensRes || []);
+        const mobileGroups = buildPermissionGroupsFromSidebar(sidebarRes || [], 'mobile', screensRes || []);
+
+        const initialPerms = {};
+        webGroups.forEach(group => {
+          group.screens.forEach(scr => {
+            initialPerms[scr.key] = ['none'];
+          });
+        });
+        mobileGroups.forEach(group => {
+          group.screens.forEach(scr => {
+            initialPerms[scr.key] = ['none'];
+          });
+        });
+        initialResolvedPerms.current = JSON.parse(JSON.stringify(initialPerms));
+        setScreenPermissions(initialPerms);
       } catch (err) {
-        console.error('Lỗi khi tải Roles:', err);
+        console.error('Lỗi khi tải dữ liệu khởi tạo:', err);
       }
     };
-    fetchRoles();
+    initData();
   }, []);
 
-  // Khởi tạo phân quyền mặc định: tất cả là 'none' (Chặn)
+  // 1.1 Tự động load quyền mặc định khi thay đổi Role, Permission, Level để cập nhật UI
   useEffect(() => {
-    const initialPerms = {};
-    SCREEN_GROUPS.forEach(group => {
-      group.screens.forEach(scr => {
-        initialPerms[scr.key] = ['none'];
-      });
-    });
-    MOBILE_SCREEN_GROUPS.forEach(group => {
-      group.screens.forEach(scr => {
-        initialPerms[scr.key] = ['none'];
-      });
-    });
-    setScreenPermissions(initialPerms);
-  }, []);
+    const fetchDefaultPermissions = async () => {
+      try {
+        const queryParams = [];
+        if (formData.role_id) queryParams.push(`role_id=${formData.role_id}`);
+        if (formData.permission_id) queryParams.push(`permission_id=${formData.permission_id}`);
+        if (formData.permission_level) queryParams.push(`permission_level=${encodeURIComponent(formData.permission_level)}`);
+        
+        const url = `/accounts/permissions/default?${queryParams.join('&')}`;
+        const res = await api.get(url);
+        const dbPerms = res.permissions || {};
+        
+        const initialPerms = {};
+        dynamicWebGroups.forEach(group => {
+          group.screens.forEach(scr => {
+            initialPerms[scr.key] = parseDbPermission(dbPerms[scr.key] || 'none');
+          });
+        });
+        dynamicMobileGroups.forEach(group => {
+          group.screens.forEach(scr => {
+            initialPerms[scr.key] = parseDbPermission(dbPerms[scr.key] || 'none');
+          });
+        });
+        
+        initialResolvedPerms.current = JSON.parse(JSON.stringify(initialPerms));
+        setScreenPermissions(initialPerms);
+      } catch (err) {
+        console.error('Lỗi khi tải phân quyền mặc định:', err);
+      }
+    };
+    
+    if (formData.role_id || formData.permission_id || formData.permission_level) {
+      fetchDefaultPermissions();
+    }
+  }, [formData.role_id, formData.permission_id, formData.permission_level, dynamicWebGroups, dynamicMobileGroups]);
 
   // 2. Khi Role thay đổi -> Lấy danh sách Permissions
   useEffect(() => {
@@ -261,7 +317,7 @@ const UserCreate = () => {
   useEffect(() => {
     if (searchQuery) {
       const nextExpanded = { ...expandedGroups };
-      SCREEN_GROUPS.forEach((group, index) => {
+      dynamicWebGroups.forEach((group, index) => {
         const hasMatch = group.screens.some(s =>
           s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           s.desc.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -271,7 +327,7 @@ const UserCreate = () => {
           nextExpanded[`web_${index}`] = true;
         }
       });
-      MOBILE_SCREEN_GROUPS.forEach((group, index) => {
+      dynamicMobileGroups.forEach((group, index) => {
         const hasMatch = group.screens.some(s =>
           s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           s.desc.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -283,7 +339,7 @@ const UserCreate = () => {
       });
       setExpandedGroups(nextExpanded);
     }
-  }, [searchQuery]);
+  }, [searchQuery, dynamicWebGroups, dynamicMobileGroups]);
 
   const generateUsername = (fullName) => {
     if (!fullName) return '';
@@ -396,7 +452,7 @@ const UserCreate = () => {
 
   // Logic radio toggle Cho phép / Không cho phép ở header nhóm cha
   const isGroupAllowed = (groupIdx, isMobile = false) => {
-    const groups = isMobile ? MOBILE_SCREEN_GROUPS : SCREEN_GROUPS;
+    const groups = isMobile ? dynamicMobileGroups : dynamicWebGroups;
     const group = groups[groupIdx];
     if (!group) return false;
     return group.screens.some(s => {
@@ -406,7 +462,7 @@ const UserCreate = () => {
   };
 
   const handleGroupToggle = (groupIdx, allow, isMobile = false) => {
-    const groups = isMobile ? MOBILE_SCREEN_GROUPS : SCREEN_GROUPS;
+    const groups = isMobile ? dynamicMobileGroups : dynamicWebGroups;
     const group = groups[groupIdx];
     if (!group) return;
     setScreenPermissions(prev => {
@@ -637,11 +693,21 @@ const UserCreate = () => {
       const newAccount = await api.post('/accounts/', dataToSend);
       const newId = newAccount.id;
 
-      // 2. Chuẩn bị bảng phân quyền chi tiết
+      // 2. Chuẩn bị bảng phân quyền chi tiết (Chỉ lưu các override thực tế so với mặc định)
       const permissionsToSave = {};
+      const initialPerms = initialResolvedPerms.current || {};
       Object.keys(screenPermissions).forEach(key => {
-        const perms = screenPermissions[key] || [];
-        permissionsToSave[key] = perms.includes('none') || perms.length === 0 ? 'none' : perms.join(',');
+        const currentPerms = screenPermissions[key] || [];
+        const initialPermsForKey = initialPerms[key] || [];
+        
+        const currentSorted = [...currentPerms].sort().join(',');
+        const initialSorted = [...initialPermsForKey].sort().join(',');
+        
+        if (currentSorted !== initialSorted) {
+          permissionsToSave[key] = currentPerms.includes('none') || currentPerms.length === 0 
+            ? 'none' 
+            : currentPerms.join(',');
+        }
       });
 
       // 3. Đồng bộ phân quyền màn hình chi tiết (PUT)
@@ -1064,8 +1130,7 @@ const UserCreate = () => {
             <div className="accordion-list">
               {(() => {
                 const isMobileTab = activeTab === 'mobile';
-                const activeGroups = isMobileTab ? MOBILE_SCREEN_GROUPS : SCREEN_GROUPS;
-                const activeIcons = isMobileTab ? MOBILE_GROUP_ICONS : GROUP_ICONS;
+                const activeGroups = isMobileTab ? dynamicMobileGroups : dynamicWebGroups;
 
                 // Kiểm định số màn hình tìm kiếm khớp
                 const totalMatches = activeGroups.reduce((sum, group) => {
@@ -1117,11 +1182,7 @@ const UserCreate = () => {
                             </svg>
                           </span>
                           <span className="group-icon-wrapper">
-                            {activeIcons[groupIdx] || (
-                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                                <rect x="3" y="3" width="18" height="18" rx="2" />
-                              </svg>
-                            )}
+                            {getGroupIcon(group.title)}
                           </span>
                           <h4 className="group-title">{group.title}</h4>
                         </div>

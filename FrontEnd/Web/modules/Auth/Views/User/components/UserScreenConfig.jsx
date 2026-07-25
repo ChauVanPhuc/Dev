@@ -564,7 +564,7 @@ export const parseDbPermission = (rawVal) => {
   return actions.length > 0 ? actions : ['none'];
 };
 
-const permissionLevels = [
+export const permissionLevels = [
   { key: 'read', label: 'Chỉ xem', color: '#2563EB' },
   { key: 'create', label: 'Thêm', color: '#16A34A' },
   { key: 'edit', label: 'Sửa', color: '#CA8A04' },

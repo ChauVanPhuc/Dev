@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Filter, FileDown, Search, Plus, FolderTree, Briefcase, Settings, Layers } from 'lucide-react';
 import api from '@webShared/Services/api.service';
@@ -6,133 +6,8 @@ import ExcelJS from 'exceljs';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
+import { buildPermissionGroupsFromSidebar } from './utils/permissionUtils';
 import '@styles/components.css';
-
-const SCREEN_GROUPS = [
-  {
-    title: 'Quản lý hệ thống',
-    screens: [
-      { key: 'users', name: 'Quản lý tài khoản' },
-      { key: 'screens', name: 'Quản lý màn hình' },
-      { key: 'logs', name: 'Quản lý lỗi hệ thống' },
-      { key: 'feedback', name: 'Quản lý góp ý' },
-      { key: 'data', name: 'Backup data' },
-      { key: 'bugs', name: 'Quản lý Bug' },
-      { key: 'monitor', name: 'Giám sát hệ thống' }
-    ]
-  },
-  {
-    title: 'Nhân sự',
-    screens: [
-      { key: 'iso-documents', name: 'Quản lý mẫu tài liệu' },
-      { key: 'iso-processes', name: 'Quản lý quy trình' }
-    ]
-  },
-  {
-    title: 'Module sản xuất',
-    screens: [
-      { key: 'plan', name: 'Kế hoạch sản xuất' },
-      { key: 'delivery-tracking', name: 'Kế hoạch bàn giao' },
-      { key: 'exception-deliveries', name: 'Phiếu ngoại lệ' },
-      { key: 'home', name: 'Trang chủ sản xuất' },
-      { key: 'backup-qrs', name: 'Quản lý mã QR' }
-    ]
-  },
-  {
-    title: 'Module chất lượng',
-    screens: [
-      { key: 'quality-records', name: 'Hồ sơ chất lượng' },
-      { key: 'defects', name: 'Danh sách lỗi' },
-      { key: 'claim', name: 'Claim khách hàng' },
-      { key: 'reports', name: 'Báo cáo kiểm tra' },
-      { key: 'handovers', name: 'Danh sách bàn giao' },
-      { key: 'hotspots', name: 'Điểm nóng cần chú ý' }
-    ]
-  },
-  {
-    title: 'Module kỹ thuật',
-    screens: [
-      { key: 'products', name: 'BOM sản phẩm' }
-    ]
-  },
-  {
-    title: 'Module bảo trì - máy móc',
-    screens: [
-      { key: 'equipment', name: 'Quản lý thiết bị' },
-      { key: 'machines', name: 'Danh sách thiết bị' },
-      { key: 'machine-history', name: 'Lịch sử bảo trì' },
-      { key: 'machine-training', name: 'Hướng dẫn sử dụng' }
-    ]
-  },
-  {
-    title: 'Module kinh doanh',
-    screens: [
-      { key: 'shipments', name: 'Thời gian xuất cont' },
-      { key: 'prices', name: 'Quản lý giá tủ' },
-      { key: 'purchase-requisitions', name: 'Đơn đặt mua' },
-      { key: 'purchase-order-items', name: 'Đơn mua hàng' }
-    ]
-  },
-  {
-    title: 'Khác',
-    screens: [
-      { key: 'kpi', name: 'Quản lý KPI' }
-    ]
-  }
-];
-
-const MOBILE_SCREEN_GROUPS = [
-  {
-    title: 'Bàn giao & In ấn',
-    screens: [
-      { key: 'mobile_delivery-info', name: 'Thông tin bàn giao' },
-      { key: 'mobile_delivery-create', name: 'Tạo phiếu bàn giao' },
-      { key: 'mobile_delivery-receive', name: 'Nhận bàn giao công đoạn' },
-      { key: 'mobile_thermal-print', name: 'In phiếu/tem nhiệt' }
-    ]
-  },
-  {
-    title: 'Kế hoạch & Sản xuất',
-    screens: [
-      { key: 'mobile_plan', name: 'Theo dõi kế hoạch & Tiến độ' }
-    ]
-  },
-  {
-    title: 'QC & Chất lượng',
-    screens: [
-      { key: 'mobile_inspection-daily', name: 'Kiểm tra hàng ngày' },
-      { key: 'mobile_inspection-stage', name: 'Kiểm tra sản phẩm' },
-      { key: 'mobile_inspection-first-article', name: 'Kiểm tra mẫu đầu tiên' },
-      { key: 'mobile_inspection-stage-moisture', name: 'Kiểm tra độ ẩm' },
-      { key: 'mobile_inspection-stage-process', name: 'Kiểm tra quy trình' },
-      { key: 'mobile_inspection-stage-adhesion', name: 'Kiểm tra bám dính' },
-      { key: 'mobile_quality-detail', name: 'Chi tiết kiểm QC' },
-      { key: 'mobile_input-inspection', name: 'Kiểm tra IQC' },
-      { key: 'mobile_logs', name: 'Nhật ký kiểm QC' },
-      { key: 'mobile_capa-list', name: 'Danh sách CAPA' },
-      { key: 'mobile_capa-report', name: 'Báo cáo sự cố' },
-      { key: 'mobile_capa-detail', name: 'Chi tiết CAPA' },
-      { key: 'mobile_feedback', name: 'Góp ý di động' },
-      { key: 'mobile_ctq-sos', name: 'Báo cáo CTQ / SOS' },
-      { key: 'mobile_warnings', name: 'Cảnh báo lỗi' }
-    ]
-  },
-  {
-    title: 'Đánh giá & KPI',
-    screens: [
-      { key: 'mobile_awards', name: 'Khen thưởng & Kỷ luật' },
-      { key: 'mobile_kpi', name: 'Theo dõi KPI' },
-      { key: 'mobile_kpi-staff', name: 'Nhân sự đánh giá' },
-      { key: 'mobile_staff-evaluation', name: 'Đánh giá nhân sự' }
-    ]
-  },
-  {
-    title: 'Thiết bị',
-    screens: [
-      { key: 'mobile_equipment-list', name: 'Danh sách thiết bị' }
-    ]
-  }
-];
 
 /**
  * View: Trang Quản lý người dùng
@@ -229,10 +104,40 @@ const UserManagement = () => {
 
   // ─── State chế độ xem & phân quyền ──────────────────────────────────────────
   const [viewMode, setViewMode] = useState('account_info'); // 'account_info' | 'permissions_web' | 'permissions_mobile'
-  const currentGroups = viewMode === 'permissions_mobile' ? MOBILE_SCREEN_GROUPS : SCREEN_GROUPS;
   const [showViewModePanel, setShowViewModePanel] = useState(false);
   const [userPermissions, setUserPermissions] = useState({});
   const [permsLoading, setPermsLoading] = useState(false);
+
+  const [sidebarItems, setSidebarItems] = useState([]);
+  const [screens, setScreens] = useState([]);
+
+  useEffect(() => {
+    const loadSidebarData = async () => {
+      try {
+        const [sidebarRes, screensRes] = await Promise.all([
+          api.get('/system/sidebar/all'),
+          api.get('/screens')
+        ]);
+        setSidebarItems(sidebarRes || []);
+        setScreens(screensRes || []);
+      } catch (err) {
+        console.error('Failed to load sidebar for matrix view:', err);
+      }
+    };
+    loadSidebarData();
+  }, []);
+
+  const dynamicWebGroups = useMemo(() => {
+    return buildPermissionGroupsFromSidebar(sidebarItems, 'web', screens);
+  }, [sidebarItems, screens]);
+
+  const dynamicMobileGroups = useMemo(() => {
+    return buildPermissionGroupsFromSidebar(sidebarItems, 'mobile', screens);
+  }, [sidebarItems, screens]);
+
+  const currentGroups = useMemo(() => {
+    return viewMode === 'permissions_mobile' ? dynamicMobileGroups : dynamicWebGroups;
+  }, [viewMode, dynamicWebGroups, dynamicMobileGroups]);
 
   const filterRef = useRef(null);
   const sortRef = useRef(null);
@@ -307,12 +212,12 @@ const UserManagement = () => {
         const permMap = {};
         results.forEach(item => {
           const userPerms = {};
-          SCREEN_GROUPS.forEach(group => {
+          dynamicWebGroups.forEach(group => {
             group.screens.forEach(scr => {
               userPerms[scr.key] = item.permissions[scr.key] || 'write';
             });
           });
-          MOBILE_SCREEN_GROUPS.forEach(group => {
+          dynamicMobileGroups.forEach(group => {
             group.screens.forEach(scr => {
               userPerms[scr.key] = item.permissions[scr.key] || 'write';
             });
@@ -546,7 +451,7 @@ const UserManagement = () => {
 
       // Extract all screen headers
       const webScreens = [];
-      SCREEN_GROUPS.forEach(g => {
+      dynamicWebGroups.forEach(g => {
         g.screens.forEach(s => {
           webScreens.push(s);
         });
@@ -635,7 +540,7 @@ const UserManagement = () => {
 
       // Extract all screen headers
       const mobileScreens = [];
-      MOBILE_SCREEN_GROUPS.forEach(g => {
+      dynamicMobileGroups.forEach(g => {
         g.screens.forEach(s => {
           mobileScreens.push(s);
         });

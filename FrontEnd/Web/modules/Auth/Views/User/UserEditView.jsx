@@ -8,14 +8,12 @@ import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 // Icons mapping for screens
 import {
   SCREEN_ICONS,
-  SCREEN_GROUPS,
-  MOBILE_SCREEN_GROUPS,
-  GROUP_ICONS,
-  MOBILE_GROUP_ICONS,
   PERM_RANK,
   LEGACY_RANK_MAP,
-  parseDbPermission
+  parseDbPermission,
+  permissionLevels
 } from './components/UserScreenConfig';
+import { buildPermissionGroupsFromSidebar, getGroupIcon } from './utils/permissionUtils';
 
 const UserEdit = ({ isProfile = false }) => {
   const { id: paramId } = useParams();
@@ -60,6 +58,18 @@ const UserEdit = ({ isProfile = false }) => {
 
   // Trạng thái phân quyền chi tiết (screen_key -> permission_string)
   const [screenPermissions, setScreenPermissions] = useState({});
+  const [sidebarItems, setSidebarItems] = useState([]);
+  const [screens, setScreens] = useState([]);
+  // Lưu trữ phân quyền resolved ban đầu từ API để so sánh khi save
+  const initialResolvedPerms = React.useRef({});
+
+  const dynamicWebGroups = useMemo(() => {
+    return buildPermissionGroupsFromSidebar(sidebarItems, 'web', screens);
+  }, [sidebarItems, screens]);
+
+  const dynamicMobileGroups = useMemo(() => {
+    return buildPermissionGroupsFromSidebar(sidebarItems, 'mobile', screens);
+  }, [sidebarItems, screens]);
 
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
@@ -168,37 +178,50 @@ const UserEdit = ({ isProfile = false }) => {
       setFetching(true);
       setError(null);
       try {
-        // Tải chi tiết người dùng
-        const data = await api.get(`/accounts/${id}`);
+        // Tải chi tiết người dùng, cấu hình sidebar và danh sách màn hình song song
+        const [userData, permRes, sidebarRes, screensRes] = await Promise.all([
+          api.get(`/accounts/${id}`),
+          api.get(`/accounts/${id}/permissions?resolved=true`),
+          api.get('/system/sidebar/all'),
+          api.get('/screens')
+        ]);
+
+        setSidebarItems(sidebarRes || []);
+        setScreens(screensRes || []);
+
         setFormData({
-          employee_id: data.employee_id || '',
-          full_name: data.full_name || '',
-          username: data.username || '',
-          email: data.email || '',
-          phone: data.phone || '',
+          employee_id: userData.employee_id || '',
+          full_name: userData.full_name || '',
+          username: userData.username || '',
+          email: userData.email || '',
+          phone: userData.phone || '',
           password: '', 
-          status: data.status || 'Đang sử dụng',
-          role_id: data.role_id || '',
-          permission_id: data.permission_id || '',
-          stage_ids: data.stage_ids || [],
-          permission_level: data.permission_level || ''
+          status: userData.status || 'Đang sử dụng',
+          role_id: userData.role_id || '',
+          permission_id: userData.permission_id || '',
+          stage_ids: userData.stage_ids || [],
+          permission_level: userData.permission_level || ''
         });
 
-        // Tải phân quyền chi tiết
-        const permRes = await api.get(`/accounts/${id}/permissions?resolved=true`);
         const dbPerms = permRes.permissions || {};
         
+        // Build nhóm quyền động từ dữ liệu mới nhất
+        const webGroups = buildPermissionGroupsFromSidebar(sidebarRes || [], 'web', screensRes || []);
+        const mobileGroups = buildPermissionGroupsFromSidebar(sidebarRes || [], 'mobile', screensRes || []);
+
         const initialPerms = {};
-        SCREEN_GROUPS.forEach(group => {
+        webGroups.forEach(group => {
           group.screens.forEach(scr => {
             initialPerms[scr.key] = parseDbPermission(dbPerms[scr.key] || 'none');
           });
         });
-        MOBILE_SCREEN_GROUPS.forEach(group => {
+        mobileGroups.forEach(group => {
           group.screens.forEach(scr => {
             initialPerms[scr.key] = parseDbPermission(dbPerms[scr.key] || 'none');
           });
         });
+        // Lưu bản gốc resolved để so sánh khi save (chỉ lưu diff)
+        initialResolvedPerms.current = JSON.parse(JSON.stringify(initialPerms));
         setScreenPermissions(initialPerms);
 
       } catch (err) {
@@ -257,7 +280,7 @@ const UserEdit = ({ isProfile = false }) => {
   useEffect(() => {
     if (searchQuery) {
       const nextExpanded = { ...expandedGroups };
-      SCREEN_GROUPS.forEach((group, index) => {
+      dynamicWebGroups.forEach((group, index) => {
         const hasMatch = group.screens.some(s =>
           s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           s.desc.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -267,7 +290,7 @@ const UserEdit = ({ isProfile = false }) => {
           nextExpanded[`web_${index}`] = true;
         }
       });
-      MOBILE_SCREEN_GROUPS.forEach((group, index) => {
+      dynamicMobileGroups.forEach((group, index) => {
         const hasMatch = group.screens.some(s =>
           s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           s.desc.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -279,7 +302,7 @@ const UserEdit = ({ isProfile = false }) => {
       });
       setExpandedGroups(nextExpanded);
     }
-  }, [searchQuery]);
+  }, [searchQuery, dynamicWebGroups, dynamicMobileGroups]);
 
   const generateUsername = (fullName) => {
     if (!fullName) return '';
@@ -429,7 +452,7 @@ const UserEdit = ({ isProfile = false }) => {
 
   // Logic radio toggle Cho phép / Không cho phép ở header nhóm cha
   const isGroupAllowed = (groupIdx, isMobile = false) => {
-    const groups = isMobile ? MOBILE_SCREEN_GROUPS : SCREEN_GROUPS;
+    const groups = isMobile ? dynamicMobileGroups : dynamicWebGroups;
     const group = groups[groupIdx];
     if (!group) return false;
     return group.screens.some(s => {
@@ -439,7 +462,7 @@ const UserEdit = ({ isProfile = false }) => {
   };
 
   const handleGroupToggle = (groupIdx, allow, isMobile = false) => {
-    const groups = isMobile ? MOBILE_SCREEN_GROUPS : SCREEN_GROUPS;
+    const groups = isMobile ? dynamicMobileGroups : dynamicWebGroups;
     const group = groups[groupIdx];
     if (!group) return;
     setScreenPermissions(prev => {
@@ -467,12 +490,12 @@ const UserEdit = ({ isProfile = false }) => {
       const permRes = await api.get(`/accounts/${id}/permissions?resolved=true`);
       const dbPerms = permRes.permissions || {};
       const initialPerms = {};
-      SCREEN_GROUPS.forEach(group => {
+      dynamicWebGroups.forEach(group => {
         group.screens.forEach(scr => {
           initialPerms[scr.key] = parseDbPermission(dbPerms[scr.key] || 'none');
         });
       });
-      MOBILE_SCREEN_GROUPS.forEach(group => {
+      dynamicMobileGroups.forEach(group => {
         group.screens.forEach(scr => {
           initialPerms[scr.key] = parseDbPermission(dbPerms[scr.key] || 'none');
         });
@@ -721,11 +744,23 @@ const UserEdit = ({ isProfile = false }) => {
 
         await api.post(`/accounts/${id}/sync-departments/`, syncPayload);
 
-        // Convert arrays of actions to comma-separated strings for DB storage
+        // Chỉ lưu những key mà user đã thực sự thay đổi so với resolved mặc định
+        // Tránh lưu lại toàn bộ resolved permissions (gây vòng lặp reset)
         const permissionsToSave = {};
+        const initialPerms = initialResolvedPerms.current || {};
         Object.keys(screenPermissions).forEach(key => {
-          const perms = screenPermissions[key] || [];
-          permissionsToSave[key] = perms.includes('none') || perms.length === 0 ? 'none' : perms.join(',');
+          const currentPerms = screenPermissions[key] || [];
+          const initialPermsForKey = initialPerms[key] || [];
+          
+          // So sánh: nếu quyền hiện tại khác quyền resolved ban đầu → là override
+          const currentSorted = [...currentPerms].sort().join(',');
+          const initialSorted = [...initialPermsForKey].sort().join(',');
+          
+          if (currentSorted !== initialSorted) {
+            permissionsToSave[key] = currentPerms.includes('none') || currentPerms.length === 0 
+              ? 'none' 
+              : currentPerms.join(',');
+          }
         });
 
         // 3. Đồng bộ phân quyền màn hình chi tiết (PUT)
@@ -733,9 +768,14 @@ const UserEdit = ({ isProfile = false }) => {
           permissions: permissionsToSave
         });
 
-        // Nếu chỉnh sửa cho chính mình, lưu cấu hình vào localStorage của trình duyệt
+        // Nếu chỉnh sửa cho chính mình, lưu toàn bộ quyền hiện tại vào localStorage (cho sidebar/navigation)
         if (Number(loggedInUser.id) === Number(id)) {
-          localStorage.setItem('smartflow_active_permissions', JSON.stringify(permissionsToSave));
+          const fullPermsToStore = {};
+          Object.keys(screenPermissions).forEach(key => {
+            const perms = screenPermissions[key] || [];
+            fullPermsToStore[key] = perms.includes('none') || perms.length === 0 ? 'none' : perms.join(',');
+          });
+          localStorage.setItem('smartflow_active_permissions', JSON.stringify(fullPermsToStore));
         }
 
         setSuccess(true);
@@ -1283,8 +1323,7 @@ const UserEdit = ({ isProfile = false }) => {
             <div className="accordion-list">
               {(() => {
                 const isMobileTab = activeTab === 'mobile';
-                const activeGroups = isMobileTab ? MOBILE_SCREEN_GROUPS : SCREEN_GROUPS;
-                const activeIcons = isMobileTab ? MOBILE_GROUP_ICONS : GROUP_ICONS;
+                const activeGroups = isMobileTab ? dynamicMobileGroups : dynamicWebGroups;
 
                 // Kiểm định số màn hình tìm kiếm khớp
                 const totalMatches = activeGroups.reduce((sum, group) => {
@@ -1336,11 +1375,7 @@ const UserEdit = ({ isProfile = false }) => {
                             </svg>
                           </span>
                           <span className="group-icon-wrapper">
-                            {activeIcons[groupIdx] || (
-                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                                <rect x="3" y="3" width="18" height="18" rx="2" />
-                              </svg>
-                            )}
+                            {getGroupIcon(group.title)}
                           </span>
                           <h4 className="group-title">{group.title}</h4>
                         </div>

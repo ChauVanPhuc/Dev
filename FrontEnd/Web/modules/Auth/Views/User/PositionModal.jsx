@@ -1,80 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Shield } from 'lucide-react';
-
-const SCREEN_GROUPS = [
-  {
-    title: 'Quản lý hệ thống',
-    screens: [
-      { key: 'users', name: 'Quản lý tài khoản' },
-      { key: 'screens', name: 'Quản lý màn hình' },
-      { key: 'logs', name: 'Quản lý lỗi hệ thống' },
-      { key: 'feedback', name: 'Quản lý góp ý' },
-      { key: 'data', name: 'Backup data' },
-      { key: 'bugs', name: 'Quản lý Bug' },
-      { key: 'monitor', name: 'Giám sát hệ thống' }
-    ]
-  },
-  {
-    title: 'Nhân sự',
-    screens: [
-      { key: 'iso-documents', name: 'Quản lý mẫu tài liệu' },
-      { key: 'iso-processes', name: 'Quản lý quy trình' }
-    ]
-  },
-  {
-    title: 'Module sản xuất',
-    screens: [
-      { key: 'plan', name: 'Kế hoạch sản xuất' },
-      { key: 'delivery-tracking', name: 'Kế hoạch bàn giao' },
-      { key: 'exception-deliveries', name: 'Phiếu ngoại lệ' },
-      { key: 'home', name: 'Trang chủ sản xuất' },
-      { key: 'backup-qrs', name: 'Quản lý mã QR' }
-    ]
-  },
-  {
-    title: 'Module chất lượng',
-    screens: [
-      { key: 'quality-records', name: 'Hồ sơ chất lượng' },
-      { key: 'defects', name: 'Danh sách lỗi' },
-      { key: 'claim', name: 'Claim khách hàng' },
-      { key: 'reports', name: 'Báo cáo kiểm tra' },
-      { key: 'handovers', name: 'Danh sách bàn giao' },
-      { key: 'hotspots', name: 'Điểm nóng cần chú ý' }
-    ]
-  },
-  {
-    title: 'Module kỹ thuật',
-    screens: [
-      { key: 'products', name: 'BOM sản phẩm' }
-    ]
-  },
-  {
-    title: 'Module bảo trì - máy móc',
-    screens: [
-      { key: 'equipment', name: 'Quản lý thiết bị' },
-      { key: 'machines', name: 'Danh sách thiết bị' },
-      { key: 'machine-history', name: 'Lịch sử bảo trì' },
-      { key: 'machine-training', name: 'Hướng dẫn sử dụng' }
-    ]
-  },
-  {
-    title: 'Module kinh doanh',
-    screens: [
-      { key: 'shipments', name: 'Thời gian xuất cont' },
-      { key: 'prices', name: 'Quản lý giá tủ' },
-      { key: 'purchase-requisitions', name: 'Đơn đặt mua' },
-      { key: 'purchase-order-items', name: 'Đơn mua hàng' }
-    ]
-  },
-  {
-    title: 'Khác',
-    screens: [
-      { key: 'kpi', name: 'Quản lý KPI' }
-    ]
-  }
-];
-
-const ALL_SCREENS = SCREEN_GROUPS.flatMap(g => g.screens.map(s => s.key));
+import api from '@webShared/Services/api.service';
 
 const PositionModal = ({ isOpen, onClose, modalMode, selectedPosition, allDepartments, onConfirm }) => {
   const [formData, setFormData] = useState({
@@ -84,44 +10,73 @@ const PositionModal = ({ isOpen, onClose, modalMode, selectedPosition, allDepart
     role_ids: []
   });
   
+  const [screensList, setScreensList] = useState([]);
   const [defaultPermissions, setDefaultPermissions] = useState({});
 
   useEffect(() => {
     if (isOpen) {
-      if (modalMode === 'edit' && selectedPosition) {
-        setFormData({
-          name: selectedPosition.name,
-          description: selectedPosition.description || '',
-          is_active: selectedPosition.is_active,
-          role_ids: selectedPosition.roles ? selectedPosition.roles.map(r => r.id) : []
-        });
-        
-        let parsed = {};
+      setFormData({
+        name: modalMode === 'edit' && selectedPosition ? selectedPosition.name : '',
+        description: modalMode === 'edit' && selectedPosition ? (selectedPosition.description || '') : '',
+        is_active: modalMode === 'edit' && selectedPosition ? selectedPosition.is_active : true,
+        role_ids: modalMode === 'edit' && selectedPosition && selectedPosition.roles ? selectedPosition.roles.map(r => r.id) : []
+      });
+
+      const fetchScreens = async () => {
         try {
-          parsed = JSON.parse(selectedPosition.default_permissions || '{}');
-        } catch (e) {
-          parsed = {};
+          const [sidebarRes, screensRes] = await Promise.all([
+            api.get('/system/sidebar/all'),
+            api.get('/screens')
+          ]);
+          
+          const list = [];
+          const seen = new Set();
+          
+          const addScreen = (scr) => {
+            const key = scr.permission_key || (scr.screen && scr.screen.current_code) || scr.route_path;
+            if (key && !seen.has(key)) {
+              seen.add(key);
+              list.push({ key, name: scr.title || (scr.screen && scr.screen.name) || key });
+            }
+          };
+
+          (sidebarRes || []).forEach(item => {
+            if (item.children && item.children.length > 0) {
+              item.children.forEach(child => addScreen(child));
+            } else {
+              addScreen(item);
+            }
+          });
+
+          (screensRes || []).forEach(scr => {
+            const key = scr.current_code;
+            if (key && !seen.has(key)) {
+              seen.add(key);
+              list.push({ key, name: scr.name || key });
+            }
+          });
+
+          setScreensList(list);
+
+          let parsed = {};
+          if (modalMode === 'edit' && selectedPosition) {
+            try {
+              parsed = JSON.parse(selectedPosition.default_permissions || '{}');
+            } catch (e) {
+              parsed = {};
+            }
+          }
+
+          const initialPerms = {};
+          list.forEach(scr => {
+            initialPerms[scr.key] = parsed[scr.key] || 'write';
+          });
+          setDefaultPermissions(initialPerms);
+        } catch (err) {
+          console.error('Lỗi khi tải màn hình trong PositionModal:', err);
         }
-        
-        const initialPerms = {};
-        ALL_SCREENS.forEach(screenKey => {
-          initialPerms[screenKey] = parsed[screenKey] || 'write';
-        });
-        setDefaultPermissions(initialPerms);
-      } else {
-        setFormData({
-          name: '',
-          description: '',
-          is_active: true,
-          role_ids: []
-        });
-        
-        const initialPerms = {};
-        ALL_SCREENS.forEach(screenKey => {
-          initialPerms[screenKey] = 'write';
-        });
-        setDefaultPermissions(initialPerms);
-      }
+      };
+      fetchScreens();
     }
   }, [isOpen, modalMode, selectedPosition]);
 
@@ -251,7 +206,7 @@ const PositionModal = ({ isOpen, onClose, modalMode, selectedPosition, allDepart
                 backgroundColor: '#FAF8F6' 
               }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {SCREEN_GROUPS.flatMap(g => g.screens).map((scr) => (
+                  {screensList.map((scr) => (
                     <div key={scr.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.82rem', color: '#444', fontWeight: '600' }}>
                         {scr.name}

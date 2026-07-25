@@ -506,11 +506,17 @@ const ProtectedRoute = ({ permissionKey, children }) => {
     }
   }
 
-  if (!isAdmin && allowedActions.length === 0) {
+  // Kiểm tra nếu bị chặn rõ ràng bởi 'none'
+  const isExplicitlyNone = 
+    permission === 'none' || 
+    (Array.isArray(permission) && (permission.includes('none') || permission.length === 0)) ||
+    (typeof permission === 'string' && permission.split(',').map(s => s.trim()).includes('none'));
+
+  if (isExplicitlyNone) {
     return <AccessDenied />;
   }
 
-  if (allowedActions.includes('none')) {
+  if (allowedActions.length === 0 && !isAdmin) {
     return <AccessDenied />;
   }
 

@@ -60,16 +60,8 @@ def get_all_sidebar(
     Lấy toàn bộ danh mục menu phục vụ giao diện quản trị (Admin).
     Lấy cả menu active và inactive.
     """
-    # Kiểm tra quyền Admin
-    is_admin = (
-        current_user.username == "admin" or 
-        (current_user.permission_level and current_user.permission_level.upper() in ["IT", "BGD", "QUẢN LÝ"])
-    )
-    if not is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Bạn không có quyền truy cập chức năng này."
-        )
+    # Cho phép tất cả các tài khoản đã đăng nhập đọc danh mục sidebar phục vụ hiển thị phân quyền
+    pass
 
     # Lấy các menu gốc của cả 2 nền tảng
     menus = (

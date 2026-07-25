@@ -318,6 +318,34 @@ def delete_user(account_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Xóa tài khoản thành công"}
 
+@router.get("/permissions/default")
+def get_default_permissions(
+    role_id: Optional[int] = None,
+    permission_id: Optional[int] = None,
+    permission_level: Optional[str] = None,
+    username: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy phân quyền mặc định của bộ phận/chức vụ/cấp bậc trước khi tạo tài khoản.
+    """
+    from typing import Optional
+    resolved_actions = account_controller.resolve_permissions_by_params(
+        role_id=role_id,
+        permission_id=permission_id,
+        permission_level=permission_level,
+        username=username,
+        db=db
+    )
+    permissions = {}
+    for screen, actions in resolved_actions.items():
+        if not actions:
+            permissions[screen] = "none"
+        else:
+            permissions[screen] = ",".join(actions)
+            
+    return {"permissions": permissions}
+
 @router.get("/{account_id}/permissions")
 def get_user_permissions(account_id: int, resolved: bool = False, db: Session = Depends(get_db)):
     """
