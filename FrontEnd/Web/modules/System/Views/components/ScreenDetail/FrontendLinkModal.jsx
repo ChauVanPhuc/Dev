@@ -10,7 +10,7 @@ const FrontendLinkModal = ({
   setLinkScreenId,
   linkComponentId,
   setLinkComponentId,
-  subsystems,
+  sidebarGroups,
   filteredScreens,
   linkFilteredComponents,
   displayInfoText,
@@ -54,29 +54,29 @@ const FrontendLinkModal = ({
 
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <div>
-        <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Phân hệ</label>
+        <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Nhóm Menu Sidebar</label>
         <select
           value={linkSubsystem}
           onChange={(e) => setLinkSubsystem(e.target.value)}
           style={{ width: '100%', border: '1px solid #CBD5E1', borderRadius: '8px', padding: '8px 12px', fontSize: '0.84rem', outline: 'none', color: '#1E293B', backgroundColor: '#fff', height: '36px' }}
         >
-          {subsystems.map(s => (
-            <option key={s} value={s}>{s}</option>
+          {sidebarGroups.map(s => (
+            <option key={s.id} value={s.id}>{s.title}</option>
           ))}
         </select>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
         <div>
-          <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Màn hình liên quan</label>
+          <label style={{ fontWeight: 'bold', color: '#475569', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Mục Menu Sidebar</label>
           <select
             value={linkScreenId}
             onChange={(e) => setLinkScreenId(e.target.value)}
             style={{ width: '100%', border: '1px solid #CBD5E1', borderRadius: '8px', padding: '8px 12px', fontSize: '0.84rem', outline: 'none', color: '#1E293B', backgroundColor: '#fff', height: '36px' }}
           >
-            <option value="">-- Chọn màn hình --</option>
+            <option value="">-- Chọn mục menu --</option>
             {filteredScreens.map(s => (
-              <option key={s.id} value={s.id}>{s.title}</option>
+              <option key={s.id} value={s.id}>{s.title} ({s.route_path})</option>
             ))}
           </select>
         </div>

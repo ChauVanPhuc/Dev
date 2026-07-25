@@ -34,6 +34,7 @@ const DataPackaging = lazy(() => import('@modules/System/Views/Data/DataPackagin
 const BackupQRManagement = lazy(() => import('@modules/System/Views/Backup/BackupQRManagementView'));
 const ScreenManagement = lazy(() => import('@modules/System/Views/Screen/ScreenManagementView'));
 const ScreenDetail = lazy(() => import('@modules/System/Views/Screen/ScreenDetailView'));
+const SidebarManagement = lazy(() => import('@modules/System/Views/Screen/SidebarManagementView'));
 const ScreenBugManagement = lazy(() => import('@modules/System/Views/Screen/ScreenBugManagementView'));
 const ProjectProgress = lazy(() => import('@modules/System/Views/Project/ProjectProgressView'));
 const DefectManagement = lazy(() => import('@modules/Inspection/Views/Defect/DefectManagementView'));
@@ -600,6 +601,7 @@ function App() {
                 <Route path="data" element={<ProtectedRoute permissionKey="data"><DataPackaging /></ProtectedRoute>} />
                 <Route path="screens" element={<ProtectedRoute permissionKey="screens"><ScreenManagement /></ProtectedRoute>} />
                 <Route path="screens/:id" element={<ProtectedRoute permissionKey="screens"><ScreenDetail /></ProtectedRoute>} />
+                <Route path="sidebar" element={<ProtectedRoute permissionKey="screens"><SidebarManagement /></ProtectedRoute>} />
                 <Route path="screens/bugs" element={<ProtectedRoute permissionKey="bugs"><ScreenBugManagement /></ProtectedRoute>} />
                 <Route path="screens/progress" element={<ProtectedRoute permissionKey="screens"><ProjectProgress /></ProtectedRoute>} />
                 <Route path="monitor" element={<ProtectedRoute permissionKey="monitor"><SystemMonitor /></ProtectedRoute>} />

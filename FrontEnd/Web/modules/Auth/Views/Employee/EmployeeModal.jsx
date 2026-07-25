@@ -183,7 +183,7 @@ const EmployeeModal = ({ isOpen, onClose, employee, onSave }) => {
             >
               {avatarPath ? (
                 <img 
-                  src={avatarPath.startsWith('/static') ? `http://localhost:5173${avatarPath}` : avatarPath} 
+                  src={avatarPath.startsWith('/static') ? `http://localhost:1222${avatarPath}` : avatarPath} 
                   alt="Avatar" 
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
                   onError={(e) => {

@@ -189,9 +189,9 @@ export default defineConfig({
     ```
 4.  Khởi động máy chủ phát triển FastAPI:
     ```powershell
-    uvicorn app.main:app --reload --port 8000
+    uvicorn app.main:app --reload --port 1111
     ```
-5.  Truy cập tài liệu API tự động tại: [http://localhost:8000/docs](http://localhost:8000/docs)
+5.  Truy cập tài liệu API tự động tại: [http://localhost:1111/docs](http://localhost:1111/docs)
 
 ### 4.2. Khởi Chạy FrontEnd Mobile
 1.  Di chuyển vào thư mục Mobile:

@@ -93,8 +93,8 @@ const InspectionDetailView = () => {
     if (path.startsWith('http')) return path;
     const clean = path.replace(/^\/+/, '');
     const { hostname } = window.location;
-    const isDev = window.location.port === '5173' || window.location.port === '5174' || window.location.port === '3000';
-    const base = isDev ? `http://${hostname}:8000` : window.location.origin;
+    const isDev = window.location.port === '1222' || window.location.port === '1333' || window.location.port === '5173' || window.location.port === '3000' || window.location.port === '5174';
+    const base = isDev ? `http://${hostname}:1111` : window.location.origin;
     return `${base}/${clean}`;
   };
 

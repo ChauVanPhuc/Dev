@@ -1,25 +1,20 @@
 import { useState, useEffect } from 'react'
-import { 
-  LayoutGrid,
-  Users,
-  MessageSquare,
-  Gamepad2,
-  Bell,
-  Smile,
-  Grid,
-  Coins,
-  Cookie,
-  ChevronDown,
-  ChevronRight,
-  ChevronLeft,
-  Truck
-} from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
+import * as Icons from 'lucide-react'
 import useUiStore from '@shared/store/uiStore'
 import useAuthStore from '@modules/auth/Models/authModel'
 import { useNavigate, useLocation } from 'react-router-dom'
 import UserProfileCard from '../user/UserProfileCard'
+import apiClient from '@shared/services/api'
 
 const BUILT_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0';
+
+// DynamicIcon resolver
+const DynamicIcon = ({ name, fallbackName, size = 20, color = '#666' }) => {
+  const iconName = name || fallbackName || 'HelpCircle';
+  const IconComponent = Icons[iconName] || Icons.HelpCircle;
+  return <IconComponent size={size} color={color} />;
+};
 
 /**
  * Sidebar Component
@@ -34,20 +29,23 @@ const Sidebar = () => {
   const [showProfile, setShowProfile] = useState(false)
   const [appVersion] = useState(BUILT_VERSION)
 
-  // State quản lý các mục đang mở rộng (collapsible)
-  const [expandedItems, setExpandedItems] = useState(() => {
-    const list = [];
-    if (location.pathname.startsWith('/inspection-') || location.pathname === '/logs' || location.pathname === '/input-inspection') {
-      list.push('inspections');
+  const [menuList, setMenuList] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [expandedItems, setExpandedItems] = useState([])
+
+  useEffect(() => {
+    const fetchSidebar = async () => {
+      try {
+        const data = await apiClient.get('/system/sidebar?platform=Mobile')
+        setMenuList(data)
+      } catch (err) {
+        console.error('Failed to load Mobile sidebar:', err)
+      } finally {
+        setLoading(false)
+      }
     }
-    if (location.pathname.startsWith('/kpi')) {
-      list.push('reports');
-    }
-    if (location.pathname === '/plan' || location.pathname.startsWith('/delivery-info') || location.pathname.startsWith('/delivery-create') || location.pathname.startsWith('/delivery-receive') || location.pathname === '/delivery-history') {
-      list.push('production_info');
-    }
-    return list;
-  });
+    fetchSidebar()
+  }, [])
 
   const toggleExpand = (id) => {
     setExpandedItems(prev => 
@@ -62,142 +60,56 @@ const Sidebar = () => {
   
   const isAdmin = combinedAuthStr.includes('admin') || combinedAuthStr.includes('it') || combinedAuthStr.includes('bgd');
 
-  const mapPathToPermissionKey = (pathname) => {
-    const path = pathname.replace(/\/$/, '') || '/';
-    
-    if (path.startsWith('/delivery-info')) return 'mobile_delivery-info';
-    if (path.startsWith('/delivery-history')) return 'mobile_delivery-info';
-    if (path.startsWith('/delivery-create')) return 'mobile_delivery-create';
-    if (path.startsWith('/delivery-receive')) return 'mobile_delivery-receive';
-    if (path.startsWith('/plan')) return 'mobile_plan';
-    if (path.startsWith('/inspection-daily')) return 'mobile_inspection-daily';
-    if (path.startsWith('/inspection-first-article')) return 'mobile_inspection-first-article';
-    if (path.startsWith('/inspection-stage-moisture')) return 'mobile_inspection-stage-moisture';
-    if (path.startsWith('/inspection-stage-process')) return 'mobile_inspection-stage-process';
-    if (path.startsWith('/inspection-stage-adhesion')) return 'mobile_inspection-stage-adhesion';
-    if (path.startsWith('/inspection-stage')) return 'mobile_inspection-stage';
-    if (path.startsWith('/logs')) return 'mobile_logs';
-    if (path.startsWith('/thermal-print')) return 'mobile_thermal-print';
-    if (path.startsWith('/awards')) return 'mobile_awards';
-    if (path.startsWith('/kpi-staff')) return 'mobile_kpi-staff';
-    if (path.startsWith('/kpi')) return 'mobile_kpi';
-    if (path.startsWith('/staff-evaluation')) return 'mobile_staff-evaluation';
-    if (path.startsWith('/quality-detail')) return 'mobile_quality-detail';
-    if (path.startsWith('/input-inspection')) return 'mobile_input-inspection';
-    if (path.startsWith('/equipment-list')) return 'mobile_equipment-list';
-    if (path.startsWith('/capa-list')) return 'mobile_capa-list';
-    if (path.startsWith('/capa-report')) return 'mobile_capa-report';
-    if (path.startsWith('/capa-detail')) return 'mobile_capa-detail';
-    if (path.startsWith('/feedback')) return 'mobile_feedback';
-    if (path.startsWith('/ctq-sos')) return 'mobile_ctq-sos';
-    if (path.startsWith('/warnings')) return 'mobile_warnings';
-    
-    return null;
-  };
-
-  const checkItemVisible = (path) => {
-    if (!path || path === '#' || path === '/dashboard') return true;
-    const key = mapPathToPermissionKey(path);
+  const checkItemVisible = (item) => {
+    const key = item.permission_key;
     if (!key) return true;
     const userPerm = permissions?.[key];
     return userPerm && userPerm !== 'none' && userPerm.split(',').map(p => p.trim()).includes('read');
   };
 
-  // Mockup Raw Menu Items
-  const rawMenuItems = [
-    { id: 'dashboard', label: 'Trang chủ', icon: LayoutGrid, path: '/dashboard' },
-    {
-      id: 'production_info',
-      label: 'Thông tin sản xuất',
-      icon: Users,
-      hasSub: true,
-      items: [
-        { label: 'Kế hoạch sản xuất', path: '/plan' },
-        { label: 'Thông tin bàn giao', path: '/delivery-info', state: { activeTab: 'plan' } },
-        { label: 'Lịch sử bàn giao', path: '/delivery-history' }
-      ]
-    },
-    { 
-      id: 'inspections', 
-      label: 'Phiếu kiểm tra', 
-      icon: MessageSquare, 
-      hasSub: true,
-      items: [
-        { label: 'Kiểm tra nhập kho', path: '/inspection-stage' },
-        { label: 'Kiểm tra công đoạn', path: '/inspection-stage-moisture' },
-        { label: 'Kiểm tra quy trình', path: '/inspection-stage-process' },
-        { label: 'Kiểm tra mẫu đầu tiên', path: '/inspection-first-article' },
-        { label: 'Kiểm tra bám dính', path: '/inspection-stage-adhesion' },
-        { label: 'Nhập lỗi', path: '/inspection-daily' },
-        { label: 'Lịch sử kiểm tra', path: '/logs' }
-      ] 
-    },
-    { 
-      id: 'reports', 
-      label: 'Báo cáo công việc', 
-      icon: Gamepad2, 
-      hasSub: true,
-      items: [
-        { label: 'Theo dõi KPI', path: '/kpi' },
-        { label: 'Báo cáo công việc', path: '/kpi-staff' }
-      ] 
-    },
-    { id: 'capa', label: 'Báo cáo CAPA', icon: Bell, path: '/capa-list' },
-    { id: 'ctq_sos', label: 'Tạo CTQ, SOS', icon: Smile, path: '/ctq-sos' },
-    { id: 'violations', label: 'Báo cáo vi phạm', icon: Grid, path: '/awards' },
-    { id: 'warnings', label: 'Cảnh báo lỗi', icon: Coins, path: '/warnings' },
-    { id: 'feedback', label: 'Góp ý', icon: Cookie, path: '/feedback' }
-  ];
-
-  const menuItems = rawMenuItems
+  const menuItems = menuList
     .map(item => {
-      if (item.hasSub) {
+      const hasSub = item.children && item.children.length > 0;
+      if (hasSub) {
         return {
           ...item,
-          items: item.items.filter(sub => checkItemVisible(sub.path))
+          hasSub,
+          children: item.children.filter(sub => checkItemVisible(sub))
         };
       }
-      return item;
+      return { ...item, hasSub };
     })
     .filter(item => {
       if (isAdmin) return true;
       if (item.hasSub) {
-        return item.items.length > 0;
+        return item.children.length > 0;
       } else {
-        return checkItemVisible(item.path);
+        return checkItemVisible(item);
       }
     });
 
-  const isActive = (path, state = null) => {
-    if (location.pathname !== path) return false;
-    if (state) {
-      if (path === '/delivery-info') {
-        const currentTab = (location.state && location.state.activeTab) || 'plan';
-        return state.activeTab === currentTab;
-      }
-      if (!location.state) return false;
-      return Object.keys(state).every(k => location.state[k] === state[k]);
-    }
-    return true;
+  const isActive = (path) => {
+    if (!path) return false;
+    return location.pathname === path;
   };
 
   const isMenuRowActive = (item) => {
     if (item.hasSub) {
-      return item.items.some(sub => isActive(sub.path, sub.state));
+      return item.children.some(sub => isActive(sub.route_path));
     }
-    return isActive(item.path, item.state);
+    return isActive(item.route_path);
   };
 
   const isExpanded = (id) => expandedItems.includes(id)
 
-  const handleNavigate = (path, state = null) => {
-    if (path === '#') return;
-    navigate(path, { state })
+  const handleNavigate = (path) => {
+    if (!path || path === '#') return;
+    navigate(path)
     setSidebarOpen(false)
   }
 
   const getStyleForItem = (item, isSub = false) => {
-    const active = isMenuRowActive(item);
+    const active = isSub ? isActive(item.route_path) : isMenuRowActive(item);
     return {
       padding: isSub ? '10px 15px' : '12px 15px',
       paddingLeft: isSub ? '40px' : '15px',
@@ -308,40 +220,46 @@ const Sidebar = () => {
             padding: '15px 10px'
           }}
         >
-          {menuItems.map((item) => (
-            <div key={item.id}>
-              <div 
-                onClick={() => item.hasSub ? toggleExpand(item.id) : handleNavigate(item.path, item.state)}
-                style={getStyleForItem(item, false)}
-              >
-                <item.icon size={20} color={isMenuRowActive(item) ? '#5d3b32' : '#666'} />
-                <span style={{ flex: 1 }}>{item.label}</span>
-                {item.hasSub && (
-                  isExpanded(item.id) 
-                    ? <ChevronDown size={18} color="#5d3b32" strokeWidth={3} /> 
-                    : <ChevronRight size={18} color="#999" />
+          {loading ? (
+            <div style={{ padding: '20px', textAlign: 'center', color: '#7B5233', fontSize: '0.9rem', fontWeight: 'bold' }}>
+              Đang tải danh mục...
+            </div>
+          ) : (
+            menuItems.map((item) => (
+              <div key={item.id}>
+                <div 
+                  onClick={() => item.hasSub ? toggleExpand(item.id) : handleNavigate(item.route_path)}
+                  style={getStyleForItem(item, false)}
+                >
+                  <DynamicIcon name={item.icon} size={20} color={isMenuRowActive(item) ? '#5d3b32' : '#666'} />
+                  <span style={{ flex: 1 }}>{item.title}</span>
+                  {item.hasSub && (
+                    isExpanded(item.id) 
+                      ? <ChevronDown size={18} color="#5d3b32" strokeWidth={3} /> 
+                      : <ChevronRight size={18} color="#999" />
+                  )}
+                </div>
+
+                {item.hasSub && isExpanded(item.id) && (
+                  <div style={{ display: 'flex', flexDirection: 'column', marginTop: '2px' }}>
+                    {item.children.map(sub => (
+                      <div 
+                        key={sub.id} 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleNavigate(sub.route_path);
+                        }}
+                        style={getStyleForItem(sub, true)}
+                      >
+                        <DynamicIcon name={sub.icon} fallbackName={item.icon} size={16} color={isActive(sub.route_path) ? '#5d3b32' : '#888'} />
+                        <span>{sub.title}</span>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
-
-              {item.hasSub && isExpanded(item.id) && (
-                <div style={{ display: 'flex', flexDirection: 'column', marginTop: '2px' }}>
-                  {item.items.map(sub => (
-                    <div 
-                      key={sub.label} 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleNavigate(sub.path, sub.state);
-                      }}
-                      style={getStyleForItem(sub, true)}
-                    >
-                      <item.icon size={16} color={isActive(sub.path, sub.state) ? '#5d3b32' : '#888'} />
-                      <span>{sub.label}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+            ))
+          )}
         </div>
 
         {/* Footer Section */}

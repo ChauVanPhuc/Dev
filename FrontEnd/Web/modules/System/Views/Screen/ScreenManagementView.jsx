@@ -11,7 +11,7 @@ import BeautifulConfirmModal from '@webShared/Views/components/feedback/Beautifu
 import { useScreenMetadataCached, clearScreenMetadataCache } from '@webShared/hooks/useScreenMetadata';
 import * as XLSX from 'xlsx';
 import ScreenExportDetailModal from '../components/ScreenExportDetailModal';
-import { menuStructure } from '@webShared/Views/components/layout/Sidebar';
+
 
 const SUBSYSTEMS = [
   'Trang chủ',
@@ -114,7 +114,7 @@ const getImageUrl = (path) => {
   if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) return path;
 
   // Clean ngrok endpoint root
-  const apiRoot = localStorage.getItem('smartflow_api_root') || 'http://localhost:8000';
+  const apiRoot = localStorage.getItem('smartflow_api_root') || 'http://localhost:1111';
   const cleanRoot = apiRoot.endsWith('/') ? apiRoot.slice(0, -1) : apiRoot;
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   return `${cleanRoot}${cleanPath}`;

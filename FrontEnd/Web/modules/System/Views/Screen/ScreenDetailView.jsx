@@ -76,6 +76,7 @@ const ScreenDetail = () => {
         setLinkSubsystem={detail.setLinkSubsystem}
         setLinkScreenId={detail.setLinkScreenId}
         setLinkComponentId={detail.setLinkComponentId}
+        openLinkModal={detail.openLinkModal}
       />
 
       {/* 02. MAIN ROW WORKSPACE */}
@@ -211,7 +212,7 @@ const ScreenDetail = () => {
           setLinkScreenId={detail.setLinkScreenId}
           linkComponentId={detail.linkComponentId}
           setLinkComponentId={detail.setLinkComponentId}
-          subsystems={detail.subsystems}
+          sidebarGroups={detail.sidebarGroups}
           filteredScreens={detail.filteredScreens}
           linkFilteredComponents={detail.linkFilteredComponents}
           displayInfoText={detail.displayInfoText}

@@ -52,7 +52,7 @@ echo    - To clear cache, restart the Backend API.
 echo.
 echo 3. RUNNING IN PRODUCTION:
 echo    - Run with multiple workers to handle high concurrency:
-echo      uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+echo      uvicorn app.main:app --host 0.0.0.0 --port 1111 --workers 4
 echo ============================================================
 echo.
 echo SYSTEM OPTIMIZED SUCCESSFULLY!

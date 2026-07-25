@@ -34,7 +34,14 @@ def seed_defect_types():
             {"name": "Ruột gỗ mục", "category": "material", "needs_tracking": True},
         ]
         
+        prefixes = {"visual": "VIS", "structure": "STR", "material": "MAT"}
+        counts = {"visual": 0, "structure": 0, "material": 0}
+
         for d in defects:
+            cat = d["category"]
+            counts[cat] = counts.get(cat, 0) + 1
+            code_val = f"{prefixes.get(cat, 'ERR')}-{counts[cat]:02d}"
+            
             exists = db.query(DefectType).filter(
                 DefectType.name == d["name"],
                 DefectType.category == d["category"]
@@ -45,10 +52,11 @@ def seed_defect_types():
                     category=d["category"],
                     needs_tracking=d["needs_tracking"],
                     qc_tracking=False, # Default QC tracking to false
-                    is_active=True
+                    is_active=True,
+                    code=code_val
                 )
                 db.add(new_defect)
-                print(f"Added defect: {d['name']} ({d['category']})")
+                print(f"Added defect: {d['name']} ({d['category']}) with code {code_val}")
             else:
                 # Update tracking status if changed
                 if exists.needs_tracking != d["needs_tracking"]:

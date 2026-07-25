@@ -34,7 +34,8 @@ const ScreenMetadataForm = ({
   setShowBugModal,
   setLinkSubsystem,
   setLinkScreenId,
-  setLinkComponentId
+  setLinkComponentId,
+  openLinkModal
 }) => {
     return (
       <div style={{
@@ -390,28 +391,7 @@ const ScreenMetadataForm = ({
                     )}
                     <button
                       type="button"
-                      onClick={() => {
-                        if (formData.frontend_path) {
-                          const cleanPath = formData.frontend_path.replace(/^\//, '');
-                          const parts = cleanPath.split('/');
-                          const screenObj = (allScreens || []).find(s => s.title === parts[0]);
-                          if (screenObj) {
-                            setLinkSubsystem(getSubsystem(screenObj));
-                            setLinkScreenId(String(screenObj.id));
-                            setLinkComponentId(parts[1] || '');
-                          } else {
-                            setLinkSubsystem(formData.subsystem || 'Quản lý hệ thống');
-                            setLinkScreenId('');
-                            setLinkComponentId('');
-                          }
-                        } else {
-                          setLinkSubsystem(formData.subsystem || 'Quản lý hệ thống');
-                          setLinkScreenId('');
-                          setLinkComponentId('');
-                        }
-
-                        setShowLinkModal(true);
-                      }}
+                      onClick={openLinkModal}
                       style={{
                         backgroundColor: '#7B5233',
                         color: '#fff',

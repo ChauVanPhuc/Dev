@@ -90,8 +90,8 @@ def run_migration():
             
             if route_exists == 0:
                 insert_sql = text("""
-                    INSERT INTO system_screens (platform, route_path, default_code, current_code, title, subtitle, is_active, updated_at)
-                    VALUES (:platform, :route_path, :default_code, :current_code, :title, :subtitle, 1, :updated_at)
+                    INSERT INTO system_screens (platform, route_path, default_code, current_code, title, subtitle, is_active, status, updated_at)
+                    VALUES (:platform, :route_path, :default_code, :current_code, :title, :subtitle, 1, N'Mới thiết kế', :updated_at)
                 """)
                 db.execute(insert_sql, {
                     "platform": screen["platform"],

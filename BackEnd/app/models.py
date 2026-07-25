@@ -34,6 +34,7 @@ from modules.system.models.system_screen import SystemScreen
 from modules.system.models.system_component import SystemComponent
 from modules.system.models.screen_bug import ScreenBug, ScreenBugUpdate, ScreenBugImage
 from modules.system.models.system_guide import SystemGuide
+from modules.inspection.models.daily_inspection import DailyInspectionRecord, DailyInspectionDefect
 from modules.inspection.models.defect_type import DefectType, ClientDefect, DefectGlossary
 from modules.chatbot.models.chatbot_history import ChatbotHistory
 from modules.purchasing.models.purchase_requisition import PurchaseRequisition
@@ -45,6 +46,7 @@ from modules.hr.models.hr_models import HRDepartment, HRPosition, HRSection, HRE
 from modules.auth.models.org_structures import OrgStructure, OrgStructureKPI, OrgStructureTask
 from modules.auth.models.employees import Employee
 from modules.inspection.models.stage_inspection import StageInspection
+from modules.system.models.system_sidebar import SystemSidebar
 
 __all__ = [
     "Base", "Account", "Category", "Delivery", "DeliveryDetails", "DeliveryImage",
@@ -55,10 +57,11 @@ __all__ = [
     "CAPAOccurrence", "CAPAEvaluation", "SystemScreen", "SystemComponent", "SystemGuide", "ScreenBug",
     "ScreenBugUpdate", "ScreenBugImage", "DefectType", "ClientDefect", "DefectGlossary", "ChatbotHistory",
     "PurchaseRequisition", "PurchaseOrderItem", "Equipment", "EquipmentInspection", "EquipmentTraining",
+    "DailyInspectionRecord", "DailyInspectionDefect",
     "Machine", "MachineMaintenance", "MachineDocument",
     "ISODocument", "ISORevisionLog", "ISOSection", "ISOProcessStep",
     "ISOProcess", "ISOProcessSection", "ISOProcessStepInstance",
     "HRDepartment", "HRPosition", "HRSection", "HREmployee", "HROrgNode", "HRNodeAssignment",
-    "OrgStructure", "OrgStructureKPI", "OrgStructureTask", "Employee", "StageInspection"
+    "OrgStructure", "OrgStructureKPI", "OrgStructureTask", "Employee", "StageInspection", "SystemSidebar"
 ]
 

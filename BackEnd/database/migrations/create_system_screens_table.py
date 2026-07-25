@@ -238,6 +238,14 @@ INITIAL_SCREENS = [
     },
     {
         "platform": "Web",
+        "route_path": "/admin/sidebar",
+        "default_code": "AD14.2",
+        "current_code": "AD14.2",
+        "title": "Quản lý Sidebar",
+        "subtitle": "Cấu hình cấu trúc thanh điều hướng của Web và Mobile"
+    },
+    {
+        "platform": "Web",
         "route_path": "/admin/monitor",
         "default_code": "AD15",
         "current_code": "AD15",
@@ -702,8 +710,8 @@ def auto_register_missing_screens(db):
             subtitle = f"Tự động đăng ký cho {route}"
             
             insert_sql = text("""
-                INSERT INTO system_screens (platform, route_path, default_code, current_code, title, subtitle, is_active, updated_at)
-                VALUES ('Web', :route_path, :code, :code, :title, :subtitle, 1, :updated_at)
+                INSERT INTO system_screens (platform, route_path, default_code, current_code, title, subtitle, is_active, status, updated_at)
+                VALUES ('Web', :route_path, :code, :code, :title, :subtitle, 1, N'Mới thiết kế', :updated_at)
             """)
             db.execute(insert_sql, {
                 "route_path": route,
@@ -730,8 +738,8 @@ def auto_register_missing_screens(db):
             subtitle = f"Tự động đăng ký cho {route}"
             
             insert_sql = text("""
-                INSERT INTO system_screens (platform, route_path, default_code, current_code, title, subtitle, is_active, updated_at)
-                VALUES ('Mobile', :route_path, :code, :code, :title, :subtitle, 1, :updated_at)
+                INSERT INTO system_screens (platform, route_path, default_code, current_code, title, subtitle, is_active, status, updated_at)
+                VALUES ('Mobile', :route_path, :code, :code, :title, :subtitle, 1, N'Mới thiết kế', :updated_at)
             """)
             db.execute(insert_sql, {
                 "route_path": route,
@@ -821,8 +829,8 @@ def upgrade():
             
             if route_exists == 0:
                 insert_sql = text("""
-                    INSERT INTO system_screens (platform, route_path, default_code, current_code, title, subtitle, is_active, updated_at)
-                    VALUES (:platform, :route_path, :default_code, :current_code, :title, :subtitle, 1, :updated_at)
+                    INSERT INTO system_screens (platform, route_path, default_code, current_code, title, subtitle, is_active, status, updated_at)
+                    VALUES (:platform, :route_path, :default_code, :current_code, :title, :subtitle, 1, N'Mới thiết kế', :updated_at)
                 """)
                 db.execute(insert_sql, {
                     "platform": screen["platform"],

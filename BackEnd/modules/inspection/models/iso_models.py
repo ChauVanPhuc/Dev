@@ -40,8 +40,8 @@ class ISORevisionLog(Base):
     __tablename__ = "iso_revision_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    document_id = Column(Integer, ForeignKey("iso_documents.id", ondelete="CASCADE"), nullable=True)
-    process_id = Column(Integer, ForeignKey("iso_processes.id", ondelete="CASCADE"), nullable=True)
+    document_id = Column(Integer, ForeignKey("iso_documents.id"), nullable=True)
+    process_id = Column(Integer, ForeignKey("iso_processes.id"), nullable=True)
     seq_no = Column(Integer)                          # Số thứ tự sửa đổi
     rev_date = Column(NVARCHAR(50))                   # Ngày sửa đổi
     content = Column(NVARCHAR(1000))                  # Nội dung sửa đổi

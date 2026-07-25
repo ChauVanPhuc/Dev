@@ -6,7 +6,6 @@ import {
   Component, MoreVertical, ChevronDown, Upload, FileText, X, Plus, Edit
 } from 'lucide-react';
 import api, { getBaseURL } from '@webShared/Services/api.service';
-import { menuStructure } from '@webShared/Views/components/layout/Sidebar';
 import { screenService } from '@modules/System/Models/screen.service';
 import { bugService } from '@modules/System/Models/bug.service';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
@@ -23,7 +22,7 @@ import {
   getImageUrl, getPositionByName, formatDate, getSubsystem,
   SUBSYSTEM_PREFIXES, MAP_SIDEBAR_GROUP_TO_SUBSYSTEM, ROUTE_SUGGESTIONS, slugify,
   parseRoutePath, combineRoutePath, normalizeRoutePath, getDisplayRoutePath,
-  generateNextScreenCode, COMPONENT_COLORS,
+  generateNextScreenCode, COMPONENT_COLORS, buildRouteSuggestionsFromSidebar,
 } from './screenDetailUtils';
 
 export const useScreenDetail = () => {
@@ -38,6 +37,7 @@ export const useScreenDetail = () => {
   const { showModal, startGlobalUpload, activeUploads, setCustomTitle, setCustomSubtitle, setCustomScreenCode } = outletContext;
   const { refreshScreens } = useScreen();
   const [allScreens, setAllScreens] = useState([]);
+  const [sidebarMenus, setSidebarMenus] = useState([]);
   const [screen, setScreen] = useState({ id: '', title: '', components: [], guides: [], bugs: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -65,8 +65,8 @@ export const useScreenDetail = () => {
 
     let newRoutePath = '';
     if (bPath) {
-      if (bPath.startsWith('/')) {
-        // If backend path is absolute (starts with /), use it directly
+      if (bPath.startsWith('/') && !fPath) {
+        // If no frontend path is selected, treat backend path as absolute
         newRoutePath = bPath;
       } else {
         // Otherwise combine them
@@ -100,19 +100,25 @@ export const useScreenDetail = () => {
     let foundItem = null;
     let foundGroupName = '';
 
-    for (const group of menuStructure) {
-      if (group.type === 'link' && group.path === bPath) {
-        foundItem = group;
-        foundGroupName = 'Trang chủ';
-        break;
+    const processItem = (item, parentGroup = '') => {
+      if (item.route_path === bPath) {
+        foundItem = item;
+        foundGroupName = parentGroup || 'Trang chủ';
+        return true;
       }
-      if (group.children) {
-        const child = group.children.find(c => c.path === bPath);
-        if (child) {
-          foundItem = child;
-          foundGroupName = group.text;
-          break;
+      if (item.children && item.children.length > 0) {
+        for (const child of item.children) {
+          if (processItem(child, parentGroup || item.title)) {
+            return true;
+          }
         }
+      }
+      return false;
+    };
+
+    for (const menu of sidebarMenus) {
+      if (processItem(menu, menu.title)) {
+        break;
       }
     }
 
@@ -124,8 +130,8 @@ export const useScreenDetail = () => {
         if (prev.subsystem !== targetSubsystem) {
           updates.subsystem = targetSubsystem;
         }
-        if (!prev.title && foundItem.text) {
-          updates.title = foundItem.text;
+        if (!prev.title && foundItem.title) {
+          updates.title = foundItem.title;
         }
         if (Object.keys(updates).length > 0) {
           return { ...prev, ...updates };
@@ -133,7 +139,7 @@ export const useScreenDetail = () => {
         return prev;
       });
     }
-  }, [formData.backend_path]);
+  }, [formData.backend_path, sidebarMenus]);
 
   // Dynamic metadata - chỉ dùng khi KHÔNG phải trang new và đã có screen
   const { screenCode, title, subtitle } = useScreenMetadataCached(
@@ -518,26 +524,54 @@ export const useScreenDetail = () => {
   const [showRouteDropdown, setShowRouteDropdown] = useState(false);
 
   const [showLinkModal, setShowLinkModal] = useState(false);
-  const [linkSubsystem, setLinkSubsystem] = useState('Quản lý hệ thống');
-  const [linkScreenId, setLinkScreenId] = useState('');
+  const [linkSubsystem, setLinkSubsystem] = useState(''); // Lưu ID nhóm Menu cha của Sidebar
+  const [linkScreenId, setLinkScreenId] = useState('');    // Lưu ID mục Menu con của Sidebar
   const [linkComponentId, setLinkComponentId] = useState('');
 
-  const subsystems = React.useMemo(() => [
-    'Trang chủ',
-    'Quản lý hệ thống',
-    'Quản lý nhân sự',
-    'Hồ sơ ISO',
-    'Quản lý sản xuất',
-    'Quản lý chất lượng',
-    'Quản lý kinh doanh',
-    'Quản lý kỹ thuật',
-    'Bảo trì - cơ sở hạ tầng',
-    'Quản lý KPI'
-  ], []);
+  // Nhóm menu cha của Sidebar lấy từ database lọc theo nền tảng đang chọn (Web/Mobile)
+  const sidebarGroups = React.useMemo(() => {
+    return (sidebarMenus || []).filter(m => m.platform === formData.platform && !m.parent_id);
+  }, [sidebarMenus, formData.platform]);
 
+  // Danh sách Phân hệ được tạo động từ tiêu đề của các nhóm menu cha theo nền tảng tương ứng
+  const subsystems = React.useMemo(() => {
+    const list = sidebarGroups.map(g => g.title).filter(Boolean);
+    const unique = Array.from(new Set(list));
+    
+    const webDefaults = [
+      'Trang chủ', 'Quản lý hệ thống', 'Quản lý nhân sự', 'Hồ sơ ISO',
+      'Quản lý sản xuất', 'Quản lý chất lượng', 'Quản lý kinh doanh',
+      'Quản lý kỹ thuật', 'Bảo trì - cơ sở hạ tầng', 'Quản lý KPI'
+    ];
+    const mobileDefaults = [
+      'Trang chủ', 'Thông tin sản xuất', 'Phiếu kiểm tra', 'Báo cáo công việc',
+      'Báo cáo CAPA', 'Tạo CTQ, SOS', 'Báo cáo vi phạm', 'Cảnh báo lỗi', 'Góp ý'
+    ];
+    
+    const defaults = formData.platform === 'Mobile' ? mobileDefaults : webDefaults;
+    defaults.forEach(d => {
+      if (!unique.includes(d)) {
+        unique.push(d);
+      }
+    });
+    return unique;
+  }, [sidebarGroups, formData.platform]);
+
+  // Thiết lập nhóm menu cha mặc định khi mở modal hoặc danh sách thay đổi
+  useEffect(() => {
+    if (showLinkModal && sidebarGroups.length > 0) {
+      const exists = sidebarGroups.some(g => String(g.id) === String(linkSubsystem));
+      if (!exists) {
+        setLinkSubsystem(String(sidebarGroups[0].id));
+      }
+    }
+  }, [showLinkModal, sidebarGroups, linkSubsystem]);
+
+  // Các mục menu con thuộc nhóm menu cha đang chọn
   const filteredScreens = React.useMemo(() => {
-    return (allScreens || []).filter(s => getSubsystem(s) === linkSubsystem);
-  }, [allScreens, linkSubsystem]);
+    const parent = sidebarGroups.find(g => String(g.id) === String(linkSubsystem));
+    return parent?.children || [];
+  }, [sidebarGroups, linkSubsystem]);
 
   useEffect(() => {
     if (filteredScreens.length > 0) {
@@ -550,10 +584,15 @@ export const useScreenDetail = () => {
     }
   }, [filteredScreens, linkScreenId]);
 
+  // Lọc các components nếu mục menu con có liên kết màn hình thực tế
   const linkFilteredComponents = React.useMemo(() => {
-    const screenObj = (allScreens || []).find(s => String(s.id) === String(linkScreenId));
-    return screenObj?.components || [];
-  }, [allScreens, linkScreenId]);
+    const childMenu = filteredScreens.find(c => String(c.id) === String(linkScreenId));
+    if (childMenu && childMenu.screen_id) {
+      const screenObj = (allScreens || []).find(s => s.id === childMenu.screen_id);
+      return screenObj?.components || [];
+    }
+    return [];
+  }, [filteredScreens, linkScreenId, allScreens]);
 
   useEffect(() => {
     if (linkFilteredComponents.length > 0) {
@@ -567,42 +606,64 @@ export const useScreenDetail = () => {
   }, [linkFilteredComponents, linkComponentId]);
 
   const displayInfoText = React.useMemo(() => {
-    const screenObj = (allScreens || []).find(s => String(s.id) === String(linkScreenId));
-    const screenTitle = screenObj?.title || '';
-
-    let path = linkSubsystem;
-    if (screenTitle) {
-      path += '/' + screenTitle;
-      if (linkComponentId) {
-        path += '/' + linkComponentId;
-      }
+    const parent = sidebarGroups.find(g => String(g.id) === String(linkSubsystem));
+    const child = filteredScreens.find(c => String(c.id) === String(linkScreenId));
+    
+    let route = child?.route_path || parent?.route_path || '';
+    if (linkComponentId) {
+      route = combineRoutePath(route, linkComponentId);
     }
-    return path;
-  }, [linkSubsystem, linkScreenId, linkComponentId, allScreens]);
+    return route || '-- Chưa chọn đường dẫn --';
+  }, [linkSubsystem, linkScreenId, linkComponentId, sidebarGroups, filteredScreens]);
 
   const handleConfirmLink = () => {
-    let finalPath = displayInfoText;
-    const currentSubsystem = formData.subsystem || 'Quản lý hệ thống';
-    if (finalPath.startsWith(currentSubsystem + '/')) {
-      finalPath = finalPath.substring(currentSubsystem.length + 1);
-    } else if (finalPath === currentSubsystem) {
-      finalPath = '';
-    }
-
-    if (finalPath && !finalPath.startsWith('/')) {
-      finalPath = '/' + finalPath;
-    }
-
-    setFormData(prev => {
-      const prefix = prev.subsystem ? prev.subsystem + (finalPath || '') : (finalPath || '');
-      return {
+    const finalPath = displayInfoText;
+    const parent = sidebarGroups.find(g => String(g.id) === String(linkSubsystem));
+    if (finalPath && finalPath !== '-- Chưa chọn đường dẫn --') {
+      const mappedSubsystem = MAP_SIDEBAR_GROUP_TO_SUBSYSTEM[parent?.title] || formData.subsystem;
+      setFormData(prev => ({
         ...prev,
+        subsystem: mappedSubsystem,
         frontend_path: finalPath,
-        route_path: combineRoutePath(prefix, prev.backend_path)
-      };
-    });
-
+        route_path: combineRoutePath(finalPath, prev.backend_path)
+      }));
+    }
     setShowLinkModal(false);
+  };
+
+  const openLinkModal = () => {
+    const fPath = (formData.frontend_path || '').trim();
+    let matchedParentId = '';
+    let matchedChildId = '';
+    
+    if (fPath) {
+      for (const parent of sidebarGroups) {
+        if (parent.route_path === fPath) {
+          matchedParentId = String(parent.id);
+          break;
+        }
+        if (parent.children) {
+          const child = parent.children.find(c => c.route_path === fPath);
+          if (child) {
+            matchedParentId = String(parent.id);
+            matchedChildId = String(child.id);
+            break;
+          }
+        }
+      }
+    }
+    
+    if (matchedParentId) {
+      setLinkSubsystem(matchedParentId);
+      setLinkScreenId(matchedChildId);
+    } else {
+      if (sidebarGroups.length > 0) {
+        setLinkSubsystem(String(sidebarGroups[0].id));
+      }
+      setLinkScreenId('');
+    }
+    setLinkComponentId('');
+    setShowLinkModal(true);
   };
 
   const [confirmModal, setConfirmModal] = useState({
@@ -813,7 +874,7 @@ export const useScreenDetail = () => {
         };
         setScreen(initialScreen);
         setIsBackendPathManuallyEdited(false);
-        const parsed = parseRoutePath(initialScreen.route_path);
+        const parsed = parseRoutePath(initialScreen.route_path, sidebarMenus);
         setFormData({
           title: initialScreen.title,
           route_path: initialScreen.route_path,
@@ -879,10 +940,13 @@ export const useScreenDetail = () => {
         };
       }
       setLoading(false);
-      // Fetch screens asynchronously in the background so it is completely non-blocking
+      // Fetch screens and sidebar asynchronously in the background so it is completely non-blocking
       screenService.getScreens()
         .then(list => setAllScreens(list || []))
         .catch(err => console.error('Failed to load all screens list in background:', err));
+      api.get('/system/sidebar/all')
+        .then(sidebarData => setSidebarMenus(sidebarData || []))
+        .catch(err => console.error('Failed to load sidebar menus in background:', err));
       return;
     }
 
@@ -890,15 +954,19 @@ export const useScreenDetail = () => {
       setLoading(true);
       setIsBackendPathManuallyEdited(false);
 
-      // Fetch screen details, bugs list, and all screens concurrently
-      const [data, bugsData, screensList] = await Promise.all([
+      // Fetch screen details, bugs list, all screens, and sidebar concurrently
+      const [data, bugsData, screensList, sidebarData] = await Promise.all([
         screenService.getScreenDetail(id),
         bugService.getBugs().catch(e => { console.error('Failed to load bugs for screen detail:', e); return []; }),
-        screenService.getScreens().catch(e => { console.error('Failed to load all screens list:', e); return []; })
+        screenService.getScreens().catch(e => { console.error('Failed to load all screens list:', e); return []; }),
+        api.get('/system/sidebar/all').catch(e => { console.error('Failed to load sidebar menus:', e); return []; })
       ]);
 
       if (screensList) {
         setAllScreens(screensList);
+      }
+      if (sidebarData) {
+        setSidebarMenus(sidebarData);
       }
 
       if (bugsData) {
@@ -910,7 +978,7 @@ export const useScreenDetail = () => {
       }
 
       setScreen(data);
-      const parsed = parseRoutePath(data.route_path || '');
+      const parsed = parseRoutePath(data.route_path || '', sidebarData || []);
       setFormData({
         title: data.title || '',
         route_path: data.route_path || '',
@@ -2502,8 +2570,10 @@ export const useScreenDetail = () => {
     handleBugModalConfirm,
     screenService,
     outletContext,
-    ROUTE_SUGGESTIONS,
-    getDisplayRoutePath,
+    ROUTE_SUGGESTIONS: buildRouteSuggestionsFromSidebar(sidebarMenus, formData.platform),
+    getDisplayRoutePath: (path, subsystem) => getDisplayRoutePath(path, subsystem, buildRouteSuggestionsFromSidebar(sidebarMenus, formData.platform)),
+    openLinkModal,
+    sidebarGroups,
     normalizeRoutePath,
     parseRoutePath,
     slugify,

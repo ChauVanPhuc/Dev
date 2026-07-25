@@ -21,7 +21,7 @@ from modules.kpi.routes import kpi_router, award_discipline_router, staff_evalua
 
 from modules.capa.routes import capa_router
 
-from modules.system.routes import system_router, screen_router, screen_bug_router
+from modules.system.routes import system_router, screen_router, screen_bug_router, system_sidebar_router
 
 from modules.claim.routes.claim_routes import router as claim_router
 
@@ -84,6 +84,7 @@ api_router.include_router(kpi_management_router.router, prefix="/kpi-management"
 api_router.include_router(screen_router.router, prefix="/screens", tags=["screens"])
 
 api_router.include_router(screen_bug_router.router, prefix="/screen-bugs", tags=["screen-bugs"])
+api_router.include_router(system_sidebar_router.router, prefix="/system/sidebar", tags=["system-sidebar"])
 
 api_router.include_router(capa_router.router, prefix="/capas", tags=["capas"])
 

@@ -96,9 +96,9 @@ uvicorn src.app.main:app --reload
 
 ```
 
--   **API sẽ chạy tại:** `http://127.0.0.1:8000`
+-   **API sẽ chạy tại:** `http://127.0.0.1:1111`
 
--   **Tài liệu API:** `http://127.0.0.1:8000/docs`
+-   **Tài liệu API:** `http://127.0.0.1:1111/docs`
 
 
 
@@ -122,7 +122,7 @@ Tại thư mục `FrontEnd/`:
 ```powershell
 npm run dev
 ```
--   **Ứng dụng sẽ chạy tại:** `http://localhost:5173`
+-   **Ứng dụng sẽ chạy tại:** `http://localhost:1222`
 
 ---
 
@@ -134,7 +134,7 @@ Di chuyển vào thư mục `FrontEnd/Mobile/`:
 ```powershell
 npm run dev
 ```
--   **Ứng dụng sẽ chạy tại:** `http://localhost:3000` (Xem thông tin cụ thể trong terminal).
+-   **Ứng dụng sẽ chạy tại:** `http://localhost:1333` (Xem thông tin cụ thể trong terminal).
 -   **Lưu ý:** Mobile UI dùng lệnh `vite --host` để bạn có thể truy cập từ điện thoại trong cùng mạng LAN bằng địa chỉ IP của máy tính.
 
 ---
@@ -145,7 +145,7 @@ npm run dev
 
 
 
-1.  Mở trình duyệt truy cập vào **Frontend** (`localhost:5173`).
+1.  Mở trình duyệt truy cập vào **Frontend** (`localhost:1222`).
 
 2.  Thử đăng nhập bằng tài khoản trong cơ sở dữ liệu.
 
@@ -167,7 +167,7 @@ npm run dev
 
 -   **Lỗi kết nối Database:** Kiểm tra lại `DB_SERVER` và `DB_PASSWORD` trong file `.env`. Đảm bảo dịch vụ SQL Server đang chạy.
 
--   **Lỗi "Port already in use":** Một ứng dụng khác đang dùng port 8000 hoặc 5173. Hãy tắt ứng dụng đó hoặc đổi port trong file cấu hình.
+-   **Lỗi "Port already in use":** Một ứng dụng khác đang dùng port 1111 hoặc 1222. Hãy tắt ứng dụng đó hoặc đổi port trong file cấu hình.
 
 
 

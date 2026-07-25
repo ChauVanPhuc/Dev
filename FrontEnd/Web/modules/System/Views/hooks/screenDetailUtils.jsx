@@ -4,7 +4,6 @@ import {
   Component, Bug, MoreVertical, ChevronDown, Upload, FileText, X, Plus, Edit
 } from 'lucide-react';
 import api, { getBaseURL } from '@webShared/Services/api.service';
-import { menuStructure } from '@webShared/Views/components/layout/Sidebar';
 import { screenService } from '@modules/System/Models/screen.service';
 import { bugService } from '@modules/System/Models/bug.service';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
@@ -1108,7 +1107,7 @@ export const getSubsystem = (screen) => {
   if (path.includes('/manufacture') || path.includes('/plan') || path.includes('/delivery-tracking') || path.includes('/orders')) {
     return 'Quản lý sản xuất';
   }
-  if (path.includes('/quality-records') || path.includes('/defects') || path.includes('/claims')) {
+  if (path.includes('/quality-records') || path.includes('/defects') || path.includes('/claims') || path.includes('/capa')) {
     return 'Quản lý chất lượng';
   }
   if (path.includes('/prices') || path.includes('/shipments')) {
@@ -1146,7 +1145,16 @@ export const MAP_SIDEBAR_GROUP_TO_SUBSYSTEM = {
   'Quản lý KPI': 'Quản lý KPI',
   'Quản lý kinh doanh': 'Quản lý kinh doanh',
   'Quản lý kỹ thuật': 'Quản lý kỹ thuật',
-  'Bảo trì - cơ sở hạ tầng': 'Bảo trì - cơ sở hạ tầng'
+  'Bảo trì - cơ sở hạ tầng': 'Bảo trì - cơ sở hạ tầng',
+  // Mobile sidebar group mappings
+  'Thông tin sản xuất': 'Quản lý sản xuất',
+  'Phiếu kiểm tra': 'Quản lý chất lượng',
+  'Báo cáo công việc': 'Quản lý sản xuất',
+  'Báo cáo CAPA': 'Quản lý chất lượng',
+  'Tạo CTQ, SOS': 'Quản lý chất lượng',
+  'Báo cáo vi phạm': 'Quản lý nhân sự',
+  'Cảnh báo lỗi': 'Quản lý chất lượng',
+  'Góp ý': 'Quản lý hệ thống'
 };
 
 export const ROUTE_SUGGESTIONS = {
@@ -1227,7 +1235,7 @@ export const slugify = (text) => {
     .replace(/\-\-+/g, '-'); // Tránh nhiều dấu - liên tiếp
 };
 
-export const parseRoutePath = (routePath) => {
+export const parseRoutePath = (routePath, sidebarMenus = []) => {
   if (!routePath) {
     return {
       frontendPath: '',
@@ -1236,12 +1244,53 @@ export const parseRoutePath = (routePath) => {
   }
 
   let clean = routePath.trim().replace(/\/+/g, '/');
-  const backend = clean;
+
+  // Tìm mục menu sidebar khớp tiền tố dài nhất
+  let longestMatch = '';
+  const checkItem = (item) => {
+    if (item.route_path && clean.startsWith(item.route_path)) {
+      if (item.route_path.length > longestMatch.length) {
+        longestMatch = item.route_path;
+      }
+    }
+    if (item.children) {
+      item.children.forEach(checkItem);
+    }
+  };
+
+  if (Array.isArray(sidebarMenus)) {
+    sidebarMenus.forEach(checkItem);
+  }
+
+  if (longestMatch) {
+    let suffix = clean.substring(longestMatch.length);
+    if (suffix && !suffix.startsWith('/')) {
+      suffix = '/' + suffix;
+    }
+    return {
+      frontendPath: longestMatch,
+      backendPath: suffix || '/'
+    };
+  }
+
+  // Fallback: nếu có tham số động (chứa dấu :), cắt trước tham số đầu tiên
+  const colonIdx = clean.indexOf(':');
+  if (colonIdx !== -1) {
+    const slashBeforeColon = clean.lastIndexOf('/', colonIdx);
+    if (slashBeforeColon !== -1 && slashBeforeColon > 0) {
+      return {
+        frontendPath: clean.substring(0, slashBeforeColon),
+        backendPath: clean.substring(slashBeforeColon)
+      };
+    }
+  }
 
   const lastSlashIdx = clean.lastIndexOf('/');
   let frontend = '';
+  let backend = clean;
   if (lastSlashIdx !== -1 && lastSlashIdx > 0) {
     frontend = clean.substring(0, lastSlashIdx);
+    backend = clean.substring(lastSlashIdx);
   }
 
   return {
@@ -1267,23 +1316,73 @@ export const normalizeRoutePath = (path) => {
   return path.trim().replace(/\/+/g, '/');
 };
 
-export const getDisplayRoutePath = (path, subsystem) => {
+export const buildRouteSuggestionsFromSidebar = (sidebarItems, platform = 'Web') => {
+  const suggestions = {};
+  
+  const subsystemsList = [
+    'Trang chủ', 'Quản lý hệ thống', 'Quản lý nhân sự', 'Hồ sơ ISO',
+    'Quản lý sản xuất', 'Quản lý chất lượng', 'Quản lý kinh doanh',
+    'Quản lý kỹ thuật', 'Bảo trì - cơ sở hạ tầng', 'Quản lý KPI'
+  ];
+  subsystemsList.forEach(sub => {
+    suggestions[sub] = [];
+  });
+  
+  const processItem = (item, parentGroup = '') => {
+    if (item.platform === platform && item.route_path) {
+      const subsystem = MAP_SIDEBAR_GROUP_TO_SUBSYSTEM[parentGroup] || 'Quản lý hệ thống';
+      if (!suggestions[subsystem]) {
+        suggestions[subsystem] = [];
+      }
+      if (!suggestions[subsystem].some(s => s.path === item.route_path)) {
+        suggestions[subsystem].push({
+          title: item.title,
+          path: item.route_path
+        });
+      }
+    }
+    
+    if (item.children && item.children.length > 0) {
+      item.children.forEach(child => {
+        processItem(child, parentGroup || item.title);
+      });
+    }
+  };
+  
+  if (Array.isArray(sidebarItems)) {
+    sidebarItems.forEach(item => {
+      processItem(item, item.title);
+    });
+  }
+  
+  // Merge with static defaults as fallback
+  for (const sub in ROUTE_SUGGESTIONS) {
+    if (!suggestions[sub]) suggestions[sub] = [];
+    ROUTE_SUGGESTIONS[sub].forEach(fallback => {
+      if (!suggestions[sub].some(s => s.path === fallback.path)) {
+        suggestions[sub].push(fallback);
+      }
+    });
+  }
+  
+  return suggestions;
+};
+
+export const getDisplayRoutePath = (path, subsystem, customSuggestions = null) => {
   if (!path) return '';
 
-  // Find in suggestion paths of the current subsystem first
-  const suggestions = ROUTE_SUGGESTIONS[subsystem] || [];
+  const activeSuggestions = customSuggestions || ROUTE_SUGGESTIONS;
+  const suggestions = activeSuggestions[subsystem] || [];
   const suggestion = suggestions.find(s => s.path === path);
   if (suggestion) {
     return suggestion.title;
   }
 
-  // Otherwise, find in any subsystem suggestions as fallback
-  for (const sub in ROUTE_SUGGESTIONS) {
-    const found = ROUTE_SUGGESTIONS[sub].find(s => s.path === path);
+  for (const sub in activeSuggestions) {
+    const found = activeSuggestions[sub].find(s => s.path === path);
     if (found) return found.title;
   }
 
-  // Strip prefix
   if (path.startsWith('/admin/')) {
     return path.slice(7);
   }

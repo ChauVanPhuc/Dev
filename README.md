@@ -483,7 +483,7 @@ pip install -r requirements.txt
 #   FCM_SERVER_KEY=your-fcm-key (nếu cần push notification)
 
 # 6. Khởi động server
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 1111 --reload
 ```
 
 > **Lưu ý:** Lần đầu chạy, SQLAlchemy sẽ tự động tạo tất cả bảng trong Database thông qua `Base.metadata.create_all()`.
@@ -499,7 +499,7 @@ npm install
 
 # 3. Chạy development server
 npm run dev
-# → Truy cập: http://localhost:3000
+# → Truy cập: http://localhost:1222
 
 # 4. Build cho production
 npm run build
@@ -569,7 +569,7 @@ run_project.bat
 ### 6.1. Đăng nhập
 
 **Web Dashboard:**
-1. Truy cập `http://localhost:3000/login` (dev) hoặc `https://smartflowg7.cloud` (production)
+1. Truy cập `http://localhost:1222/login` (dev) hoặc `https://smartflowg7.cloud` (production)
 2. Nhập tên đăng nhập và mật khẩu
 3. Hệ thống tự động chuyển hướng dựa trên vai trò (Admin → Dashboard, Worker → Mobile)
 
@@ -751,7 +751,7 @@ Script sẽ tự động thực hiện 5 bước:
 ```bash
 # Production mode (multi-worker)
 cd BackEnd
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+uvicorn app.main:app --host 0.0.0.0 --port 1111 --workers 4
 
 # Hoặc dùng script
 start_server.bat
@@ -798,7 +798,7 @@ tunnel: <tunnel-id>
 credentials-file: /root/.cloudflared/<tunnel-id>.json
 ingress:
   - hostname: smartflowg7.cloud
-    service: http://localhost:8000
+    service: http://localhost:1111
   - service: http_status:404
 
 # Chạy tunnel
@@ -830,7 +830,7 @@ WITH REPLACE;
 | 1 | `ModuleNotFoundError: No module named 'fastapi'` | Chưa cài dependencies | `cd BackEnd && pip install -r requirements.txt` |
 | 2 | `Cannot connect to SQL Server` | SQL Server chưa chạy hoặc chuỗi kết nối sai | Kiểm tra SQL Server Service + chuỗi kết nối trong `.env` |
 | 3 | `Cannot resolve import '@modules/...'` | Alias chưa đúng hoặc thiếu package | Kiểm tra `vite.config.js` aliases + chạy `npm install` |
-| 4 | `WebSocket connection closed` | Backend chưa chạy | Kiểm tra Backend đang chạy ở port 8000 |
+| 4 | `WebSocket connection closed` | Backend chưa chạy | Kiểm tra Backend đang chạy ở port 1111 |
 | 5 | `Push notification not received` | FCM key chưa cấu hình | Kiểm tra `FCM_SERVER_KEY` trong `.env` |
 | 6 | `Build APK thất bại (đường dẫn tiếng Việt)` | Gradle không hỗ trợ ký tự Unicode trong path | Dùng `ONE_CLICK_PUBLISH.bat` (tự động mount ổ đĩa ảo Z:) |
 | 7 | `Pool timeout / Too many connections` | Vượt quá giới hạn connection pool | Tăng `pool_size` và `max_overflow` trong `config/database.py` |
@@ -840,11 +840,11 @@ WITH REPLACE;
 
 ```bash
 # Kiểm tra Backend đang chạy
-curl http://localhost:8000/health
+curl http://localhost:1111/health
 # Response: {"status": "ok"}
 
 # Kiểm tra API docs
-# Truy cập: http://localhost:8000/docs (Swagger UI)
+# Truy cập: http://localhost:1111/docs (Swagger UI)
 ```
 
 ---
