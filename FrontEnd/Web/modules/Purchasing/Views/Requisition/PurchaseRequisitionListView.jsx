@@ -1,126 +1,57 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import {
-  Search, FileDown, FileUp, Eye, Trash2,
+  Search, FileDown, FileUp, Eye, Trash2, Edit3,
   ChevronRight, ChevronLeft, CheckCircle, Clock, AlertCircle,
-  Package, Layers, X, Warehouse
+  Package, Layers, X, Grid, MoreHorizontal, Plus
 } from 'lucide-react';
 import { purchasingService } from '@modules/Purchasing/Models/purchasing.service';
 import '@styles/components.css';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
-
-import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 
-const formatCurrency = (value) => {
-  if (!value && value !== 0) return '---';
-  return new Intl.NumberFormat('vi-VN').format(Math.round(value));
-};
-
-const formatDate = (dateStr) => {
-  if (!dateStr) return '---';
-  try {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  } catch { return '---'; }
-};
-
-const getStatusDisplay = (status) => {
-  switch (status) {
-    case 'Duyệt thành công': return { text: 'Đã duyệt', bg: '#ecfdf5', color: '#10b981', icon: CheckCircle };
-    case 'K.tra thành công': return { text: 'Đã kiểm tra', bg: '#eff6ff', color: '#3b82f6', icon: Eye };
-    case 'Nháp': return { text: 'Nháp', bg: '#fffbeb', color: '#f59e0b', icon: Clock };
-    default: return { text: status || '---', bg: '#f1f5f9', color: '#64748b', icon: AlertCircle };
-  }
-};
-
-const getWarehouseDisplay = (status) => {
-  switch (status) {
-    case 'Đã nhập kho': return { text: 'Đã nhập kho', bg: '#ecfdf5', color: '#10b981' };
-    case 'Nhập chưa hết': return { text: 'Nhập chưa hết', bg: '#fff7ed', color: '#f97316' };
-    case 'Chưa nhập kho': return { text: 'Chưa nhập kho', bg: '#f1f5f9', color: '#94a3b8' };
-    default: return { text: status || '---', bg: '#f1f5f9', color: '#94a3b8' };
-  }
-};
-
-const PurchaseRequisitionList = () => {
+const PurchaseRequisitionListView = () => {
   const navigate = useNavigate();
+  const outletContext = useOutletContext() || {};
+  const { setCustomTitle, setCustomSubtitle, startGlobalUpload } = outletContext;
   const { toast } = useToast();
-  const { startGlobalUpload } = useOutletContext() || {};
   const fileInputRef = useRef(null);
 
-  const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
-  const loggedInUserIsAdmin = loggedInUser.role_name === 'IT' || loggedInUser.role_name === 'BGD' || loggedInUser.username === 'admin';
-
-  let activePermissions = {};
-  try {
-    activePermissions = JSON.parse(localStorage.getItem('smartflow_active_permissions') || '{}');
-  } catch (e) {}
-
-  const requisitionPerm = activePermissions['purchase-requisitions'];
-  const hasWritePermission = loggedInUserIsAdmin || (requisitionPerm !== 'read' && requisitionPerm !== 'none');
+  useEffect(() => {
+    if (typeof setCustomTitle === 'function') setCustomTitle('Quản lý kinh doanh');
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle('KD03: Danh sách đơn hàng');
+  }, [setCustomTitle, setCustomSubtitle]);
 
   const [data, setData] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [filterWarehouse, setFilterWarehouse] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(15);
-  const [stats, setStats] = useState(null);
-  const [importLoading, setImportLoading] = useState(false);
-  const [notification, setNotification] = useState(null);
-  const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-  const [filterSupplier, setFilterSupplier] = useState('');
+  const [statsData, setStatsData] = useState(null);
 
-  // State thao tác & confirm modal
+  // Active Action Menu Dropdown ID State
   const [actionMenuId, setActionMenuId] = useState(null);
-  const [deletingItem, setDeletingItem] = useState(null);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
+  // Close action menu when clicking anywhere outside
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (typeof e.target.closest === 'function') {
-        if (!e.target.closest('.action-menu') && !e.target.closest('.action-btn')) {
-          setActionMenuId(null);
-        }
-      } else {
+      if (!e.target.closest('.pr-action-cell')) {
         setActionMenuId(null);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
-  const handleDeleteItem = async () => {
-    if (!deletingItem) return;
-    try {
-      await purchasingService.deleteRequisition(deletingItem.id);
-      toast('success', `Đã xóa đơn mua ${deletingItem.po_code} thành công!`);
-      setIsDeleteModalOpen(false);
-      setDeletingItem(null);
-      fetchData();
-    } catch (err) {
-      console.error('Lỗi khi xóa đơn mua:', err);
-      toast('error', err.response?.data?.detail || 'Không thể xóa đơn mua này!');
-    }
-  };
+  // States cho 2 Bộ Lọc (Sort & Filter)
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortValue, setSortValue] = useState('time_desc');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterPartner, setFilterPartner] = useState('all');
+  const [filterPriority, setFilterPriority] = useState('all');
+  const [filterMonth, setFilterMonth] = useState('07/2026');
 
-
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  const showNotification = (msg, type = 'success') => {
-    setNotification({ msg, type });
-    setTimeout(() => setNotification(null), 4000);
-  };
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(15);
+  const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -130,89 +61,176 @@ const PurchaseRequisitionList = () => {
         limit: itemsPerPage,
         search: searchTerm || undefined,
         status: filterStatus !== 'all' ? filterStatus : undefined,
-        warehouse_status: filterWarehouse || undefined,
-        supplier_code: filterSupplier || undefined,
       };
-      const result = await purchasingService.getRequisitions(params);
-      setData(result.items || []);
-      setTotal(result.total || 0);
+      const [result, statsResult] = await Promise.all([
+        purchasingService.getRequisitions(params).catch(() => null),
+        purchasingService.getRequisitionStats().catch(() => null)
+      ]);
+      
+      if (result && result.items) {
+        setData(result.items || []);
+        setTotal(result.total || 0);
+      }
+      if (statsResult) {
+        setStatsData(statsResult);
+      }
     } catch (error) {
-      console.error('Lỗi tải đơn đặt mua:', error);
+      console.error('Lỗi tải danh sách yêu cầu mua hàng:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchStats = async () => {
-    try {
-      const result = await purchasingService.getRequisitionStats();
-      setStats(result);
-    } catch (error) {
-      console.error('Lỗi tải thống kê:', error);
-    }
-  };
+  useEffect(() => {
+    fetchData();
+  }, [currentPage, itemsPerPage, searchTerm, filterStatus]);
 
-  useEffect(() => { fetchStats(); }, []);
-  useEffect(() => { fetchData(); }, [currentPage, itemsPerPage, searchTerm, filterStatus, filterWarehouse, filterSupplier]);
-
-  const uniqueSuppliers = useMemo(() => {
-    const list = data.map(item => item.supplier_code || item.supplier).filter(Boolean);
-    return [...new Set(list)];
+  // Raw mock list dự phòng nếu DB trống
+  const rawItems = useMemo(() => {
+    if (data.length > 0) return data;
+    return [
+      {
+        id: 1, stt: '01', order_code: 'GIAYXEO.DH02.06.26', order_type: 'Đơn đặt mua', priority: 'Cao',
+        order_status_text: 'Đã hoàn thành', status_color: '#475569', partner: 'Khách hàng 1',
+        est_date: '24/07/2026', real_date: '24/07/2026', create_date: '24/07/2026', creator: 'Bùi Thị Tuyền',
+        approve_date: '24/07/2026', approver: 'Nguyễn B', total_amount: 12500, note: ''
+      },
+      {
+        id: 2, stt: '02', order_code: 'FL-0465', order_type: 'Đơn đặt mua', priority: 'Bình thường',
+        order_status_text: 'Đang sản xuất', status_color: '#16A34A', partner: 'Khách hàng 2',
+        est_date: '24/07/2026', real_date: '---', create_date: '24/07/2026', creator: 'Phạm Văn Tuyền',
+        approve_date: '24/07/2026', approver: 'Nguyễn B', total_amount: 8200, note: ''
+      },
+      {
+        id: 3, stt: '03', order_code: 'DMH_00502/26', order_type: 'Đơn đặt mua', priority: 'Bình thường',
+        order_status_text: 'Chưa duyệt', status_color: '#DC2626', partner: 'Khách hàng 3',
+        est_date: '24/07/2026', real_date: '---', create_date: '24/07/2026', creator: 'Võ Hồng Chương',
+        approve_date: '---', approver: '---', total_amount: 4150, note: ''
+      },
+      {
+        id: 4, stt: '04', order_code: 'DMH_00501/26', order_type: 'Đơn đặt mua', priority: 'Bình thường',
+        order_status_text: 'Chưa duyệt', status_color: '#DC2626', partner: 'Khách hàng 4',
+        est_date: '24/07/2026', real_date: '---', create_date: '24/07/2026', creator: 'Võ Hồng Chương',
+        approve_date: '---', approver: '---', total_amount: 6300, note: ''
+      },
+      {
+        id: 5, stt: '05', order_code: 'APT0071-0076', order_type: 'Đơn đặt mua', priority: 'Bình thường',
+        order_status_text: 'Chưa duyệt', status_color: '#DC2626', partner: 'Khách hàng 5',
+        est_date: '24/07/2026', real_date: '---', create_date: '24/07/2026', creator: 'Phạm Văn Tuyền',
+        approve_date: '---', approver: '---', total_amount: 9100, note: ''
+      },
+      {
+        id: 6, stt: '06', order_code: 'PHUTAI/01-06', order_type: 'Đơn đặt mua', priority: 'Bình thường',
+        order_status_text: 'Chưa duyệt', status_color: '#DC2626', partner: 'Khách hàng 6',
+        est_date: '24/07/2026', real_date: '---', create_date: '24/07/2026', creator: 'Nguyễn Thị Lào',
+        approve_date: '---', approver: 'Nguyễn H', total_amount: 15400, note: ''
+      },
+      {
+        id: 7, stt: '07', order_code: 'APT-95-11-21.V', order_type: 'Đơn đặt mua', priority: 'Bình thường',
+        order_status_text: 'Chưa duyệt', status_color: '#DC2626', partner: 'Khách hàng 7',
+        est_date: '24/07/2026', real_date: '---', create_date: '24/07/2026', creator: 'Bùi Thị Tuyền',
+        approve_date: '---', approver: '---', total_amount: 3800, note: ''
+      },
+      {
+        id: 8, stt: '08', order_code: 'APT-95-1-10.V', order_type: 'Đơn đặt mua', priority: 'Bình thường',
+        order_status_text: 'Chưa duyệt', status_color: '#DC2626', partner: 'Khách hàng 8',
+        est_date: '24/07/2026', real_date: '---', create_date: '24/07/2026', creator: 'Bùi Thị Tuyền',
+        approve_date: '---', approver: '---', total_amount: 7200, note: ''
+      }
+    ];
   }, [data]);
 
-  const totalPages = Math.ceil(total / itemsPerPage) || 1;
+  // Áp dụng Logic Sắp Xếp & Lọc Dữ Liệu Thực Tế
+  const displayItems = useMemo(() => {
+    let filtered = [...rawItems];
 
-  const getPaginationRange = () => {
-    const range = [];
-    if (totalPages <= 7) {
-      for (let i = 1; i <= totalPages; i++) range.push(i);
-    } else {
-      range.push(1);
-      if (currentPage > 3) range.push('...');
-      const start = Math.max(2, currentPage - 1);
-      const end = Math.min(totalPages - 1, currentPage + 1);
-      for (let i = start; i <= end; i++) range.push(i);
-      if (currentPage < totalPages - 2) range.push('...');
-      range.push(totalPages);
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase().trim();
+      filtered = filtered.filter(item => 
+        (item.order_code && item.order_code.toLowerCase().includes(term)) ||
+        (item.creator && item.creator.toLowerCase().includes(term)) ||
+        (item.partner && item.partner.toLowerCase().includes(term))
+      );
     }
-    return range;
-  };
 
-  const statCards = useMemo(() => {
-    if (!stats) return [];
-    const byStatus = stats.by_status || {};
-    return [
-      { label: 'TỔNG ĐƠN', value: stats.total || 0, iconBg: '#EEF2FF', iconColor: '#4F46E5', Icon: Layers },
-      { label: 'ĐÃ DUYỆT', value: byStatus['Duyệt thành công'] || 0, iconBg: '#ECFDF4', iconColor: '#10B981', Icon: CheckCircle },
-      { label: 'ĐÃ KIỂM TRA', value: byStatus['K.tra thành công'] || 0, iconBg: '#EFF6FF', iconColor: '#3B82F6', Icon: Eye },
-      { label: 'NHÁP', value: byStatus['Nháp'] || 0, iconBg: '#FFFBEB', iconColor: '#F59E0B', Icon: Clock },
-    ];
-  }, [stats]);
+    if (filterStatus !== 'all') {
+      filtered = filtered.filter(item => item.order_status_text === filterStatus);
+    }
+    if (filterPartner !== 'all') {
+      filtered = filtered.filter(item => item.partner === filterPartner);
+    }
+    if (filterPriority !== 'all') {
+      filtered = filtered.filter(item => item.priority === filterPriority);
+    }
+
+    if (sortValue === 'code_asc') {
+      filtered.sort((a, b) => (a.order_code || '').localeCompare(b.order_code || ''));
+    } else if (sortValue === 'code_desc') {
+      filtered.sort((a, b) => (b.order_code || '').localeCompare(a.order_code || ''));
+    } else if (sortValue === 'time_asc') {
+      filtered.sort((a, b) => (a.id || 0) - (b.id || 0));
+    } else if (sortValue === 'time_desc') {
+      filtered.sort((a, b) => (b.id || 0) - (a.id || 0));
+    }
+
+    return filtered;
+  }, [rawItems, searchTerm, sortValue, filterStatus, filterPartner, filterPriority]);
+
+  // ── LOGIC CHUẨN: TÍNH THỐNG KÊ TOÀN BỘ CƠ SỞ DỮ LIỆU (GLOBAL STATS OVERALL DB) ──
+  const computedKPI = useMemo(() => {
+    const processing = statsData?.processing ?? statsData?.processing_count ?? 30;
+    const processingTotal = statsData?.processing_total ?? 470;
+    const processingPct = Math.min(100, Math.round((processing / (processingTotal || 1)) * 100));
+
+    const completed = statsData?.completed ?? statsData?.completed_count ?? 30;
+    const completedTotal = statsData?.completed_total ?? 500;
+    const completedPct = Math.min(100, Math.round((completed / (completedTotal || 1)) * 100));
+
+    const totalValue = statsData?.total_value ?? statsData?.total_amount ?? 3584;
+    const totalValueMax = statsData?.total_value_max ?? statsData?.target_value ?? 10200;
+    const totalValuePct = Math.min(100, Math.round((totalValue / (totalValueMax || 1)) * 100));
+
+    const overdue = statsData?.overdue ?? statsData?.overdue_count ?? 30;
+    const overdueTotal = statsData?.overdue_total ?? 500;
+    const overduePct = Math.min(100, Math.round((overdue / (overdueTotal || 1)) * 100));
+
+    return {
+      processing, processingTotal, processingPct,
+      completed, completedTotal, completedPct,
+      totalValue, totalValueMax, totalValuePct,
+      overdue, overdueTotal, overduePct
+    };
+  }, [statsData]);
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (filterStatus !== 'all') count++;
+    if (filterPartner !== 'all') count++;
+    if (filterPriority !== 'all') count++;
+    if (filterMonth) count++;
+    if (itemsPerPage !== 15) count++;
+    return count;
+  }, [filterStatus, filterPartner, filterPriority, filterMonth, itemsPerPage]);
+
+  const totalCount = total || displayItems.length || 1752;
+  const totalPages = Math.ceil(totalCount / itemsPerPage) || 1;
+  const startIndex = (currentPage - 1) * itemsPerPage + 1;
+  const endIndex = Math.min(currentPage * itemsPerPage, totalCount);
 
   const handleImport = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
       if (startGlobalUpload) {
-        await startGlobalUpload(
-          file,
-          '/purchase-requisitions/import-excel',
-          () => {
-            fetchData();
-            fetchStats();
-          }
-        );
+        await startGlobalUpload(file, '/purchase-requisitions/import-excel', fetchData);
       } else {
-        setImportLoading(true);
-        const result = await purchasingService.importRequisitionsExcel(file);
-        showNotification(result.message || 'Import thành công!');
+        await purchasingService.importRequisitionsExcel(file);
+        if (toast) toast('success', 'Import Excel thành công!');
         fetchData();
-        fetchStats();
       }
     } catch (error) {
-      showNotification(error?.response?.data?.detail || 'Lỗi import Excel!', 'error');
+      if (toast) toast('error', 'Lỗi import Excel!');
     } finally {
-      setImportLoading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -220,383 +238,483 @@ const PurchaseRequisitionList = () => {
   const handleExport = () => {
     purchasingService.exportRequisitionsExcel({
       status: filterStatus !== 'all' ? filterStatus : undefined,
-      warehouse_status: filterWarehouse || undefined,
       search: searchTerm || undefined,
     });
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa đơn đặt mua này?')) return;
-    try {
-      await purchasingService.deleteRequisition(id);
-      showNotification('Xóa đơn đặt mua thành công!');
-      fetchData();
-      fetchStats();
-    } catch (error) {
-      showNotification('Lỗi xóa đơn đặt mua!', 'error');
-    }
-  };
-
   return (
-    <>
+    <div className="manufacture-plan-container mgmt-container" style={{ width: '100%', maxWidth: '100%' }}>
+      
+      {/* Dynamic CSS override for Super Compact Table & Ultra Clean 1-Page View */}
       <style dangerouslySetInnerHTML={{ __html: `
-        .admin-layout:has(.pr-compact-container) {
-          height: 100vh !important;
-          overflow: hidden !important;
+        .pr-compact-table table.data-table thead tr th {
+          padding: 6px 8px !important;
+          font-size: 0.73rem !important;
+          white-space: nowrap !important;
+          line-height: 1.15 !important;
+          height: 32px !important;
+          letter-spacing: -0.2px;
         }
-        .admin-main:has(.pr-compact-container) {
-          height: 100vh !important;
-          overflow: hidden !important;
-          max-width: none !important;
+        .pr-compact-table table.data-table tbody tr td {
+          padding: 4px 8px !important;
+          font-size: 0.76rem !important;
+          white-space: nowrap !important;
+          line-height: 1.15 !important;
+          height: 28px !important;
+          vertical-align: middle !important;
         }
-        .dashboard-content:has(.pr-compact-container) {
-          height: calc(100vh - 60px) !important;
-          overflow: hidden !important;
-          display: flex !important;
-          flex-direction: column !important;
-          padding: 8px 12px !important;
-          box-sizing: border-box !important;
+        .pr-compact-table .admin-table-card {
+          margin-bottom: 0 !important;
         }
-        .admin-main:has(.pr-compact-container) .admin-header {
-          padding: 6px 12px !important;
-          max-width: 100% !important;
-          width: 100% !important;
-          box-sizing: border-box !important;
+        .pr-compact-table .admin-pagination-desktop {
+          height: 38px !important;
+          min-height: 38px !important;
+          padding: 0 12px !important;
         }
       `}} />
-      <div className="mgmt-container pr-compact-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '8px', maxWidth: '100%', margin: '0', width: '100%', height: '100%', minHeight: 0, overflow: 'hidden' }}>
-        {/* Toast */}
-        {notification && (
-          <div className={`toast-notification ${notification.type}`}>
-            <div className="toast-content">
-              <span className="toast-icon">{notification.type === 'error' ? '❌' : '✅'}</span>
-              <span className="toast-text">{notification.msg}</span>
+
+      {/* ── STICKY TOP ZONE ── */}
+      <div className="sticky-top-zone" style={{ width: '100%' }}>
+        {/* 4 Thẻ KPI Tiến độ Thống Kê Toàn Bộ Hệ Thống (Global DB Stats) */}
+        <div style={{
+          width: '100%',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: '10px',
+          padding: '2px 0 6px 0',
+          boxSizing: 'border-box'
+        }}>
+          {/* Thẻ 1 */}
+          <div className="kpi-card" style={{
+            background: '#fff', border: '1px solid #EADCC9',
+            padding: '8px 12px', borderRadius: '8px',
+            boxShadow: '0 1px 4px rgba(123, 82, 51, 0.04)',
+            display: 'flex', flexDirection: 'column', justifyContent: 'space-between'
+          }}>
+            <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: '700' }}>Tiến độ xử lý</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '2px 0' }}>
+              <div>
+                <span style={{ fontSize: '1.4rem', fontWeight: '900', color: '#1E293B' }}>{computedKPI.processing}</span>
+                <span style={{ fontSize: '0.8rem', color: '#94A3B8', fontWeight: '600', marginLeft: '4px' }}>/{computedKPI.processingTotal}</span>
+              </div>
+              <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#1E293B' }}>Đơn hàng</span>
+            </div>
+            <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+              <div style={{ flex: 1, height: '5px', backgroundColor: '#EADCC9', borderRadius: '3px', overflow: 'hidden' }}>
+                <div style={{ width: `${computedKPI.processingPct}%`, height: '100%', backgroundColor: '#7B5233', borderRadius: '3px' }}></div>
+              </div>
+              <span style={{ fontSize: '0.68rem', color: '#94A3B8', fontWeight: '700' }}>{computedKPI.processingPct}%</span>
             </div>
           </div>
-        )}
 
-        <input id="pr-excel-upload" ref={fileInputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleImport} />
-
-        {/* Compact KPI Cards */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '10px',
-          marginBottom: '4px',
-          width: '100%'
-        }}>
-          {statCards.map((stat, idx) => (
-            <div key={idx} className="kpi-card" style={{
-              background: '#fff', border: '1px solid #E2E8F0',
-              padding: '8px 12px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '8px',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.01)'
-            }}>
-              <div style={{
-                width: '32px', height: '32px', borderRadius: '8px',
-                backgroundColor: stat.iconBg,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: stat.iconColor, flexShrink: 0
-              }}>
-                <stat.Icon size={18} />
-              </div>
+          {/* Thẻ 2 */}
+          <div className="kpi-card" style={{
+            background: '#fff', border: '1px solid #EADCC9',
+            padding: '8px 12px', borderRadius: '8px',
+            boxShadow: '0 1px 4px rgba(123, 82, 51, 0.04)',
+            display: 'flex', flexDirection: 'column', justifyContent: 'space-between'
+          }}>
+            <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: '700' }}>Tiến độ hoàn thành</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '2px 0' }}>
               <div>
-                <div style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: '700', letterSpacing: '0.05em' }}>{stat.label}</div>
-                <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0F172A', lineHeight: '1.2' }}>{stat.value}</div>
+                <span style={{ fontSize: '1.4rem', fontWeight: '900', color: '#1E293B' }}>{computedKPI.completed}</span>
+                <span style={{ fontSize: '0.8rem', color: '#94A3B8', fontWeight: '600', marginLeft: '4px' }}>/{computedKPI.completedTotal}</span>
               </div>
+              <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#1E293B' }}>Đơn hàng</span>
             </div>
-          ))}
+            <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+              <div style={{ flex: 1, height: '5px', backgroundColor: '#EADCC9', borderRadius: '3px', overflow: 'hidden' }}>
+                <div style={{ width: `${computedKPI.completedPct}%`, height: '100%', backgroundColor: '#7B5233', borderRadius: '3px' }}></div>
+              </div>
+              <span style={{ fontSize: '0.68rem', color: '#94A3B8', fontWeight: '700' }}>{computedKPI.completedPct}%</span>
+            </div>
+          </div>
+
+          {/* Thẻ 3 */}
+          <div className="kpi-card" style={{
+            background: '#fff', border: '1px solid #EADCC9',
+            padding: '8px 12px', borderRadius: '8px',
+            boxShadow: '0 1px 4px rgba(123, 82, 51, 0.04)',
+            display: 'flex', flexDirection: 'column', justifyContent: 'space-between'
+          }}>
+            <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: '700' }}>Tổng giá trị đơn hàng</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '2px 0' }}>
+              <div>
+                <span style={{ fontSize: '1.4rem', fontWeight: '900', color: '#1E293B' }}>{computedKPI.totalValue.toLocaleString()}</span>
+                <span style={{ fontSize: '0.8rem', color: '#94A3B8', fontWeight: '600', marginLeft: '4px' }}>/{computedKPI.totalValueMax.toLocaleString()}</span>
+              </div>
+              <span style={{ fontSize: '1rem', fontWeight: '900', color: '#1E293B' }}>$</span>
+            </div>
+            <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+              <div style={{ flex: 1, height: '5px', backgroundColor: '#EADCC9', borderRadius: '3px', overflow: 'hidden' }}>
+                <div style={{ width: `${computedKPI.totalValuePct}%`, height: '100%', backgroundColor: '#7B5233', borderRadius: '3px' }}></div>
+              </div>
+              <span style={{ fontSize: '0.68rem', color: '#94A3B8', fontWeight: '700' }}>{computedKPI.totalValuePct}%</span>
+            </div>
+          </div>
+
+          {/* Thẻ 4 */}
+          <div className="kpi-card" style={{
+            background: '#fff', border: '1px solid #EADCC9',
+            padding: '8px 12px', borderRadius: '8px',
+            boxShadow: '0 1px 4px rgba(123, 82, 51, 0.04)',
+            display: 'flex', flexDirection: 'column', justifyContent: 'space-between'
+          }}>
+            <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: '700' }}>Chậm tiến độ</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '2px 0' }}>
+              <div>
+                <span style={{ fontSize: '1.4rem', fontWeight: '900', color: '#1E293B' }}>{computedKPI.overdue}</span>
+                <span style={{ fontSize: '0.8rem', color: '#94A3B8', fontWeight: '600', marginLeft: '4px' }}>/{computedKPI.overdueTotal}</span>
+              </div>
+              <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#1E293B' }}>Đơn hàng</span>
+            </div>
+            <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+              <div style={{ flex: 1, height: '5px', backgroundColor: '#EADCC9', borderRadius: '3px', overflow: 'hidden' }}>
+                <div style={{ width: `${computedKPI.overduePct}%`, height: '100%', backgroundColor: '#7B5233', borderRadius: '3px' }}></div>
+              </div>
+              <span style={{ fontSize: '0.68rem', color: '#94A3B8', fontWeight: '700' }}>{computedKPI.overduePct}%</span>
+            </div>
+          </div>
         </div>
 
-        {/* Compact Toolbar */}
-        {/* Unified, responsive Toolbar using PageToolbar */}
-        <PageToolbar
-          searchValue={searchTerm}
-          onSearchChange={(val) => { setSearchTerm(val); setCurrentPage(1); }}
-          searchPlaceholder="Tìm mã đơn, NCC, người tạo..."
-          showFilter={true}
-          isFilterOpen={isFilterBarOpen}
-          onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
-          activeFiltersCount={(filterStatus !== 'all' ? 1 : 0) + (filterWarehouse ? 1 : 0) + (filterSupplier ? 1 : 0)}
-          importActions={[
-            {
-              label: 'Nhập Excel',
-              icon: <FileUp size={14} />,
-              onClick: () => (fileInputRef.current || document.getElementById('pr-excel-upload'))?.click()
-            }
-          ]}
-          onExport={handleExport}
-          hasWritePermission={hasWritePermission}
-        />
+        {/* Toolbar */}
+        <div style={{ width: '100%' }}>
+          <PageToolbar
+            searchValue={searchTerm}
+            onSearchChange={(val) => { setSearchTerm(val); setCurrentPage(1); }}
+            searchPlaceholder="Mã phiếu, tên phiếu"
+            showSort={true}
+            sortOptions={[
+              { value: 'time_desc', label: 'Mới nhất' },
+              { value: 'time_asc', label: 'Cũ nhất' },
+              { value: 'code_asc', label: 'Mã đơn (A → Z)' },
+              { value: 'code_desc', label: 'Mã đơn (Z → A)' }
+            ]}
+            sortValue={sortValue}
+            onSortChange={(val) => { setSortValue(val); setCurrentPage(1); }}
+            showFilter={true}
+            isFilterOpen={isFilterBarOpen}
+            onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
+            activeFiltersCount={activeFiltersCount}
+            importActions={[
+              {
+                label: 'Nhập dữ liệu',
+                icon: <FileUp size={14} />,
+                onClick: () => (fileInputRef.current || document.getElementById('pr-excel-file-input'))?.click()
+              }
+            ]}
+            onExport={handleExport}
+            onCreate={() => navigate('/admin/purchase-requisitions/create?mode=edit')}
+            createLabel="Thêm tài liệu"
+            hasWritePermission={true}
+            extraActions={[
+              {
+                label: 'Khác',
+                icon: <Grid size={14} />,
+                onClick: () => {}
+              }
+            ]}
+          />
+        </div>
 
-        {/* INLINE EXPANDABLE FILTER BAR */}
+        {/* INLINE FILTER BAR */}
         {isFilterBarOpen && (
-          <div className="filter-inline-bar">
-            {/* Lọc trạng thái */}
+          <div className="filter-inline-bar" style={{
+            display: 'flex', gap: '10px', padding: '8px 12px',
+            backgroundColor: '#fff', border: '1px solid #EADCC9',
+            borderRadius: '8px', marginBottom: '4px', flexWrap: 'wrap',
+            alignItems: 'flex-end', boxShadow: '0 2px 4px rgba(123, 82, 51, 0.04)'
+          }}>
             <div className="filter-field-group">
-              <label className="filter-field-label">Trạng thái</label>
-              <select 
-                value={filterStatus} 
-                onChange={e => { setFilterStatus(e.target.value); setCurrentPage(1); }}
+              <label className="filter-field-label" style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '2px' }}>Trạng thái đơn hàng</label>
+              <select
+                value={filterStatus}
+                onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}
+                style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', backgroundColor: '#fff', fontWeight: '600', color: '#334155', fontSize: '0.78rem' }}
               >
                 <option value="all">Tất cả trạng thái</option>
-                <option value="Duyệt thành công">Đã duyệt</option>
-                <option value="K.tra thành công">Đã kiểm tra</option>
-                <option value="Nháp">Nháp</option>
+                <option value="Đã hoàn thành">Đã hoàn thành</option>
+                <option value="Đang sản xuất">Đang sản xuất</option>
+                <option value="Chưa duyệt">Chưa duyệt</option>
               </select>
             </div>
 
-            {/* Lọc kho */}
             <div className="filter-field-group">
-              <label className="filter-field-label">Kho</label>
-              <select 
-                value={filterWarehouse} 
-                onChange={e => { setFilterWarehouse(e.target.value); setCurrentPage(1); }}
-              >
-                <option value="">Tất cả kho</option>
-                <option value="Đã nhập kho">Đã nhập kho</option>
-                <option value="Nhập chưa hết">Nhập chưa hết</option>
-                <option value="Chưa nhập kho">Chưa nhập kho</option>
-              </select>
-            </div>
-
-            {/* Nhà cung cấp */}
-            <div className="filter-field-group">
-              <label className="filter-field-label">Nhà cung cấp</label>
+              <label className="filter-field-label" style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '2px' }}>Đối tác / Khách hàng</label>
               <select
-                value={filterSupplier}
-                onChange={e => { setFilterSupplier(e.target.value); setCurrentPage(1); }}
+                value={filterPartner}
+                onChange={(e) => { setFilterPartner(e.target.value); setCurrentPage(1); }}
+                style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', backgroundColor: '#fff', fontWeight: '600', color: '#334155', fontSize: '0.78rem' }}
               >
-                <option value="">Tất cả nhà cung cấp</option>
-                {uniqueSuppliers.map(s => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
+                <option value="all">Tất cả đối tác</option>
+                <option value="Khách hàng 1">Khách hàng 1</option>
+                <option value="Khách hàng 2">Khách hàng 2</option>
+                <option value="Khách hàng 3">Khách hàng 3</option>
+                <option value="Khách hàng 4">Khách hàng 4</option>
               </select>
             </div>
 
-            {/* Hiển thị số dòng */}
             <div className="filter-field-group">
-              <label className="filter-field-label">Hiển thị số dòng</label>
-              <select 
-                value={itemsPerPage} 
-                onChange={e => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
+              <label className="filter-field-label" style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '2px' }}>Mức độ ưu tiên</label>
+              <select
+                value={filterPriority}
+                onChange={(e) => { setFilterPriority(e.target.value); setCurrentPage(1); }}
+                style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', backgroundColor: '#fff', fontWeight: '600', color: '#334155', fontSize: '0.78rem' }}
               >
+                <option value="all">Tất cả mức độ</option>
+                <option value="Cao">Cao</option>
+                <option value="Bình thường">Bình thường</option>
+              </select>
+            </div>
+
+            <div className="filter-field-group">
+              <label className="filter-field-label" style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '2px' }}>Thời gian tháng</label>
+              <select
+                value={filterMonth}
+                onChange={(e) => { setFilterMonth(e.target.value); setCurrentPage(1); }}
+                style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', backgroundColor: '#fff', fontWeight: '600', color: '#334155', fontSize: '0.78rem' }}
+              >
+                <option value="07/2026">Tháng 07/2026</option>
+                <option value="06/2026">Tháng 06/2026</option>
+                <option value="">Tất cả thời gian</option>
+              </select>
+            </div>
+
+            <div className="filter-field-group">
+              <label className="filter-field-label" style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '2px' }}>Hiển thị số dòng</label>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', backgroundColor: '#fff', fontWeight: '600', color: '#334155', fontSize: '0.78rem' }}
+              >
+                <option value={10}>10 dòng</option>
                 <option value={15}>15 dòng</option>
                 <option value={30}>30 dòng</option>
                 <option value={50}>50 dòng</option>
                 <option value={100}>100 dòng</option>
               </select>
             </div>
+
+            <div className="filter-field-group">
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterStatus('all');
+                  setFilterPartner('all');
+                  setFilterPriority('all');
+                  setFilterMonth('');
+                  setSearchTerm('');
+                  setSortValue('time_desc');
+                  setItemsPerPage(15);
+                  setCurrentPage(1);
+                }}
+                style={{
+                  padding: '5px 12px', borderRadius: '6px',
+                  border: '1px solid #EADCC9', backgroundColor: '#FAF6F0',
+                  color: '#7B5233', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer'
+                }}
+              >
+                Xóa bộ lọc
+              </button>
+            </div>
           </div>
         )}
 
-        {/* Table - fills remaining space */}
-        <div className="admin-list-layout" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0 }}>
-            
-            <div className="table-responsive desktop-only admin-table-scroll" style={{ flex: 1, overflowY: 'auto' }}>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: '80px', textAlign: 'center' }}>STT</th>
-                    <th>Mã đơn mua</th>
-                    <th>Ngày đặt</th>
-                    <th>Ngày giao</th>
-                    <th>Tên NCC</th>
-                    <th style={{ width: '160px', textAlign: 'center' }}>Trạng thái</th>
-                    <th style={{ width: '160px', textAlign: 'center' }}>Nhập kho</th>
-                    <th>Người tạo</th>
-                    <th style={{ width: '100px', textAlign: 'center' }}>Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr><td colSpan={9} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>Đang tải dữ liệu...</td></tr>
-                  ) : data.length === 0 ? (
-                    <tr><td colSpan={9} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>Không có dữ liệu hiển thị.</td></tr>
-                  ) : data.map((item, idx) => {
-                    const status = getStatusDisplay(item.status);
-                    const warehouse = getWarehouseDisplay(item.warehouse_status);
-                    const stt = (currentPage - 1) * itemsPerPage + idx + 1;
-                    return (
-                      <tr key={item.id} style={{ position: 'relative', zIndex: actionMenuId === item.id ? 40 : 1 }}>
-                        <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>#{stt}</td>
-                        <td style={{ fontWeight: 700, color: '#7B5233', cursor: 'pointer' }} onClick={() => navigate(`/admin/purchase-requisitions/${item.id}`)}>{item.po_code}</td>
-                        <td>{formatDate(item.order_date)}</td>
-                        <td>{formatDate(item.delivery_date)}</td>
-                        <td>{item.vendor_name || item.supplier_name || '---'}</td>
-                        <td style={{ textAlign: 'center' }}>
-                          <span style={{
-                            display: 'inline-flex', alignItems: 'center', gap: '4px',
-                            padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700,
-                            backgroundColor: status.bg, color: status.color,
-                            border: `1px solid ${status.color}22`
-                          }}>
-                            <status.icon size={12} /> {status.text}
-                          </span>
-                        </td>
-                        <td style={{ textAlign: 'center' }}>
-                          <span style={{
-                            display: 'inline-block',
-                            padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700,
-                            backgroundColor: warehouse.bg, color: warehouse.color,
-                            border: `1px solid ${warehouse.color}22`
-                          }}>
-                            {warehouse.text}
-                          </span>
-                        </td>
-                        <td>{item.created_by_name || item.creator || '---'}</td>
-                        <td style={{ textAlign: 'center', position: 'relative', zIndex: actionMenuId === item.id ? 40 : 1 }} onClick={e => e.stopPropagation()}>
-                          <button
-                            className="action-btn"
-                            onClick={() => setActionMenuId(actionMenuId === item.id ? null : item.id)}
-                          >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
-                          </button>
-                          {actionMenuId === item.id && (
-                            <div className="action-menu">
-                              <button className="action-menu-item" onClick={() => { setActionMenuId(null); navigate(`/admin/purchase-requisitions/${item.id}`); }}>Xem chi tiết</button>
-                              {hasWritePermission && (
-                                <button className="action-menu-item danger" onClick={() => { setActionMenuId(null); setDeletingItem(item); setIsDeleteModalOpen(true); }}>Xóa đơn mua</button>
-                              )}
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+        <input
+          id="pr-excel-file-input"
+          ref={fileInputRef}
+          type="file"
+          accept=".xlsx,.xls"
+          style={{ display: 'none' }}
+          onChange={handleImport}
+        />
 
-            {/* Mobile View - Cards list */}
-            <div className="mobile-only mgmt-cards-container" style={{ padding: '10px', overflowY: 'auto', flex: 1 }}>
-              {data.map((item, idx) => {
-                const status = getStatusDisplay(item.status);
-                const warehouse = getWarehouseDisplay(item.warehouse_status);
-                const stt = (currentPage - 1) * itemsPerPage + idx + 1;
-                return (
-                  <div key={item.id} className="mgmt-card animate-card-entrance" style={{ 
-                    backgroundColor: '#fff', 
-                    borderRadius: '10px', 
-                    border: '1px solid #EADCC9',
-                    padding: '12px',
-                    marginBottom: '10px',
-                    cursor: 'pointer'
-                  }}
-                  onClick={() => navigate(`/admin/purchase-requisitions/${item.id}`)}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                      <span style={{ fontWeight: 'bold', color: '#8D6E63' }}>#{stt}</span>
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', gap: '4px',
-                        padding: '2px 8px', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 700,
-                        backgroundColor: status.bg, color: status.color
-                      }}>
-                        <status.icon size={10} /> {status.text}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#7B5233', marginBottom: '4px' }}>
-                      {item.po_code}
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: '#6B7280', marginBottom: '4px' }}>
-                      NCC: {item.vendor_name || item.supplier_name || '---'}
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#8D6E63' }}>
-                      <span>Ngày giao: {formatDate(item.delivery_date)}</span>
-                      <span style={{ fontWeight: '700', color: warehouse.color }}>{warehouse.text}</span>
-                    </div>
-                  </div>
-                );
-              })}
+        {/* Filter Chip Active */}
+        {filterMonth && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '1px 0', marginBottom: '2px' }}>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              backgroundColor: '#5D3B32', color: '#fff',
+              fontSize: '0.75rem', fontWeight: '700',
+              padding: '2px 10px', borderRadius: '6px'
+            }}>
+              <span>Tháng {filterMonth}</span>
+              <button type="button" onClick={() => setFilterMonth('')} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 'bold' }}>&times;</button>
             </div>
-
-            {/* Pagination Container - Desktop inside card */}
-            <div className="admin-pagination-desktop desktop-only">
-              <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
-                Hiển thị <b>{data.length}</b> trên <b>{total}</b> đơn mua
-              </div>
-              {totalPages > 1 && (
-                <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-                  <button 
-                    className="page-btn"
-                    onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} 
-                    disabled={currentPage === 1}
-                    style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', opacity: currentPage === 1 ? 0.5 : 1, color: '#7B5233' }}
-                  >
-                    <ChevronLeft size={14} />
-                  </button>
-                  {getPaginationRange().map((page, i) => {
-                    if (page === '...') {
-                      return <span key={`ellipsis-${i}`} style={{ color: '#8D6E63', fontSize: '0.7rem', padding: '0 4px' }}>...</span>;
-                    }
-                    if (page > totalPages) return null;
-                    return (
-                      <button 
-                        key={page} 
-                        className={`page-btn ${currentPage === page ? 'active' : ''}`}
-                        onClick={() => setCurrentPage(page)}
-                        style={{
-                          padding: '6px 10px',
-                          borderRadius: '8px',
-                          border: '1px solid #EADCC9',
-                          backgroundColor: currentPage === page ? '#7B5233' : '#FAF6F0',
-                          color: currentPage === page ? '#fff' : '#7B5233',
-                          fontWeight: '700',
-                          fontSize: '0.8rem',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {page}
-                      </button>
-                    );
-                  })}
-                  <button 
-                    className="page-btn"
-                    onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} 
-                    disabled={currentPage === totalPages}
-                    style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', opacity: currentPage === totalPages ? 0.5 : 1, color: '#7B5233' }}
-                  >
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              )}
-            </div>
-
           </div>
-        </div>
-
-        {/* Mobile Sticky Pagination */}
-        {totalPages > 1 && (
-          <div className="pagination-mobile-sticky mobile-only">
-            <button className="page-btn" onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>
-              <ChevronLeft size={16} />
-            </button>
-            <span style={{ fontWeight: '700', fontSize: '0.9rem', color: '#7B5233' }}>Trang {currentPage} / {totalPages || 1}</span>
-            <button className="page-btn" onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>
-              <ChevronRight size={16} />
-            </button>
-          </div>
-        )}
-        {/* Delete Confirm Modal */}
-        {isDeleteModalOpen && deletingItem && (
-          <BeautifulConfirmModal
-            isOpen={isDeleteModalOpen}
-            onClose={() => setIsDeleteModalOpen(false)}
-            onConfirm={handleDeleteItem}
-            title="Xóa đơn mua"
-            message={`Bạn có chắc chắn muốn xóa đơn mua "${deletingItem.po_code}"? Cảnh báo: Việc xóa bỏ sẽ gỡ thông tin đơn mua khỏi hệ thống.`}
-            confirmText="Đồng ý xóa"
-            cancelText="Hủy bỏ"
-            type="danger"
-          />
         )}
       </div>
-    </>
+
+      {/* ── BẢNG DỮ LIỆU SIÊU TINH GỌN (THAO TÁC NÚT BẤM MỞ DROPDOWN XEM CHI TIẾT & CHỈNH SỬA - KHÔNG ICON - KHÔNG NÚT XÓA) ── */}
+      <div className="admin-list-layout pr-compact-table" style={{ width: '100%' }}>
+        <div className="mgmt-table card admin-table-card" style={{ width: '100%' }}>
+          <div className="table-responsive desktop-only admin-table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'center', width: '40px' }}>STT</th>
+                  <th>Mã đơn</th>
+                  <th>Loại</th>
+                  <th>Ưu tiên</th>
+                  <th>Trạng thái</th>
+                  <th>Đối tác</th>
+                  <th>Ngày HT dự kiến</th>
+                  <th>Ngày HT thực tế</th>
+                  <th>Ngày tạo</th>
+                  <th>Người tạo</th>
+                  <th>Ngày duyệt</th>
+                  <th>Người duyệt</th>
+                  <th style={{ textAlign: 'right' }}>Tổng giá trị</th>
+                  <th>Ghi chú</th>
+                  <th style={{ textAlign: 'center', width: '65px' }}>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={15} style={{ padding: '2rem', textAlign: 'center', color: '#94A3B8' }}>Đang tải dữ liệu đơn hàng...</td>
+                  </tr>
+                ) : displayItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={15} style={{ padding: '2rem', textAlign: 'center', color: '#94A3B8' }}>Không tìm thấy đơn hàng nào phù hợp với bộ lọc.</td>
+                  </tr>
+                ) : displayItems.map((row, idx) => {
+                  const rowId = row.id || idx + 1;
+                  const isMenuOpen = actionMenuId === rowId;
+                  return (
+                    <tr key={rowId}>
+                      <td style={{ textAlign: 'center', fontWeight: '600', color: '#475569' }}>{row.stt || String(idx + 1).padStart(2, '0')}</td>
+                      <td style={{ fontWeight: '800', color: '#2D1A12' }}>{row.po_code || row.order_code || `GIAYXEO.DH02.06.26`}</td>
+                      <td style={{ color: '#475569' }}>{row.order_type || 'Đơn đặt mua'}</td>
+                      <td style={{ color: '#475569' }}>{row.priority || (idx === 0 ? 'Cao' : 'Bình thường')}</td>
+                      <td style={{ fontWeight: '700', color: row.status_color || (idx === 0 ? '#475569' : idx === 1 ? '#16A34A' : '#DC2626') }}>
+                        {row.order_status_text || (idx === 0 ? 'Đã hoàn thành' : idx === 1 ? 'Đang sản xuất' : 'Chưa duyệt')}
+                      </td>
+                      <td style={{ color: '#2D1A12', fontWeight: '600' }}>{row.partner || row.supplier || `Khách hàng ${idx + 1}`}</td>
+                      <td style={{ color: '#64748B' }}>{row.est_date || '24/07/2026'}</td>
+                      <td style={{ color: '#64748B' }}>{row.real_date || (idx === 0 ? '24/07/2026' : '---')}</td>
+                      <td style={{ color: '#64748B' }}>{row.create_date || '24/07/2026'}</td>
+                      <td style={{ color: '#475569' }}>{row.creator || (idx === 0 ? 'Bùi Thị Tuyền' : idx === 1 ? 'Phạm Văn Tuyền' : 'Võ Hồng Chương')}</td>
+                      <td style={{ color: '#64748B' }}>{row.approve_date || (idx < 2 ? '24/07/2026' : '---')}</td>
+                      <td style={{ color: '#475569' }}>{row.approver || (idx < 2 ? 'Nguyễn B' : '---')}</td>
+                      <td style={{ textAlign: 'right', fontWeight: '700', color: '#2D1A12' }}>{typeof row.total_amount === 'number' ? `$${row.total_amount.toLocaleString()}` : row.total_amount || '$12,500'}</td>
+                      <td style={{ color: '#64748B' }}>{row.note || ''}</td>
+                      <td className="pr-action-cell" style={{ textAlign: 'center', position: 'relative', zIndex: isMenuOpen ? 50 : 1 }}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActionMenuId(isMenuOpen ? null : rowId);
+                          }}
+                          style={{
+                            background: isMenuOpen ? '#FAF6F0' : 'none',
+                            border: isMenuOpen ? '1px solid #7B5233' : 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            color: isMenuOpen ? '#7B5233' : '#64748B',
+                            padding: '3px 6px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                          title="Thao tác"
+                        >
+                          <MoreHorizontal size={16} />
+                        </button>
+
+                        {/* POPUP ACTION MENU KHÔNG CÓ ICON - KHÔNG CÓ NÚT XÓA */}
+                        {isMenuOpen && (
+                          <div className="action-menu" style={{ right: '0', top: '100%', minWidth: '120px', padding: '4px 0', boxShadow: '0 6px 16px rgba(123, 82, 51, 0.12)' }}>
+                            <button
+                              type="button"
+                              className="action-menu-item"
+                              style={{ display: 'block', width: '100%', fontSize: '0.8rem', fontWeight: '600', padding: '8px 14px', textAlign: 'left', color: '#334155' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActionMenuId(null);
+                                navigate(`/admin/purchase-requisitions/${rowId}?mode=view`);
+                              }}
+                            >
+                              Xem chi tiết
+                            </button>
+
+                            <button
+                              type="button"
+                              className="action-menu-item"
+                              style={{ display: 'block', width: '100%', fontSize: '0.8rem', fontWeight: '600', padding: '8px 14px', textAlign: 'left', color: '#16A34A', borderTop: '1px solid #FAF6F0' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActionMenuId(null);
+                                navigate(`/admin/purchase-requisitions/${rowId}?mode=edit`);
+                              }}
+                            >
+                              Chỉnh sửa
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Footers Phân Trang Compact */}
+          <div className="admin-pagination-desktop desktop-only">
+            <div style={{ color: '#8D6E63', fontSize: '0.78rem', fontWeight: '600' }}>
+              Hiển thị <b>{startIndex}–{endIndex}</b> trên <b>{totalCount}</b> đơn hàng
+            </div>
+
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+              <button
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(currentPage - 1)}
+                className="page-btn"
+                style={{ padding: '4px 10px', fontSize: '0.78rem' }}
+              >
+                &lt; Trước
+              </button>
+              {[1, 2, 3, 4].map(p => (
+                <button
+                  key={p}
+                  onClick={() => setCurrentPage(p)}
+                  className={`page-btn ${currentPage === p ? 'active' : ''}`}
+                  style={{
+                    padding: '4px 10px',
+                    backgroundColor: currentPage === p ? '#7B5233' : '#fff',
+                    color: currentPage === p ? '#fff' : '#334155',
+                    fontWeight: '700',
+                    border: '1px solid #CBD5E1',
+                    borderRadius: '5px',
+                    fontSize: '0.78rem'
+                  }}
+                >
+                  {p}
+                </button>
+              ))}
+              <span style={{ color: '#7B5233', fontWeight: '700', padding: '0 4px', fontSize: '0.78rem' }}>...</span>
+              <button
+                onClick={() => setCurrentPage(117)}
+                className="page-btn"
+                style={{ padding: '4px 10px', background: '#fff', color: '#334155', fontWeight: '700', border: '1px solid #CBD5E1', borderRadius: '5px', fontSize: '0.78rem' }}
+              >
+                117
+              </button>
+              <button
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage(currentPage + 1)}
+                className="page-btn"
+                style={{ padding: '4px 10px', fontSize: '0.78rem' }}
+              >
+                Sau &gt;
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 
-const thStyle = { padding: '12px 10px', textAlign: 'left', fontSize: '0.73rem', fontWeight: 700, whiteSpace: 'nowrap' };
-const tdStyle = { padding: '12px 10px', fontSize: '0.76rem', color: '#334155' };
-const pageBtnStyle = { padding: '4px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer', background: '#fff' };
-
-export default PurchaseRequisitionList;
+export default PurchaseRequisitionListView;

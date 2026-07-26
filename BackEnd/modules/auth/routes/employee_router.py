@@ -10,6 +10,9 @@ from modules.kpi.models.kpi_management import KPIChecklist, KPIEmployeeItem
 from modules.auth.schemas.employees import EmployeeCreate, EmployeeUpdate, EmployeeResponse, PaginatedEmployeeResponse
 import math
 
+from sqlalchemy import func
+from modules.hr.models.hr_models import HREmployee, HRDepartment, HRPosition
+
 router = APIRouter()
 
 def resolve_employee_names_and_kpis(db: Session, emp: Employee) -> EmployeeResponse:
@@ -29,23 +32,27 @@ def resolve_employee_names_and_kpis(db: Session, emp: Employee) -> EmployeeRespo
     return res
 
 @router.get("/", response_model=PaginatedEmployeeResponse)
-def list_employees(
-    page: int = 1, 
+def get_employees(
+    page: int = 1,
     size: int = 10,
     search: Optional[str] = None,
+    role_id: Optional[int] = None,
+    permission_id: Optional[int] = None,
     status: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     query = db.query(Employee)
     
-    # Search filter
+    if role_id:
+        query = query.filter(Employee.role_id == role_id)
+    if permission_id:
+        query = query.filter(Employee.permission_id == permission_id)
+        
     if search:
         search_filter = f"%{search}%"
         query = query.filter(
             (Employee.employee_id.like(search_filter)) |
             (Employee.full_name.like(search_filter)) |
-            (Employee.phone.like(search_filter)) |
-            (Employee.email.like(search_filter)) |
             (Employee.department.like(search_filter)) |
             (Employee.position.like(search_filter))
         )
@@ -69,12 +76,83 @@ def list_employees(
         "pages": pages
     }
 
-@router.get("/by-code/{employee_id}", response_model=EmployeeResponse)
+@router.get("/by-code/{employee_id}")
 def get_employee_by_code(employee_id: str, db: Session = Depends(get_db)):
-    employee = db.query(Employee).filter(Employee.employee_id == employee_id).first()
-    if not employee:
-        raise HTTPException(status_code=404, detail="Không tìm thấy nhân viên với mã cung cấp")
-    return resolve_employee_names_and_kpis(db, employee)
+    clean_code = employee_id.strip()
+    
+    # 1. Tra cứu trong bảng employees legacy
+    employee = db.query(Employee).filter(func.lower(Employee.employee_id) == clean_code.lower()).first()
+    if employee:
+        return resolve_employee_names_and_kpis(db, employee)
+        
+    # 2. Tra cứu bổ sung trong bảng hr_employees (Quản lý nhân sự HR)
+    hr_emp = db.query(HREmployee).filter(func.lower(HREmployee.employee_id) == clean_code.lower()).first()
+    if hr_emp:
+        dept_name = None
+        pos_name = None
+        
+        if hr_emp.department_id:
+            dept = db.query(HRDepartment).filter(HRDepartment.id == hr_emp.department_id).first()
+            if dept:
+                dept_name = dept.name
+        if hr_emp.position_id:
+            pos = db.query(HRPosition).filter(HRPosition.id == hr_emp.position_id).first()
+            if pos:
+                pos_name = pos.name
+
+        # Auto-match với bảng Roles
+        matched_role_id = None
+        if dept_name:
+            matched_role = db.query(Role).filter(
+                (func.lower(Role.name) == dept_name.lower()) |
+                (func.lower(Role.description) == dept_name.lower())
+            ).first()
+            if matched_role:
+                matched_role_id = matched_role.id
+            else:
+                all_roles = db.query(Role).all()
+                for r in all_roles:
+                    r_title = (r.description or r.name or "").lower()
+                    if dept_name.lower() in r_title or r_title in dept_name.lower():
+                        matched_role_id = r.id
+                        break
+
+        # Auto-match với bảng Permissions
+        matched_perm_id = None
+        if pos_name:
+            matched_perm = db.query(Permission).filter(
+                (func.lower(Permission.name) == pos_name.lower()) |
+                (func.lower(Permission.description) == pos_name.lower())
+            ).first()
+            if matched_perm:
+                matched_perm_id = matched_perm.id
+            else:
+                all_perms = db.query(Permission).all()
+                for p in all_perms:
+                    p_title = (p.description or p.name or "").lower()
+                    if pos_name.lower() in p_title or p_title in pos_name.lower():
+                        matched_perm_id = p.id
+                        break
+
+        return {
+            "id": hr_emp.id,
+            "employee_id": hr_emp.employee_id,
+            "full_name": hr_emp.full_name,
+            "email": getattr(hr_emp, "email", None),
+            "phone": hr_emp.phone,
+            "role_id": matched_role_id,
+            "permission_id": matched_perm_id,
+            "department": dept_name,
+            "position": pos_name,
+            "status": "Đang làm việc",
+            "note": None,
+            "role_name": dept_name,
+            "permission_name": pos_name,
+            "kpis": [],
+            "checklists": []
+        }
+        
+    raise HTTPException(status_code=404, detail="Không tìm thấy nhân viên với mã cung cấp")
 
 @router.get("/{id}", response_model=EmployeeResponse)
 def get_employee(id: int, db: Session = Depends(get_db)):

@@ -127,26 +127,36 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     if (menuList.length === 0) return;
 
     const nextState = {};
-    const role = user.role_name;
-    if (role === 'IT' || user.username === 'admin') {
-      nextState[2] = true;
-      nextState[10] = true;
-    } else if (role === 'Sx') {
-      nextState[21] = true;
-    } else if (role === 'QLCL') {
-      nextState[27] = true;
-    } else if (role === 'NS' || role === 'HR') {
-      nextState[10] = true;
-    }
 
+    // 1. Tìm nhóm menu chứa trang đang được chọn (active)
+    let activeGroupId = null;
     menuList.forEach(group => {
       if (group.children && group.children.length > 0) {
         const hasActive = group.children.some(child => checkIsActive(child));
         if (hasActive) {
-          nextState[group.id] = true;
+          activeGroupId = group.id;
         }
       }
     });
+
+    // 2. Nếu đang chọn trang con thuộc 1 nhóm -> CHỈ MỞ nhóm đó (Tự động thu gọn tất cả nhóm khác)
+    if (activeGroupId !== null) {
+      nextState[activeGroupId] = true;
+    } else {
+      // 3. Nếu ở trang tổng/chưa chọn mục con nào -> Sử dụng nhóm mặc định theo vai trò (IT/Admin mở ID 2 & 10)
+      const role = user.role_name;
+      if (role === 'IT' || user.username === 'admin') {
+        nextState[2] = true;
+        nextState[10] = true;
+      } else if (role === 'Sx') {
+        nextState[21] = true;
+      } else if (role === 'QLCL') {
+        nextState[27] = true;
+      } else if (role === 'NS' || role === 'HR') {
+        nextState[10] = true;
+      }
+    }
+
     setExpandedGroups(nextState);
   }, [menuList, location.pathname, location.search]);
 

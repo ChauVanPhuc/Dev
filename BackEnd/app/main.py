@@ -99,6 +99,14 @@ except Exception as migration_err:
     # Ignore if column already exists
     pass
 
+# [MIGRATION] Add created_at column to roles table (fix SQL error 42S22)
+try:
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE roles ADD created_at DATETIME NULL"))
+except Exception:
+    # Ignore if column already exists
+    pass
+
 
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -159,7 +167,7 @@ app.add_middleware(
 
     allow_origins=["*"],
 
-    allow_credentials=True,
+    allow_credentials=False,
 
     allow_methods=["*"],
 

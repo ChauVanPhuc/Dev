@@ -2138,7 +2138,15 @@ const PortalLayout = () => {
         .dashboard-content.allow-y-scroll {
           overflow-y: auto !important;
         }
-        .dashboard-content > div,
+        .dashboard-content.allow-y-scroll > div,
+        .dashboard-content.allow-y-scroll .user-create-container,
+        .dashboard-content.allow-y-scroll .user-edit-container {
+          overflow-y: visible !important;
+          height: auto !important;
+          min-height: min-content !important;
+          flex: none !important;
+        }
+        .dashboard-content:not(.allow-y-scroll) > div,
         .mgmt-container,
         .manufacture-plan-container,
         .quality-records-container {

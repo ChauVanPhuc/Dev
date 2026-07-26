@@ -386,7 +386,7 @@ const UserEdit = ({ isProfile = false }) => {
     setSyncing(true);
     try {
       const response = await api.get(`/employees/by-code/${formData.employee_id}`);
-      const employee = response.data;
+      const employee = response.data || response;
       
       setFormData(prev => {
         const fetchedName = employee.full_name;
@@ -396,7 +396,9 @@ const UserEdit = ({ isProfile = false }) => {
           full_name: fetchedName,
           phone: prev.phone || employee.phone || '',
           email: prev.email || employee.email || '',
-          username: generatedUser
+          username: generatedUser,
+          role_id: employee.role_id ? String(employee.role_id) : prev.role_id,
+          permission_id: employee.permission_id ? String(employee.permission_id) : prev.permission_id
         };
       });
       setIsDirty(true);
@@ -1648,7 +1650,7 @@ const UserEdit = ({ isProfile = false }) => {
       )}
 
       <style dangerouslySetInnerHTML={{ __html: `
-        .user-create-container { width: 100%; padding-bottom: 90px; }
+        .user-create-container { width: 100%; padding-bottom: 90px; height: auto !important; overflow-y: visible !important; }
         @keyframes slideIn {
           from { transform: translateX(120%); opacity: 0; }
           to { transform: translateX(0); opacity: 1; }

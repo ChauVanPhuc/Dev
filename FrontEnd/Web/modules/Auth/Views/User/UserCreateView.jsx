@@ -111,7 +111,7 @@ const UserCreate = () => {
     setSyncing(true);
     try {
       const response = await api.get(`/employees/by-code/${formData.employee_id}`);
-      const employee = response.data;
+      const employee = response.data || response;
       
       setFormData(prev => {
         const fetchedName = employee.full_name;
@@ -121,7 +121,9 @@ const UserCreate = () => {
           full_name: fetchedName,
           phone: prev.phone || employee.phone || '',
           email: prev.email || employee.email || '',
-          username: generatedUser
+          username: generatedUser,
+          role_id: employee.role_id ? String(employee.role_id) : prev.role_id,
+          permission_id: employee.permission_id ? String(employee.permission_id) : prev.permission_id
         };
       });
       setToastMessage('Đồng bộ dữ liệu nhân sự thành công!');
@@ -274,8 +276,14 @@ const UserCreate = () => {
         try {
           const data = await api.get(`/roles/${formData.role_id}/permissions`);
           setPermissions(data);
-          // Reset các lựa chọn cấp dưới
-          setFormData(prev => ({ ...prev, permission_id: '', stage_ids: [] }));
+          setFormData(prev => {
+            const hasMatch = data.some(p => String(p.id) === String(prev.permission_id));
+            return {
+              ...prev,
+              permission_id: hasMatch ? prev.permission_id : (data.length > 0 ? String(data[0].id) : ''),
+              stage_ids: []
+            };
+          });
           setStages([]);
         } catch (err) {
           console.error('Lỗi khi tải Permissions:', err);
@@ -1372,7 +1380,7 @@ const UserCreate = () => {
       )}
 
       <style dangerouslySetInnerHTML={{ __html: `
-        .user-create-container { width: 100%; padding-bottom: 30px; }
+        .user-create-container { width: 100%; padding-bottom: 50px; height: auto !important; overflow-y: visible !important; }
         @keyframes slideIn {
           from { transform: translateX(120%); opacity: 0; }
           to { transform: translateX(0); opacity: 1; }
