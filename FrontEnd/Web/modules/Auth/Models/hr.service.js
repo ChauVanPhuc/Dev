@@ -62,6 +62,10 @@ export const hrService = {
     return await api.delete(`/hr/departments/${id}`);
   },
 
+  updateDepartment: async (id, data) => {
+    return await api.put(`/hr/departments/${id}`, data);
+  },
+
   // --- POSITIONS ---
   getPositions: async (search = '') => {
     const url = search ? `/hr/positions?search=${encodeURIComponent(search)}` : '/hr/positions';
@@ -76,6 +80,10 @@ export const hrService = {
     return await api.delete(`/hr/positions/${id}`);
   },
 
+  updatePosition: async (id, data) => {
+    return await api.put(`/hr/positions/${id}`, data);
+  },
+
   // --- SECTIONS ---
   getSections: async (search = '') => {
     const url = search ? `/hr/sections?search=${encodeURIComponent(search)}` : '/hr/sections';
@@ -88,6 +96,10 @@ export const hrService = {
 
   deleteSection: async (id) => {
     return await api.delete(`/hr/sections/${id}`);
+  },
+
+  updateSection: async (id, data) => {
+    return await api.put(`/hr/sections/${id}`, data);
   },
 
   // --- ORG CHART NODES ---
@@ -161,6 +173,14 @@ export const hrService = {
 
   updateFactoryStructure: async (id, data) => {
     return await api.put(`/hr/factory-structures/${id}`, data);
+  },
+
+  upsertFactoryStructure: async (code, data) => {
+    return await api.put(`/hr/factory-structures/upsert/${encodeURIComponent(code)}`, data);
+  },
+
+  syncFactoryStructuresFromBOM: async () => {
+    return await api.post('/hr/factory-structures/sync-from-bom');
   },
 
   deleteFactoryStructure: async (id) => {

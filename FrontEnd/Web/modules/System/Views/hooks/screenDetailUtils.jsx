@@ -1197,8 +1197,9 @@ export const ROUTE_SUGGESTIONS = {
     { title: 'Nhật ký sự cố', path: '/admin/logs' }
   ],
   'Quản lý kinh doanh': [
+    { title: 'Quản lý khách hàng', path: '/admin/customers' },
     { title: 'Thời gian xuất cont', path: '/admin/shipments' },
-    { title: 'Quản lý giá tủ', path: '/admin/prices' },
+    { title: 'Đơn giá sản phẩm', path: '/admin/prices' },
     { title: 'Đơn đặt mua', path: '/admin/purchase-requisitions' },
     { title: 'Đơn mua hàng', path: '/admin/purchase-order-items' }
   ],

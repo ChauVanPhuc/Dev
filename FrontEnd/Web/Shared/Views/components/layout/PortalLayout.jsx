@@ -2111,66 +2111,67 @@ const PortalLayout = () => {
         __html: `
         .admin-layout {
           display: flex;
-          min-height: 100vh;
+          height: 100vh;
+          max-height: 100vh;
           background-color: #FAFAFA;
           position: relative;
           max-width: 100vw;
+          overflow: hidden;
         }
-        .admin-layout.fit-to-screen-active .admin-sidebar {
-          height: 100% !important;
-          min-height: 100% !important;
+        .admin-main {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          height: 100vh;
+          max-height: 100vh;
+          overflow: hidden;
         }
-        .admin-layout.fit-to-screen-active .admin-main {
+        .dashboard-content {
+          flex: 1;
+          min-height: 0;
+          height: calc(100vh - 60px);
+          overflow-y: hidden;
+          background-color: #F8FAFC;
+          display: flex;
+          flex-direction: column;
+        }
+        .dashboard-content.allow-y-scroll {
+          overflow-y: auto !important;
+        }
+        .dashboard-content > div,
+        .mgmt-container,
+        .manufacture-plan-container,
+        .quality-records-container {
+          flex: 1 !important;
           height: 100% !important;
-          min-height: 100% !important;
+          min-height: 0 !important;
+          display: flex !important;
+          flex-direction: column !important;
           overflow: hidden !important;
         }
-        .admin-layout.fit-to-screen-active .dashboard-content {
-          height: calc(100% - 60px) !important;
-          overflow-y: hidden !important;
-          background-color: #F8FAFC !important;
-          display: flex !important;
-          flex-direction: column !important;
-        }
-        .admin-layout.fit-to-screen-active .dashboard-content.allow-y-scroll {
-          overflow-y: auto !important;
-        }
-        .admin-layout.fit-to-screen-active .dashboard-content > div,
-        .admin-layout.fit-to-screen-active .mgmt-container,
-        .admin-layout.fit-to-screen-active .manufacture-plan-container,
-        .admin-layout.fit-to-screen-active .quality-records-container {
-          flex: 1 !important;
-          height: 100% !important;
-          min-height: 0 !important;
-          display: flex !important;
-          flex-direction: column !important;
-        }
-        .admin-layout.fit-to-screen-active .mgmt-main {
+        .mgmt-main {
           flex: 1 !important;
           display: flex !important;
           flex-direction: column !important;
           min-height: 0 !important;
           height: 100% !important;
+          overflow: hidden !important;
         }
-        .admin-layout.fit-to-screen-active .main-tabs,
-        .admin-layout.fit-to-screen-active .defect-mgmt-tabs {
+        .main-tabs,
+        .defect-mgmt-tabs,
+        .sticky-top-zone {
           flex-shrink: 0 !important;
-          position: relative !important;
-          top: 0 !important;
-          margin-top: 0 !important;
-          margin-bottom: 0 !important;
-          z-index: 10 !important;
         }
-        .admin-layout.fit-to-screen-active .analytics-view,
-        .admin-layout.fit-to-screen-active .list-view {
+        .analytics-view,
+        .list-view {
           flex: 1 !important;
           min-height: 0 !important;
           overflow-y: auto !important;
           display: flex !important;
           flex-direction: column !important;
         }
-        .admin-layout.fit-to-screen-active .admin-list-layout,
-        .admin-layout.fit-to-screen-active .defect-list-layout {
+        .admin-list-layout,
+        .defect-list-layout {
           flex: 1 !important;
           height: 100% !important;
           min-height: 0 !important;

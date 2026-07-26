@@ -297,7 +297,7 @@ INITIAL_SCREENS = [
         "route_path": "/admin/prices",
         "default_code": "CL2",
         "current_code": "CL2",
-        "title": "Quản lý đơn giá",
+        "title": "Đơn giá sản phẩm",
         "subtitle": "Quản lý đơn giá sản phẩm và cấu hình chi phí"
     },
     {

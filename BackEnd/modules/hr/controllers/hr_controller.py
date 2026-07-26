@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import re
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 from datetime import datetime
@@ -12,6 +13,8 @@ from modules.hr.schemas.hr_schemas import (
     HROrgNodeCreate, HRNodeAssignmentCreate,
     HRHierarchyNodeCreate, HRPersonnelNodeCreate, HRFactoryStructureCreate
 )
+from modules.production.models.bom_detail import BOMDetail
+from modules.master.models.master_bom_detail import MasterBOMDetail
 
 # --- EMPLOYEES CONTROLLER ---
 def get_employees(db: Session, page: int = 1, size: int = 10, search: str = None, 
@@ -425,9 +428,33 @@ def delete_personnel_node(db: Session, node_id: int):
 
 # --- FACTORY STRUCTURES CONTROLLER ---
 def get_factory_structures(db: Session):
-    structures = db.query(HRFactoryStructure).order_by(HRFactoryStructure.id.asc()).all()
+    # 1. Scan factory codes (NM\d+) from BOM details and master BOM details
+    bom_stages = set()
+    
+    bom_details_stages = db.query(BOMDetail.input_stage, BOMDetail.output_stage).all()
+    for row in bom_details_stages:
+        if row[0]: bom_stages.add(row[0])
+        if row[1]: bom_stages.add(row[1])
+        
+    master_stages = db.query(MasterBOMDetail.input_stage, MasterBOMDetail.output_stage).all()
+    for row in master_stages:
+        if row[0]: bom_stages.add(row[0])
+        if row[1]: bom_stages.add(row[1])
+        
+    bom_factory_codes = set()
+    for stage in bom_stages:
+        match = re.search(r'(NM\d+)', stage)
+        if match:
+            bom_factory_codes.add(match.group(1))
+
+    # 2. Get saved factory structures from database
+    db_structures = db.query(HRFactoryStructure).all()
+    mapped_codes = {s.structure_code for s in db_structures}
+    
     res = []
-    for struct in structures:
+    
+    # 3. Add existing database structures
+    for struct in db_structures:
         dept_name = None
         parent_name = None
         
@@ -450,6 +477,25 @@ def get_factory_structures(db: Session):
             "department_name": dept_name,
             "parent_structure_name": parent_name
         })
+        
+    # 4. Add BOM detected codes as placeholder structure rows if not already mapped
+    for code in bom_factory_codes:
+        if code not in mapped_codes:
+            res.append({
+                "id": None,
+                "structure_code": code,
+                "structure_name": f"Nhà máy {code} (Chưa cấu hình)",
+                "structure_type": "Nhà máy",
+                "parent_id": None,
+                "department_id": None,
+                "description": "Tự động phát hiện từ dữ liệu BOM. Nhấn 'Sửa' để cấu hình chi tiết.",
+                "created_at": None,
+                "department_name": None,
+                "parent_structure_name": None
+            })
+            
+    # Sort logically by structure_code
+    res.sort(key=lambda x: x["structure_code"])
     return res
 
 def create_factory_structure(db: Session, structure: HRFactoryStructureCreate):
@@ -477,3 +523,77 @@ def delete_factory_structure(db: Session, struct_id: int):
     db.delete(db_struct)
     db.commit()
     return True
+
+def update_department(db: Session, dept_id: int, department_data: HRDepartmentCreate):
+    db_dept = db.query(HRDepartment).filter(HRDepartment.id == dept_id).first()
+    if not db_dept:
+        return None
+    for key, val in department_data.model_dump().items():
+        setattr(db_dept, key, val)
+    db.commit()
+    db.refresh(db_dept)
+    return db_dept
+
+def update_position(db: Session, pos_id: int, position_data: HRPositionCreate):
+    db_pos = db.query(HRPosition).filter(HRPosition.id == pos_id).first()
+    if not db_pos:
+        return None
+    for key, val in position_data.model_dump().items():
+        setattr(db_pos, key, val)
+    db.commit()
+    db.refresh(db_pos)
+    return db_pos
+
+def update_section(db: Session, sec_id: int, section_data: HRSectionCreate):
+    db_sec = db.query(HRSection).filter(HRSection.id == sec_id).first()
+    if not db_sec:
+        return None
+    for key, val in section_data.model_dump().items():
+        setattr(db_sec, key, val)
+    db.commit()
+    db.refresh(db_sec)
+    return db_sec
+
+def sync_factory_structures_from_bom(db: Session):
+    # 1. Scan BOM stages
+    bom_stages = set()
+    bom_details_stages = db.query(BOMDetail.input_stage, BOMDetail.output_stage).all()
+    for row in bom_details_stages:
+        if row[0]: bom_stages.add(row[0])
+        if row[1]: bom_stages.add(row[1])
+        
+    master_stages = db.query(MasterBOMDetail.input_stage, MasterBOMDetail.output_stage).all()
+    for row in master_stages:
+        if row[0]: bom_stages.add(row[0])
+        if row[1]: bom_stages.add(row[1])
+        
+    bom_factory_codes = set()
+    for stage in bom_stages:
+        match = re.search(r'(NM\d+)', stage)
+        if match:
+            bom_factory_codes.add(match.group(1))
+
+    # 2. Get existing database codes
+    db_structures = db.query(HRFactoryStructure).all()
+    mapped_codes = {s.structure_code for s in db_structures}
+    
+    # 3. Create records for new codes
+    added_count = 0
+    for code in bom_factory_codes:
+        if code not in mapped_codes:
+            new_struct = HRFactoryStructure(
+                structure_code=code,
+                structure_name=f"Nhà máy {code}",
+                structure_type="Nhà máy",
+                parent_id=None,
+                department_id=None,
+                description="Đồng bộ tự động từ dữ liệu BOM"
+            )
+            db.add(new_struct)
+            added_count += 1
+            
+    if added_count > 0:
+        db.commit()
+        
+    return get_factory_structures(db)
+

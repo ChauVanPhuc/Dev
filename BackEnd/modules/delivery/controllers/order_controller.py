@@ -177,3 +177,12 @@ def update_order(db: Session, order_id: int, order: OrderUpdate):
         db.commit()
         db.refresh(db_order)
     return db_order
+
+def delete_order(db: Session, order_id: int):
+    db_order = db.query(Order).filter(Order.id == order_id).first()
+    if db_order:
+        db.delete(db_order)
+        db.commit()
+        return True
+    return False
+

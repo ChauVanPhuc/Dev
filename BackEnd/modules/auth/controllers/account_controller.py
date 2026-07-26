@@ -360,10 +360,10 @@ def resolve_permissions_by_params(
     legacy_rank_map = {
         "none": [],
         "read": ["read"],
-        "create": ["read", "create"],
-        "edit": ["read", "create", "edit"],
-        "delete": ["read", "create", "edit", "delete"],
-        "approve": ["read", "create", "edit", "delete", "approve"],
+        "create": ["read", "create", "export_import"],
+        "edit": ["read", "create", "edit", "export_import"],
+        "delete": ["read", "create", "edit", "delete", "export_import"],
+        "approve": ["read", "create", "edit", "delete", "approve", "export_import"],
         "export_import": ["read", "create", "edit", "delete", "approve", "export_import"],
         "write": ["read", "create", "edit", "delete", "approve", "export_import"],
     }

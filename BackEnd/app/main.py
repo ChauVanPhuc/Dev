@@ -310,30 +310,33 @@ async def check_write_permissions(request: Request, call_next):
                                     elif screen_key in ("mobile_delivery-create", "mobile_delivery-receive"):
                                         keys_to_check = ["mobile_delivery-create", "mobile_delivery-receive", "delivery-tracking"]
                                     
-                                    user_perm = "none"
-                                    for key in keys_to_check:
-                                        p = resolved_perms.get(key, "none")
-                                        if p != "none":
-                                            user_perm = p
-                                            break
-                                    
-                                    # Phân tích danh sách các hành động được cho phép
-                                    allowed_actions_list = []
-                                    if user_perm:
-                                        if "," in user_perm:
-                                            allowed_actions_list = [p.strip() for p in user_perm.split(",") if p.strip()]
-                                        else:
-                                            legacy_rank_map = {
-                                                "none": [],
-                                                "read": ["read"],
-                                                "create": ["read", "create"],
-                                                "edit": ["read", "create", "edit"],
-                                                "delete": ["read", "create", "edit", "delete"],
-                                                "approve": ["read", "create", "edit", "delete", "approve"],
-                                                "export_import": ["read", "create", "edit", "delete", "approve", "export_import"],
-                                                "write": ["read", "create", "edit", "delete", "approve", "export_import"],
-                                            }
-                                            allowed_actions_list = legacy_rank_map.get(user_perm, [])
+                                    # Admin và Toàn quyền hệ thống luôn có full quyền
+                                    if user.username == "admin" or getattr(user, "permission_level", "") == "Toàn quyền hệ thống":
+                                        allowed_actions_list = ["read", "create", "edit", "delete", "approve", "export_import"]
+                                    else:
+                                        allowed_actions_list = []
+                                        for key in keys_to_check:
+                                            perm_val = resolved_perms.get(key, [])
+                                            if isinstance(perm_val, list):
+                                                if perm_val:
+                                                    allowed_actions_list = perm_val
+                                                    break
+                                            elif isinstance(perm_val, str) and perm_val != "none":
+                                                if "," in perm_val:
+                                                    allowed_actions_list = [a.strip() for a in perm_val.split(",") if a.strip()]
+                                                else:
+                                                    legacy_rank_map = {
+                                                        "none": [],
+                                                        "read": ["read"],
+                                                        "create": ["read", "create", "export_import"],
+                                                        "edit": ["read", "create", "edit", "export_import"],
+                                                        "delete": ["read", "create", "edit", "delete", "export_import"],
+                                                        "approve": ["read", "create", "edit", "delete", "approve", "export_import"],
+                                                        "export_import": ["read", "create", "edit", "delete", "approve", "export_import"],
+                                                        "write": ["read", "create", "edit", "delete", "approve", "export_import"],
+                                                    }
+                                                    allowed_actions_list = legacy_rank_map.get(perm_val, [])
+                                                break
 
                                     # Xác định hành động được yêu cầu
                                     path_lower = path.lower()

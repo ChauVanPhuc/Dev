@@ -4,7 +4,7 @@ from fastapi import APIRouter
 
 from modules.production.routes import product_router, category_router, product_plan_router, production_router, stage_router
 
-from modules.master.routes import master_product_router
+from modules.master.routes import master_product_router, customer_router
 
 from modules.delivery.routes import order_router, delivery_router, return_router, pallet_router
 
@@ -38,6 +38,8 @@ api_router = APIRouter()
 api_router.include_router(product_router.router, prefix="/products", tags=["products"])
 
 api_router.include_router(master_product_router.router, prefix="/master-products", tags=["master-products"])
+
+api_router.include_router(customer_router.router, prefix="/customers", tags=["customers"])
 
 api_router.include_router(category_router.router, prefix="/categories", tags=["categories"])
 

@@ -9,6 +9,9 @@ import { purchasingService } from '@modules/Purchasing/Models/purchasing.service
 import '@styles/components.css';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 
+import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
+import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+
 const formatCurrency = (value) => {
   if (!value && value !== 0) return '---';
   return new Intl.NumberFormat('vi-VN').format(Math.round(value));
@@ -42,8 +45,21 @@ const getWarehouseDisplay = (status) => {
 
 const PurchaseRequisitionList = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const { startGlobalUpload } = useOutletContext() || {};
   const fileInputRef = useRef(null);
+
+  const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
+  const loggedInUserIsAdmin = loggedInUser.role_name === 'IT' || loggedInUser.role_name === 'BGD' || loggedInUser.username === 'admin';
+
+  let activePermissions = {};
+  try {
+    activePermissions = JSON.parse(localStorage.getItem('smartflow_active_permissions') || '{}');
+  } catch (e) {}
+
+  const requisitionPerm = activePermissions['purchase-requisitions'];
+  const hasWritePermission = loggedInUserIsAdmin || (requisitionPerm !== 'read' && requisitionPerm !== 'none');
+
   const [data, setData] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -58,6 +74,40 @@ const PurchaseRequisitionList = () => {
   const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [filterSupplier, setFilterSupplier] = useState('');
+
+  // State thao tác & confirm modal
+  const [actionMenuId, setActionMenuId] = useState(null);
+  const [deletingItem, setDeletingItem] = useState(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (typeof e.target.closest === 'function') {
+        if (!e.target.closest('.action-menu') && !e.target.closest('.action-btn')) {
+          setActionMenuId(null);
+        }
+      } else {
+        setActionMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleDeleteItem = async () => {
+    if (!deletingItem) return;
+    try {
+      await purchasingService.deleteRequisition(deletingItem.id);
+      toast('success', `Đã xóa đơn mua ${deletingItem.po_code} thành công!`);
+      setIsDeleteModalOpen(false);
+      setDeletingItem(null);
+      fetchData();
+    } catch (err) {
+      console.error('Lỗi khi xóa đơn mua:', err);
+      toast('error', err.response?.data?.detail || 'Không thể xóa đơn mua này!');
+    }
+  };
+
 
   useEffect(() => {
     const handleResize = () => {
@@ -225,7 +275,7 @@ const PurchaseRequisitionList = () => {
           </div>
         )}
 
-        <input ref={fileInputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleImport} />
+        <input id="pr-excel-upload" ref={fileInputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleImport} />
 
         {/* Compact KPI Cards */}
         <div style={{
@@ -271,11 +321,11 @@ const PurchaseRequisitionList = () => {
             {
               label: 'Nhập Excel',
               icon: <FileUp size={14} />,
-              onClick: () => fileInputRef.current?.click()
+              onClick: () => (fileInputRef.current || document.getElementById('pr-excel-upload'))?.click()
             }
           ]}
           onExport={handleExport}
-          hasWritePermission={true}
+          hasWritePermission={hasWritePermission}
         />
 
         {/* INLINE EXPANDABLE FILTER BAR */}
@@ -355,23 +405,22 @@ const PurchaseRequisitionList = () => {
                     <th style={{ width: '160px', textAlign: 'center' }}>Trạng thái</th>
                     <th style={{ width: '160px', textAlign: 'center' }}>Nhập kho</th>
                     <th>Người tạo</th>
+                    <th style={{ width: '100px', textAlign: 'center' }}>Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr><td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>Đang tải dữ liệu...</td></tr>
+                    <tr><td colSpan={9} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>Đang tải dữ liệu...</td></tr>
                   ) : data.length === 0 ? (
-                    <tr><td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>Không có dữ liệu hiển thị.</td></tr>
+                    <tr><td colSpan={9} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>Không có dữ liệu hiển thị.</td></tr>
                   ) : data.map((item, idx) => {
                     const status = getStatusDisplay(item.status);
                     const warehouse = getWarehouseDisplay(item.warehouse_status);
                     const stt = (currentPage - 1) * itemsPerPage + idx + 1;
                     return (
-                      <tr key={item.id} 
-                        style={{ cursor: 'pointer' }}
-                        onClick={() => navigate(`/admin/purchase-requisitions/${item.id}`)}>
+                      <tr key={item.id} style={{ position: 'relative', zIndex: actionMenuId === item.id ? 40 : 1 }}>
                         <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>#{stt}</td>
-                        <td style={{ fontWeight: 700, color: '#7B5233' }}>{item.po_code}</td>
+                        <td style={{ fontWeight: 700, color: '#7B5233', cursor: 'pointer' }} onClick={() => navigate(`/admin/purchase-requisitions/${item.id}`)}>{item.po_code}</td>
                         <td>{formatDate(item.order_date)}</td>
                         <td>{formatDate(item.delivery_date)}</td>
                         <td>{item.vendor_name || item.supplier_name || '---'}</td>
@@ -396,6 +445,22 @@ const PurchaseRequisitionList = () => {
                           </span>
                         </td>
                         <td>{item.created_by_name || item.creator || '---'}</td>
+                        <td style={{ textAlign: 'center', position: 'relative', zIndex: actionMenuId === item.id ? 40 : 1 }} onClick={e => e.stopPropagation()}>
+                          <button
+                            className="action-btn"
+                            onClick={() => setActionMenuId(actionMenuId === item.id ? null : item.id)}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+                          </button>
+                          {actionMenuId === item.id && (
+                            <div className="action-menu">
+                              <button className="action-menu-item" onClick={() => { setActionMenuId(null); navigate(`/admin/purchase-requisitions/${item.id}`); }}>Xem chi tiết</button>
+                              {hasWritePermission && (
+                                <button className="action-menu-item danger" onClick={() => { setActionMenuId(null); setDeletingItem(item); setIsDeleteModalOpen(true); }}>Xóa đơn mua</button>
+                              )}
+                            </div>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}
@@ -511,6 +576,19 @@ const PurchaseRequisitionList = () => {
               <ChevronRight size={16} />
             </button>
           </div>
+        )}
+        {/* Delete Confirm Modal */}
+        {isDeleteModalOpen && deletingItem && (
+          <BeautifulConfirmModal
+            isOpen={isDeleteModalOpen}
+            onClose={() => setIsDeleteModalOpen(false)}
+            onConfirm={handleDeleteItem}
+            title="Xóa đơn mua"
+            message={`Bạn có chắc chắn muốn xóa đơn mua "${deletingItem.po_code}"? Cảnh báo: Việc xóa bỏ sẽ gỡ thông tin đơn mua khỏi hệ thống.`}
+            confirmText="Đồng ý xóa"
+            cancelText="Hủy bỏ"
+            type="danger"
+          />
         )}
       </div>
     </>

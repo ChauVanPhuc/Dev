@@ -178,8 +178,8 @@ class HRFactoryStructureCreate(HRFactoryStructureBase):
     pass
 
 class HRFactoryStructureResponse(HRFactoryStructureBase):
-    id: int
-    created_at: datetime
+    id: Optional[int] = None
+    created_at: Optional[datetime] = None
     department_name: Optional[str] = None
     parent_structure_name: Optional[str] = None
 

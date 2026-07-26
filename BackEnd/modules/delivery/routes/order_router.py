@@ -310,3 +310,14 @@ def update_order(order_id: int, order: OrderUpdate, db: Session = Depends(get_db
         # Ghi log lỗi phía server để hỗ trợ chẩn đoán
         print(f"Server Error during Order Update: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/{order_id}")
+def delete_order(order_id: int, db: Session = Depends(get_db)):
+    """
+    [DELETE] Xóa đơn hàng theo ID.
+    """
+    success = order_controller.delete_order(db=db, order_id=order_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng để xóa")
+    return {"message": "Xóa đơn hàng thành công"}
+

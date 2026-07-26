@@ -1,11 +1,14 @@
 import React from 'react';
 import { X, AlertTriangle, CheckCircle, Info, AlertCircle } from 'lucide-react';
 
-const BeautifulConfirmModal = ({ visible, onCancel, onConfirm, title, message, type = 'warning', confirmText = 'Xác nhận', cancelText = 'Hủy' }) => {
-  if (!visible) return null;
+const BeautifulConfirmModal = ({ visible, isOpen, onCancel, onClose, onConfirm, title, message, type = 'warning', confirmText = 'Xác nhận', cancelText = 'Hủy' }) => {
+  const isVisible = visible ?? isOpen;
+  const handleCancel = onCancel || onClose;
+  const resolvedType = type === 'danger' ? 'error' : type;
+  if (!isVisible) return null;
 
   const getIcon = () => {
-    switch (type) {
+    switch (resolvedType) {
       case 'warning': return <AlertTriangle size={48} color="#f59e0b" />;
       case 'success': return <CheckCircle size={48} color="#10b981" />;
       case 'error': return <AlertCircle size={48} color="#ef4444" />;
@@ -14,7 +17,7 @@ const BeautifulConfirmModal = ({ visible, onCancel, onConfirm, title, message, t
   };
 
   const getHeaderColor = () => {
-    switch (type) {
+    switch (resolvedType) {
       case 'warning': return '#f59e0b';
       case 'success': return '#10b981';
       case 'error': return '#ef4444';
@@ -46,7 +49,7 @@ const BeautifulConfirmModal = ({ visible, onCancel, onConfirm, title, message, t
         textAlign: 'center'
       }}>
         <button
-          onClick={onCancel}
+          onClick={handleCancel}
           style={{
             position: 'absolute',
             top: '20px', right: '20px',
@@ -107,7 +110,7 @@ const BeautifulConfirmModal = ({ visible, onCancel, onConfirm, title, message, t
 
         <div style={{ display: 'flex', gap: '12px' }}>
           <button
-            onClick={onCancel}
+            onClick={handleCancel}
             style={{
               flex: 1,
               padding: '12px',

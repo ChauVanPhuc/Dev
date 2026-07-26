@@ -41,6 +41,18 @@ const PurchaseOrderItemList = () => {
   const navigate = useNavigate();
   const { startGlobalUpload } = useOutletContext() || {};
   const fileInputRef = useRef(null);
+
+  const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
+  const loggedInUserIsAdmin = loggedInUser.role_name === 'IT' || loggedInUser.role_name === 'BGD' || loggedInUser.username === 'admin';
+
+  let activePermissions = {};
+  try {
+    activePermissions = JSON.parse(localStorage.getItem('smartflow_active_permissions') || '{}');
+  } catch (e) {}
+
+  const orderItemPerm = activePermissions['purchase-order-items'];
+  const hasWritePermission = loggedInUserIsAdmin || (orderItemPerm !== 'read' && orderItemPerm !== 'none');
+
   const [data, setData] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -268,7 +280,7 @@ const PurchaseOrderItemList = () => {
           </div>
         )}
 
-        <input ref={fileInputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleImport} />
+        <input id="poi-excel-upload" ref={fileInputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleImport} />
 
         {/* Compact KPI Cards */}
         <div style={{
@@ -316,11 +328,11 @@ const PurchaseOrderItemList = () => {
             {
               label: 'Nhập Excel',
               icon: <FileUp size={14} />,
-              onClick: () => fileInputRef.current?.click()
+              onClick: () => (fileInputRef.current || document.getElementById('poi-excel-upload'))?.click()
             }
           ]}
           onExport={handleExport}
-          hasWritePermission={true}
+          hasWritePermission={hasWritePermission}
         />
 
         {/* INLINE EXPANDABLE FILTER BAR */}

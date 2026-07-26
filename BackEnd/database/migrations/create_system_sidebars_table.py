@@ -120,7 +120,7 @@ def upgrade():
                 "title": "Quản lý kinh doanh", "icon": "DollarSign", "sort_order": 7,
                 "children": [
                     {"title": "Thời gian xuất cont", "route_path": "/admin/shipments", "icon": "Calendar", "sort_order": 1, "permission_key": None},
-                    {"title": "Quản lý giá tủ", "route_path": "/admin/prices", "icon": "Tag", "sort_order": 2, "permission_key": None},
+                    {"title": "Đơn giá sản phẩm", "route_path": "/admin/prices", "icon": "Tag", "sort_order": 2, "permission_key": None},
                     {"title": "Đơn đặt mua", "route_path": "/admin/purchase-requisitions", "icon": "FilePlus", "sort_order": 3, "permission_key": None},
                     {"title": "Đơn mua hàng", "route_path": "/admin/purchase-order-items", "icon": "ShoppingCart", "sort_order": 4, "permission_key": None},
                 ]

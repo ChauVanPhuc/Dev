@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, Boolean
+from sqlalchemy import Column, Integer, Boolean, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.mssql import NVARCHAR
+from datetime import datetime
 from config.database import Base
 from modules.auth.models.associations import role_permission
 
@@ -16,6 +17,7 @@ class Role(Base):
     description = Column(NVARCHAR(255))                     # Mô tả vai trò
     is_active = Column(Boolean, default=True)               # Trạng thái hoạt động
     default_permissions = Column(NVARCHAR(None), nullable=True) # Quyền mặc định của bộ phận dạng JSON string
+    created_at = Column(DateTime, default=datetime.utcnow)  # Ngày tạo bộ phận
 
     # Quan hệ Many-to-Many tới Permission (Quyền hạn)
     permissions = relationship("Permission", secondary=role_permission, back_populates="roles")

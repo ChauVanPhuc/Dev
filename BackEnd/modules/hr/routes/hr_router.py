@@ -233,6 +233,16 @@ def delete_department(id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Không tìm thấy phòng ban")
     return {"message": "Xóa phòng ban thành công"}
 
+@router.put("/departments/{id}", response_model=hr_schemas.HRDepartmentResponse)
+def update_existing_department(id: int, dept: hr_schemas.HRDepartmentCreate, db: Session = Depends(get_db)):
+    existing = db.query(HRDepartment).filter(HRDepartment.code == dept.code, HRDepartment.id != id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Mã phòng ban đã được sử dụng")
+    updated = hr_controller.update_department(db, id, dept)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phòng ban")
+    return updated
+
 
 # --- POSITIONS ENDPOINTS ---
 
@@ -254,6 +264,16 @@ def delete_position(id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Không tìm thấy vị trí")
     return {"message": "Xóa vị trí thành công"}
 
+@router.put("/positions/{id}", response_model=hr_schemas.HRPositionResponse)
+def update_existing_position(id: int, pos: hr_schemas.HRPositionCreate, db: Session = Depends(get_db)):
+    existing = db.query(HRPosition).filter(HRPosition.code == pos.code, HRPosition.id != id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Mã vị trí đã được sử dụng")
+    updated = hr_controller.update_position(db, id, pos)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Không tìm thấy vị trí")
+    return updated
+
 
 # --- SECTIONS ENDPOINTS ---
 
@@ -274,6 +294,16 @@ def delete_section(id: int, db: Session = Depends(get_db)):
     if not success:
         raise HTTPException(status_code=404, detail="Không tìm thấy bộ phận")
     return {"message": "Xóa bộ phận thành công"}
+
+@router.put("/sections/{id}", response_model=hr_schemas.HRSectionResponse)
+def update_existing_section(id: int, sec: hr_schemas.HRSectionCreate, db: Session = Depends(get_db)):
+    existing = db.query(HRSection).filter(HRSection.code == sec.code, HRSection.id != id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Mã bộ phận đã được sử dụng")
+    updated = hr_controller.update_section(db, id, sec)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Không tìm thấy bộ phận")
+    return updated
 
 
 # --- ORG NODES ENDPOINTS ---
@@ -384,6 +414,26 @@ def update_factory_structure(id: int, structure: hr_schemas.HRFactoryStructureCr
     if not updated:
         raise HTTPException(status_code=404, detail="Không tìm thấy cấu trúc nhà máy")
     return updated
+
+@router.put("/factory-structures/upsert/{code}", response_model=hr_schemas.HRFactoryStructureResponse)
+def upsert_factory_structure_by_code(code: str, structure: hr_schemas.HRFactoryStructureCreate, db: Session = Depends(get_db)):
+    existing = db.query(HRFactoryStructure).filter(HRFactoryStructure.structure_code == code).first()
+    if existing:
+        for key, val in structure.model_dump().items():
+            setattr(existing, key, val)
+        db.commit()
+        db.refresh(existing)
+        return existing
+    else:
+        new_struct = HRFactoryStructure(**structure.model_dump())
+        db.add(new_struct)
+        db.commit()
+        db.refresh(new_struct)
+        return new_struct
+
+@router.post("/factory-structures/sync-from-bom", response_model=List[hr_schemas.HRFactoryStructureResponse])
+def sync_factory_structures_from_bom(db: Session = Depends(get_db)):
+    return hr_controller.sync_factory_structures_from_bom(db)
 
 @router.delete("/factory-structures/{id}")
 def delete_factory_structure(id: int, db: Session = Depends(get_db)):

@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional, List
+from datetime import datetime
 from modules.auth.schemas.permissions import Permission
 
 class RoleBase(BaseModel):
@@ -11,6 +12,7 @@ class RoleBase(BaseModel):
     description: Optional[str] = None # Mô tả chi tiết vai trò
     is_active: bool = True         # Trạng thái hoạt động
     default_permissions: Optional[str] = None # Quyền mặc định dạng JSON
+    created_at: Optional[datetime] = None # Ngày tạo bộ phận
 
 class RoleCreate(RoleBase):
     """Schema dùng để tạo mới một vai trò."""

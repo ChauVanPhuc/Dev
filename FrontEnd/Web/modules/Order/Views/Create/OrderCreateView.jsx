@@ -14,7 +14,7 @@ import {
     Search,
     Loader2
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { bomService } from '@modules/Product/Models/bom.service';
 import { orderService } from '@modules/Order/Models/order.service';
 
@@ -154,6 +154,7 @@ const SearchableSelect = ({ value, onChange, placeholder }) => {
 
 const OrderCreate = () => {
     const navigate = useNavigate();
+    const { id } = useParams();
     const [isLoading, setIsLoading] = useState(false);
     const [boms, setBoms] = useState([]);
 
@@ -169,7 +170,6 @@ const OrderCreate = () => {
     useEffect(() => {
         const fetchBOMs = async () => {
             try {
-                // Tải nhiều hơn để phục vụ logic bung (explode) Element/Part
                 const data = await bomService.getBOMs('', 1000);
                 setBoms(data || []);
             } catch (error) {
@@ -178,6 +178,42 @@ const OrderCreate = () => {
         };
         fetchBOMs();
     }, []);
+
+    useEffect(() => {
+        if (!id) return;
+        const fetchExistingOrder = async () => {
+            try {
+                setIsLoading(true);
+                const existing = await orderService.getById(id);
+                if (existing) {
+                    setOrderData({
+                        customer: existing.customer || '',
+                        orderCode: existing.order_code || '',
+                        estimated_date: existing.estimated_date ? new Date(existing.estimated_date).toISOString().slice(0, 10) : '',
+                        finished_date: existing.finished_date ? new Date(existing.finished_date).toISOString().slice(0, 10) : '',
+                        note: existing.note || '',
+                        status: existing.order_status === 3 ? 'Hoàn thành' : existing.order_status === 2 ? 'Đang sản xuất' : 'Chờ Lệnh Sản Xuất'
+                    });
+
+                    const items = existing.items || [];
+                    if (items.length > 0) {
+                        setSelectedProducts(items.map((item, idx) => ({
+                            id: `p-existing-${idx}-${Date.now()}`,
+                            productId: item.master_product_id,
+                            quantity: item.quantity || 1,
+                            elements: [],
+                            isExpanded: false
+                        })));
+                    }
+                }
+            } catch (err) {
+                console.error("Lỗi khi tải đơn hàng cũ:", err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchExistingOrder();
+    }, [id]);
 
     const [selectedProducts, setSelectedProducts] = useState([
         { id: `p-${Date.now()}`, productId: '', quantity: 1, elements: [], isExpanded: false }
@@ -196,20 +232,15 @@ const OrderCreate = () => {
     const handleSelectProduct = async (internalId, productId) => {
         setIsLoading(true);
         try {
-            // Lấy chi tiết đầy đủ của sản phẩm mẫu (bao gồm cả cây BOM)
             const productData = await bomService.getBOM(productId);
             if (!productData) return;
 
-            // Xử lý đệ quy để bung cấu trúc BOM mẫu thành Elements/Parts cho Đơn hàng
-            // Lưu ý: Cấu trúc mới dùng master_bom_details (dạng phẳng hoặc lồng nhau)
             const bomDetails = productData.master_bom_details || [];
             
-            // Lọc ra các Element cấp 1 (con trực tiếp của sản phẩm gốc)
             const elements = bomDetails.map(el => ({
                 id: el.id,
                 name: el.name,
                 quantity: el.quantity || 1,
-                // Lấy các chi tiết con nếu có (cấu trúc cây)
                 parts: (el.children || []).map(part => ({
                     id: part.id,
                     name: part.name,
@@ -221,7 +252,7 @@ const OrderCreate = () => {
                 ...p,
                 productId: Number(productId),
                 elements: elements,
-                isExpanded: true // Tự động mở ra để người dùng thấy BOM đã load
+                isExpanded: true
             } : p));
         } catch (error) {
             console.error("Lỗi khi tải chi tiết sản phẩm:", error);
@@ -301,8 +332,15 @@ const OrderCreate = () => {
                     quantity: p.quantity
                 }))
             };
-            const result = await orderService.create(payload);
-            setSaveMsg({ type: 'success', text: `Đã tạo Đơn hàng ${result.order_code} thành công!` });
+
+            let result;
+            if (id) {
+                result = await orderService.update(id, payload);
+                setSaveMsg({ type: 'success', text: `Đã cập nhật Đơn hàng ${result.order_code || orderData.orderCode} thành công!` });
+            } else {
+                result = await orderService.create(payload);
+                setSaveMsg({ type: 'success', text: `Đã tạo Đơn hàng ${result.order_code} thành công!` });
+            }
             setTimeout(() => navigate('/admin/orders'), 1500);
         } catch (error) {
             setSaveMsg({ type: 'error', text: 'Lỗi khi lưu dữ liệu. Thử lại sau.' });

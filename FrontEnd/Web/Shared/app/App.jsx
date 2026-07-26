@@ -35,6 +35,7 @@ const BackupQRManagement = lazy(() => import('@modules/System/Views/Backup/Backu
 const ScreenManagement = lazy(() => import('@modules/System/Views/Screen/ScreenManagementView'));
 const ScreenDetail = lazy(() => import('@modules/System/Views/Screen/ScreenDetailView'));
 const SidebarManagement = lazy(() => import('@modules/System/Views/Screen/SidebarManagementView'));
+const SystemConfig = lazy(() => import('@modules/System/Views/SystemConfig/SystemConfigView'));
 const ScreenBugManagement = lazy(() => import('@modules/System/Views/Screen/ScreenBugManagementView'));
 const ProjectProgress = lazy(() => import('@modules/System/Views/Project/ProjectProgressView'));
 const DefectManagement = lazy(() => import('@modules/Inspection/Views/Defect/DefectManagementView'));
@@ -70,6 +71,8 @@ const ProductDetail = lazy(() => import('@modules/Product/Views/Detail/ProductDe
 const ProductCreate = lazy(() => import('@modules/Product/Views/Create/ProductCreateView'));
 const ManufactureOrders = lazy(() => import('@modules/Order/Views/List/OrdersListView'));
 const OrderCreate = lazy(() => import('@modules/Order/Views/Create/OrderCreateView'));
+const OrderDetail = lazy(() => import('@modules/Order/Views/Detail/OrderDetailView'));
+const CustomerList = lazy(() => import('@modules/Order/Views/Customer/CustomerListView'));
 const AddProductionPlan = lazy(() => import('@modules/Plan/Views/Plan/AddProductionPlanView'));
 const ProductionProgress = lazy(() => import('@modules/Plan/Views/Progress/ProductionProgressView'));
 const DeliveryTracking = lazy(() => import('@modules/Delivery/Views/Tracking/DeliveryTrackingView'));
@@ -608,6 +611,7 @@ function App() {
                 <Route path="screens" element={<ProtectedRoute permissionKey="screens"><ScreenManagement /></ProtectedRoute>} />
                 <Route path="screens/:id" element={<ProtectedRoute permissionKey="screens"><ScreenDetail /></ProtectedRoute>} />
                 <Route path="sidebar" element={<ProtectedRoute permissionKey="screens"><SidebarManagement /></ProtectedRoute>} />
+                <Route path="system-config" element={<ProtectedRoute permissionKey="screens"><SystemConfig /></ProtectedRoute>} />
                 <Route path="screens/bugs" element={<ProtectedRoute permissionKey="bugs"><ScreenBugManagement /></ProtectedRoute>} />
                 <Route path="screens/progress" element={<ProtectedRoute permissionKey="screens"><ProjectProgress /></ProtectedRoute>} />
                 <Route path="monitor" element={<ProtectedRoute permissionKey="monitor"><SystemMonitor /></ProtectedRoute>} />
@@ -638,6 +642,9 @@ function App() {
                 <Route path="progress/:id" element={<ProtectedRoute permissionKey="plan"><ProductionProgress /></ProtectedRoute>} />
                 <Route path="orders" element={<ProtectedRoute permissionKey="orders"><ManufactureOrders /></ProtectedRoute>} />
                 <Route path="orders/create" element={<ProtectedRoute permissionKey="orders"><OrderCreate /></ProtectedRoute>} />
+                <Route path="orders/edit/:id" element={<ProtectedRoute permissionKey="orders"><OrderCreate /></ProtectedRoute>} />
+                <Route path="orders/:id" element={<ProtectedRoute permissionKey="orders"><OrderDetail /></ProtectedRoute>} />
+                <Route path="customers" element={<ProtectedRoute permissionKey="customers"><CustomerList /></ProtectedRoute>} />
                 <Route path="backup-qrs" element={<ProtectedRoute permissionKey="backup-qrs"><BackupQRManagement /></ProtectedRoute>} />
                 <Route path="exception-deliveries" element={<ProtectedRoute permissionKey="exception-deliveries"><ExceptionDeliveries /></ProtectedRoute>} />
                 <Route path="purchase-requisitions" element={<ProtectedRoute permissionKey="purchase-requisitions"><PurchaseRequisitionList /></ProtectedRoute>} />

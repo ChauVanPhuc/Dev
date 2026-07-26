@@ -26,12 +26,19 @@ export const orderService = {
 
 
   // Cập nhật đơn hàng
-
   update: async (id, orderData) => {
-
     return await api.put(`/orders/${id}`, orderData);
+  },
 
+  // Lấy chi tiết đơn hàng theo ID
+  getById: async (id) => {
+    return await api.get(`/orders/${id}`);
+  },
+
+  // Xóa đơn hàng
+  delete: async (id) => {
+    return await api.delete(`/orders/${id}`);
   }
-
 };
+
 
