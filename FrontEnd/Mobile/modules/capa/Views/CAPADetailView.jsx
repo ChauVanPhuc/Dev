@@ -7,6 +7,8 @@ import apiClient from '@shared/services/api';
 import CapaCauseModal from './components/CapaCauseModal';
 import CapaPreventiveModal from './components/CapaPreventiveModal';
 import CapaCorrectiveModal from './components/CapaCorrectiveModal';
+import MessageModal from '@mobile/Shared/Views/components/feedback/MessageModal';
+import ConfirmModal from '@mobile/Shared/Views/components/feedback/ConfirmModal';
 
 const CAPADetailView = () => {
   const navigate = useNavigate();
@@ -16,6 +18,72 @@ const CAPADetailView = () => {
   const [activeTab, setActiveTab] = useState('general'); // 'general' | 'plan' | 'tracking'
   const [loading, setLoading] = useState(!isCreate);
   const [saving, setSaving] = useState(false);
+
+  // MessageModal System Popup State
+  const [modalState, setModalState] = useState({
+    isOpen: false,
+    type: 'info',
+    title: '',
+    message: '',
+    onConfirm: null
+  });
+
+  const showMessage = (type, title, message, onConfirm = null) => {
+    setModalState({
+      isOpen: true,
+      type,
+      title,
+      message,
+      onConfirm: () => {
+        setModalState(prev => ({ ...prev, isOpen: false }));
+        if (onConfirm) onConfirm();
+      }
+    });
+  };
+
+  // ConfirmModal System Confirmation State
+  const [confirmState, setConfirmState] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: null
+  });
+
+  const showConfirm = (title, message, onConfirm) => {
+    setConfirmState({
+      isOpen: true,
+      title,
+      message,
+      onConfirm: () => {
+        setConfirmState(prev => ({ ...prev, isOpen: false }));
+        onConfirm();
+      }
+    });
+  };
+
+  const handleCancelClick = () => {
+    showConfirm(
+      'Xác nhận hủy bỏ',
+      'Bạn có chắc chắn muốn rời khỏi trang và hủy các thao tác chưa lưu?',
+      () => navigate('/mobile/capa/list')
+    );
+  };
+
+  const handleDraftClick = () => {
+    showConfirm(
+      'Xác nhận lưu nháp',
+      'Bạn có chắc chắn muốn lưu bản nháp phiếu CAPA này không?',
+      () => handleSave('Lưu nháp')
+    );
+  };
+
+  const handleSubmitClick = () => {
+    showConfirm(
+      'Xác nhận gửi phản hồi',
+      'Bạn có chắc chắn muốn gửi phản hồi báo cáo CAPA này cho người phụ trách không?',
+      () => handleSave(formData.ticket_status || 'Vừa tạo')
+    );
+  };
 
   // Tab 1: General Info State
   const [formData, setFormData] = useState({
@@ -172,7 +240,7 @@ const CAPADetailView = () => {
   const handleExportReport = () => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      alert('Vui lòng cho phép bật cửa sổ popup để xuất báo cáo PDF!');
+      showMessage('warning', 'Cảnh báo', 'Vui lòng cho phép bật cửa sổ popup để xuất báo cáo PDF!');
       return;
     }
     const causesList = causes.map((c, i) => `
@@ -299,7 +367,7 @@ const CAPADetailView = () => {
 
   const handleSave = async (statusOverride = null) => {
     if (!formData.issue_description || !formData.issue_description.trim()) {
-      alert('Vui lòng nhập mô tả sự cố trước khi lưu báo cáo CAPA!');
+      showMessage('warning', 'Thiếu thông tin', 'Vui lòng nhập mô tả sự cố trước khi lưu báo cáo CAPA!');
       return;
     }
 
@@ -327,15 +395,24 @@ const CAPADetailView = () => {
 
       if (isCreate) {
         const resp = await apiClient.post('/capas/', payload);
-        alert(`Tạo báo cáo CAPA thành công (${resp.data?.code || formData.code})!`);
+        showMessage(
+          'success',
+          'Thành công',
+          `Tạo báo cáo CAPA thành công (${resp.data?.code || formData.code})!`,
+          () => navigate('/mobile/capa/list')
+        );
       } else {
         await apiClient.put(`/capas/${id}`, payload);
-        alert('Cập nhật báo cáo CAPA thành công!');
+        showMessage(
+          'success',
+          'Thành công',
+          'Cập nhật báo cáo CAPA thành công!',
+          () => navigate('/mobile/capa/list')
+        );
       }
-      navigate('/mobile/capa/list');
     } catch (err) {
       console.error('Lỗi khi lưu CAPA:', err);
-      alert('Đã xảy ra lỗi khi lưu báo cáo CAPA vào hệ thống.');
+      showMessage('error', 'Lỗi kết nối', 'Đã xảy ra lỗi khi lưu báo cáo CAPA vào hệ thống.');
     } finally {
       setSaving(false);
     }
@@ -990,7 +1067,7 @@ const CAPADetailView = () => {
         <div style={{ display: 'flex', gap: '10px' }}>
           <button
             type="button"
-            onClick={() => navigate('/mobile/capa/list')}
+            onClick={handleCancelClick}
             style={{
               flex: 1,
               height: '38px',
@@ -1011,7 +1088,7 @@ const CAPADetailView = () => {
 
           <button
             type="button"
-            onClick={() => handleSave('Lưu nháp')}
+            onClick={handleDraftClick}
             disabled={saving}
             style={{
               flex: 1,
@@ -1037,7 +1114,7 @@ const CAPADetailView = () => {
         {/* Hàng 2: Gửi phản hồi (Đỏ nổi bật full-width) */}
         <button
           type="button"
-          onClick={() => handleSave(formData.ticket_status || 'Vừa tạo')}
+          onClick={handleSubmitClick}
           disabled={saving}
           style={{
             width: '100%',
@@ -1083,6 +1160,26 @@ const CAPADetailView = () => {
         onClose={() => setIsPreventiveModalOpen(false)}
         onConfirm={handleConfirmPreventive}
         initialData={editingPlanIdx !== null ? preventivePlans[editingPlanIdx] : null}
+      />
+
+      {/* Premium System MessageModal Popup */}
+      <MessageModal
+        isOpen={modalState.isOpen}
+        type={modalState.type}
+        title={modalState.title}
+        message={modalState.message}
+        onConfirm={modalState.onConfirm}
+      />
+
+      {/* Premium System ConfirmModal Popup */}
+      <ConfirmModal
+        isOpen={confirmState.isOpen}
+        title={confirmState.title}
+        message={confirmState.message}
+        onConfirm={confirmState.onConfirm}
+        onCancel={() => setConfirmState(prev => ({ ...prev, isOpen: false }))}
+        confirmText="Xác nhận"
+        cancelText="Hủy"
       />
     </Layout>
   );

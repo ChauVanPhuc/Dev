@@ -252,6 +252,327 @@ const AwardDiscipline = () => {
     }
   }
 
+  if (showAddModal) {
+    return (
+      <Layout>
+        <PageHeader
+          screenCode="CL13.1: Thêm vi phạm"
+          title="Thêm vi phạm"
+          showBack={true}
+          onBackClick={() => { setShowAddModal(false); resetForm(); }}
+        />
+
+        <div style={{ padding: '12px 14px 100px 14px', display: 'flex', flexDirection: 'column', gap: '14px', boxSizing: 'border-box' }}>
+          <div style={{ backgroundColor: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '14px', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+            
+            {/* Tên nhân sự + Thời gian ghi nhận */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '10px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+                <label style={{ fontSize: '0.78rem', fontWeight: '700', color: '#475569' }}>
+                  Tên nhân sự <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <select
+                  value={formData.staff}
+                  onChange={(e) => handleFormChange('staff', e.target.value)}
+                  style={{
+                    width: '100%',
+                    height: '40px',
+                    boxSizing: 'border-box',
+                    minWidth: 0,
+                    padding: '0 10px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.84rem',
+                    lineHeight: '1.2',
+                    outline: 'none',
+                    backgroundColor: '#fff',
+                    color: '#1e293b'
+                  }}
+                >
+                  <option value="">Chọn nhân sự</option>
+                  {staffOptions.map((opt, idx) => (
+                    <option key={opt.employee_id || idx} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+                <label style={{ fontSize: '0.78rem', fontWeight: '700', color: '#475569' }}>
+                  Thời gian ghi nhận
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  value={new Date().toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })}
+                  style={{
+                    width: '100%',
+                    height: '40px',
+                    boxSizing: 'border-box',
+                    minWidth: 0,
+                    padding: '0 10px',
+                    borderRadius: '8px',
+                    border: '1px solid #c5c5c5',
+                    fontSize: '0.84rem',
+                    lineHeight: '1.2',
+                    outline: 'none',
+                    backgroundColor: '#e0e0e0',
+                    color: '#1e293b',
+                    fontWeight: '600',
+                    cursor: 'not-allowed'
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Nội dung vi phạm + Điểm */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: '10px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+                <label style={{ fontSize: '0.78rem', fontWeight: '700', color: '#475569' }}>
+                  Nội dung vi phạm <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <select
+                  value={formData.issue}
+                  onChange={(e) => handleFormChange('issue', e.target.value)}
+                  style={{
+                    width: '100%',
+                    height: '40px',
+                    boxSizing: 'border-box',
+                    minWidth: 0,
+                    padding: '0 10px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.84rem',
+                    lineHeight: '1.2',
+                    outline: 'none',
+                    backgroundColor: '#fff',
+                    color: '#1e293b'
+                  }}
+                >
+                  <option value="">Chọn nội dung</option>
+                  {issueOptions.map((opt, idx) => (
+                    <option key={opt.rule_code || idx} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+                <label style={{ fontSize: '0.78rem', fontWeight: '700', color: '#475569' }}>
+                  Điểm
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  value={formData.points}
+                  style={{
+                    width: '100%',
+                    height: '40px',
+                    boxSizing: 'border-box',
+                    minWidth: 0,
+                    padding: '0 10px',
+                    borderRadius: '8px',
+                    border: '1px solid #c5c5c5',
+                    fontSize: '0.84rem',
+                    lineHeight: '1.2',
+                    outline: 'none',
+                    backgroundColor: '#e0e0e0',
+                    color: '#1e293b',
+                    fontWeight: '600',
+                    textAlign: 'center',
+                    cursor: 'not-allowed'
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Mô tả */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+              <label style={{ fontSize: '0.78rem', fontWeight: '700', color: '#475569' }}>
+                Mô tả
+              </label>
+              <input
+                type="text"
+                placeholder="Nhập chi tiết mô tả..."
+                value={formData.description}
+                onChange={(e) => handleFormChange('description', e.target.value)}
+                style={{
+                  width: '100%',
+                  height: '40px',
+                  boxSizing: 'border-box',
+                  minWidth: 0,
+                  padding: '0 10px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '0.84rem',
+                  lineHeight: '1.2',
+                  outline: 'none',
+                  backgroundColor: '#fff'
+                }}
+              />
+            </div>
+
+            {/* Ghi chú */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+              <label style={{ fontSize: '0.78rem', fontWeight: '700', color: '#475569' }}>
+                Ghi chú
+              </label>
+              <textarea
+                placeholder="Nhập ghi chú..."
+                value={formData.note}
+                onChange={(e) => handleFormChange('note', e.target.value)}
+                rows={3}
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  minWidth: 0,
+                  padding: '8px 10px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '0.84rem',
+                  outline: 'none',
+                  resize: 'vertical',
+                  fontFamily: 'inherit'
+                }}
+              />
+            </div>
+
+            {/* Thêm ảnh */}
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              ref={fileInputRef}
+              style={{ display: 'none' }}
+              onChange={handleFileChange}
+            />
+            <button
+              type="button"
+              onClick={handleAddPhoto}
+              style={{
+                alignSelf: 'flex-start',
+                border: 'none',
+                background: 'transparent',
+                color: '#432818',
+                fontSize: '0.84rem',
+                fontWeight: '800',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <Plus size={16} strokeWidth={3} /> Thêm ảnh
+            </button>
+
+            {/* Preview ảnh đính kèm */}
+            {photos.length > 0 && (
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {photos.map(photo => (
+                  <div key={photo.id} style={{
+                    width: '60px', height: '60px', borderRadius: '8px',
+                    position: 'relative', overflow: 'hidden', border: '1px solid #cbd5e1'
+                  }}>
+                    <img src={photo.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePhoto(photo.id)}
+                      style={{
+                        position: 'absolute', top: '2px', right: '2px',
+                        background: '#fff', borderRadius: '50%', border: 'none',
+                        width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                      }}
+                    >
+                      <X size={12} color="#ef4444" strokeWidth={3} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+          </div>
+        </div>
+
+        {/* Fixed Bottom Action Bar */}
+        <div style={{
+          position: 'fixed',
+          bottom: 0,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: '100%',
+          maxWidth: '450px',
+          backgroundColor: '#fff',
+          borderTop: '1px solid #e2e8f0',
+          padding: '10px 14px 12px 14px',
+          boxShadow: '0 -4px 16px rgba(0, 0, 0, 0.12)',
+          zIndex: 1000,
+          boxSizing: 'border-box',
+          display: 'flex',
+          gap: '10px'
+        }}>
+          <button
+            type="button"
+            onClick={() => { setShowAddModal(false); resetForm(); }}
+            style={{
+              flex: 1,
+              height: '38px',
+              borderRadius: '8px',
+              border: '1px solid #432818',
+              backgroundColor: '#fff',
+              color: '#432818',
+              fontWeight: '700',
+              fontSize: '0.84rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            Xóa
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={isSubmitting || !formData.staff || !formData.issue}
+            style={{
+              flex: 1,
+              height: '38px',
+              borderRadius: '8px',
+              border: 'none',
+              backgroundColor: (!formData.staff || !formData.issue) ? '#94a3b8' : '#432818',
+              color: '#fff',
+              fontWeight: '700',
+              fontSize: '0.84rem',
+              cursor: (isSubmitting || !formData.staff || !formData.issue) ? 'not-allowed' : 'pointer',
+              boxShadow: '0 2px 4px rgba(67, 40, 24, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            {isSubmitting ? 'Đang lưu...' : 'Xác nhận'}
+          </button>
+        </div>
+
+        {/* Modals */}
+        <MessageModal
+          isOpen={messageModal.isOpen}
+          type={messageModal.type}
+          title={messageModal.title}
+          message={messageModal.message}
+          onConfirm={() => setMessageModal({ ...messageModal, isOpen: false })}
+        />
+        <ConfirmModal
+          isOpen={showConfirmModal}
+          title="Xác nhận tạo báo cáo"
+          message="Bạn có chắc chắn muốn tạo báo cáo vi phạm này không?"
+          onConfirm={executeSubmit}
+          onCancel={() => setShowConfirmModal(false)}
+        />
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <PageHeader title="Báo cáo vi phạm" subTitle="CL13: Danh sách vi phạm" />
@@ -582,231 +903,6 @@ const AwardDiscipline = () => {
             </button>
           </div>
         )}
-      {/* === MODAL: Thêm vi phạm (CL13.1) === */}
-      {showAddModal && (
-        <>
-          <div
-            onClick={() => setShowAddModal(false)}
-            style={{
-              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-              backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 10000
-            }}
-          />
-          <div style={{
-            position: 'absolute', top: 0, right: 0, bottom: 0,
-            width: '90%', maxWidth: '400px',
-            backgroundColor: '#fff', zIndex: 10001,
-            display: 'flex', flexDirection: 'column',
-            boxShadow: '-4px 0 20px rgba(0,0,0,0.2)',
-            animation: 'slideInRight 0.25s ease-out'
-          }}>
-            {/* Modal Header */}
-            <div style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '16px 20px', borderBottom: '1px solid #e5e7eb'
-            }}>
-              <span style={{ fontSize: '1rem', fontWeight: '800', color: '#1e293b' }}>
-                CL13.1: Thêm vi phạm
-              </span>
-              <button
-                onClick={() => setShowAddModal(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
-              >
-                <X size={22} color="#64748b" />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
-              {/* Tên nhân sự + Thời gian */}
-              <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
-                    Tên nhân sự <span style={{ color: '#dc2626' }}>*</span>
-                  </label>
-                  <select
-                    value={formData.staff}
-                    onChange={(e) => handleFormChange('staff', e.target.value)}
-                    style={{
-                      width: '100%', padding: '10px 12px', borderRadius: '8px',
-                      border: '1px solid #cbd5e1', fontSize: '0.85rem', outline: 'none',
-                      backgroundColor: '#fff', color: '#1e293b', boxSizing: 'border-box'
-                    }}
-                  >
-                    <option value="">Chọn nhân sự</option>
-                    {staffOptions.map((opt, idx) => (
-                      <option key={opt.employee_id || idx} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
-                    Thời gian ghi nhận
-                  </label>
-                  <input
-                    type="text"
-                    readOnly
-                    value={new Date().toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })}
-                    style={{
-                      width: '100%', padding: '10px 12px', borderRadius: '8px',
-                      border: '1px solid #cbd5e1', fontSize: '0.85rem', outline: 'none',
-                      backgroundColor: '#f8fafc', color: '#64748b', boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Nội dung vi phạm + Điểm */}
-              <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
-                <div style={{ flex: 2 }}>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
-                    Nội dung vi phạm <span style={{ color: '#dc2626' }}>*</span>
-                  </label>
-                  <select
-                    value={formData.issue}
-                    onChange={(e) => handleFormChange('issue', e.target.value)}
-                    style={{
-                      width: '100%', padding: '10px 12px', borderRadius: '8px',
-                      border: '1px solid #cbd5e1', fontSize: '0.85rem', outline: 'none',
-                      backgroundColor: '#fff', color: '#1e293b', boxSizing: 'border-box'
-                    }}
-                  >
-                    <option value="">Chọn nội dung</option>
-                    {issueOptions.map((opt, idx) => (
-                      <option key={opt.rule_code || idx} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
-                    Điểm
-                  </label>
-                  <input
-                    type="text"
-                    readOnly
-                    value={formData.points}
-                    style={{
-                      width: '100%', padding: '10px 12px', borderRadius: '8px',
-                      border: '1px solid #cbd5e1', fontSize: '0.85rem', outline: 'none',
-                      backgroundColor: '#f8fafc', color: '#64748b', boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Mô tả */}
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
-                  Mô tả
-                </label>
-                <input
-                  type="text"
-                  placeholder=""
-                  value={formData.description}
-                  onChange={(e) => handleFormChange('description', e.target.value)}
-                  style={{
-                    width: '100%', padding: '10px 12px', borderRadius: '8px',
-                    border: '1px solid #cbd5e1', fontSize: '0.85rem', outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              {/* Ghi chú */}
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
-                  Ghi chú
-                </label>
-                <textarea
-                  placeholder="Nhập ghi chú"
-                  value={formData.note}
-                  onChange={(e) => handleFormChange('note', e.target.value)}
-                  rows={3}
-                  style={{
-                    width: '100%', padding: '10px 12px', borderRadius: '8px',
-                    border: '1px solid #cbd5e1', fontSize: '0.85rem', outline: 'none',
-                    resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              {/* Thêm ảnh */}
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                ref={fileInputRef}
-                style={{ display: 'none' }}
-                onChange={handleFileChange}
-              />
-              <button
-                onClick={handleAddPhoto}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '6px',
-                  background: 'none', border: 'none', color: '#2563eb',
-                  fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer',
-                  padding: '4px 0', marginBottom: '12px'
-                }}
-              >
-                <Plus size={16} strokeWidth={3} /> Thêm ảnh
-              </button>
-
-              {/* Preview ảnh */}
-              {photos.length > 0 && (
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
-                  {photos.map(photo => (
-                    <div key={photo.id} style={{
-                      width: '60px', height: '60px', borderRadius: '8px',
-                      position: 'relative', overflow: 'hidden', border: '1px solid #e2e8f0'
-                    }}>
-                      <img src={photo.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      <button
-                        onClick={() => handleRemovePhoto(photo.id)}
-                        style={{
-                          position: 'absolute', top: '2px', right: '2px',
-                          background: '#fff', borderRadius: '50%', border: 'none',
-                          width: '16px', height: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
-                        }}
-                      >
-                        <X size={10} color="#ef4444" strokeWidth={3} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            <div style={{
-              padding: '16px 20px', borderTop: '1px solid #e5e7eb',
-              display: 'flex', gap: '12px'
-            }}>
-              <button
-                onClick={() => { setShowAddModal(false); resetForm() }}
-                style={{
-                  flex: 1, padding: '12px', borderRadius: '10px',
-                  border: '1px solid #cbd5e1', backgroundColor: '#fff',
-                  color: '#64748b', fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer'
-                }}
-              >
-                Xóa
-              </button>
-              <button
-                onClick={handleSubmit}
-                disabled={isSubmitting || !formData.staff || !formData.issue}
-                style={{
-                  flex: 1, padding: '12px', borderRadius: '10px',
-                  border: 'none', backgroundColor: (!formData.staff || !formData.issue) ? '#94a3b8' : '#7c2d12',
-                  color: '#fff', fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer'
-                }}
-              >
-                Xác nhận
-              </button>
-            </div>
-          </div>
-        </>
-      )}
       </div>
 
       {/* Modals */}
