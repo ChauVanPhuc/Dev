@@ -1,325 +1,300 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from typing import List, Optional
+import json
+from datetime import datetime
+
 from config.database import get_db
 from modules.capa.models.capa import CAPA
-from modules.capa.models.capa_occurrence import CAPAOccurrence
-from modules.capa.models.capa_evaluation import CAPAEvaluation
-from modules.capa.schemas.capa import CAPAOccurrenceUpdate, CAPAEvaluationCreate
-from typing import List
-import json
+from modules.capa.schemas.capa import CAPACreate, CAPAUpdate, CAPAResponse
 
 router = APIRouter()
 
-def seed_capas(db: Session):
-    # 1. CAPA 1: Cong venh
-    c1 = CAPA(
-        error_name="Cong vênh",
-        description="Cánh cửa bị cong dẫn đến đóng không được khít",
-        severity="Nghiêm trọng",
-        assigned_person="Hà Minh Xuân",
-        images="[]"
-    )
-    db.add(c1)
-    db.flush() # Lấy ID của c1
-    
-    # Occurrences cho c1
-    o1_2 = CAPAOccurrence(
-        capa_id=c1.id,
-        occurrence_number=2,
-        occurrence_date="27/08/2025",
-        container_code="APT0056",
-        product_name="T48s",
-        quantity=12,
-        issue_detail="T48s bị cong cánh cửa quá 2mm, cánh cửa ko che được",
-        inspector_name="Hà Minh Xuân",
-        status="Chờ đánh giá",
-        main_cause="",
-        corrective_action=""
-    )
-    db.add(o1_2)
-    db.flush()
+def seed_capas_if_empty(db: Session):
+    count = db.query(CAPA).count()
+    if count > 0:
+        return
 
-    o1_1 = CAPAOccurrence(
-        capa_id=c1.id,
-        occurrence_number=1,
-        occurrence_date="27/08/2024",
-        container_code="APT0042",
-        product_name="T48s",
-        quantity=150,
-        issue_detail="Cánh cửa bị cong lệch mép",
-        inspector_name="Hà Minh Xuân",
-        status="Đã đóng",
-        main_cause="Độ ẩm vượt mức tiêu chuẩn",
-        corrective_action="Hồi ẩm trước khi kiểm tra"
-    )
-    db.add(o1_1)
-    db.flush()
-
-    # Evaluations cho c1 occurrences
-    db.add(CAPAEvaluation(
-        occurrence_id=o1_2.id,
-        content="Kiểm tra thao tác lụa phôi",
-        execution_date="28/04/2025",
-        executor="Hà Minh Xuân",
-        result="Chưa đg",
-        notes="",
-        images="[]"
-    ))
-    db.add(CAPAEvaluation(
-        occurrence_id=o1_1.id,
-        content="Check thao tác lụa phôi",
-        execution_date="22/11/2025",
-        executor="Hà Minh Xuân",
-        result="Chưa đg",
-        notes="",
-        images="[]"
-    ))
-    db.add(CAPAEvaluation(
-        occurrence_id=o1_1.id,
-        content="Check độ ẩm",
-        execution_date="22/11/2025",
-        executor="Đặng Minh Tuấn",
-        result="Fail",
-        notes="",
-        images="[]"
-    ))
-    db.add(CAPAEvaluation(
-        occurrence_id=o1_1.id,
-        content="Check ngoại quan",
-        execution_date="22/11/2025",
-        executor="Đặng Văn Nam",
-        result="Pass",
-        notes="",
-        images="[]"
-    ))
-
-    # 2. CAPA 2: Khong dong mau
-    c2 = CAPA(
-        error_name="Không đồng màu",
-        description="Sản phẩm bị lệch màu sơn phủ bề mặt ngoài",
-        severity="Nặng",
-        assigned_person="Đặng Minh Tuấn",
-        images="[]"
-    )
-    db.add(c2)
-    db.flush()
-
-    o2_1 = CAPAOccurrence(
-        capa_id=c2.id,
-        occurrence_number=1,
-        occurrence_date="22/11/2025",
-        container_code="APT0043",
-        product_name="T49s",
-        quantity=1,
-        issue_detail="Sản phẩm sơn lót lệch màu sơn phủ ngoài 5%",
-        inspector_name="Đặng Minh Tuấn",
-        status="Đã đóng",
-        main_cause="Tỉ lệ pha dung môi chưa chính xác",
-        corrective_action="Pha theo đúng tỉ lệ định lượng chuẩn"
-    )
-    db.add(o2_1)
-    db.flush()
-
-    # 3. CAPA 3: Sai tem nhan
-    c3 = CAPA(
-        error_name="Sai tem nhãn",
-        description="Tem mã vạch dán sai vị trí hoặc sai thông tin lô sản xuất",
-        severity="Nhẹ",
-        assigned_person="Đặng Văn Nam",
-        images="[]"
-    )
-    db.add(c3)
-    db.flush()
-
-    o3_1 = CAPAOccurrence(
-        capa_id=c3.id,
-        occurrence_number=1,
-        occurrence_date="22/11/2025",
-        container_code="APT0044",
-        product_name="T50s",
-        quantity=3,
-        issue_detail="Nhầm lẫn tem nhãn thùng hàng",
-        inspector_name="Đặng Văn Nam",
-        status="Chờ đánh giá",
-        main_cause="",
-        corrective_action=""
-    )
-    db.add(o3_1)
-    db.flush()
-
-    db.add(CAPAEvaluation(
-        occurrence_id=o3_1.id,
-        content="Kiểm tra tem mã vạch",
-        execution_date="22/11/2025",
-        executor="Đặng Văn Nam",
-        result="Chưa đg",
-        notes="",
-        images="[]"
-    ))
-    
+    sample_capas = [
+        CAPA(
+            code="CAPA-01",
+            created_at_time="16:40 | 22/1/2026",
+            creator_name="Trần Thị B",
+            handler_name="Ngô Diễm My",
+            urgency="Nghiêm trọng",
+            scope="Sản phẩm lỗi",
+            issue_description="Vi phạm quy trình sản xuất, làm cong vênh sản phẩm đơn hàng T48s",
+            images=json.dumps([
+                "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=300",
+                "https://images.unsplash.com/photo-1581092335397-9583fe92d232?w=300"
+            ]),
+            evaluator_name="Nguyễn Văn A",
+            evaluation_time="10:00 | 23/1/2026",
+            ticket_status="Đang theo dõi",
+            tab_status="tracking",
+            causes_json=json.dumps([
+                {
+                    "direct_cause": "Do con người: Công nhân thao tác sai quy trình",
+                    "whys": ["Chưa được đào tạo kỹ bước lắp phôi", "Tài liệu SOP thiếu hình ảnh minh họa"]
+                }
+            ]),
+            corrective_actions_json=json.dumps([
+                {
+                    "stt": 1,
+                    "action": "Tái đào tạo quy trình ghép phôi cho công nhân",
+                    "time": "23/01/2026",
+                    "handler": "Ngô Diễm My"
+                }
+            ]),
+            preventive_plans_json=json.dumps([
+                {
+                    "stt": 1,
+                    "action": "Cập nhật tài liệu SOP kèm hình ảnh trực quan tại chuyền",
+                    "performer": "Ngô Diễm My",
+                    "deadline": "30/01/2026",
+                    "expected_result": "100% công nhân nắm rõ quy trình"
+                }
+            ]),
+            evaluations_json=json.dumps([
+                {
+                    "id": 1,
+                    "content": "Kiểm tra thao tác lụa phôi tại chuyền",
+                    "execution_date": "24/01/2026",
+                    "executor": "Nguyễn Văn A",
+                    "result": "Pass",
+                    "notes": "Công nhân tuân thủ đúng SOP mới"
+                }
+            ])
+        ),
+        CAPA(
+            code="CAPA-02",
+            created_at_time="16:45 | 22/1/2026",
+            creator_name="Đặng Văn Nam",
+            handler_name="Nguyễn Văn A",
+            urgency="Bình thường",
+            scope="Quy trình",
+            issue_description="Sơn lót không đồng màu giữa các lô phôi gỗ sồi",
+            images=json.dumps([]),
+            evaluator_name="Hà Minh Xuân",
+            evaluation_time="14:20 | 23/1/2026",
+            ticket_status="Vừa tạo",
+            tab_status="tracking",
+            causes_json=json.dumps([
+                {
+                    "direct_cause": "Do nguyên vật liệu: Tỉ lệ pha dung môi chưa chính xác",
+                    "whys": ["Cốc đo dung tích bị mờ vạch chia"]
+                }
+            ]),
+            corrective_actions_json=json.dumps([]),
+            preventive_plans_json=json.dumps([]),
+            evaluations_json=json.dumps([])
+        ),
+        CAPA(
+            code="CAPA-03",
+            created_at_time="09:15 | 15/1/2026",
+            creator_name="Phạm Minh C",
+            handler_name="Trần Thị B",
+            urgency="Nhẹ",
+            scope="Khiếu nại từ KH",
+            issue_description="Tem mã vạch bị dán nhầm vị trí góc thùng hàng",
+            images=json.dumps([]),
+            evaluator_name="Ngô Diễm My",
+            evaluation_time="11:00 | 18/1/2026",
+            ticket_status="Đạt (đóng CAPA)",
+            tab_status="history",
+            causes_json=json.dumps([]),
+            corrective_actions_json=json.dumps([]),
+            preventive_plans_json=json.dumps([]),
+            evaluations_json=json.dumps([])
+        )
+    ]
+    db.add_all(sample_capas)
     db.commit()
 
-@router.get("/", response_model=List[dict])
-def get_capas(db: Session = Depends(get_db)):
+@router.get("/", response_model=dict)
+def get_capas(
+    skip: int = 0,
+    limit: int = 20,
+    search: Optional[str] = None,
+    tab_status: Optional[str] = Query(None, description="tracking hoặc history"),
+    month: Optional[str] = Query(None, description="Lọc theo tháng e.g. 07 hoặc Tháng 7"),
+    db: Session = Depends(get_db)
+):
     """
-    [GET] Lấy danh sách CAPA tổng thể (MH-23)
+    [GET] Lấy danh sách CAPA (CL10.1) phân trang, tìm kiếm & bộ lọc Tab
     """
-    records = db.query(CAPA).all()
-    if not records:
-        seed_capas(db)
-        records = db.query(CAPA).all()
+    seed_capas_if_empty(db)
+    
+    query = db.query(CAPA)
+    
+    if tab_status:
+        query = query.filter(CAPA.tab_status == tab_status)
         
-    result_list = []
-    for r in records:
-        # Tìm ngày ghi nhận mới nhất và số lần ghi nhận
-        occurrences = r.occurrences
-        count = len(occurrences)
-        latest_date = ""
-        if count > 0:
-            # Lấy occurrence có number lớn nhất làm mới nhất
-            sorted_occ = sorted(occurrences, key=lambda x: x.occurrence_number, reverse=True)
-            latest_date = sorted_occ[0].occurrence_date
-            
-        result_list.append({
-            "id": r.id,
-            "error_name": r.error_name,
-            "description": r.description,
-            "severity": r.severity,
-            "assigned_person": r.assigned_person,
-            "latest_date": latest_date,
-            "occurrence_count": count
+    if search:
+        search_fmt = f"%{search}%"
+        query = query.filter(
+            (CAPA.code.like(search_fmt)) |
+            (CAPA.issue_description.like(search_fmt)) |
+            (CAPA.creator_name.like(search_fmt)) |
+            (CAPA.handler_name.like(search_fmt))
+        )
+
+    total = query.count()
+    items = query.order_by(CAPA.id.desc()).offset(skip).limit(limit).all()
+    
+    # Đếm số lượng CAPA đang theo dõi cho Badge Tab
+    tracking_count = db.query(CAPA).filter(CAPA.tab_status == "tracking").count()
+    history_count = db.query(CAPA).filter(CAPA.tab_status == "history").count()
+
+    items_data = []
+    for item in items:
+        items_data.append({
+            "id": item.id,
+            "code": item.code,
+            "created_at_time": item.created_at_time,
+            "creator_name": item.creator_name,
+            "handler_name": item.handler_name,
+            "urgency": item.urgency,
+            "scope": item.scope,
+            "issue_description": item.issue_description,
+            "ticket_status": item.ticket_status,
+            "tab_status": item.tab_status,
+            "images": item.images,
+            "evaluator_name": item.evaluator_name,
+            "evaluation_time": item.evaluation_time
         })
-    return result_list
+
+    return {
+        "items": items_data,
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+        "tracking_count": tracking_count,
+        "history_count": history_count
+    }
 
 @router.get("/{capa_id}", response_model=dict)
 def get_capa_detail(capa_id: int, db: Session = Depends(get_db)):
     """
-    [GET] Chi tiết CAPA và danh sách các lần ghi nhận (MH-24)
+    [GET] Chi tiết CAPA (CL10.2) bao gồm 3 Tab thông tin
     """
     c = db.query(CAPA).filter(CAPA.id == capa_id).first()
     if not c:
-        raise HTTPException(status_code=404, detail="Không tìm thấy CAPA")
-        
-    occurrences_data = []
-    for occ in c.occurrences:
-        occurrences_data.append({
-            "id": occ.id,
-            "occurrence_number": occ.occurrence_number,
-            "occurrence_date": occ.occurrence_date,
-            "container_code": occ.container_code,
-            "product_name": occ.product_name,
-            "quantity": occ.quantity,
-            "inspector_name": occ.inspector_name,
-            "status": occ.status
-        })
+        raise HTTPException(status_code=404, detail="Không tìm thấy báo cáo CAPA")
         
     return {
         "id": c.id,
-        "error_name": c.error_name,
-        "description": c.description,
-        "severity": c.severity,
-        "assigned_person": c.assigned_person,
-        "images": c.images,
-        "occurrences": sorted(occurrences_data, key=lambda x: x["occurrence_number"], reverse=True)
+        "code": c.code,
+        "created_at_time": c.created_at_time,
+        "creator_name": c.creator_name,
+        "handler_name": c.handler_name,
+        "urgency": c.urgency,
+        "scope": c.scope,
+        "issue_description": c.issue_description,
+        "images": c.images or "[]",
+        "evaluator_name": c.evaluator_name,
+        "evaluation_time": c.evaluation_time,
+        "ticket_status": c.ticket_status,
+        "tab_status": c.tab_status,
+        "causes_json": c.causes_json or "[]",
+        "corrective_actions_json": c.corrective_actions_json or "[]",
+        "preventive_plans_json": c.preventive_plans_json or "[]",
+        "evaluations_json": c.evaluations_json or "[]"
     }
 
-@router.get("/{capa_id}/occurrences/{occurrence_id}", response_model=dict)
-def get_capa_occurrence_detail(capa_id: int, occurrence_id: int, db: Session = Depends(get_db)):
-    """
-    [GET] Chi tiết 1 lần ghi nhận CAPA bao gồm thông tin ghi nhận, điều tra và đánh giá (MH-25)
-    """
-    occ = db.query(CAPAOccurrence).filter(
-        CAPAOccurrence.capa_id == capa_id, 
-        CAPAOccurrence.id == occurrence_id
-    ).first()
-    
-    if not occ:
-        raise HTTPException(status_code=404, detail="Không tìm thấy lần ghi nhận CAPA")
-        
-    evaluations_data = []
-    for ev in occ.evaluations:
-        evaluations_data.append({
-            "id": ev.id,
-            "content": ev.content,
-            "execution_date": ev.execution_date,
-            "executor": ev.executor,
-            "result": ev.result,
-            "notes": ev.notes,
-            "images": ev.images
-        })
-        
-    return {
-        "id": occ.id,
-        "capa_id": occ.capa_id,
-        "occurrence_number": occ.occurrence_number,
-        "occurrence_date": occ.occurrence_date,
-        "container_code": occ.container_code,
-        "product_name": occ.product_name,
-        "quantity": occ.quantity,
-        "inspector_name": occ.inspector_name,
-        "status": occ.status,
-        "issue_detail": occ.issue_detail,
-        "main_cause": occ.main_cause,
-        "corrective_action": occ.corrective_action,
-        "evaluations": evaluations_data
-    }
+from modules.notification.models.notifications import Notification
+from modules.auth.models.accounts import Account as AccountModel
 
-@router.put("/{capa_id}/occurrences/{occurrence_id}/investigation", response_model=dict)
-def update_capa_investigation(
-    capa_id: int, 
-    occurrence_id: int, 
-    payload: CAPAOccurrenceUpdate, 
-    db: Session = Depends(get_db)
-):
-    """
-    [PUT] Cập nhật thông tin điều tra (Nguyên nhân chính và hành động khắc phục) (MH-25)
-    """
-    occ = db.query(CAPAOccurrence).filter(
-        CAPAOccurrence.capa_id == capa_id, 
-        CAPAOccurrence.id == occurrence_id
-    ).first()
-    
-    if not occ:
-        raise HTTPException(status_code=404, detail="Không tìm thấy lần ghi nhận CAPA")
-        
-    if payload.main_cause is not None:
-        occ.main_cause = payload.main_cause
-    if payload.corrective_action is not None:
-        occ.corrective_action = payload.corrective_action
-    if payload.status is not None:
-        occ.status = payload.status
-        
-    db.commit()
-    return {"status": "success", "message": "Cập nhật thông tin điều tra CAPA thành công"}
+def trigger_capa_notification(db: Session, capa_code: str, creator: str, handler: str, status: str):
+    try:
+        admin = db.query(AccountModel).first()
+        announcer_id = admin.id if admin else 1
+        notif_text = f"Báo cáo CAPA [{capa_code}] từ {creator} đã được chuyển cho {handler} (Trạng thái: {status})"
+        notif = Notification(
+            content=notif_text,
+            announcer_id=announcer_id,
+            target_group="Toàn công ty",
+            priority_status="Quan trọng"
+        )
+        db.add(notif)
+        db.commit()
+    except Exception as e:
+        print("Capa Notification Error:", e)
 
-@router.post("/{capa_id}/occurrences/{occurrence_id}/evaluations", response_model=dict)
-def add_capa_evaluation(
-    capa_id: int, 
-    occurrence_id: int, 
-    payload: CAPAEvaluationCreate, 
-    db: Session = Depends(get_db)
-):
+@router.post("/", response_model=dict)
+def create_capa(payload: CAPACreate, db: Session = Depends(get_db)):
     """
-    [POST] Thêm mới dòng đánh giá kiểm tra CAPA từ Modal Popup (MH-25 Dialog)
+    [POST] Tạo mới phiếu CAPA
     """
-    occ = db.query(CAPAOccurrence).filter(
-        CAPAOccurrence.capa_id == capa_id, 
-        CAPAOccurrence.id == occurrence_id
-    ).first()
-    
-    if not occ:
-        raise HTTPException(status_code=404, detail="Không tìm thấy lần ghi nhận CAPA")
+    # Tự động sinh mã nếu chưa có
+    if not payload.code:
+        count = db.query(CAPA).count() + 1
+        payload.code = f"CAPA-{count:02d}"
         
-    new_ev = CAPAEvaluation(
-        occurrence_id=occ.id,
-        content=payload.content,
-        execution_date=payload.execution_date,
-        executor=payload.executor,
-        result=payload.result or "Chưa đg",
-        notes=payload.notes,
-        images=payload.images or "[]"
+    if not payload.created_at_time:
+        now_str = datetime.now().strftime("%H:%M | %d/%m/%Y")
+        payload.created_at_time = now_str
+        
+    new_capa = CAPA(
+        code=payload.code,
+        created_at_time=payload.created_at_time,
+        creator_name=payload.creator_name,
+        handler_name=payload.handler_name,
+        urgency=payload.urgency or "Bình thường",
+        scope=payload.scope or "Sản phẩm lỗi",
+        issue_description=payload.issue_description,
+        images=payload.images or "[]",
+        evaluator_name=payload.evaluator_name,
+        evaluation_time=payload.evaluation_time,
+        ticket_status=payload.ticket_status or "Vừa tạo",
+        tab_status=payload.tab_status or "tracking",
+        causes_json=payload.causes_json or "[]",
+        corrective_actions_json=payload.corrective_actions_json or "[]",
+        preventive_plans_json=payload.preventive_plans_json or "[]",
+        evaluations_json=payload.evaluations_json or "[]"
     )
-    db.add(new_ev)
+    db.add(new_capa)
     db.commit()
-    db.refresh(new_ev)
-    return {"status": "success", "id": new_ev.id, "message": "Thêm đánh giá CAPA thành công"}
+    db.refresh(new_capa)
+
+    trigger_capa_notification(db, new_capa.code, new_capa.creator_name, new_capa.handler_name, new_capa.ticket_status)
+
+    return {"status": "success", "id": new_capa.id, "code": new_capa.code, "message": "Tạo báo cáo CAPA thành công"}
+
+@router.put("/{capa_id}", response_model=dict)
+def update_capa(capa_id: int, payload: CAPAUpdate, db: Session = Depends(get_db)):
+    """
+    [PUT] Cập nhật thông tin CAPA (Thông tin chung, 5-Why, Hành động, Kế hoạch)
+    """
+    c = db.query(CAPA).filter(CAPA.id == capa_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Không tìm thấy báo cáo CAPA")
+        
+    for field, val in payload.dict(exclude_unset=True).items():
+        if val is not None:
+            setattr(c, field, val)
+
+    # Cập nhật tab_status tự động nếu ticket_status chuyển thành "Đạt (đóng CAPA)"
+    if c.ticket_status == "Đạt (đóng CAPA)":
+        c.tab_status = "history"
+    elif c.ticket_status in ["Không đạt (làm lại)", "Đang theo dõi", "Vừa tạo", "Lưu nháp"]:
+        c.tab_status = "tracking"
+
+    db.commit()
+
+    trigger_capa_notification(db, c.code, c.creator_name, c.handler_name, c.ticket_status)
+
+    return {"status": "success", "id": c.id, "message": "Cập nhật báo cáo CAPA thành công"}
+
+@router.delete("/{capa_id}", response_model=dict)
+def delete_capa(capa_id: int, db: Session = Depends(get_db)):
+    """
+    [DELETE] Xóa báo cáo CAPA
+    """
+    c = db.query(CAPA).filter(CAPA.id == capa_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Không tìm thấy báo cáo CAPA")
+        
+    db.delete(c)
+    db.commit()
+    return {"status": "success", "message": "Đã xóa báo cáo CAPA"}

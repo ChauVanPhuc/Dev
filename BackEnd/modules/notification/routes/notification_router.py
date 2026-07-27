@@ -6,6 +6,7 @@ from config.database import get_db
 from modules.notification.models.notifications import Notification as NotificationModel
 from modules.notification.schemas.notifications import Notification as NotificationSchema, NotificationCreate, NotificationMarkRead
 from modules.notification.services.zalo_service import trigger_zalo_notifications_for_group
+from modules.auth.models.accounts import Account as AccountModel
 
 router = APIRouter()
 @router.post("/clear-all")
@@ -127,13 +128,7 @@ def get_notifications(
 
         return results
     except Exception as e:
-        print(f"ERROR: Lỗi trong get_notifications: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return [] # Trả về danh sách rỗng thay vì lỗi 500
-
-
-from modules.auth.models.accounts import Account as AccountModel
+        raise HTTPException(status_code=500, detail=f"Lỗi khi lấy thông báo: {str(e)}")
 
 @router.get("/unread-count-v2")
 def get_unread_count(
@@ -149,97 +144,103 @@ def get_unread_count(
     # print(f"DEBUG: unread-count raw -> user_id={user_id}, group={target_group}, stage={target_stage}")
     
     try:
-        u_id = int(user_id)
-    except (ValueError, TypeError):
-        return {"unread_count": 0}
+        try:
+            u_id = int(user_id)
+        except (ValueError, TypeError):
+            return {"unread_count": 0}
 
-    # 1. Lấy ID thông báo cuối cùng mà người dùng đã xem
-    user = db.query(AccountModel).filter(AccountModel.id == u_id).first()
-    if not user:
-        return {"unread_count": 0}
-    
-    last_seen_id = user.last_notif_seen_id or 0
-    
-    # 2. Xây dựng câu query đếm thông báo mới
-    query = db.query(NotificationModel).filter(NotificationModel.id > last_seen_id)
-    
-    # 3. Lấy thông tin vai trò từ bảng Department (vì bảng Account không lưu trực tiếp)
-    from modules.auth.models.departments import Department
-    from modules.auth.models.role import Role
-    from modules.auth.models.permissions import Permission
-    
-    dept = db.query(Department).filter(Department.account_id == u_id).first()
-    user_role_name = ""
-    user_perm_desc = ""
-    
-    if dept:
-        if dept.role_id:
-            role_obj = db.query(Role).filter(Role.id == dept.role_id).first()
-            if role_obj:
-                user_role_name = role_obj.name or ""
-        if dept.permission_id:
-            perm_obj = db.query(Permission).filter(Permission.id == dept.permission_id).first()
-            if perm_obj:
-                user_perm_desc = perm_obj.description or perm_obj.name or ""
-
-    user_role_upper = user_role_name.upper()
-    user_perm_upper = user_perm_desc.upper()
-    
-    # Kiểm tra xem có phải Quản lý/Giám đốc hay không
-    is_manager = any(keyword in user_role_upper or keyword in user_perm_upper for keyword in ["QUẢN LÝ", "ADMIN", "GIÁM ĐỐC", "MANAGER"])
-
-    # Chuẩn hóa Stage
-    real_stage_name = target_stage
-    if target_stage:
-        from modules.production.models.stages import Stage as StageModel
-        stage_obj = db.query(StageModel).filter(
-            (StageModel.name == target_stage) | (StageModel.description == target_stage)
-        ).first()
-        if stage_obj:
-            real_stage_name = stage_obj.name
-
-    # [BỘ LỌC THÔNG MINH]
-    if is_manager:
-        # SẾP: Không lọc theo nhóm hay công đoạn, thấy TẤT CẢ tin mới
-        pass
-    else:
-        # NHÂN VIÊN: Lọc nghiêm ngặt theo Nhóm và Công đoạn
-        tg_upper = target_group.upper() if target_group else ""
-        if "QC" in tg_upper or "QLCL" in tg_upper or "CHẤT LƯỢNG" in tg_upper or "KIỂM TRA" in tg_upper:
-            query = query.filter((NotificationModel.target_group.ilike('%QC%')) | (NotificationModel.target_group.ilike('%Kiểm tra%')) | (NotificationModel.target_group == "Toàn công ty"))
-        elif "SX" in tg_upper or "SẢN XUẤT" in tg_upper:
-            query = query.filter(
-                (NotificationModel.target_group == "SX") | 
-                (NotificationModel.target_group == "Sản xuất") |
-                (NotificationModel.target_group.ilike("%SX%")) |
-                (NotificationModel.target_group.ilike("%Sản xuất%")) |
-                (NotificationModel.target_group == "Toàn công ty")
-            )
-        else:
-            query = query.filter((NotificationModel.target_group == target_group) | (NotificationModel.target_group == "Toàn công ty"))
-
-        # Lọc theo Công đoạn cho nhân viên thường
-        if real_stage_name:
-            query = query.filter(
-                (NotificationModel.target_stage.ilike(real_stage_name)) | 
-                (NotificationModel.target_stage.ilike(target_stage))
-            )
-        else:
-            query = query.filter(
-                (NotificationModel.target_group == "Toàn công ty") |
-                (NotificationModel.target_stage.is_(None)) |
-                (NotificationModel.target_stage == '')
-            )
+        # 1. Lấy ID thông báo cuối cùng mà người dùng đã xem
+        user = db.query(AccountModel).filter(AccountModel.id == u_id).first()
+        if not user:
+            return {"unread_count": 0}
         
-    unread_notifs = query.all()
-    count = len(unread_notifs)
-    notif_ids = [n.id for n in unread_notifs]
-    
-    # [LOG CHUYÊN SÂU] In ra để debug
-    total_in_db = db.query(NotificationModel).count()
+        last_seen_id = user.last_notif_seen_id or 0
+        
+        # 2. Xây dựng câu query đếm thông báo mới
+        query = db.query(NotificationModel).filter(NotificationModel.id > last_seen_id)
+        
+        # 3. Lấy thông tin vai trò từ bảng Department (vì bảng Account không lưu trực tiếp)
+        from modules.auth.models.departments import Department
+        from modules.auth.models.role import Role
+        from modules.auth.models.permissions import Permission
+        
+        dept = db.query(Department).filter(Department.account_id == u_id).first()
+        user_role_name = ""
+        user_perm_desc = ""
+        
+        if dept:
+            if dept.role_id:
+                role_obj = db.query(Role).filter(Role.id == dept.role_id).first()
+                if role_obj:
+                    user_role_name = role_obj.name or ""
+            if dept.permission_id:
+                perm_obj = db.query(Permission).filter(Permission.id == dept.permission_id).first()
+                if perm_obj:
+                    user_perm_desc = perm_obj.description or perm_obj.name or ""
 
-    
-    return {"unread_count": count}
+        user_role_upper = user_role_name.upper()
+        user_perm_upper = user_perm_desc.upper()
+        
+        # Kiểm tra xem có phải Quản lý/Giám đốc hay không
+        is_manager = any(keyword in user_role_upper or keyword in user_perm_upper for keyword in ["QUẢN LÝ", "ADMIN", "GIÁM ĐỐC", "MANAGER"])
+
+        # Chuẩn hóa Stage
+        real_stage_name = target_stage
+        if target_stage:
+            from modules.production.models.stages import Stage as StageModel
+            stage_obj = db.query(StageModel).filter(
+                (StageModel.name == target_stage) | (StageModel.description == target_stage)
+            ).first()
+            if stage_obj:
+                real_stage_name = stage_obj.name
+
+        # [BỘ LỌC THÔNG MINH]
+        if is_manager:
+            # SẾP: Không lọc theo nhóm hay công đoạn, thấy TẤT CẢ tin mới
+            pass
+        else:
+            # NHÂN VIÊN: Lọc nghiêm ngặt theo Nhóm và Công đoạn
+            tg_upper = target_group.upper() if target_group else ""
+            if "QC" in tg_upper or "QLCL" in tg_upper or "CHẤT LƯỢNG" in tg_upper or "KIỂM TRA" in tg_upper:
+                query = query.filter((NotificationModel.target_group.ilike('%QC%')) | (NotificationModel.target_group.ilike('%Kiểm tra%')) | (NotificationModel.target_group == "Toàn công ty"))
+            elif "SX" in tg_upper or "SẢN XUẤT" in tg_upper:
+                query = query.filter(
+                    (NotificationModel.target_group == "SX") | 
+                    (NotificationModel.target_group == "Sản xuất") |
+                    (NotificationModel.target_group.ilike("%SX%")) |
+                    (NotificationModel.target_group.ilike("%Sản xuất%")) |
+                    (NotificationModel.target_group == "Toàn công ty")
+                )
+            else:
+                query = query.filter((NotificationModel.target_group == target_group) | (NotificationModel.target_group == "Toàn công ty"))
+
+            # Lọc theo Công đoạn cho nhân viên thường
+            if real_stage_name:
+                query = query.filter(
+                    (NotificationModel.target_stage.ilike(real_stage_name)) | 
+                    (NotificationModel.target_stage.ilike(target_stage))
+                )
+            else:
+                query = query.filter(
+                    (NotificationModel.target_group == "Toàn công ty") |
+                    (NotificationModel.target_stage.is_(None)) |
+                    (NotificationModel.target_stage == '')
+                )
+            
+        unread_notifs = query.all()
+        count = len(unread_notifs)
+        notif_ids = [n.id for n in unread_notifs]
+        
+        # [LOG CHUYÊN SÂU] In ra để debug
+        total_in_db = db.query(NotificationModel).count()
+
+        return {"unread_count": count}
+
+    except Exception as e:
+        print(f"ERROR: Exception in get_unread_count: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {"unread_count": 0}
 
 @router.post("/mark-as-read")
 def mark_as_read(

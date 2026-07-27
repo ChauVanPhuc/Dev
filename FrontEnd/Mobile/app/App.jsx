@@ -97,7 +97,10 @@ function App() {
             <Route path="/equipment-list" element={<EquipmentList />} />
             <Route path="/kpi-staff" element={<KPIStaffList />} />
             <Route path="/capa-list" element={<CAPAList />} />
+            <Route path="/mobile/capa/list" element={<CAPAList />} />
             <Route path="/capa-report/:id" element={<CAPAReport />} />
+            <Route path="/capa-detail/:id" element={<CAPADetail />} />
+            <Route path="/mobile/capa/detail/:id" element={<CAPADetail />} />
             <Route path="/capa-detail/:capaId/:occurrenceId" element={<CAPADetail />} />
             <Route path="/dashboard" element={<DashboardView />} />
             <Route path="/feedback" element={<FeedbackView />} />

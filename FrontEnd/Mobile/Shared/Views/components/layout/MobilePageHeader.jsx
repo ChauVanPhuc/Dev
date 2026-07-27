@@ -36,7 +36,7 @@ const getMatchedScreen = (screensMap, path) => {
 
   let matchedPath = path;
 
-  
+
 
   const paths = Object.keys(screensMap);
 
@@ -74,7 +74,7 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
 
   const toggleNotification = useUiStore((state) => state.toggleNotification)
 
-  
+
 
   // [NEW] Quản lý trực tiếp trạng thái thông báo chưa đọc
 
@@ -100,9 +100,9 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
     // Nếu tin nhắn báo có phiếu mới hoặc QC xong
 
     if (
-      message.type === 'NEW_DELIVERY' || 
-      message.type === 'QC_CONFIRMED' || 
-      message.type === 'DELIVERY_RECEIVED' || 
+      message.type === 'NEW_DELIVERY' ||
+      message.type === 'QC_CONFIRMED' ||
+      message.type === 'DELIVERY_RECEIVED' ||
       message.type === 'UPDATE_DELIVERY'
     ) {
 
@@ -110,7 +110,7 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
 
       const targetStage = user?.stage_description || user?.stage_name || ''
 
-      
+
 
       // [DEBUG] Theo dõi tham số gửi lên
 
@@ -182,7 +182,7 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
 
         }
 
-        
+
 
         if (!activeFetchPromise) {
 
@@ -206,7 +206,7 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
 
         }
 
-        
+
 
         const cache = await activeFetchPromise;
 
@@ -226,7 +226,7 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
 
   }, [location.pathname, refreshTrigger]);
 
-  
+
 
   // [NEW] Kiểm tra quyền hạn (Chỉ ẩn cho Nhân Viên Sản Xuất)
 
@@ -252,7 +252,7 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
 
   const [stages, setStages] = useState([])
 
-  
+
 
   useEffect(() => {
 
@@ -286,23 +286,23 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
 
 
 
-  const dropdownStages = isAdmin 
+  const dropdownStages = isAdmin
 
     ? [
 
-        { name: '', description: 'Tất cả công đoạn' },
+      { name: '', description: 'Tất cả công đoạn' },
 
-        ...stages.map(s => ({ name: s.name, description: s.description || s.name }))
+      ...stages.map(s => ({ name: s.name, description: s.description || s.name }))
 
-      ]
+    ]
 
     : (user?.stageNames || []).map((name, idx) => ({
 
-        name,
+      name,
 
-        description: user?.stageDescriptions?.[idx] || name
+      description: user?.stageDescriptions?.[idx] || name
 
-      }));
+    }));
 
 
 
@@ -310,25 +310,25 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
 
   const hasTour = [
 
-    '/delivery-info', 
+    '/delivery-info',
 
-    '/delivery-create', 
+    '/delivery-create',
 
     '/delivery-receive',
 
-    '/inspection-daily', 
+    '/inspection-daily',
 
-    '/inspection-stage', 
+    '/inspection-stage',
 
-    '/input-inspection', 
+    '/input-inspection',
 
-    '/logs', 
+    '/logs',
 
-    '/delivery-return', 
+    '/delivery-return',
 
-    '/plan', 
+    '/plan',
 
-    '/kpi', 
+    '/kpi',
 
     '/awards'
 
@@ -362,13 +362,13 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
 
       const targetStage = user.stage_description || user.stage_name || '';
 
-      
+
 
       // [LOG QUAN TRỌNG] In ra console để kiểm tra
 
 
 
-      
+
 
       fetchUnreadCount(user.id, roleName, targetStage);
 
@@ -392,43 +392,43 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
 
     if (code.startsWith('DP-') || code.startsWith('BACKUP-')) {
 
-        try {
+      try {
 
-            // Lấy trạng thái của thẻ luân chuyển
+        // Lấy trạng thái của thẻ luân chuyển
 
-            const res = await apiClient.get(`deliveries/by-backup-qr/${code}`);
+        const res = await apiClient.get(`deliveries/by-backup-qr/${code}`);
 
-            const qrData = res.data;
+        const qrData = res.data;
 
-            
 
-            if (qrData && qrData.status === 'Đang Sử Dụng' && qrData.current_delivery_id) {
 
-                // Đã bị khóa vào một phiếu -> Đi tới trang Nhận hàng của phiếu đó
+        if (qrData && qrData.status === 'Đang Sử Dụng' && qrData.current_delivery_id) {
 
-                navigate(`/delivery-receive/${qrData.current_delivery_id}`);
+          // Đã bị khóa vào một phiếu -> Đi tới trang Nhận hàng của phiếu đó
 
-                return;
+          navigate(`/delivery-receive/${qrData.current_delivery_id}`);
 
-            } else {
+          return;
 
-                // Thẻ trống (chưa khóa) -> Đi tới trang Tạo phiếu mới
+        } else {
 
-                navigate('/delivery-create', { state: { backupQrCode: code } });
+          // Thẻ trống (chưa khóa) -> Đi tới trang Tạo phiếu mới
 
-                return;
+          navigate('/delivery-create', { state: { backupQrCode: code } });
 
-            }
-
-        } catch (error) {
-
-            console.error("Lỗi khi kiểm tra mã QR dự phòng:", error);
-
-            alert("Có lỗi khi kiểm tra thẻ QR luân chuyển.");
-
-            return;
+          return;
 
         }
+
+      } catch (error) {
+
+        console.error("Lỗi khi kiểm tra mã QR dự phòng:", error);
+
+        alert("Có lỗi khi kiểm tra thẻ QR luân chuyển.");
+
+        return;
+
+      }
 
     }
 
@@ -548,7 +548,7 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
 
             {(() => {
 
-              const displaySub = dynamicScreen 
+              const displaySub = dynamicScreen
 
                 ? `${dynamicScreen.current_code} | ${dynamicScreen.title}`
 
@@ -744,7 +744,7 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
 
           {unreadCount > 0 && (
 
-            <span 
+            <span
 
               className="notification-badge"
 
@@ -782,7 +782,7 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
 
                 boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
 
-              }} 
+              }}
 
             >
 

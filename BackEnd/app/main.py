@@ -406,7 +406,17 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
 
-# Include API Router
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    print("!!! UNHANDLED 500 EXCEPTION !!!", exc)
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "traceback": traceback.format_exc()}
+    )
 
 app.include_router(api_router, prefix="/api/v1")
 

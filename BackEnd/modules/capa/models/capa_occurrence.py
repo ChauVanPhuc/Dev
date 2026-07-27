@@ -25,5 +25,5 @@ class CAPAOccurrence(Base):
     corrective_action = Column(NVARCHAR(1000), nullable=True) # Hành động khắc phục
 
     # Quan hệ liên kết
-    capa = relationship("CAPA", back_populates="occurrences")
+    capa = relationship("CAPA")
     evaluations = relationship("CAPAEvaluation", back_populates="occurrence", cascade="all, delete-orphan")

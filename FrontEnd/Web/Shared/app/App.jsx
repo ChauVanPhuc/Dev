@@ -30,6 +30,8 @@ const KPIRules = lazy(() => import('@modules/KPI/Views/Rule/KPIRulesView'));
 const KPIFeedback = lazy(() => import('@modules/KPI/Views/Feedback/KPIFeedbackView'));
 const ViolationHistory = lazy(() => import('@modules/KPI/Views/Violation/ViolationHistoryView'));
 const ViolationForm = lazy(() => import('@modules/KPI/Views/Violation/ViolationFormView'));
+const CapaHistory = lazy(() => import('@modules/CAPA/Views/Improvement/CapaHistoryView'));
+const CapaForm = lazy(() => import('@modules/CAPA/Views/Improvement/CapaFormView'));
 const Improvements = lazy(() => import('@modules/CAPA/Views/Improvement/ImprovementsView'));
 const Hotspots = lazy(() => import('@modules/System/Views/Monitor/HotspotsView'));
 const DataPackaging = lazy(() => import('@modules/System/Views/Data/DataPackagingView'));
@@ -610,6 +612,9 @@ function App() {
                 <Route path="violations" element={<ProtectedRoute permissionKey="violations"><ViolationHistory /></ProtectedRoute>} />
                 <Route path="violations/create" element={<ProtectedRoute permissionKey="violations"><ViolationForm /></ProtectedRoute>} />
                 <Route path="violations/edit/:id" element={<ProtectedRoute permissionKey="violations"><ViolationForm /></ProtectedRoute>} />
+                <Route path="capa" element={<ProtectedRoute permissionKey="capa"><CapaHistory /></ProtectedRoute>} />
+                <Route path="capa/create" element={<ProtectedRoute permissionKey="capa"><CapaForm /></ProtectedRoute>} />
+                <Route path="capa/edit/:id" element={<ProtectedRoute permissionKey="capa"><CapaForm /></ProtectedRoute>} />
                 <Route path="feedback" element={<ProtectedRoute permissionKey="feedback"><Improvements /></ProtectedRoute>} />
                 <Route path="hotspots" element={<ProtectedRoute permissionKey="hotspots"><Hotspots /></ProtectedRoute>} />
                 <Route path="data" element={<ProtectedRoute permissionKey="data"><DataPackaging /></ProtectedRoute>} />
