@@ -21,10 +21,15 @@ const AwardDiscipline = () => {
   const [totalItems, setTotalItems] = useState(0)
   const [pendingCount, setPendingCount] = useState(0)
 
-  // Filter states
+  // Filter & Sort states
   const [activeTab, setActiveTab] = useState('pending') // pending | history
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
   const [showMonthPicker, setShowMonthPicker] = useState(false)
+  const [sortOrder, setSortOrder] = useState('desc') // desc | asc
+  const [showSortMenu, setShowSortMenu] = useState(false)
+  const [showFilterBar, setShowFilterBar] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [severityFilter, setSeverityFilter] = useState('all')
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1)
@@ -68,10 +73,13 @@ const AwardDiscipline = () => {
       const params = new URLSearchParams({
         month: String(selectedMonth),
         year: String(new Date().getFullYear()),
+        sort_order: sortOrder,
         skip: String((currentPage - 1) * pageSize),
         limit: String(pageSize)
       })
       if (statusFilter) params.set('status', statusFilter)
+      if (searchQuery) params.set('search', searchQuery)
+      if (severityFilter && severityFilter !== 'all') params.set('severity', severityFilter)
 
       const resp = await apiClient.get(`/awards-discipline/?${params.toString()}`)
       const data = resp.data || resp
@@ -83,7 +91,7 @@ const AwardDiscipline = () => {
     } finally {
       setLoading(false)
     }
-  }, [activeTab, selectedMonth, currentPage])
+  }, [activeTab, selectedMonth, currentPage, sortOrder, searchQuery, severityFilter])
 
   // Fetch stats (pending count)
   const fetchStats = useCallback(async () => {
@@ -104,8 +112,9 @@ const AwardDiscipline = () => {
         const staffData = staffResp.data || staffResp
         if (Array.isArray(staffData) && staffData.length > 0) {
           setStaffOptions(staffData.map(item => ({
-            label: item.full_name,
+            label: `${item.full_name}${item.employee_id ? ' (' + item.employee_id + ')' : ''}`,
             value: item.full_name,
+            full_name: item.full_name,
             employee_id: item.employee_id,
             department: item.department,
             position: item.position
@@ -247,7 +256,7 @@ const AwardDiscipline = () => {
     <Layout>
       <PageHeader title="Báo cáo vi phạm" subTitle="CL13: Danh sách vi phạm" />
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#faf6f1', position: 'relative' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#faf6f1' }}>
 
         {/* Toolbar */}
         <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #e5e0d8' }}>
@@ -291,13 +300,74 @@ const AwardDiscipline = () => {
             )}
           </div>
 
-          {/* Sort & Filter */}
-          <button style={{ padding: '8px', borderRadius: '8px', border: '1px solid #d4c5b0', backgroundColor: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-            <ArrowUpDown size={18} color="#5d3b32" />
-          </button>
-          <button style={{ padding: '8px', borderRadius: '8px', border: '1px solid #d4c5b0', backgroundColor: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-            <SlidersHorizontal size={18} color="#5d3b32" />
-          </button>
+          {/* Sort Menu */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => { setShowSortMenu(!showSortMenu); setShowMonthPicker(false); setShowFilterBar(false); }}
+              style={{
+                padding: '8px', borderRadius: '8px',
+                border: '1px solid #d4c5b0',
+                backgroundColor: sortOrder === 'asc' ? '#faf4ee' : '#fff',
+                cursor: 'pointer', display: 'flex', alignItems: 'center'
+              }}
+            >
+              <ArrowUpDown size={18} color="#5d3b32" />
+            </button>
+            {showSortMenu && (
+              <div style={{
+                position: 'absolute', top: '100%', right: 0, zIndex: 120, marginTop: '4px',
+                backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0',
+                boxShadow: '0 8px 16px rgba(0,0,0,0.12)', width: '150px', overflow: 'hidden'
+              }}>
+                <button
+                  onClick={() => { setSortOrder('desc'); setCurrentPage(1); setShowSortMenu(false); }}
+                  style={{
+                    display: 'block', width: '100%', padding: '10px 12px', border: 'none',
+                    backgroundColor: sortOrder === 'desc' ? '#faf4ee' : '#fff',
+                    color: sortOrder === 'desc' ? '#5d3b32' : '#333',
+                    fontWeight: sortOrder === 'desc' ? '800' : '500',
+                    fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer'
+                  }}
+                >
+                  Mới nhất
+                </button>
+                <button
+                  onClick={() => { setSortOrder('asc'); setCurrentPage(1); setShowSortMenu(false); }}
+                  style={{
+                    display: 'block', width: '100%', padding: '10px 12px', border: 'none',
+                    backgroundColor: sortOrder === 'asc' ? '#faf4ee' : '#fff',
+                    color: sortOrder === 'asc' ? '#5d3b32' : '#333',
+                    fontWeight: sortOrder === 'asc' ? '800' : '500',
+                    fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer'
+                  }}
+                >
+                  Cũ nhất
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Filter Bar Toggle */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => { setShowFilterBar(!showFilterBar); setShowMonthPicker(false); setShowSortMenu(false); }}
+              style={{
+                padding: '8px', borderRadius: '8px',
+                border: '1px solid #d4c5b0',
+                backgroundColor: (showFilterBar || searchQuery || severityFilter !== 'all') ? '#5d3b32' : '#fff',
+                color: (showFilterBar || searchQuery || severityFilter !== 'all') ? '#fff' : '#5d3b32',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', position: 'relative'
+              }}
+            >
+              <SlidersHorizontal size={18} color={(showFilterBar || searchQuery || severityFilter !== 'all') ? '#fff' : '#5d3b32'} />
+              {(searchQuery || severityFilter !== 'all') && (
+                <span style={{
+                  position: 'absolute', top: '-4px', right: '-4px',
+                  width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#dc2626'
+                }} />
+              )}
+            </button>
+          </div>
 
           {/* Add New Button */}
           <button
@@ -313,6 +383,69 @@ const AwardDiscipline = () => {
             <Plus size={16} strokeWidth={3} /> Thêm mới
           </button>
         </div>
+
+        {/* Expandable Filter Panel */}
+        {showFilterBar && (
+          <div style={{
+            padding: '12px 16px', backgroundColor: '#fff', borderBottom: '1px solid #e5e0d8',
+            display: 'flex', flexDirection: 'column', gap: '10px',
+            animation: 'slideInRight 0.2s ease-out'
+          }}>
+            {/* Search Input */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>
+                Tìm kiếm
+              </label>
+              <input
+                type="text"
+                placeholder="Tìm tên nhân sự, mã quy tắc..."
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                style={{
+                  width: '100%', padding: '8px 12px', borderRadius: '8px',
+                  border: '1px solid #cbd5e1', fontSize: '0.85rem', outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            {/* Severity Filter */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>
+                Mức độ ảnh hưởng
+              </label>
+              <select
+                value={severityFilter}
+                onChange={(e) => { setSeverityFilter(e.target.value); setCurrentPage(1); }}
+                style={{
+                  width: '100%', padding: '8px 12px', borderRadius: '8px',
+                  border: '1px solid #cbd5e1', fontSize: '0.85rem', outline: 'none',
+                  backgroundColor: '#fff', color: '#1e293b', boxSizing: 'border-box'
+                }}
+              >
+                <option value="all">Tất cả mức độ</option>
+                <option value="Nghiêm trọng">Nghiêm trọng</option>
+                <option value="Cao">Cao</option>
+                <option value="Trung bình">Trung bình</option>
+                <option value="Nhẹ">Nhẹ</option>
+              </select>
+            </div>
+
+            {/* Reset Filters */}
+            {(searchQuery || severityFilter !== 'all') && (
+              <button
+                onClick={() => { setSearchQuery(''); setSeverityFilter('all'); setCurrentPage(1); }}
+                style={{
+                  alignSelf: 'flex-end', background: 'none', border: 'none',
+                  color: '#dc2626', fontSize: '0.78rem', fontWeight: '700',
+                  cursor: 'pointer', padding: '4px 0'
+                }}
+              >
+                Xóa bộ lọc
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: '0', borderBottom: '2px solid #e5e0d8' }}>
@@ -449,14 +582,14 @@ const AwardDiscipline = () => {
             </button>
           </div>
         )}
-        {/* === MODAL: Thêm vi phạm (CL13.1) === */}}
+      {/* === MODAL: Thêm vi phạm (CL13.1) === */}
       {showAddModal && (
         <>
           <div
             onClick={() => setShowAddModal(false)}
             style={{
-              position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.35)',
-              zIndex: 10000
+              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 10000
             }}
           />
           <div style={{
@@ -464,7 +597,7 @@ const AwardDiscipline = () => {
             width: '90%', maxWidth: '400px',
             backgroundColor: '#fff', zIndex: 10001,
             display: 'flex', flexDirection: 'column',
-            boxShadow: '-4px 0 20px rgba(0,0,0,0.15)',
+            boxShadow: '-4px 0 20px rgba(0,0,0,0.2)',
             animation: 'slideInRight 0.25s ease-out'
           }}>
             {/* Modal Header */}

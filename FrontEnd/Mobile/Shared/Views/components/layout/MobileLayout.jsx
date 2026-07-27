@@ -58,7 +58,7 @@ const Layout = ({ children }) => {
 
   return (
 
-    <div className="app-layout" style={{ height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', overflowX: 'clip', maxWidth: '100vw', width: '100%', margin: 0, padding: 0, boxSizing: 'border-box' }}>
+    <div className="app-layout" style={{ height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', overflowX: 'clip', maxWidth: '100vw', width: '100%', margin: 0, padding: 0, boxSizing: 'border-box', position: 'relative' }}>
 
       {/* Hướng dẫn người dùng mới */}
       <UserGuideTour />

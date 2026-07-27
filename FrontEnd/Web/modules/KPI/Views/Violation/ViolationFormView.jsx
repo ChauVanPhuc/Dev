@@ -70,18 +70,50 @@ const ViolationFormView = () => {
 
   const fetchDropdowns = async () => {
     try {
-      const staffData = await api.get('/kpi-management/employees');
-      if (Array.isArray(staffData)) {
-        setStaffOptions(staffData.map(s => ({
-          label: s.full_name,
-          value: s.full_name,
-          employee_id: s.employee_id,
-          department: s.department,
-          position: s.position,
-          section: s.section
-        })));
+      const [kpiStaff, accRes] = await Promise.allSettled([
+        api.get('/kpi-management/employees'),
+        api.get('/accounts/?size=1000')
+      ]);
+
+      const combinedMap = new Map();
+
+      if (kpiStaff.status === 'fulfilled' && Array.isArray(kpiStaff.value)) {
+        kpiStaff.value.forEach(s => {
+          const key = s.employee_id || s.full_name;
+          if (key) {
+            combinedMap.set(key, {
+              label: `${s.full_name}${s.employee_id ? ' (' + s.employee_id + ')' : ''}`,
+              value: s.employee_id || s.full_name,
+              full_name: s.full_name,
+              employee_id: s.employee_id,
+              department: s.department || '',
+              position: s.position || '',
+              section: s.section || ''
+            });
+          }
+        });
       }
-    } catch (err) { console.error(err); }
+
+      if (accRes.status === 'fulfilled' && accRes.value) {
+        const items = Array.isArray(accRes.value) ? accRes.value : (accRes.value.items || []);
+        items.forEach(acc => {
+          const key = acc.employee_id || acc.full_name;
+          if (key && !combinedMap.has(key)) {
+            combinedMap.set(key, {
+              label: `${acc.full_name}${acc.employee_id ? ' (' + acc.employee_id + ')' : ''}`,
+              value: acc.employee_id || acc.full_name,
+              full_name: acc.full_name,
+              employee_id: acc.employee_id,
+              department: acc.department || '',
+              position: acc.position || acc.role_name || '',
+              section: acc.stage_name || ''
+            });
+          }
+        });
+      }
+
+      setStaffOptions(Array.from(combinedMap.values()));
+    } catch (err) { console.error('Lỗi khi tải nhân sự:', err); }
 
     try {
       const rulesData = await api.get('/kpi-management/point-rules');
@@ -133,16 +165,47 @@ const ViolationFormView = () => {
     }
   };
 
-  const handleStaffChange = (staffName) => {
-    const staff = staffOptions.find(s => s.value === staffName);
-    setFormData(prev => ({
-      ...prev,
-      staff_name: staffName,
-      employee_id: staff?.employee_id || '',
-      department: staff?.department || prev.department,
-      position: staff?.position || prev.position,
-      section: staff?.section || prev.section
-    }));
+  // Sync staff info when staffOptions or formData.employee_id/staff_name changes
+  useEffect(() => {
+    if (staffOptions.length > 0 && (formData.employee_id || formData.staff_name)) {
+      const match = staffOptions.find(s => 
+        (formData.employee_id && s.employee_id === formData.employee_id) ||
+        (formData.staff_name && (s.full_name === formData.staff_name || s.value === formData.staff_name))
+      );
+      if (match) {
+        setFormData(prev => ({
+          ...prev,
+          employee_id: match.employee_id || prev.employee_id,
+          staff_name: match.full_name || prev.staff_name,
+          department: prev.department || match.department || '',
+          position: prev.position || match.position || '',
+          section: prev.section || match.section || ''
+        }));
+      }
+    }
+  }, [staffOptions, formData.employee_id, formData.staff_name]);
+
+  const handleStaffChange = (selectedVal) => {
+    const staff = staffOptions.find(s => 
+      (s.employee_id && s.employee_id === selectedVal) || 
+      s.value === selectedVal || 
+      s.full_name === selectedVal
+    );
+    if (staff) {
+      setFormData(prev => ({
+        ...prev,
+        staff_name: staff.full_name,
+        employee_id: staff.employee_id || '',
+        department: staff.department || prev.department,
+        position: staff.position || prev.position,
+        section: staff.section || prev.section
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        staff_name: selectedVal
+      }));
+    }
   };
 
   const handleRuleChange = (ruleName) => {
@@ -279,11 +342,25 @@ const ViolationFormView = () => {
                     Tên nhân sự <span style={{ color: '#ef4444' }}>*</span>
                   </label>
                   <select
-                    value={formData.staff_name}
+                    value={
+                      (staffOptions.find(s => 
+                        (formData.employee_id && s.employee_id === formData.employee_id) || 
+                        (formData.staff_name && (s.full_name === formData.staff_name || s.value === formData.staff_name))
+                      )?.value) || formData.employee_id || formData.staff_name || ''
+                    }
                     onChange={(e) => handleStaffChange(e.target.value)}
                     style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none', backgroundColor: '#fff', color: '#1e293b', boxSizing: 'border-box' }}
                   >
                     <option value="">Chọn nhân sự vi phạm</option>
+                    {Boolean(formData.staff_name || formData.employee_id) && 
+                     !staffOptions.some(s => 
+                       (formData.employee_id && s.employee_id === formData.employee_id) || 
+                       (formData.staff_name && (s.full_name === formData.staff_name || s.value === formData.staff_name))
+                     ) && (
+                      <option value={formData.employee_id || formData.staff_name}>
+                        {formData.staff_name || formData.employee_id} {formData.employee_id ? `(${formData.employee_id})` : ''}
+                      </option>
+                    )}
                     {staffOptions.map((opt, idx) => (
                       <option key={opt.employee_id || idx} value={opt.value}>{opt.label}</option>
                     ))}

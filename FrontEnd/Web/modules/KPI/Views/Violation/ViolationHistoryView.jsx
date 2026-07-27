@@ -1,11 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { Trash2, Edit2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Trash2, Edit2, ChevronLeft, ChevronRight, MoreVertical } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import '@styles/components.css';
+
+const SeverityBadge = ({ value }) => {
+  let bg = '#F1F5F9';
+  let color = '#475569';
+
+  if (value === 'Nghiêm trọng') { bg = '#FEE2E2'; color = '#DC2626'; }
+  else if (value === 'Cao') { bg = '#FFEDD5'; color = '#C2410C'; }
+  else if (value === 'Trung bình') { bg = '#FEF3C7'; color = '#D97706'; }
+  else if (value === 'Nhẹ') { bg = '#DCFCE7'; color = '#15803D'; }
+
+  return (
+    <span style={{
+      display: 'inline-block',
+      padding: '3px 9px',
+      borderRadius: '6px',
+      fontSize: '0.78rem',
+      fontWeight: '700',
+      backgroundColor: bg,
+      color: color,
+      whiteSpace: 'nowrap'
+    }}>
+      {value || 'Nhẹ'}
+    </span>
+  );
+};
 
 /**
  * ViolationHistoryView (HT08 — Lịch sử vi phạm)
@@ -39,9 +64,22 @@ const ViolationHistoryView = () => {
   const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
   const [severityFilter, setSeverityFilter] = useState('all');
 
+  // Action Menu Dropdown State
+  const [activeActionMenuId, setActiveActionMenuId] = useState(null);
+
   // Modals & Toast
   const { toast } = useToast();
   const [confirmModal, setConfirmModal] = useState({ show: false, title: '', message: '', type: 'delete', onConfirm: null });
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.action-btn') && !e.target.closest('.action-menu')) {
+        setActiveActionMenuId(null);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (screenCode && title) {
@@ -78,60 +116,43 @@ const ViolationHistoryView = () => {
     }
   };
 
-  const handleEdit = (item) => {
-    navigate(`/admin/violations/edit/${item.id}`);
-  };
-
   const handleCreate = () => {
     navigate('/admin/violations/create');
+  };
+
+  const handleEdit = (item) => {
+    navigate(`/admin/violations/edit/${item.id}`);
   };
 
   const handleDelete = (item) => {
     setConfirmModal({
       show: true,
-      title: 'Xác nhận xóa',
-      message: `Bạn có chắc muốn xóa vi phạm của "${item.staff_name}" (${item.rule_code || item.issue})?`,
+      title: 'Xác nhận xóa vi phạm',
+      message: `Bạn có chắc chắn muốn xóa bản ghi vi phạm của "${item.staff_name || item.employee_id}" không? Hành động này không thể hoàn tác.`,
       type: 'delete',
       onConfirm: async () => {
         try {
           await api.delete(`/awards-discipline/${item.id}`);
-          toast('success', 'Xóa vi phạm thành công.');
+          toast('success', 'Đã xóa bản ghi vi phạm thành công.');
           fetchViolations();
         } catch (err) {
           console.error(err);
-          toast('error', 'Không thể xóa vi phạm.');
+          toast('error', 'Xóa vi phạm thất bại.');
         }
       }
     });
   };
 
-  const handleExport = async () => {
-    try {
-      window.open(`${api.defaults.baseURL}/awards-discipline/export`, '_blank');
-      toast('success', 'Đang xuất dữ liệu...');
-    } catch (err) {
-      console.error(err);
-      toast('error', 'Không thể xuất dữ liệu.');
+  const handleExport = () => {
+    toast('info', 'Tính năng xuất Excel đang được xử lý...');
+  };
+
+  const filteredViolations = violations.filter(item => {
+    if (severityFilter !== 'all') {
+      const sev = item.severity || item.impact || '';
+      if (sev !== severityFilter) return false;
     }
-  };
-
-  // Severity badge component matching design
-  const SeverityBadge = ({ value }) => {
-    if (!value) return <span>—</span>;
-    const colors = {
-      'Cao': { bg: '#fee2e2', color: '#ef4444' },
-      'Nghiêm trọng': { bg: '#fee2e2', color: '#ef4444' },
-      'Trung bình': { bg: '#fef3c7', color: '#d97706' },
-      'Nhẹ': { bg: '#f1f5f9', color: '#64748b' },
-      'Thấp': { bg: '#f1f5f9', color: '#64748b' }
-    };
-    const c = colors[value] || colors['Trung bình'];
-    return <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', backgroundColor: c.bg, color: c.color }}>{value}</span>;
-  };
-
-  const filteredViolations = violations.filter(v => {
-    if (severityFilter === 'all') return true;
-    return (v.severity || v.impact) === severityFilter;
+    return true;
   });
 
   const totalPages = Math.ceil(totalItems / pageSize) || 1;
@@ -139,14 +160,14 @@ const ViolationHistoryView = () => {
   return (
     <div className="mgmt-container">
       <div className="mgmt-main">
-        {/* Page Toolbar component */}
+        {/* Standard Page Toolbar */}
         <PageToolbar
+          title="Lịch sử vi phạm"
           searchValue={searchQuery}
           onSearchChange={(val) => { setSearchQuery(val); setPage(1); }}
-          searchPlaceholder="Tìm kiếm..."
-          showFilter={true}
-          isFilterOpen={isFilterBarOpen}
-          onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
+          searchPlaceholder="Tìm mã quy tắc, tên nhân sự..."
+          isFilterActive={isFilterBarOpen}
+          onToggleFilter={() => setIsFilterBarOpen(!isFilterBarOpen)}
           activeFiltersCount={severityFilter !== 'all' ? 1 : 0}
           onExport={handleExport}
           onCreate={hasWritePermission ? handleCreate : undefined}
@@ -194,43 +215,85 @@ const ViolationHistoryView = () => {
             ) : filteredViolations.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px', color: '#9CA3AF' }}>Không có vi phạm nào.</div>
             ) : (
-              <div className="table-responsive desktop-only admin-table-scroll">
-                <table className="data-table">
+              <div className="table-responsive desktop-only admin-table-scroll" style={{ width: '100%', overflowX: 'auto' }}>
+                <table className="data-table" style={{ width: '100%', tableLayout: 'auto' }}>
                   <thead>
                     <tr>
-                      <th style={{ width: '100px' }}>MÃ QUY TẮC</th>
-                      <th>TÊN QUY TẮC</th>
-                      <th style={{ width: '90px', textAlign: 'center' }}>MỨC ĐỘ</th>
-                      <th style={{ width: '100px' }}>MÃ NHÂN SỰ</th>
-                      <th>TÊN NHÂN SỰ</th>
-                      <th>PHÒNG BAN</th>
-                      <th style={{ width: '90px' }}>VỊ TRÍ</th>
-                      <th>BỘ PHẬN</th>
-                      <th style={{ width: '140px' }}>THỜI GIAN VI PHẠM</th>
-                      <th>NGƯỜI PHÁT HIỆN</th>
-                      <th>GHI CHÚ</th>
-                      <th style={{ width: '80px', textAlign: 'center' }}>THAO TÁC</th>
+                      <th style={{ width: '65px', whiteSpace: 'nowrap', fontSize: '0.72rem', padding: '8px 4px' }}>MÃ QT</th>
+                      <th style={{ minWidth: '110px', whiteSpace: 'nowrap', fontSize: '0.72rem', padding: '8px 4px' }}>TÊN QUY TẮC</th>
+                      <th style={{ width: '80px', textAlign: 'center', whiteSpace: 'nowrap', fontSize: '0.72rem', padding: '8px 4px' }}>MỨC ĐỘ</th>
+                      <th style={{ width: '60px', whiteSpace: 'nowrap', fontSize: '0.72rem', padding: '8px 4px' }}>MÃ NV</th>
+                      <th style={{ width: '110px', whiteSpace: 'nowrap', fontSize: '0.72rem', padding: '8px 4px' }}>TÊN NHÂN SỰ</th>
+                      <th style={{ width: '65px', whiteSpace: 'nowrap', fontSize: '0.72rem', padding: '8px 4px' }}>PHÒNG BAN</th>
+                      <th style={{ width: '75px', whiteSpace: 'nowrap', fontSize: '0.72rem', padding: '8px 4px' }}>VỊ TRÍ</th>
+                      <th style={{ width: '55px', whiteSpace: 'nowrap', fontSize: '0.72rem', padding: '8px 4px' }}>BỘ PHẬN</th>
+                      <th style={{ width: '95px', whiteSpace: 'nowrap', fontSize: '0.72rem', padding: '8px 4px' }}>THỜI GIAN</th>
+                      <th style={{ width: '95px', whiteSpace: 'nowrap', fontSize: '0.72rem', padding: '8px 4px' }}>NGƯỜI BÁO CÁO</th>
+                      <th style={{ width: '90px', whiteSpace: 'nowrap', fontSize: '0.72rem', padding: '8px 4px' }}>GHI CHÚ</th>
+                      <th style={{ width: '65px', textAlign: 'center', whiteSpace: 'nowrap', fontSize: '0.72rem', padding: '8px 4px' }}>THAO TÁC</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredViolations.map(item => (
                       <tr key={item.id} onClick={() => handleEdit(item)} style={{ cursor: 'pointer' }}>
-                        <td style={{ fontWeight: '700', color: '#7B5233' }}>{item.rule_code || '—'}</td>
-                        <td style={{ fontWeight: '600' }}>{item.rule_name || item.issue || '—'}</td>
-                        <td style={{ textAlign: 'center' }}><SeverityBadge value={item.severity || item.impact} /></td>
-                        <td>{item.employee_id || '—'}</td>
-                        <td style={{ fontWeight: '600' }}>{item.staff_name || '—'}</td>
-                        <td>{item.department || '—'}</td>
-                        <td>{item.position || '—'}</td>
-                        <td>{item.section || '—'}</td>
-                        <td style={{ fontSize: '11px' }}>{item.violation_time || item.date || '—'}</td>
-                        <td>{item.reporter_name || '—'}</td>
-                        <td style={{ maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.note || '—'}</td>
-                        <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                          <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                            <button onClick={() => handleEdit(item)} style={{ display: 'flex', padding: '5px', borderRadius: '6px', border: 'none', background: '#f1f5f9', cursor: 'pointer', color: '#475569' }}><Edit2 size={12} /></button>
-                            <button onClick={() => handleDelete(item)} style={{ display: 'flex', padding: '5px', borderRadius: '6px', border: 'none', background: '#fee2e2', cursor: 'pointer', color: '#ef4444' }}><Trash2 size={12} /></button>
-                          </div>
+                        <td style={{ fontWeight: '700', color: '#7B5233', fontSize: '0.74rem', whiteSpace: 'nowrap', padding: '8px 4px' }}>{item.rule_code || '—'}</td>
+                        <td style={{ fontWeight: '600', fontSize: '0.74rem', whiteSpace: 'nowrap', padding: '8px 4px', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.rule_name || item.issue}>{item.rule_name || item.issue || '—'}</td>
+                        <td style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '8px 2px' }}><SeverityBadge value={item.severity || item.impact} /></td>
+                        <td style={{ fontSize: '0.74rem', whiteSpace: 'nowrap', padding: '8px 4px', color: '#475569' }}>{item.employee_id || '—'}</td>
+                        <td style={{ fontWeight: '600', fontSize: '0.74rem', whiteSpace: 'nowrap', padding: '8px 4px', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.staff_name}>{item.staff_name || '—'}</td>
+                        <td style={{ fontSize: '0.74rem', whiteSpace: 'nowrap', padding: '8px 4px', color: '#334155' }}>{item.department || '—'}</td>
+                        <td style={{ fontSize: '0.74rem', whiteSpace: 'nowrap', padding: '8px 4px', color: '#334155' }}>{item.position || '—'}</td>
+                        <td style={{ fontSize: '0.74rem', whiteSpace: 'nowrap', padding: '8px 4px', color: '#334155' }}>{item.section || '—'}</td>
+                        <td style={{ fontSize: '0.72rem', whiteSpace: 'nowrap', padding: '8px 4px', color: '#475569' }}>{item.violation_time || item.date || '—'}</td>
+                        <td style={{ fontSize: '0.74rem', whiteSpace: 'nowrap', padding: '8px 4px', color: '#334155', maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.reporter_name || '—'}</td>
+                        <td style={{ fontSize: '0.74rem', whiteSpace: 'nowrap', padding: '8px 4px', maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', color: '#64748b' }} title={item.note}>{item.note || '—'}</td>
+                        <td style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '8px 2px', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+                          <button
+                            className="action-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveActionMenuId(activeActionMenuId === item.id ? null : item.id);
+                            }}
+                            style={{
+                              border: 'none',
+                              background: 'transparent',
+                              padding: '6px',
+                              cursor: 'pointer',
+                              borderRadius: '50%',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#7B5233',
+                              transition: 'background-color 0.2s'
+                            }}
+                          >
+                            <MoreVertical size={16} style={{ pointerEvents: 'none' }} />
+                          </button>
+
+                          {activeActionMenuId === item.id && (
+                            <div className="action-menu" style={{ right: '50%', transform: 'translateX(50%)', top: '80%', opacity: 1, animation: 'none' }}>
+                              <button
+                                className="action-menu-item"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveActionMenuId(null);
+                                  handleEdit(item);
+                                }}
+                              >
+                                Chỉnh sửa
+                              </button>
+                              <button
+                                className="action-menu-item danger"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveActionMenuId(null);
+                                  handleDelete(item);
+                                }}
+                              >
+                                Xóa
+                              </button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -289,6 +352,19 @@ const ViolationHistoryView = () => {
           </div>
         </div>
       )}
+
+      {/* Hide Horizontal Scrollbar */}
+      <style>{`
+        .admin-table-scroll {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .admin-table-scroll::-webkit-scrollbar {
+          display: none;
+          width: 0;
+          height: 0;
+        }
+      `}</style>
     </div>
   );
 };

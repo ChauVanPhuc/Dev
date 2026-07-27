@@ -40,7 +40,7 @@ const MessageModal = ({ isOpen, type = 'info', title, message, onConfirm }) => {
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 2000, // Cao nhất
+        zIndex: 20000, // Cao nhất
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

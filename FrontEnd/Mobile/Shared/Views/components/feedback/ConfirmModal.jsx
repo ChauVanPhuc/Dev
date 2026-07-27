@@ -13,7 +13,7 @@ const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel, confirmText
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 1000,
+        zIndex: 20000,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

@@ -44,14 +44,16 @@ def get_award_disciplines(
     month: Optional[int] = Query(None, description="Lọc theo tháng (1-12)"),
     year: Optional[int] = Query(None, description="Lọc theo năm"),
     status: Optional[str] = Query(None, description="Lọc theo trạng thái: pending, tracking, approved, rejected"),
-    search: Optional[str] = Query(None, description="Tìm kiếm theo tên nhân sự, mã quy tắt, nội dung"),
+    severity: Optional[str] = Query(None, description="Lọc theo mức độ: Nghiêm trọng, Cao, Trung bình, Nhẹ"),
+    search: Optional[str] = Query(None, description="Tìm kiếm theo tên nhân sự, mã quy tắc..."),
+    sort_order: Optional[str] = Query("desc", description="Sắp xếp: desc (mới nhất) hoặc asc (cũ nhất)"),
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db)
 ):
     """
     [GET] Lấy danh sách vi phạm / khen thưởng kỷ luật.
-    Hỗ trợ lọc theo tháng, năm, trạng thái và tìm kiếm. Có phân trang.
+    Hỗ trợ lọc theo tháng, năm, trạng thái, mức độ và tìm kiếm. Có phân trang và sắp xếp.
     """
     query = db.query(AwardDiscipline)
 
@@ -63,6 +65,12 @@ def get_award_disciplines(
             )
         else:
             query = query.filter(AwardDiscipline.status == status)
+
+    # Lọc theo mức độ
+    if severity:
+        query = query.filter(
+            (AwardDiscipline.severity == severity) | (AwardDiscipline.impact == severity)
+        )
 
     # Lọc theo tháng/năm (dựa trên trường date "dd.mm.yyyy" hoặc created_at)
     if month and year:
@@ -88,7 +96,12 @@ def get_award_disciplines(
         )
 
     total = query.count()
-    records = query.order_by(AwardDiscipline.id.desc()).offset(skip).limit(limit).all()
+    if sort_order == "asc":
+        order_clause = AwardDiscipline.id.asc()
+    else:
+        order_clause = AwardDiscipline.id.desc()
+
+    records = query.order_by(order_clause).offset(skip).limit(limit).all()
 
     # Seed dữ liệu mẫu nếu trống
     if total == 0 and not status and not search and not month:
