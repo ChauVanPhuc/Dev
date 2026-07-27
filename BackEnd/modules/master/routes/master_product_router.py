@@ -80,11 +80,55 @@ def delete_master_product(id: int, db: Session = Depends(get_db)):
 def produce_product(id: int, quantity: float, db: Session = Depends(get_db)):
     """
     [POST] Phân rã (Produce) từ BOM mẫu sang sản phẩm thực tế.
-    
-    Quy trình này sẽ tự động tạo ra các Product, Element, và Part tương ứng 
-    dựa trên cấu trúc BOM của Master Product.
     """
     db_product = master_product_controller.produce_from_bom(db, master_product_id=id, quantity_to_produce=quantity)
     if not db_product:
         raise HTTPException(status_code=404, detail="Không tìm thấy sản phẩm mẫu để phân rã")
     return db_product
+
+@router.get("/technical-pending-tasks")
+def get_technical_pending_tasks(db: Session = Depends(get_db)):
+    """
+    [GET] Lấy danh sách công việc kỹ thuật tồn đọng cho KT01 Dashboard.
+    """
+    return master_product_controller.get_technical_pending_tasks(db)
+
+@router.post("/technical-pending-tasks")
+def create_technical_pending_task(payload: dict, db: Session = Depends(get_db)):
+    """
+    [POST] Tạo mới một công việc kỹ thuật tồn đọng.
+    """
+    title = payload.get("title", "Công việc mới")
+    assigned_to = payload.get("assigned_to", "Kỹ thuật viên")
+    return master_product_controller.create_technical_pending_task(db, title, assigned_to)
+
+@router.post("/{id}/drawings")
+def create_technical_drawing(id: int, payload: dict, db: Session = Depends(get_db)):
+    """
+    [POST] Thêm bản vẽ kỹ thuật / revision mới cho sản phẩm.
+    """
+    return master_product_controller.create_technical_drawing(db, id, payload)
+
+@router.post("/{id}/paint-colors")
+def create_paint_color_sample(id: int, payload: dict, db: Session = Depends(get_db)):
+    """
+    [POST] Thêm mẫu màu sơn (Modal KT03.3).
+    """
+    return master_product_controller.create_paint_color_sample(db, id, payload)
+
+@router.post("/{id}/bom-details")
+def add_bom_detail(id: int, payload: dict, db: Session = Depends(get_db)):
+    """
+    [POST] Thêm chi tiết / thành phần BOM mới (Modal KT03.1, KT03.2).
+    """
+    return master_product_controller.add_bom_detail_to_product(db, id, payload)
+
+@router.delete("/{id}/bom-details/{detail_id}")
+def delete_bom_detail(id: int, detail_id: int, db: Session = Depends(get_db)):
+    """
+    [DELETE] Xóa chi tiết / thành phần BOM.
+    """
+    success = master_product_controller.delete_bom_detail(db, detail_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Không tìm thấy chi tiết BOM để xóa")
+    return {"message": "Đã xóa chi tiết BOM thành công"}

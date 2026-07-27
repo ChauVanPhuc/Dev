@@ -10,6 +10,11 @@ from modules.master.models.master_bom_detail import MasterBOMDetail
 from modules.master.schemas.master_product import MasterProductCreate, MasterProductUpdate
 from shared.utils.string_cleaner import clean_and_standardize_name, clean_and_standardize_sku
 
+from modules.master.models.technical_drawing import TechnicalDrawing
+from modules.master.models.paint_color_sample import PaintColorSample
+from modules.master.models.master_product_material import MasterProductMaterial
+from modules.master.models.technical_pending_task import TechnicalPendingTask
+
 def to_master_product_dict(master: MasterProduct):
     if not master:
         return None
@@ -17,21 +22,30 @@ def to_master_product_dict(master: MasterProduct):
         "id": master.id,
         "sku": master.sku,
         "name": master.name,
+        "new_name": master.new_name or master.name,
+        "brand_name": master.brand_name or "Thương hiệu G7",
         "category_id": master.category_id,
-        "price": master.price,
-        "material": master.material,
-        "color": master.color,
-        "length": master.length,
-        "width": master.width,
-        "height": master.height,
-        "weight": master.weight,
-        "status": master.status,
-        "quantity": master.quantity,
-        "unit": master.unit,
-        "specification": master.specification,
-        "description": master.description,
+        "category_name": master.master_category.name if master.master_category else "Dòng hàng A",
+        "price": master.price or 0.0,
+        "material": master.material or "Gỗ tự nhiên",
+        "color": master.color or "Màu tự nhiên",
+        "length": master.length or 0.0,
+        "width": master.width or 0.0,
+        "height": master.height or 0.0,
+        "weight": master.weight or 0.0,
+        "status": master.status or "Hoạt động",
+        "quantity": master.quantity or 1.0,
+        "unit": master.unit or "Bộ",
+        "specification": master.specification or "Chuẩn",
+        "description": master.description or "",
+        "adjusted_date": master.adjusted_date.strftime("%d/%m/%Y") if master.adjusted_date else (master.created_at.strftime("%d/%m/%Y") if master.created_at else "22/1/2026"),
+        "image_url": master.image_url,
+        "total_category_count": len(master.master_bom_details) if master.master_bom_details else 0,
         "created_at": master.created_at,
-        "master_bom_details": [b for b in master.master_bom_details if b.parent_id is None]
+        "master_bom_details": [b for b in master.master_bom_details if b.parent_id is None],
+        "technical_drawings": master.technical_drawings or [],
+        "paint_color_samples": master.paint_color_samples or [],
+        "materials": master.materials or []
     }
 
 def get_master_products(db: Session, skip: int = 0, limit: int = 50, q: str = None):
@@ -495,3 +509,80 @@ def import_master_products_from_excel(db: Session, file_content: bytes):
 
     db.commit()
     yield json.dumps({"status": "completed", "processed": processed_count, "total": total_rows}) + "\n"
+
+def get_technical_pending_tasks(db: Session):
+    tasks = db.query(TechnicalPendingTask).order_by(TechnicalPendingTask.id.desc()).all()
+    if not tasks:
+        defaults = [
+            TechnicalPendingTask(title="Duyệt bản vẽ SP A009-L-010-LSP", assigned_to="Nguyễn Văn A", status="Chờ xử lý"),
+            TechnicalPendingTask(title="Cập nhật định mức keo & sơn SP A009-L-010-BKO", assigned_to="Trần Văn B", status="Đang xử lý"),
+            TechnicalPendingTask(title="Thẩm định màu sơn bóng gỗ sồi Lô 2", assigned_to="Lê Văn C", status="Chờ xử lý")
+        ]
+        db.add_all(defaults)
+        db.commit()
+        tasks = db.query(TechnicalPendingTask).order_by(TechnicalPendingTask.id.desc()).all()
+    return tasks
+
+def create_technical_pending_task(db: Session, title: str, assigned_to: str):
+    task = TechnicalPendingTask(title=title, assigned_to=assigned_to)
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    return task
+
+def create_technical_drawing(db: Session, product_id: int, data: dict):
+    drawing = TechnicalDrawing(
+        master_product_id=product_id,
+        lot_code=data.get('lot_code', 'Lô 1'),
+        updated_by=data.get('updated_by', 'Kỹ thuật viên'),
+        status=data.get('status', 'Bản áp dụng'),
+        change_reason=data.get('change_reason', 'Thay đổi kỹ thuật'),
+        approved_by=data.get('approved_by', 'Trưởng phòng KT'),
+        note=data.get('note', ''),
+        file_url=data.get('file_url', '')
+    )
+    db.add(drawing)
+    db.commit()
+    db.refresh(drawing)
+    return drawing
+
+def create_paint_color_sample(db: Session, product_id: int, data: dict):
+    sample = PaintColorSample(
+        master_product_id=product_id,
+        color_code=data.get('color_code', 'MS-01'),
+        color_name=data.get('color_name', 'Màu sơn gỗ tự nhiên'),
+        supplier=data.get('supplier', 'NPP Sơn Nippon'),
+        image_url=data.get('image_url', ''),
+        note=data.get('note', '')
+    )
+    db.add(sample)
+    db.commit()
+    db.refresh(sample)
+    return sample
+
+def add_bom_detail_to_product(db: Session, product_id: int, data: dict):
+    bom = MasterBOMDetail(
+        master_product_id=product_id,
+        parent_id=data.get('parent_id'),
+        sku=data.get('sku', 'PART-01'),
+        name=data.get('name', 'Chi tiết mới'),
+        quantity=float(data.get('quantity', 1.0)),
+        unit=data.get('unit', 'Cái'),
+        input_stage=data.get('input_stage', 'Định hình'),
+        output_stage=data.get('output_stage', 'Lắp ráp'),
+        material=data.get('material', 'Gỗ'),
+        specification=data.get('specification', ''),
+        description=data.get('description', '')
+    )
+    db.add(bom)
+    db.commit()
+    db.refresh(bom)
+    return bom
+
+def delete_bom_detail(db: Session, detail_id: int):
+    detail = db.query(MasterBOMDetail).filter(MasterBOMDetail.id == detail_id).first()
+    if detail:
+        db.delete(detail)
+        db.commit()
+        return True
+    return False

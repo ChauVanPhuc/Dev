@@ -235,35 +235,69 @@ const ManufactureProducts = () => {
                 <table className="manufacture-table">
                   <thead>
                     <tr>
-                      <th>STT</th>
-                      <th>Mã SKU</th>
-                      <th>Tên Sản Phẩm</th>
-                      <th>Kích Thước (L-W-H)</th>
-                      <th style={{ textAlign: 'center', width: '120px' }}>Thao Tác</th>
+                      <th style={{ width: '60px', textAlign: 'center' }}>STT</th>
+                      <th>Tên sản phẩm</th>
+                      <th>Tên sản phẩm mới</th>
+                      <th>Dòng hàng</th>
+                      <th>Mẫu sắc</th>
+                      <th>Giá</th>
+                      <th>Ngày điều chỉnh</th>
+                      <th>Ghi chú</th>
+                      <th style={{ textAlign: 'center', width: '100px' }}>Thao tác</th>
                     </tr>
                   </thead>
                   <tbody>
                     {displayedProducts.length === 0 ? (
                       <tr>
-                        <td colSpan="5" style={{ textAlign: 'center', color: '#6b7280' }}>
+                        <td colSpan="9" style={{ textAlign: 'center', color: '#6b7280', padding: '30px' }}>
                           Chưa có sản phẩm mẫu nào
                         </td>
                       </tr>
                     ) : (
                       displayedProducts.map((product, index) => (
                         <tr 
-                          key={product.id} 
+                          key={product.id || index} 
                           className="animate-card-entrance"
                           style={{
                             position: 'relative',
-                            zIndex: actionMenuId === product.id ? 30 : 1
+                            zIndex: actionMenuId === product.id ? 30 : 1,
+                            cursor: 'pointer'
                           }}
+                          onClick={() => navigate(`/admin/products/${product.id}`)}
                         >
-                          <td data-label="STT">{index + 1}</td>
-                          <td data-label="Mã SKU" style={{ fontWeight: '500' }}>{product.sku || 'N/A'}</td>
-                          <td data-label="Tên Sản Phẩm">{product.name}</td>
-                          <td data-label="Kích Thước (L-W-H)">
-                            {product.length}x{product.width}x{product.height}
+                          <td data-label="STT" style={{ textAlign: 'center', fontWeight: '700', color: '#64748b' }}>
+                            {String(page * limit + index + 1).padStart(2, '0')}
+                          </td>
+                          <td data-label="Tên sản phẩm">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#432818', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '0.78rem' }}>
+                                {(product.name || 'P').charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: '800', color: '#1e293b' }}>{product.sku}</div>
+                                <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{product.name}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td data-label="Tên sản phẩm mới" style={{ fontWeight: '700', color: '#334155' }}>
+                            {product.new_name || product.name}
+                          </td>
+                          <td data-label="Dòng hàng">
+                            <span style={{ backgroundColor: '#f1f5f9', color: '#475569', padding: '4px 8px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: '800' }}>
+                              {product.category_name || (product.sku && product.sku.startsWith('A') ? 'A' : 'T')}
+                            </span>
+                          </td>
+                          <td data-label="Mẫu sắc" style={{ fontWeight: '600', color: '#334155' }}>
+                            {product.color || 'Tự nhiên'}
+                          </td>
+                          <td data-label="Giá" style={{ fontWeight: '800', color: '#432818' }}>
+                            {product.price ? product.price.toLocaleString('vi-VN') : '0.00'}
+                          </td>
+                          <td data-label="Ngày điều chỉnh" style={{ fontSize: '0.82rem', color: '#64748b' }}>
+                            {product.adjusted_date || '22/01/2026'}
+                          </td>
+                          <td data-label="Ghi chú" style={{ fontSize: '0.82rem', color: '#64748b', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {product.description || 'APT012'}
                           </td>
                           <td data-label="Thao Tác" style={{ position: 'relative', textAlign: 'center', zIndex: actionMenuId === product.id ? 40 : 1 }}>
                              <button

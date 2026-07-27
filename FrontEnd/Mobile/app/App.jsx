@@ -28,6 +28,11 @@ import CAPADetail from '@modules/capa/Views/CAPADetailView'
 import QuickReportCreate from '@modules/quick_report/Views/QuickReportCreateView'
 import QuickReportList from '@modules/quick_report/Views/QuickReportListView'
 import DashboardView from '@modules/production/Views/DashboardView'
+import ProductionDashboard from '@modules/production/Views/ProductionDashboardView'
+import ProductionOrders from '@modules/production/Views/ProductionOrdersView'
+import ProductionOrderDetail from '@modules/production/Views/ProductionOrderDetailView'
+import ProductionPlanSchedule from '@modules/production/Views/ProductionPlanScheduleView'
+import ProductionTransferHistory from '@modules/production/Views/ProductionTransferHistoryView'
 import FeedbackView from '@modules/inspection/Views/FeedbackView'
 import CtqSosView from '@modules/inspection/Views/CtqSosView'
 import WarningsView from '@modules/inspection/Views/WarningsView'
@@ -104,7 +109,13 @@ function App() {
             <Route path="/capa-detail/:id" element={<CAPADetail />} />
             <Route path="/mobile/capa/detail/:id" element={<CAPADetail />} />
             <Route path="/capa-detail/:capaId/:occurrenceId" element={<CAPADetail />} />
-            <Route path="/dashboard" element={<DashboardView />} />
+            <Route path="/dashboard" element={<ProductionDashboard />} />
+            <Route path="/production/dashboard" element={<ProductionDashboard />} />
+            <Route path="/production/orders" element={<ProductionOrders />} />
+            <Route path="/production/order-detail" element={<ProductionOrderDetail />} />
+            <Route path="/production/order-detail/:poCode" element={<ProductionOrderDetail />} />
+            <Route path="/production/plans" element={<ProductionPlanSchedule />} />
+            <Route path="/production/transfers" element={<ProductionTransferHistory />} />
             <Route path="/feedback" element={<FeedbackView />} />
             <Route path="/quick-report-create" element={<QuickReportCreate />} />
             <Route path="/mobile/quick-report/create" element={<QuickReportCreate />} />

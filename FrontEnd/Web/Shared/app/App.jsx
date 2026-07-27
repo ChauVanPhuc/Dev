@@ -73,6 +73,9 @@ const ManufactureReceive = lazy(() => import('@modules/Delivery/Views/Receive/De
 const ManufactureProducts = lazy(() => import('@modules/Product/Views/List/ProductsListView'));
 const ProductDetail = lazy(() => import('@modules/Product/Views/Detail/ProductDetailView'));
 const ProductCreate = lazy(() => import('@modules/Product/Views/Create/ProductCreateView'));
+const TechnicalDashboard = lazy(() => import('@modules/Product/Views/Dashboard/TechnicalDashboardView'));
+const TechnicalStandards = lazy(() => import('@modules/Product/Views/Standards/TechnicalStandardsView'));
+const MaintenanceFacility = lazy(() => import('@modules/Equipment/Views/Maintenance/MaintenanceView'));
 const ManufactureOrders = lazy(() => import('@modules/Order/Views/List/OrdersListView'));
 const OrderCreate = lazy(() => import('@modules/Order/Views/Create/OrderCreateView'));
 const OrderDetail = lazy(() => import('@modules/Order/Views/Detail/OrderDetailView'));
@@ -646,6 +649,9 @@ function App() {
                 <Route path="plan/:id" element={<ProtectedRoute permissionKey="plan"><PlanDetail /></ProtectedRoute>} />
                 <Route path="plan/create" element={<ProtectedRoute permissionKey="plan"><AddProductionPlan /></ProtectedRoute>} />
                 <Route path="delivery-tracking" element={<ProtectedRoute permissionKey="delivery-tracking"><DeliveryTracking /></ProtectedRoute>} />
+                <Route path="technical-dashboard" element={<ProtectedRoute permissionKey="products"><TechnicalDashboard /></ProtectedRoute>} />
+                <Route path="technical-standards" element={<ProtectedRoute permissionKey="products"><TechnicalStandards /></ProtectedRoute>} />
+                <Route path="maintenance" element={<ProtectedRoute permissionKey="products"><MaintenanceFacility /></ProtectedRoute>} />
                 <Route path="products" element={<ProtectedRoute permissionKey="products"><ManufactureProducts /></ProtectedRoute>} />
                 <Route path="products/:id" element={<ProtectedRoute permissionKey="products"><ProductDetail /></ProtectedRoute>} />
                 <Route path="products/create" element={<ProtectedRoute permissionKey="products"><ProductCreate /></ProtectedRoute>} />

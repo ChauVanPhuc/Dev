@@ -19,6 +19,10 @@ from modules.notification.models.notifications import Notification
 from modules.master.models.master_category import MasterCategory
 from modules.master.models.master_product import MasterProduct
 from modules.master.models.master_bom_detail import MasterBOMDetail
+from modules.master.models.technical_drawing import TechnicalDrawing
+from modules.master.models.paint_color_sample import PaintColorSample
+from modules.master.models.master_product_material import MasterProductMaterial
+from modules.master.models.technical_pending_task import TechnicalPendingTask
 from modules.delivery.models.delivery_qc import DeliveryQC
 from modules.delivery.models.delivery_returns import DeliveryReturn
 from modules.auth.models.associations import permission_stage, role_permission
@@ -52,7 +56,8 @@ __all__ = [
     "Base", "Account", "Category", "Delivery", "DeliveryDetails", "DeliveryImage",
     "Department", "BOMDetail", "Order", "OrderItem", "Permission", "Product",
     "ProductPlan", "MobileDailyPlan", "Role", "Stage", "Notification", "MasterCategory", "MasterProduct",
-    "MasterBOMDetail", "DeliveryQC", "DeliveryReturn", "permission_stage", "role_permission",
+    "MasterBOMDetail", "TechnicalDrawing", "PaintColorSample", "MasterProductMaterial", "TechnicalPendingTask",
+    "DeliveryQC", "DeliveryReturn", "permission_stage", "role_permission",
     "BackupQRCode", "PalletCard", "KPI", "AwardDiscipline", "StaffEvaluation", "CAPA",
     "CAPAOccurrence", "CAPAEvaluation", "SystemScreen", "SystemComponent", "SystemGuide", "ScreenBug",
     "ScreenBugUpdate", "ScreenBugImage", "DefectType", "ClientDefect", "DefectGlossary", "ChatbotHistory",

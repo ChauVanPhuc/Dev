@@ -28,8 +28,16 @@ class MasterProduct(Base):
     unit = Column(NVARCHAR(50), default="Bộ") # Đơn vị tính
     specification = Column(NVARCHAR(255)) # Quy cách
     description = Column(NVARCHAR(500))   # Mô tả kỹ thuật tổng quát
+    new_name = Column(NVARCHAR(255))      # Tên sản phẩm mới
+    brand_name = Column(NVARCHAR(100))    # Tên thương hiệu
+    adjusted_date = Column(DateTime, nullable=True) # Ngày điều chỉnh giá / quy cách
+    image_url = Column(NVARCHAR(500))     # Ảnh minh họa sản phẩm
+    total_category_count = Column(Integer, default=0) # Tổng số danh mục/thành phần
     created_at = Column(DateTime, default=get_vietnam_time) # Thời gian tạo
 
     # Các quan hệ liên kết trong cấu trúc BOM
     master_category = relationship("MasterCategory", back_populates="master_products")
     master_bom_details = relationship("MasterBOMDetail", back_populates="master_product", cascade="all, delete-orphan")
+    technical_drawings = relationship("TechnicalDrawing", back_populates="master_product", cascade="all, delete-orphan")
+    paint_color_samples = relationship("PaintColorSample", back_populates="master_product", cascade="all, delete-orphan")
+    materials = relationship("MasterProductMaterial", back_populates="master_product", cascade="all, delete-orphan")

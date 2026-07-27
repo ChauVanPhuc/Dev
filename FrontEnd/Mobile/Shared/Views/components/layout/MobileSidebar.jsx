@@ -38,6 +38,8 @@ const Sidebar = () => {
       try {
         const response = await apiClient.get('/system/sidebar?platform=Mobile')
         let items = Array.isArray(response.data) ? [...response.data] : [];
+
+        // Ensure "Lập báo cáo" menu item
         const hasReportItem = items.some(i => i.route_path === '/quick-report-list' || i.title === 'Lập báo cáo');
         if (!hasReportItem) {
           items.push({
@@ -48,10 +50,40 @@ const Sidebar = () => {
             is_active: true
           });
         }
+
+        // Ensure "Thông tin sản xuất" has subitems according to Mockup 2
+        items = items.map(item => {
+          if (item.title === 'Thông tin sản xuất' || item.route_path === '/production/orders') {
+            return {
+              ...item,
+              title: 'Thông tin sản xuất',
+              route_path: '#',
+              icon: 'Users',
+              children: [
+                { id: 'sub-prod-1', title: 'Lệnh sản xuất', route_path: '/production/orders', icon: 'Users' },
+                { id: 'sub-prod-2', title: 'Kế hoạch sản xuất', route_path: '/production/plans', icon: 'Users' },
+                { id: 'sub-prod-3', title: 'Lịch sử luân chuyển', route_path: '/production/transfers', icon: 'Users' }
+              ]
+            };
+          }
+          return item;
+        });
+
         setMenuList(items)
       } catch (err) {
         console.error('Failed to load Mobile sidebar:', err)
         setMenuList([
+          {
+            id: 'prod-info-menu',
+            title: 'Thông tin sản xuất',
+            route_path: '#',
+            icon: 'Users',
+            children: [
+              { id: 'sub-prod-1', title: 'Lệnh sản xuất', route_path: '/production/orders', icon: 'Users' },
+              { id: 'sub-prod-2', title: 'Kế hoạch sản xuất', route_path: '/production/plans', icon: 'Users' },
+              { id: 'sub-prod-3', title: 'Lịch sử luân chuyển', route_path: '/production/transfers', icon: 'Users' }
+            ]
+          },
           { id: 'quick-report-menu', title: 'Lập báo cáo', route_path: '/quick-report-list', icon: 'FileText', is_active: true }
         ])
       } finally {

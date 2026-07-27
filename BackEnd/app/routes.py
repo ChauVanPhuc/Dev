@@ -21,6 +21,7 @@ from modules.kpi.routes import kpi_router, award_discipline_router, staff_evalua
 
 from modules.capa.routes import capa_router
 from modules.quick_report.routes import quick_report_router
+from modules.production.routes import production_v2_router
 
 from modules.system.routes import system_router, screen_router, screen_bug_router, system_sidebar_router
 
@@ -37,6 +38,7 @@ api_router = APIRouter()
 
 
 api_router.include_router(product_router.router, prefix="/products", tags=["products"])
+api_router.include_router(production_v2_router.router, prefix="/production-v2", tags=["production-v2"])
 
 api_router.include_router(master_product_router.router, prefix="/master-products", tags=["master-products"])
 
