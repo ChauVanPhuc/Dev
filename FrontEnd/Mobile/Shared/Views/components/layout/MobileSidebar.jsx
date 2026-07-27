@@ -37,9 +37,23 @@ const Sidebar = () => {
     const fetchSidebar = async () => {
       try {
         const response = await apiClient.get('/system/sidebar?platform=Mobile')
-        setMenuList(Array.isArray(response.data) ? response.data : [])
+        let items = Array.isArray(response.data) ? [...response.data] : [];
+        const hasReportItem = items.some(i => i.route_path === '/quick-report-list' || i.title === 'Lập báo cáo');
+        if (!hasReportItem) {
+          items.push({
+            id: 'quick-report-menu',
+            title: 'Lập báo cáo',
+            route_path: '/quick-report-list',
+            icon: 'FileText',
+            is_active: true
+          });
+        }
+        setMenuList(items)
       } catch (err) {
         console.error('Failed to load Mobile sidebar:', err)
+        setMenuList([
+          { id: 'quick-report-menu', title: 'Lập báo cáo', route_path: '/quick-report-list', icon: 'FileText', is_active: true }
+        ])
       } finally {
         setLoading(false)
       }

@@ -45,6 +45,7 @@ from config.database import Base
 
 from app import models  # Đảm bảo tất cả Model được import để tránh lỗi Mapper
 from modules.kpi.models.kpi_management import KPIChecklist, KPIEmployeeItem, KPIViolation, KPIFeedback, KPIPointRule, KPIChecklistPool, KPIItemPool
+from modules.quick_report.models.quick_report import QuickReport
 
 
 

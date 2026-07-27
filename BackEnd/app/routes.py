@@ -20,6 +20,7 @@ from modules.equipment.routes import equipment_router, machinery_router
 from modules.kpi.routes import kpi_router, award_discipline_router, staff_evaluation_router, kpi_management_router
 
 from modules.capa.routes import capa_router
+from modules.quick_report.routes import quick_report_router
 
 from modules.system.routes import system_router, screen_router, screen_bug_router, system_sidebar_router
 
@@ -89,6 +90,7 @@ api_router.include_router(screen_bug_router.router, prefix="/screen-bugs", tags=
 api_router.include_router(system_sidebar_router.router, prefix="/system/sidebar", tags=["system-sidebar"])
 
 api_router.include_router(capa_router.router, prefix="/capas", tags=["capas"])
+api_router.include_router(quick_report_router.router, prefix="/quick-reports", tags=["quick-reports"])
 
 api_router.include_router(claim_router, prefix="/claims", tags=["claim"])
 

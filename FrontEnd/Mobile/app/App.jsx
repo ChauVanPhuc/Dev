@@ -25,6 +25,8 @@ import KPIStaffList from '@modules/kpi/Views/KPIStaffListView'
 import CAPAList from '@modules/capa/Views/CAPAListView'
 import CAPAReport from '@modules/capa/Views/CAPAReportView'
 import CAPADetail from '@modules/capa/Views/CAPADetailView'
+import QuickReportCreate from '@modules/quick_report/Views/QuickReportCreateView'
+import QuickReportList from '@modules/quick_report/Views/QuickReportListView'
 import DashboardView from '@modules/production/Views/DashboardView'
 import FeedbackView from '@modules/inspection/Views/FeedbackView'
 import CtqSosView from '@modules/inspection/Views/CtqSosView'
@@ -104,6 +106,11 @@ function App() {
             <Route path="/capa-detail/:capaId/:occurrenceId" element={<CAPADetail />} />
             <Route path="/dashboard" element={<DashboardView />} />
             <Route path="/feedback" element={<FeedbackView />} />
+            <Route path="/quick-report-create" element={<QuickReportCreate />} />
+            <Route path="/mobile/quick-report/create" element={<QuickReportCreate />} />
+            <Route path="/quick-report-list" element={<QuickReportList />} />
+            <Route path="/mobile/quick-report/list" element={<QuickReportList />} />
+            <Route path="/reports" element={<QuickReportList />} />
             <Route path="/ctq-sos" element={<CtqSosView />} />
             <Route path="/warnings" element={<WarningsView />} />
             <Route path="/inspection-stage-adhesion" element={<StageAdhesionView />} />
