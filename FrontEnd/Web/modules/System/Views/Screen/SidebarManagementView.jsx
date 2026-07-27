@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import api from '@webShared/Services/api.service';
-import { 
-  Plus, Edit2, Trash2, ArrowUp, ArrowDown, Layout, Smartphone, Check, 
+import {
+  Plus, Edit2, Trash2, ArrowUp, ArrowDown, Layout, Smartphone, Check,
   X, HelpCircle, Save, Settings, ChevronRight, CheckSquare, Square
 } from 'lucide-react';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
@@ -22,7 +22,7 @@ const DURATION = 300;
 export default function SidebarManagementView() {
   const { setCustomTitle, setCustomSubtitle } = useOutletContext();
   const { toast } = useToast();
-  
+
   const [activeTab, setActiveTab] = useState('Web'); // 'Web' or 'Mobile'
   const [menus, setMenus] = useState([]);
 
@@ -134,11 +134,11 @@ export default function SidebarManagementView() {
       } else {
         // Add mode
         // Determine sorting order at end of group
-        const siblings = formParentId 
+        const siblings = formParentId
           ? (menus.find(m => m.id === parseInt(formParentId))?.children || [])
           : filteredMenus;
         payload.sort_order = siblings.length + 1;
-        
+
         await api.post('/system/sidebar', payload);
         toast('success', `Đã thêm mới mục "${formTitle}" thành công!`);
       }
@@ -204,7 +204,7 @@ export default function SidebarManagementView() {
 
     return (
       <React.Fragment key={item.id}>
-        <div 
+        <div
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -218,26 +218,26 @@ export default function SidebarManagementView() {
           className="menu-row-item"
         >
           {/* Menu core metadata */}
-          <div 
+          <div
             onClick={() => {
               if (depth === 0 && isParent) {
                 toggleCollapse(item.id);
               }
             }}
-            style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '12px', 
-              flex: 1, 
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              flex: 1,
               minWidth: 0,
               cursor: (depth === 0 && isParent) ? 'pointer' : 'default',
               userSelect: 'none'
             }}
           >
             {depth === 0 && isParent && (
-              <span style={{ 
-                color: '#9CA3AF', 
-                display: 'flex', 
+              <span style={{
+                color: '#9CA3AF',
+                display: 'flex',
                 alignItems: 'center',
                 transition: 'transform 0.2s',
                 transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)'
@@ -249,8 +249,8 @@ export default function SidebarManagementView() {
               <DynamicIcon name={item.icon} size={depth === 0 ? 18 : 14} />
             </span>
             <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-              <span style={{ 
-                fontWeight: depth === 0 ? 800 : 600, 
+              <span style={{
+                fontWeight: depth === 0 ? 800 : 600,
                 color: depth === 0 ? '#1F2937' : '#4B5563',
                 fontSize: depth === 0 ? '0.95rem' : '0.85rem',
                 whiteSpace: 'nowrap',
@@ -281,7 +281,7 @@ export default function SidebarManagementView() {
           {/* Action buttons */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '12px' }}>
             {/* Sorting buttons */}
-            <button 
+            <button
               onClick={() => handleMove(item, 'up')}
               style={{
                 border: '1px solid #E5E7EB',
@@ -299,7 +299,7 @@ export default function SidebarManagementView() {
             >
               <ArrowUp size={14} />
             </button>
-            <button 
+            <button
               onClick={() => handleMove(item, 'down')}
               style={{
                 border: '1px solid #E5E7EB',
@@ -321,7 +321,7 @@ export default function SidebarManagementView() {
             <div style={{ width: '1px', height: '20px', backgroundColor: '#E5E7EB', margin: '0 4px' }} />
 
             {depth === 0 && (
-              <button 
+              <button
                 onClick={() => openAddModal(item.id)}
                 style={{
                   border: '1px solid #7B5233',
@@ -344,7 +344,7 @@ export default function SidebarManagementView() {
               </button>
             )}
 
-            <button 
+            <button
               onClick={() => openEditModal(item)}
               style={{
                 border: '1px solid #E5E7EB',
@@ -362,7 +362,7 @@ export default function SidebarManagementView() {
             >
               <Edit2 size={14} />
             </button>
-            <button 
+            <button
               onClick={() => confirmDelete(item)}
               style={{
                 border: '1px solid #FCA5A5',
@@ -391,11 +391,11 @@ export default function SidebarManagementView() {
 
   return (
     <div style={{ fontFamily: 'Inter, sans-serif', padding: '20px', backgroundColor: '#F9FBFB', minHeight: '85vh' }}>
-      
+
       {/* Platform tab selector - Sticky toolbar */}
       <div style={{
         position: 'sticky',
-        top: '50px',
+        // top: '50px',
         backgroundColor: '#F9FBFB',
         zIndex: 90,
         display: 'flex',
@@ -406,7 +406,7 @@ export default function SidebarManagementView() {
         paddingTop: '10px',
         marginTop: '-10px'
       }}>
-        <button 
+        <button
           onClick={() => setActiveTab('Web')}
           style={{
             padding: '10px 20px',
@@ -425,7 +425,7 @@ export default function SidebarManagementView() {
           <Layout size={16} />
           <span>Vận hành trên Web</span>
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('Mobile')}
           style={{
             padding: '10px 20px',
@@ -444,10 +444,10 @@ export default function SidebarManagementView() {
           <Smartphone size={16} />
           <span>Vận hành trên Mobile</span>
         </button>
-        
+
         <div style={{ flex: 1 }} />
 
-        <button 
+        <button
           onClick={() => openAddModal(null)}
           style={{
             padding: '10px 20px',
@@ -540,7 +540,7 @@ export default function SidebarManagementView() {
               <h3 style={{ margin: 0, color: '#2D1A12', fontWeight: 800, fontSize: '1.1rem' }}>
                 {selectedItem ? `Chỉnh sửa mục: "${selectedItem.title}"` : 'Thêm mục menu mới'}
               </h3>
-              <button 
+              <button
                 onClick={() => setIsModalOpen(false)}
                 style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#9CA3AF' }}
               >
@@ -551,11 +551,11 @@ export default function SidebarManagementView() {
             {/* Modal Body */}
             <form onSubmit={handleSave} style={{ padding: '24px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                
+
                 {/* Title */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <label style={{ fontSize: '0.8rem', fontWeight: 800, color: '#4B5563' }}>TIÊU ĐỀ MENU *</label>
-                  <input 
+                  <input
                     type="text"
                     value={formTitle}
                     onChange={(e) => setFormTitle(e.target.value)}
@@ -599,7 +599,7 @@ export default function SidebarManagementView() {
                 {/* Route path */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <label style={{ fontSize: '0.8rem', fontWeight: 800, color: '#4B5563' }}>ĐƯỜNG DẪN / ROUTE PATH</label>
-                  <input 
+                  <input
                     type="text"
                     value={formRoutePath}
                     onChange={(e) => setFormRoutePath(e.target.value)}

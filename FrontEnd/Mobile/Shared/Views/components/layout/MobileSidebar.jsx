@@ -36,8 +36,8 @@ const Sidebar = () => {
   useEffect(() => {
     const fetchSidebar = async () => {
       try {
-        const data = await apiClient.get('/system/sidebar?platform=Mobile')
-        setMenuList(data)
+        const response = await apiClient.get('/system/sidebar?platform=Mobile')
+        setMenuList(Array.isArray(response.data) ? response.data : [])
       } catch (err) {
         console.error('Failed to load Mobile sidebar:', err)
       } finally {

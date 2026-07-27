@@ -57,7 +57,7 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     }
     if (!key) return false;
     const perm = activePermissions[key];
-    
+
     // 1. Kiểm tra chặn rõ ràng (Explicit block)
     if (perm === 'none') return true;
     if (Array.isArray(perm)) {
@@ -66,10 +66,10 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     if (typeof perm === 'string' && perm.split(',').map(s => s.trim()).includes('none')) {
       return true;
     }
-    
+
     // 2. Mặc định đối với admin/IT/BGD (nếu không bị chặn rõ ràng ở trên)
     if (isAdmin) return false;
-    
+
     // 3. Với các tài khoản thường, nếu chưa cấu hình (undefined/null) thì mặc định chặn
     return perm === undefined || perm === null;
   };
@@ -88,9 +88,9 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     }
 
     // 2. Prefix match
-    if (item.route_path !== '/admin/dashboard' && 
-        item.route_path !== '/admin/manufacture-dashboard' && 
-        (location.pathname.startsWith(item.route_path + '/') || location.pathname.startsWith(item.route_path + '?'))) {
+    if (item.route_path !== '/admin/dashboard' &&
+      item.route_path !== '/admin/manufacture-dashboard' &&
+      (location.pathname.startsWith(item.route_path + '/') || location.pathname.startsWith(item.route_path + '?'))) {
 
       // Check if there is another item in the sidebar that matches the pathname exactly
       let hasExactMatchSibling = false;

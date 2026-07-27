@@ -7,8 +7,10 @@
 .admin-sidebar {
     width: var(--sidebar-width);
     height: 100vh;
-    background-color: #FFFFFF; /* Màu trắng theo yêu cầu */
-    color: #757575; /* Màu chữ xám cho trạng thái bình thường */
+    background-color: #FFFFFF;
+    /* Màu trắng theo yêu cầu */
+    color: #757575;
+    /* Màu chữ xám cho trạng thái bình thường */
     display: flex;
     flex-direction: column;
     position: fixed;
@@ -26,7 +28,8 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    background-color: #7B5233; /* Màu nâu theo ảnh mẫu */
+    background-color: #7B5233;
+    /* Màu nâu theo ảnh mẫu */
     border-bottom: none;
 }
 
@@ -105,7 +108,8 @@
     gap: 15px;
     padding: 12px 25px;
     text-decoration: none;
-    color: #757575; /* Màu xám trung tính */
+    color: #757575;
+    /* Màu xám trung tính */
     font-size: 0.95rem;
     font-weight: 600;
     transition: all 0.2s ease;
@@ -117,7 +121,8 @@
 }
 
 .nav-link.active {
-    color: #A34A2E; /* Màu đỏ nâu/cam đậm cho mục đang chọn */
+    color: #A34A2E;
+    /* Màu đỏ nâu/cam đậm cho mục đang chọn */
     border-left-color: #D35D33;
     background-color: transparent;
 }
@@ -146,14 +151,22 @@
     .admin-sidebar {
         width: 80px;
     }
-    .user-info, .user-name, .user-email, .nav-text, .sidebar-footer {
+
+    .user-info,
+    .user-name,
+    .user-email,
+    .nav-text,
+    .sidebar-footer {
         display: none;
     }
-    .sidebar-user-section, .nav-link {
+
+    .sidebar-user-section,
+    .nav-link {
         justify-content: center;
         padding-left: 0;
         padding-right: 0;
     }
+
     .nav-icon {
         font-size: 1.5rem;
     }
@@ -162,14 +175,16 @@
     .admin-sidebar.active {
         width: var(--sidebar-width);
     }
-    .admin-sidebar.active .user-info, 
-    .admin-sidebar.active .user-name, 
-    .admin-sidebar.active .user-email, 
-    .admin-sidebar.active .nav-text, 
+
+    .admin-sidebar.active .user-info,
+    .admin-sidebar.active .user-name,
+    .admin-sidebar.active .user-email,
+    .admin-sidebar.active .nav-text,
     .admin-sidebar.active .sidebar-footer {
         display: block;
     }
-    .admin-sidebar.active .sidebar-user-section, 
+
+    .admin-sidebar.active .sidebar-user-section,
     .admin-sidebar.active .nav-link {
         justify-content: flex-start;
         padding-left: 20px;
@@ -181,11 +196,13 @@
         width: var(--sidebar-width) !important;
         transform: translateX(-100%);
     }
+
     .admin-sidebar.active {
         width: var(--sidebar-width) !important;
         transform: translateX(0);
     }
 }
+
 /* 4. Overlay cho Mobile */
 .sidebar-overlay {
     position: fixed;
@@ -194,8 +211,10 @@
     width: 100vw;
     height: 100vh;
     background-color: rgba(0, 0, 0, 0.5);
-    z-index: 1900; /* Thấp hơn sidebar (2000) */
-    display: none; /* Mặc định ẩn */
+    z-index: 1900;
+    /* Thấp hơn sidebar (2000) */
+    display: none;
+    /* Mặc định ẩn */
 }
 
 .sidebar-overlay.visible {
@@ -304,6 +323,7 @@
         opacity: 0;
         transform: translateY(-8px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);

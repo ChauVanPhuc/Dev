@@ -28,6 +28,8 @@ const KPIChecklist = lazy(() => import('@modules/KPI/Views/Checklist/KPIChecklis
 const KPIItems = lazy(() => import('@modules/KPI/Views/Item/KPIItemsView'));
 const KPIRules = lazy(() => import('@modules/KPI/Views/Rule/KPIRulesView'));
 const KPIFeedback = lazy(() => import('@modules/KPI/Views/Feedback/KPIFeedbackView'));
+const ViolationHistory = lazy(() => import('@modules/KPI/Views/Violation/ViolationHistoryView'));
+const ViolationForm = lazy(() => import('@modules/KPI/Views/Violation/ViolationFormView'));
 const Improvements = lazy(() => import('@modules/CAPA/Views/Improvement/ImprovementsView'));
 const Hotspots = lazy(() => import('@modules/System/Views/Monitor/HotspotsView'));
 const DataPackaging = lazy(() => import('@modules/System/Views/Data/DataPackagingView'));
@@ -605,6 +607,9 @@ function App() {
                 <Route path="kpi/list" element={<ProtectedRoute permissionKey="kpi"><KPIItems /></ProtectedRoute>} />
                 <Route path="kpi/rules" element={<ProtectedRoute permissionKey="kpi"><KPIRules /></ProtectedRoute>} />
                 <Route path="kpi/feedback" element={<ProtectedRoute permissionKey="kpi"><KPIFeedback /></ProtectedRoute>} />
+                <Route path="violations" element={<ProtectedRoute permissionKey="violations"><ViolationHistory /></ProtectedRoute>} />
+                <Route path="violations/create" element={<ProtectedRoute permissionKey="violations"><ViolationForm /></ProtectedRoute>} />
+                <Route path="violations/edit/:id" element={<ProtectedRoute permissionKey="violations"><ViolationForm /></ProtectedRoute>} />
                 <Route path="feedback" element={<ProtectedRoute permissionKey="feedback"><Improvements /></ProtectedRoute>} />
                 <Route path="hotspots" element={<ProtectedRoute permissionKey="hotspots"><Hotspots /></ProtectedRoute>} />
                 <Route path="data" element={<ProtectedRoute permissionKey="data"><DataPackaging /></ProtectedRoute>} />
