@@ -297,7 +297,17 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
                 if (isBlocked(item)) return null;
                 return item;
               } else {
-                const visibleChildren = item.children.filter(child => !isBlocked(child));
+                let visibleChildren = item.children.filter(child => !isBlocked(child));
+
+                // Yêu cầu: "Quản lý sản xuất" chỉ hiển thị 3 mục: Lệnh sản xuất, Quy trình - kế hoạch, Danh sách bàn giao. Các mục khác tạm ẩn.
+                if (item.title === 'Quản lý sản xuất') {
+                  visibleChildren = [
+                    { id: 21, parent_id: 19, title: 'Lệnh sản xuất', route_path: '/admin/production-orders', icon: 'Handshake' },
+                    { id: 24, parent_id: 19, title: 'Quy trình - kế hoạch', route_path: '/admin/production-routing', icon: 'Handshake' },
+                    { id: 25, parent_id: 19, title: 'Danh sách bàn giao', route_path: '/admin/delivery-tracking', icon: 'Handshake' }
+                  ];
+                }
+
                 if (visibleChildren.length === 0) return null;
                 return { ...item, children: visibleChildren };
               }
@@ -323,7 +333,7 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
                           navigate('/admin/quality');
                         }
                         if (item.title === 'Quản lý sản xuất') {
-                          navigate('/admin/production-dashboard');
+                          navigate('/admin/production-orders');
                         }
                       }}
                       className={`sidebar-group-header ${isGroupActive ? 'active' : ''}`}
