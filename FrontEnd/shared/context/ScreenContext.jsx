@@ -51,6 +51,15 @@ export const ScreenProvider = ({ children }) => {
       };
     }
 
+    if (path.includes('order-shipping-monitoring')) {
+      return {
+        screenCode: 'KD04',
+        title: 'Quản lý kinh doanh',
+        subtitle: 'KD04: Giám sát tiến độ đơn hàng',
+        isActive: true
+      };
+    }
+
     if (path.includes('production-dashboard')) {
       const dbScreen = screensMap['/admin/production-dashboard'];
       return {
