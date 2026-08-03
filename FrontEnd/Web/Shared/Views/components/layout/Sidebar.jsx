@@ -322,6 +322,9 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
                         if (item.title === 'Quản lý chất lượng') {
                           navigate('/admin/quality');
                         }
+                        if (item.title === 'Quản lý sản xuất') {
+                          navigate('/admin/production-dashboard');
+                        }
                       }}
                       className={`sidebar-group-header ${isGroupActive ? 'active' : ''}`}
                       style={{

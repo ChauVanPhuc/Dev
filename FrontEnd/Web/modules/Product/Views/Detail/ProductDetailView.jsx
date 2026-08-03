@@ -27,19 +27,22 @@ import AddDetailModal from './modals/AddDetailModal';
 import AddComponentModal from './modals/AddComponentModal';
 import AddPaintColorModal from './modals/AddPaintColorModal';
 
-const flattenBOM = (items, parentPath = '', level = 0, result = []) => {
+const flattenBOM = (items, parentPath = '', level = 0, result = [], parentTreeStt = '') => {
   items.forEach((item, index) => {
     const path = parentPath ? `${parentPath}-${index}` : `${index}`;
+    const treeStt = parentTreeStt ? `${parentTreeStt}.${index + 1}` : `${index + 1}`;
+    
     const enrichedItem = {
       ...item,
       path,
       parentPath,
       level,
+      treeStt,
       hasChildren: item.children && item.children.length > 0
     };
     result.push(enrichedItem);
     if (enrichedItem.hasChildren) {
-      flattenBOM(item.children, path, level + 1, result);
+      flattenBOM(item.children, path, level + 1, result, treeStt);
     }
   });
   return result;
@@ -352,8 +355,8 @@ const ProductDetail = () => {
                     <tr key={item.path || idx} style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: item.level === 0 ? '#fafaf9' : '#fff' }}>
                       
                       {/* STT */}
-                      <td style={{ padding: '10px', textAlign: 'center', color: '#64748b', fontWeight: '700' }}>
-                        {idx + 1}
+                      <td style={{ padding: '10px', textAlign: 'center', color: '#432818', fontWeight: '800' }}>
+                        {item.treeStt}
                       </td>
 
                       {/* Cấp (Rounded Pill Badge like Image 2) */}
@@ -552,31 +555,65 @@ const ProductDetail = () => {
             </thead>
             <tbody>
               {(() => {
-                const stageFiltered = flattenedData.filter(item => {
-                  const inp = item.input_stage || '';
-                  const out = item.output_stage || '';
-                  return inp.includes(activeProcessStage) || out.includes(activeProcessStage);
+                const normTarget = activeProcessStage.trim().toLowerCase();
+
+                // 1. Primary Filter: Only include items whose input_stage (Công đoạn giao) matches activeProcessStage
+                let displayItems = flattenedData.filter(item => {
+                  const inp = (item.input_stage || '').trim().toLowerCase();
+                  if (!inp) return false;
+
+                  if (normTarget === 'tạo phôi') return inp.includes('tạo phôi');
+                  if (normTarget === 'định hình') return inp.includes('định hình');
+                  if (normTarget === 'lắp ráp') return inp.includes('lắp ráp');
+                  if (normTarget === 'sơn') return inp.includes('sơn');
+                  if (normTarget === 'đóng gói') return inp.includes('đóng gói');
+                  if (normTarget === 'lưu kho') return inp.includes('lưu kho') || inp.includes('kho thành phẩm');
+                  return inp.includes(normTarget);
                 });
 
-                // Fallback smart stage assignment if string doesn't match directly
-                const displayItems = stageFiltered.length > 0 
-                  ? stageFiltered 
-                  : (activeProcessStage === 'Tạo phôi' ? flattenedData.filter(i => i.level > 0)
-                    : activeProcessStage === 'Lắp ráp' ? flattenedData.filter(i => i.hasChildren || i.level === 0)
-                    : activeProcessStage === 'Sơn' ? flattenedData.filter(i => i.level === 0)
-                    : activeProcessStage === 'Đóng gói' ? flattenedData.filter(i => i.level === 0)
-                    : activeProcessStage === 'Lưu kho' ? flattenedData.filter(i => i.level === 0)
-                    : flattenedData);
+                // 2. Fallback filter if input_stage is not explicitly defined in BOM detail data
+                if (displayItems.length === 0) {
+                  if (activeProcessStage === 'Tạo phôi') {
+                    displayItems = flattenedData.filter(i => (!i.hasChildren || i.unit === 'm3' || i.unit === 'm2') && i.level >= 2);
+                    if (displayItems.length === 0) displayItems = flattenedData.filter(i => !i.hasChildren);
+                  } else if (activeProcessStage === 'Định hình') {
+                    displayItems = flattenedData.filter(i => i.level >= 1 && i.unit !== 'm3');
+                  } else if (activeProcessStage === 'Lắp ráp') {
+                    displayItems = flattenedData.filter(i => i.level === 1 || (i.level === 2 && i.hasChildren));
+                  } else if (activeProcessStage === 'Sơn') {
+                    displayItems = flattenedData.filter(i => i.level === 1 || i.level === 0);
+                  } else if (activeProcessStage === 'Đóng gói') {
+                    displayItems = flattenedData.filter(i => i.level === 1);
+                  } else if (activeProcessStage === 'Lưu kho') {
+                    displayItems = flattenedData.filter(i => i.level === 0);
+                  } else {
+                    displayItems = flattenedData;
+                  }
+                }
+
+                const defaultInputStage = 
+                  activeProcessStage === 'Tạo phôi' ? 'NM3 - Tạo phôi 3' :
+                  activeProcessStage === 'Định hình' ? 'NM2 - Định hình mặt tiền 2' :
+                  activeProcessStage === 'Lắp ráp' ? 'NM2 - Lắp ráp mặt tiền 2' :
+                  activeProcessStage === 'Sơn' ? 'NM2 - Sơn treo 2' :
+                  activeProcessStage === 'Đóng gói' ? 'NM2 - Đóng gói 2' : 'Kho thành phẩm';
+
+                const defaultOutputStage = 
+                  activeProcessStage === 'Tạo phôi' ? 'NM2 - Định hình mặt tiền 2' :
+                  activeProcessStage === 'Định hình' ? 'NM2 - Lắp ráp mặt tiền 2' :
+                  activeProcessStage === 'Lắp ráp' ? 'NM2 - Sơn treo 2' :
+                  activeProcessStage === 'Sơn' ? 'NM2 - Đóng gói 2' :
+                  activeProcessStage === 'Đóng gói' ? 'Kho thành phẩm' : 'Xuất hàng';
 
                 return displayItems.length > 0 ? (
                   displayItems.map((item, idx) => (
                     <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '10px', fontWeight: '700', color: '#64748b' }}>{idx + 1}</td>
+                      <td style={{ padding: '10px', fontWeight: '800', color: '#432818' }}>{item.treeStt}</td>
                       <td style={{ padding: '10px', fontWeight: '700', color: '#475569' }}>
-                        {item.level === 0 ? 'Cụm chính' : (item.hasChildren ? 'Khung' : 'Chi tiết')}
+                        {item.level === 0 ? 'Cụm chính' : (item.hasChildren ? 'Khung / Cụm phụ' : (item.unit === 'm3' ? 'Phôi thô NVL' : 'Chi tiết linh kiện'))}
                       </td>
-                      <td style={{ padding: '10px', color: '#475569' }}>{item.input_stage || 'NM3 - Tạo phôi 3'}</td>
-                      <td style={{ padding: '10px', color: '#475569' }}>{item.output_stage || 'NM3 - Lắp ráp 3'}</td>
+                      <td style={{ padding: '10px', color: '#475569' }}>{item.input_stage || defaultInputStage}</td>
+                      <td style={{ padding: '10px', color: '#475569' }}>{item.output_stage || defaultOutputStage}</td>
                       <td style={{ padding: '10px', fontWeight: '800', color: '#432818' }}>{item.sku}</td>
                       <td style={{ padding: '10px', fontWeight: '800', color: '#1e293b' }}>{item.name}</td>
                       <td style={{ padding: '10px', textAlign: 'right', fontWeight: '800', color: '#16a34a' }}>{item.quantity}</td>

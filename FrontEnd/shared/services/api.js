@@ -45,13 +45,11 @@ const apiClient = axios.create({
   timeout: 30000
 })
 
-import useAuthStore from '@modules/auth/Models/authModel'
-
 // Interceptor để tự động gắn Token vào mọi request
 apiClient.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().token || localStorage.getItem('token')
+  const token = localStorage.getItem('token') || localStorage.getItem('access_token');
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+    config.headers.Authorization = `Bearer ${token}`;
   }
   
   // Xử lý đặc biệt cho FormData: Xóa Content-Type để Axios tự động set boundary

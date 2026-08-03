@@ -25,18 +25,30 @@ def list_requisitions(
     warehouse_status: Optional[str] = None,
     search: Optional[str] = None,
     supplier_code: Optional[str] = None,
+    order_type: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """[GET] Danh sách đơn đặt mua với filter, search và phân trang."""
+    """[GET] Danh sách đơn hàng với filter, search và phân trang."""
     return controller.get_all(db, skip=skip, limit=limit,
                               status=status, warehouse_status=warehouse_status,
-                              search=search, supplier_code=supplier_code)
+                              search=search, supplier_code=supplier_code,
+                              order_type=order_type)
 
 
 @router.get("/stats")
 def get_stats(db: Session = Depends(get_db)):
-    """[GET] Thống kê tổng hợp đơn đặt mua."""
+    """[GET] Thống kê tổng hợp đơn hàng."""
     return controller.get_stats(db)
+
+
+@router.get("/shipping-monitoring")
+def get_shipping_monitoring(
+    skip: int = 0, limit: int = 50,
+    search: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """[GET] Danh sách mốc thời gian vận chuyển đơn hàng cho KD04."""
+    return controller.get_shipping_monitoring(db, skip=skip, limit=limit, search=search)
 
 
 @router.get("/{requisition_id}", response_model=PurchaseRequisitionResponse)

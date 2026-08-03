@@ -29,11 +29,25 @@ class PurchaseRequisition(Base):
     supplier_name = Column(NVARCHAR(255))  # Tên nhà cung cấp
     total_amount = Column(Float, default=0)  # Tổng tiền
 
-    order_type = Column(NVARCHAR(50))  # Loại đơn mua hàng
-    status = Column(NVARCHAR(50), index=True)  # Trạng thái (Duyệt thành công, K.tra thành công, Nháp)
+    order_type = Column(NVARCHAR(50))  # Loại đơn hàng (Đơn mua hàng, Đơn bán hàng, Đơn mua lẻ)
+    priority = Column(NVARCHAR(50), default="Bình thường")  # Mức độ ưu tiên (Cao, Bình thường, Thấp)
+    reviewer = Column(NVARCHAR(100))  # Người xem xét
+    reviewed_at = Column(DateTime)  # Ngày xem xét
+    material_type = Column(NVARCHAR(100))  # Loại vật tư (Gỗ & Phụ kiện, ...)
+    est_completion_date = Column(DateTime)  # Ngày hoàn thành dự kiến
+    real_completion_date = Column(DateTime)  # Ngày hoàn thành thực tế
+
+    # Mốc thời gian vận chuyển / tiến độ đơn hàng
+    production_date = Column(DateTime)  # Ngày bắt đầu/hoàn thành sản xuất
+    warehouse_in_date = Column(DateTime)  # Ngày nhập kho
+    storage_date = Column(DateTime)  # Ngày lưu kho
+    warehouse_out_date = Column(DateTime)  # Ngày xuất kho
+    completed_date = Column(DateTime)  # Ngày hoàn thành giao nhận
+
+    status = Column(NVARCHAR(50), index=True)  # Trạng thái (Duyệt thành công, K.tra thành công, Nháp, Đã hoàn thành, Đang sản xuất, Chưa duyệt, Đã xuất kho...)
     processing_status = Column(NVARCHAR(50))  # Tình trạng xử lý
     warehouse_status = Column(NVARCHAR(50), index=True)  # Tình trạng nhập kho (Đã nhập kho, Chưa nhập kho, Nhập chưa hết)
-    note = Column(NVARCHAR(None))  # Ghi chú mua hàng (NVARCHAR(MAX))
+    note = Column(NVARCHAR(None))  # Ghi chú (NVARCHAR(MAX))
 
     created_at = Column(DateTime, default=get_vietnam_time)  # Ngày tạo record trong hệ thống
 

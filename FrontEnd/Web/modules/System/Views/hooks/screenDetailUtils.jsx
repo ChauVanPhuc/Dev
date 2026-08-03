@@ -1200,8 +1200,8 @@ export const ROUTE_SUGGESTIONS = {
     { title: 'Quản lý khách hàng', path: '/admin/customers' },
     { title: 'Thời gian xuất cont', path: '/admin/shipments' },
     { title: 'Đơn giá sản phẩm', path: '/admin/prices' },
-    { title: 'Đơn đặt mua', path: '/admin/purchase-requisitions' },
-    { title: 'Đơn mua hàng', path: '/admin/purchase-order-items' }
+    { title: 'Danh sách đơn hàng', path: '/admin/purchase-requisitions' },
+    { title: 'Giám sát vận chuyển', path: '/admin/order-shipping-monitoring' }
   ],
   'Quản lý kỹ thuật': [
     { title: 'Bom sản phẩm', path: '/admin/products' }

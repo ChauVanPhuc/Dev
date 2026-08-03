@@ -114,3 +114,12 @@ ID: 1111 | Default: MB30 | Current: MB30 | Title: Inspection First Article
 ID: 1112 | Default: AD55 | Current: AD55 | Title: Admin Edit Detail
 ID: 1113 | Default: MB6.1 | Current: MB6.1 | Title: Kiểm tra độ ẩm
 ID: 1114 | Default: MB31 | Current: MB31 | Title: Inspection Stage Process
+ID: 1117 | Default: SX00 | Current: SX00 | Title: Quản lý sản xuất
+ID: 1118 | Default: SX01 | Current: SX01 | Title: Lệnh sản xuất
+ID: 1119 | Default: SX02 | Current: SX02 | Title: Lịch sản xuất
+ID: 1120 | Default: SX03 | Current: SX03 | Title: Kế hoạch sản xuất
+ID: 1121 | Default: SX03.1 | Current: SX03.1 | Title: Lập kế hoạch sản xuất mới
+ID: 1122 | Default: SX04 | Current: SX04 | Title: Quy trình sản xuất
+ID: 1123 | Default: SX05 | Current: SX05 | Title: Kế hoạch bàn giao
+ID: 1124 | Default: SX06 | Current: SX06 | Title: Phiếu ngoại lệ
+ID: 1125 | Default: SX07 | Current: SX07 | Title: Quản lý mã QR

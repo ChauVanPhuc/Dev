@@ -11,7 +11,16 @@ export const purchasingService = {
     if (params.warehouse_status) query.append('warehouse_status', params.warehouse_status);
     if (params.search) query.append('search', params.search);
     if (params.supplier_code) query.append('supplier_code', params.supplier_code);
+    if (params.order_type) query.append('order_type', params.order_type);
     return await api.get(`/purchase-requisitions/?${query.toString()}`);
+  },
+
+  getShippingMonitoring: async (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.skip !== undefined) query.append('skip', params.skip);
+    if (params.limit !== undefined) query.append('limit', params.limit);
+    if (params.search) query.append('search', params.search);
+    return await api.get(`/purchase-requisitions/shipping-monitoring?${query.toString()}`);
   },
 
   getRequisitionStats: async () => {

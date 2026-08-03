@@ -1431,7 +1431,7 @@ const PortalLayout = () => {
               <div className="header-titles">
                 <h2 className="header-page-title">{title}</h2>
                 <p className="header-page-subtitle">
-                  {screenCode && <span>{screenCode} - </span>}
+                  {screenCode && !subtitle?.startsWith(screenCode) && <span>{screenCode} - </span>}
                   {subtitle}
                 </p>
               </div>

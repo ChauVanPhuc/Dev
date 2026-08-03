@@ -93,13 +93,16 @@ def upgrade():
                 ]
             },
             {
-                "title": "Quản lý sản xuất", "icon": "Layers", "sort_order": 5,
+                "title": "Quản lý sản xuất", "icon": "Factory", "sort_order": 5,
                 "children": [
-                    {"title": "Kế hoạch sản xuất", "route_path": "/admin/plan", "icon": "Calendar", "sort_order": 1, "permission_key": None},
-                    {"title": "Kế hoạch bàn giao", "route_path": "/admin/delivery-tracking", "icon": "Truck", "sort_order": 2, "permission_key": None},
-                    {"title": "Phiếu ngoại lệ", "route_path": "/admin/exception-deliveries", "icon": "AlertTriangle", "sort_order": 3, "permission_key": None},
-                    {"title": "Trang chủ sản xuất", "route_path": "/admin/manufacture-dashboard", "icon": "Home", "sort_order": 4, "permission_key": None},
-                    {"title": "Quản lý mã QR", "route_path": "/admin/backup-qrs", "icon": "QrCode", "sort_order": 5, "permission_key": None},
+                    {"title": "Trang tổng quan", "route_path": "/admin/production-dashboard", "icon": "LayoutDashboard", "sort_order": 1, "permission_key": None},
+                    {"title": "Lệnh sản xuất", "route_path": "/admin/production-orders", "icon": "ClipboardList", "sort_order": 2, "permission_key": None},
+                    {"title": "Lịch sản xuất", "route_path": "/admin/production-schedule", "icon": "Calendar", "sort_order": 3, "permission_key": None},
+                    {"title": "Kế hoạch sản xuất", "route_path": "/admin/plan", "icon": "ListOrdered", "sort_order": 4, "permission_key": None},
+                    {"title": "Quy trình sản xuất", "route_path": "/admin/production-routing", "icon": "GitMerge", "sort_order": 5, "permission_key": None},
+                    {"title": "Kế hoạch bàn giao", "route_path": "/admin/delivery-tracking", "icon": "Truck", "sort_order": 6, "permission_key": None},
+                    {"title": "Phiếu ngoại lệ", "route_path": "/admin/exception-deliveries", "icon": "AlertTriangle", "sort_order": 7, "permission_key": None},
+                    {"title": "Quản lý mã QR", "route_path": "/admin/backup-qrs", "icon": "QrCode", "sort_order": 8, "permission_key": None},
                 ]
             },
             {
@@ -121,8 +124,8 @@ def upgrade():
                 "children": [
                     {"title": "Thời gian xuất cont", "route_path": "/admin/shipments", "icon": "Calendar", "sort_order": 1, "permission_key": None},
                     {"title": "Đơn giá sản phẩm", "route_path": "/admin/prices", "icon": "Tag", "sort_order": 2, "permission_key": None},
-                    {"title": "Đơn đặt mua", "route_path": "/admin/purchase-requisitions", "icon": "FilePlus", "sort_order": 3, "permission_key": None},
-                    {"title": "Đơn mua hàng", "route_path": "/admin/purchase-order-items", "icon": "ShoppingCart", "sort_order": 4, "permission_key": None},
+                    {"title": "Danh sách đơn hàng", "route_path": "/admin/purchase-requisitions", "icon": "ClipboardList", "sort_order": 3, "permission_key": None},
+                    {"title": "Giám sát vận chuyển", "route_path": "/admin/order-shipping-monitoring", "icon": "Truck", "sort_order": 4, "permission_key": None},
                 ]
             },
             {

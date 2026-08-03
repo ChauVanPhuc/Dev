@@ -51,6 +51,43 @@ export const ScreenProvider = ({ children }) => {
       };
     }
 
+    if (path.includes('production-dashboard')) {
+      const dbScreen = screensMap['/admin/production-dashboard'];
+      return {
+        screenCode: dbScreen?.current_code || 'SX00',
+        title: dbScreen?.title || 'Quản lý sản xuất',
+        subtitle: dbScreen?.subtitle || 'SX00: Tổng quan phân hệ quản lý sản xuất',
+        isActive: true
+      };
+    }
+    if (path.includes('production-orders')) {
+      const dbScreen = screensMap['/admin/production-orders'];
+      return {
+        screenCode: dbScreen?.current_code || 'SX01',
+        title: dbScreen?.title || 'Lệnh sản xuất',
+        subtitle: dbScreen?.subtitle || 'SX01: Danh sách lệnh sản xuất',
+        isActive: true
+      };
+    }
+    if (path.includes('production-schedule')) {
+      const dbScreen = screensMap['/admin/production-schedule'];
+      return {
+        screenCode: dbScreen?.current_code || 'SX02',
+        title: dbScreen?.title || 'Lịch sản xuất',
+        subtitle: dbScreen?.subtitle || 'SX02: Tiến độ & lịch sản xuất nhà máy/xưởng',
+        isActive: true
+      };
+    }
+    if (path.includes('production-routing')) {
+      const dbScreen = screensMap['/admin/production-routing'];
+      return {
+        screenCode: dbScreen?.current_code || 'SX04',
+        title: dbScreen?.title || 'Quy trình sản xuất',
+        subtitle: dbScreen?.subtitle || 'SX04: Sơ đồ luồng & quy trình sản xuất',
+        isActive: true
+      };
+    }
+
     // Virtual Path Rewriter: Anh xa cac duong dan moi duoi /admin nguoc lai thanh /manufacture de khop DB cu
     let lookupPath = path;
     if (path === '/admin/manufacture-dashboard') {

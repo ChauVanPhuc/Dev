@@ -407,8 +407,8 @@ export const SCREEN_GROUPS = [
       { key: 'customers', name: 'Quản lý khách hàng', desc: 'Quản lý danh sách khách hàng và đối tác kinh doanh.' },
       { key: 'shipments', name: 'Thời gian xuất cont', desc: 'Lịch trình đóng cont gỗ xuất khẩu của bộ phận logistics.' },
       { key: 'prices', name: 'Đơn giá sản phẩm', desc: 'Biểu giá các loại sản phẩm làm căn cứ bồi thường.' },
-      { key: 'purchase-requisitions', name: 'Đơn đặt mua', desc: 'Quản lý đơn đặt mua từ nhà cung cấp, theo dõi trạng thái duyệt và nhập kho.' },
-      { key: 'purchase-order-items', name: 'Đơn mua hàng', desc: 'Chi tiết mặt hàng trong mỗi đơn mua, theo dõi số lượng và giá trị.' }
+      { key: 'purchase-requisitions', name: 'Danh sách đơn hàng', desc: 'Quản lý danh sách đơn mua hàng và đơn bán hàng, theo dõi trạng thái duyệt.' },
+      { key: 'order-shipping-monitoring', name: 'Giám sát vận chuyển', desc: 'Hiển thị danh sách về thời gian vận chuyển hàng và tiến độ giao nhận.' }
     ]
   },
   {

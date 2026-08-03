@@ -76,6 +76,11 @@ const ProductCreate = lazy(() => import('@modules/Product/Views/Create/ProductCr
 const TechnicalDashboard = lazy(() => import('@modules/Product/Views/Dashboard/TechnicalDashboardView'));
 const TechnicalStandards = lazy(() => import('@modules/Product/Views/Standards/TechnicalStandardsView'));
 const MaintenanceFacility = lazy(() => import('@modules/Equipment/Views/Maintenance/MaintenanceView'));
+const ProductionDashboard = lazy(() => import('@modules/Production/Views/Dashboard/ProductionDashboardView'));
+const ProductionOrders = lazy(() => import('@modules/Production/Views/Orders/ProductionOrdersView'));
+const ProductionSchedule = lazy(() => import('@modules/Production/Views/Schedule/ProductionScheduleView'));
+const ProductionPlans = lazy(() => import('@modules/Production/Views/Plans/ProductionPlansView'));
+const ProductionRouting = lazy(() => import('@modules/Production/Views/Routing/ProductionRoutingView'));
 const ManufactureOrders = lazy(() => import('@modules/Order/Views/List/OrdersListView'));
 const OrderCreate = lazy(() => import('@modules/Order/Views/Create/OrderCreateView'));
 const OrderDetail = lazy(() => import('@modules/Order/Views/Detail/OrderDetailView'));
@@ -89,6 +94,7 @@ const ExceptionDeliveries = lazy(() => import('@modules/Pallet/Views/Card/Pallet
 const PurchaseRequisitionList = lazy(() => import('@modules/Purchasing/Views/Requisition/PurchaseRequisitionListView'));
 const PurchaseRequisitionDetail = lazy(() => import('@modules/Purchasing/Views/Requisition/PurchaseRequisitionDetailView'));
 const PurchaseOrderItemList = lazy(() => import('@modules/Purchasing/Views/Order/PurchaseOrderItemListView'));
+const OrderShippingMonitoring = lazy(() => import('@modules/Purchasing/Views/Monitoring/OrderShippingMonitoringView'));
 
 // Import ISO module (Tải động)
 const ISODocumentList = lazy(() => import('@modules/ISO/Views/Document/ISODocumentListView'));
@@ -649,6 +655,11 @@ function App() {
                 <Route path="plan/:id" element={<ProtectedRoute permissionKey="plan"><PlanDetail /></ProtectedRoute>} />
                 <Route path="plan/create" element={<ProtectedRoute permissionKey="plan"><AddProductionPlan /></ProtectedRoute>} />
                 <Route path="delivery-tracking" element={<ProtectedRoute permissionKey="delivery-tracking"><DeliveryTracking /></ProtectedRoute>} />
+                <Route path="production-dashboard" element={<ProtectedRoute permissionKey="plan"><ProductionDashboard /></ProtectedRoute>} />
+                <Route path="production-orders" element={<ProtectedRoute permissionKey="orders"><ProductionOrders /></ProtectedRoute>} />
+                <Route path="production-orders/:id" element={<ProtectedRoute permissionKey="orders"><PlanDetail /></ProtectedRoute>} />
+                <Route path="production-schedule" element={<ProtectedRoute permissionKey="plan"><ProductionSchedule /></ProtectedRoute>} />
+                <Route path="production-routing" element={<ProtectedRoute permissionKey="products"><ProductionRouting /></ProtectedRoute>} />
                 <Route path="technical-dashboard" element={<ProtectedRoute permissionKey="products"><TechnicalDashboard /></ProtectedRoute>} />
                 <Route path="technical-standards" element={<ProtectedRoute permissionKey="products"><TechnicalStandards /></ProtectedRoute>} />
                 <Route path="maintenance" element={<ProtectedRoute permissionKey="products"><MaintenanceFacility /></ProtectedRoute>} />
@@ -666,6 +677,7 @@ function App() {
                 <Route path="purchase-requisitions" element={<ProtectedRoute permissionKey="purchase-requisitions"><PurchaseRequisitionList /></ProtectedRoute>} />
                 <Route path="purchase-requisitions/:id" element={<ProtectedRoute permissionKey="purchase-requisitions"><PurchaseRequisitionDetail /></ProtectedRoute>} />
                 <Route path="purchase-order-items" element={<ProtectedRoute permissionKey="purchase-order-items"><PurchaseOrderItemList /></ProtectedRoute>} />
+                <Route path="order-shipping-monitoring" element={<ProtectedRoute permissionKey="order-shipping-monitoring"><OrderShippingMonitoring /></ProtectedRoute>} />
               </Route>
 
               {/* Route Claim (Root level but with PortalLayout) */}

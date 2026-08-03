@@ -10,6 +10,18 @@ import '@styles/components.css';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 
+// Helper format ngày hiển thị (2026-07-26T15:19:53 -> 26/07/2026)
+const formatDateDisplay = (dateStr) => {
+  if (!dateStr) return '---';
+  if (typeof dateStr === 'string' && dateStr.includes('T')) {
+    const parts = dateStr.split('T')[0].split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+  }
+  return dateStr;
+};
+
 const PurchaseRequisitionListView = () => {
   const navigate = useNavigate();
   const outletContext = useOutletContext() || {};
@@ -44,6 +56,7 @@ const PurchaseRequisitionListView = () => {
   // States cho 2 Bộ Lọc (Sort & Filter)
   const [searchTerm, setSearchTerm] = useState('');
   const [sortValue, setSortValue] = useState('time_desc');
+  const [filterOrderType, setFilterOrderType] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPartner, setFilterPartner] = useState('all');
   const [filterPriority, setFilterPriority] = useState('all');
@@ -61,6 +74,7 @@ const PurchaseRequisitionListView = () => {
         limit: itemsPerPage,
         search: searchTerm || undefined,
         status: filterStatus !== 'all' ? filterStatus : undefined,
+        order_type: filterOrderType !== 'all' ? filterOrderType : undefined,
       };
       const [result, statsResult] = await Promise.all([
         purchasingService.getRequisitions(params).catch(() => null),
@@ -83,61 +97,11 @@ const PurchaseRequisitionListView = () => {
 
   useEffect(() => {
     fetchData();
-  }, [currentPage, itemsPerPage, searchTerm, filterStatus]);
+  }, [currentPage, itemsPerPage, searchTerm, filterStatus, filterOrderType]);
 
-  // Raw mock list dự phòng nếu DB trống
+  // Sử dụng dữ liệu thực tế 100% từ CSDL
   const rawItems = useMemo(() => {
-    if (data.length > 0) return data;
-    return [
-      {
-        id: 1, stt: '01', order_code: 'GIAYXEO.DH02.06.26', order_type: 'Đơn đặt mua', priority: 'Cao',
-        order_status_text: 'Đã hoàn thành', status_color: '#475569', partner: 'Khách hàng 1',
-        est_date: '24/07/2026', real_date: '24/07/2026', create_date: '24/07/2026', creator: 'Bùi Thị Tuyền',
-        approve_date: '24/07/2026', approver: 'Nguyễn B', total_amount: 12500, note: ''
-      },
-      {
-        id: 2, stt: '02', order_code: 'FL-0465', order_type: 'Đơn đặt mua', priority: 'Bình thường',
-        order_status_text: 'Đang sản xuất', status_color: '#16A34A', partner: 'Khách hàng 2',
-        est_date: '24/07/2026', real_date: '---', create_date: '24/07/2026', creator: 'Phạm Văn Tuyền',
-        approve_date: '24/07/2026', approver: 'Nguyễn B', total_amount: 8200, note: ''
-      },
-      {
-        id: 3, stt: '03', order_code: 'DMH_00502/26', order_type: 'Đơn đặt mua', priority: 'Bình thường',
-        order_status_text: 'Chưa duyệt', status_color: '#DC2626', partner: 'Khách hàng 3',
-        est_date: '24/07/2026', real_date: '---', create_date: '24/07/2026', creator: 'Võ Hồng Chương',
-        approve_date: '---', approver: '---', total_amount: 4150, note: ''
-      },
-      {
-        id: 4, stt: '04', order_code: 'DMH_00501/26', order_type: 'Đơn đặt mua', priority: 'Bình thường',
-        order_status_text: 'Chưa duyệt', status_color: '#DC2626', partner: 'Khách hàng 4',
-        est_date: '24/07/2026', real_date: '---', create_date: '24/07/2026', creator: 'Võ Hồng Chương',
-        approve_date: '---', approver: '---', total_amount: 6300, note: ''
-      },
-      {
-        id: 5, stt: '05', order_code: 'APT0071-0076', order_type: 'Đơn đặt mua', priority: 'Bình thường',
-        order_status_text: 'Chưa duyệt', status_color: '#DC2626', partner: 'Khách hàng 5',
-        est_date: '24/07/2026', real_date: '---', create_date: '24/07/2026', creator: 'Phạm Văn Tuyền',
-        approve_date: '---', approver: '---', total_amount: 9100, note: ''
-      },
-      {
-        id: 6, stt: '06', order_code: 'PHUTAI/01-06', order_type: 'Đơn đặt mua', priority: 'Bình thường',
-        order_status_text: 'Chưa duyệt', status_color: '#DC2626', partner: 'Khách hàng 6',
-        est_date: '24/07/2026', real_date: '---', create_date: '24/07/2026', creator: 'Nguyễn Thị Lào',
-        approve_date: '---', approver: 'Nguyễn H', total_amount: 15400, note: ''
-      },
-      {
-        id: 7, stt: '07', order_code: 'APT-95-11-21.V', order_type: 'Đơn đặt mua', priority: 'Bình thường',
-        order_status_text: 'Chưa duyệt', status_color: '#DC2626', partner: 'Khách hàng 7',
-        est_date: '24/07/2026', real_date: '---', create_date: '24/07/2026', creator: 'Bùi Thị Tuyền',
-        approve_date: '---', approver: '---', total_amount: 3800, note: ''
-      },
-      {
-        id: 8, stt: '08', order_code: 'APT-95-1-10.V', order_type: 'Đơn đặt mua', priority: 'Bình thường',
-        order_status_text: 'Chưa duyệt', status_color: '#DC2626', partner: 'Khách hàng 8',
-        est_date: '24/07/2026', real_date: '---', create_date: '24/07/2026', creator: 'Bùi Thị Tuyền',
-        approve_date: '---', approver: '---', total_amount: 7200, note: ''
-      }
-    ];
+    return data || [];
   }, [data]);
 
   // Áp dụng Logic Sắp Xếp & Lọc Dữ Liệu Thực Tế
@@ -426,6 +390,19 @@ const PurchaseRequisitionListView = () => {
             alignItems: 'flex-end', boxShadow: '0 2px 4px rgba(123, 82, 51, 0.04)'
           }}>
             <div className="filter-field-group">
+              <label className="filter-field-label" style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '2px' }}>Loại đơn hàng</label>
+              <select
+                value={filterOrderType}
+                onChange={(e) => { setFilterOrderType(e.target.value); setCurrentPage(1); }}
+                style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', backgroundColor: '#fff', fontWeight: '600', color: '#334155', fontSize: '0.78rem' }}
+              >
+                <option value="all">Tất cả loại đơn</option>
+                <option value="Đơn bán hàng">Đơn bán hàng</option>
+                <option value="Đơn mua hàng">Đơn mua hàng</option>
+              </select>
+            </div>
+
+            <div className="filter-field-group">
               <label className="filter-field-label" style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '2px' }}>Trạng thái đơn hàng</label>
               <select
                 value={filterStatus}
@@ -499,6 +476,7 @@ const PurchaseRequisitionListView = () => {
               <button
                 type="button"
                 onClick={() => {
+                  setFilterOrderType('all');
                   setFilterStatus('all');
                   setFilterPartner('all');
                   setFilterPriority('all');
@@ -557,7 +535,7 @@ const PurchaseRequisitionListView = () => {
                   <th>Loại</th>
                   <th>Ưu tiên</th>
                   <th>Trạng thái</th>
-                  <th>Đối tác</th>
+                  <th style={{ maxWidth: '180px', width: '160px' }}>Đối tác</th>
                   <th>Ngày HT dự kiến</th>
                   <th>Ngày HT thực tế</th>
                   <th>Ngày tạo</th>
@@ -581,23 +559,41 @@ const PurchaseRequisitionListView = () => {
                 ) : displayItems.map((row, idx) => {
                   const rowId = row.id || idx + 1;
                   const isMenuOpen = actionMenuId === rowId;
+                  const partnerName = row.supplier_name || row.partner || '---';
                   return (
                     <tr key={rowId}>
-                      <td style={{ textAlign: 'center', fontWeight: '600', color: '#475569' }}>{row.stt || String(idx + 1).padStart(2, '0')}</td>
-                      <td style={{ fontWeight: '800', color: '#2D1A12' }}>{row.po_code || row.order_code || `GIAYXEO.DH02.06.26`}</td>
-                      <td style={{ color: '#475569' }}>{row.order_type || 'Đơn đặt mua'}</td>
-                      <td style={{ color: '#475569' }}>{row.priority || (idx === 0 ? 'Cao' : 'Bình thường')}</td>
-                      <td style={{ fontWeight: '700', color: row.status_color || (idx === 0 ? '#475569' : idx === 1 ? '#16A34A' : '#DC2626') }}>
-                        {row.order_status_text || (idx === 0 ? 'Đã hoàn thành' : idx === 1 ? 'Đang sản xuất' : 'Chưa duyệt')}
+                      <td style={{ textAlign: 'center', fontWeight: '600', color: '#475569' }}>{String(startIndex + idx).padStart(2, '0')}</td>
+                      <td style={{ fontWeight: '800', color: '#2D1A12' }}>{row.po_code || row.order_code || '---'}</td>
+                      <td style={{ color: '#475569' }}>{row.order_type || 'Đơn mua hàng'}</td>
+                      <td style={{ color: '#475569' }}>{row.priority || 'Bình thường'}</td>
+                      <td style={{
+                        fontWeight: '700',
+                        color: row.status === 'Đã hoàn thành' ? '#475569' : row.status === 'Đang sản xuất' ? '#16A34A' : '#DC2626'
+                      }}>
+                        {row.status || row.order_status_text || 'Chưa duyệt'}
                       </td>
-                      <td style={{ color: '#2D1A12', fontWeight: '600' }}>{row.partner || row.supplier || `Khách hàng ${idx + 1}`}</td>
-                      <td style={{ color: '#64748B' }}>{row.est_date || '24/07/2026'}</td>
-                      <td style={{ color: '#64748B' }}>{row.real_date || (idx === 0 ? '24/07/2026' : '---')}</td>
-                      <td style={{ color: '#64748B' }}>{row.create_date || '24/07/2026'}</td>
-                      <td style={{ color: '#475569' }}>{row.creator || (idx === 0 ? 'Bùi Thị Tuyền' : idx === 1 ? 'Phạm Văn Tuyền' : 'Võ Hồng Chương')}</td>
-                      <td style={{ color: '#64748B' }}>{row.approve_date || (idx < 2 ? '24/07/2026' : '---')}</td>
-                      <td style={{ color: '#475569' }}>{row.approver || (idx < 2 ? 'Nguyễn B' : '---')}</td>
-                      <td style={{ textAlign: 'right', fontWeight: '700', color: '#2D1A12' }}>{typeof row.total_amount === 'number' ? `$${row.total_amount.toLocaleString()}` : row.total_amount || '$12,500'}</td>
+                      <td
+                        style={{
+                          color: '#2D1A12',
+                          fontWeight: '600',
+                          maxWidth: '180px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                        title={partnerName}
+                      >
+                        {partnerName}
+                      </td>
+                      <td style={{ color: '#64748B' }}>{formatDateDisplay(row.est_completion_date || row.est_date)}</td>
+                      <td style={{ color: '#64748B' }}>{formatDateDisplay(row.real_completion_date || row.real_date)}</td>
+                      <td style={{ color: '#64748B' }}>{formatDateDisplay(row.order_date || row.created_at || row.create_date)}</td>
+                      <td style={{ color: '#475569' }}>{row.creator || '---'}</td>
+                      <td style={{ color: '#64748B' }}>{formatDateDisplay(row.approval_date || row.approve_date)}</td>
+                      <td style={{ color: '#475569' }}>{row.approver || '---'}</td>
+                      <td style={{ textAlign: 'right', fontWeight: '700', color: '#2D1A12' }}>
+                        {typeof row.total_amount === 'number' ? `$${row.total_amount.toLocaleString()}` : (row.total_amount || '$0')}
+                      </td>
                       <td style={{ color: '#64748B' }}>{row.note || ''}</td>
                       <td className="pr-action-cell" style={{ textAlign: 'center', position: 'relative', zIndex: isMenuOpen ? 50 : 1 }}>
                         <button

@@ -4,7 +4,7 @@ from datetime import datetime
 
 
 class PurchaseRequisitionCreate(BaseModel):
-    """Schema tạo mới Đơn đặt mua."""
+    """Schema tạo mới Đơn hàng."""
     po_code: str
     creator: Optional[str] = None
     order_date: Optional[datetime] = None
@@ -12,20 +12,27 @@ class PurchaseRequisitionCreate(BaseModel):
     branch: Optional[str] = None
     inspector: Optional[str] = None
     inspection_date: Optional[datetime] = None
+    reviewer: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
     approver: Optional[str] = None
     approval_date: Optional[datetime] = None
     supplier_code: Optional[str] = None
     supplier_name: Optional[str] = None
     total_amount: Optional[float] = 0
     order_type: Optional[str] = None
+    priority: Optional[str] = "Bình thường"
+    material_type: Optional[str] = None
+    est_completion_date: Optional[datetime] = None
+    real_completion_date: Optional[datetime] = None
     status: Optional[str] = None
     processing_status: Optional[str] = None
     warehouse_status: Optional[str] = None
     note: Optional[str] = None
+    items: Optional[List[dict]] = None
 
 
 class PurchaseRequisitionUpdate(BaseModel):
-    """Schema cập nhật Đơn đặt mua."""
+    """Schema cập nhật Đơn hàng."""
     po_code: Optional[str] = None
     creator: Optional[str] = None
     order_date: Optional[datetime] = None
@@ -33,20 +40,27 @@ class PurchaseRequisitionUpdate(BaseModel):
     branch: Optional[str] = None
     inspector: Optional[str] = None
     inspection_date: Optional[datetime] = None
+    reviewer: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
     approver: Optional[str] = None
     approval_date: Optional[datetime] = None
     supplier_code: Optional[str] = None
     supplier_name: Optional[str] = None
     total_amount: Optional[float] = None
     order_type: Optional[str] = None
+    priority: Optional[str] = None
+    material_type: Optional[str] = None
+    est_completion_date: Optional[datetime] = None
+    real_completion_date: Optional[datetime] = None
     status: Optional[str] = None
     processing_status: Optional[str] = None
     warehouse_status: Optional[str] = None
     note: Optional[str] = None
+    items: Optional[List[dict]] = None
 
 
 class PurchaseOrderItemInRequisition(BaseModel):
-    """Schema hiển thị mặt hàng trong đơn đặt mua."""
+    """Schema hiển thị mặt hàng trong đơn hàng."""
     id: int
     item_code: Optional[str] = None
     item_name: Optional[str] = None
@@ -63,7 +77,7 @@ class PurchaseOrderItemInRequisition(BaseModel):
 
 
 class PurchaseRequisitionResponse(BaseModel):
-    """Schema hiển thị Đơn đặt mua đầy đủ."""
+    """Schema hiển thị Đơn hàng đầy đủ."""
     id: int
     po_code: str
     creator: Optional[str] = None
@@ -72,12 +86,23 @@ class PurchaseRequisitionResponse(BaseModel):
     branch: Optional[str] = None
     inspector: Optional[str] = None
     inspection_date: Optional[datetime] = None
+    reviewer: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
     approver: Optional[str] = None
     approval_date: Optional[datetime] = None
     supplier_code: Optional[str] = None
     supplier_name: Optional[str] = None
     total_amount: Optional[float] = 0
     order_type: Optional[str] = None
+    priority: Optional[str] = None
+    material_type: Optional[str] = None
+    est_completion_date: Optional[datetime] = None
+    real_completion_date: Optional[datetime] = None
+    production_date: Optional[datetime] = None
+    warehouse_in_date: Optional[datetime] = None
+    storage_date: Optional[datetime] = None
+    warehouse_out_date: Optional[datetime] = None
+    completed_date: Optional[datetime] = None
     status: Optional[str] = None
     processing_status: Optional[str] = None
     warehouse_status: Optional[str] = None
@@ -90,7 +115,7 @@ class PurchaseRequisitionResponse(BaseModel):
 
 
 class PurchaseRequisitionListResponse(BaseModel):
-    """Schema hiển thị Đơn đặt mua rút gọn (cho danh sách)."""
+    """Schema hiển thị Đơn hàng rút gọn (cho danh sách)."""
     id: int
     po_code: str
     creator: Optional[str] = None
@@ -100,12 +125,19 @@ class PurchaseRequisitionListResponse(BaseModel):
     supplier_name: Optional[str] = None
     total_amount: Optional[float] = 0
     order_type: Optional[str] = None
+    priority: Optional[str] = None
+    reviewer: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    approver: Optional[str] = None
+    approval_date: Optional[datetime] = None
+    est_completion_date: Optional[datetime] = None
+    real_completion_date: Optional[datetime] = None
     status: Optional[str] = None
     processing_status: Optional[str] = None
     warehouse_status: Optional[str] = None
     inspector: Optional[str] = None
-    approver: Optional[str] = None
     item_count: Optional[int] = 0
+    note: Optional[str] = None
 
     class Config:
         from_attributes = True

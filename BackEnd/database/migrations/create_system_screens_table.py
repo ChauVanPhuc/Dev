@@ -406,6 +406,79 @@ INITIAL_SCREENS = [
         "title": "Thẻ Pallet ngoại lệ",
         "subtitle": "Quản lý thẻ pallet và sự cố"
     },
+    # PRODUCTION MODULE SCREENS (SX00 - SX07)
+    {
+        "platform": "Web",
+        "route_path": "/admin/production-dashboard",
+        "default_code": "SX00",
+        "current_code": "SX00",
+        "title": "Quản lý sản xuất",
+        "subtitle": "SX00: Tổng quan phân hệ quản lý sản xuất"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/production-orders",
+        "default_code": "SX01",
+        "current_code": "SX01",
+        "title": "Lệnh sản xuất",
+        "subtitle": "SX01: Danh sách lệnh sản xuất"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/production-schedule",
+        "default_code": "SX02",
+        "current_code": "SX02",
+        "title": "Lịch sản xuất",
+        "subtitle": "SX02: Tiến độ & lịch sản xuất nhà máy/xưởng"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/plan",
+        "default_code": "SX03",
+        "current_code": "SX03",
+        "title": "Kế hoạch sản xuất",
+        "subtitle": "SX03: Quản lý & lập kế hoạch sản xuất"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/plan/create",
+        "default_code": "SX03.1",
+        "current_code": "SX03.1",
+        "title": "Lập kế hoạch sản xuất mới",
+        "subtitle": "SX03.1: Thêm kế hoạch sản xuất"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/production-routing",
+        "default_code": "SX04",
+        "current_code": "SX04",
+        "title": "Quy trình sản xuất",
+        "subtitle": "SX04: Sơ đồ luồng & quy trình sản xuất"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/delivery-tracking",
+        "default_code": "SX05",
+        "current_code": "SX05",
+        "title": "Kế hoạch bàn giao",
+        "subtitle": "SX05: Theo dõi kế hoạch bàn giao công đoạn"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/exception-deliveries",
+        "default_code": "SX06",
+        "current_code": "SX06",
+        "title": "Phiếu ngoại lệ",
+        "subtitle": "SX06: Sự cố bàn giao & phiếu ngoại lệ"
+    },
+    {
+        "platform": "Web",
+        "route_path": "/admin/backup-qrs",
+        "default_code": "SX07",
+        "current_code": "SX07",
+        "title": "Quản lý mã QR",
+        "subtitle": "SX07: Mã QR theo dõi sản xuất"
+    },
 
     # MOBILE SCREENS
     {

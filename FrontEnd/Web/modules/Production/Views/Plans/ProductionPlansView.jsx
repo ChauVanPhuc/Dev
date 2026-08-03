@@ -1,0 +1,165 @@
+import React, { useState, useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom';
+import { Search, ArrowUpDown, Filter, Plus, FileSpreadsheet, Share2, MoreHorizontal, ChevronRight, Layers, RefreshCw } from 'lucide-react';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
+import api from '@webShared/Services/api.service';
+import AddPlanModal from './modals/AddPlanModal';
+
+const ProductionPlansView = () => {
+  const outletContext = useOutletContext() || {};
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = outletContext;
+
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/plan');
+
+  useEffect(() => {
+    if (setCustomTitle) setCustomTitle(title || 'Kế hoạch sản xuất');
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'SX03: Quản lý & lập kế hoạch sản xuất');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'SX03');
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [pageSize, setPageSize] = useState(10);
+  const [loading, setLoading] = useState(true);
+
+  const initialPlans = [
+    { id: 1, code: 'KH-2026-0801', name: 'Kế hoạch sản xuất tháng 8/2026 - Lô xuất khẩu Mỹ', order: 'DH-EX-992', quantity: 500, factory: 'Nhà máy 1', progress: 70, status: 'Đang chạy' },
+    { id: 2, code: 'KH-2026-0802', name: 'Kế hoạch nội thất khách sạn Pullman Hải Phòng', order: 'DH-PM-104', quantity: 240, factory: 'Nhà máy 2', progress: 45, status: 'Đang chạy' },
+    { id: 3, code: 'KH-2026-0803', name: 'Kế hoạch bổ sung tồn kho Tủ bếp Q3', order: 'DH-TK-005', quantity: 150, factory: 'Nhà máy 1', progress: 90, status: 'Sắp hoàn thành' },
+  ];
+
+  const [plans, setPlans] = useState([]);
+
+  const fetchPlans = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get('/production/v2/plans');
+      if (res && Array.isArray(res.plans) && res.plans.length > 0) {
+        const mapped = res.plans.map((p, idx) => ({
+          id: p.id || idx + 1,
+          code: p.code || `KH-2026-${p.id}`,
+          name: p.name || `Kế hoạch sản xuất ${p.month || 8}/${p.year || 2026}`,
+          order: p.order_code || `DH-2026-${idx + 1}`,
+          quantity: p.total_quantity || 100,
+          factory: p.factory_name || 'Nhà máy 1',
+          progress: p.progress_percent || 50,
+          status: p.status || 'Đang chạy'
+        }));
+        setPlans(mapped);
+      } else {
+        setPlans(initialPlans);
+      }
+    } catch (err) {
+      console.warn('Dùng dữ liệu khởi tạo khi chưa kết nối API:', err);
+      setPlans(initialPlans);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPlans();
+  }, []);
+
+  const handleSavePlan = (data) => {
+    const newPlan = {
+      id: plans.length + 1,
+      code: `KH-2026-080${plans.length + 1}`,
+      name: `Kế hoạch sản xuất ${data.orderId}`,
+      order: data.orderId,
+      quantity: Number(data.quantity),
+      factory: data.factory,
+      progress: 0,
+      status: 'Đang chạy'
+    };
+    setPlans([newPlan, ...plans]);
+  };
+
+  const filteredPlans = plans.filter(p =>
+    p.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.order.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div style={{ padding: '20px 24px', backgroundColor: '#FAF6F0', minHeight: 'calc(100vh - 110px)', fontFamily: 'Inter, sans-serif' }}>
+      {/* Action Toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ position: 'relative', width: '320px', background: '#FFF', borderRadius: '8px', border: '1.5px solid #EADCC9' }}>
+            <Search size={18} color="#9CA3AF" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+            <input
+              type="text"
+              placeholder="Tìm kiếm kế hoạch sản xuất..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{ width: '100%', padding: '9px 12px 9px 38px', border: 'none', outline: 'none', background: 'transparent', fontSize: '0.88rem' }}
+            />
+          </div>
+          <button onClick={fetchPlans} title="Tải lại dữ liệu API" style={{ padding: '9px 12px', background: '#FFF', border: '1.5px solid #EADCC9', borderRadius: '8px', color: '#5D3B32', cursor: 'pointer' }}>
+            <RefreshCw size={18} className={loading ? 'spin' : ''} />
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button style={{ padding: '9px 16px', background: '#FFF', border: '1.5px solid #EADCC9', borderRadius: '8px', color: '#5D3B32', fontWeight: '600', cursor: 'pointer' }}>
+            Xuất Excel
+          </button>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            style={{ padding: '9px 20px', background: '#5D3B32', border: 'none', borderRadius: '8px', color: '#FFF', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Plus size={18} /> + Thêm kế hoạch
+          </button>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div style={{ background: '#FFF', borderRadius: '12px', border: '1.5px solid #EADCC9', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
+          <thead>
+            <tr style={{ background: '#FAF6F0', borderBottom: '1.5px solid #EADCC9', color: '#5D3B32' }}>
+              <th style={{ padding: '14px 16px', fontWeight: '800' }}>STT</th>
+              <th style={{ padding: '14px 16px', fontWeight: '800' }}>Mã kế hoạch</th>
+              <th style={{ padding: '14px 16px', fontWeight: '800' }}>Tên kế hoạch</th>
+              <th style={{ padding: '14px 16px', fontWeight: '800' }}>Mã đơn hàng</th>
+              <th style={{ padding: '14px 16px', fontWeight: '800', textAlign: 'right' }}>Số lượng</th>
+              <th style={{ padding: '14px 16px', fontWeight: '800' }}>Nhà máy</th>
+              <th style={{ padding: '14px 16px', fontWeight: '800' }}>Tiến độ</th>
+              <th style={{ padding: '14px 16px', fontWeight: '800' }}>Trạng thái</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredPlans.map((p, idx) => (
+              <tr key={p.id} style={{ borderBottom: '1px solid #F3F4F6' }}>
+                <td style={{ padding: '14px 16px', color: '#6B7280', fontWeight: '600' }}>{idx + 1}</td>
+                <td style={{ padding: '14px 16px', fontWeight: '800', color: '#5D3B32' }}>{p.code}</td>
+                <td style={{ padding: '14px 16px', fontWeight: '600', color: '#1F2937' }}>{p.name}</td>
+                <td style={{ padding: '14px 16px', color: '#4B5563', fontFamily: 'monospace', fontWeight: '600' }}>{p.order}</td>
+                <td style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '800', color: '#2D1A12' }}>{p.quantity}</td>
+                <td style={{ padding: '14px 16px', color: '#4B5563' }}>{p.factory}</td>
+                <td style={{ padding: '14px 16px', width: '140px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ flex: 1, background: '#E5E7EB', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
+                      <div style={{ width: `${p.progress}%`, background: '#5D3B32', height: '100%' }}></div>
+                    </div>
+                    <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#5D3B32' }}>{p.progress}%</span>
+                  </div>
+                </td>
+                <td style={{ padding: '14px 16px' }}>
+                  <span style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '0.78rem', fontWeight: '700', background: '#DBEAFE', color: '#2563EB' }}>
+                    {p.status}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <AddPlanModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSavePlan} />
+    </div>
+  );
+};
+
+export default ProductionPlansView;

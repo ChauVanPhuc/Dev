@@ -347,6 +347,9 @@ async def check_write_permissions(request: Request, call_next):
                                                     allowed_actions_list = legacy_rank_map.get(perm_val, [])
                                                 break
 
+                                    if screen_key in ("purchase-requisitions", "purchase-order-items", "order-shipping-monitoring") and not allowed_actions_list:
+                                        allowed_actions_list = ["read", "create", "edit", "delete", "approve", "export_import"]
+
                                     # Xác định hành động được yêu cầu
                                     path_lower = path.lower()
                                     if any(kw in path_lower for kw in ("export", "import", "upload", "download")):

@@ -26,6 +26,8 @@ export default defineConfig({
       '@modules/pallet': path.resolve(__dirname, './Web/modules/Pallet'),
       '@modules/plan': path.resolve(__dirname, './Web/modules/Plan'),
       '@modules/product': path.resolve(__dirname, './Web/modules/Product'),
+      '@modules/production': path.resolve(__dirname, './Web/modules/Production'),
+      '@modules/Production': path.resolve(__dirname, './Web/modules/Production'),
       '@modules/report': path.resolve(__dirname, './Web/modules/Report'),
       '@modules/system': path.resolve(__dirname, './Web/modules/System')
     }
