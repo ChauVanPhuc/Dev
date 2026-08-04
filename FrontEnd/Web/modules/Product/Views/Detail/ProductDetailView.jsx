@@ -351,53 +351,118 @@ const ProductDetailView = () => {
   ];
 
   const displayItems = useMemo(() => {
-    const normTarget = activeStage.trim().toLowerCase();
+    const stage = activeStage.trim();
 
-    // 1. Primary Filter: Only include items whose input_stage (stageFrom) matches activeStage
-    let items = bomRows.filter(item => {
-      const inp = (item.stageFrom || '').trim().toLowerCase();
-      if (!inp) return false;
+    const enrich = (item) => {
+      const level = item.stt ? item.stt.split('.').length - 1 : 0;
+      const isRawMaterial = item.unit === 'm3' || item.unit === 'm2' || (item.compName || '').toLowerCase().includes('gỗ') || (item.compName || '').toLowerCase().includes('ván');
+      const isPackaging = (item.type || '').toLowerCase().includes('đóng gói') || (item.type || '').toLowerCase().includes('phụ kiện') || (item.compName || '').toLowerCase().includes('carton') || (item.compName || '').toLowerCase().includes('thùng') || (item.compName || '').toLowerCase().includes('nẹp') || (item.compName || '').toLowerCase().includes('hướng dẫn');
+      return { ...item, level, isRawMaterial, isPackaging };
+    };
 
-      if (normTarget === 'tạo phôi') return inp.includes('tạo phôi');
-      if (normTarget === 'định hình') return inp.includes('định hình');
-      if (normTarget === 'lắp ráp') return inp.includes('lắp ráp');
-      if (normTarget === 'sơn') return inp.includes('sơn');
-      if (normTarget === 'đóng gói') return inp.includes('đóng gói');
-      if (normTarget === 'lưu kho') return inp.includes('lưu kho') || inp.includes('kho thành phẩm');
-      return inp.includes(normTarget);
-    });
+    const enrichedRows = bomRows.map(enrich);
 
-    // 2. Fallback filter if stageFrom is not explicitly defined in BOM detail data
-    if (items.length === 0) {
-      // Helper to compute properties dynamically
-      const enrich = (item) => {
-        const level = item.stt.split('.').length - 1;
-        const hasChildren = bomRows.some(r => r.stt.startsWith(item.stt + '.'));
-        return { ...item, level, hasChildren };
-      };
-
-      const enrichedRows = bomRows.map(enrich);
-
-      if (activeStage === 'Tạo phôi') {
-        items = enrichedRows.filter(i => (!i.hasChildren || i.unit === 'm3' || i.unit === 'm2') && i.level >= 2);
-        if (items.length === 0) items = enrichedRows.filter(i => !i.hasChildren);
-      } else if (activeStage === 'Định hình') {
-        items = enrichedRows.filter(i => i.level >= 1 && i.unit !== 'm3');
-      } else if (activeStage === 'Lắp ráp') {
-        items = enrichedRows.filter(i => i.level === 1 || (i.level === 2 && i.hasChildren));
-      } else if (activeStage === 'Sơn') {
-        items = enrichedRows.filter(i => i.level === 1 || i.level === 0);
-      } else if (activeStage === 'Đóng gói') {
-        items = enrichedRows.filter(i => i.level === 1);
-      } else if (activeStage === 'Lưu kho') {
-        items = enrichedRows.filter(i => i.level === 0);
-      } else {
-        items = enrichedRows;
+    if (stage === 'Tạo phôi') {
+      // Stage 1: Raw lumber & wood boards (m3, m2, phôi gỗ) -> From NM3 - Tạo phôi 3 to NM3 - Định hình 3
+      const phoiItems = enrichedRows.filter(i => i.isRawMaterial);
+      if (phoiItems.length === 0) {
+        return enrichedRows.filter(i => i.level >= 2).map(i => ({
+          ...i,
+          stageFrom: 'NM3 - Tạo phôi 3',
+          stageTo: 'NM3 - Định hình 3'
+        }));
       }
+      return phoiItems.map(i => ({
+        ...i,
+        stageFrom: 'NM3 - Tạo phôi 3',
+        stageTo: 'NM3 - Định hình 3'
+      }));
     }
 
-    return items;
-  }, [bomRows, activeStage]);
+    if (stage === 'Định hình') {
+      // Stage 2: Machined detail components (Chân trước, Chân sau, Diềm 1, Diềm 2, Tựa cong...) -> From NM3 - Định hình 3 to NM3 - Lắp ráp 3
+      const dihItems = enrichedRows.filter(i => !i.isRawMaterial && !i.isPackaging && i.level >= 2);
+      if (dihItems.length === 0) {
+        return enrichedRows.filter(i => !i.isRawMaterial && !i.isPackaging).map(i => ({
+          ...i,
+          stageFrom: 'NM3 - Định hình 3',
+          stageTo: 'NM3 - Lắp ráp 3'
+        }));
+      }
+      return dihItems.map(i => ({
+        ...i,
+        stageFrom: 'NM3 - Định hình 3',
+        stageTo: 'NM3 - Lắp ráp 3'
+      }));
+    }
+
+    if (stage === 'Lắp ráp') {
+      // Stage 3: Sub-assemblies & main frames (KHUNG GHẾ, VÁN MÊ NGỒI...) -> From NM3 - Lắp ráp 3 to NM3 - Sơn 3
+      const lapItems = enrichedRows.filter(i => !i.isRawMaterial && !i.isPackaging && i.level === 1);
+      if (lapItems.length === 0) {
+        return enrichedRows.filter(i => !i.isRawMaterial && !i.isPackaging).slice(0, 3).map(i => ({
+          ...i,
+          stageFrom: 'NM3 - Lắp ráp 3',
+          stageTo: 'NM3 - Sơn 3'
+        }));
+      }
+      return lapItems.map(i => ({
+        ...i,
+        stageFrom: 'NM3 - Lắp ráp 3',
+        stageTo: 'NM3 - Sơn 3'
+      }));
+    }
+
+    if (stage === 'Sơn') {
+      // Stage 4: Main assembled structures receiving PU finish -> From NM3 - Sơn 3 to NM3 - Đóng gói 3
+      const sonItems = enrichedRows.filter(i => !i.isRawMaterial && !i.isPackaging && i.level === 1);
+      return (sonItems.length > 0 ? sonItems.slice(0, 1) : enrichedRows.slice(0, 1)).map(i => ({
+        ...i,
+        stageFrom: 'NM3 - Sơn 3',
+        stageTo: 'NM3 - Đóng gói 3'
+      }));
+    }
+
+    if (stage === 'Đóng gói') {
+      // Stage 5: Packaging items, cartons, accessories, PE foam -> From NM3 - Đóng gói 3 to Kho thành phẩm
+      let pkgItems = enrichedRows.filter(i => i.isPackaging);
+      if (pkgItems.length === 0) {
+        pkgItems = [
+          { stt: '1.1', type: 'Vật liệu đóng gói', compCode: 'PK-CARTON-01', compName: 'Thùng Carton 5 lớp in logo thương hiệu', quantity: '1', unit: 'Bộ', material: 'Giấy sóng BC', spec: '650*700*850', volume: '0.38', note: 'Dán tem Barcode' },
+          { stt: '1.2', type: 'Phụ kiện đóng gói', compCode: 'PK-MOUSSE-02', compName: 'Mút xốp PE foam chống trầy xước góc', quantity: '1', unit: 'Bộ', material: 'Xốp EPE 5mm', spec: 'Tiêu chuẩn', volume: '0.05', note: 'Bọc kín 4 chân' },
+          { stt: '1.3', type: 'Tài liệu dán tem', compCode: 'PK-MANUAL-03', compName: 'Giấy hướng dẫn bảo quản & Thẻ bảo hành', quantity: '1', unit: 'Bộ', material: 'Giấy Couche 150', spec: 'A5', volume: '0.01', note: 'Kèm trong thùng' }
+        ];
+      }
+      return pkgItems.map(i => ({
+        ...i,
+        stageFrom: 'NM3 - Đóng gói 3',
+        stageTo: 'Kho thành phẩm'
+      }));
+    }
+
+    if (stage === 'Lưu kho') {
+      // Stage 6: ONLY THE FINISHED PRODUCT SKU (Sản phẩm hoàn chỉnh)! -> From Kho thành phẩm to Xuất hàng
+      const prodCode = product?.product_code || product?.code || 'ADV011';
+      const prodName = product?.product_name || product?.name || 'Sản phẩm hoàn chỉnh';
+      const finishedRow = {
+        stt: '1',
+        type: 'Thành phẩm',
+        compCode: prodCode,
+        compName: `${prodName} (Sản phẩm hoàn chỉnh)`,
+        quantity: '1',
+        unit: 'Bộ',
+        material: product?.material || 'Gỗ / MDF',
+        spec: product?.specifications || 'Hoàn chỉnh',
+        volume: '1',
+        note: 'Sản phẩm đóng gói hoàn chỉnh sẵn sàng xuất hàng',
+        stageFrom: 'Kho thành phẩm',
+        stageTo: 'Xuất hàng'
+      };
+      return [finishedRow];
+    }
+
+    return enrichedRows;
+  }, [bomRows, activeStage, product]);
 
   const handleAddNewBomRow = () => {
     const newStt = `${bomRows.length + 1}`;

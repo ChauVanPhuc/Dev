@@ -56,9 +56,24 @@ const PurchaseRequisitionDetailView = () => {
     }
   }, [setCustomTitle, setCustomSubtitle, isEditing]);
 
+  const getLoggedInUser = () => {
+    try {
+      const userStr = localStorage.getItem('smartflow_user');
+      if (userStr) {
+        const userObj = JSON.parse(userStr);
+        return userObj.full_name || userObj.name || userObj.username || userObj.display_name || 'Bùi Thị Tuyền';
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return 'Bùi Thị Tuyền';
+  };
+
+  const loggedInUserName = useMemo(() => getLoggedInUser(), []);
+
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
-    creator: 'Bùi Thị Tuyền',
+    creator: loggedInUserName,
     created_at: '24/07/2026',
     po_code: id === 'create' ? `DH.${Date.now().toString().slice(-6)}` : 'GIAYXEO.DH02.06.26',
     status: 'Đang xử lý',
@@ -70,7 +85,7 @@ const PurchaseRequisitionDetailView = () => {
     priority: 'Bình thường',
     approver: 'Nguyễn Hòa',
     approved_at: '24/07/2026',
-    supplier: 'Khách hàng A'
+    supplier: id === 'create' ? '' : 'Khách hàng A'
   });
 
   // Danh sách thành phần mặt hàng trong đơn (100% từ CSDL)
@@ -382,36 +397,32 @@ const PurchaseRequisitionDetailView = () => {
           gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
           gap: '14px 18px', width: '100%'
         }}>
-          {/* Ô Xám: Người khởi tạo */}
+          {/* Ô Xám: Người khởi tạo (Cố định hệ thống) */}
           <div>
             <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#64748B', marginBottom: '6px' }}>Người khởi tạo</label>
             <input
               type="text"
               value={formData.creator || ''}
-              onChange={(e) => setFormData({ ...formData, creator: e.target.value })}
-              readOnly={!isEditing}
-              disabled={!isEditing}
+              readOnly disabled
               style={{
                 width: '100%', padding: '8px 12px', borderRadius: '8px',
-                border: '1px solid #E2E8F0', backgroundColor: '#F8FAFC',
-                fontWeight: '600', color: '#334155', boxSizing: 'border-box'
+                border: '1px solid #E2E8F0', backgroundColor: '#F1F5F9',
+                fontWeight: '600', color: '#64748B', cursor: 'not-allowed', boxSizing: 'border-box'
               }}
             />
           </div>
 
-          {/* Ô Xám: Ngày khởi tạo */}
+          {/* Ô Xám: Ngày khởi tạo (Cố định hệ thống) */}
           <div>
             <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#64748B', marginBottom: '6px' }}>Ngày khởi tạo</label>
             <input
               type="text"
               value={formatDateDisplay(formData.created_at)}
-              onChange={(e) => setFormData({ ...formData, created_at: e.target.value })}
-              readOnly={!isEditing}
-              disabled={!isEditing}
+              readOnly disabled
               style={{
                 width: '100%', padding: '8px 12px', borderRadius: '8px',
-                border: '1px solid #E2E8F0', backgroundColor: '#F8FAFC',
-                fontWeight: '600', color: '#334155', boxSizing: 'border-box'
+                border: '1px solid #E2E8F0', backgroundColor: '#F1F5F9',
+                fontWeight: '600', color: '#64748B', cursor: 'not-allowed', boxSizing: 'border-box'
               }}
             />
           </div>
@@ -428,79 +439,70 @@ const PurchaseRequisitionDetailView = () => {
               style={{
                 width: '100%', padding: '8px 12px', borderRadius: '8px',
                 border: '1px solid #CBD5E1',
-                backgroundColor: isEditMode ? '#fff' : '#F8FAFC',
+                backgroundColor: isEditing ? '#fff' : '#F8FAFC',
                 fontWeight: '800', color: '#2D1A12',
-                cursor: isEditMode ? 'text' : 'not-allowed',
+                cursor: isEditing ? 'text' : 'not-allowed',
                 boxSizing: 'border-box'
               }}
             />
           </div>
 
-          {/* Ô Trắng: Trạng thái đơn hàng */}
+          {/* Ô Xám: Trạng thái đơn hàng (Cố định hệ thống) */}
           <div>
             <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#64748B', marginBottom: '6px' }}>Trạng thái đơn hàng</label>
             <input
               type="text"
               value={formData.status || 'Đang xử lý'}
-              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-              readOnly={!isEditing}
-              disabled={!isEditing}
+              readOnly disabled
               style={{
                 width: '100%', padding: '8px 12px', borderRadius: '8px',
-                border: '1px solid #CBD5E1',
-                backgroundColor: isEditMode ? '#fff' : '#F8FAFC',
-                fontWeight: '700', color: '#16A34A',
-                cursor: isEditMode ? 'text' : 'not-allowed',
-                boxSizing: 'border-box'
+                border: '1px solid #E2E8F0', backgroundColor: '#F1F5F9',
+                fontWeight: '700', color: '#16A34A', cursor: 'not-allowed', boxSizing: 'border-box'
               }}
             />
           </div>
 
-          {/* Ô Trắng: Giá trị đơn hàng */}
+          {/* Ô Xám: Giá trị đơn hàng (Tự động tính toán) */}
           <div>
             <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#64748B', marginBottom: '6px' }}>Giá trị đơn hàng</label>
             <input
               type="text"
               value={formatMoneyDisplay(computedTotalAmount || formData.total_amount)}
-              readOnly
+              readOnly disabled
               style={{
                 width: '100%', padding: '8px 12px', borderRadius: '8px',
-                border: '1px solid #CBD5E1', backgroundColor: '#F8FAFC',
-                fontWeight: '800', color: '#2D1A12', boxSizing: 'border-box'
+                border: '1px solid #E2E8F0', backgroundColor: '#F1F5F9',
+                fontWeight: '800', color: '#2D1A12', cursor: 'not-allowed', boxSizing: 'border-box'
               }}
             />
           </div>
 
-          {/* Ô Xám: Người xem xét */}
+          {/* Ô Xám: Người xem xét (Cố định hệ thống) */}
           <div>
             <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#64748B', marginBottom: '6px' }}>Người xem xét</label>
             <input
               type="text"
               value={formData.reviewer || ''}
-              onChange={(e) => setFormData({ ...formData, reviewer: e.target.value })}
-              readOnly={!isEditing}
-              disabled={!isEditing}
+              readOnly disabled
               style={{
                 width: '100%', padding: '8px 12px', borderRadius: '8px',
-                border: '1px solid #E2E8F0', backgroundColor: '#F8FAFC',
-                fontWeight: '600', color: '#334155', boxSizing: 'border-box'
+                border: '1px solid #E2E8F0', backgroundColor: '#F1F5F9',
+                fontWeight: '600', color: '#64748B', cursor: 'not-allowed', boxSizing: 'border-box'
               }}
             />
           </div>
 
-          {/* Ô Xám: Ngày xem xét */}
+          {/* Ô Xám: Ngày xem xét (Cố định hệ thống) */}
           <div>
             <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#64748B', marginBottom: '6px' }}>Ngày xem xét</label>
             <input
               type="text"
               value={formatDateDisplay(formData.reviewed_at)}
-              onChange={(e) => setFormData({ ...formData, reviewed_at: e.target.value })}
-              readOnly={!isEditing}
-              disabled={!isEditing}
+              readOnly disabled
               style={{
                 width: '100%', padding: '8px 12px', borderRadius: '8px',
-                border: '1px solid #E2E8F0', backgroundColor: '#F8FAFC',
-                fontWeight: '600', color: '#334155', boxSizing: 'border-box'
+                border: '1px solid #E2E8F0', backgroundColor: '#F1F5F9',
+                fontWeight: '600', color: '#64748B', cursor: 'not-allowed', boxSizing: 'border-box'
               }}
             />
           </div>
@@ -571,36 +573,32 @@ const PurchaseRequisitionDetailView = () => {
             </select>
           </div>
 
-          {/* Ô Xám: Người duyệt */}
+          {/* Ô Xám: Người duyệt (Cố định hệ thống) */}
           <div>
             <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#64748B', marginBottom: '6px' }}>Người duyệt</label>
             <input
               type="text"
               value={formData.approver || ''}
-              onChange={(e) => setFormData({ ...formData, approver: e.target.value })}
-              readOnly={!isEditing}
-              disabled={!isEditing}
+              readOnly disabled
               style={{
                 width: '100%', padding: '8px 12px', borderRadius: '8px',
-                border: '1px solid #E2E8F0', backgroundColor: '#F8FAFC',
-                fontWeight: '600', color: '#334155', boxSizing: 'border-box'
+                border: '1px solid #E2E8F0', backgroundColor: '#F1F5F9',
+                fontWeight: '600', color: '#64748B', cursor: 'not-allowed', boxSizing: 'border-box'
               }}
             />
           </div>
 
-          {/* Ô Xám: Ngày duyệt */}
+          {/* Ô Xám: Ngày duyệt (Cố định hệ thống) */}
           <div>
             <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#64748B', marginBottom: '6px' }}>Ngày duyệt</label>
             <input
               type="text"
               value={formatDateDisplay(formData.approved_at)}
-              onChange={(e) => setFormData({ ...formData, approved_at: e.target.value })}
-              readOnly={!isEditing}
-              disabled={!isEditing}
+              readOnly disabled
               style={{
                 width: '100%', padding: '8px 12px', borderRadius: '8px',
-                border: '1px solid #E2E8F0', backgroundColor: '#F8FAFC',
-                fontWeight: '600', color: '#334155', boxSizing: 'border-box'
+                border: '1px solid #E2E8F0', backgroundColor: '#F1F5F9',
+                fontWeight: '600', color: '#64748B', cursor: 'not-allowed', boxSizing: 'border-box'
               }}
             />
           </div>
