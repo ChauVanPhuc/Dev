@@ -1,0 +1,52 @@
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from config.database import get_db
+from modules.production.schemas.production_routing_schema import (
+    ProductionTeamCreate, ProductionRoutingCreate, ProductionRoutingComponentCreate
+)
+from modules.production.controllers import routing_controller
+
+router = APIRouter(prefix="/production", tags=["Production Routing & Teams"])
+
+# --- TEAMS ENDPOINTS ---
+@router.get("/teams")
+def get_teams(db: Session = Depends(get_db)):
+    """Lấy danh sách Master Data tất cả các Tổ sản xuất"""
+    return routing_controller.get_all_teams(db)
+
+@router.post("/teams")
+def create_team(data: ProductionTeamCreate, db: Session = Depends(get_db)):
+    """Tạo mới một Tổ sản xuất"""
+    return routing_controller.create_team(db, data)
+
+@router.delete("/teams/{team_id}")
+def delete_team(team_id: int, db: Session = Depends(get_db)):
+    """Xóa một Tổ sản xuất khỏi CSDL"""
+    return routing_controller.delete_team(db, team_id)
+
+
+# --- ROUTINGS ENDPOINTS ---
+@router.get("/routings")
+def get_routings(db: Session = Depends(get_db)):
+    """Lấy danh sách tất cả Quy trình sản xuất kèm danh sách Tổ và Linh kiện"""
+    return routing_controller.get_all_routings(db)
+
+@router.post("/routings")
+def create_routing(data: ProductionRoutingCreate, db: Session = Depends(get_db)):
+    """Tạo mới một Quy trình sản xuất"""
+    return routing_controller.create_routing(db, data)
+
+@router.post("/routings/{routing_id}/duplicate")
+def duplicate_routing(routing_id: int, db: Session = Depends(get_db)):
+    """Sao chép Quy trình sản xuất"""
+    return routing_controller.duplicate_routing(db, routing_id)
+
+@router.post("/routings/components")
+def create_routing_component(data: ProductionRoutingComponentCreate, db: Session = Depends(get_db)):
+    """Gán linh kiện cho Tổ trong Quy trình"""
+    return routing_controller.create_component_item(db, data)
+
+@router.delete("/routings/{routing_id}")
+def delete_routing(routing_id: str, db: Session = Depends(get_db)):
+    """Xóa một Quy trình sản xuất khỏi CSDL"""
+    return routing_controller.delete_routing(db, routing_id)

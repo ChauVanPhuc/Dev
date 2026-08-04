@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from modules.production.routes import product_router, category_router, product_plan_router, production_router, stage_router
+from modules.production.routes import product_router, category_router, product_plan_router, production_router, stage_router, routing_router
 
 from modules.master.routes import master_product_router, customer_router
 
@@ -101,6 +101,7 @@ api_router.include_router(purchase_requisition_router.router, prefix="/purchase-
 api_router.include_router(purchase_order_item_router.router, prefix="/purchase-order-items", tags=["purchase-order-items"])
 api_router.include_router(iso_router, prefix="/iso-documents", tags=["iso-documents"])
 api_router.include_router(hr_router.router, prefix="/hr", tags=["hr"])
+api_router.include_router(routing_router.router)
 
 
 
