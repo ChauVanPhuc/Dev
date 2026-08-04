@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X, Upload, Image as ImageIcon } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 
-const AddPaintColorModal = ({ productId, onClose, onSuccess }) => {
+const AddPaintColorModal = ({ productId, bomRows = [], detailRows = [], onClose, onSuccess }) => {
   const [colorCode, setColorCode] = useState('');
   const [colorName, setColorName] = useState('');
   const [supplier, setSupplier] = useState('');
@@ -10,6 +10,12 @@ const AddPaintColorModal = ({ productId, onClose, onSuccess }) => {
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
+
+  // Lấy danh sách tên màu sơn THUẦN TÚY từ các Chi tiết trong bảng master_product_details (detailRows) - KHÔNG dùng gợi ý cứng
+  const dynamicColorNames = Array.from(new Set([
+    ...detailRows.map(r => r.name ? `Sơn PU - ${r.name}` : null).filter(Boolean),
+    ...detailRows.map(r => r.name).filter(Boolean)
+  ]));
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
@@ -47,7 +53,7 @@ const AddPaintColorModal = ({ productId, onClose, onSuccess }) => {
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ backgroundColor: '#fff', borderRadius: '16px', width: '100%', maxWidth: '460px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
-        
+
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
           <h3 style={{ fontSize: '1.1rem', fontWeight: '900', color: '#432818', margin: 0 }}>
@@ -59,7 +65,7 @@ const AddPaintColorModal = ({ productId, onClose, onSuccess }) => {
         </div>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          
+
           {/* Image Upload Box matching Mockup 3 */}
           <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
             <div style={{
@@ -91,10 +97,19 @@ const AddPaintColorModal = ({ productId, onClose, onSuccess }) => {
               <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#334155', marginBottom: '2px' }}>Tên màu sơn *</label>
                 <input
-                  type="text" required placeholder="Ví dụ: Sơn bóng gỗ sồi"
-                  value={colorName} onChange={e => setColorName(e.target.value)}
+                  type="text"
+                  list="paint-color-names-list"
+                  required
+                  placeholder="Ví dụ: Sơn bóng gỗ sồi..."
+                  value={colorName}
+                  onChange={e => setColorName(e.target.value)}
                   style={{ width: '100%', padding: '7px 10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.84rem', outline: 'none' }}
                 />
+                <datalist id="paint-color-names-list">
+                  {dynamicColorNames.map((opt, i) => (
+                    <option key={i} value={opt} />
+                  ))}
+                </datalist>
               </div>
             </div>
           </div>

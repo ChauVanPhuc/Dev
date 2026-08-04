@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import {
-  Pencil, Download, Upload, Send, ArrowLeft, ChevronDown
+  Pencil, Download, Upload, Send, ArrowLeft, ChevronDown, Eye, Plus, ArrowRight
 } from 'lucide-react';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
@@ -12,9 +12,10 @@ import '@styles/components.css';
 
 /**
  * View: Quản lý Lệnh sản xuất (/admin/production-orders)
- * Tinh chỉnh theo yêu cầu:
- * - Nút "Quay lại danh sách Lệnh SX" nằm trực tiếp trên thanh Nav Cố Định (admin-header / setHeaderExtra)
- *   để đồng bộ 100% với cấu trúc tất cả các trang khác trong hệ thống.
+ * Xây dựng hoàn chỉnh Tab "Quy trình - Kế hoạch":
+ * 1. Khối "Quy trình sản xuất": Chuỗi công đoạn chính (Khối chữ nhật) + Nút chọn công đoạn active màu xanh lá chuối.
+ *    Khối công đoạn con/tổ máy (Khối Oval xanh dương) nằm trong viền bo.
+ * 2. Khối "Kế hoạch thực hiện": Bảng 15 cột chuẩn ERP + Nút "+ Thêm mới".
  */
 const ProductionOrdersView = () => {
   const outletContext = useOutletContext() || {};
@@ -23,6 +24,9 @@ const ProductionOrdersView = () => {
 
   // View Mode: 'list' (Danh sách Lệnh SX) | 'create' (Chi tiết/Tạo Lệnh SX)
   const [viewMode, setViewMode] = useState('list');
+  // Edit Mode: true = Chỉnh sửa lệnh có sẵn | false = Tạo lệnh mới
+  const [isEditMode, setIsEditMode] = useState(false);
+
   const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
   const [sortValue, setSortValue] = useState('time_desc');
 
@@ -31,8 +35,9 @@ const ProductionOrdersView = () => {
   // Đặt Tiêu đề, Subtitle và Nút "Quay lại" trực tiếp lên Thanh Nav Cố Định (admin-header)
   useEffect(() => {
     if (viewMode === 'create') {
+      const titleSub = isEditMode ? 'SX02.1: Chi tiết lệnh sản xuất' : 'SX02.1: Tạo lệnh sản xuất';
       if (setCustomTitle) setCustomTitle('Lệnh sản xuất');
-      if (setCustomSubtitle) setCustomSubtitle('SX02.1: Tạo lệnh sản xuất');
+      if (setCustomSubtitle) setCustomSubtitle(titleSub);
       if (setCustomScreenCode) setCustomScreenCode('SX02.1');
       if (setHeaderExtra) {
         setHeaderExtra(
@@ -77,7 +82,7 @@ const ProductionOrdersView = () => {
     return () => {
       if (setHeaderExtra) setHeaderExtra(null);
     };
-  }, [viewMode, setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra]);
+  }, [viewMode, isEditMode, setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra]);
 
   // State dữ liệu danh sách Lệnh sản xuất
   const [ordersList, setOrdersList] = useState([]);
@@ -104,14 +109,54 @@ const ProductionOrdersView = () => {
     status: 'Đang sản xuất'
   });
 
-  // Sub-tabs
-  const [activeSubTab, setActiveSubTab] = useState('order_info');
+  // Active Main Tab bên dưới Thông tin chung
+  const [activeMainTab, setActiveMainTab] = useState('order_info');
 
-  // Bảng 1: Thông tin đơn hàng & SKU
+  // Bảng 1: Thông tin đơn hàng (Top Table)
   const [orderProducts, setOrderProducts] = useState([]);
 
-  // Bảng 2: Chi tiết linh kiện BOM & Công đoạn sản xuất
+  // Bảng 2: Chi tiết sản phẩm (Bottom Card & Table)
   const [productDetails, setProductDetails] = useState([]);
+
+  // Sản phẩm đang được chọn ở Bảng 1 để lọc Bảng 2
+  const [selectedProductCode, setSelectedProductCode] = useState(null);
+
+  // --- STATE CHO TAB QUY TRÌNH - KẾ HOẠCH ---
+  const [activeStage, setActiveStage] = useState('Định hình');
+  const mainStages = ['Tạo phôi', 'Định hình', 'Lắp ráp', 'Sơn', 'Đóng gói', 'Lưu kho'];
+
+  const subStagesMap = {
+    'Tạo phôi': [{ id: 1, name: 'Xẻ phôi gỗ' }, { id: 2, name: 'Bào 4 mặt' }],
+    'Định hình': [{ id: 1, name: 'Cắt ván 1' }, { id: 2, name: 'Dán viền' }],
+    'Lắp ráp': [{ id: 1, name: 'Khoan chốt cam' }, { id: 2, name: 'Lắp cụm khung' }],
+    'Sơn': [{ id: 1, name: 'Sơn lót 1' }, { id: 2, name: 'Sơn bóng PU' }],
+    'Đóng gói': [{ id: 1, name: 'Bọc màng PE' }, { id: 2, name: 'Đóng thùng Carton' }],
+    'Lưu kho': [{ id: 1, name: 'Nhập kho thành phẩm' }]
+  };
+
+  const [scheduleRows, setScheduleRows] = useState([]);
+
+  const handleAddScheduleRow = () => {
+    const newRow = {
+      id: Date.now(),
+      startDate: '',
+      endDate: '',
+      team: 'Tổ mới',
+      type: 'Chi tiết mới',
+      stageFrom: activeStage,
+      stageTo: 'Lắp ráp',
+      compName: 'Cụm thành phẩm mới',
+      quantity: '0/10',
+      unit: 'Cái',
+      spec: '15*200*600',
+      volume: '1',
+      material: 'Gỗ Sồi',
+      compCode: `ADV-${Date.now().toString().slice(-4)}`,
+      status: 'Chờ sản xuất'
+    };
+    setScheduleRows([...scheduleRows, newRow]);
+    if (toast) toast('success', 'Đã thêm dòng kế hoạch mới thành công!');
+  };
 
   // Lấy danh sách PO Mua hàng từ module Purchasing (/admin/purchase-requisitions)
   useEffect(() => {
@@ -238,7 +283,64 @@ const ProductionOrdersView = () => {
     fetchProductionOrders();
   }, [page, pageSize, searchTerm, sortValue]);
 
-  // Xử lý nạp dữ liệu từ Đơn mua hàng (/admin/purchase-requisitions) theo poCode hoặc requisitionId
+  // Bộ sinh linh kiện BOM đầy đủ 7 - 8 dòng linh kiện thành phần chuẩn ERP
+  const generateBomForProduct = (pCode, pName = '', qtyVal = 50) => {
+    const codeUpper = (pCode || '').toUpperCase();
+    const nameUpper = (pName || '').toUpperCase();
+
+    // 1. Ghế (Chair) -> 7 dòng linh kiện
+    if (codeUpper.includes('CHAIR') || nameUpper.includes('CHAIR') || nameUpper.includes('GHẾ')) {
+      return [
+        { id: `${pCode}-1`, parentCode: pCode, type: 'Nan tựa', stageFrom: 'Uốn cong', stageTo: 'Lắp ráp', compCode: 'TUA-01', compName: 'Nan tựa lưng uốn cong', quantity: `0/${qtyVal * 3}`, unit: 'Nan', material: 'Gỗ Tần Bì (Ash)', spec: '12*40*450', volume: 0.5, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-2`, parentCode: pCode, type: 'Khung tựa', stageFrom: 'Định hình', stageTo: 'Lắp ráp', compCode: 'TUA-02', compName: 'Khung viền tựa lưng', quantity: `0/${qtyVal}`, unit: 'Bộ', material: 'Gỗ Tần Bì (Ash)', spec: '25*45*500', volume: 0.8, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-3`, parentCode: pCode, type: 'Mặt nệm', stageFrom: 'Định hình', stageTo: 'Bọc đệm', compCode: 'MAT-01', compName: 'Mặt đệm mút bọc da PU', quantity: `0/${qtyVal}`, unit: 'Cái', material: 'Mút K43 + Da PU', spec: '50*420*420', volume: 1.2, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-4`, parentCode: pCode, type: 'Chân trước', stageFrom: 'Định hình', stageTo: 'Chà nhám', compCode: 'CHF-01', compName: 'Chân ghế trước vót nhọn (Trái/Phải)', quantity: `0/${qtyVal * 2}`, unit: 'Cái', material: 'Gỗ Tần Bì (Ash)', spec: '40*40*450', volume: 0.8, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-5`, parentCode: pCode, type: 'Chân sau', stageFrom: 'Định hình', stageTo: 'Chà nhám', compCode: 'CHS-01', compName: 'Chân ghế sau uốn cong', quantity: `0/${qtyVal * 2}`, unit: 'Cái', material: 'Gỗ Tần Bì (Ash)', spec: '40*50*850', volume: 1.4, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-6`, parentCode: pCode, type: 'Giằng dọc', stageFrom: 'Cắt mộng', stageTo: 'Lắp khung', compCode: 'GIANG-01', compName: 'Thanh giằng dọc chịu lực', quantity: `0/${qtyVal * 2}`, unit: 'Thanh', material: 'Gỗ Tần Bì (Ash)', spec: '25*30*400', volume: 0.4, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-7`, parentCode: pCode, type: 'Giằng ngang', stageFrom: 'Cắt mộng', stageTo: 'Lắp khung', compCode: 'GIANG-02', compName: 'Thanh giằng ngang liên kết', quantity: `0/${qtyVal * 2}`, unit: 'Thanh', material: 'Gỗ Tần Bì (Ash)', spec: '25*30*380', volume: 0.4, note: '', status: 'Chờ sản xuất' }
+      ];
+    }
+
+    // 2. Giường / Đầu giường (Headboard / Bed) -> 7 dòng linh kiện
+    if (codeUpper.includes('HEADBOARD') || nameUpper.includes('HEADBOARD') || nameUpper.includes('BED') || nameUpper.includes('GIƯỜNG')) {
+      return [
+        { id: `${pCode}-1`, parentCode: pCode, type: 'Khung chính', stageFrom: 'Cắt hộp', stageTo: 'Bọc nỉ', compCode: 'KHUNG-01', compName: 'Khung ván chịu lực đầu giường', quantity: `0/${qtyVal}`, unit: 'Bộ', material: 'Gỗ Thông + MDF', spec: '35*1200*1800', volume: 12.0, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-2`, parentCode: pCode, type: 'Mút đệm', stageFrom: 'Cắt mút', stageTo: 'May bọc', compCode: 'MUT-01', compName: 'Mút đệm múi đầu giường', quantity: `0/${qtyVal}`, unit: 'Tấm', material: 'Memory Foam', spec: '40*1150*1750', volume: 3.5, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-3`, parentCode: pCode, type: 'Áo nỉ bọc', stageFrom: 'May công nghiệp', stageTo: 'Bắn đinh', compCode: 'VAI-01', compName: 'Vải nỉ cao cấp may múi', quantity: `0/${qtyVal}`, unit: 'Áo', material: 'Vải Nỉ Nhung', spec: '1400*2200', volume: 1.5, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-4`, parentCode: pCode, type: 'Chân giường', stageFrom: 'Tiện gỗ', stageTo: 'Sơn PU', compCode: 'CHAN-01', compName: 'Chân đầu giường gỗ tự nhiên', quantity: `0/${qtyVal * 2}`, unit: 'Cái', material: 'Gỗ Sồi (Oak)', spec: '60*60*250', volume: 0.9, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-5`, parentCode: pCode, type: 'Vách tựa', stageFrom: 'Cắt ván', stageTo: 'Lắp ráp', compCode: 'VACH-01', compName: 'Tấm ván tựa lưng hậu', quantity: `0/${qtyVal}`, unit: 'Tấm', material: 'Plywood 9mm', spec: '9*1100*1700', volume: 2.2, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-6`, parentCode: pCode, type: 'Nẹp inox', stageFrom: 'Cắt kim loại', stageTo: 'Đính nẹp', compCode: 'NEP-01', compName: 'Nẹp inox mạ vàng trang trí', quantity: `0/${qtyVal * 2}`, unit: 'Thanh', material: 'Inox 304', spec: '2*20*1800', volume: 0.2, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-7`, parentCode: pCode, type: 'Đế đinh nhựa', stageFrom: 'Lắp đóng gói', stageTo: 'Đóng gói', compCode: 'DE-01', compName: 'Đế đinh nhựa chống trầy sàn', quantity: `0/${qtyVal * 4}`, unit: 'Cái', material: 'Nhựa ABS', spec: '20*20*10', volume: 0.05, note: '', status: 'Chờ sản xuất' }
+      ];
+    }
+
+    // 3. Hộc kéo / Ngăn kéo (Drawer / Drawer Side / FOL...) -> 7 dòng linh kiện
+    if (codeUpper.includes('DRAWER') || nameUpper.includes('DRAWER') || codeUpper.includes('FOL') || codeUpper.includes('SIDE')) {
+      return [
+        { id: `${pCode}-1`, parentCode: pCode, type: 'Thành hộc trái', stageFrom: 'Xẻ gỗ', stageTo: 'Khoan lỗ', compCode: 'LEFT-01', compName: 'Thành ngăn kéo bên trái 12mm', quantity: `0/${qtyVal}`, unit: 'Cái', material: 'Gỗ Thông ép', spec: '12*70*600', volume: 0.4, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-2`, parentCode: pCode, type: 'Thành hộc phải', stageFrom: 'Xẻ gỗ', stageTo: 'Khoan lỗ', compCode: 'RIGHT-01', compName: 'Thành ngăn kéo bên phải 12mm', quantity: `0/${qtyVal}`, unit: 'Cái', material: 'Gỗ Thông ép', spec: '12*70*600', volume: 0.4, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-3`, parentCode: pCode, type: 'Mặt hộc trước', stageFrom: 'Sơn PU', stageTo: 'Lắp ráp', compCode: 'FAC-01', compName: 'Tấm mặt hộc kéo soi chỉ', quantity: `0/${qtyVal}`, unit: 'Tấm', material: 'MDF Kháng ẩm 18mm', spec: '18*180*580', volume: 0.8, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-4`, parentCode: pCode, type: 'Thành sau hộc', stageFrom: 'Cắt gỗ', stageTo: 'Khoan chốt', compCode: 'BACK-01', compName: 'Thành sau ngăn kéo 12mm', quantity: `0/${qtyVal}`, unit: 'Cái', material: 'Gỗ Thông ép', spec: '12*70*550', volume: 0.3, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-5`, parentCode: pCode, type: 'Đáy hộc kéo', stageFrom: 'Cắt ván', stageTo: 'Chạy rãnh', compCode: 'BOT-01', compName: 'Tấm đáy hộc kéo ván ép', quantity: `0/${qtyVal}`, unit: 'Tấm', material: 'Plywood 4mm', spec: '4*580*580', volume: 0.6, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-6`, parentCode: pCode, type: 'Nẹp chỉ viền', stageFrom: 'Dán chỉ', stageTo: 'Hoàn thiện', compCode: 'NEP-01', compName: 'Nẹp chỉ Veneer sồi tự nhiên', quantity: `0/${qtyVal * 2}`, unit: 'Mét', material: 'Veneer Sồi', spec: '1*15*2400', volume: 0.1, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-7`, parentCode: pCode, type: 'Ray trượt giảm chấn', stageFrom: 'Lắp phụ kiện', stageTo: 'Đóng gói', compCode: 'RAY-01', compName: 'Bộ ray trượt âm giảm chấn DTC', quantity: `0/${qtyVal}`, unit: 'Bộ', material: 'Thép mạ kẽm', spec: '45*450', volume: 0.5, note: '', status: 'Chờ sản xuất' }
+      ];
+    }
+
+    // 4. Các dòng Tủ / Đồ gỗ nội thất (Nightstand / Vanity / Cabinet / APT...) -> 8 dòng linh kiện đầy đủ
+    return [
+      { id: `${pCode}-1`, parentCode: pCode, type: 'Mặt tủ', stageFrom: 'Định hình', stageTo: 'Sơn PU', compCode: 'MAT-01', compName: 'Mặt gỗ sồi tự nhiên', quantity: `0/${qtyVal}`, unit: 'Tấm', material: 'Gỗ Sồi (Oak)', spec: '18*450*1200', volume: 2.5, note: '', status: 'Chờ sản xuất' },
+      { id: `${pCode}-2`, parentCode: pCode, type: 'Cánh tủ', stageFrom: 'Cắt CNC', stageTo: 'Lắp ráp', compCode: 'CANH-01', compName: 'Cánh tủ ván soi chỉ nghệ thuật', quantity: `0/${qtyVal}`, unit: 'Cái', material: 'MDF Chống ẩm', spec: '15*380*650', volume: 1.8, note: '', status: 'Chờ sản xuất' },
+      { id: `${pCode}-3`, parentCode: pCode, type: 'Chân tủ', stageFrom: 'Tiện gỗ', stageTo: 'Lắp ráp', compCode: 'CHAN-01', compName: 'Cụm chân gỗ tròn vót nhọn', quantity: `0/${qtyVal * 4}`, unit: 'Cái', material: 'Gỗ Cao su', spec: '50*50*150', volume: 0.6, note: '', status: 'Chờ sản xuất' },
+      { id: `${pCode}-4`, parentCode: pCode, type: 'Vách hông trái', stageFrom: 'Định hình', stageTo: 'Khoan cam', compCode: 'HONG-01', compName: 'Tấm vách hông bên trái', quantity: `0/${qtyVal}`, unit: 'Tấm', material: 'MDF Kháng ẩm 17mm', spec: '17*400*750', volume: 1.05, note: '', status: 'Chờ sản xuất' },
+      { id: `${pCode}-5`, parentCode: pCode, type: 'Vách hông phải', stageFrom: 'Định hình', stageTo: 'Khoan cam', compCode: 'HONG-02', compName: 'Tấm vách hông bên phải', quantity: `0/${qtyVal}`, unit: 'Tấm', material: 'MDF Kháng ẩm 17mm', spec: '17*400*750', volume: 1.05, note: '', status: 'Chờ sản xuất' },
+      { id: `${pCode}-6`, parentCode: pCode, type: 'Tấm đáy tủ', stageFrom: 'Cắt ván', stageTo: 'Khoan lỗ', compCode: 'DAY-01', compName: 'Tấm ván đáy tủ liên kết', quantity: `0/${qtyVal}`, unit: 'Tấm', material: 'MDF Kháng ẩm 17mm', spec: '17*450*1160', volume: 1.6, note: '', status: 'Chờ sản xuất' },
+      { id: `${pCode}-7`, parentCode: pCode, type: 'Khung đố nóc', stageFrom: 'Chạy chỉ', stageTo: 'Lắp ráp', compCode: 'DO-01', compName: 'Thanh đố ngang nóc chịu lực', quantity: `0/${qtyVal * 2}`, unit: 'Thanh', material: 'Gỗ Sồi (Oak)', spec: '25*50*1160', volume: 0.7, note: '', status: 'Chờ sản xuất' },
+      { id: `${pCode}-8`, parentCode: pCode, type: 'Tấm hậu tủ', stageFrom: 'Cắt ván', stageTo: 'Đóng hậu', compCode: 'HAU-01', compName: 'Tấm hậu tủ phủ Melamine 2 mặt', quantity: `0/${qtyVal}`, unit: 'Tấm', material: 'Plywood 5mm', spec: '5*700*1160', volume: 0.9, note: '', status: 'Chờ sản xuất' }
+    ];
+  };
+
+  // Xử lý nạp DỮ LIỆU ĐỘNG từ Đơn mua hàng (/admin/purchase-requisitions)
   const handleSelectPurchaseRequisition = async (reqObj) => {
     if (!reqObj) return;
 
@@ -248,8 +350,12 @@ const ProductionOrdersView = () => {
       const itemsList = (fullReq && fullReq.items) ? fullReq.items : [];
 
       const poCodeVal = reqObj.po_code || fullReq.po_code || '';
-      const orderDateVal = (reqObj.order_date || fullReq.order_date) ? (reqObj.order_date || fullReq.order_date).split('T')[0] : new Date().toISOString().split('T')[0];
-      const deliveryDateVal = (reqObj.delivery_date || fullReq.delivery_date) ? (reqObj.delivery_date || fullReq.delivery_date).split('T')[0] : '';
+      const orderDateVal = (reqObj.order_date || fullReq.order_date) 
+        ? (reqObj.order_date || fullReq.order_date).split('T')[0]
+        : '';
+      const deliveryDateVal = (reqObj.delivery_date || fullReq.delivery_date) 
+        ? (reqObj.delivery_date || fullReq.delivery_date).split('T')[0]
+        : '';
 
       setOrderForm(prev => ({
         ...prev,
@@ -257,46 +363,46 @@ const ProductionOrdersView = () => {
         orderId: poCodeVal,
         priority: reqObj.priority || fullReq.priority || 'Bình thường',
         startDate: orderDateVal,
-        endDate: deliveryDateVal
+        endDate: deliveryDateVal,
+        status: reqObj.status || fullReq.status || 'Đang sản xuất'
       }));
 
+      // Bảng 1: Mặt hàng trong Đơn mua hàng
       const mappedProducts = itemsList.map((it, idx) => {
-        const qty = it.quantity || 0;
+        const qty = Number(it.quantity) || 0;
         const spare = Math.ceil(qty * 0.05);
+        const code = it.item_code || `SKU-${idx + 1}`;
         return {
           id: it.id || idx + 1,
-          productCode: it.item_code || `SKU-${idx + 1}`,
-          productName: it.item_name || 'Sản phẩm mua',
-          category: poCodeVal,
+          productCode: code,
+          productName: it.item_name || 'Mặt hàng mua',
+          lineType: it.type || it.content || reqObj.supplier_name || 'Nội thất',
           orderQty: qty,
           spareQty: spare,
           totalQty: qty + spare,
           unit: it.unit || 'Bộ',
-          startDate: orderDateVal,
-          endDate: deliveryDateVal,
-          deliveryDate: deliveryDateVal,
-          drawingCode: `BV-${it.item_code || idx + 1}`
+          startDate: orderDateVal || '01/08/2026',
+          endDate: deliveryDateVal || '15/08/2026',
+          deliveryDate: it.requested_delivery_date ? it.requested_delivery_date.split('T')[0] : (deliveryDateVal || '15/08/2026'),
+          drawingCode: `BV-${code}`
         };
       });
 
-      const mappedBomParts = itemsList.map((it, idx) => ({
-        id: it.id || idx + 1,
-        type: 'Chi tiết mua hàng',
-        stageFrom: 'Cung ứng (PO)',
-        stageTo: 'Sản xuất / Nhập kho',
-        compCode: it.item_code || `COMP-${idx + 1}`,
-        compName: it.item_name || 'Chi tiết',
-        quantity: `${it.quantity || 0}/${it.quantity || 0}`,
-        unit: it.unit || 'Bộ',
-        material: reqObj.supplier_name || 'Vật tư mua hàng',
-        spec: 'Theo đơn đặt mua',
-        volume: 1,
-        note: poCodeVal,
-        status: reqObj.status || 'Chờ sản xuất'
-      }));
+      // Bảng 2: Nạp linh kiện BOM gắn trực tiếp với parentCode = productCode
+      const mappedBomParts = itemsList.flatMap((it, idx) => {
+        const qty = Number(it.quantity) || 0;
+        const code = it.item_code || `SKU-${idx + 1}`;
+        return generateBomForProduct(code, it.item_name, qty);
+      });
 
       setOrderProducts(mappedProducts);
       setProductDetails(mappedBomParts);
+
+      // Mặc định chọn Sản phẩm ĐẦU TIÊN để lọc Bảng 2
+      if (mappedProducts.length > 0) {
+        setSelectedProductCode(mappedProducts[0].productCode);
+      }
+
       if (toast) toast('success', `Đã nạp ${mappedProducts.length} mặt hàng từ Đơn mua hàng ${poCodeVal}`);
     } catch (err) {
       console.warn('Lỗi nạp dữ liệu từ Purchase Requisition:', err);
@@ -306,8 +412,10 @@ const ProductionOrdersView = () => {
     }
   };
 
-  // Xử lý mở Chi tiết khi xem/sửa 1 Lệnh sẵn có
+  // Xử lý nạp DỮ LIỆU ĐỘNG khi xem/sửa Lệnh sản xuất sẵn có (CHẾ ĐỘ EDIT)
   const handleOpenOrderDetail = async (item) => {
+    setIsEditMode(true); // Đánh dấu là chế độ chỉnh sửa Lệnh có sẵn
+
     setOrderForm({
       code: item.code,
       orderId: item.orderNo,
@@ -326,49 +434,63 @@ const ProductionOrdersView = () => {
 
       if (item.products && item.products.length > 0) {
         formattedProducts = item.products.map((p, idx) => {
-          const qty = p.quantity || 0;
-          const spare = Math.ceil(qty * 0.05);
+          const qty = Number(p.quantity || p.order_qty) || 0;
+          const spare = p.spare_qty !== undefined ? Number(p.spare_qty) : Math.ceil(qty * 0.05);
+          const total = p.total_qty !== undefined ? Number(p.total_qty) : (qty + spare);
+          const code = p.sku || p.productCode || `SP-${idx + 1}`;
           return {
             id: p.id || idx + 1,
-            productCode: p.sku || `SP${1000 + idx}`,
-            productName: p.name || 'Sản phẩm gỗ',
-            category: item.orderNo || 'Đơn hàng',
+            productCode: code,
+            productName: p.name || p.productName || 'Sản phẩm sản xuất',
+            lineType: p.category || p.lineType || p.group_name || 'Nội thất',
             orderQty: qty,
             spareQty: spare,
-            totalQty: qty + spare,
-            unit: 'Cái',
-            startDate: item.startDate,
-            endDate: item.endDate,
-            deliveryDate: item.endDate,
-            drawingCode: `BV-${p.sku || idx + 1}`
+            totalQty: total,
+            unit: p.unit || 'Cái',
+            startDate: p.startDate || item.startDate || '01/08/2026',
+            endDate: p.endDate || item.endDate || '15/08/2026',
+            deliveryDate: p.deliveryDate || item.endDate || '15/08/2026',
+            drawingCode: p.drawingCode || p.drawing_code || `BV-${code}`
           };
         });
 
         item.products.forEach((p, idx) => {
+          const pCode = p.sku || p.productCode || `SP-${idx + 1}`;
           if (p.bom_details && p.bom_details.length > 0) {
             p.bom_details.forEach((b, bIdx) => {
+              const delivered = Number(b.delivered || b.delivered_qty || 0);
+              const planned = Number(b.planned || b.quantity || p.quantity || 0);
               formattedBomParts.push({
                 id: b.id || `${p.id}-${bIdx}`,
-                type: b.name || 'Linh kiện',
-                stageFrom: b.input_stage || 'Định hình',
-                stageTo: b.output_stage || 'Lắp ráp',
-                compCode: b.sku || `COMP-${bIdx + 1}`,
-                compName: b.name || 'Cụm chi tiết',
-                quantity: `${Math.round(b.delivered || 0)}/${Math.round(b.planned || p.quantity || 1)}`,
-                unit: 'Cái',
-                material: 'MDF / Gỗ tự nhiên',
-                spec: 'Tiêu chuẩn SX',
-                volume: 1,
-                note: item.orderNo,
-                status: (b.delivered || 0) >= (b.planned || p.quantity || 1) ? 'Hoàn thành' : 'Chờ sản xuất'
+                parentCode: pCode,
+                type: b.type || b.component_type || 'Linh kiện',
+                stageFrom: b.input_stage || b.stageFrom || 'Định hình',
+                stageTo: b.output_stage || b.stageTo || 'Lắp ráp',
+                compCode: b.sku || b.compCode || `COMP-${bIdx + 1}`,
+                compName: b.name || b.compName || 'Cụm chi tiết',
+                quantity: `${delivered}/${planned}`,
+                unit: b.unit || 'Cái',
+                material: b.material || 'Gỗ / MDF',
+                spec: b.specification || b.spec || 'Tiêu chuẩn SX',
+                volume: b.volume || 1,
+                note: b.description || b.note || '',
+                status: b.status || (delivered >= planned && planned > 0 ? 'Hoàn thành' : 'Chờ sản xuất')
               });
             });
+          } else {
+            // Sinh linh kiện BOM đầy đủ 7-8 dòng cho từng sản phẩm
+            const generated = generateBomForProduct(pCode, p.name, p.quantity || 50);
+            formattedBomParts.push(...generated);
           }
         });
       }
 
       setOrderProducts(formattedProducts);
       setProductDetails(formattedBomParts);
+
+      if (formattedProducts.length > 0) {
+        setSelectedProductCode(formattedProducts[0].productCode);
+      }
     } catch (err) {
       console.warn('Lỗi tải chi tiết Lệnh sản xuất:', err);
     } finally {
@@ -376,8 +498,9 @@ const ProductionOrdersView = () => {
     }
   };
 
-  // Khởi tạo TRỐNG 100% khi nhấp + Thêm tài liệu
+  // Khởi tạo TRỐNG 100% & CHO PHÉP SỬA TẤT CẢ TỪ ĐẦU khi nhấp + Thêm tài liệu (CHẾ ĐỘ TẠO MỚI)
   const handleOpenCreateOrder = () => {
+    setIsEditMode(false); // Đánh dấu là chế độ Tạo mới Lệnh sản xuất
     setOrderForm({
       code: '',
       orderId: '',
@@ -388,6 +511,7 @@ const ProductionOrdersView = () => {
     });
     setOrderProducts([]);
     setProductDetails([]);
+    setSelectedProductCode(null);
     setViewMode('create');
   };
 
@@ -431,6 +555,18 @@ const ProductionOrdersView = () => {
       (po.supplier_name && po.supplier_name.toLowerCase().includes(term))
     ).slice(0, 15);
   }, [purchaseRequisitions, poSearch]);
+
+  // Lọc Bảng 2 ("Chi tiết sản phẩm") theo Sản phẩm đang được chọn ở Bảng 1
+  const displayedProductDetails = useMemo(() => {
+    if (!selectedProductCode) return productDetails;
+    const filtered = productDetails.filter(det => det.parentCode === selectedProductCode);
+    if (filtered.length > 0) return filtered;
+    
+    // Nếu chưa có chi tiết cho sản phẩm được chọn, sinh bộ 7-8 dòng chi tiết BOM đầy đủ
+    const targetProd = orderProducts.find(p => p.productCode === selectedProductCode);
+    const qtyVal = targetProd ? targetProd.orderQty : 50;
+    return generateBomForProduct(selectedProductCode, targetProd?.productName, qtyVal);
+  }, [productDetails, selectedProductCode, orderProducts]);
 
   const handleExport = () => {
     if (toast) toast('info', 'Xuất danh sách Lệnh sản xuất');
@@ -630,30 +766,30 @@ const ProductionOrdersView = () => {
 
         {/* MÀN HÌNH 2: TẠO/CHI TIẾT LỆNH SẢN XUẤT */}
         {viewMode === 'create' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             
-            {/* Card 1: Khung Thông tin chung */}
+            {/* KHUNG 1: Thông tin chung */}
             <div style={{
               backgroundColor: '#FFFFFF',
-              borderRadius: '14px',
+              borderRadius: '12px',
               border: '1.5px solid #EADCC9',
-              padding: '24px',
-              boxShadow: '0 4px 16px rgba(45, 26, 18, 0.04)'
+              padding: '18px 24px',
+              boxShadow: '0 2px 12px rgba(45, 26, 18, 0.03)'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
-                <h3 style={{ margin: 0, fontSize: '1.4rem', fontWeight: '900', color: '#2D1A12' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+                <h3 style={{ margin: 0, fontSize: '1.35rem', fontWeight: '800', color: '#2D1A12' }}>
                   Thông tin chung {orderForm.code ? `(${orderForm.code})` : ''}
                 </h3>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <button style={{
-                    padding: '9px 16px',
-                    backgroundColor: '#A07855',
+                    padding: '8px 16px',
+                    backgroundColor: '#8D6E63',
                     border: 'none',
                     borderRadius: '8px',
                     color: '#FFFFFF',
                     fontWeight: '700',
-                    fontSize: '0.88rem',
+                    fontSize: '0.85rem',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
@@ -663,13 +799,13 @@ const ProductionOrdersView = () => {
                   </button>
 
                   <button style={{
-                    padding: '9px 16px',
-                    backgroundColor: '#A07855',
+                    padding: '8px 16px',
+                    backgroundColor: '#8D6E63',
                     border: 'none',
                     borderRadius: '8px',
                     color: '#FFFFFF',
                     fontWeight: '700',
-                    fontSize: '0.88rem',
+                    fontSize: '0.85rem',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
@@ -679,13 +815,13 @@ const ProductionOrdersView = () => {
                   </button>
 
                   <button style={{
-                    padding: '9px 16px',
+                    padding: '8px 16px',
                     backgroundColor: '#65A30D',
                     border: 'none',
                     borderRadius: '8px',
                     color: '#FFFFFF',
                     fontWeight: '700',
-                    fontSize: '0.88rem',
+                    fontSize: '0.85rem',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
@@ -697,15 +833,15 @@ const ProductionOrdersView = () => {
                   <button
                     onClick={handleSaveOrder}
                     style={{
-                      padding: '9px 20px',
+                      padding: '8px 20px',
                       backgroundColor: '#5D3B32',
                       border: 'none',
                       borderRadius: '8px',
                       color: '#FFFFFF',
                       fontWeight: '800',
-                      fontSize: '0.88rem',
+                      fontSize: '0.85rem',
                       cursor: 'pointer',
-                      boxShadow: '0 4px 10px rgba(93, 59, 50, 0.25)'
+                      boxShadow: '0 4px 10px rgba(93, 59, 50, 0.2)'
                     }}
                   >
                     Lưu thông tin
@@ -713,30 +849,42 @@ const ProductionOrdersView = () => {
                 </div>
               </div>
 
-              {/* Form Grid 6 Ô */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+              {/* Form Grid 6 Ô Nhập (Mã lệnh & Trạng thái: CHO PHÉP SỬA khi Tạo Mới; KHÔNG CHO SỬA khi Edit) */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
                 
-                {/* 1. Mã lệnh sản xuất */}
+                {/* 1. Mã lệnh: Tạo Mới -> ĐƯỢC CHỈNH SỬA | Edit -> READONLY NỀN XÁM */}
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#6B7280', marginBottom: '6px' }}>Mã lệnh sản xuất</label>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#4B5563', marginBottom: '5px' }}>Mã lệnh</label>
                   <input
                     type="text"
                     placeholder="Nhập mã lệnh..."
                     value={orderForm.code}
+                    readOnly={isEditMode}
                     onChange={(e) => setOrderForm({ ...orderForm, code: e.target.value })}
-                    style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #EADCC9', borderRadius: '8px', fontWeight: '700', color: '#2D1A12', outline: 'none' }}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      border: '1.5px solid #D1D5DB',
+                      borderRadius: '8px',
+                      backgroundColor: isEditMode ? '#E5E7EB' : '#FFFFFF',
+                      fontWeight: '700',
+                      fontSize: '0.88rem',
+                      color: '#1F2937',
+                      outline: 'none',
+                      cursor: isEditMode ? 'not-allowed' : 'text'
+                    }}
                   />
                 </div>
 
                 {/* 2. Mã đơn hàng */}
                 <div ref={poDropdownRef} style={{ position: 'relative' }}>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#6B7280', marginBottom: '6px' }}>
-                    Mã đơn hàng <span style={{ color: '#7B5233', fontSize: '0.75rem', fontWeight: '600' }}>(từ Đơn mua hàng)</span>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#4B5563', marginBottom: '5px' }}>
+                    Mã đơn hàng
                   </label>
                   <div style={{ position: 'relative' }}>
                     <input
                       type="text"
-                      placeholder="Chọn/Nhập mã đơn mua..."
+                      placeholder="Chọn mã đơn hàng..."
                       value={orderForm.orderId}
                       onFocus={() => setIsPoDropdownOpen(true)}
                       onChange={(e) => {
@@ -747,18 +895,20 @@ const ProductionOrdersView = () => {
                       }}
                       style={{
                         width: '100%',
-                        padding: '10px 32px 10px 12px',
-                        border: '1.5px solid #EADCC9',
+                        padding: '8px 32px 8px 12px',
+                        border: '1.5px solid #D1D5DB',
                         borderRadius: '8px',
                         fontWeight: '700',
-                        color: '#2D1A12',
-                        outline: 'none'
+                        fontSize: '0.88rem',
+                        color: '#1F2937',
+                        outline: 'none',
+                        backgroundColor: '#FFFFFF'
                       }}
                     />
                     <ChevronDown
                       size={18}
                       onClick={() => setIsPoDropdownOpen(!isPoDropdownOpen)}
-                      style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#7B5233', cursor: 'pointer' }}
+                      style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#6B7280', cursor: 'pointer' }}
                     />
                   </div>
 
@@ -790,7 +940,7 @@ const ProductionOrdersView = () => {
                             key={po.id}
                             onClick={() => handleSelectPurchaseRequisition(po)}
                             style={{
-                              padding: '10px 12px',
+                              padding: '9px 12px',
                               cursor: 'pointer',
                               borderBottom: '1px solid #F3F4F6',
                               display: 'flex',
@@ -817,11 +967,11 @@ const ProductionOrdersView = () => {
 
                 {/* 3. Mức độ ưu tiên */}
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#6B7280', marginBottom: '6px' }}>Mức độ ưu tiên</label>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#4B5563', marginBottom: '5px' }}>Mức độ ưu tiên</label>
                   <select
                     value={orderForm.priority}
                     onChange={(e) => setOrderForm({ ...orderForm, priority: e.target.value })}
-                    style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #EADCC9', borderRadius: '8px', fontWeight: '700', color: '#2D1A12', outline: 'none', backgroundColor: '#FFF' }}
+                    style={{ width: '100%', padding: '8px 12px', border: '1.5px solid #D1D5DB', borderRadius: '8px', fontWeight: '700', fontSize: '0.88rem', color: '#1F2937', outline: 'none', backgroundColor: '#FFF' }}
                   >
                     <option value="Cao">Cao</option>
                     <option value="Bình thường">Bình thường</option>
@@ -831,205 +981,513 @@ const ProductionOrdersView = () => {
 
                 {/* 4. Thời gian bắt đầu */}
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#6B7280', marginBottom: '6px' }}>Thời gian bắt đầu</label>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#4B5563', marginBottom: '5px' }}>Thời gian bắt đầu</label>
                   <input
                     type="date"
                     value={orderForm.startDate}
                     onChange={(e) => setOrderForm({ ...orderForm, startDate: e.target.value })}
-                    style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #EADCC9', borderRadius: '8px', fontWeight: '700', color: '#2D1A12', outline: 'none' }}
+                    style={{ width: '100%', padding: '8px 12px', border: '1.5px solid #D1D5DB', borderRadius: '8px', fontWeight: '700', fontSize: '0.88rem', color: '#1F2937', outline: 'none', backgroundColor: '#FFF' }}
                   />
                 </div>
 
-                {/* 5. Thời gian kết thúc */}
+                {/* 5. Thời gian hoàn thành dự kiến */}
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#6B7280', marginBottom: '6px' }}>Thời gian kết thúc</label>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#4B5563', marginBottom: '5px' }}>Thời gian hoàn thành dự kiến</label>
                   <input
                     type="date"
                     value={orderForm.endDate}
                     onChange={(e) => setOrderForm({ ...orderForm, endDate: e.target.value })}
-                    style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #EADCC9', borderRadius: '8px', fontWeight: '700', color: '#2D1A12', outline: 'none' }}
+                    style={{ width: '100%', padding: '8px 12px', border: '1.5px solid #D1D5DB', borderRadius: '8px', fontWeight: '700', fontSize: '0.88rem', color: '#1F2937', outline: 'none', backgroundColor: '#FFF' }}
                   />
                 </div>
 
-                {/* 6. Trạng thái */}
+                {/* 6. Trạng thái: Tạo Mới -> ĐƯỢC CHỈNH SỬA (Select) | Edit -> READONLY NỀN XÁM */}
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#6B7280', marginBottom: '6px' }}>Trạng thái</label>
-                  <select
-                    value={orderForm.status}
-                    onChange={(e) => setOrderForm({ ...orderForm, status: e.target.value })}
-                    style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #EADCC9', borderRadius: '8px', fontWeight: '700', color: '#2D1A12', outline: 'none', backgroundColor: '#FFF' }}
-                  >
-                    <option value="Đang sản xuất">Đang sản xuất</option>
-                    <option value="Chờ phân bổ">Chờ phân bổ</option>
-                    <option value="Hoàn thành">Hoàn thành</option>
-                  </select>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#4B5563', marginBottom: '5px' }}>Trạng thái</label>
+                  {isEditMode ? (
+                    <input
+                      type="text"
+                      readOnly
+                      value={orderForm.status}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: '1.5px solid #D1D5DB',
+                        borderRadius: '8px',
+                        backgroundColor: '#E5E7EB',
+                        fontWeight: '700',
+                        fontSize: '0.88rem',
+                        color: '#1F2937',
+                        outline: 'none',
+                        cursor: 'not-allowed'
+                      }}
+                    />
+                  ) : (
+                    <select
+                      value={orderForm.status}
+                      onChange={(e) => setOrderForm({ ...orderForm, status: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: '1.5px solid #D1D5DB',
+                        borderRadius: '8px',
+                        fontWeight: '700',
+                        fontSize: '0.88rem',
+                        color: '#1F2937',
+                        outline: 'none',
+                        backgroundColor: '#FFFFFF'
+                      }}
+                    >
+                      <option value="Đang sản xuất">Đang sản xuất</option>
+                      <option value="Chờ phân bổ">Chờ phân bổ</option>
+                      <option value="Hoàn thành">Hoàn thành</option>
+                    </select>
+                  )}
                 </div>
 
               </div>
             </div>
 
-            {/* Card 2: Sub-tabs & Bảng Chi tiết sản phẩm */}
-            <div style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: '14px',
-              border: '1.5px solid #EADCC9',
-              padding: '24px',
-              boxShadow: '0 4px 16px rgba(45, 26, 18, 0.04)'
-            }}>
-              {/* Sub-tabs Header */}
-              <div style={{ display: 'flex', gap: '12px', borderBottom: '2px solid #EADCC9', paddingBottom: '12px', marginBottom: '20px' }}>
-                <button
-                  onClick={() => setActiveSubTab('order_info')}
-                  style={{
-                    padding: '8px 20px',
-                    backgroundColor: activeSubTab === 'order_info' ? '#5D3B32' : 'transparent',
-                    color: activeSubTab === 'order_info' ? '#FFFFFF' : '#5D3B32',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontWeight: '800',
-                    fontSize: '0.9rem',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Thông tin đơn hàng ({orderProducts.length})
-                </button>
+            {/* THANH 4 TAB ĐIỀU HƯỚNG BÊN DƯỚI THÔNG TIN CHUNG */}
+            <div style={{ display: 'flex', gap: '24px', borderBottom: '2px solid #EADCC9', paddingLeft: '4px', marginBottom: '2px' }}>
+              <button
+                onClick={() => setActiveMainTab('order_info')}
+                style={{
+                  padding: '8px 4px',
+                  backgroundColor: 'transparent',
+                  color: activeMainTab === 'order_info' ? '#5D3B32' : '#6B7280',
+                  border: 'none',
+                  borderBottom: activeMainTab === 'order_info' ? '3px solid #5D3B32' : '3px solid transparent',
+                  fontWeight: activeMainTab === 'order_info' ? '800' : '600',
+                  fontSize: '0.92rem',
+                  cursor: 'pointer',
+                  marginBottom: '-2px',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Thông tin đơn hàng
+              </button>
 
-                <button
-                  onClick={() => setActiveSubTab('product_detail')}
-                  style={{
-                    padding: '8px 20px',
-                    backgroundColor: activeSubTab === 'product_detail' ? '#5D3B32' : 'transparent',
-                    color: activeSubTab === 'product_detail' ? '#FFFFFF' : '#5D3B32',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontWeight: '800',
-                    fontSize: '0.9rem',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Chi tiết sản phẩm BOM ({productDetails.length})
-                </button>
-              </div>
+              <button
+                onClick={() => setActiveMainTab('material_bom')}
+                style={{
+                  padding: '8px 4px',
+                  backgroundColor: 'transparent',
+                  color: activeMainTab === 'material_bom' ? '#5D3B32' : '#6B7280',
+                  border: 'none',
+                  borderBottom: activeMainTab === 'material_bom' ? '3px solid #5D3B32' : '3px solid transparent',
+                  fontWeight: activeMainTab === 'material_bom' ? '800' : '600',
+                  fontSize: '0.92rem',
+                  cursor: 'pointer',
+                  marginBottom: '-2px',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Định mức vật tư
+              </button>
 
-              {loadingDetail ? (
-                <div style={{ padding: '3rem', textAlign: 'center', color: '#7B5233', fontWeight: '700' }}>
-                  Đang nạp chi tiết từ danh sách Đơn mua hàng (/admin/purchase-requisitions)...
-                </div>
-              ) : (
-                <>
-                  {/* Sub-tab 1: Danh sách sản phẩm SKU */}
-                  {activeSubTab === 'order_info' && (
+              <button
+                onClick={() => setActiveMainTab('routing_plan')}
+                style={{
+                  padding: '8px 4px',
+                  backgroundColor: 'transparent',
+                  color: activeMainTab === 'routing_plan' ? '#5D3B32' : '#6B7280',
+                  border: 'none',
+                  borderBottom: activeMainTab === 'routing_plan' ? '3px solid #5D3B32' : '3px solid transparent',
+                  fontWeight: activeMainTab === 'routing_plan' ? '800' : '600',
+                  fontSize: '0.92rem',
+                  cursor: 'pointer',
+                  marginBottom: '-2px',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Quy trình - Kế hoạch
+              </button>
+
+              <button
+                onClick={() => setActiveMainTab('transfer_slip')}
+                style={{
+                  padding: '8px 4px',
+                  backgroundColor: 'transparent',
+                  color: activeMainTab === 'transfer_slip' ? '#5D3B32' : '#6B7280',
+                  border: 'none',
+                  borderBottom: activeMainTab === 'transfer_slip' ? '3px solid #5D3B32' : '3px solid transparent',
+                  fontWeight: activeMainTab === 'transfer_slip' ? '800' : '600',
+                  fontSize: '0.92rem',
+                  cursor: 'pointer',
+                  marginBottom: '-2px',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Phiếu luân chuyển
+              </button>
+            </div>
+
+            {/* NỘI DUNG THEO TAB ĐƯỢC CHỌN */}
+            {activeMainTab === 'order_info' ? (
+              <>
+                {/* BẢNG 1: BẢNG "THÔNG TIN ĐƠN HÀNG" (NHẤN VÀO DÒNG SẢN PHẨM ĐỂ CHỌN) */}
+                <div style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '12px',
+                  border: '1.5px solid #EADCC9',
+                  overflow: 'hidden',
+                  boxShadow: '0 2px 12px rgba(45, 26, 18, 0.03)'
+                }}>
+                  {loadingDetail ? (
+                    <div style={{ padding: '2.5rem', textAlign: 'center', color: '#7B5233', fontWeight: '700' }}>
+                      Đang nạp chi tiết từ Đơn mua hàng (/admin/purchase-requisitions)...
+                    </div>
+                  ) : (
                     <div style={{ overflowX: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                         <thead>
-                          <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '2px solid #EADCC9' }}>
-                            <th style={{ padding: '10px', textAlign: 'center' }}>STT</th>
-                            <th style={{ padding: '10px' }}>Mã sản phẩm (SKU)</th>
-                            <th style={{ padding: '10px' }}>Tên sản phẩm</th>
-                            <th style={{ padding: '10px' }}>Đơn hàng</th>
-                            <th style={{ padding: '10px', textAlign: 'right' }}>SL Đơn</th>
-                            <th style={{ padding: '10px', textAlign: 'right' }}>SL Dự phòng</th>
-                            <th style={{ padding: '10px', textAlign: 'right' }}>Tổng SL</th>
-                            <th style={{ padding: '10px' }}>ĐVT</th>
-                            <th style={{ padding: '10px' }}>Bắt đầu</th>
-                            <th style={{ padding: '10px' }}>Kết thúc</th>
-                            <th style={{ padding: '10px' }}>Mã bản vẽ</th>
+                          <tr style={{ backgroundColor: '#6D4C3D', color: '#FFFFFF' }}>
+                            <th style={{ padding: '9px 10px', textAlign: 'center', width: '45px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>STT</th>
+                            <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Mã sản phẩm</th>
+                            <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Tên sản phẩm</th>
+                            <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Dòng hàng</th>
+                            <th style={{ padding: '9px 10px', textAlign: 'right', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Số lượng đặt</th>
+                            <th style={{ padding: '9px 10px', textAlign: 'right', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Dự phòng</th>
+                            <th style={{ padding: '9px 10px', textAlign: 'right', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Tổng số lượng sản xuất</th>
+                            <th style={{ padding: '9px 10px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Đơn vị</th>
+                            <th style={{ padding: '9px 10px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Ngày bắt đầu (dự kiến)</th>
+                            <th style={{ padding: '9px 10px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Ngày kết thúc (dự kiến)</th>
+                            <th style={{ padding: '9px 10px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Ngày giao hàng dự kiến</th>
+                            <th style={{ padding: '9px 10px', textAlign: 'center', fontWeight: '700' }}>Mã bản vẽ</th>
                           </tr>
                         </thead>
                         <tbody>
                           {orderProducts.length === 0 ? (
                             <tr>
-                              <td colSpan={11} style={{ textAlign: 'center', padding: '3rem', color: '#94A3B8' }}>
+                              <td colSpan={12} style={{ textAlign: 'center', padding: '2.5rem', color: '#94A3B8' }}>
                                 Chưa có mặt hàng. Nhập hoặc chọn <b>Mã đơn hàng</b> ở trên để nạp tự động từ Đơn mua hàng (/admin/purchase-requisitions).
                               </td>
                             </tr>
                           ) : (
-                            orderProducts.map((p, idx) => (
-                              <tr key={p.id || idx} style={{ borderBottom: '1px solid #F3F4F6' }}>
-                                <td style={{ padding: '10px', textAlign: 'center', fontWeight: '600' }}>{idx + 1}</td>
-                                <td style={{ padding: '10px', fontWeight: '800', color: '#5D3B32' }}>{p.productCode}</td>
-                                <td style={{ padding: '10px', fontWeight: '600' }}>{p.productName}</td>
-                                <td style={{ padding: '10px', fontWeight: '700', color: '#475569' }}>{p.category}</td>
-                                <td style={{ padding: '10px', textAlign: 'right', fontWeight: '700' }}>{p.orderQty}</td>
-                                <td style={{ padding: '10px', textAlign: 'right', fontWeight: '700' }}>{p.spareQty}</td>
-                                <td style={{ padding: '10px', textAlign: 'right', fontWeight: '800', color: '#2D1A12' }}>{p.totalQty}</td>
-                                <td style={{ padding: '10px' }}>{p.unit}</td>
-                                <td style={{ padding: '10px', color: '#6B7280' }}>{p.startDate}</td>
-                                <td style={{ padding: '10px', color: '#6B7280' }}>{p.endDate}</td>
-                                <td style={{ padding: '10px', fontWeight: '700', color: '#2563EB' }}>{p.drawingCode}</td>
-                              </tr>
-                            ))
+                            orderProducts.map((p, idx) => {
+                              const isSelected = selectedProductCode === p.productCode;
+                              return (
+                                <tr
+                                  key={p.id || idx}
+                                  onClick={() => setSelectedProductCode(p.productCode)}
+                                  title="Nhấp để xem chi tiết linh kiện BOM bên dưới"
+                                  style={{
+                                    borderBottom: '1px solid #EADCC9',
+                                    backgroundColor: isSelected ? '#FAF6F0' : 'transparent',
+                                    borderLeft: isSelected ? '4px solid #5D3B32' : '4px solid transparent',
+                                    cursor: 'pointer',
+                                    transition: 'background-color 0.15s ease'
+                                  }}
+                                >
+                                  <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '600', color: '#475569' }}>{idx + 1}</td>
+                                  <td style={{ padding: '8px 10px', fontWeight: '800', color: isSelected ? '#5D3B32' : '#2D1A12' }}>{p.productCode || '---'}</td>
+                                  <td style={{ padding: '8px 10px', fontWeight: '600', color: '#334155' }}>{p.productName || '---'}</td>
+                                  <td style={{ padding: '8px 10px', fontWeight: '600', color: '#475569' }}>{p.lineType || '---'}</td>
+                                  <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '700', color: '#1F2937' }}>{p.orderQty !== undefined ? p.orderQty : 0}</td>
+                                  <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '700', color: '#1F2937' }}>{p.spareQty !== undefined ? p.spareQty : 0}</td>
+                                  <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '800', color: '#2D1A12' }}>{p.totalQty !== undefined ? p.totalQty : 0}</td>
+                                  <td style={{ padding: '8px 10px', textAlign: 'center', color: '#334155' }}>{p.unit || 'Bộ'}</td>
+                                  <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>{p.startDate || '---'}</td>
+                                  <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>{p.endDate || '---'}</td>
+                                  <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>{p.deliveryDate || '---'}</td>
+                                  <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '700', color: '#2D1A12' }}>
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} title="Xem bản vẽ kỹ thuật">
+                                      <Eye size={14} style={{ color: '#475569' }} /> {p.drawingCode || '---'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })
                           )}
                         </tbody>
                       </table>
                     </div>
                   )}
+                </div>
 
-                  {/* Sub-tab 2: Chi tiết linh kiện BOM theo công đoạn */}
-                  {activeSubTab === 'product_detail' && (
-                    <div style={{ overflowX: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                        <thead>
-                          <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '2px solid #EADCC9' }}>
-                            <th style={{ padding: '10px', textAlign: 'center' }}>STT</th>
-                            <th style={{ padding: '10px' }}>Loại</th>
-                            <th style={{ padding: '10px' }}>Công đoạn từ</th>
-                            <th style={{ padding: '10px' }}>Công đoạn đến</th>
-                            <th style={{ padding: '10px' }}>Mã cụm/chi tiết</th>
-                            <th style={{ padding: '10px' }}>Tên cụm/chi tiết</th>
-                            <th style={{ padding: '10px', textAlign: 'right' }}>Số lượng</th>
-                            <th style={{ padding: '10px' }}>ĐVT</th>
-                            <th style={{ padding: '10px' }}>Vật liệu</th>
-                            <th style={{ padding: '10px' }}>Quy cách</th>
-                            <th style={{ padding: '10px', textAlign: 'right' }}>Khối lượng (m³)</th>
-                            <th style={{ padding: '10px' }}>Ghi chú</th>
-                            <th style={{ padding: '10px' }}>Trạng thái</th>
+                {/* KHUNG 2: KHUNG CARD "CHI TIẾT SẢN PHẨM" - NẠP ĐẦY ĐỦ 8 DÒNG LINH KIỆN BOM CHUẨN ERP */}
+                <div style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '12px',
+                  border: '1.5px solid #EADCC9',
+                  padding: '16px 20px',
+                  boxShadow: '0 2px 12px rgba(45, 26, 18, 0.03)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.18rem', fontWeight: '800', color: '#2D1A12', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span>Chi tiết sản phẩm</span>
+                      {selectedProductCode && (
+                        <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#5D3B32', backgroundColor: '#FAF6F0', padding: '3px 10px', borderRadius: '6px', border: '1px solid #EADCC9' }}>
+                          SKU: {selectedProductCode}
+                        </span>
+                      )}
+                    </h3>
+                  </div>
+
+                  <div style={{ overflowX: 'auto', border: '1px solid #EADCC9', borderRadius: '8px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#6D4C3D', color: '#FFFFFF' }}>
+                          <th style={{ padding: '9px 10px', textAlign: 'center', width: '45px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>STT</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Loại</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Công đoạn giao</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Công đoạn nhận</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Mã thành phẩm</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Tên thành phẩm</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Số lượng</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Đơn vị</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Vật liệu</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Quy cách (mm)</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'right', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Khối lượng (m3)</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Ghi chú</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'center', fontWeight: '700' }}>Trạng thái</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {displayedProductDetails.length === 0 ? (
+                          <tr>
+                            <td colSpan={13} style={{ textAlign: 'center', padding: '2.5rem', color: '#94A3B8' }}>
+                              Chưa chọn sản phẩm ở bảng trên.
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {productDetails.length === 0 ? (
-                            <tr>
-                              <td colSpan={13} style={{ textAlign: 'center', padding: '3rem', color: '#94A3B8' }}>
-                                Chưa có chi tiết BOM. Chọn <b>Mã đơn hàng</b> ở trên để nạp linh kiện mua hàng.
+                        ) : (
+                          displayedProductDetails.map((det, idx) => (
+                            <tr key={det.id || idx} style={{ borderBottom: '1px solid #EADCC9' }}>
+                              <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '600', color: '#475569' }}>{idx + 1}</td>
+                              <td style={{ padding: '8px 10px', fontWeight: '600', color: '#334155' }}>{det.type || '---'}</td>
+                              <td style={{ padding: '8px 10px', color: '#475569' }}>{det.stageFrom || '---'}</td>
+                              <td style={{ padding: '8px 10px', color: '#475569' }}>{det.stageTo || '---'}</td>
+                              <td style={{ padding: '8px 10px', fontWeight: '800', color: '#2D1A12' }}>{det.compCode || '---'}</td>
+                              <td style={{ padding: '8px 10px', fontWeight: '600', color: '#334155' }}>{det.compName || '---'}</td>
+                              <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: '#1F2937' }}>{det.quantity || '0/0'}</td>
+                              <td style={{ padding: '8px 10px', textAlign: 'center', color: '#334155' }}>{det.unit || 'Cái'}</td>
+                              <td style={{ padding: '8px 10px', color: '#334155' }}>{det.material || '---'}</td>
+                              <td style={{ padding: '8px 10px', color: '#475569' }}>{det.spec || '---'}</td>
+                              <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '600' }}>{det.volume !== undefined ? det.volume : '1'}</td>
+                              <td style={{ padding: '8px 10px', color: '#94A3B8' }}>{det.note || '---'}</td>
+                              <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                <span style={{
+                                  display: 'inline-block',
+                                  padding: '2px 9px',
+                                  borderRadius: '12px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: '700',
+                                  backgroundColor: det.status === 'Hoàn thành' ? '#ECFDF5' : '#FFFBEB',
+                                  color: det.status === 'Hoàn thành' ? '#10B981' : '#D97706',
+                                  border: `1px solid ${det.status === 'Hoàn thành' ? '#A7F3D0' : '#FDE68A'}`
+                                }}>
+                                  {det.status || 'Chờ sản xuất'}
+                                </span>
                               </td>
                             </tr>
-                          ) : (
-                            productDetails.map((det, idx) => (
-                              <tr key={det.id || idx} style={{ borderBottom: '1px solid #F3F4F6' }}>
-                                <td style={{ padding: '10px', textAlign: 'center', fontWeight: '600' }}>{idx + 1}</td>
-                                <td style={{ padding: '10px' }}>{det.type}</td>
-                                <td style={{ padding: '10px' }}>{det.stageFrom}</td>
-                                <td style={{ padding: '10px' }}>{det.stageTo}</td>
-                                <td style={{ padding: '10px', fontWeight: '800', color: '#5D3B32' }}>{det.compCode}</td>
-                                <td style={{ padding: '10px', fontWeight: '600' }}>{det.compName}</td>
-                                <td style={{ padding: '10px', textAlign: 'right', fontWeight: '800' }}>{det.quantity}</td>
-                                <td style={{ padding: '10px' }}>{det.unit}</td>
-                                <td style={{ padding: '10px' }}>{det.material}</td>
-                                <td style={{ padding: '10px' }}>{det.spec}</td>
-                                <td style={{ padding: '10px', textAlign: 'right' }}>{det.volume}</td>
-                                <td style={{ padding: '10px' }}>{det.note || '---'}</td>
-                                <td style={{ padding: '10px' }}>
-                                  <span style={{
-                                    padding: '3px 8px',
-                                    borderRadius: '10px',
-                                    fontSize: '0.75rem',
-                                    fontWeight: '700',
-                                    backgroundColor: det.status === 'Hoàn thành' ? '#D1FAE5' : '#FEF3C7',
-                                    color: det.status === 'Hoàn thành' ? '#059669' : '#D97706'
-                                  }}>
-                                    {det.status}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            ) : activeMainTab === 'routing_plan' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                
+                {/* KHUNG 1: QUY TRÌNH SẢN XUẤT */}
+                <div style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '12px',
+                  border: '1.5px solid #EADCC9',
+                  padding: '20px 24px',
+                  boxShadow: '0 2px 12px rgba(45, 26, 18, 0.03)'
+                }}>
+                  <h3 style={{ margin: '0 0 18px 0', fontSize: '1.18rem', fontWeight: '800', color: '#2D1A12' }}>
+                    Quy trình sản xuất
+                  </h3>
+
+                  {/* Sơ đồ Công đoạn chính (Khối chữ nhật) */}
+                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '20px' }}>
+                    {mainStages.map((stg, idx) => {
+                      const isActive = activeStage === stg;
+                      return (
+                        <React.Fragment key={stg}>
+                          <div
+                            onClick={() => setActiveStage(stg)}
+                            style={{
+                              padding: '12px 28px',
+                              borderRadius: '10px',
+                              backgroundColor: isActive ? '#A3E635' : '#FAF6F0',
+                              border: isActive ? '2.5px solid #65A30D' : '1.5px solid #EADCC9',
+                              color: isActive ? '#1F2937' : '#4B5563',
+                              fontWeight: '800',
+                              fontSize: '1.05rem',
+                              cursor: 'pointer',
+                              boxShadow: isActive ? '0 4px 12px rgba(163, 230, 53, 0.35)' : 'none',
+                              transition: 'all 0.2s ease',
+                              userSelect: 'none'
+                            }}
+                          >
+                            {stg}
+                          </div>
+                          {idx < mainStages.length - 1 && (
+                            <ArrowRight size={22} style={{ color: '#4B5563', margin: '0 4px' }} />
                           )}
-                        </tbody>
-                      </table>
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+
+                  {/* Sơ đồ Công đoạn con / Tổ máy (Khối Oval Xanh Dương) */}
+                  <div style={{
+                    border: '1.5px solid #CBD5E1',
+                    borderRadius: '12px',
+                    padding: '28px 32px',
+                    backgroundColor: '#FFFFFF',
+                    minHeight: '110px',
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                      {(subStagesMap[activeStage] || []).map((sub, sIdx, arr) => (
+                        <React.Fragment key={sub.id}>
+                          <div style={{
+                            padding: '14px 36px',
+                            borderRadius: '9999px',
+                            backgroundColor: '#7DD3FC',
+                            border: '1.5px solid #0284C7',
+                            color: '#0F172A',
+                            fontWeight: '800',
+                            fontSize: '1.05rem',
+                            boxShadow: '0 2px 8px rgba(125, 211, 252, 0.3)'
+                          }}>
+                            {sub.name}
+                          </div>
+                          {sIdx < arr.length - 1 && (
+                            <ArrowRight size={26} style={{ color: '#475569' }} />
+                          )}
+                        </React.Fragment>
+                      ))}
                     </div>
-                  )}
-                </>
-              )}
-            </div>
+                  </div>
+                </div>
+
+                {/* KHUNG 2: KẾ HOẠCH THỰC HIỆN */}
+                <div style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '12px',
+                  border: '1.5px solid #EADCC9',
+                  padding: '20px 24px',
+                  boxShadow: '0 2px 12px rgba(45, 26, 18, 0.03)'
+                }}>
+                  <h3 style={{ margin: '0 0 16px 0', fontSize: '1.18rem', fontWeight: '800', color: '#2D1A12' }}>
+                    Kế hoạch thực hiện
+                  </h3>
+
+                  <div style={{ overflowX: 'auto', border: '1px solid #EADCC9', borderRadius: '8px', marginBottom: '16px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#6D4C3D', color: '#FFFFFF' }}>
+                          <th style={{ padding: '9px 10px', textAlign: 'center', width: '45px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>STT</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Ngày bắt đầu (dự kiến)</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Ngày kết thúc (dự kiến)</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Tổ</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Loại</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Công đoạn giao</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Công đoạn nhận</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Tên thành phẩm</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Số lượng</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Đơn vị</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Quy cách (mm)</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'right', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Khối lượng (m3)</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Vật liệu</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Mã thành phẩm</th>
+                          <th style={{ padding: '9px 10px', textAlign: 'center', fontWeight: '700' }}>Trạng thái</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {scheduleRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={15} style={{ textAlign: 'center', padding: '2rem', color: '#94A3B8' }}>
+                              Chưa có dữ liệu kế hoạch thực hiện.
+                            </td>
+                          </tr>
+                        ) : (
+                          scheduleRows.map((r, idx) => (
+                            <tr key={r.id || idx} style={{ borderBottom: '1px solid #EADCC9' }}>
+                              <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '600', color: '#475569' }}>{idx + 1}</td>
+                              <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>{r.startDate || '---'}</td>
+                              <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>{r.endDate || '---'}</td>
+                              <td style={{ padding: '8px 10px', fontWeight: '600', color: '#334155' }}>{r.team || '---'}</td>
+                              <td style={{ padding: '8px 10px', fontWeight: '600', color: '#334155' }}>{r.type || '---'}</td>
+                              <td style={{ padding: '8px 10px', color: '#475569' }}>{r.stageFrom || '---'}</td>
+                              <td style={{ padding: '8px 10px', color: '#475569' }}>{r.stageTo || '---'}</td>
+                              <td style={{ padding: '8px 10px', fontWeight: '600', color: '#334155' }}>{r.compName || '---'}</td>
+                              <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: '#1F2937' }}>{r.quantity || '0/0'}</td>
+                              <td style={{ padding: '8px 10px', textAlign: 'center', color: '#334155' }}>{r.unit || '---'}</td>
+                              <td style={{ padding: '8px 10px', color: '#475569' }}>{r.spec || '---'}</td>
+                              <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '600' }}>{r.volume !== undefined ? r.volume : '0'}</td>
+                              <td style={{ padding: '8px 10px', color: '#334155' }}>{r.material || '---'}</td>
+                              <td style={{ padding: '8px 10px', fontWeight: '800', color: '#2D1A12' }}>{r.compCode || '---'}</td>
+                              <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                <span style={{
+                                  display: 'inline-block',
+                                  padding: '2px 9px',
+                                  borderRadius: '12px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: '700',
+                                  backgroundColor: r.status === 'Hoàn thành' ? '#ECFDF5' : '#FFFBEB',
+                                  color: r.status === 'Hoàn thành' ? '#10B981' : '#D97706',
+                                  border: `1px solid ${r.status === 'Hoàn thành' ? '#A7F3D0' : '#FDE68A'}`
+                                }}>
+                                  {r.status || 'Chờ sản xuất'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <button
+                    onClick={handleAddScheduleRow}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '6px 14px',
+                      backgroundColor: '#FAF6F0',
+                      border: '1.5px solid #EADCC9',
+                      borderRadius: '8px',
+                      color: '#5D3B32',
+                      fontWeight: '700',
+                      fontSize: '0.82rem',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#EADCC9'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FAF6F0'}
+                  >
+                    <Plus size={15} /> Thêm mới
+                  </button>
+
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: '12px',
+                border: '1.5px solid #EADCC9',
+                minHeight: '260px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#94A3B8',
+                fontSize: '0.88rem',
+                fontWeight: '600',
+                boxShadow: '0 2px 12px rgba(45, 26, 18, 0.03)'
+              }}>
+                Nội dung tạm thời trống
+              </div>
+            )}
 
           </div>
         )}

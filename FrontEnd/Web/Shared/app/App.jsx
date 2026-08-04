@@ -73,6 +73,8 @@ const ManufactureReceive = lazy(() => import('@modules/Delivery/Views/Receive/De
 const ManufactureProducts = lazy(() => import('@modules/Product/Views/List/ProductsListView'));
 const ProductDetail = lazy(() => import('@modules/Product/Views/Detail/ProductDetailView'));
 const ProductCreate = lazy(() => import('@modules/Product/Views/Create/ProductCreateView'));
+const ProductDetailsManagement = lazy(() => import('@modules/Product/Views/Details/ProductDetailsManagementView'));
+const PaintColorManagement = lazy(() => import('@modules/Product/Views/PaintColors/PaintColorManagementView'));
 const TechnicalDashboard = lazy(() => import('@modules/Product/Views/Dashboard/TechnicalDashboardView'));
 const TechnicalStandards = lazy(() => import('@modules/Product/Views/Standards/TechnicalStandardsView'));
 const MaintenanceFacility = lazy(() => import('@modules/Equipment/Views/Maintenance/MaintenanceView'));
@@ -666,6 +668,8 @@ function App() {
                 <Route path="products" element={<ProtectedRoute permissionKey="products"><ManufactureProducts /></ProtectedRoute>} />
                 <Route path="products/:id" element={<ProtectedRoute permissionKey="products"><ProductDetail /></ProtectedRoute>} />
                 <Route path="products/create" element={<ProtectedRoute permissionKey="products"><ProductCreate /></ProtectedRoute>} />
+                <Route path="product-details" element={<ProtectedRoute permissionKey="products"><ProductDetailsManagement /></ProtectedRoute>} />
+                <Route path="paint-colors" element={<ProtectedRoute permissionKey="products"><PaintColorManagement /></ProtectedRoute>} />
                 <Route path="progress/:id" element={<ProtectedRoute permissionKey="plan"><ProductionProgress /></ProtectedRoute>} />
                 <Route path="orders" element={<ProtectedRoute permissionKey="orders"><ManufactureOrders /></ProtectedRoute>} />
                 <Route path="orders/create" element={<ProtectedRoute permissionKey="orders"><OrderCreate /></ProtectedRoute>} />

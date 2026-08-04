@@ -1,123 +1,103 @@
 import React, { useState } from 'react';
-import { X, Package, Ruler, Palette, StickyNote, Layers } from 'lucide-react';
+import { X } from 'lucide-react';
 import api from '@webShared/Services/api.service';
-
-const inputStyle = {
-  width: '100%',
-  padding: '9px 12px',
-  border: '1.5px solid #e2e8f0',
-  borderRadius: '8px',
-  fontSize: '0.84rem',
-  fontWeight: '600',
-  outline: 'none',
-  transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
-  backgroundColor: '#fff',
-  color: '#1e293b',
-  boxSizing: 'border-box',
-};
-
-const inputFocusStyle = {
-  borderColor: '#432818',
-  boxShadow: '0 0 0 3px rgba(67, 40, 24, 0.08)',
-};
 
 const labelStyle = {
   display: 'block',
-  fontSize: '0.78rem',
+  fontSize: '0.85rem',
   fontWeight: '700',
-  color: '#475569',
-  marginBottom: '5px',
+  color: '#2D1A12',
+  marginBottom: '6px',
 };
 
-const sectionTitleStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '6px',
-  fontSize: '0.82rem',
-  fontWeight: '800',
-  color: '#432818',
-  marginBottom: '10px',
-  paddingBottom: '6px',
-  borderBottom: '1px solid #f1f5f9',
+const inputBaseStyle = {
+  width: '100%',
+  padding: '10px 12px',
+  border: '1.5px solid #EADCC9',
+  borderRadius: '8px',
+  fontSize: '0.88rem',
+  fontWeight: '600',
+  color: '#2D1A12',
+  outline: 'none',
+  boxSizing: 'border-box',
+  fontFamily: 'inherit',
 };
 
-const FocusInput = ({ style, ...props }) => {
-  const [focused, setFocused] = useState(false);
-  return (
-    <input
-      {...props}
-      style={{ ...inputStyle, ...style, ...(focused ? inputFocusStyle : {}) }}
-      onFocus={(e) => { setFocused(true); props.onFocus?.(e); }}
-      onBlur={(e) => { setFocused(false); props.onBlur?.(e); }}
-    />
-  );
+const whiteInputStyle = {
+  ...inputBaseStyle,
+  backgroundColor: '#FFFFFF',
 };
 
-const FocusTextarea = ({ style, ...props }) => {
-  const [focused, setFocused] = useState(false);
-  return (
-    <textarea
-      {...props}
-      style={{ ...inputStyle, ...style, resize: 'none', ...(focused ? inputFocusStyle : {}) }}
-      onFocus={(e) => { setFocused(true); props.onFocus?.(e); }}
-      onBlur={(e) => { setFocused(false); props.onBlur?.(e); }}
-    />
-  );
+const greyInputStyle = {
+  ...inputBaseStyle,
+  backgroundColor: '#F1ECE6', // Light beige-grey matching mockup fields
+  border: '1.5px solid #D9C5B2',
 };
 
-const FocusSelect = ({ style, children, ...props }) => {
-  const [focused, setFocused] = useState(false);
-  return (
-    <select
-      {...props}
-      style={{ ...inputStyle, ...style, ...(focused ? inputFocusStyle : {}) }}
-      onFocus={(e) => { setFocused(true); props.onFocus?.(e); }}
-      onBlur={(e) => { setFocused(false); props.onBlur?.(e); }}
-    >
-      {children}
-    </select>
-  );
-};
+const AddComponentModal = ({ productId, product, bomRows = [], parentId = null, onClose, onSuccess }) => {
+  // Option lists
+  const parentOptions = [
+    { id: '', name: product?.name || 'Sven Display Cabinet', stt: '1' },
+    ...bomRows
+      .filter(r => r.stt.split('.').length <= 2)
+      .map(r => ({ id: r.id || r.compCode, name: r.compName, stt: r.stt }))
+  ];
 
-const AddComponentModal = ({ productId, parentId = null, onClose, onSuccess }) => {
-  const [componentName, setComponentName] = useState('');
-  const [sku, setSku] = useState('');
+  const typeOptions = ['Chân', 'Cụm', 'Ván panel', 'Khung', 'Hộc kéo', 'Mặt', 'Phụ kiện'];
+  const nameOptions = ['Chân', 'Ván panel', 'Cụm hông dưới', 'Cánh tủ', 'Khung đỡ', 'Đế tủ'];
+  const stageOptions = ['Tạo phôi', 'Định hình', 'Lắp ráp', 'Sơn', 'Đóng gói', 'Lưu kho'];
+  const materialOptions = ['MDF', 'Gỗ Sồi', 'Gỗ thông', 'HDF', 'Ván ép', 'Kim loại'];
+  const colorOptions = ['Tự nhiên', 'Màu WOA', 'Màu sồi', 'Trắng', 'Đen'];
+
+  // Form states
+  const [selectedParent, setSelectedParent] = useState(parentId || '');
   const [quantity, setQuantity] = useState(1);
   const [unit, setUnit] = useState('Cái');
-  const [type, setType] = useState('Khung');
+  const [type, setType] = useState('Chân');
+  const [detailName, setDetailName] = useState('Chân');
   const [inputStage, setInputStage] = useState('Định hình');
   const [outputStage, setOutputStage] = useState('Lắp ráp');
-  const [length, setLength] = useState('');
-  const [width, setWidth] = useState('');
-  const [height, setHeight] = useState('');
-  const [volume, setVolume] = useState('');
+  const [length, setLength] = useState('12');
+  const [width, setWidth] = useState('12');
+  const [height, setHeight] = useState('15');
+  const [volume, setVolume] = useState('5');
   const [material, setMaterial] = useState('MDF');
-  const [color, setColor] = useState('Màu sồi');
+  const [color, setColor] = useState('Tự nhiên');
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!componentName.trim()) return;
+    if (!detailName.trim()) return;
+
     try {
       setLoading(true);
-      const specStr = (length || width || height) ? `${length || 0}*${width || 0}*${height || 0}` : '';
+      const specStr = `${length || 0}*${width || 0}*${height || 0}`;
+      
+      // Auto-generate target parent STT
+      const parentObj = parentOptions.find(o => o.id === selectedParent);
+      const parentStt = parentObj ? parentObj.stt : '1';
+
       await api.post(`/master-products/${productId}/bom-details`, {
-        parent_id: parentId,
-        name: componentName,
-        sku: sku || `COMP-${Date.now().toString().slice(-4)}`,
+        parent_id: selectedParent || null,
+        name: detailName,
+        sku: `ADV691.${parentStt}.${bomRows.length + 1}`,
         quantity: parseFloat(quantity),
         unit,
+        component_type: type,
         input_stage: inputStage,
         output_stage: outputStage,
         specification: specStr,
         material,
+        color,
+        volume: parseFloat(volume),
         description: note
       });
+
       onSuccess();
       onClose();
     } catch (err) {
-      console.error('Lỗi khi thêm thành phần BOM:', err);
+      console.error('Lỗi khi thêm thành phần mới:', err);
     } finally {
       setLoading(false);
     }
@@ -126,271 +106,223 @@ const AddComponentModal = ({ productId, parentId = null, onClose, onSuccess }) =
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.45)',
-      backdropFilter: 'blur(4px)',
+      backgroundColor: 'rgba(45, 26, 18, 0.45)', // Custom brown shadow backdrop
+      backdropFilter: 'blur(3px)',
       zIndex: 2000,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: '20px',
     }}>
       <div style={{
-        backgroundColor: '#fff',
+        backgroundColor: '#FFFFFF',
         borderRadius: '16px',
         width: '100%',
-        maxWidth: '640px',
-        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+        maxWidth: '580px',
+        boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)',
         overflow: 'hidden',
-        animation: 'modalSlideIn 0.25s ease-out',
+        border: '1.5px solid #EADCC9'
       }}>
-
         {/* Header */}
         <div style={{
-          background: 'linear-gradient(135deg, #432818 0%, #5a3a28 100%)',
-          padding: '16px 24px',
+          padding: '20px 24px 14px 24px',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
+          borderBottom: '1px solid #EADCC9'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{
-              width: '32px', height: '32px',
-              backgroundColor: 'rgba(255,255,255,0.15)',
-              borderRadius: '8px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <Package size={18} color="#fff" />
-            </div>
-            <div>
-              <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#fff', margin: 0 }}>
-                KTO3.2: Thêm thành phần
-              </h3>
-              <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.7)', fontWeight: '500' }}>
-                Thêm thành phần mới vào cấu trúc BOM
-              </span>
-            </div>
-          </div>
+          <h3 style={{ fontSize: '1.38rem', fontWeight: '900', color: '#2D1A12', margin: 0 }}>
+            KT03.2: Thêm thành phần
+          </h3>
           <button
             onClick={onClose}
             style={{
-              background: 'rgba(255,255,255,0.1)',
+              background: 'transparent',
               border: 'none',
               cursor: 'pointer',
-              color: '#fff',
-              borderRadius: '8px',
-              width: '32px', height: '32px',
+              color: '#2D1A12',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'background 0.2s ease',
+              padding: '4px'
             }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.25)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
           >
-            <X size={18} />
+            <X size={24} />
           </button>
         </div>
 
-        {/* Body */}
-        <form onSubmit={handleSubmit} style={{ padding: '20px 24px 24px' }}>
-
-          {/* Section 1: Thông tin cơ bản */}
-          <div style={{ marginBottom: '18px' }}>
-            <div style={sectionTitleStyle}>
-              <Layers size={14} color="#432818" />
-              Thông tin cơ bản
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+        {/* Body Form */}
+        <form onSubmit={handleSubmit} style={{ padding: '20px 24px 24px 24px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            
+            {/* ROW 1: Thành phẩm, Số lượng, Đơn vị */}
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '12px' }}>
               <div>
-                <label style={labelStyle}>Tên thành phần <span style={{ color: '#dc2626' }}>*</span></label>
-                <FocusInput
-                  type="text" required placeholder="VD: Khung chính, Cánh tủ..."
-                  value={componentName} onChange={e => setComponentName(e.target.value)}
-                />
+                <label style={labelStyle}>Thành phẩm</label>
+                <select value={selectedParent} onChange={e => setSelectedParent(e.target.value)} style={whiteInputStyle}>
+                  {parentOptions.map((opt, i) => (
+                    <option key={i} value={opt.id}>{opt.name}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label style={labelStyle}>Số lượng</label>
-                <FocusInput
-                  type="number" min="1" step="any"
+                <input
+                  type="number" min="1" step="any" required
                   value={quantity} onChange={e => setQuantity(e.target.value)}
+                  style={greyInputStyle}
                 />
               </div>
               <div>
                 <label style={labelStyle}>Đơn vị</label>
-                <FocusSelect value={unit} onChange={e => setUnit(e.target.value)}>
+                <select value={unit} onChange={e => setUnit(e.target.value)} style={greyInputStyle}>
                   <option value="Cái">Cái</option>
+                  <option value="Tấm">Tấm</option>
                   <option value="Bộ">Bộ</option>
-                  <option value="m2">m²</option>
-                  <option value="m3">m³</option>
-                  <option value="kg">kg</option>
-                </FocusSelect>
+                  <option value="m2">m2</option>
+                  <option value="m3">m3</option>
+                </select>
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: '12px' }}>
+            {/* ROW 2: Loại, Tên chi tiết */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 3fr', gap: '12px' }}>
               <div>
-                <label style={labelStyle}>Loại <span style={{ color: '#dc2626' }}>*</span></label>
-                <FocusSelect value={type} onChange={e => setType(e.target.value)}>
-                  <option value="Khung">Khung</option>
-                  <option value="Cánh">Cánh</option>
-                  <option value="Hộc kéo">Hộc kéo</option>
-                  <option value="Mặt">Mặt</option>
-                  <option value="Chân">Chân</option>
-                </FocusSelect>
+                <label style={labelStyle}>Loại *</label>
+                <select value={type} onChange={e => setType(e.target.value)} style={whiteInputStyle}>
+                  {typeOptions.map((opt, i) => (
+                    <option key={i} value={opt}>{opt}</option>
+                  ))}
+                </select>
               </div>
               <div>
-                <label style={labelStyle}>Mã thành phần</label>
-                <FocusInput
-                  type="text" placeholder="Mã hoặc tên chi tiết liên quan (tự sinh nếu bỏ trống)"
-                  value={sku} onChange={e => setSku(e.target.value)}
-                />
+                <label style={labelStyle}>Tên chi tiết *</label>
+                <select value={detailName} onChange={e => setDetailName(e.target.value)} style={whiteInputStyle}>
+                  {nameOptions.map((opt, i) => (
+                    <option key={i} value={opt}>{opt}</option>
+                  ))}
+                </select>
               </div>
             </div>
-          </div>
 
-          {/* Section 2: Công đoạn */}
-          <div style={{ marginBottom: '18px' }}>
-            <div style={sectionTitleStyle}>
-              <Layers size={14} color="#432818" />
-              Công đoạn sản xuất
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 40px 1fr', gap: '8px', alignItems: 'end' }}>
+            {/* ROW 3: Công đoạn giao, Công đoạn nhận, Quy cách, Khối lượng */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1.8fr 1.2fr', gap: '12px' }}>
               <div>
                 <label style={labelStyle}>Công đoạn giao</label>
-                <FocusSelect value={inputStage} onChange={e => setInputStage(e.target.value)}>
-                  <option value="Tạo phôi">Tạo phôi</option>
-                  <option value="Định hình">Định hình</option>
-                  <option value="Lắp ráp">Lắp ráp</option>
-                  <option value="Sơn">Sơn</option>
-                  <option value="Đóng gói">Đóng gói</option>
-                  <option value="Lưu kho">Lưu kho</option>
-                </FocusSelect>
-              </div>
-              <div style={{ textAlign: 'center', paddingBottom: '10px' }}>
-                <span style={{ fontSize: '1.1rem', color: '#94a3b8', fontWeight: '900' }}>➔</span>
+                <select value={inputStage} onChange={e => setInputStage(e.target.value)} style={greyInputStyle}>
+                  {stageOptions.map((opt, i) => (
+                    <option key={i} value={opt}>{opt}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label style={labelStyle}>Công đoạn nhận</label>
-                <FocusSelect value={outputStage} onChange={e => setOutputStage(e.target.value)}>
-                  <option value="Tạo phôi">Tạo phôi</option>
-                  <option value="Định hình">Định hình</option>
-                  <option value="Lắp ráp">Lắp ráp</option>
-                  <option value="Sơn">Sơn</option>
-                  <option value="Đóng gói">Đóng gói</option>
-                  <option value="Lưu kho">Lưu kho</option>
-                </FocusSelect>
+                <select value={outputStage} onChange={e => setOutputStage(e.target.value)} style={greyInputStyle}>
+                  {stageOptions.map((opt, i) => (
+                    <option key={i} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Quy cách (mm)</label>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <input
+                    type="number" placeholder="Dài" required
+                    value={length} onChange={e => setLength(e.target.value)}
+                    style={{ ...whiteInputStyle, padding: '10px 4px', textAlign: 'center' }}
+                  />
+                  <input
+                    type="number" placeholder="Rộng" required
+                    value={width} onChange={e => setWidth(e.target.value)}
+                    style={{ ...whiteInputStyle, padding: '10px 4px', textAlign: 'center' }}
+                  />
+                  <input
+                    type="number" placeholder="Cao" required
+                    value={height} onChange={e => setHeight(e.target.value)}
+                    style={{ ...whiteInputStyle, padding: '10px 4px', textAlign: 'center' }}
+                  />
+                </div>
+              </div>
+              <div>
+                <label style={labelStyle}>Khối lượng (m3)</label>
+                <input
+                  type="number" placeholder="Volume" step="any" required
+                  value={volume} onChange={e => setVolume(e.target.value)}
+                  style={greyInputStyle}
+                />
               </div>
             </div>
-          </div>
 
-          {/* Section 3: Quy cách */}
-          <div style={{ marginBottom: '18px' }}>
-            <div style={sectionTitleStyle}>
-              <Ruler size={14} color="#432818" />
-              Quy cách kích thước (mm)
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '10px' }}>
-              <div>
-                <label style={labelStyle}>Dài</label>
-                <FocusInput type="number" placeholder="0" value={length} onChange={e => setLength(e.target.value)} />
-              </div>
-              <div>
-                <label style={labelStyle}>Rộng</label>
-                <FocusInput type="number" placeholder="0" value={width} onChange={e => setWidth(e.target.value)} />
-              </div>
-              <div>
-                <label style={labelStyle}>Cao</label>
-                <FocusInput type="number" placeholder="0" value={height} onChange={e => setHeight(e.target.value)} />
-              </div>
-              <div>
-                <label style={labelStyle}>Khối lượng (m³)</label>
-                <FocusInput type="number" placeholder="0" step="any" value={volume} onChange={e => setVolume(e.target.value)} />
-              </div>
-            </div>
-          </div>
-
-          {/* Section 4: Vật liệu & Màu sắc */}
-          <div style={{ marginBottom: '18px' }}>
-            <div style={sectionTitleStyle}>
-              <Palette size={14} color="#432818" />
-              Vật liệu & Màu sắc
-            </div>
+            {/* ROW 4: Vật liệu, Màu sắc */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
-                <label style={labelStyle}>Vật liệu <span style={{ color: '#dc2626' }}>*</span></label>
-                <FocusSelect value={material} onChange={e => setMaterial(e.target.value)}>
-                  <option value="MDF">MDF</option>
-                  <option value="Gỗ">Gỗ tự nhiên</option>
-                  <option value="Ván ép">Ván ép</option>
-                  <option value="Kim loại">Kim loại</option>
-                  <option value="Nhựa">Nhựa</option>
-                  <option value="Kính">Kính</option>
-                </FocusSelect>
+                <label style={labelStyle}>Vật liệu *</label>
+                <select value={material} onChange={e => setMaterial(e.target.value)} style={whiteInputStyle}>
+                  {materialOptions.map((opt, i) => (
+                    <option key={i} value={opt}>{opt}</option>
+                  ))}
+                </select>
               </div>
               <div>
-                <label style={labelStyle}>Mẫu màu sắc <span style={{ color: '#dc2626' }}>*</span></label>
-                <FocusInput type="text" value={color} onChange={e => setColor(e.target.value)} />
+                <label style={labelStyle}>Màu sắc *</label>
+                <select value={color} onChange={e => setColor(e.target.value)} style={whiteInputStyle}>
+                  {colorOptions.map((opt, i) => (
+                    <option key={i} value={opt}>{opt}</option>
+                  ))}
+                </select>
               </div>
             </div>
-          </div>
 
-          {/* Section 5: Ghi chú */}
-          <div style={{ marginBottom: '20px' }}>
-            <div style={sectionTitleStyle}>
-              <StickyNote size={14} color="#432818" />
-              Ghi chú kỹ thuật
+            {/* ROW 5: Ghi chú */}
+            <div>
+              <label style={labelStyle}>Ghi chú</label>
+              <textarea
+                rows="3"
+                placeholder="Nhập ghi chú kỹ thuật..."
+                value={note} onChange={e => setNote(e.target.value)}
+                style={{ ...whiteInputStyle, resize: 'none' }}
+              />
             </div>
-            <FocusTextarea
-              rows="2" placeholder="Nhập ghi chú kỹ thuật nếu có..."
-              value={note} onChange={e => setNote(e.target.value)}
-            />
-          </div>
 
-          {/* Footer buttons */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'flex-end',
-            gap: '10px',
-            paddingTop: '16px',
-            borderTop: '1px solid #f1f5f9',
-          }}>
-            <button
-              type="button"
-              onClick={onClose}
-              style={{
-                border: '1.5px solid #cbd5e1',
-                background: '#fff',
-                padding: '10px 22px',
-                borderRadius: '10px',
-                fontWeight: '700',
-                fontSize: '0.84rem',
-                cursor: 'pointer',
-                color: '#475569',
-                transition: 'all 0.2s ease',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#94a3b8'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
-            >
-              Hủy bỏ
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              style={{
-                border: 'none',
-                background: loading ? '#94a3b8' : 'linear-gradient(135deg, #432818 0%, #5a3a28 100%)',
-                color: '#fff',
-                padding: '10px 28px',
-                borderRadius: '10px',
-                fontWeight: '800',
-                fontSize: '0.84rem',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                boxShadow: loading ? 'none' : '0 4px 6px rgba(67, 40, 24, 0.25)',
-                transition: 'all 0.2s ease',
-              }}
-              onMouseEnter={e => { if (!loading) e.currentTarget.style.boxShadow = '0 6px 12px rgba(67, 40, 24, 0.35)'; }}
-              onMouseLeave={e => { if (!loading) e.currentTarget.style.boxShadow = '0 4px 6px rgba(67, 40, 24, 0.25)'; }}
-            >
-              {loading ? 'Đang lưu...' : '✓ Xác nhận thêm'}
-            </button>
-          </div>
+            {/* ROW 6: Action Buttons */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '12px',
+              marginTop: '10px'
+            }}>
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  padding: '11px 26px',
+                  backgroundColor: '#FFFFFF',
+                  border: '1.5px solid #2D1A12',
+                  borderRadius: '8px',
+                  color: '#2D1A12',
+                  fontWeight: '800',
+                  fontSize: '0.88rem',
+                  cursor: 'pointer'
+                }}
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  padding: '11px 32px',
+                  backgroundColor: '#432818',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: '#FFFFFF',
+                  fontWeight: '800',
+                  fontSize: '0.88rem',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 4px 10px rgba(67, 40, 24, 0.2)'
+                }}
+              >
+                {loading ? 'Đang thêm...' : 'Xác nhận'}
+              </button>
+            </div>
 
+          </div>
         </form>
       </div>
     </div>

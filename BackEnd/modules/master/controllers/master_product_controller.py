@@ -14,6 +14,7 @@ from modules.master.models.technical_drawing import TechnicalDrawing
 from modules.master.models.paint_color_sample import PaintColorSample
 from modules.master.models.master_product_material import MasterProductMaterial
 from modules.master.models.technical_pending_task import TechnicalPendingTask
+from modules.master.models.master_product_detail import MasterProductDetail
 
 def to_master_product_dict(master: MasterProduct):
     if not master:
@@ -42,10 +43,11 @@ def to_master_product_dict(master: MasterProduct):
         "image_url": master.image_url,
         "total_category_count": len(master.master_bom_details) if master.master_bom_details else 0,
         "created_at": master.created_at,
-        "master_bom_details": [b for b in master.master_bom_details if b.parent_id is None],
+        "master_bom_details": master.master_bom_details or [],
         "technical_drawings": master.technical_drawings or [],
         "paint_color_samples": master.paint_color_samples or [],
-        "materials": master.materials or []
+        "materials": master.materials or [],
+        "product_details": master.product_details or []
     }
 
 def get_master_products(db: Session, skip: int = 0, limit: int = 50, q: str = None):
@@ -547,8 +549,14 @@ def create_technical_drawing(db: Session, product_id: int, data: dict):
     return drawing
 
 def create_paint_color_sample(db: Session, product_id: int, data: dict):
+    if not product_id or product_id == 0:
+        product_id = data.get('master_product_id')
+    if not product_id:
+        first_prod = db.query(MasterProduct).first()
+        product_id = first_prod.id if first_prod else 1
+
     sample = PaintColorSample(
-        master_product_id=product_id,
+        master_product_id=int(product_id),
         color_code=data.get('color_code', 'MS-01'),
         color_name=data.get('color_name', 'Màu sơn gỗ tự nhiên'),
         supplier=data.get('supplier', 'NPP Sơn Nippon'),
@@ -586,3 +594,297 @@ def delete_bom_detail(db: Session, detail_id: int):
         db.commit()
         return True
     return False
+
+def create_product_detail(db: Session, product_id: int, data: dict):
+    """
+    Tạo chi tiết sản phẩm mới (KT03.1) vào bảng riêng master_product_details.
+    """
+    if not product_id or product_id == 0:
+        product_id = data.get('master_product_id')
+    if not product_id:
+        first_prod = db.query(MasterProduct).first()
+        product_id = first_prod.id if first_prod else 1
+
+    detail = MasterProductDetail(
+        master_product_id=int(product_id),
+        name=data.get('name', 'Chi tiết mới'),
+        quantity=float(data.get('quantity', 1.0)),
+        unit=data.get('unit', 'Cái'),
+        input_stage=data.get('input_stage', ''),
+        output_stage=data.get('output_stage', ''),
+        parent_name=data.get('parent_name', ''),
+        material=data.get('material', '')
+    )
+    db.add(detail)
+    db.commit()
+    db.refresh(detail)
+    return detail
+
+def delete_product_detail(db: Session, detail_id: int):
+    """
+    Xóa chi tiết sản phẩm (KT03.1) theo ID.
+    """
+    detail = db.query(MasterProductDetail).filter(MasterProductDetail.id == detail_id).first()
+    if detail:
+        db.delete(detail)
+        db.commit()
+        return True
+    return False
+
+def delete_paint_color_sample(db: Session, sample_id: int):
+    """
+    Xóa mẫu màu sơn (KT03.3) theo ID.
+    """
+    sample = db.query(PaintColorSample).filter(PaintColorSample.id == sample_id).first()
+    if sample:
+        db.delete(sample)
+        db.commit()
+        return True
+    return False
+
+def get_all_product_details(
+    db: Session,
+    product_id: int = None,
+    input_stage: str = None,
+    output_stage: str = None,
+    material: str = None,
+    unit: str = None,
+    q: str = None,
+    skip: int = 0,
+    limit: int = 50
+):
+    """
+    Lấy danh sách tất cả chi tiết sản phẩm (KT03.1) có phân trang & lọc đa tiêu chí.
+    """
+    query = db.query(MasterProductDetail).outerjoin(MasterProduct, MasterProductDetail.master_product_id == MasterProduct.id)
+    if product_id:
+        query = query.filter(MasterProductDetail.master_product_id == product_id)
+    if input_stage and input_stage.strip():
+        query = query.filter(MasterProductDetail.input_stage == input_stage.strip())
+    if output_stage and output_stage.strip():
+        query = query.filter(MasterProductDetail.output_stage == output_stage.strip())
+    if material and material.strip():
+        query = query.filter(MasterProductDetail.material == material.strip())
+    if unit and unit.strip():
+        query = query.filter(MasterProductDetail.unit == unit.strip())
+    if q and q.strip():
+        term = f"%{q.strip()}%"
+        query = query.filter(
+            (MasterProductDetail.name.ilike(term)) |
+            (MasterProductDetail.material.ilike(term)) |
+            (MasterProductDetail.input_stage.ilike(term)) |
+            (MasterProductDetail.output_stage.ilike(term)) |
+            (MasterProduct.sku.ilike(term)) |
+            (MasterProduct.name.ilike(term))
+        )
+    total = query.count()
+    items = query.order_by(MasterProductDetail.id.desc()).offset(skip).limit(limit).all()
+    
+    # Enrich each item with product info
+    result_items = []
+    for item in items:
+        prod = item.master_product
+        result_items.append({
+            "id": item.id,
+            "master_product_id": item.master_product_id,
+            "product_sku": prod.sku if prod else "N/A",
+            "product_name": prod.name if prod else "N/A",
+            "name": item.name,
+            "quantity": item.quantity,
+            "unit": item.unit,
+            "input_stage": item.input_stage,
+            "output_stage": item.output_stage,
+            "parent_name": item.parent_name,
+            "material": item.material,
+            "created_at": item.created_at.strftime("%d/%m/%Y") if item.created_at else ""
+        })
+    return {"items": result_items, "total": total}
+
+def update_product_detail(db: Session, detail_id: int, data: dict):
+    """
+    Cập nhật thông tin chi tiết sản phẩm (KT03.1).
+    """
+    detail = db.query(MasterProductDetail).filter(MasterProductDetail.id == detail_id).first()
+    if not detail:
+        return None
+    if 'name' in data and data['name']:
+        detail.name = data['name']
+    if 'quantity' in data:
+        detail.quantity = float(data['quantity'])
+    if 'unit' in data:
+        detail.unit = data['unit']
+    if 'input_stage' in data:
+        detail.input_stage = data['input_stage']
+    if 'output_stage' in data:
+        detail.output_stage = data['output_stage']
+    if 'parent_name' in data:
+        detail.parent_name = data['parent_name']
+    if 'material' in data:
+        detail.material = data['material']
+    if 'master_product_id' in data and data['master_product_id']:
+        detail.master_product_id = int(data['master_product_id'])
+    
+    db.commit()
+    db.refresh(detail)
+    return detail
+
+def get_all_paint_color_samples(
+    db: Session,
+    product_id: int = None,
+    supplier: str = None,
+    has_image: str = None,
+    q: str = None,
+    skip: int = 0,
+    limit: int = 50
+):
+    """
+    Lấy danh sách tất cả mẫu màu sơn (KT03.3) có phân trang & lọc đa tiêu chí.
+    """
+    query = db.query(PaintColorSample).outerjoin(MasterProduct, PaintColorSample.master_product_id == MasterProduct.id)
+    if product_id:
+        query = query.filter(PaintColorSample.master_product_id == product_id)
+    if supplier and supplier.strip():
+        query = query.filter(PaintColorSample.supplier == supplier.strip())
+    if has_image == 'yes':
+        query = query.filter(PaintColorSample.image_url.isnot(None), PaintColorSample.image_url != '')
+    elif has_image == 'no':
+        query = query.filter((PaintColorSample.image_url.is_(None)) | (PaintColorSample.image_url == ''))
+    if q and q.strip():
+        term = f"%{q.strip()}%"
+        query = query.filter(
+            (PaintColorSample.color_code.ilike(term)) |
+            (PaintColorSample.color_name.ilike(term)) |
+            (PaintColorSample.supplier.ilike(term)) |
+            (MasterProduct.sku.ilike(term)) |
+            (MasterProduct.name.ilike(term))
+        )
+    total = query.count()
+    items = query.order_by(PaintColorSample.id.desc()).offset(skip).limit(limit).all()
+    
+    result_items = []
+    for item in items:
+        prod = item.master_product
+        result_items.append({
+            "id": item.id,
+            "master_product_id": item.master_product_id,
+            "product_sku": prod.sku if prod else "N/A",
+            "product_name": prod.name if prod else "N/A",
+            "color_code": item.color_code,
+            "color_name": item.color_name,
+            "supplier": item.supplier,
+            "expiry_date": item.expiry_date.strftime("%Y-%m-%d") if item.expiry_date else "",
+            "image_url": item.image_url,
+            "note": item.note,
+            "created_at": item.created_at.strftime("%d/%m/%Y") if item.created_at else ""
+        })
+    return {"items": result_items, "total": total}
+
+def update_paint_color_sample(db: Session, sample_id: int, data: dict):
+    """
+    Cập nhật thông tin mẫu màu sơn (KT03.3).
+    """
+    sample = db.query(PaintColorSample).filter(PaintColorSample.id == sample_id).first()
+    if not sample:
+        return None
+    if 'color_code' in data and data['color_code']:
+        sample.color_code = data['color_code']
+    if 'color_name' in data and data['color_name']:
+        sample.color_name = data['color_name']
+    if 'supplier' in data:
+        sample.supplier = data['supplier']
+    if 'expiry_date' in data and data['expiry_date']:
+        try:
+            from datetime import datetime
+            sample.expiry_date = datetime.strptime(data['expiry_date'], "%Y-%m-%d")
+        except Exception:
+            pass
+    if 'image_url' in data:
+        sample.image_url = data['image_url']
+    if 'note' in data:
+        sample.note = data['note']
+    if 'master_product_id' in data and data['master_product_id']:
+        sample.master_product_id = int(data['master_product_id'])
+
+    db.commit()
+    db.refresh(sample)
+    return sample
+
+def sync_bom_data_to_auxiliary_tables(db: Session):
+    """
+    Trích xuất & lọc KHÔNG TRÙNG LẶP toàn bộ dữ liệu BOM hiện có trong hệ thống
+    để nạp vào 2 bảng: master_product_details (KT03.1) và paint_color_samples (KT03.3).
+    """
+    boms = db.query(MasterBOMDetail).all()
+    products = db.query(MasterProduct).all()
+
+    unique_details = {}
+    unique_colors = {}
+
+    # 1. Deduplicate Product Details by name
+    for b in boms:
+        if b.name and b.name.strip():
+            name_clean = b.name.strip()
+            key = name_clean.lower()
+            if key not in unique_details:
+                unique_details[key] = {
+                    'master_product_id': b.master_product_id,
+                    'name': name_clean,
+                    'quantity': b.quantity or 1.0,
+                    'unit': b.unit or 'Cái',
+                    'input_stage': b.input_stage or 'Định hình',
+                    'output_stage': b.output_stage or 'Lắp ráp',
+                    'parent_name': b.parent.name if (b.parent and b.parent.name) else '',
+                    'material': b.material or 'Gỗ'
+                }
+
+    # 2. Deduplicate Paint Colors from BOM details
+    for b in boms:
+        if b.color and b.color.strip():
+            c_clean = b.color.strip()
+            key = c_clean.lower()
+            if key not in unique_colors:
+                unique_colors[key] = {
+                    'master_product_id': b.master_product_id,
+                    'color_code': f"MS-{c_clean[:10].upper().replace(' ', '-')}",
+                    'color_name': c_clean,
+                    'supplier': 'NPP Sơn Nippon',
+                    'note': 'Mẫu màu sơn độc nhất lọc từ BOM'
+                }
+
+    # 3. Deduplicate Paint Colors from Master Products
+    for p in products:
+        if p.color and p.color.strip():
+            c_clean = p.color.strip()
+            key = c_clean.lower()
+            if key not in unique_colors:
+                unique_colors[key] = {
+                    'master_product_id': p.id,
+                    'color_code': f"MS-{c_clean[:10].upper().replace(' ', '-')}",
+                    'color_name': c_clean,
+                    'supplier': 'Nội bộ G7',
+                    'note': 'Mẫu màu sơn độc nhất lọc từ sản phẩm'
+                }
+
+    # Clear current data
+    db.query(MasterProductDetail).delete()
+    db.query(PaintColorSample).delete()
+    db.commit()
+
+    # Bulk insert details
+    detail_objects = [MasterProductDetail(**val) for val in unique_details.values()]
+    db.bulk_save_objects(detail_objects)
+
+    # Bulk insert paint colors
+    color_objects = [PaintColorSample(**val) for val in unique_colors.values()]
+    db.bulk_save_objects(color_objects)
+
+    db.commit()
+
+    return {
+        "status": "success",
+        "message": "Đã trích xuất & lọc không trùng lặp thành công!",
+        "unique_product_details_inserted": len(detail_objects),
+        "unique_paint_colors_inserted": len(color_objects)
+    }
+
+

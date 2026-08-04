@@ -41,3 +41,4 @@ class MasterProduct(Base):
     technical_drawings = relationship("TechnicalDrawing", back_populates="master_product", cascade="all, delete-orphan")
     paint_color_samples = relationship("PaintColorSample", back_populates="master_product", cascade="all, delete-orphan")
     materials = relationship("MasterProductMaterial", back_populates="master_product", cascade="all, delete-orphan")
+    product_details = relationship("MasterProductDetail", back_populates="master_product", cascade="all, delete-orphan")

@@ -22,6 +22,7 @@ from modules.master.models.master_bom_detail import MasterBOMDetail
 from modules.master.models.technical_drawing import TechnicalDrawing
 from modules.master.models.paint_color_sample import PaintColorSample
 from modules.master.models.master_product_material import MasterProductMaterial
+from modules.master.models.master_product_detail import MasterProductDetail
 from modules.master.models.technical_pending_task import TechnicalPendingTask
 from modules.delivery.models.delivery_qc import DeliveryQC
 from modules.delivery.models.delivery_returns import DeliveryReturn
@@ -67,6 +68,7 @@ __all__ = [
     "ISODocument", "ISORevisionLog", "ISOSection", "ISOProcessStep",
     "ISOProcess", "ISOProcessSection", "ISOProcessStepInstance",
     "HRDepartment", "HRPosition", "HRSection", "HREmployee", "HROrgNode", "HRNodeAssignment",
-    "OrgStructure", "OrgStructureKPI", "OrgStructureTask", "Employee", "StageInspection", "SystemSidebar"
+    "OrgStructure", "OrgStructureKPI", "OrgStructureTask", "Employee", "StageInspection", "SystemSidebar",
+    "MasterProductDetail"
 ]
 
