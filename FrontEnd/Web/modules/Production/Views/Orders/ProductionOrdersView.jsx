@@ -158,16 +158,20 @@ const ProductionOrdersView = () => {
     if (toast) toast('success', 'Đã thêm dòng kế hoạch mới thành công!');
   };
 
-  // Lấy danh sách PO Mua hàng từ module Purchasing (/admin/purchase-requisitions)
+  // Lấy danh sách Đơn bán hàng từ module Purchasing (/admin/purchase-requisitions)
   useEffect(() => {
     const fetchPOList = async () => {
       try {
-        const res = await purchasingService.getRequisitions({ limit: 100 }).catch(() => null);
+        const res = await purchasingService.getRequisitions({ limit: 100, order_type: 'Đơn bán hàng' }).catch(() => null);
         if (res && res.items) {
-          setPurchaseRequisitions(res.items);
+          const salesOrders = res.items.filter(item => {
+            const typeStr = (item.order_type || item.type || '').toLowerCase();
+            return !typeStr || typeStr.includes('bán');
+          });
+          setPurchaseRequisitions(salesOrders);
         }
       } catch (err) {
-        console.warn('Lỗi lấy danh sách Đơn mua hàng:', err);
+        console.warn('Lỗi lấy danh sách Đơn bán hàng:', err);
       }
     };
     fetchPOList();
@@ -548,11 +552,20 @@ const ProductionOrdersView = () => {
   const currentItems = ordersList.slice((page - 1) * pageSize, page * pageSize);
 
   const filteredPOList = useMemo(() => {
-    if (!poSearch.trim()) return purchaseRequisitions.slice(0, 15);
+    // CHỈ LỌC VÀ LẤY ĐƠN BÁN HÀNG (Loại bỏ các Đơn mua hàng)
+    const salesOnly = purchaseRequisitions.filter(po => {
+      const typeStr = (po.order_type || po.type || '').toLowerCase();
+      if (typeStr.includes('mua')) return false;
+      return true;
+    });
+
+    if (!poSearch.trim()) return salesOnly.slice(0, 15);
     const term = poSearch.toLowerCase();
-    return purchaseRequisitions.filter(po =>
+    return salesOnly.filter(po =>
       (po.po_code && po.po_code.toLowerCase().includes(term)) ||
-      (po.supplier_name && po.supplier_name.toLowerCase().includes(term))
+      (po.supplier_name && po.supplier_name.toLowerCase().includes(term)) ||
+      (po.customer && po.customer.toLowerCase().includes(term)) ||
+      (po.order_code && po.order_code.toLowerCase().includes(term))
     ).slice(0, 15);
   }, [purchaseRequisitions, poSearch]);
 
@@ -928,11 +941,11 @@ const ProductionOrdersView = () => {
                       zIndex: 100
                     }}>
                       <div style={{ padding: '6px 12px', fontSize: '0.75rem', fontWeight: '800', color: '#7B5233', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9' }}>
-                        Danh sách Đơn mua hàng (/admin/purchase-requisitions)
+                        Danh sách Đơn bán hàng (/admin/purchase-requisitions)
                       </div>
                       {filteredPOList.length === 0 ? (
                         <div style={{ padding: '12px', fontSize: '0.82rem', color: '#94A3B8', textAlign: 'center' }}>
-                          Không tìm thấy đơn mua phù hợp
+                          Không tìm thấy đơn bán hàng phù hợp
                         </div>
                       ) : (
                         filteredPOList.map((po) => (
@@ -1136,7 +1149,7 @@ const ProductionOrdersView = () => {
                 }}>
                   {loadingDetail ? (
                     <div style={{ padding: '2.5rem', textAlign: 'center', color: '#7B5233', fontWeight: '700' }}>
-                      Đang nạp chi tiết từ Đơn mua hàng (/admin/purchase-requisitions)...
+                      Đang nạp chi tiết từ Đơn bán hàng (/admin/purchase-requisitions)...
                     </div>
                   ) : (
                     <div style={{ overflowX: 'auto' }}>
@@ -1161,7 +1174,7 @@ const ProductionOrdersView = () => {
                           {orderProducts.length === 0 ? (
                             <tr>
                               <td colSpan={12} style={{ textAlign: 'center', padding: '2.5rem', color: '#94A3B8' }}>
-                                Chưa có mặt hàng. Nhập hoặc chọn <b>Mã đơn hàng</b> ở trên để nạp tự động từ Đơn mua hàng (/admin/purchase-requisitions).
+                                Chưa có mặt hàng. Nhập hoặc chọn <b>Mã đơn hàng</b> ở trên để nạp tự động từ Đơn bán hàng (/admin/purchase-requisitions).
                               </td>
                             </tr>
                           ) : (
