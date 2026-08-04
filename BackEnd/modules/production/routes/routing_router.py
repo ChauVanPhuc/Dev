@@ -41,6 +41,15 @@ def duplicate_routing(routing_id: int, db: Session = Depends(get_db)):
     """Sao chép Quy trình sản xuất"""
     return routing_controller.duplicate_routing(db, routing_id)
 
+@router.post("/routings/{routing_id}/nodes")
+def add_team_to_routing(routing_id: str, body: dict, db: Session = Depends(get_db)):
+    """Thêm một Tổ sản xuất vào Quy trình"""
+    team_id = body.get("team_id")
+    if not team_id:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Thiếu team_id!")
+    return routing_controller.add_team_to_routing(db, routing_id, int(team_id))
+
 @router.post("/routings/components")
 def create_routing_component(data: ProductionRoutingComponentCreate, db: Session = Depends(get_db)):
     """Gán linh kiện cho Tổ trong Quy trình"""
@@ -50,3 +59,8 @@ def create_routing_component(data: ProductionRoutingComponentCreate, db: Session
 def delete_routing(routing_id: str, db: Session = Depends(get_db)):
     """Xóa một Quy trình sản xuất khỏi CSDL"""
     return routing_controller.delete_routing(db, routing_id)
+
+@router.delete("/routings/{routing_id}/nodes/{team_ref}")
+def delete_routing_node(routing_id: str, team_ref: str, db: Session = Depends(get_db)):
+    """Xóa một Tổ khỏi Quy trình sản xuất"""
+    return routing_controller.delete_routing_node(db, routing_id, team_ref)

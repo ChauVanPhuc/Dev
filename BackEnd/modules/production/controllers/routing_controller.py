@@ -42,22 +42,6 @@ def create_team(db: Session, team_data: ProductionTeamCreate):
 # --- ROUTINGS CONTROLLERS ---
 def get_all_routings(db: Session):
     routings = db.query(ProductionRouting).all()
-    all_teams = db.query(ProductionTeam).order_by(ProductionTeam.factory, ProductionTeam.id).all()
-
-    # Nếu quy trình chưa có mắt xích tổ nào trong CSDL, tự động nạp toàn bộ Tổ sản xuất hiện có
-    for r in routings:
-        if len(r.nodes) == 0 and len(all_teams) > 0:
-            for idx, t in enumerate(all_teams):
-                node = ProductionRoutingNode(
-                    routing_id=r.id,
-                    team_id=t.id,
-                    step_order=idx + 1,
-                    color=t.color or '#2D1A12'
-                )
-                db.add(node)
-            db.commit()
-            db.refresh(r)
-
     results = []
     for r in routings:
         nodes_res = []
@@ -102,6 +86,53 @@ def get_all_routings(db: Session):
             "components": comps_res
         })
     return results
+
+def add_team_to_routing(db: Session, routing_id: str, team_id: int):
+    """Thêm một Tổ vào Quy trình (tạo routing node)"""
+    routing = None
+    if str(routing_id).isdigit():
+        routing = db.query(ProductionRouting).filter(ProductionRouting.id == int(routing_id)).first()
+    if not routing:
+        routing = db.query(ProductionRouting).filter(ProductionRouting.routing_code == str(routing_id)).first()
+    if not routing:
+        raise HTTPException(status_code=404, detail="Không tìm thấy Quy trình!")
+
+    team = db.query(ProductionTeam).filter(ProductionTeam.id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Không tìm thấy Tổ sản xuất!")
+
+    # Kiểm tra xem tổ đã tồn tại trong routing chưa
+    existing_node = db.query(ProductionRoutingNode).filter(
+        ProductionRoutingNode.routing_id == routing.id,
+        ProductionRoutingNode.team_id == team_id
+    ).first()
+    if existing_node:
+        raise HTTPException(status_code=400, detail="Tổ này đã tồn tại trong Quy trình!")
+
+    # Tính step_order tiếp theo
+    max_order = db.query(ProductionRoutingNode).filter(
+        ProductionRoutingNode.routing_id == routing.id
+    ).count()
+
+    node = ProductionRoutingNode(
+        routing_id=routing.id,
+        team_id=team_id,
+        step_order=max_order + 1,
+        color=team.color or '#2D1A12'
+    )
+    db.add(node)
+    db.commit()
+    db.refresh(node)
+
+    return {
+        "id": node.id,
+        "routing_id": node.routing_id,
+        "team_id": node.team_id,
+        "step_order": node.step_order,
+        "team_code": team.team_code,
+        "team_name": team.team_name,
+        "factory": team.factory
+    }
 
 def create_routing(db: Session, data: ProductionRoutingCreate):
     existing = db.query(ProductionRouting).filter(ProductionRouting.routing_code == data.routing_code).first()
@@ -205,3 +236,22 @@ def delete_routing(db: Session, routing_id: str):
     db.delete(routing)
     db.commit()
     return {"message": "Đã xóa Quy trình thành công"}
+
+def delete_routing_node(db: Session, routing_id: str, team_ref: str):
+    routing = None
+    if str(routing_id).isdigit():
+        routing = db.query(ProductionRouting).filter(ProductionRouting.id == int(routing_id)).first()
+    if not routing:
+        routing = db.query(ProductionRouting).filter(ProductionRouting.routing_code == str(routing_id)).first()
+
+    if not routing:
+        raise HTTPException(status_code=404, detail="Không tìm thấy Quy trình!")
+
+    nodes = db.query(ProductionRoutingNode).filter(ProductionRoutingNode.routing_id == routing.id).all()
+    for n in nodes:
+        team = db.query(ProductionTeam).filter(ProductionTeam.id == n.team_id).first()
+        t_code = team.team_code if team else ""
+        if str(n.id) == str(team_ref) or str(n.team_id) == str(team_ref) or t_code == str(team_ref):
+            db.delete(n)
+    db.commit()
+    return get_all_routings(db)

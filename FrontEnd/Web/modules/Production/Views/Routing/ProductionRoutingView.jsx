@@ -107,23 +107,44 @@ const ProductionRoutingView = () => {
     { id: 25, code: 'SP-GIUONG-005', name: 'Giường bệt kiểu Nhật gỗ sồi bọc vải', routingCode: 'QT-GIUONG-01', applyDate: '05/08/2026', status: 'Đang áp dụng' }
   ], []);
 
+  const extractDòngHàngKey = (category, code, name) => {
+    const text = `${category || ''} ${code || ''} ${name || ''}`.toUpperCase();
+    const seriesList = ['APT', 'ATL', 'FOL', 'ADV', 'TPH', 'HOR', 'EYC', 'COV', 'TIN', 'BEZ', 'MBC', 'TU', 'BAN', 'GIUONG'];
+    for (const s of seriesList) {
+      if (text.includes(s)) return s;
+    }
+    if (category) {
+      const cleaned = category.replace(/Dòng hàng/gi, '').trim();
+      if (cleaned) return cleaned;
+    }
+    return '';
+  };
+
   const [appliedProducts, setAppliedProducts] = useState(defaultProducts);
 
   const currentAppliedProducts = useMemo(() => {
     const rCode = selectedRoutingId || currentRouting?.code || 'QT-TU-01';
+    const seriesKey = extractDòngHàngKey(currentRouting?.category, currentRouting?.code, currentRouting?.name);
+
+    if (seriesKey) {
+      const sKeyUpper = seriesKey.toUpperCase();
+      const matched = appliedProducts.filter(p => {
+        const codeUpper = (p.code || '').toUpperCase();
+        const catUpper = (p.category || '').toUpperCase();
+        const rCodeUpper = (p.routingCode || '').toUpperCase();
+        return codeUpper.includes(sKeyUpper) || catUpper.includes(sKeyUpper) || rCodeUpper.includes(sKeyUpper);
+      });
+      if (matched.length > 0) return matched;
+    }
+
     return appliedProducts.filter(p => p.routingCode === rCode);
   }, [appliedProducts, selectedRoutingId, currentRouting]);
 
   const [isBackendLoaded, setIsBackendLoaded] = useState(false);
 
   const currentRoutingTeams = useMemo(() => {
-    const list = routingTeamsMap[selectedRoutingId];
-    if (list !== undefined) return list;
-    if (['QT-TU-01', 'QT-BAN-01', 'QT-GIUONG-01'].includes(selectedRoutingId)) {
-      return teamsList || [];
-    }
-    return [];
-  }, [routingTeamsMap, selectedRoutingId, teamsList]);
+    return routingTeamsMap[selectedRoutingId] || [];
+  }, [routingTeamsMap, selectedRoutingId]);
 
   const currentFactoryTeamsGrouped = useMemo(() => {
     const map = {};
@@ -250,9 +271,10 @@ const ProductionRoutingView = () => {
           setTeamsList(loadedTeams);
         }
 
+        let parsedRoutings = [];
         if (Array.isArray(rawRoutings) && rawRoutings.length > 0) {
           const newTeamsMap = {};
-          const parsedRoutings = rawRoutings.map(r => {
+          parsedRoutings = rawRoutings.map(r => {
             const dbNodes = (r.nodes || []).map(n => ({
               id: n.id || n.team_id,
               teamCode: n.team_code,
@@ -279,26 +301,41 @@ const ProductionRoutingView = () => {
             };
           });
 
-          ['QT-TU-01', 'QT-BAN-01', 'QT-GIUONG-01'].forEach(id => {
-            if (!newTeamsMap[id] || newTeamsMap[id].length === 0) {
-              newTeamsMap[id] = loadedTeams;
-            }
-          });
-
           setRoutingTeamsMap(newTeamsMap);
           setRoutingsList(parsedRoutings);
+          if (parsedRoutings.length > 0 && !parsedRoutings.some(r => r.id === selectedRoutingId || r.code === selectedRoutingId)) {
+            setSelectedRoutingId(parsedRoutings[0].id || parsedRoutings[0].code);
+          }
         }
 
-        if (Array.isArray(rawProducts) && rawProducts.length > 0) {
-          const prods = rawProducts.map((p, idx) => ({
-            id: p.id || idx + 1,
-            code: p.product_code || p.code || `SP-${p.id}`,
-            name: p.product_name || p.name || 'Sản phẩm',
-            applyDate: p.created_at ? new Date(p.created_at).toLocaleDateString('vi-VN') : '01/08/2026',
-            routingCode: selectedRoutingId || 'QT-TU-01',
-            status: 'Đang áp dụng'
-          }));
-          setAppliedProducts(prods);
+        const curR = (parsedRoutings && parsedRoutings.length > 0)
+          ? (parsedRoutings.find(r => r.id === selectedRoutingId || r.code === selectedRoutingId) || parsedRoutings[0])
+          : currentRouting;
+
+        const seriesKey = extractDòngHàngKey(curR?.category, curR?.code, curR?.name);
+
+        if (seriesKey) {
+          try {
+            const mpRes = await api.get(`/master-products/?q=${seriesKey}&limit=200`);
+            const mpData = (mpRes && mpRes.items) ? mpRes.items : (Array.isArray(mpRes) ? mpRes : []);
+            if (Array.isArray(mpData) && mpData.length > 0) {
+              const masterProds = mpData.map((item, idx) => ({
+                id: item.id || idx + 1,
+                code: item.sku,
+                name: item.name || item.sku,
+                applyDate: item.created_at ? new Date(item.created_at).toLocaleDateString('vi-VN') : '01/08/2026',
+                routingCode: curR?.code || selectedRoutingId,
+                category: curR?.category || seriesKey,
+                status: 'Đang áp dụng'
+              }));
+              setAppliedProducts(prev => {
+                const otherProds = prev.filter(p => !p.code.toUpperCase().includes(seriesKey.toUpperCase()));
+                return [...otherProds, ...masterProds];
+              });
+            }
+          } catch (e) {
+            console.warn('Lỗi fetch master products cho Dòng hàng:', e);
+          }
         }
       } catch (err) {
         console.warn('Lỗi fetch dữ liệu backend:', err);
@@ -451,7 +488,16 @@ const ProductionRoutingView = () => {
         desc: created.description || ''
       };
 
+      // Gọi API thêm tổ vào quy trình (tạo routing_node trong CSDL)
       const routingKey = (currentRouting && currentRouting.id) || selectedRoutingId || 'QT-TU-01';
+      const rObj = routingsList.find(r => r.id === routingKey || r.code === routingKey);
+      const targetRoutingId = (rObj && rObj.numericId) ? rObj.numericId : routingKey;
+      try {
+        await api.post(`/production/routings/${targetRoutingId}/nodes`, { team_id: newTeamObj.id });
+      } catch (nodeErr) {
+        console.warn('Lỗi tạo routing node:', nodeErr);
+      }
+
       const currentList = currentRoutingTeams || [];
       const updatedTeamsList = [...currentList, newTeamObj];
       setRoutingTeamsMap(prev => ({
@@ -621,7 +667,7 @@ const ProductionRoutingView = () => {
 
   const handleDeleteTeamFromRouting = (teamId) => {
     const routingKey = selectedRoutingId || 'QT-TU-01';
-    const teamObj = (currentRoutingTeams || []).find(t => t.id === teamId) || {};
+    const teamObj = (currentRoutingTeams || []).find(t => t.id === teamId || t.teamCode === teamId) || {};
     const tName = teamObj.teamName || 'Tổ sản xuất';
     const tCode = teamObj.teamCode || '';
 
@@ -630,12 +676,20 @@ const ProductionRoutingView = () => {
       title: 'Xác nhận xóa Tổ khỏi Quy trình',
       message: `Bạn có chắc chắn muốn xóa Tổ "${tName}" ${tCode ? `(${tCode})` : ''} khỏi Quy trình ${routingKey}?`,
       confirmText: 'Xóa Tổ khỏi quy trình',
-      onConfirm: () => {
+      onConfirm: async () => {
+        try {
+          const rObj = routingsList.find(r => r.id === routingKey || r.code === routingKey);
+          const targetId = (rObj && rObj.numericId) ? rObj.numericId : routingKey;
+          await api.delete(`/production/routings/${targetId}/nodes/${tCode || teamId}`);
+        } catch (e) {
+          console.warn('Lỗi gọi API xóa node backend:', e);
+        }
+
         setRoutingTeamsMap(prev => {
           const currentList = prev[routingKey] || currentRoutingTeams || [];
           return {
             ...prev,
-            [routingKey]: currentList.filter(t => t.id !== teamId)
+            [routingKey]: currentList.filter(t => t.id !== teamId && t.teamCode !== tCode)
           };
         });
 
@@ -643,7 +697,7 @@ const ProductionRoutingView = () => {
           if (r.id === routingKey || r.code === routingKey) {
             return {
               ...r,
-              nodes: (r.nodes || []).filter(n => n.id !== teamId && n.team_id !== teamId)
+              nodes: (r.nodes || []).filter(n => n.id !== teamId && n.team_id !== teamId && n.teamCode !== tCode)
             };
           }
           return r;
