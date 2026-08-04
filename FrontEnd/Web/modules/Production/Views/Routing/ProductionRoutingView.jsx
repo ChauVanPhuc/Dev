@@ -784,7 +784,7 @@ const ProductionRoutingView = () => {
               transition: 'all 0.2s'
             }}
           >
-            <Plus size={16} /> + Tạo quy trình mới
+            <Plus size={16} /> Tạo quy trình mới
           </button>
 
           <button
@@ -1127,7 +1127,7 @@ const ProductionRoutingView = () => {
                   onClick={() => setShowAddPlanModal(true)}
                   style={{ padding: '7px 16px', background: '#5D3B32', border: 'none', borderRadius: '6px', color: '#FFF', fontWeight: '800', fontSize: '0.84rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 6px rgba(93,59,50,0.2)' }}
                 >
-                  <Plus size={16} /> + Thêm mới
+                  <Plus size={16} /> Thêm mới
                 </button>
               </div>
             </div>
@@ -1310,7 +1310,7 @@ const ProductionRoutingView = () => {
                 gap: '6px'
               }}
             >
-              <Plus size={18} /> + Thêm tổ vào quy trình
+              <Plus size={18} /> Thêm tổ vào quy trình
             </button>
           </div>
 
@@ -1330,7 +1330,7 @@ const ProductionRoutingView = () => {
                 {currentRoutingTeams.length === 0 ? (
                   <tr>
                     <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: '#9CA3AF', fontWeight: '600' }}>
-                      Chưa có Tổ nào thuộc Quy trình này. Nhấp nút "+ Thêm tổ vào quy trình" góc trên để bổ sung.
+                      Chưa có Tổ nào thuộc Quy trình này. Nhấp nút "Thêm tổ vào quy trình" góc trên để bổ sung.
                     </td>
                   </tr>
                 ) : (

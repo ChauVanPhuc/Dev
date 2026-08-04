@@ -109,7 +109,7 @@ const ProductionPlansView = () => {
             onClick={() => setIsModalOpen(true)}
             style={{ padding: '9px 20px', background: '#5D3B32', border: 'none', borderRadius: '8px', color: '#FFF', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            <Plus size={18} /> + Thêm kế hoạch
+            <Plus size={18} /> Thêm kế hoạch
           </button>
         </div>
       </div>

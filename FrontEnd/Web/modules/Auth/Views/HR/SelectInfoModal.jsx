@@ -310,7 +310,7 @@ const SelectInfoModal = ({ isOpen, onClose, type, onSelect }) => {
                 padding: 0
               }}
             >
-              <Plus size={16} /> + Thêm mới
+              <Plus size={16} /> Thêm mới
             </button>
           </div>
         )}
