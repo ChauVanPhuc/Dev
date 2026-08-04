@@ -3,7 +3,8 @@ import { useOutletContext } from 'react-router-dom';
 import {
   Search, ArrowUpDown, Filter, Plus, Copy, MoreHorizontal, Upload, Download,
   ArrowRight, ArrowLeft, Trash2, CheckCircle2, Layers, Building2, Wrench, Settings,
-  Grid, PlusCircle, Check, X, ShieldAlert, Sparkles, RefreshCw, Calendar, Edit3, AlertTriangle
+  Grid, PlusCircle, Check, X, ShieldAlert, Sparkles, RefreshCw, Calendar, Edit3, AlertTriangle,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
@@ -139,6 +140,34 @@ const ProductionRoutingView = () => {
 
     return appliedProducts.filter(p => p.routingCode === rCode);
   }, [appliedProducts, selectedRoutingId, currentRouting]);
+
+  const [productSearchTerm, setProductSearchTerm] = useState('');
+  const [productPage, setProductPage] = useState(0);
+  const [productRowsPerPage, setProductRowsPerPage] = useState(15);
+
+  useEffect(() => {
+    setProductPage(0);
+  }, [selectedRoutingId, productSearchTerm]);
+
+  const filteredAppliedProducts = useMemo(() => {
+    let list = currentAppliedProducts;
+    if (productSearchTerm.trim()) {
+      const term = productSearchTerm.trim().toLowerCase();
+      list = list.filter(
+        p => (p.code || '').toLowerCase().includes(term) || (p.name || '').toLowerCase().includes(term)
+      );
+    }
+    return list;
+  }, [currentAppliedProducts, productSearchTerm]);
+
+  const totalProductPages = useMemo(() => {
+    return Math.ceil(filteredAppliedProducts.length / productRowsPerPage) || 1;
+  }, [filteredAppliedProducts.length, productRowsPerPage]);
+
+  const paginatedAppliedProducts = useMemo(() => {
+    const start = productPage * productRowsPerPage;
+    return filteredAppliedProducts.slice(start, start + productRowsPerPage);
+  }, [filteredAppliedProducts, productPage, productRowsPerPage]);
 
   const [isBackendLoaded, setIsBackendLoaded] = useState(false);
 
@@ -316,7 +345,7 @@ const ProductionRoutingView = () => {
 
         if (seriesKey) {
           try {
-            const mpRes = await api.get(`/master-products/?q=${seriesKey}&limit=200`);
+            const mpRes = await api.get(`/master-products/?q=${seriesKey}&limit=5000`);
             const mpData = (mpRes && mpRes.items) ? mpRes.items : (Array.isArray(mpRes) ? mpRes : []);
             if (Array.isArray(mpData) && mpData.length > 0) {
               const masterProds = mpData.map((item, idx) => ({
@@ -1273,38 +1302,90 @@ const ProductionRoutingView = () => {
           overflow: 'hidden',
           boxShadow: '0 4px 16px rgba(45, 26, 18, 0.04)'
         }}>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
+          {/* Top Search & Filter Bar for Products */}
+          <div style={{
+            padding: '14px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderBottom: '1.5px solid #EADCC9',
+            backgroundColor: '#FAF6F0',
+            flexWrap: 'wrap',
+            gap: '12px'
+          }}>
+            <div>
+              <span style={{ fontSize: '1rem', fontWeight: '800', color: '#2D1A12' }}>
+                Danh sách Sản phẩm thuộc Dòng hàng: {currentRouting.category || currentRouting.code}
+              </span>
+              <span style={{ display: 'block', fontSize: '0.78rem', color: '#6B7280', marginTop: '2px' }}>
+                Tự động đồng bộ từ CSDL BOM Master theo mã Dòng hàng (Tổng cộng {currentAppliedProducts.length.toLocaleString('vi-VN')} sản phẩm)
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ position: 'relative', width: '280px' }}>
+                <Search size={16} color="#9CA3AF" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm mã SKU, tên sản phẩm..."
+                  value={productSearchTerm}
+                  onChange={(e) => setProductSearchTerm(e.target.value)}
+                  style={{ width: '100%', padding: '7px 30px 7px 32px', borderRadius: '8px', border: '1.5px solid #EADCC9', outline: 'none', fontSize: '0.84rem' }}
+                />
+                {productSearchTerm && (
+                  <button
+                    onClick={() => setProductSearchTerm('')}
+                    style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', cursor: 'pointer', color: '#9CA3AF' }}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '540px', backgroundColor: '#FFFDF9', padding: '0 12px 12px 12px' }}>
+            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 6px', textAlign: 'left', fontSize: '0.86rem' }}>
               <thead>
-                <tr style={{ backgroundColor: '#5D3B32', color: '#FFFFFF' }}>
-                  <th style={{ padding: '12px 16px', fontWeight: '800', width: '60px' }}>STT</th>
-                  <th style={{ padding: '12px 16px', fontWeight: '800', width: '200px' }}>Mã sản phẩm</th>
-                  <th style={{ padding: '12px 16px', fontWeight: '800' }}>Tên sản phẩm</th>
-                  <th style={{ padding: '12px 16px', fontWeight: '800', width: '220px' }}>Quy trình áp dụng</th>
-                  <th style={{ padding: '12px 16px', fontWeight: '800', width: '160px' }}>Thời gian áp dụng</th>
-                  <th style={{ padding: '12px 16px', fontWeight: '800', width: '140px', textAlign: 'center' }}>Trạng thái</th>
+                <tr style={{ color: '#8B5E3C' }}>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0', padding: '14px 16px', fontWeight: '800', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.5px', width: '65px', borderRadius: '8px 0 0 8px', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>STT</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0', padding: '14px 16px', fontWeight: '800', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.5px', width: '210px', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>MÃ SẢN PHẨM</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0', padding: '14px 16px', fontWeight: '800', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.5px', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>TÊN SẢN PHẨM</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0', padding: '14px 16px', fontWeight: '800', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.5px', width: '200px', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>QUY TRÌNH ÁP DỤNG</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0', padding: '14px 16px', fontWeight: '800', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.5px', width: '170px', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>THỜI GIAN ÁP DỤNG</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0', padding: '14px 16px', fontWeight: '800', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.5px', width: '130px', textAlign: 'center', borderRadius: '0 8px 8px 0', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>TRẠNG THÁI</th>
                 </tr>
               </thead>
               <tbody>
-                {currentAppliedProducts.length === 0 ? (
+                {paginatedAppliedProducts.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', padding: '2.5rem', color: '#94A3B8', fontWeight: '600' }}>
-                      Chưa có sản phẩm nào gán cho quy trình này.
+                    <td colSpan={6} style={{ textAlign: 'center', padding: '2.5rem', color: '#94A3B8', fontWeight: '600', backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid #F3EBE1' }}>
+                      {productSearchTerm ? 'Không tìm thấy sản phẩm nào phù hợp với từ khóa.' : 'Chưa có sản phẩm nào gán cho quy trình này.'}
                     </td>
                   </tr>
                 ) : (
-                  currentAppliedProducts.map((p, idx) => (
-                    <tr key={p.id} style={{ borderBottom: '1px solid #F3F4F6', backgroundColor: idx % 2 === 1 ? '#FAF6F0' : '#FFFFFF' }}>
-                      <td style={{ padding: '12px 16px', color: '#6B7280', fontWeight: '600' }}>{idx + 1}</td>
-                      <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontWeight: '800', color: '#5D3B32' }}>{p.code}</td>
-                      <td style={{ padding: '12px 16px', fontWeight: '700', color: '#1F2937' }}>{p.name}</td>
-                      <td style={{ padding: '12px 16px', fontWeight: '800', color: '#0284C7' }}>{p.routingCode}</td>
-                      <td style={{ padding: '12px 16px', color: '#4B5563' }}>{p.applyDate}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                  paginatedAppliedProducts.map((p, idx) => (
+                    <tr key={p.id} style={{ backgroundColor: '#FFFFFF', boxShadow: '0 2px 6px rgba(0,0,0,0.02)', border: '1px solid #F3EBE1', borderRadius: '10px' }}>
+                      <td style={{ padding: '12px 16px', color: '#6B7280', fontWeight: '600', borderTopLeftRadius: '10px', borderBottomLeftRadius: '10px', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1', borderLeft: '1px solid #F3EBE1' }}>
+                        {productPage * productRowsPerPage + idx + 1}
+                      </td>
+                      <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontWeight: '800', color: '#374151', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1' }}>
+                        {p.code}
+                      </td>
+                      <td style={{ padding: '12px 16px', fontWeight: '800', color: '#111827', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1' }}>
+                        {p.name}
+                      </td>
+                      <td style={{ padding: '12px 16px', fontWeight: '800', color: '#0284C7', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1' }}>
+                        {p.routingCode}
+                      </td>
+                      <td style={{ padding: '12px 16px', color: '#6B7280', fontWeight: '500', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1' }}>
+                        {p.applyDate}
+                      </td>
+                      <td style={{ padding: '12px 16px', textAlign: 'center', borderTopRightRadius: '10px', borderBottomRightRadius: '10px', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1', borderRight: '1px solid #F3EBE1' }}>
                         <span style={{
                           display: 'inline-block',
-                          padding: '3px 10px',
-                          borderRadius: '12px',
+                          padding: '3px 12px',
+                          borderRadius: '16px',
                           fontSize: '0.75rem',
                           fontWeight: '700',
                           backgroundColor: '#ECFDF5',
@@ -1319,6 +1400,98 @@ const ProductionRoutingView = () => {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Pagination Controls Footer matching reference screenshot */}
+          <div style={{
+            padding: '14px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderTop: '1px solid #F3EBE1',
+            backgroundColor: '#FFFDF9',
+            fontSize: '0.84rem'
+          }}>
+            <div style={{ color: '#6B7280', fontWeight: '500' }}>
+              Hiển thị <strong style={{ color: '#111827', fontWeight: '700' }}>{paginatedAppliedProducts.length}</strong> trên <strong style={{ color: '#111827', fontWeight: '700' }}>{filteredAppliedProducts.length.toLocaleString('vi-VN')}</strong> sản phẩm
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button
+                onClick={() => setProductPage(p => Math.max(0, p - 1))}
+                disabled={productPage === 0}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: productPage === 0 ? '#CBD5E1' : '#64748B',
+                  cursor: productPage === 0 ? 'not-allowed' : 'pointer',
+                  fontWeight: '600',
+                  fontSize: '0.84rem',
+                  padding: '4px 8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '2px'
+                }}
+              >
+                &lt; Trước
+              </button>
+
+              {(() => {
+                const pages = [];
+                const maxButtons = 5;
+                let start = Math.max(0, productPage - 2);
+                let end = Math.min(totalProductPages - 1, start + maxButtons - 1);
+                if (end - start + 1 < maxButtons) {
+                  start = Math.max(0, end - maxButtons + 1);
+                }
+
+                for (let i = start; i <= end; i++) {
+                  const isActive = i === productPage;
+                  pages.push(
+                    <button
+                      key={i}
+                      onClick={() => setProductPage(i)}
+                      style={{
+                        width: '30px',
+                        height: '30px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        backgroundColor: isActive ? '#5D3B32' : 'transparent',
+                        color: isActive ? '#FFFFFF' : '#334155',
+                        fontWeight: isActive ? '800' : '600',
+                        fontSize: '0.84rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      {i + 1}
+                    </button>
+                  );
+                }
+                return pages;
+              })()}
+
+              <button
+                onClick={() => setProductPage(p => Math.min(totalProductPages - 1, p + 1))}
+                disabled={productPage >= totalProductPages - 1}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: productPage >= totalProductPages - 1 ? '#CBD5E1' : '#64748B',
+                  cursor: productPage >= totalProductPages - 1 ? 'not-allowed' : 'pointer',
+                  fontWeight: '600',
+                  fontSize: '0.84rem',
+                  padding: '4px 8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '2px'
+                }}
+              >
+                Sau &gt;
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1375,7 +1548,6 @@ const ProductionRoutingView = () => {
                   <th style={{ padding: '12px 16px', fontWeight: '800', width: '140px' }}>Mã tổ</th>
                   <th style={{ padding: '12px 16px', fontWeight: '800', width: '220px' }}>Tên tổ</th>
                   <th style={{ padding: '12px 16px', fontWeight: '800', width: '160px' }}>Tên nhà máy</th>
-                  <th style={{ padding: '12px 16px', fontWeight: '800', width: '120px', textAlign: 'center' }}>Nhân sự</th>
                   <th style={{ padding: '12px 16px', fontWeight: '800' }}>Mô tả công việc & Năng lực</th>
                   <th style={{ padding: '12px 16px', fontWeight: '800', width: '100px', textAlign: 'center' }}>Thao tác</th>
                 </tr>
@@ -1383,7 +1555,7 @@ const ProductionRoutingView = () => {
               <tbody>
                 {currentRoutingTeams.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: '#9CA3AF', fontWeight: '600' }}>
+                    <td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: '#9CA3AF', fontWeight: '600' }}>
                       Chưa có Tổ nào thuộc Quy trình này. Nhấp nút "Thêm tổ vào quy trình" góc trên để bổ sung.
                     </td>
                   </tr>
@@ -1393,7 +1565,6 @@ const ProductionRoutingView = () => {
                       <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontWeight: '800', color: '#5D3B32' }}>{t.teamCode}</td>
                       <td style={{ padding: '12px 16px', fontWeight: '800', color: '#1F2937' }}>{t.teamName}</td>
                       <td style={{ padding: '12px 16px', color: '#4B5563', fontWeight: '700' }}>{t.factory}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '800', color: '#0284C7' }}>{t.members} công nhân</td>
                       <td style={{ padding: '12px 16px', color: '#6B7280' }}>{t.desc}</td>
                       <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                         <button
