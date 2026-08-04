@@ -155,7 +155,7 @@ const ProductionRoutingView = () => {
   const [newRoutingForm, setNewRoutingForm] = useState({
     code: '',
     name: '',
-    category: 'Tủ gỗ',
+    category: 'Dòng hàng APT',
     desc: ''
   });
 
@@ -507,9 +507,9 @@ const ProductionRoutingView = () => {
   const handleOpenAddRoutingModal = () => {
     const num = Math.floor(10 + Math.random() * 90);
     setNewRoutingForm({
-      code: `QT-TU-${num}`,
-      name: `Quy trình sản xuất Tủ gỗ cao cấp ${num}`,
-      category: 'Tủ gỗ',
+      code: `QT-APT-${num}`,
+      name: `Quy trình sản xuất Dòng hàng APT ${num}`,
+      category: 'Dòng hàng APT',
       desc: 'Mô tả chi tiết quy trình sản xuất mới'
     });
     setShowAddRoutingModal(true);
@@ -1585,19 +1585,22 @@ const ProductionRoutingView = () => {
 
               <div style={{ marginBottom: '14px' }}>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#374151', marginBottom: '6px' }}>
-                  Phân loại sản phẩm *
+                  Dòng hàng *
                 </label>
                 <select
                   value={newRoutingForm.category}
                   onChange={(e) => setNewRoutingForm({ ...newRoutingForm, category: e.target.value })}
                   style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #EADCC9', outline: 'none', fontSize: '0.88rem', fontWeight: '700' }}
                 >
-                  <option value="Tủ gỗ">Tủ gỗ</option>
-                  <option value="Bàn gỗ">Bàn gỗ</option>
-                  <option value="Giường gỗ">Giường gỗ</option>
-                  <option value="Ghế gỗ">Ghế gỗ</option>
-                  <option value="Sơn & Phôi">Sơn & Phôi</option>
-                  <option value="Khác">Khác</option>
+                  <option value="Dòng hàng APT">Dòng hàng APT (1,380 SP)</option>
+                  <option value="Dòng hàng ATL">Dòng hàng ATL (512 SP)</option>
+                  <option value="Dòng hàng FOL">Dòng hàng FOL (509 SP)</option>
+                  <option value="Dòng hàng ADV">Dòng hàng ADV (482 SP)</option>
+                  <option value="Dòng hàng TPH">Dòng hàng TPH (114 SP)</option>
+                  <option value="Dòng hàng HOR">Dòng hàng HOR (32 SP)</option>
+                  <option value="Dòng hàng EYC">Dòng hàng EYC (27 SP)</option>
+                  <option value="Dòng hàng COV">Dòng hàng COV (10 SP)</option>
+                  <option value="Dòng hàng Khác">Dòng hàng Khác</option>
                 </select>
               </div>
 
