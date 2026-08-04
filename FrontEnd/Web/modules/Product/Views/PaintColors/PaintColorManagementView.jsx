@@ -97,19 +97,30 @@ const PaintColorManagementView = () => {
     };
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra, navigate]);
 
-  // Load products list for dropdown
+  // Suggestion states for autocomplete
+  const [colorCodeSuggestions, setColorCodeSuggestions] = useState([]);
+  const [colorNameSuggestions, setColorNameSuggestions] = useState([]);
+  const [supplierSuggestions, setSupplierSuggestions] = useState([]);
+
+  // Load products list and paint color suggestions
   useEffect(() => {
-    const fetchProducts = async () => {
+    const fetchInitialData = async () => {
       try {
         const res = await api.get('/master-products/?skip=0&limit=100').catch(() => null);
         if (res && res.items) {
           setProducts(res.items);
         }
+        const sugRes = await api.get('/master-products/paint-color-suggestions').catch(() => null);
+        if (sugRes) {
+          setColorCodeSuggestions(sugRes.color_codes || []);
+          setColorNameSuggestions(sugRes.color_names || []);
+          setSupplierSuggestions(sugRes.suppliers || []);
+        }
       } catch (err) {
-        console.warn('Lỗi lấy danh sách sản phẩm:', err);
+        console.warn('Lỗi lấy dữ liệu ban đầu:', err);
       }
     };
-    fetchProducts();
+    fetchInitialData();
   }, []);
 
   // Fetch list of paint color samples from backend
@@ -164,16 +175,28 @@ const PaintColorManagementView = () => {
     }
   };
 
+  const getDefaultExpiryDate = () => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 3);
+    return d.toISOString().split('T')[0];
+  };
+
+  const generateAutoCode = () => {
+    const nextNum = (total || items.length || 0) + 1;
+    return `MS-${String(nextNum).padStart(3, '0')}`;
+  };
+
   // Open modal for creating
   const handleOpenCreate = () => {
     setEditingItem(null);
     setImagePreview(null);
+    const autoCode = generateAutoCode();
     setFormData({
       master_product_id: products.length > 0 ? String(products[0].id) : '',
-      color_code: '',
+      color_code: autoCode,
       color_name: '',
       supplier: '',
-      expiry_date: '',
+      expiry_date: getDefaultExpiryDate(),
       image_url: '',
       note: ''
     });
@@ -199,21 +222,26 @@ const PaintColorManagementView = () => {
   // Submit form (Create / Update)
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.color_code.trim() || !formData.color_name.trim()) {
-      if (toast) toast('error', 'Vui lòng nhập Mã màu và Tên màu sơn');
+    const finalCode = formData.color_code.trim() || generateAutoCode();
+    if (!formData.color_name.trim()) {
+      if (toast) toast('error', 'Vui lòng chọn Tên màu sơn');
       return;
     }
     const prodId = formData.master_product_id || (products.length > 0 ? products[0].id : 1);
-    const payload = { ...formData, master_product_id: prodId };
+    const payload = {
+      ...formData,
+      color_code: finalCode,
+      master_product_id: prodId
+    };
 
     try {
       setSubmitting(true);
       if (editingItem) {
         await api.put(`/master-products/paint-colors-item/${editingItem.id}`, payload);
-        if (toast) toast('success', `Đã cập nhật mẫu màu sơn "${formData.color_code}" thành công!`);
+        if (toast) toast('success', `Đã cập nhật mẫu màu sơn "${finalCode}" thành công!`);
       } else {
         await api.post(`/master-products/${prodId}/paint-colors`, payload);
-        if (toast) toast('success', `Đã thêm mẫu màu sơn "${formData.color_code}" thành công!`);
+        if (toast) toast('success', `Đã thêm mẫu màu sơn "${finalCode}" thành công!`);
       }
       setShowFormModal(false);
       fetchPaintColors();
@@ -492,7 +520,7 @@ const PaintColorManagementView = () => {
             backgroundColor: '#FFFFFF',
             borderRadius: '16px',
             width: '100%',
-            maxWidth: '500px',
+            maxWidth: '700px',
             boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)',
             overflow: 'hidden',
             border: '1.5px solid #EADCC9'
@@ -505,7 +533,7 @@ const PaintColorManagementView = () => {
               borderBottom: '1px solid #EADCC9'
             }}>
               <h3 style={{ fontSize: '1.25rem', fontWeight: '900', color: '#2D1A12', margin: 0 }}>
-                {editingItem ? 'Chỉnh sửa mẫu màu sơn' : 'Thêm mới mẫu màu sơn'}
+                {editingItem ? 'KT03.3: Chỉnh sửa mẫu màu sơn' : 'KT03.3: Thêm mẫu màu sơn'}
               </h3>
               <button
                 type="button"
@@ -542,39 +570,65 @@ const PaintColorManagementView = () => {
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#334155', marginBottom: '2px' }}>Mã màu sơn *</label>
                       <input
-                        type="text" required placeholder="Ví dụ: MS-PU-01"
-                        value={formData.color_code}
-                        onChange={(e) => setFormData(prev => ({ ...prev, color_code: e.target.value }))}
-                        style={{ width: '100%', padding: '7px 10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.84rem', outline: 'none' }}
+                        type="text" disabled readOnly
+                        value={formData.color_code || 'MS-001'}
+                        placeholder="Mã màu sơn tự sinh..."
+                        style={{ width: '100%', padding: '8px 10px', border: '1.5px solid #cbd5e1', backgroundColor: '#e2e8f0', color: '#475569', borderRadius: '8px', fontSize: '0.88rem', fontWeight: '700', cursor: 'not-allowed', outline: 'none' }}
                       />
                     </div>
 
                     <div>
                       <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#334155', marginBottom: '2px' }}>Tên màu sơn *</label>
-                      <input
-                        type="text" required placeholder="Ví dụ: Sơn bóng gỗ sồi"
+                      <select
+                        required
                         value={formData.color_name}
                         onChange={(e) => setFormData(prev => ({ ...prev, color_name: e.target.value }))}
-                        style={{ width: '100%', padding: '7px 10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.84rem', outline: 'none' }}
-                      />
+                        style={{ width: '100%', padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.84rem', outline: 'none', backgroundColor: '#FFFFFF' }}
+                      >
+                        <option value="">-- Chọn tên màu sơn --</option>
+                        {Array.from(new Set([
+                          ...colorNameSuggestions,
+                          'Sơn PU mờ 50%',
+                          'Sơn PU mờ 70%',
+                          'Sơn PU bóng 100%',
+                          'Sơn bóng gỗ sồi',
+                          'Sơn lót Polyurethane',
+                          'Sơn trắng 2K',
+                          'Sơn màu Walnut'
+                        ])).map((opt, i) => (
+                          <option key={i} value={opt}>{opt}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#334155', marginBottom: '2px' }}>Nhà cung cấp</label>
-                    <input
-                      type="text" placeholder="Tên nhà cung cấp"
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#334155', marginBottom: '2px' }}>Nhà cung cấp *</label>
+                    <select
+                      required
                       value={formData.supplier}
                       onChange={(e) => setFormData(prev => ({ ...prev, supplier: e.target.value }))}
-                      style={{ width: '100%', padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.84rem', outline: 'none' }}
-                    />
+                      style={{ width: '100%', padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.84rem', outline: 'none', backgroundColor: '#FFFFFF' }}
+                    >
+                      <option value="">-- Chọn nhà cung cấp --</option>
+                      {Array.from(new Set([
+                        ...supplierSuggestions,
+                        'Công ty Sơn Nippon',
+                        'NPP Sơn Oseven',
+                        'NPP Sơn Dulux',
+                        'Sơn Á Châu',
+                        'Nội bộ G7'
+                      ])).map((opt, i) => (
+                        <option key={i} value={opt}>{opt}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#334155', marginBottom: '2px' }}>Ngày hết hạn</label>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#334155', marginBottom: '2px' }}>Ngày hết hạn của mẫu *</label>
                     <input
-                      type="date"
+                      type="date" required
                       value={formData.expiry_date}
                       onChange={(e) => setFormData(prev => ({ ...prev, expiry_date: e.target.value }))}
                       style={{ width: '100%', padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.84rem', outline: 'none' }}
@@ -583,13 +637,24 @@ const PaintColorManagementView = () => {
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#334155', marginBottom: '2px' }}>Ghi chú</label>
-                  <textarea
-                    rows="2" placeholder="Ghi chú điều kiện bảo quản mẫu màu..."
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#334155', marginBottom: '2px' }}>Ghi chú *</label>
+                  <select
+                    required
                     value={formData.note}
                     onChange={(e) => setFormData(prev => ({ ...prev, note: e.target.value }))}
-                    style={{ width: '100%', padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.84rem', outline: 'none' }}
-                  />
+                    style={{ width: '100%', padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.84rem', outline: 'none', backgroundColor: '#FFFFFF' }}
+                  >
+                    <option value="">-- Chọn điều kiện bảo quản / ghi chú --</option>
+                    {[
+                      'Bảo quản nơi khô ráo, thoáng mát (25-30°C)',
+                      'Đóng kín nắp ngay sau khi lấy mẫu',
+                      'Tránh ánh nắng trực tiếp',
+                      'Mẫu thử tiêu chuẩn kiểm định chất lượng',
+                      'Dùng cho công đoạn sơn phủ bề mặt'
+                    ].map((opt, i) => (
+                      <option key={i} value={opt}>{opt}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px' }}>
@@ -605,7 +670,7 @@ const PaintColorManagementView = () => {
                     disabled={submitting}
                     style={{ padding: '10px 28px', backgroundColor: '#5D3B32', border: 'none', borderRadius: '8px', color: '#FFFFFF', fontWeight: '800', cursor: submitting ? 'not-allowed' : 'pointer' }}
                   >
-                    {submitting ? 'Đang lưu...' : (editingItem ? 'Lưu thay đổi' : 'Tạo mẫu sơn')}
+                    {submitting ? 'Đang lưu...' : 'Xác nhận'}
                   </button>
                 </div>
 

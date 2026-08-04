@@ -31,11 +31,6 @@ const AddDetailModal = ({ productId, product, bomRows = [], detailRows = [], onC
     ...detailRows.map(r => ({ id: r.id || r.name, name: r.name }))
   ];
 
-  // Lấy danh sách tên chi tiết THUẦN TÚY từ bảng master_product_details (detailRows) - KHÔNG dùng gợi ý cứng
-  const dynamicDetailNames = Array.from(new Set(
-    detailRows.map(r => r.name).filter(Boolean)
-  ));
-
   const stageOptions = ['Định hình', 'Tạo phôi', 'Lắp ráp', 'Sơn', 'Đóng gói', 'Lưu kho'];
   const materialOptions = ['Gỗ tự nhiên', 'MDF', 'Gỗ Sồi', 'Gỗ thông', 'Ván ép', 'Kim loại'];
   const unitOptions = ['Cái', 'Tấm', 'Bộ', 'm2', 'm3'];
@@ -49,6 +44,28 @@ const AddDetailModal = ({ productId, product, bomRows = [], detailRows = [], onC
   const [selectedParent, setSelectedParent] = useState('');
   const [material, setMaterial] = useState('Gỗ tự nhiên');
   const [loading, setLoading] = useState(false);
+  const [systemSuggestions, setSystemSuggestions] = useState([]);
+
+  // Fetch full system detail suggestions from backend
+  useEffect(() => {
+    const fetchSuggestions = async () => {
+      try {
+        const res = await api.get('/master-products/detail-suggestions').catch(() => null);
+        if (res && res.detail_names) {
+          setSystemSuggestions(res.detail_names);
+        }
+      } catch (err) {
+        console.warn('Lỗi lấy gợi ý tên chi tiết:', err);
+      }
+    };
+    fetchSuggestions();
+  }, []);
+
+  // Combined suggestions
+  const dynamicDetailNames = Array.from(new Set([
+    ...detailRows.map(r => r.name).filter(Boolean),
+    ...systemSuggestions
+  ]));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -91,7 +108,7 @@ const AddDetailModal = ({ productId, product, bomRows = [], detailRows = [], onC
         backgroundColor: '#FFFFFF',
         borderRadius: '16px',
         width: '100%',
-        maxWidth: '580px',
+        maxWidth: '780px',
         boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)',
         overflow: 'hidden',
         border: '1.5px solid #EADCC9'
@@ -128,22 +145,46 @@ const AddDetailModal = ({ productId, product, bomRows = [], detailRows = [], onC
             
             {/* ROW 1: Tên chi tiết, Số lượng, Đơn vị */}
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '12px' }}>
-              <div>
+              <div style={{ position: 'relative' }}>
                 <label style={labelStyle}>Tên chi tiết *</label>
                 <input
                   type="text"
-                  list="bom-detail-names-list"
                   required
-                  placeholder="Chọn từ BOM hoặc gõ tên mới..."
+                  placeholder="Gõ để xem gợi ý tên chi tiết..."
                   value={detailName}
                   onChange={e => setDetailName(e.target.value)}
                   style={inputBaseStyle}
                 />
-                <datalist id="bom-detail-names-list">
-                  {dynamicDetailNames.map((opt, i) => (
-                    <option key={i} value={opt} />
-                  ))}
-                </datalist>
+                {detailName && detailName.trim() && (
+                  (() => {
+                    const filtered = dynamicDetailNames
+                      .filter(s => s.toLowerCase().includes(detailName.toLowerCase().trim()) && s.toLowerCase() !== detailName.toLowerCase().trim())
+                      .slice(0, 6);
+                    if (filtered.length === 0) return null;
+                    return (
+                      <div style={{
+                        position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px',
+                        backgroundColor: '#FFFFFF', border: '1.5px solid #EADCC9', borderRadius: '8px',
+                        boxShadow: '0 8px 16px rgba(45, 26, 18, 0.15)', maxHeight: '180px', overflowY: 'auto', zIndex: 3000
+                      }}>
+                        {filtered.map((item, idx) => (
+                          <div
+                            key={idx}
+                            onClick={() => setDetailName(item)}
+                            style={{
+                              padding: '8px 12px', fontSize: '0.82rem', fontWeight: '600', color: '#2D1A12',
+                              cursor: 'pointer', borderBottom: idx < filtered.length - 1 ? '1px solid #F1F5F9' : 'none'
+                            }}
+                            onMouseEnter={(e) => e.target.style.backgroundColor = '#FAF6F0'}
+                            onMouseLeave={(e) => e.target.style.backgroundColor = '#FFFFFF'}
+                          >
+                            {item}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()
+                )}
               </div>
               <div>
                 <label style={labelStyle}>Số lượng *</label>

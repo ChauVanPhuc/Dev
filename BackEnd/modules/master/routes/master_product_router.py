@@ -55,6 +55,20 @@ def sync_bom_data(db: Session = Depends(get_db)):
     """
     return master_product_controller.sync_bom_data_to_auxiliary_tables(db)
 
+@router.get("/detail-suggestions")
+def get_detail_suggestions(db: Session = Depends(get_db)):
+    """
+    [GET] Lấy danh sách tên chi tiết & thành phẩm duy nhất để gợi ý autocomplete.
+    """
+    return master_product_controller.get_detail_suggestions(db)
+
+@router.get("/paint-color-suggestions")
+def get_paint_color_suggestions(db: Session = Depends(get_db)):
+    """
+    [GET] Lấy danh sách mã màu, tên màu & nhà cung cấp duy nhất để gợi ý autocomplete.
+    """
+    return master_product_controller.get_paint_color_suggestions(db)
+
 @router.get("/all-product-details")
 def get_all_product_details(
     product_id: int = None,

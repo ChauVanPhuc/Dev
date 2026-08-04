@@ -22,14 +22,22 @@ const ProductDetailsManagementView = () => {
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState([]);
 
-  // Action menu state
+  // Action menu state & Autocomplete menu states
   const [actionMenuId, setActionMenuId] = useState(null);
+  const [showNameMenu, setShowNameMenu] = useState(false);
+  const [showParentMenu, setShowParentMenu] = useState(false);
 
-  // Close action menu when clicking outside
+  // Close menus when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (!e.target.closest('.action-btn') && !e.target.closest('.action-menu')) {
         setActionMenuId(null);
+      }
+      if (!e.target.closest('.suggest-name-box')) {
+        setShowNameMenu(false);
+      }
+      if (!e.target.closest('.suggest-parent-box')) {
+        setShowParentMenu(false);
       }
     };
     document.addEventListener('click', handleClickOutside);
@@ -102,19 +110,28 @@ const ProductDetailsManagementView = () => {
     };
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra, navigate]);
 
-  // Load products list for dropdown
+  // Suggestion states for autocomplete
+  const [detailSuggestions, setDetailSuggestions] = useState([]);
+  const [parentSuggestions, setParentSuggestions] = useState([]);
+
+  // Load products list and detail suggestions
   useEffect(() => {
-    const fetchProducts = async () => {
+    const fetchInitialData = async () => {
       try {
         const res = await api.get('/master-products/?skip=0&limit=100').catch(() => null);
         if (res && res.items) {
           setProducts(res.items);
         }
+        const sugRes = await api.get('/master-products/detail-suggestions').catch(() => null);
+        if (sugRes) {
+          setDetailSuggestions(sugRes.detail_names || []);
+          setParentSuggestions(sugRes.parent_names || []);
+        }
       } catch (err) {
-        console.warn('Lỗi lấy danh sách sản phẩm:', err);
+        console.warn('Lỗi lấy dữ liệu ban đầu:', err);
       }
     };
-    fetchProducts();
+    fetchInitialData();
   }, []);
 
   // Fetch list of details from backend
@@ -493,7 +510,7 @@ const ProductDetailsManagementView = () => {
             backgroundColor: '#FFFFFF',
             borderRadius: '16px',
             width: '100%',
-            maxWidth: '580px',
+            maxWidth: '780px',
             boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)',
             overflow: 'hidden',
             border: '1.5px solid #EADCC9'
@@ -520,16 +537,56 @@ const ProductDetailsManagementView = () => {
             <form onSubmit={handleSubmit} style={{ padding: '20px 24px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '12px' }}>
-                  <div>
+                  <div className="suggest-name-box" style={{ position: 'relative' }}>
                     <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: '700', color: '#2D1A12', marginBottom: '4px' }}>Tên chi tiết *</label>
                     <input
                       type="text"
                       required
-                      placeholder="Nhập tên chi tiết..."
+                      placeholder="Nhấp chọn hoặc gõ tên chi tiết..."
                       value={formData.name}
-                      onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                      onFocus={() => setShowNameMenu(true)}
+                      onChange={(e) => {
+                        setFormData(prev => ({ ...prev, name: e.target.value }));
+                        setShowNameMenu(true);
+                      }}
                       style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #EADCC9', borderRadius: '8px', fontSize: '0.88rem', outline: 'none' }}
                     />
+                    {showNameMenu && (
+                      (() => {
+                        const queryStr = (formData.name || '').toLowerCase().trim();
+                        const filtered = queryStr
+                          ? detailSuggestions.filter(s => s.toLowerCase().includes(queryStr)).slice(0, 8)
+                          : detailSuggestions.slice(0, 8);
+                        if (filtered.length === 0) return null;
+                        return (
+                          <div style={{
+                            position: 'absolute', top: '100%', left: 0, minWidth: '320px', maxWidth: '420px', marginTop: '4px',
+                            backgroundColor: '#FFFFFF', border: '1.5px solid #EADCC9', borderRadius: '8px',
+                            boxShadow: '0 10px 20px rgba(45, 26, 18, 0.2)', maxHeight: '220px', overflowY: 'auto', zIndex: 3000,
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {filtered.map((item, idx) => (
+                              <div
+                                key={idx}
+                                onClick={() => {
+                                  setFormData(prev => ({ ...prev, name: item }));
+                                  setShowNameMenu(false);
+                                }}
+                                style={{
+                                  padding: '9px 14px', fontSize: '0.84rem', fontWeight: '600', color: '#2D1A12',
+                                  cursor: 'pointer', borderBottom: idx < filtered.length - 1 ? '1px solid #F1F5F9' : 'none',
+                                  textOverflow: 'ellipsis', overflow: 'hidden'
+                                }}
+                                onMouseEnter={(e) => e.target.style.backgroundColor = '#FAF6F0'}
+                                onMouseLeave={(e) => e.target.style.backgroundColor = '#FFFFFF'}
+                              >
+                                {item}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()
+                    )}
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: '700', color: '#2D1A12', marginBottom: '4px' }}>Số lượng *</label>
@@ -579,15 +636,55 @@ const ProductDetailsManagementView = () => {
                       ))}
                     </select>
                   </div>
-                  <div>
+                  <div className="suggest-parent-box" style={{ position: 'relative' }}>
                     <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: '700', color: '#2D1A12', marginBottom: '4px' }}>Thành phẩm</label>
                     <input
                       type="text"
-                      placeholder="Nhập tên thành phẩm..."
+                      placeholder="Nhấp chọn hoặc gõ tên thành phẩm..."
                       value={formData.parent_name}
-                      onChange={(e) => setFormData(prev => ({ ...prev, parent_name: e.target.value }))}
+                      onFocus={() => setShowParentMenu(true)}
+                      onChange={(e) => {
+                        setFormData(prev => ({ ...prev, parent_name: e.target.value }));
+                        setShowParentMenu(true);
+                      }}
                       style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #EADCC9', borderRadius: '8px', fontSize: '0.88rem', outline: 'none' }}
                     />
+                    {showParentMenu && (
+                      (() => {
+                        const queryStr = (formData.parent_name || '').toLowerCase().trim();
+                        const filtered = queryStr
+                          ? parentSuggestions.filter(s => s.toLowerCase().includes(queryStr)).slice(0, 8)
+                          : parentSuggestions.slice(0, 8);
+                        if (filtered.length === 0) return null;
+                        return (
+                          <div style={{
+                            position: 'absolute', top: '100%', right: 0, minWidth: '320px', maxWidth: '420px', marginTop: '4px',
+                            backgroundColor: '#FFFFFF', border: '1.5px solid #EADCC9', borderRadius: '8px',
+                            boxShadow: '0 10px 20px rgba(45, 26, 18, 0.2)', maxHeight: '220px', overflowY: 'auto', zIndex: 3000,
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {filtered.map((item, idx) => (
+                              <div
+                                key={idx}
+                                onClick={() => {
+                                  setFormData(prev => ({ ...prev, parent_name: item }));
+                                  setShowParentMenu(false);
+                                }}
+                                style={{
+                                  padding: '9px 14px', fontSize: '0.84rem', fontWeight: '600', color: '#2D1A12',
+                                  cursor: 'pointer', borderBottom: idx < filtered.length - 1 ? '1px solid #F1F5F9' : 'none',
+                                  textOverflow: 'ellipsis', overflow: 'hidden'
+                                }}
+                                onMouseEnter={(e) => e.target.style.backgroundColor = '#FAF6F0'}
+                                onMouseLeave={(e) => e.target.style.backgroundColor = '#FFFFFF'}
+                              >
+                                {item}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()
+                    )}
                   </div>
                 </div>
 

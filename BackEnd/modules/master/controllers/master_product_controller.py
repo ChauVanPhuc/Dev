@@ -887,4 +887,48 @@ def sync_bom_data_to_auxiliary_tables(db: Session):
         "unique_paint_colors_inserted": len(color_objects)
     }
 
+def is_raw_sku_code(text: str) -> bool:
+    """
+    Kiểm tra xem một chuỗi có phải là Mã sản phẩm thuần túy (SKU code) hay không.
+    Ví dụ: '02-BD10-BLK', '1-36L-BRO', 'APT19-BD6-WOA' -> True (Là mã SKU).
+    'Oslo Dining table', 'Bộ chân ghế', 'Khung trước' -> False (Là tên thành phẩm/sản phẩm).
+    """
+    if not text or not text.strip():
+        return True
+    s = text.strip()
+    import re
+    if re.match(r'^[A-Z0-9]{1,10}(-[A-Z0-9]{1,10})+$', s, re.IGNORECASE):
+        return True
+    return False
+
+def get_detail_suggestions(db: Session):
+    """
+    Lấy danh sách tất cả các tên chi tiết và tên thành phẩm duy nhất để hỗ trợ gợi ý autocomplete.
+    Tự động lọc bỏ các mã SKU thuần túy để chỉ hiển thị TÊN thành phẩm/sản phẩm thực tế.
+    """
+    detail_names = [r[0] for r in db.query(MasterProductDetail.name).distinct().all() if r[0]]
+    bom_names = [r[0] for r in db.query(MasterBOMDetail.name).distinct().all() if r[0]]
+    all_names = sorted(list(set(detail_names + bom_names)))
+
+    parent_names = [r[0] for r in db.query(MasterProductDetail.parent_name).distinct().all() if r[0]]
+    prod_names = [r[0] for r in db.query(MasterProduct.name).distinct().all() if r[0]]
+    combined_parents = set(parent_names + prod_names)
+    clean_parents = sorted([p for p in combined_parents if p and not is_raw_sku_code(p)])
+
+    return {"detail_names": all_names, "parent_names": clean_parents}
+
+def get_paint_color_suggestions(db: Session):
+    """
+    Lấy danh sách các mã màu, tên màu và nhà cung cấp duy nhất để hỗ trợ gợi ý autocomplete.
+    """
+    codes = [r[0] for r in db.query(PaintColorSample.color_code).distinct().all() if r[0]]
+    names = [r[0] for r in db.query(PaintColorSample.color_name).distinct().all() if r[0]]
+    suppliers = [r[0] for r in db.query(PaintColorSample.supplier).distinct().all() if r[0]]
+
+    return {
+        "color_codes": sorted(list(set(codes))),
+        "color_names": sorted(list(set(names))),
+        "suppliers": sorted(list(set(suppliers)))
+    }
+
 
