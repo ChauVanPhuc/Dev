@@ -129,3 +129,26 @@ class HRFactoryStructure(Base):
     department_id = Column(Integer, nullable=True)
     description = Column(NVARCHAR(500), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class HRFactoryDepartment(Base):
+    """
+    Bảng liên kết Nhà máy - Phòng ban thuộc nhà máy
+    """
+    __tablename__ = "hr_factory_departments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    factory_structure_id = Column(Integer, ForeignKey("hr_factory_structures.id", ondelete="CASCADE"), nullable=False)
+    department_id = Column(Integer, ForeignKey("hr_departments.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class HRDepartmentPosition(Base):
+    """
+    Bảng liên kết Phòng ban - Vị trí / Chức danh cho phép
+    """
+    __tablename__ = "hr_department_positions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    department_id = Column(Integer, ForeignKey("hr_departments.id", ondelete="CASCADE"), nullable=False)
+    position_id = Column(Integer, ForeignKey("hr_positions.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+

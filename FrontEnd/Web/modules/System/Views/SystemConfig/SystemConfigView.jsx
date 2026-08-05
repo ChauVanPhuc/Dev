@@ -38,6 +38,18 @@ export default function SystemConfigView() {
   const [deletingItem, setDeletingItem] = useState(null);
   const [actionMenuId, setActionMenuId] = useState(null);
 
+  // --- SUB-TABLE STATES ---
+  const [selectedRow, setSelectedRow] = useState(null);
+  const [activeSubTab, setActiveSubTab] = useState('subtab1');
+  const [subTableData, setSubTableData] = useState([]);
+  const [subTableLoading, setSubTableLoading] = useState(false);
+
+  // LINK MODAL STATES (For Sub-table CRUD)
+  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [availableOptions, setAvailableOptions] = useState([]);
+  const [selectedOptionId, setSelectedOptionId] = useState('');
+  const [linkSubmitting, setLinkSubmitting] = useState(false);
+
   // --- FACTORY FORM STATES ---
   const [factoryCode, setFactoryCode] = useState('');
   const [factoryName, setFactoryName] = useState('');
@@ -120,8 +132,152 @@ export default function SystemConfigView() {
 
   useEffect(() => {
     setSearchQuery('');
+    setSelectedRow(null);
+    setActiveSubTab('subtab1');
+    setSubTableData([]);
     loadData();
   }, [activeTab]);
+
+  // SUB-TABLE DATA FETCHER
+  const fetchSubTableData = async (row, mainTab, subTabKey) => {
+    if (!row || !row.id) {
+      setSubTableData([]);
+      return;
+    }
+    setSubTableLoading(true);
+    try {
+      if (mainTab === 'factory') {
+        if (subTabKey === 'subtab1') {
+          const res = await hrService.getFactoryDepartments(row.id);
+          setSubTableData(res || []);
+        } else if (subTabKey === 'subtab2') {
+          const res = await hrService.getFactoryChildren(row.id);
+          setSubTableData(res || []);
+        }
+      } else if (mainTab === 'department') {
+        if (subTabKey === 'subtab1') {
+          const res = await hrService.getDepartmentEmployees(row.id);
+          setSubTableData(res || []);
+        } else if (subTabKey === 'subtab2') {
+          const res = await hrService.getDepartmentPositions(row.id);
+          setSubTableData(res || []);
+        }
+      } else if (mainTab === 'position') {
+        if (subTabKey === 'subtab1') {
+          const res = await hrService.getPositionEmployees(row.id);
+          setSubTableData(res || []);
+        } else if (subTabKey === 'subtab2') {
+          const res = await hrService.getPositionDepartments(row.id);
+          setSubTableData(res || []);
+        }
+      } else if (mainTab === 'role') {
+        if (subTabKey === 'subtab1') {
+          const res = await hrService.getRoleEmployees(row.id);
+          setSubTableData(res || []);
+        } else if (subTabKey === 'subtab2') {
+          let perms = {};
+          try { perms = JSON.parse(row.default_permissions || '{}'); } catch (e) {}
+          const list = Object.entries(perms).map(([key, level]) => ({ key, level }));
+          setSubTableData(list);
+        }
+      } else if (mainTab === 'sidebar') {
+        if (subTabKey === 'subtab1') {
+          setSubTableData(row.children || []);
+        } else if (subTabKey === 'subtab2') {
+          setSubTableData([
+            { field: 'Mã ID', value: row.id },
+            { field: 'Tiêu đề Menu', value: row.title },
+            { field: 'Đường dẫn (Route)', value: row.route_path || '---' },
+            { field: 'Nền tảng', value: row.platform },
+            { field: 'Biểu tượng (Icon)', value: row.icon || 'LayoutGrid' },
+            { field: 'Khóa phân quyền', value: row.permission_key || '---' },
+            { field: 'Trạng thái', value: row.is_active ? 'Đang hoạt động' : 'Tạm ẩn' }
+          ]);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      toast('error', 'Không thể tải dữ liệu bảng phụ!');
+    } finally {
+      setSubTableLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedRow) {
+      fetchSubTableData(selectedRow, activeTab, activeSubTab);
+    } else {
+      setSubTableData([]);
+    }
+  }, [selectedRow, activeSubTab]);
+
+  // SUB-TABLE CRUD LINK HANDLERS
+  const handleOpenLinkModal = async () => {
+    if (!selectedRow) return;
+    setSelectedOptionId('');
+    setLinkSubmitting(false);
+
+    try {
+      if (activeTab === 'factory' && activeSubTab === 'subtab1') {
+        const allDepts = await hrService.getDepartments();
+        const existingIds = (subTableData || []).map(x => x.department_id || x.id);
+        const filtered = (allDepts || []).filter(d => !existingIds.includes(d.id));
+        setAvailableOptions(filtered);
+        setIsLinkModalOpen(true);
+      } else if (activeTab === 'department' && activeSubTab === 'subtab2') {
+        const allPositions = await hrService.getPositions();
+        const existingIds = (subTableData || []).map(x => x.position_id || x.id);
+        const filtered = (allPositions || []).filter(p => !existingIds.includes(p.id));
+        setAvailableOptions(filtered);
+        setIsLinkModalOpen(true);
+      }
+    } catch (err) {
+      console.error(err);
+      toast('error', 'Không thể tải danh sách liên kết!');
+    }
+  };
+
+  const handleSaveLink = async (e) => {
+    if (e) e.preventDefault();
+    if (!selectedOptionId || !selectedRow) return;
+    setLinkSubmitting(true);
+    try {
+      if (activeTab === 'factory' && activeSubTab === 'subtab1') {
+        await hrService.addFactoryDepartment(selectedRow.id, parseInt(selectedOptionId));
+        toast('success', 'Đã liên kết phòng ban vào nhà máy!');
+      } else if (activeTab === 'department' && activeSubTab === 'subtab2') {
+        await hrService.addDepartmentPosition(selectedRow.id, parseInt(selectedOptionId));
+        toast('success', 'Đã liên kết vị trí vào phòng ban!');
+      }
+      setIsLinkModalOpen(false);
+      fetchSubTableData(selectedRow, activeTab, activeSubTab);
+    } catch (err) {
+      console.error(err);
+      toast('error', err.response?.data?.detail || 'Liên kết thất bại!');
+    } finally {
+      setLinkSubmitting(false);
+    }
+  };
+
+  const handleRemoveLink = async (item) => {
+    if (!selectedRow) return;
+    try {
+      if (activeTab === 'factory' && activeSubTab === 'subtab1') {
+        const deptId = item.department_id || item.id;
+        await hrService.removeFactoryDepartment(selectedRow.id, deptId);
+        toast('success', 'Đã xóa liên kết phòng ban!');
+      } else if (activeTab === 'department' && activeSubTab === 'subtab2') {
+        const posId = item.position_id || item.id;
+        await hrService.removeDepartmentPosition(selectedRow.id, posId);
+        toast('success', 'Đã xóa liên kết vị trí!');
+      }
+      fetchSubTableData(selectedRow, activeTab, activeSubTab);
+    } catch (err) {
+      console.error(err);
+      toast('error', err.response?.data?.detail || 'Xóa liên kết thất bại!');
+    }
+  };
+
 
   // Clean data searching
   const filteredData = useMemo(() => {
@@ -370,14 +526,17 @@ export default function SystemConfigView() {
     return (
       <React.Fragment key={item.id}>
         <div 
+          onClick={() => setSelectedRow(selectedRow?.id === item.id ? null : item)}
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '12px 16px 12px ' + paddingLeft,
             borderBottom: '1px solid #F3F4F6',
-            backgroundColor: !item.is_active ? '#F9FAFB' : '#FFFFFF',
-            opacity: item.is_active ? 1 : 0.6
+            backgroundColor: selectedRow?.id === item.id ? '#FAF6F0' : (!item.is_active ? '#F9FAFB' : '#FFFFFF'),
+            borderLeft: selectedRow?.id === item.id ? '4px solid #7B5233' : '4px solid transparent',
+            opacity: item.is_active ? 1 : 0.6,
+            cursor: 'pointer'
           }}
           className="menu-row-item"
         >
@@ -841,7 +1000,18 @@ export default function SystemConfigView() {
                       </tr>
                     ) : (
                       filteredData.map((item, idx) => (
-                        <tr key={item.id} style={{ borderBottom: '1px solid #F3F4F6', position: 'relative', zIndex: actionMenuId === item.id ? 30 : 1 }}>
+                        <tr 
+                          key={item.id} 
+                          onClick={() => setSelectedRow(selectedRow?.id === item.id ? null : item)}
+                          style={{ 
+                            borderBottom: '1px solid #F3F4F6', 
+                            position: 'relative', 
+                            zIndex: actionMenuId === item.id ? 30 : 1,
+                            backgroundColor: selectedRow?.id === item.id ? '#FAF6F0' : 'transparent',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.2s'
+                          }}
+                        >
                           <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#4B5563', fontWeight: 600 }}>{idx + 1}</td>
                           
                           {activeTab === 'factory' && (
@@ -974,6 +1144,311 @@ export default function SystemConfigView() {
                 )}
               </div>
             )}
+
+            {/* SUB-TABLE PANEL WHEN A ROW IS SELECTED */}
+            {selectedRow && (
+              <div style={{
+                marginTop: '20px',
+                backgroundColor: '#FFFFFF',
+                borderRadius: '12px',
+                border: '1.5px solid #7B5233',
+                boxShadow: '0 4px 12px rgba(123, 82, 51, 0.08)',
+                overflow: 'hidden'
+              }}>
+                {/* SubTable Header */}
+                <div style={{
+                  padding: '12px 18px',
+                  backgroundColor: '#FAF6F0',
+                  borderBottom: '1px solid #E5E7EB',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <FileText size={16} style={{ color: '#7B5233' }} />
+                    <span style={{ fontWeight: 800, fontSize: '0.9rem', color: '#2D1A12' }}>
+                      BẢNG PHỤ CẤU HÌNH: <span style={{ color: '#7B5233' }}>{selectedRow.structure_name || selectedRow.name || selectedRow.title}</span>
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setSelectedRow(null)}
+                    style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9CA3AF', padding: '4px' }}
+                    title="Thu gọn bảng phụ"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                {/* SubTab Navigation Headers */}
+                <div style={{ display: 'flex', borderBottom: '1px solid #F3F4F6', backgroundColor: '#FFFFFF', padding: '0 12px' }}>
+                  {activeTab === 'factory' && (
+                    <>
+                      <button
+                        onClick={() => setActiveSubTab('subtab1')}
+                        style={{
+                          padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                          fontSize: '0.82rem', fontWeight: activeSubTab === 'subtab1' ? 800 : 600,
+                          color: activeSubTab === 'subtab1' ? '#7B5233' : '#6B7280',
+                          borderBottom: activeSubTab === 'subtab1' ? '2px solid #7B5233' : '2px solid transparent'
+                        }}
+                      >
+                        Phòng ban thuộc Nhà máy ({subTableData.length})
+                      </button>
+                      <button
+                        onClick={() => setActiveSubTab('subtab2')}
+                        style={{
+                          padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                          fontSize: '0.82rem', fontWeight: activeSubTab === 'subtab2' ? 800 : 600,
+                          color: activeSubTab === 'subtab2' ? '#7B5233' : '#6B7280',
+                          borderBottom: activeSubTab === 'subtab2' ? '2px solid #7B5233' : '2px solid transparent'
+                        }}
+                      >
+                        Tổ sản xuất / Cấu trúc con ({subTableData.length})
+                      </button>
+                    </>
+                  )}
+
+                  {activeTab === 'department' && (
+                    <>
+                      <button
+                        onClick={() => setActiveSubTab('subtab1')}
+                        style={{
+                          padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                          fontSize: '0.82rem', fontWeight: activeSubTab === 'subtab1' ? 800 : 600,
+                          color: activeSubTab === 'subtab1' ? '#7B5233' : '#6B7280',
+                          borderBottom: activeSubTab === 'subtab1' ? '2px solid #7B5233' : '2px solid transparent'
+                        }}
+                      >
+                        Nhân viên thuộc phòng ban ({subTableData.length})
+                      </button>
+                      <button
+                        onClick={() => setActiveSubTab('subtab2')}
+                        style={{
+                          padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                          fontSize: '0.82rem', fontWeight: activeSubTab === 'subtab2' ? 800 : 600,
+                          color: activeSubTab === 'subtab2' ? '#7B5233' : '#6B7280',
+                          borderBottom: activeSubTab === 'subtab2' ? '2px solid #7B5233' : '2px solid transparent'
+                        }}
+                      >
+                        Vị trí / Chức danh cho phép ({subTableData.length})
+                      </button>
+                    </>
+                  )}
+
+                  {activeTab === 'position' && (
+                    <>
+                      <button
+                        onClick={() => setActiveSubTab('subtab1')}
+                        style={{
+                          padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                          fontSize: '0.82rem', fontWeight: activeSubTab === 'subtab1' ? 800 : 600,
+                          color: activeSubTab === 'subtab1' ? '#7B5233' : '#6B7280',
+                          borderBottom: activeSubTab === 'subtab1' ? '2px solid #7B5233' : '2px solid transparent'
+                        }}
+                      >
+                        Nhân viên đảm nhiệm ({subTableData.length})
+                      </button>
+                      <button
+                        onClick={() => setActiveSubTab('subtab2')}
+                        style={{
+                          padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                          fontSize: '0.82rem', fontWeight: activeSubTab === 'subtab2' ? 800 : 600,
+                          color: activeSubTab === 'subtab2' ? '#7B5233' : '#6B7280',
+                          borderBottom: activeSubTab === 'subtab2' ? '2px solid #7B5233' : '2px solid transparent'
+                        }}
+                      >
+                        Phòng ban sử dụng ({subTableData.length})
+                      </button>
+                    </>
+                  )}
+
+                  {activeTab === 'role' && (
+                    <>
+                      <button
+                        onClick={() => setActiveSubTab('subtab1')}
+                        style={{
+                          padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                          fontSize: '0.82rem', fontWeight: activeSubTab === 'subtab1' ? 800 : 600,
+                          color: activeSubTab === 'subtab1' ? '#7B5233' : '#6B7280',
+                          borderBottom: activeSubTab === 'subtab1' ? '2px solid #7B5233' : '2px solid transparent'
+                        }}
+                      >
+                        Tài khoản thuộc Bộ phận ({subTableData.length})
+                      </button>
+                      <button
+                        onClick={() => setActiveSubTab('subtab2')}
+                        style={{
+                          padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                          fontSize: '0.82rem', fontWeight: activeSubTab === 'subtab2' ? 800 : 600,
+                          color: activeSubTab === 'subtab2' ? '#7B5233' : '#6B7280',
+                          borderBottom: activeSubTab === 'subtab2' ? '2px solid #7B5233' : '2px solid transparent'
+                        }}
+                      >
+                        Quyền mặc định
+                      </button>
+                    </>
+                  )}
+
+                  {activeTab === 'sidebar' && (
+                    <>
+                      <button
+                        onClick={() => setActiveSubTab('subtab1')}
+                        style={{
+                          padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                          fontSize: '0.82rem', fontWeight: activeSubTab === 'subtab1' ? 800 : 600,
+                          color: activeSubTab === 'subtab1' ? '#7B5233' : '#6B7280',
+                          borderBottom: activeSubTab === 'subtab1' ? '2px solid #7B5233' : '2px solid transparent'
+                        }}
+                      >
+                        Mục menu con ({subTableData.length})
+                      </button>
+                      <button
+                        onClick={() => setActiveSubTab('subtab2')}
+                        style={{
+                          padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                          fontSize: '0.82rem', fontWeight: activeSubTab === 'subtab2' ? 800 : 600,
+                          color: activeSubTab === 'subtab2' ? '#7B5233' : '#6B7280',
+                          borderBottom: activeSubTab === 'subtab2' ? '2px solid #7B5233' : '2px solid transparent'
+                        }}
+                      >
+                        Thông số kỹ thuật
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* SubTable Body */}
+                <div style={{ padding: '16px', maxHeight: '250px', overflowY: 'auto' }}>
+                  {subTableLoading ? (
+                    <div style={{ textAlign: 'center', padding: '20px', color: '#9CA3AF', fontSize: '0.85rem' }}>
+                      Đang tải dữ liệu bảng phụ...
+                    </div>
+                  ) : subTableData.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '20px', color: '#9CA3AF', fontSize: '0.85rem' }}>
+                      Chưa có dữ liệu bảng phụ liên kết.
+                    </div>
+                  ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#F9FAFB', borderBottom: '1px solid #E5E7EB', color: '#4B5563', textAlign: 'left' }}>
+                          <th style={{ padding: '8px 12px', width: '50px' }}>STT</th>
+                          <th style={{ padding: '8px 12px' }}>Tên / Mã</th>
+                          <th style={{ padding: '8px 12px' }}>Mô tả / Chi tiết</th>
+                          <th style={{ padding: '8px 12px', width: '100px', textAlign: 'center' }}>Thao tác</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {subTableData.map((stItem, index) => (
+                          <tr key={stItem.id || stItem.key || index} style={{ borderBottom: '1px solid #F3F4F6' }}>
+                            <td style={{ padding: '8px 12px', color: '#6B7280' }}>{index + 1}</td>
+                            <td style={{ padding: '8px 12px', fontWeight: 600, color: '#1F2937' }}>
+                              {stItem.name || stItem.full_name || stItem.title || stItem.code || stItem.key || stItem.field}
+                            </td>
+                            <td style={{ padding: '8px 12px', color: '#6B7280' }}>
+                              {stItem.description || stItem.email || stItem.structure_name || stItem.level || stItem.value || '---'}
+                            </td>
+                            <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                              {((activeTab === 'factory' && activeSubTab === 'subtab1') || (activeTab === 'department' && activeSubTab === 'subtab2')) ? (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleRemoveLink(stItem); }}
+                                  style={{ border: 'none', background: 'none', color: '#EF4444', cursor: 'pointer' }}
+                                  title="Gỡ liên kết"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              ) : (
+                                <span style={{ color: '#D1D5DB' }}>---</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+
+                  {/* Action Add Button for Sub-table CRUD */}
+                  {((activeTab === 'factory' && activeSubTab === 'subtab1') || (activeTab === 'department' && activeSubTab === 'subtab2')) && (
+                    <div style={{ marginTop: '12px' }}>
+                      <button
+                        onClick={handleOpenLinkModal}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '6px',
+                          padding: '6px 12px', borderRadius: '6px', border: '1px dashed #7B5233',
+                          backgroundColor: '#FAF6F0', color: '#7B5233', fontWeight: 'bold',
+                          fontSize: '0.78rem', cursor: 'pointer'
+                        }}
+                      >
+                        <Plus size={14} />
+                        <span>Thêm liên kết mới</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* LINK MODAL FOR SUB-TABLE CRUD */}
+            {isLinkModalOpen && (
+              <div style={{
+                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                backgroundColor: 'rgba(0, 0, 0, 0.4)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                zIndex: 1100, backdropFilter: 'blur(4px)'
+              }}>
+                <div style={{
+                  backgroundColor: '#FFFFFF', borderRadius: '14px', width: '420px',
+                  padding: '20px', border: '1px solid #E5E7EB', boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <h4 style={{ margin: 0, color: '#2D1A12', fontSize: '0.95rem', fontWeight: 800 }}>
+                      {activeTab === 'factory' ? 'Thêm liên kết Phòng ban' : 'Thêm liên kết Vị trí'}
+                    </h4>
+                    <button onClick={() => setIsLinkModalOpen(false)} style={{ border: 'none', background: 'none', cursor: 'pointer' }}>
+                      <X size={16} />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleSaveLink}>
+                    <div style={{ marginBottom: '16px' }}>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#4B5563', marginBottom: '6px' }}>
+                        {activeTab === 'factory' ? 'CHỌN PHÒNG BAN LIÊN KẾT' : 'CHỌN VỊ TRÍ LIÊN KẾT'}
+                      </label>
+                      <select
+                        value={selectedOptionId}
+                        onChange={(e) => setSelectedOptionId(e.target.value)}
+                        style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                        required
+                      >
+                        <option value="">-- Chọn mục để liên kết --</option>
+                        {availableOptions.map(opt => (
+                          <option key={opt.id} value={opt.id}>
+                            {opt.code ? `[${opt.code}] ` : ''}{opt.name || opt.structure_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setIsLinkModalOpen(false)}
+                        style={{ padding: '6px 14px', borderRadius: '6px', border: '1px solid #D1D5DB', backgroundColor: '#FFF', fontSize: '0.8rem', fontWeight: 'bold' }}
+                      >
+                        Hủy
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={linkSubmitting}
+                        style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', backgroundColor: '#7B5233', color: '#FFF', fontSize: '0.8rem', fontWeight: 'bold' }}
+                      >
+                        {linkSubmitting ? 'Đang lưu...' : 'Lưu liên kết'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
       </div>

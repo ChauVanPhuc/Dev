@@ -185,5 +185,50 @@ export const hrService = {
 
   deleteFactoryStructure: async (id) => {
     return await api.delete(`/hr/factory-structures/${id}`);
+  },
+
+  // --- SUB-TABLE SERVICES ---
+  getFactoryDepartments: async (factoryId) => {
+    return await api.get(`/hr/factory-structures/${factoryId}/departments`);
+  },
+
+  addFactoryDepartment: async (factoryId, departmentId) => {
+    return await api.post(`/hr/factory-structures/${factoryId}/departments`, { department_id: departmentId });
+  },
+
+  removeFactoryDepartment: async (factoryId, departmentId) => {
+    return await api.delete(`/hr/factory-structures/${factoryId}/departments/${departmentId}`);
+  },
+
+  getFactoryChildren: async (factoryId) => {
+    return await api.get(`/hr/factory-structures/${factoryId}/children`);
+  },
+
+  getDepartmentEmployees: async (deptId) => {
+    return await api.get(`/hr/departments/${deptId}/employees`);
+  },
+
+  getDepartmentPositions: async (deptId) => {
+    return await api.get(`/hr/departments/${deptId}/positions`);
+  },
+
+  addDepartmentPosition: async (deptId, positionId) => {
+    return await api.post(`/hr/departments/${deptId}/positions`, { position_id: positionId });
+  },
+
+  removeDepartmentPosition: async (deptId, positionId) => {
+    return await api.delete(`/hr/departments/${deptId}/positions/${positionId}`);
+  },
+
+  getPositionEmployees: async (posId) => {
+    return await api.get(`/hr/positions/${posId}/employees`);
+  },
+
+  getPositionDepartments: async (posId) => {
+    return await api.get(`/hr/positions/${posId}/departments`);
+  },
+
+  getRoleEmployees: async (roleId) => {
+    return await api.get(`/hr/roles/${roleId}/employees`);
   }
 };

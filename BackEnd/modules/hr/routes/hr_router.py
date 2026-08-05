@@ -13,7 +13,8 @@ from modules.hr.schemas import hr_schemas
 from modules.hr.controllers import hr_controller
 from modules.hr.models.hr_models import (
     HREmployee, HRDepartment, HRPosition, HRSection,
-    HRHierarchyNode, HRPersonnelNode, HRFactoryStructure
+    HRHierarchyNode, HRPersonnelNode, HRFactoryStructure,
+    HRFactoryDepartment, HRDepartmentPosition
 )
 
 router = APIRouter()
@@ -441,3 +442,168 @@ def delete_factory_structure(id: int, db: Session = Depends(get_db)):
     if not success:
         raise HTTPException(status_code=404, detail="Không tìm thấy cấu trúc nhà máy")
     return {"message": "Xóa cấu trúc nhà máy thành công"}
+
+
+# --- SUB-TABLES ENDPOINTS ---
+
+# 1. Factory Structure Sub-tables
+@router.get("/factory-structures/{id}/departments")
+def get_factory_departments(id: int, db: Session = Depends(get_db)):
+    links = db.query(HRFactoryDepartment).filter(HRFactoryDepartment.factory_structure_id == id).all()
+    dept_ids = [l.department_id for l in links]
+    if not dept_ids:
+        return []
+    depts = db.query(HRDepartment).filter(HRDepartment.id.in_(dept_ids)).all()
+    link_map = {l.department_id: l.id for l in links}
+    return [
+        {
+            "link_id": link_map.get(d.id),
+            "department_id": d.id,
+            "code": d.code,
+            "name": d.name,
+            "description": d.description,
+            "created_at": d.created_at
+        }
+        for d in depts
+    ]
+
+@router.post("/factory-structures/{id}/departments")
+def add_factory_department(id: int, payload: dict, db: Session = Depends(get_db)):
+    dept_id = payload.get("department_id")
+    if not dept_id:
+        raise HTTPException(status_code=400, detail="Thiếu department_id")
+    existing = db.query(HRFactoryDepartment).filter(
+        HRFactoryDepartment.factory_structure_id == id,
+        HRFactoryDepartment.department_id == dept_id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Phòng ban này đã liên kết với nhà máy!")
+    link = HRFactoryDepartment(factory_structure_id=id, department_id=dept_id)
+    db.add(link)
+    db.commit()
+    db.refresh(link)
+    return link
+
+@router.delete("/factory-structures/{id}/departments/{dept_id}")
+def remove_factory_department(id: int, dept_id: int, db: Session = Depends(get_db)):
+    link = db.query(HRFactoryDepartment).filter(
+        HRFactoryDepartment.factory_structure_id == id,
+        HRFactoryDepartment.department_id == dept_id
+    ).first()
+    if not link:
+        raise HTTPException(status_code=404, detail="Không tìm thấy liên kết phòng ban")
+    db.delete(link)
+    db.commit()
+    return {"message": "Đã xóa liên kết phòng ban"}
+
+@router.get("/factory-structures/{id}/children")
+def get_factory_children(id: int, db: Session = Depends(get_db)):
+    children = db.query(HRFactoryStructure).filter(HRFactoryStructure.parent_id == id).all()
+    return children
+
+
+# 2. Department Sub-tables
+@router.get("/departments/{id}/employees")
+def get_department_employees(id: int, db: Session = Depends(get_db)):
+    employees = db.query(HREmployee).filter(HREmployee.department_id == id).all()
+    return employees
+
+@router.get("/departments/{id}/positions")
+def get_department_positions(id: int, db: Session = Depends(get_db)):
+    links = db.query(HRDepartmentPosition).filter(HRDepartmentPosition.department_id == id).all()
+    pos_ids = [l.position_id for l in links]
+    if not pos_ids:
+        return []
+    positions = db.query(HRPosition).filter(HRPosition.id.in_(pos_ids)).all()
+    link_map = {l.position_id: l.id for l in links}
+    return [
+        {
+            "link_id": link_map.get(p.id),
+            "position_id": p.id,
+            "code": p.code,
+            "name": p.name,
+            "description": p.description,
+            "created_at": p.created_at
+        }
+        for p in positions
+    ]
+
+@router.post("/departments/{id}/positions")
+def add_department_position(id: int, payload: dict, db: Session = Depends(get_db)):
+    pos_id = payload.get("position_id")
+    if not pos_id:
+        raise HTTPException(status_code=400, detail="Thiếu position_id")
+    existing = db.query(HRDepartmentPosition).filter(
+        HRDepartmentPosition.department_id == id,
+        HRDepartmentPosition.position_id == pos_id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Vị trí này đã được liên kết với phòng ban!")
+    link = HRDepartmentPosition(department_id=id, position_id=pos_id)
+    db.add(link)
+    db.commit()
+    db.refresh(link)
+    return link
+
+@router.delete("/departments/{id}/positions/{pos_id}")
+def remove_department_position(id: int, pos_id: int, db: Session = Depends(get_db)):
+    link = db.query(HRDepartmentPosition).filter(
+        HRDepartmentPosition.department_id == id,
+        HRDepartmentPosition.position_id == pos_id
+    ).first()
+    if not link:
+        raise HTTPException(status_code=404, detail="Không tìm thấy liên kết vị trí")
+    db.delete(link)
+    db.commit()
+    return {"message": "Đã xóa liên kết vị trí"}
+
+
+# 3. Position Sub-tables
+@router.get("/positions/{id}/employees")
+def get_position_employees(id: int, db: Session = Depends(get_db)):
+    employees = db.query(HREmployee).filter(HREmployee.position_id == id).all()
+    return employees
+
+@router.get("/positions/{id}/departments")
+def get_position_departments(id: int, db: Session = Depends(get_db)):
+    links = db.query(HRDepartmentPosition).filter(HRDepartmentPosition.position_id == id).all()
+    dept_ids = [l.department_id for l in links]
+    if not dept_ids:
+        return []
+    depts = db.query(HRDepartment).filter(HRDepartment.id.in_(dept_ids)).all()
+    link_map = {l.department_id: l.id for l in links}
+    return [
+        {
+            "link_id": link_map.get(d.id),
+            "department_id": d.id,
+            "code": d.code,
+            "name": d.name,
+            "description": d.description,
+            "created_at": d.created_at
+        }
+        for d in depts
+    ]
+
+
+# 4. Role Sub-tables
+@router.get("/roles/{id}/employees")
+def get_role_employees(id: int, db: Session = Depends(get_db)):
+    # Query accounts or hr_employees linked to role
+    from modules.auth.models.departments import Department
+    from modules.auth.models.accounts import Account
+    dept_mappings = db.query(Department).filter(Department.role_id == id).all()
+    account_ids = [d.account_id for d in dept_mappings if d.account_id]
+    if not account_ids:
+        return []
+    accounts = db.query(Account).filter(Account.id.in_(account_ids)).all()
+    return [
+        {
+            "id": acc.id,
+            "username": acc.username,
+            "full_name": acc.full_name or acc.username,
+            "email": getattr(acc, 'email', '---'),
+            "is_active": acc.is_active
+        }
+        for acc in accounts
+    ]
+
