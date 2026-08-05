@@ -794,14 +794,14 @@ export default function SystemConfigView() {
                     Chưa có mục menu nào cho bản {sidebarPlatform}.
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 360px)', overflowY: 'auto' }}>
                     {filteredData.map(menu => renderSidebarNode(menu, 0))}
                   </div>
                 )}
               </div>
             ) : (
               // DEFAULT LIST TABLE (FACTORY, DEPT, POSITION, ROLE)
-              <div style={{ overflowX: 'auto' }}>
+              <div style={{ overflowX: 'auto', maxHeight: 'calc(100vh - 360px)', overflowY: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ backgroundColor: '#7B5233', color: '#FFFFFF' }}>

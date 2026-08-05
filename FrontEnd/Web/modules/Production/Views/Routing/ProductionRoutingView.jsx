@@ -4,7 +4,7 @@ import {
   Search, ArrowUpDown, Filter, Plus, Copy, MoreHorizontal, Upload, Download,
   ArrowRight, ArrowLeft, Trash2, CheckCircle2, Layers, Building2, Wrench, Settings,
   Grid, PlusCircle, Check, X, ShieldAlert, Sparkles, RefreshCw, Calendar, Edit3, AlertTriangle,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, ChevronUp, ChevronDown
 } from 'lucide-react';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
@@ -29,6 +29,8 @@ const ProductionRoutingView = () => {
 
   const [activeTab, setActiveTab] = useState('routing');
   const [searchTerm, setSearchTerm] = useState('');
+  const [isKhoTổCollapsed, setIsKhoTổCollapsed] = useState(false);
+  const [isPipelineCollapsed, setIsPipelineCollapsed] = useState(false);
 
   const [routingsList, setRoutingsList] = useState([
     {
@@ -483,7 +485,7 @@ const ProductionRoutingView = () => {
       teamCode: code,
       teamName: firstStage,
       members: 10,
-      desc: `Tổ phụ trách công đoạn ${firstStage}`
+      desc: ''
     });
     setShowAddTeamModal(true);
   };
@@ -810,7 +812,7 @@ const ProductionRoutingView = () => {
   };
 
   return (
-    <div style={{ padding: '20px 24px', backgroundColor: '#FAF6F0', minHeight: 'calc(100vh - 110px)', fontFamily: 'Inter, sans-serif' }}>
+    <div style={{ padding: '20px 24px', backgroundColor: '#FAF6F0', minHeight: 'calc(100vh - 110px)', fontFamily: 'Inter, sans-serif', display: 'flex', flexDirection: 'column' }}>
       
       <div style={{
         display: 'flex',
@@ -973,7 +975,7 @@ const ProductionRoutingView = () => {
       </div>
 
       {activeTab === 'routing' && (
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
           <div style={{
             backgroundColor: '#FFFFFF',
             borderRadius: '12px',
@@ -982,76 +984,108 @@ const ProductionRoutingView = () => {
             marginBottom: '20px',
             boxShadow: '0 2px 8px rgba(45, 26, 18, 0.04)'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isKhoTổCollapsed ? '0px' : '14px', flexWrap: 'wrap', gap: '10px' }}>
               <div style={{ fontSize: '0.88rem', fontWeight: '800', color: '#2D1A12', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Building2 size={18} color="#5D3B32" /> Kho Tổ sản xuất (Cấu hình từ Tab "Danh sách tổ" - Bấm chọn Tổ để thêm vào Chuỗi luồng):
               </div>
-              <button
-                onClick={() => setActiveTab('workshops')}
-                style={{
-                  padding: '5px 12px',
-                  backgroundColor: '#FAF6F0',
-                  border: '1.5px solid #EADCC9',
-                  borderRadius: '6px',
-                  color: '#5D3B32',
-                  fontWeight: '700',
-                  fontSize: '0.78rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}
-              >
-                <Settings size={14} /> Quản lý danh sách tổ
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  onClick={() => setActiveTab('workshops')}
+                  style={{
+                    padding: '5px 12px',
+                    backgroundColor: '#FAF6F0',
+                    border: '1.5px solid #EADCC9',
+                    borderRadius: '6px',
+                    color: '#5D3B32',
+                    fontWeight: '700',
+                    fontSize: '0.78rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <Settings size={14} /> Quản lý danh sách tổ
+                </button>
+                <button
+                  onClick={() => setIsKhoTổCollapsed(prev => !prev)}
+                  title={isKhoTổCollapsed ? "Mở rộng Kho Tổ" : "Thu gọn Kho Tổ"}
+                  style={{
+                    padding: '5px 12px',
+                    backgroundColor: isKhoTổCollapsed ? '#5D3B32' : '#FAF6F0',
+                    border: '1.5px solid #EADCC9',
+                    borderRadius: '6px',
+                    color: isKhoTổCollapsed ? '#FFFFFF' : '#5D3B32',
+                    fontWeight: '700',
+                    fontSize: '0.78rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  {isKhoTổCollapsed ? (
+                    <>
+                      <ChevronDown size={14} /> Mở rộng Kho Tổ
+                    </>
+                  ) : (
+                    <>
+                      <ChevronUp size={14} /> Thu gọn
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px' }}>
-              {currentFactoryTeamsGrouped.length === 0 ? (
-                <div style={{ color: '#9CA3AF', fontSize: '0.88rem' }}>Chưa có Tổ nào trong danh sách tổ của quy trình này. Vui lòng thêm bên Tab "Danh sách tổ".</div>
-              ) : (
-                currentFactoryTeamsGrouped.map(fac => (
-                  <div key={fac.factory}>
-                    <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#6B7280', marginBottom: '10px' }}>
-                      {fac.factory}
+            {!isKhoTổCollapsed && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px' }}>
+                {currentFactoryTeamsGrouped.length === 0 ? (
+                  <div style={{ color: '#9CA3AF', fontSize: '0.88rem' }}>Chưa có Tổ nào trong danh sách tổ của quy trình này. Vui lòng thêm bên Tab "Danh sách tổ".</div>
+                ) : (
+                  currentFactoryTeamsGrouped.map(fac => (
+                    <div key={fac.factory}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#6B7280', marginBottom: '10px' }}>
+                        {fac.factory}
+                      </div>
+                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                        {fac.teams.map(t => {
+                          const isInRouting = validPipelineNodes.some(n => n.teamCode === t.teamCode);
+                          return (
+                            <button
+                              key={t.teamCode}
+                              onClick={() => handleAddTeamToPipeline({ ...t, factory: fac.factory })}
+                              title={`Click để thêm ${t.teamName} vào quy trình`}
+                              style={{
+                                border: 'none',
+                                backgroundColor: fac.color,
+                                color: '#FFFFFF',
+                                padding: '8px 16px',
+                                borderRadius: '8px',
+                                fontWeight: '700',
+                                fontSize: '0.88rem',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                opacity: isInRouting ? 1 : 0.75,
+                                boxShadow: isInRouting ? '0 2px 8px rgba(0,0,0,0.15)' : 'none',
+                                transition: 'all 0.15s ease'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                              onMouseLeave={(e) => e.currentTarget.style.opacity = isInRouting ? '1' : '0.75'}
+                            >
+                              {t.teamName}
+                              {isInRouting ? <Check size={14} /> : <Plus size={14} />}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                      {fac.teams.map(t => {
-                        const isInRouting = validPipelineNodes.some(n => n.teamCode === t.teamCode);
-                        return (
-                          <button
-                            key={t.teamCode}
-                            onClick={() => handleAddTeamToPipeline({ ...t, factory: fac.factory })}
-                            title={`Click để thêm ${t.teamName} vào quy trình`}
-                            style={{
-                              border: 'none',
-                              backgroundColor: fac.color,
-                              color: '#FFFFFF',
-                              padding: '8px 16px',
-                              borderRadius: '8px',
-                              fontWeight: '700',
-                              fontSize: '0.88rem',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              opacity: isInRouting ? 1 : 0.75,
-                              boxShadow: isInRouting ? '0 2px 8px rgba(0,0,0,0.15)' : 'none',
-                              transition: 'all 0.15s ease'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-                            onMouseLeave={(e) => e.currentTarget.style.opacity = isInRouting ? '1' : '0.75'}
-                          >
-                            {t.teamName}
-                            {isInRouting ? <Check size={14} /> : <Plus size={14} />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
 
           <div style={{
@@ -1062,117 +1096,149 @@ const ProductionRoutingView = () => {
             marginBottom: '20px',
             boxShadow: '0 2px 8px rgba(45, 26, 18, 0.04)'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isPipelineCollapsed ? '0px' : '16px', flexWrap: 'wrap', gap: '10px' }}>
               <div style={{ fontSize: '0.92rem', fontWeight: '800', color: '#2D1A12', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Sparkles size={18} color="#D97706" /> Chuỗi Quy trình Chuyển tiếp giữa các Tổ (Nhấp chọn Tổ để lọc Bảng kế hoạch bên dưới):
               </div>
-              <span style={{ fontSize: '0.78rem', color: '#6B7280', fontWeight: '600' }}>
-                Dùng nút ← → để đổi thứ tự
-              </span>
-            </div>
-
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: validPipelineNodes.length === 0 ? 'center' : 'flex-start',
-              flexWrap: 'wrap',
-              gap: '16px',
-              minHeight: '80px',
-              padding: '12px 0'
-            }}>
-              {validPipelineNodes.length === 0 ? (
-                <div style={{ color: '#9CA3AF', fontSize: '0.88rem', padding: '20px', textAlign: 'center', fontWeight: '600' }}>
-                  Chưa có Tổ nào trong chuỗi luồng quy trình này. Vui lòng chọn Tổ ở khối "Kho Tổ sản xuất" phía trên để đưa vào chuỗi.
-                </div>
-              ) : (
-                <>
-                  {validPipelineNodes.map((node, idx, arr) => {
-                    const isActive = activeNodeId === node.id;
-                    return (
-                      <React.Fragment key={node.id}>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-                          <div
-                            onClick={() => setActiveNodeId(node.id)}
-                            style={{
-                              backgroundColor: node.color || '#2D1A12',
-                              color: '#FFFFFF',
-                              padding: '12px 24px',
-                              borderRadius: '10px',
-                              fontWeight: '800',
-                              fontSize: '0.95rem',
-                              cursor: 'pointer',
-                              boxShadow: isActive ? `0 0 0 3px #10B981, 0 4px 14px ${node.color}55` : '0 4px 10px rgba(45, 26, 18, 0.12)',
-                              transform: isActive ? 'scale(1.05)' : 'scale(1)',
-                              transition: 'all 0.2s ease',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '10px',
-                              userSelect: 'none'
-                            }}
-                          >
-                            <span>{node.teamName}</span>
-                            
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderLeft: '1px solid rgba(255,255,255,0.25)', paddingLeft: '8px' }}>
-                              {idx > 0 && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); handleMoveNode(node.id, 'left'); }}
-                                  title="Di chuyển sang trái"
-                                  style={{ border: 'none', background: 'transparent', color: '#FFF', cursor: 'pointer', padding: '2px' }}
-                                >
-                                  <ArrowLeft size={14} />
-                                </button>
-                              )}
-                              {idx < arr.length - 1 && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); handleMoveNode(node.id, 'right'); }}
-                                  title="Di chuyển sang phải"
-                                  style={{ border: 'none', background: 'transparent', color: '#FFF', cursor: 'pointer', padding: '2px' }}
-                                >
-                                  <ArrowRight size={14} />
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); handleRemoveNode(node.id); }}
-                                title="Xóa tổ khỏi chuỗi"
-                                style={{ border: 'none', background: 'transparent', color: '#F87171', cursor: 'pointer', padding: '2px', marginLeft: '2px' }}
-                              >
-                                <X size={14} />
-                              </button>
-                            </div>
-                          </div>
-
-                          {isActive && (
-                            <span style={{ fontSize: '0.72rem', fontWeight: '800', color: '#10B981', backgroundColor: '#ECFDF5', padding: '2px 8px', borderRadius: '10px', border: '1px solid #A7F3D0' }}>
-                              Đang chọn
-                            </span>
-                          )}
-                        </div>
-
-                        <ArrowRight size={24} color="#9CA3AF" />
-                      </React.Fragment>
-                    );
-                  })}
-
-                  <div style={{
-                    backgroundColor: '#10B981',
-                    color: '#FFFFFF',
-                    padding: '12px 24px',
-                    borderRadius: '10px',
-                    fontWeight: '800',
-                    fontSize: '0.95rem',
-                    boxShadow: '0 4px 10px rgba(16, 185, 129, 0.25)',
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '0.78rem', color: '#6B7280', fontWeight: '600' }}>
+                  Dùng nút ← → để đổi thứ tự
+                </span>
+                <button
+                  onClick={() => setIsPipelineCollapsed(prev => !prev)}
+                  title={isPipelineCollapsed ? "Mở rộng Chuỗi Quy trình" : "Thu gọn Chuỗi Quy trình"}
+                  style={{
+                    padding: '5px 12px',
+                    backgroundColor: isPipelineCollapsed ? '#5D3B32' : '#FAF6F0',
+                    border: '1.5px solid #EADCC9',
+                    borderRadius: '6px',
+                    color: isPipelineCollapsed ? '#FFFFFF' : '#5D3B32',
+                    fontWeight: '700',
+                    fontSize: '0.78rem',
+                    cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '8px'
-                  }}>
-                    <CheckCircle2 size={18} /> Kho thành phẩm
-                  </div>
-                </>
-              )}
+                    gap: '4px',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  {isPipelineCollapsed ? (
+                    <>
+                      <ChevronDown size={14} /> Mở rộng Chuỗi
+                    </>
+                  ) : (
+                    <>
+                      <ChevronUp size={14} /> Thu gọn
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
+
+            {!isPipelineCollapsed && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: validPipelineNodes.length === 0 ? 'center' : 'flex-start',
+                flexWrap: 'wrap',
+                gap: '16px',
+                minHeight: '80px',
+                padding: '12px 0'
+              }}>
+                {validPipelineNodes.length === 0 ? (
+                  <div style={{ color: '#9CA3AF', fontSize: '0.88rem', padding: '20px', textAlign: 'center', fontWeight: '600' }}>
+                    Chưa có Tổ nào trong chuỗi luồng quy trình này. Vui lòng chọn Tổ ở khối "Kho Tổ sản xuất" phía trên để đưa vào chuỗi.
+                  </div>
+                ) : (
+                  <>
+                    {validPipelineNodes.map((node, idx, arr) => {
+                      const isActive = activeNodeId === node.id;
+                      return (
+                        <React.Fragment key={node.id}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                            <div
+                              onClick={() => setActiveNodeId(node.id)}
+                              style={{
+                                backgroundColor: node.color || '#2D1A12',
+                                color: '#FFFFFF',
+                                padding: '12px 24px',
+                                borderRadius: '10px',
+                                fontWeight: '800',
+                                fontSize: '0.95rem',
+                                cursor: 'pointer',
+                                boxShadow: isActive ? `0 0 0 3px #10B981, 0 4px 14px ${node.color}55` : '0 4px 10px rgba(45, 26, 18, 0.12)',
+                                transform: isActive ? 'scale(1.05)' : 'scale(1)',
+                                transition: 'all 0.2s ease',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px',
+                                userSelect: 'none'
+                              }}
+                            >
+                              <span>{node.teamName}</span>
+                              
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderLeft: '1px solid rgba(255,255,255,0.25)', paddingLeft: '8px' }}>
+                                {idx > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleMoveNode(node.id, 'left'); }}
+                                    title="Di chuyển sang trái"
+                                    style={{ border: 'none', background: 'transparent', color: '#FFF', cursor: 'pointer', padding: '2px' }}
+                                  >
+                                    <ArrowLeft size={14} />
+                                  </button>
+                                )}
+                                {idx < arr.length - 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleMoveNode(node.id, 'right'); }}
+                                    title="Di chuyển sang phải"
+                                    style={{ border: 'none', background: 'transparent', color: '#FFF', cursor: 'pointer', padding: '2px' }}
+                                  >
+                                    <ArrowRight size={14} />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); handleRemoveNode(node.id); }}
+                                  title="Xóa tổ khỏi chuỗi"
+                                  style={{ border: 'none', background: 'transparent', color: '#F87171', cursor: 'pointer', padding: '2px', marginLeft: '2px' }}
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            </div>
+
+                            {isActive && (
+                              <span style={{ fontSize: '0.72rem', fontWeight: '800', color: '#10B981', backgroundColor: '#ECFDF5', padding: '2px 8px', borderRadius: '10px', border: '1px solid #A7F3D0' }}>
+                                Đang chọn
+                              </span>
+                            )}
+                          </div>
+
+                          <ArrowRight size={24} color="#9CA3AF" />
+                        </React.Fragment>
+                      );
+                    })}
+
+                    <div style={{
+                      backgroundColor: '#10B981',
+                      color: '#FFFFFF',
+                      padding: '12px 24px',
+                      borderRadius: '10px',
+                      fontWeight: '800',
+                      fontSize: '0.95rem',
+                      boxShadow: '0 4px 10px rgba(16, 185, 129, 0.25)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      <CheckCircle2 size={18} /> Kho thành phẩm
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           <div style={{
@@ -1180,7 +1246,11 @@ const ProductionRoutingView = () => {
             borderRadius: '12px',
             border: '1.5px solid #EADCC9',
             padding: '20px 24px',
-            boxShadow: '0 2px 12px rgba(45, 26, 18, 0.03)'
+            boxShadow: '0 2px 12px rgba(45, 26, 18, 0.03)',
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: '380px'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
               <h3 style={{ margin: 0, fontSize: '1.18rem', fontWeight: '800', color: '#2D1A12', display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -1215,8 +1285,8 @@ const ProductionRoutingView = () => {
               </div>
             </div>
 
-            <div style={{ overflowX: 'auto', border: '1px solid #EADCC9', borderRadius: '8px' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+            <div style={{ overflowX: 'auto', border: '1px solid #EADCC9', borderRadius: '8px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', height: filteredExecutionPlanRows.length === 0 ? '100%' : 'auto' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#6D4C3D', color: '#FFFFFF' }}>
                     <th style={{ padding: '9px 10px', textAlign: 'center', width: '45px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>STT</th>
@@ -1240,7 +1310,7 @@ const ProductionRoutingView = () => {
                 <tbody>
                   {filteredExecutionPlanRows.length === 0 ? (
                     <tr>
-                      <td colSpan={16} style={{ textAlign: 'center', padding: '2.5rem', color: '#94A3B8', fontWeight: '600' }}>
+                      <td colSpan={16} style={{ textAlign: 'center', padding: '3.5rem 2.5rem', color: '#94A3B8', fontWeight: '600' }}>
                         Không có dữ liệu kế hoạch cho công đoạn {activeNodeObj?.teamName || 'hiện tại'}. Nhấp nút "+ Thêm mới" để bổ sung.
                       </td>
                     </tr>
@@ -1663,7 +1733,7 @@ const ProductionRoutingView = () => {
                       factory: fac,
                       teamCode: `TO-NM${facNum}-${Math.floor(100 + Math.random() * 900)}`,
                       teamName: defaultStage,
-                      desc: defaultStage ? `Tổ phụ trách công đoạn ${defaultStage}` : ''
+                      desc: ''
                     });
                   }}
                   style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #EADCC9', outline: 'none', fontSize: '0.88rem', fontWeight: '700' }}
@@ -1688,8 +1758,7 @@ const ProductionRoutingView = () => {
                         const selectedName = e.target.value;
                         setNewTeamForm({
                           ...newTeamForm,
-                          teamName: selectedName,
-                          desc: `Tổ phụ trách công đoạn ${selectedName}`
+                          teamName: selectedName
                         });
                       }
                     }}

@@ -23,7 +23,7 @@ from modules.capa.routes import capa_router
 from modules.quick_report.routes import quick_report_router
 from modules.production.routes import production_v2_router
 
-from modules.system.routes import system_router, screen_router, screen_bug_router, system_sidebar_router
+from modules.system.routes import system_router, screen_router, screen_bug_router, system_sidebar_router, data_package_router
 
 from modules.claim.routes.claim_routes import router as claim_router
 
@@ -71,6 +71,7 @@ api_router.include_router(qc_router, prefix="/qc", tags=["qc"])
 api_router.include_router(return_router.router, prefix="/returns", tags=["returns"])
 
 api_router.include_router(system_router.router, prefix="/system", tags=["system"])
+api_router.include_router(data_package_router.router, prefix="/system/data-packages", tags=["data-packages"])
 
 api_router.include_router(inspection_router, prefix="/inspections", tags=["inspections"])
 

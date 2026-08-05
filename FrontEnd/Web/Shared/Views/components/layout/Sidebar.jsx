@@ -119,6 +119,9 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
 
   // Helper check xem group co child nao dang active ko
   const hasActiveChild = (group) => {
+    if (group.title === 'Quản lý hệ thống' && (location.pathname === '/admin/monitor' || location.pathname === '/admin/monitor/')) {
+      return true;
+    }
     if (!group.children) return false;
     return group.children.some(child => checkIsActive(child));
   };
@@ -126,28 +129,40 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
   React.useEffect(() => {
     if (menuList.length === 0) return;
 
-    const nextState = {};
-
-    // 1. Tìm nhóm menu chứa trang đang được chọn (active)
     let activeGroupId = null;
-    menuList.forEach(group => {
-      if (group.children && group.children.length > 0) {
-        const hasActive = group.children.some(child => checkIsActive(child));
-        if (hasActive) {
-          activeGroupId = group.id;
+
+    // 1. Kiểm tra xem nhóm đang mở ĐÃ chứa trang con active này chưa (giữ nguyên nhóm để không nhảy sang nhóm khác)
+    for (const groupIdStr in expandedGroups) {
+      if (expandedGroups[groupIdStr]) {
+        const groupId = parseInt(groupIdStr);
+        const group = menuList.find(g => g.id === groupId);
+        if (group && hasActiveChild(group)) {
+          activeGroupId = groupId;
+          break;
         }
       }
-    });
+    }
 
-    // 2. Nếu đang chọn trang con thuộc 1 nhóm -> CHỈ MỞ nhóm đó (Tự động thu gọn tất cả nhóm khác)
+    // 2. Nếu chưa nhóm nào mở chứa route active này, tìm nhóm ĐẦU TIÊN chứa nó
+    if (activeGroupId === null) {
+      for (const group of menuList) {
+        if (hasActiveChild(group)) {
+          activeGroupId = group.id;
+          break;
+        }
+      }
+    }
+
+    const nextState = {};
+
+    // 3. Nếu tìm thấy nhóm phù hợp -> CHỈ MỞ nhóm đó (Accordion style)
     if (activeGroupId !== null) {
       nextState[activeGroupId] = true;
     } else {
-      // 3. Nếu ở trang tổng/chưa chọn mục con nào -> Sử dụng nhóm mặc định theo vai trò (IT/Admin mở ID 2 & 10)
+      // 4. Mặc định cho IT/Admin
       const role = user.role_name;
       if (role === 'IT' || user.username === 'admin') {
         nextState[2] = true;
-        nextState[10] = true;
       } else if (role === 'Sx') {
         nextState[21] = true;
       } else if (role === 'QLCL') {
@@ -211,7 +226,7 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
         onClick={onClose}
       ></div>
 
-      <aside className={`admin-sidebar ${active ? 'active' : ''} ${collapsed ? 'collapsed' : ''}`} style={{ backgroundColor: '#FFFFFF', borderRight: '1px solid #E5E7EB' }}>
+      <aside className={`admin-sidebar ${active ? 'active' : ''} ${collapsed ? 'collapsed' : ''}`} style={{ backgroundColor: '#FFFFFF', borderRight: '1px solid #E5E7EB', display: 'flex', flexDirection: 'column', height: '100vh', maxHeight: '100vh', overflow: 'hidden' }}>
         {/* User profile section */}
         <div
           onClick={collapsed ? onToggleCollapse : undefined}
@@ -223,7 +238,8 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
             backgroundColor: '#7B5233',
             borderBottom: '1px solid rgba(255,255,255,0.1)',
             cursor: collapsed ? 'pointer' : 'default',
-            position: 'relative'
+            position: 'relative',
+            flexShrink: 0
           }}
           title={collapsed ? 'Mở rộng menu' : undefined}
         >
@@ -286,7 +302,7 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
         </div>
 
         {/* Navigation items - Collapsible Grouped layout */}
-        <nav className="sidebar-nav" style={{ padding: '15px 10px', overflowY: 'auto', flex: 1 }}>
+        <nav className="sidebar-nav" style={{ padding: '15px 10px', overflowY: 'auto', flex: 1, minHeight: 0 }}>
           {loading ? (
             <div style={{ padding: '20px', textAlign: 'center', color: '#7B5233', fontSize: '0.85rem', fontWeight: 'bold' }}>
               Đang tải danh mục...
@@ -316,7 +332,7 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
                 return renderDirectLink(item);
               } else {
                 const isExpanded = !!expandedGroups[item.id];
-                const isGroupActive = hasActiveChild(item);
+                const isGroupActive = isExpanded && hasActiveChild(item);
 
                 return (
                   <div key={item.id} className="sidebar-group-container" style={{ marginBottom: '6px' }}>
