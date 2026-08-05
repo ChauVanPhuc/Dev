@@ -117,13 +117,25 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     return false;
   };
 
+  // Helper lay danh sach trang con cua group (tinh den ca truong hop ghi de Quản lý sản xuất)
+  const getGroupChildren = (group) => {
+    if (group.title === 'Quản lý sản xuất') {
+      return [
+        { id: 21, parent_id: 19, title: 'Lệnh sản xuất', route_path: '/admin/production-orders', icon: 'Handshake' },
+        { id: 24, parent_id: 19, title: 'Quy trình - kế hoạch', route_path: '/admin/production-routing', icon: 'Handshake' },
+        { id: 25, parent_id: 19, title: 'Danh sách bàn giao', route_path: '/admin/delivery-tracking', icon: 'Handshake' }
+      ];
+    }
+    return group.children || [];
+  };
+
   // Helper check xem group co child nao dang active ko
   const hasActiveChild = (group) => {
     if (group.title === 'Quản lý hệ thống' && (location.pathname === '/admin/monitor' || location.pathname === '/admin/monitor/')) {
       return true;
     }
-    if (!group.children) return false;
-    return group.children.some(child => checkIsActive(child));
+    const children = getGroupChildren(group);
+    return children.some(child => checkIsActive(child));
   };
 
   React.useEffect(() => {
@@ -131,7 +143,7 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
 
     let activeGroupId = null;
 
-    // 1. Kiểm tra xem nhóm đang mở ĐÃ chứa trang con active này chưa (giữ nguyên nhóm để không nhảy sang nhóm khác)
+    // 1. Kiểm tra xem nhóm đang mở ĐÃ chứa trang con active này chưa
     for (const groupIdStr in expandedGroups) {
       if (expandedGroups[groupIdStr]) {
         const groupId = parseInt(groupIdStr);
@@ -153,26 +165,10 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
       }
     }
 
-    const nextState = {};
-
     // 3. Nếu tìm thấy nhóm phù hợp -> CHỈ MỞ nhóm đó (Accordion style)
     if (activeGroupId !== null) {
-      nextState[activeGroupId] = true;
-    } else {
-      // 4. Mặc định cho IT/Admin
-      const role = user.role_name;
-      if (role === 'IT' || user.username === 'admin') {
-        nextState[2] = true;
-      } else if (role === 'Sx') {
-        nextState[21] = true;
-      } else if (role === 'QLCL') {
-        nextState[27] = true;
-      } else if (role === 'NS' || role === 'HR') {
-        nextState[10] = true;
-      }
+      setExpandedGroups({ [activeGroupId]: true });
     }
-
-    setExpandedGroups(nextState);
   }, [menuList, location.pathname, location.search]);
 
   const toggleGroup = (groupId) => {
@@ -339,18 +335,6 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
                     <button
                       onClick={() => {
                         toggleGroup(item.id);
-                        if (item.title === 'Quản lý hệ thống') {
-                          navigate('/admin/monitor');
-                        }
-                        if (item.title === 'Quản lý nhân sự') {
-                          navigate('/admin/hr/org-chart');
-                        }
-                        if (item.title === 'Quản lý chất lượng') {
-                          navigate('/admin/quality');
-                        }
-                        if (item.title === 'Quản lý sản xuất') {
-                          navigate('/admin/production-orders');
-                        }
                       }}
                       className={`sidebar-group-header ${isGroupActive ? 'active' : ''}`}
                       style={{

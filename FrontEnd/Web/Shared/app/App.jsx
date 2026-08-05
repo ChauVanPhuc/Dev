@@ -630,11 +630,11 @@ function App() {
                 <Route path="hotspots" element={<ProtectedRoute permissionKey="hotspots"><Hotspots /></ProtectedRoute>} />
                 <Route path="data" element={<ProtectedRoute permissionKey="data"><DataPackaging /></ProtectedRoute>} />
                 <Route path="screens" element={<ProtectedRoute permissionKey="screens"><ScreenManagement /></ProtectedRoute>} />
+                <Route path="screens/bugs" element={<ProtectedRoute permissionKey="bugs"><ScreenBugManagement /></ProtectedRoute>} />
+                <Route path="screens/progress" element={<ProtectedRoute permissionKey="screens"><ProjectProgress /></ProtectedRoute>} />
                 <Route path="screens/:id" element={<ProtectedRoute permissionKey="screens"><ScreenDetail /></ProtectedRoute>} />
                 <Route path="sidebar" element={<ProtectedRoute permissionKey="screens"><SidebarManagement /></ProtectedRoute>} />
                 <Route path="system-config" element={<ProtectedRoute permissionKey="screens"><SystemConfig /></ProtectedRoute>} />
-                <Route path="screens/bugs" element={<ProtectedRoute permissionKey="bugs"><ScreenBugManagement /></ProtectedRoute>} />
-                <Route path="screens/progress" element={<ProtectedRoute permissionKey="screens"><ProjectProgress /></ProtectedRoute>} />
                 <Route path="monitor" element={<ProtectedRoute permissionKey="monitor"><SystemMonitor /></ProtectedRoute>} />
                 <Route path="equipment" element={<ProtectedRoute permissionKey="equipment"><EquipmentManagement /></ProtectedRoute>} />
                 <Route path="equipment/categories" element={<ProtectedRoute permissionKey="equipment"><EquipmentCategories /></ProtectedRoute>} />
@@ -654,8 +654,8 @@ function App() {
                 {/* Manufacture Routes merged under /admin */}
                 <Route path="manufacture-dashboard" element={<ProtectedRoute permissionKey="home"><ManufactureDashboard /></ProtectedRoute>} />
                 <Route path="plan" element={<ProtectedRoute permissionKey="plan"><ManufacturePlan /></ProtectedRoute>} />
-                <Route path="plan/:id" element={<ProtectedRoute permissionKey="plan"><PlanDetail /></ProtectedRoute>} />
                 <Route path="plan/create" element={<ProtectedRoute permissionKey="plan"><AddProductionPlan /></ProtectedRoute>} />
+                <Route path="plan/:id" element={<ProtectedRoute permissionKey="plan"><PlanDetail /></ProtectedRoute>} />
                 <Route path="delivery-tracking" element={<ProtectedRoute permissionKey="delivery-tracking"><DeliveryTracking /></ProtectedRoute>} />
                 <Route path="production-dashboard" element={<ProtectedRoute permissionKey="plan"><ProductionDashboard /></ProtectedRoute>} />
                 <Route path="production-orders" element={<ProtectedRoute permissionKey="orders"><ProductionOrders /></ProtectedRoute>} />
@@ -666,8 +666,8 @@ function App() {
                 <Route path="technical-standards" element={<ProtectedRoute permissionKey="products"><TechnicalStandards /></ProtectedRoute>} />
                 <Route path="maintenance" element={<ProtectedRoute permissionKey="products"><MaintenanceFacility /></ProtectedRoute>} />
                 <Route path="products" element={<ProtectedRoute permissionKey="products"><ManufactureProducts /></ProtectedRoute>} />
-                <Route path="products/:id" element={<ProtectedRoute permissionKey="products"><ProductDetail /></ProtectedRoute>} />
                 <Route path="products/create" element={<ProtectedRoute permissionKey="products"><ProductCreate /></ProtectedRoute>} />
+                <Route path="products/:id" element={<ProtectedRoute permissionKey="products"><ProductDetail /></ProtectedRoute>} />
                 <Route path="product-details" element={<ProtectedRoute permissionKey="products"><ProductDetailsManagement /></ProtectedRoute>} />
                 <Route path="paint-colors" element={<ProtectedRoute permissionKey="products"><PaintColorManagement /></ProtectedRoute>} />
                 <Route path="progress/:id" element={<ProtectedRoute permissionKey="plan"><ProductionProgress /></ProtectedRoute>} />

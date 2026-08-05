@@ -30,7 +30,7 @@ export default defineConfig({
     },
   },
   server: {
-    port: 1333,
+    port: 3000,
     open: false,
     host: "0.0.0.0",
     allowedHosts: true,

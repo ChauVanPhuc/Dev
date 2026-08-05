@@ -26,7 +26,7 @@ const effectiveHost = IS_REMOTE ? currentHost : DEFAULT_LAN_IP;
 // Base URL cho API và Static Files
 export const BASE_URL = IS_REMOTE
     ? `https://${REMOTE_DOMAIN}`
-    : `http://${effectiveHost}:1111`;
+    : `http://${effectiveHost}:8000`;
 
 export const API_URL = BASE_URL;
 
