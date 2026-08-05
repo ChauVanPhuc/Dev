@@ -64,3 +64,24 @@ def delete_routing(routing_id: str, db: Session = Depends(get_db)):
 def delete_routing_node(routing_id: str, team_ref: str, db: Session = Depends(get_db)):
     """Xóa một Tổ khỏi Quy trình sản xuất"""
     return routing_controller.delete_routing_node(db, routing_id, team_ref)
+
+
+# --- ROUTING PRODUCTS ENDPOINTS ---
+@router.get("/routings/{routing_id}/products")
+def get_routing_products(routing_id: str, db: Session = Depends(get_db)):
+    """Lấy danh sách các sản phẩm đang được gán cho Quy trình"""
+    return routing_controller.get_routing_products(db, routing_id)
+
+@router.post("/routings/{routing_id}/products/assign")
+def assign_products_to_routing(routing_id: str, body: dict, db: Session = Depends(get_db)):
+    """Gán 1 hoặc nhiều sản phẩm (danh sách skus) vào Quy trình"""
+    skus = body.get("skus", [])
+    if isinstance(skus, str):
+        skus = [skus]
+    return routing_controller.assign_products_to_routing(db, routing_id, skus)
+
+@router.delete("/routings/{routing_id}/products/{sku}")
+def unassign_product_from_routing(routing_id: str, sku: str, db: Session = Depends(get_db)):
+    """Gỡ 1 sản phẩm khỏi Quy trình sản xuất"""
+    return routing_controller.unassign_product_from_routing(db, routing_id, sku)
+

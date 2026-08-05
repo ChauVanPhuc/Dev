@@ -2,10 +2,13 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from modules.production.models.production_team import ProductionTeam
-from modules.production.models.production_routing import ProductionRouting, ProductionRoutingNode, ProductionRoutingComponent
+from modules.production.models.production_routing import (
+    ProductionRouting, ProductionRoutingNode, ProductionRoutingComponent, ProductionRoutingProduct
+)
 from modules.production.schemas.production_routing_schema import (
     ProductionTeamCreate, ProductionRoutingCreate, ProductionRoutingComponentCreate
 )
+
 
 def delete_team(db: Session, team_id: int):
     team = db.query(ProductionTeam).filter(ProductionTeam.id == team_id).first()
@@ -255,3 +258,63 @@ def delete_routing_node(db: Session, routing_id: str, team_ref: str):
             db.delete(n)
     db.commit()
     return get_all_routings(db)
+
+
+# --- ROUTING PRODUCTS CONTROLLERS ---
+def get_routing_products(db: Session, routing_id: str):
+    routing = None
+    if str(routing_id).isdigit():
+        routing = db.query(ProductionRouting).filter(ProductionRouting.id == int(routing_id)).first()
+    if not routing:
+        routing = db.query(ProductionRouting).filter(ProductionRouting.routing_code == str(routing_id)).first()
+    if not routing:
+        return []
+
+    items = db.query(ProductionRoutingProduct).filter(ProductionRoutingProduct.routing_id == routing.id).all()
+    return [
+        {
+            "id": i.id,
+            "routing_id": i.routing_id,
+            "routing_code": routing.routing_code,
+            "product_sku": i.product_sku,
+            "created_at": i.created_at
+        }
+        for i in items
+    ]
+
+def assign_products_to_routing(db: Session, routing_id: str, skus: list):
+    routing = None
+    if str(routing_id).isdigit():
+        routing = db.query(ProductionRouting).filter(ProductionRouting.id == int(routing_id)).first()
+    if not routing:
+        routing = db.query(ProductionRouting).filter(ProductionRouting.routing_code == str(routing_id)).first()
+    if not routing:
+        raise HTTPException(status_code=404, detail="Không tìm thấy Quy trình!")
+
+    # Unassign SKUs from other routings to enforce 1 SKU -> 1 primary routing if needed, or allow single assignment
+    for sku in skus:
+        existing = db.query(ProductionRoutingProduct).filter(ProductionRoutingProduct.product_sku == sku).first()
+        if existing:
+            existing.routing_id = routing.id
+        else:
+            db.add(ProductionRoutingProduct(routing_id=routing.id, product_sku=sku))
+    
+    db.commit()
+    return get_routing_products(db, routing_id)
+
+def unassign_product_from_routing(db: Session, routing_id: str, sku: str):
+    routing = None
+    if str(routing_id).isdigit():
+        routing = db.query(ProductionRouting).filter(ProductionRouting.id == int(routing_id)).first()
+    if not routing:
+        routing = db.query(ProductionRouting).filter(ProductionRouting.routing_code == str(routing_id)).first()
+    if not routing:
+        raise HTTPException(status_code=404, detail="Không tìm thấy Quy trình!")
+
+    db.query(ProductionRoutingProduct).filter(
+        ProductionRoutingProduct.routing_id == routing.id,
+        ProductionRoutingProduct.product_sku == sku
+    ).delete()
+    db.commit()
+    return {"message": f"Đã gỡ sản phẩm {sku} khỏi quy trình"}
+

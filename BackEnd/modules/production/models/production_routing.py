@@ -22,6 +22,7 @@ class ProductionRouting(Base):
     # Relationships
     nodes = relationship("ProductionRoutingNode", back_populates="routing", cascade="all, delete-orphan", order_by="ProductionRoutingNode.step_order")
     components = relationship("ProductionRoutingComponent", back_populates="routing", cascade="all, delete-orphan")
+    routing_products = relationship("ProductionRoutingProduct", back_populates="routing", cascade="all, delete-orphan")
 
 
 class ProductionRoutingNode(Base):
@@ -60,3 +61,19 @@ class ProductionRoutingComponent(Base):
 
     # Relationships
     routing = relationship("ProductionRouting", back_populates="components")
+
+
+class ProductionRoutingProduct(Base):
+    """
+    Model đại diện cho bảng 'production_routing_products' (Liên kết gán sản phẩm vào Quy trình).
+    """
+    __tablename__ = "production_routing_products"
+
+    id = Column(Integer, primary_key=True, index=True)
+    routing_id = Column(Integer, ForeignKey("production_routings.id", ondelete="CASCADE"), nullable=False)
+    product_sku = Column(NVARCHAR(100), nullable=False, index=True)
+    created_at = Column(DateTime, default=get_vietnam_time)
+
+    # Relationships
+    routing = relationship("ProductionRouting", back_populates="routing_products")
+

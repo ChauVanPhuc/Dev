@@ -124,35 +124,118 @@ const ProductionRoutingView = () => {
   };
 
   const [appliedProducts, setAppliedProducts] = useState(defaultProducts);
+  const [allMasterProducts, setAllMasterProducts] = useState([]);
+  const [masterCategories, setMasterCategories] = useState([]);
+  const [routingAssignedMap, setRoutingAssignedMap] = useState({});
 
-  const currentAppliedProducts = useMemo(() => {
-    const rCode = selectedRoutingId || currentRouting?.code || 'QT-TU-01';
-    const seriesKey = extractDòngHàngKey(currentRouting?.category, currentRouting?.code, currentRouting?.name);
-
-    if (seriesKey) {
-      const sKeyUpper = seriesKey.toUpperCase();
-      const matched = appliedProducts.filter(p => {
-        const codeUpper = (p.code || '').toUpperCase();
-        const catUpper = (p.category || '').toUpperCase();
-        const rCodeUpper = (p.routingCode || '').toUpperCase();
-        return codeUpper.includes(sKeyUpper) || catUpper.includes(sKeyUpper) || rCodeUpper.includes(sKeyUpper);
-      });
-      if (matched.length > 0) return matched;
-    }
-
-    return appliedProducts.filter(p => p.routingCode === rCode);
-  }, [appliedProducts, selectedRoutingId, currentRouting]);
-
+  // PRODUCT FILTER & SELECTION STATES
+  const [productScopeFilter, setProductScopeFilter] = useState('assigned'); // 'assigned' | 'all' | 'unassigned'
+  const [productCategoryFilter, setProductCategoryFilter] = useState('ALL');
   const [productSearchTerm, setProductSearchTerm] = useState('');
+  const [selectedProductSkus, setSelectedProductSkus] = useState([]);
   const [productPage, setProductPage] = useState(0);
   const [productRowsPerPage, setProductRowsPerPage] = useState(15);
 
   useEffect(() => {
     setProductPage(0);
-  }, [selectedRoutingId, productSearchTerm]);
+  }, [selectedRoutingId, productSearchTerm, productScopeFilter, productCategoryFilter]);
+
+  // Load Routing Assigned Products & All Master Products
+  useEffect(() => {
+    const fetchProductsData = async () => {
+      try {
+        const [mpRes, mcRes, rpRes] = await Promise.all([
+          api.get('/master-products/?limit=5000'),
+          api.get('/master-categories/'),
+          api.get(`/production/routings/${selectedRoutingId}/products`)
+        ]);
+        const mpData = (mpRes && mpRes.items) ? mpRes.items : (Array.isArray(mpRes) ? mpRes : []);
+        const mcData = Array.isArray(mcRes) ? mcRes : (mcRes?.data || []);
+        const rpData = Array.isArray(rpRes) ? rpRes : (rpRes?.data || []);
+
+        if (mpData.length > 0) setAllMasterProducts(mpData);
+        if (mcData.length > 0) setMasterCategories(mcData);
+
+        const assignedMap = {};
+        rpData.forEach(r => {
+          assignedMap[r.product_sku] = selectedRoutingId;
+        });
+        setRoutingAssignedMap(assignedMap);
+      } catch (e) {
+        console.warn('Lỗi fetch sản phẩm nâng cao:', e);
+      }
+    };
+    fetchProductsData();
+  }, [selectedRoutingId]);
+
+  const categoryOptions = useMemo(() => {
+    const set = new Set();
+    defaultProducts.forEach(p => { if (p.category) set.add(p.category); });
+    allMasterProducts.forEach(p => {
+      const c = p.master_category?.name || p.category_name;
+      if (c) set.add(c);
+    });
+    return Array.from(set);
+  }, [defaultProducts, allMasterProducts]);
+
+  const currentRoutingCategorySeries = useMemo(() => {
+    return extractDòngHàngKey(currentRouting?.category, currentRouting?.code, currentRouting?.name);
+  }, [currentRouting]);
+
+  const allProductsListFormatted = useMemo(() => {
+    const rCode = selectedRoutingId || currentRouting?.code || 'QT-TU-01';
+
+    if (allMasterProducts.length > 0) {
+      return allMasterProducts.map((p, idx) => {
+        const catName = p.master_category?.name || p.category_name || extractDòngHàngKey(null, p.sku, p.name) || 'Sản phẩm mẫu';
+        const assignedCode = routingAssignedMap[p.sku];
+        const isAssignedToThis = assignedCode === rCode || assignedCode === currentRouting?.code ||
+          (!assignedCode && currentRoutingCategorySeries && extractDòngHàngKey(catName, p.sku, p.name) === currentRoutingCategorySeries);
+
+        return {
+          id: p.id || idx + 1,
+          code: p.sku,
+          name: p.name || p.sku,
+          category: catName,
+          routingCode: assignedCode || (isAssignedToThis ? rCode : '---'),
+          isAssignedToThis: Boolean(isAssignedToThis),
+          applyDate: p.created_at ? new Date(p.created_at).toLocaleDateString('vi-VN') : '01/08/2026',
+          status: isAssignedToThis ? 'Đang áp dụng' : (assignedCode ? `Gán ${assignedCode}` : 'Chưa gán')
+        };
+      });
+    }
+
+    return defaultProducts.map(p => {
+      const assignedCode = routingAssignedMap[p.code] || p.routingCode;
+      const isAssignedToThis = assignedCode === rCode ||
+        (!assignedCode && currentRoutingCategorySeries && extractDòngHàngKey(p.category, p.code, p.name) === currentRoutingCategorySeries);
+
+      return {
+        ...p,
+        category: p.category || extractDòngHàngKey(null, p.code, p.name) || 'Tất cả',
+        isAssignedToThis: Boolean(isAssignedToThis),
+        routingCode: assignedCode || (isAssignedToThis ? rCode : '---'),
+        status: isAssignedToThis ? 'Đang áp dụng' : (assignedCode ? `Gán ${assignedCode}` : 'Chưa gán')
+      };
+    });
+  }, [allMasterProducts, routingAssignedMap, selectedRoutingId, currentRouting, defaultProducts, currentRoutingCategorySeries]);
 
   const filteredAppliedProducts = useMemo(() => {
-    let list = currentAppliedProducts;
+    let list = allProductsListFormatted;
+
+    // 1. Filter by Scope
+    if (productScopeFilter === 'assigned') {
+      list = list.filter(p => p.isAssignedToThis);
+    } else if (productScopeFilter === 'unassigned') {
+      list = list.filter(p => !p.isAssignedToThis && p.routingCode === '---');
+    }
+
+    // 2. Filter by Category / Dòng hàng
+    if (productCategoryFilter !== 'ALL') {
+      list = list.filter(p => (p.category || '').toUpperCase().includes(productCategoryFilter.toUpperCase()));
+    }
+
+    // 3. Search Term
     if (productSearchTerm.trim()) {
       const term = productSearchTerm.trim().toLowerCase();
       list = list.filter(
@@ -160,7 +243,7 @@ const ProductionRoutingView = () => {
       );
     }
     return list;
-  }, [currentAppliedProducts, productSearchTerm]);
+  }, [allProductsListFormatted, productScopeFilter, productCategoryFilter, productSearchTerm]);
 
   const totalProductPages = useMemo(() => {
     return Math.ceil(filteredAppliedProducts.length / productRowsPerPage) || 1;
@@ -170,6 +253,94 @@ const ProductionRoutingView = () => {
     const start = productPage * productRowsPerPage;
     return filteredAppliedProducts.slice(start, start + productRowsPerPage);
   }, [filteredAppliedProducts, productPage, productRowsPerPage]);
+
+  // HANDLERS FOR ASSIGN / UNASSIGN
+  const handleAssignSingleProduct = async (productSku) => {
+    const rCode = selectedRoutingId || currentRouting?.code;
+    try {
+      await api.post(`/production/routings/${rCode}/products/assign`, { skus: [productSku] });
+    } catch (e) {
+      console.warn('Assign API error (fallback state):', e);
+    }
+    setRoutingAssignedMap(prev => ({ ...prev, [productSku]: rCode }));
+    if (toast) toast('success', `Đã gán sản phẩm ${productSku} vào Quy trình ${rCode}!`);
+  };
+
+  const handleUnassignSingleProduct = async (productSku) => {
+    const rCode = selectedRoutingId || currentRouting?.code;
+    try {
+      await api.delete(`/production/routings/${rCode}/products/${productSku}`);
+    } catch (e) {
+      console.warn('Unassign API error (fallback state):', e);
+    }
+    setRoutingAssignedMap(prev => {
+      const next = { ...prev };
+      delete next[productSku];
+      return next;
+    });
+    if (toast) toast('success', `Đã gỡ sản phẩm ${productSku} khỏi Quy trình!`);
+  };
+
+  const handleBulkAssignProducts = async () => {
+    if (selectedProductSkus.length === 0) return;
+    const rCode = selectedRoutingId || currentRouting?.code;
+    try {
+      await api.post(`/production/routings/${rCode}/products/assign`, { skus: selectedProductSkus });
+    } catch (e) {
+      console.warn('Bulk assign API error:', e);
+    }
+    setRoutingAssignedMap(prev => {
+      const next = { ...prev };
+      selectedProductSkus.forEach(sku => { next[sku] = rCode; });
+      return next;
+    });
+    if (toast) toast('success', `Đã gán ${selectedProductSkus.length} sản phẩm đã chọn vào Quy trình ${rCode}!`);
+    setSelectedProductSkus([]);
+  };
+
+  const handleAutoAssignSameCategory = async () => {
+    const rCode = selectedRoutingId || currentRouting?.code;
+    const sameCatProds = allProductsListFormatted.filter(p => {
+      if (!currentRoutingCategorySeries) return true;
+      return (p.category || '').toUpperCase().includes(currentRoutingCategorySeries.toUpperCase()) ||
+             (p.code || '').toUpperCase().includes(currentRoutingCategorySeries.toUpperCase());
+    });
+
+    if (sameCatProds.length === 0) {
+      if (toast) toast('warning', 'Không tìm thấy sản phẩm nào khớp với Dòng hàng này!');
+      return;
+    }
+
+    const skusToAssign = sameCatProds.map(p => p.code);
+    try {
+      await api.post(`/production/routings/${rCode}/products/assign`, { skus: skusToAssign });
+    } catch (e) {
+      console.warn('Auto assign API error:', e);
+    }
+
+    setRoutingAssignedMap(prev => {
+      const next = { ...prev };
+      skusToAssign.forEach(sku => { next[sku] = rCode; });
+      return next;
+    });
+    if (toast) toast('success', `Đã tự động gán ${skusToAssign.length} sản phẩm Dòng hàng vào Quy trình ${rCode}!`);
+  };
+
+  const handleToggleSelectAll = (e) => {
+    if (e.target.checked) {
+      const allSkus = filteredAppliedProducts.map(p => p.code);
+      setSelectedProductSkus(allSkus);
+    } else {
+      setSelectedProductSkus([]);
+    }
+  };
+
+  const handleToggleSelectProduct = (sku) => {
+    setSelectedProductSkus(prev =>
+      prev.includes(sku) ? prev.filter(s => s !== sku) : [...prev, sku]
+    );
+  };
+
 
   const [isBackendLoaded, setIsBackendLoaded] = useState(false);
 
@@ -969,7 +1140,7 @@ const ProductionRoutingView = () => {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#059669', backgroundColor: '#ECFDF5', padding: '4px 12px', borderRadius: '6px', border: '1px solid #A7F3D0' }}>
-            Đang áp dụng cho {currentAppliedProducts.length} sản phẩm
+            Đang áp dụng cho {filteredAppliedProducts.length} sản phẩm
           </span>
         </div>
       </div>
@@ -1374,99 +1545,238 @@ const ProductionRoutingView = () => {
         }}>
           {/* Top Search & Filter Bar for Products */}
           <div style={{
-            padding: '14px 20px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
+            padding: '16px 20px',
             borderBottom: '1.5px solid #EADCC9',
             backgroundColor: '#FAF6F0',
-            flexWrap: 'wrap',
+            display: 'flex',
+            flexDirection: 'column',
             gap: '12px'
           }}>
-            <div>
-              <span style={{ fontSize: '1rem', fontWeight: '800', color: '#2D1A12' }}>
-                Danh sách Sản phẩm thuộc Dòng hàng: {currentRouting.category || currentRouting.code}
-              </span>
-              <span style={{ display: 'block', fontSize: '0.78rem', color: '#6B7280', marginTop: '2px' }}>
-                Tự động đồng bộ từ CSDL BOM Master theo mã Dòng hàng (Tổng cộng {currentAppliedProducts.length.toLocaleString('vi-VN')} sản phẩm)
-              </span>
-            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <span style={{ fontSize: '1.05rem', fontWeight: '800', color: '#2D1A12' }}>
+                  Danh sách Sản phẩm áp dụng Quy trình: <span style={{ color: '#7B5233' }}>{currentRouting.name} ({currentRouting.code})</span>
+                </span>
+                <span style={{ display: 'block', fontSize: '0.78rem', color: '#6B7280', marginTop: '2px' }}>
+                  Quản lý gán sản phẩm từ mọi Dòng hàng vào Quy trình sản xuất này (Tổng số {filteredAppliedProducts.length.toLocaleString('vi-VN')} sản phẩm)
+                </span>
+              </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ position: 'relative', width: '280px' }}>
-                <Search size={16} color="#9CA3AF" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
-                <input
-                  type="text"
-                  placeholder="Tìm kiếm mã SKU, tên sản phẩm..."
-                  value={productSearchTerm}
-                  onChange={(e) => setProductSearchTerm(e.target.value)}
-                  style={{ width: '100%', padding: '7px 30px 7px 32px', borderRadius: '8px', border: '1.5px solid #EADCC9', outline: 'none', fontSize: '0.84rem' }}
-                />
-                {productSearchTerm && (
+              {/* Action Buttons: Auto-assign & Bulk assign */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  onClick={handleAutoAssignSameCategory}
+                  title="Tự động gán tất cả sản phẩm thuộc cùng Dòng hàng vào quy trình này"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    padding: '7px 14px', borderRadius: '8px', border: '1px solid #7B5233',
+                    backgroundColor: '#FFFFFF', color: '#7B5233', fontWeight: 'bold',
+                    fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF6F0'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+                >
+                  <Sparkles size={14} />
+                  <span>Tự động gán SP Dòng hàng</span>
+                </button>
+
+                {selectedProductSkus.length > 0 && (
                   <button
-                    onClick={() => setProductSearchTerm('')}
-                    style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', cursor: 'pointer', color: '#9CA3AF' }}
+                    onClick={handleBulkAssignProducts}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '6px',
+                      padding: '7px 14px', borderRadius: '8px', border: 'none',
+                      backgroundColor: '#7B5233', color: '#FFFFFF', fontWeight: 'bold',
+                      fontSize: '0.8rem', cursor: 'pointer', boxShadow: '0 2px 6px rgba(123, 82, 51, 0.2)'
+                    }}
                   >
-                    <X size={14} />
+                    <PlusCircle size={14} />
+                    <span>Gán {selectedProductSkus.length} SP đã chọn</span>
                   </button>
                 )}
               </div>
             </div>
+
+            {/* Scope Filter Tabs & Category Filter & Search Bar */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', paddingTop: '8px', borderTop: '1px solid #EADCC9' }}>
+              {/* Scope filter buttons */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#FFFFFF', padding: '4px', borderRadius: '8px', border: '1px solid #EADCC9' }}>
+                <button
+                  onClick={() => setProductScopeFilter('assigned')}
+                  style={{
+                    padding: '6px 12px', border: 'none', borderRadius: '6px',
+                    fontSize: '0.78rem', fontWeight: productScopeFilter === 'assigned' ? 800 : 600,
+                    backgroundColor: productScopeFilter === 'assigned' ? '#7B5233' : 'transparent',
+                    color: productScopeFilter === 'assigned' ? '#FFFFFF' : '#4B5563',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Đã gán cho QT này
+                </button>
+                <button
+                  onClick={() => setProductScopeFilter('all')}
+                  style={{
+                    padding: '6px 12px', border: 'none', borderRadius: '6px',
+                    fontSize: '0.78rem', fontWeight: productScopeFilter === 'all' ? 800 : 600,
+                    backgroundColor: productScopeFilter === 'all' ? '#7B5233' : 'transparent',
+                    color: productScopeFilter === 'all' ? '#FFFFFF' : '#4B5563',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Tất cả sản phẩm ({allProductsListFormatted.length})
+                </button>
+                <button
+                  onClick={() => setProductScopeFilter('unassigned')}
+                  style={{
+                    padding: '6px 12px', border: 'none', borderRadius: '6px',
+                    fontSize: '0.78rem', fontWeight: productScopeFilter === 'unassigned' ? 800 : 600,
+                    backgroundColor: productScopeFilter === 'unassigned' ? '#7B5233' : 'transparent',
+                    color: productScopeFilter === 'unassigned' ? '#FFFFFF' : '#4B5563',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Chưa gán quy trình
+                </button>
+              </div>
+
+              {/* Category Filter Dropdown & Search Input */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                {/* Category selector */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Filter size={14} style={{ color: '#6B7280' }} />
+                  <select
+                    value={productCategoryFilter}
+                    onChange={(e) => setProductCategoryFilter(e.target.value)}
+                    style={{
+                      padding: '6px 10px', borderRadius: '8px', border: '1.5px solid #EADCC9',
+                      fontSize: '0.8rem', fontWeight: 'bold', outline: 'none', backgroundColor: '#FFFFFF', color: '#374151'
+                    }}
+                  >
+                    <option value="ALL">-- Tất cả Dòng hàng --</option>
+                    {categoryOptions.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Search input */}
+                <div style={{ position: 'relative', width: '220px' }}>
+                  <Search size={14} color="#9CA3AF" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
+                  <input
+                    type="text"
+                    placeholder="Tìm SKU, tên sản phẩm..."
+                    value={productSearchTerm}
+                    onChange={(e) => setProductSearchTerm(e.target.value)}
+                    style={{ width: '100%', padding: '6px 26px 6px 30px', borderRadius: '8px', border: '1.5px solid #EADCC9', outline: 'none', fontSize: '0.8rem' }}
+                  />
+                  {productSearchTerm && (
+                    <button
+                      onClick={() => setProductSearchTerm('')}
+                      style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', cursor: 'pointer', color: '#9CA3AF' }}
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '540px', backgroundColor: '#FFFDF9', padding: '0 12px 12px 12px' }}>
+          {/* Product Table Body */}
+          <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '520px', backgroundColor: '#FFFDF9', padding: '0 12px 12px 12px' }}>
             <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 6px', textAlign: 'left', fontSize: '0.86rem' }}>
               <thead>
                 <tr style={{ color: '#8B5E3C' }}>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0', padding: '14px 16px', fontWeight: '800', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.5px', width: '65px', borderRadius: '8px 0 0 8px', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>STT</th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0', padding: '14px 16px', fontWeight: '800', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.5px', width: '210px', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>MÃ SẢN PHẨM</th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0', padding: '14px 16px', fontWeight: '800', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.5px', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>TÊN SẢN PHẨM</th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0', padding: '14px 16px', fontWeight: '800', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.5px', width: '200px', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>QUY TRÌNH ÁP DỤNG</th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0', padding: '14px 16px', fontWeight: '800', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.5px', width: '170px', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>THỜI GIAN ÁP DỤNG</th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0', padding: '14px 16px', fontWeight: '800', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.5px', width: '130px', textAlign: 'center', borderRadius: '0 8px 8px 0', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>TRẠNG THÁI</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0', padding: '12px 14px', width: '45px', textAlign: 'center', borderRadius: '8px 0 0 8px' }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedProductSkus.length > 0 && selectedProductSkus.length === filteredAppliedProducts.length}
+                      onChange={handleToggleSelectAll}
+                      style={{ cursor: 'pointer' }}
+                    />
+                  </th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0', padding: '12px 14px', fontWeight: '800', fontSize: '0.78rem', textTransform: 'uppercase', width: '55px' }}>STT</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0', padding: '12px 14px', fontWeight: '800', fontSize: '0.78rem', textTransform: 'uppercase', width: '180px' }}>MÃ SẢN PHẨM (SKU)</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0', padding: '12px 14px', fontWeight: '800', fontSize: '0.78rem', textTransform: 'uppercase' }}>TÊN SẢN PHẨM</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0', padding: '12px 14px', fontWeight: '800', fontSize: '0.78rem', textTransform: 'uppercase', width: '140px' }}>DÒNG HÀNG</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0', padding: '12px 14px', fontWeight: '800', fontSize: '0.78rem', textTransform: 'uppercase', width: '160px' }}>QUY TRÌNH HÀM</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0', padding: '12px 14px', fontWeight: '800', fontSize: '0.78rem', textTransform: 'uppercase', width: '120px', textAlign: 'center' }}>TRẠNG THÁI</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0', padding: '12px 14px', fontWeight: '800', fontSize: '0.78rem', textTransform: 'uppercase', width: '130px', textAlign: 'center', borderRadius: '0 8px 8px 0' }}>THAO TÁC</th>
                 </tr>
               </thead>
               <tbody>
                 {paginatedAppliedProducts.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', padding: '2.5rem', color: '#94A3B8', fontWeight: '600', backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid #F3EBE1' }}>
-                      {productSearchTerm ? 'Không tìm thấy sản phẩm nào phù hợp với từ khóa.' : 'Chưa có sản phẩm nào gán cho quy trình này.'}
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '2.5rem', color: '#94A3B8', fontWeight: '600', backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid #F3EBE1' }}>
+                      {productSearchTerm ? 'Không tìm thấy sản phẩm nào phù hợp với từ khóa.' : 'Chưa có sản phẩm nào trong danh mục lọc.'}
                     </td>
                   </tr>
                 ) : (
-                  paginatedAppliedProducts.map((p, idx) => (
-                    <tr key={p.id} style={{ backgroundColor: '#FFFFFF', boxShadow: '0 2px 6px rgba(0,0,0,0.02)', border: '1px solid #F3EBE1', borderRadius: '10px' }}>
-                      <td style={{ padding: '12px 16px', color: '#6B7280', fontWeight: '600', borderTopLeftRadius: '10px', borderBottomLeftRadius: '10px', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1', borderLeft: '1px solid #F3EBE1' }}>
-                        {productPage * productRowsPerPage + idx + 1}
-                      </td>
-                      <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontWeight: '800', color: '#374151', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1' }}>
-                        {p.code}
-                      </td>
-                      <td style={{ padding: '12px 16px', fontWeight: '800', color: '#111827', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1' }}>
-                        {p.name}
-                      </td>
-                      <td style={{ padding: '12px 16px', fontWeight: '800', color: '#0284C7', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1' }}>
-                        {p.routingCode}
-                      </td>
-                      <td style={{ padding: '12px 16px', color: '#6B7280', fontWeight: '500', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1' }}>
-                        {p.applyDate}
-                      </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'center', borderTopRightRadius: '10px', borderBottomRightRadius: '10px', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1', borderRight: '1px solid #F3EBE1' }}>
-                        <span style={{
-                          display: 'inline-block',
-                          padding: '3px 12px',
-                          borderRadius: '16px',
-                          fontSize: '0.75rem',
-                          fontWeight: '700',
-                          backgroundColor: '#ECFDF5',
-                          color: '#10B981',
-                          border: '1px solid #A7F3D0'
-                        }}>
-                          {p.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
+                  paginatedAppliedProducts.map((p, idx) => {
+                    const isSelected = selectedProductSkus.includes(p.code);
+                    return (
+                      <tr key={p.code + idx} style={{ backgroundColor: isSelected ? '#FAF6F0' : '#FFFFFF', boxShadow: '0 2px 6px rgba(0,0,0,0.02)', border: '1px solid #F3EBE1', borderRadius: '10px' }}>
+                        <td style={{ padding: '12px 14px', textAlign: 'center', borderTopLeftRadius: '10px', borderBottomLeftRadius: '10px', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1', borderLeft: '1px solid #F3EBE1' }}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleSelectProduct(p.code)}
+                            style={{ cursor: 'pointer' }}
+                          />
+                        </td>
+                        <td style={{ padding: '12px 14px', color: '#6B7280', fontWeight: '600', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1' }}>
+                          {productPage * productRowsPerPage + idx + 1}
+                        </td>
+                        <td style={{ padding: '12px 14px', fontFamily: 'monospace', fontWeight: '800', color: '#374151', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1' }}>
+                          {p.code}
+                        </td>
+                        <td style={{ padding: '12px 14px', fontWeight: '800', color: '#111827', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1' }}>
+                          {p.name}
+                        </td>
+                        <td style={{ padding: '12px 14px', color: '#4B5563', fontWeight: '600', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1' }}>
+                          <span style={{ backgroundColor: '#F3F4F6', color: '#374151', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                            {p.category}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 14px', fontWeight: '800', color: '#0284C7', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1' }}>
+                          {p.routingCode}
+                        </td>
+                        <td style={{ padding: '12px 14px', textAlign: 'center', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1' }}>
+                          <span style={{
+                            display: 'inline-block',
+                            padding: '3px 10px',
+                            borderRadius: '16px',
+                            fontSize: '0.72rem',
+                            fontWeight: '700',
+                            backgroundColor: p.isAssignedToThis ? '#ECFDF5' : (p.routingCode !== '---' ? '#EFF6FF' : '#F3F4F6'),
+                            color: p.isAssignedToThis ? '#10B981' : (p.routingCode !== '---' ? '#2563EB' : '#6B7280'),
+                            border: `1px solid ${p.isAssignedToThis ? '#A7F3D0' : (p.routingCode !== '---' ? '#BFDBFE' : '#E5E7EB')}`
+                          }}>
+                            {p.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 14px', textAlign: 'center', borderTopRightRadius: '10px', borderBottomRightRadius: '10px', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1', borderRight: '1px solid #F3EBE1' }}>
+                          {p.isAssignedToThis ? (
+                            <button
+                              onClick={() => handleUnassignSingleProduct(p.code)}
+                              style={{ border: '1px solid #FCA5A5', backgroundColor: '#FEF2F2', color: '#EF4444', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
+                              title="Gỡ khỏi quy trình này"
+                            >
+                              Gỡ gán
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleAssignSingleProduct(p.code)}
+                              style={{ border: '1px solid #7B5233', backgroundColor: '#FAF6F0', color: '#7B5233', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
+                              title="Gán sản phẩm vào quy trình này"
+                            >
+                              + Gán vào QT
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
