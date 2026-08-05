@@ -5,6 +5,7 @@ from modules.production.models.production_team import ProductionTeam
 from modules.production.models.production_routing import (
     ProductionRouting, ProductionRoutingNode, ProductionRoutingComponent, ProductionRoutingProduct
 )
+from modules.master.models.master_product import MasterProduct
 from modules.production.schemas.production_routing_schema import (
     ProductionTeamCreate, ProductionRoutingCreate, ProductionRoutingComponentCreate
 )
@@ -81,6 +82,8 @@ def get_all_routings(db: Session):
             "routing_code": r.routing_code,
             "routing_name": r.routing_name,
             "category": r.category,
+            "category_id": r.category_id,
+            "category_name": r.master_category.name if r.master_category else None,
             "is_default": r.is_default,
             "applied_count": r.applied_count,
             "description": r.description,
@@ -146,6 +149,7 @@ def create_routing(db: Session, data: ProductionRoutingCreate):
         routing_code=data.routing_code,
         routing_name=data.routing_name,
         category=data.category,
+        category_id=data.category_id,
         is_default=data.is_default,
         applied_count=data.applied_count or 0,
         description=data.description
@@ -165,6 +169,9 @@ def create_routing(db: Session, data: ProductionRoutingCreate):
             )
             db.add(node)
         db.commit()
+
+    if data.auto_assign_products and data.category_id:
+        assign_products_by_category(db, str(new_routing.id), data.category_id)
 
     return get_all_routings(db)
 
@@ -301,6 +308,24 @@ def assign_products_to_routing(db: Session, routing_id: str, skus: list):
     
     db.commit()
     return get_routing_products(db, routing_id)
+
+def assign_products_by_category(db: Session, routing_id: str, category_id: int):
+    """Gán nhanh TOÀN BỘ sản phẩm mẫu thuộc 1 Dòng hàng (category_id) vào Quy trình.
+    Đây là cách 'tạo nhanh bằng cách chọn dòng hàng' thay vì phải chọn từng dòng sản phẩm.
+    """
+    routing = None
+    if str(routing_id).isdigit():
+        routing = db.query(ProductionRouting).filter(ProductionRouting.id == int(routing_id)).first()
+    if not routing:
+        routing = db.query(ProductionRouting).filter(ProductionRouting.routing_code == str(routing_id)).first()
+    if not routing:
+        raise HTTPException(status_code=404, detail="Không tìm thấy Quy trình!")
+
+    skus = [p.sku for p in db.query(MasterProduct.sku).filter(MasterProduct.category_id == category_id).all()]
+    if not skus:
+        return get_routing_products(db, routing_id)
+
+    return assign_products_to_routing(db, routing_id, skus)
 
 def unassign_product_from_routing(db: Session, routing_id: str, sku: str):
     routing = None

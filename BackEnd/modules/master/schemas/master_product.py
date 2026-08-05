@@ -54,6 +54,7 @@ class MasterProductListItem(MasterProductBase):
     id: int
     unit: Optional[str] = "Bộ"
     specification: Optional[str] = None
+    category_name: Optional[str] = None
     created_at: Optional[datetime] = None
 
     class Config:

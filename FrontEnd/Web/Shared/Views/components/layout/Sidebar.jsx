@@ -40,11 +40,7 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     const fetchSidebar = async () => {
       try {
         const data = await api.get('/system/sidebar?platform=Web');
-        if (Array.isArray(data) && data.length > 0) {
-          setMenuList(data);
-        } else if (data && Array.isArray(data.items) && data.items.length > 0) {
-          setMenuList(data.items);
-        }
+        setMenuList(data);
       } catch (err) {
         console.error('Failed to fetch sidebar menus:', err);
       } finally {
@@ -53,7 +49,6 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     };
     fetchSidebar();
   }, []);
-
 
   const isBlocked = (item) => {
     let key = item.permission_key;
@@ -309,8 +304,7 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
               Đang tải danh mục...
             </div>
           ) : (
-            (Array.isArray(menuList) ? menuList : []).map(item => {
-
+            menuList.map(item => {
               if (!item.children || item.children.length === 0) {
                 if (isBlocked(item)) return null;
                 return item;

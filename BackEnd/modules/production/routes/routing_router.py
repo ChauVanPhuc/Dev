@@ -80,6 +80,15 @@ def assign_products_to_routing(routing_id: str, body: dict, db: Session = Depend
         skus = [skus]
     return routing_controller.assign_products_to_routing(db, routing_id, skus)
 
+@router.post("/routings/{routing_id}/products/assign-by-category")
+def assign_products_by_category(routing_id: str, body: dict, db: Session = Depends(get_db)):
+    """Gán nhanh toàn bộ sản phẩm thuộc 1 Dòng hàng (category_id) vào Quy trình"""
+    category_id = body.get("category_id")
+    if not category_id:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Thiếu category_id!")
+    return routing_controller.assign_products_by_category(db, routing_id, int(category_id))
+
 @router.delete("/routings/{routing_id}/products/{sku}")
 def unassign_product_from_routing(routing_id: str, sku: str, db: Session = Depends(get_db)):
     """Gỡ 1 sản phẩm khỏi Quy trình sản xuất"""

@@ -14,6 +14,7 @@ class ProductionRouting(Base):
     routing_code = Column(NVARCHAR(50), nullable=False, unique=True, index=True)
     routing_name = Column(NVARCHAR(255), nullable=False)
     category = Column(NVARCHAR(100), nullable=True)
+    category_id = Column(Integer, ForeignKey("master_categories.id"), nullable=True, index=True)
     is_default = Column(Boolean, default=False)
     applied_count = Column(Integer, default=0)
     description = Column(NVARCHAR(500), nullable=True)
@@ -23,6 +24,7 @@ class ProductionRouting(Base):
     nodes = relationship("ProductionRoutingNode", back_populates="routing", cascade="all, delete-orphan", order_by="ProductionRoutingNode.step_order")
     components = relationship("ProductionRoutingComponent", back_populates="routing", cascade="all, delete-orphan")
     routing_products = relationship("ProductionRoutingProduct", back_populates="routing", cascade="all, delete-orphan")
+    master_category = relationship("MasterCategory")
 
 
 class ProductionRoutingNode(Base):
@@ -71,7 +73,7 @@ class ProductionRoutingProduct(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     routing_id = Column(Integer, ForeignKey("production_routings.id", ondelete="CASCADE"), nullable=False)
-    product_sku = Column(NVARCHAR(100), nullable=False, index=True)
+    product_sku = Column(NVARCHAR(100), nullable=False, unique=True, index=True)
     created_at = Column(DateTime, default=get_vietnam_time)
 
     # Relationships

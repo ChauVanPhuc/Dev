@@ -67,15 +67,18 @@ class ProductionRoutingBase(BaseModel):
     routing_code: str
     routing_name: str
     category: Optional[str] = None
+    category_id: Optional[int] = None
     is_default: Optional[bool] = False
     applied_count: Optional[int] = 0
     description: Optional[str] = None
 
 class ProductionRoutingCreate(ProductionRoutingBase):
     node_team_ids: Optional[List[int]] = []
+    auto_assign_products: Optional[bool] = False
 
 class ProductionRoutingResponse(ProductionRoutingBase):
     id: int
+    category_name: Optional[str] = None
     created_at: Optional[datetime] = None
     nodes: List[ProductionRoutingNodeResponse] = []
     components: List[ProductionRoutingComponentResponse] = []

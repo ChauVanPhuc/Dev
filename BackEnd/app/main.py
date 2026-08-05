@@ -109,6 +109,95 @@ except Exception:
     # Ignore if column already exists
     pass
 
+# [MIGRATION] Add category_id (FK -> master_categories) to production_routings table
+try:
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE production_routings ADD category_id INT NULL"))
+except Exception:
+    # Ignore if column already exists
+    pass
+try:
+    with engine.begin() as conn:
+        conn.execute(text(
+            "ALTER TABLE production_routings ADD CONSTRAINT FK_production_routings_category "
+            "FOREIGN KEY (category_id) REFERENCES master_categories(id)"
+        ))
+except Exception:
+    # Ignore if constraint already exists
+    pass
+
+# [MIGRATION] Seed master_categories and link master_products + production_routings by SKU prefix
+try:
+    with engine.begin() as conn:
+        # 1. Seed known categories if not exists
+        known_categories = [
+            ('APT', 'Dòng hàng APT'),
+            ('ATL', 'Dòng hàng ATL'),
+            ('FOL', 'Dòng hàng FOL'),
+            ('ADV', 'Dòng hàng ADV'),
+            ('TPH', 'Dòng hàng TPH'),
+            ('HOR', 'Dòng hàng HOR'),
+            ('EYC', 'Dòng hàng EYC'),
+            ('COV', 'Dòng hàng COV'),
+            ('TIN', 'Dòng hàng TIN'),
+            ('BEZ', 'Dòng hàng BEZ'),
+            ('MBC', 'Dòng hàng MBC'),
+            ('TU', 'Dòng hàng TU'),
+            ('BAN', 'Dòng hàng BAN'),
+            ('GIUONG', 'Dòng hàng GIUONG'),
+        ]
+        for prefix, cat_name in known_categories:
+            conn.execute(text(
+                "IF NOT EXISTS (SELECT 1 FROM master_categories WHERE name = :name) "
+                "INSERT INTO master_categories (name, description, status, created_at) VALUES (:name, :desc, 1, GETDATE())"
+            ), {"name": cat_name, "desc": f"Dòng hàng {prefix}"})
+
+        # 2. Link master_products to categories by SKU prefix (first 3-6 chars)
+        #    Try longer prefixes first (GIUONG, BAN) then shorter (APT, ATL, etc.)
+        for prefix, cat_name in known_categories:
+            conn.execute(text(
+                "UPDATE mp SET mp.category_id = mc.id "
+                "FROM master_products mp "
+                "CROSS JOIN master_categories mc "
+                "WHERE mc.name = :cat_name "
+                "AND (mp.category_id IS NULL) "
+                "AND UPPER(mp.sku) LIKE :prefix_pattern"
+            ), {"cat_name": cat_name, "prefix_pattern": f"{prefix}%"})
+
+        # 3. Link production_routings to categories by matching category text
+        for prefix, cat_name in known_categories:
+            conn.execute(text(
+                "UPDATE pr SET pr.category_id = mc.id "
+                "FROM production_routings pr "
+                "CROSS JOIN master_categories mc "
+                "WHERE mc.name = :cat_name "
+                "AND (pr.category_id IS NULL) "
+                "AND (pr.category LIKE :pattern OR pr.routing_code LIKE :code_pattern)"
+            ), {"cat_name": cat_name, "pattern": f"%{prefix}%", "code_pattern": f"%{prefix}%"})
+except Exception as seed_err:
+    print(f"[MIGRATION] Seed master_categories warning: {seed_err}")
+
+# [MIGRATION] Enforce 1 SKU -> 1 routing: dedupe rows then add unique index on product_sku
+try:
+    with engine.begin() as conn:
+        conn.execute(text("""
+            ;WITH dedupe_cte AS (
+                SELECT id, ROW_NUMBER() OVER (PARTITION BY product_sku ORDER BY id DESC) AS rn
+                FROM production_routing_products
+            )
+            DELETE FROM production_routing_products WHERE id IN (SELECT id FROM dedupe_cte WHERE rn > 1)
+        """))
+except Exception:
+    pass
+try:
+    with engine.begin() as conn:
+        conn.execute(text(
+            "CREATE UNIQUE INDEX UQ_production_routing_products_sku ON production_routing_products (product_sku)"
+        ))
+except Exception:
+    # Ignore if index already exists
+    pass
+
 
 
 from fastapi import WebSocket, WebSocketDisconnect

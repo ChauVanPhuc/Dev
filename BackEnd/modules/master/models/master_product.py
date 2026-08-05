@@ -42,3 +42,7 @@ class MasterProduct(Base):
     paint_color_samples = relationship("PaintColorSample", back_populates="master_product", cascade="all, delete-orphan")
     materials = relationship("MasterProductMaterial", back_populates="master_product", cascade="all, delete-orphan")
     product_details = relationship("MasterProductDetail", back_populates="master_product", cascade="all, delete-orphan")
+
+    @property
+    def category_name(self):
+        return self.master_category.name if self.master_category else None

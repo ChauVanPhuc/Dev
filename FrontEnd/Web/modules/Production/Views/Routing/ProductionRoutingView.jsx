@@ -125,6 +125,7 @@ const ProductionRoutingView = () => {
 
   const [appliedProducts, setAppliedProducts] = useState(defaultProducts);
   const [allMasterProducts, setAllMasterProducts] = useState([]);
+  const [totalMasterProducts, setTotalMasterProducts] = useState(0);
   const [masterCategories, setMasterCategories] = useState([]);
   const [routingAssignedMap, setRoutingAssignedMap] = useState({});
 
@@ -133,6 +134,7 @@ const ProductionRoutingView = () => {
   const [productCategoryFilter, setProductCategoryFilter] = useState('ALL');
   const [productSearchTerm, setProductSearchTerm] = useState('');
   const [selectedProductSkus, setSelectedProductSkus] = useState([]);
+  const [openActionMenuSku, setOpenActionMenuSku] = useState(null);
   const [productPage, setProductPage] = useState(0);
   const [productRowsPerPage, setProductRowsPerPage] = useState(15);
 
@@ -145,15 +147,17 @@ const ProductionRoutingView = () => {
     const fetchProductsData = async () => {
       try {
         const [mpRes, mcRes, rpRes] = await Promise.all([
-          api.get('/master-products/?limit=5000'),
+          api.get('/master-products/?limit=100000'),
           api.get('/master-categories/'),
           api.get(`/production/routings/${selectedRoutingId}/products`)
         ]);
         const mpData = (mpRes && mpRes.items) ? mpRes.items : (Array.isArray(mpRes) ? mpRes : []);
+        const mpTotal = (mpRes && mpRes.total) ? mpRes.total : mpData.length;
         const mcData = Array.isArray(mcRes) ? mcRes : (mcRes?.data || []);
         const rpData = Array.isArray(rpRes) ? rpRes : (rpRes?.data || []);
 
         if (mpData.length > 0) setAllMasterProducts(mpData);
+        setTotalMasterProducts(mpTotal);
         if (mcData.length > 0) setMasterCategories(mcData);
 
         const assignedMap = {};
@@ -170,13 +174,14 @@ const ProductionRoutingView = () => {
 
   const categoryOptions = useMemo(() => {
     const set = new Set();
+    masterCategories.forEach(c => { if (c.name) set.add(c.name); });
     defaultProducts.forEach(p => { if (p.category) set.add(p.category); });
     allMasterProducts.forEach(p => {
-      const c = p.master_category?.name || p.category_name;
+      const c = p.category_name || p.master_category?.name;
       if (c) set.add(c);
     });
     return Array.from(set);
-  }, [defaultProducts, allMasterProducts]);
+  }, [masterCategories, defaultProducts, allMasterProducts]);
 
   const currentRoutingCategorySeries = useMemo(() => {
     return extractDòngHàngKey(currentRouting?.category, currentRouting?.code, currentRouting?.name);
@@ -187,10 +192,9 @@ const ProductionRoutingView = () => {
 
     if (allMasterProducts.length > 0) {
       return allMasterProducts.map((p, idx) => {
-        const catName = p.master_category?.name || p.category_name || extractDòngHàngKey(null, p.sku, p.name) || 'Sản phẩm mẫu';
+        const catName = p.category_name || p.master_category?.name || extractDòngHàngKey(null, p.sku, p.name) || 'Sản phẩm mẫu';
         const assignedCode = routingAssignedMap[p.sku];
-        const isAssignedToThis = assignedCode === rCode || assignedCode === currentRouting?.code ||
-          (!assignedCode && currentRoutingCategorySeries && extractDòngHàngKey(catName, p.sku, p.name) === currentRoutingCategorySeries);
+        const isAssignedToThis = assignedCode === rCode || assignedCode === currentRouting?.code;
 
         return {
           id: p.id || idx + 1,
@@ -219,6 +223,10 @@ const ProductionRoutingView = () => {
       };
     });
   }, [allMasterProducts, routingAssignedMap, selectedRoutingId, currentRouting, defaultProducts, currentRoutingCategorySeries]);
+
+  const assignedToThisCount = useMemo(() => {
+    return allProductsListFormatted.filter(p => p.isAssignedToThis).length;
+  }, [allProductsListFormatted]);
 
   const filteredAppliedProducts = useMemo(() => {
     let list = allProductsListFormatted;
@@ -281,6 +289,18 @@ const ProductionRoutingView = () => {
     if (toast) toast('success', `Đã gỡ sản phẩm ${productSku} khỏi Quy trình!`);
   };
 
+  const handleChangeRoutingForProduct = async (productSku, newRoutingCode) => {
+    if (!newRoutingCode) return;
+    try {
+      await api.post(`/production/routings/${newRoutingCode}/products/assign`, { skus: [productSku] });
+      setRoutingAssignedMap(prev => ({ ...prev, [productSku]: newRoutingCode }));
+      if (toast) toast('success', `Đã chuyển sản phẩm ${productSku} sang Quy trình ${newRoutingCode}`);
+    } catch (e) {
+      console.warn('Change routing API error:', e);
+      if (toast) toast('error', `Lỗi chuyển Quy trình: ${e?.response?.data?.detail || e.message}`);
+    }
+  };
+
   const handleBulkAssignProducts = async () => {
     if (selectedProductSkus.length === 0) return;
     const rCode = selectedRoutingId || currentRouting?.code;
@@ -300,10 +320,32 @@ const ProductionRoutingView = () => {
 
   const handleAutoAssignSameCategory = async () => {
     const rCode = selectedRoutingId || currentRouting?.code;
+    const routingKey = (currentRouting && currentRouting.numericId) ? currentRouting.numericId : rCode;
+
+    // Ưu tiên dùng category_id thật (dữ liệu có cấu trúc) thay vì đoán theo text SKU/tên
+    if (currentRouting?.categoryId) {
+      try {
+        const res = await api.post(`/production/routings/${routingKey}/products/assign-by-category`, {
+          category_id: currentRouting.categoryId
+        });
+        const items = Array.isArray(res) ? res : (res?.data || []);
+        setRoutingAssignedMap(prev => {
+          const next = { ...prev };
+          items.forEach(i => { next[i.product_sku] = rCode; });
+          return next;
+        });
+        if (toast) toast('success', `Đã tự động gán ${items.length} sản phẩm thuộc Dòng hàng "${currentRouting.categoryName || currentRouting.category}" vào Quy trình ${rCode}!`);
+        return;
+      } catch (e) {
+        console.warn('Auto assign by category API error, fallback to heuristic:', e);
+      }
+    }
+
+    // Fallback: quy trình chưa gắn category_id -> dùng đối chiếu text tạm thời
     const sameCatProds = allProductsListFormatted.filter(p => {
       if (!currentRoutingCategorySeries) return true;
       return (p.category || '').toUpperCase().includes(currentRoutingCategorySeries.toUpperCase()) ||
-             (p.code || '').toUpperCase().includes(currentRoutingCategorySeries.toUpperCase());
+        (p.code || '').toUpperCase().includes(currentRoutingCategorySeries.toUpperCase());
     });
 
     if (sameCatProds.length === 0) {
@@ -378,8 +420,10 @@ const ProductionRoutingView = () => {
   const [newRoutingForm, setNewRoutingForm] = useState({
     code: '',
     name: '',
-    category: 'Dòng hàng APT',
-    desc: ''
+    categoryId: '',
+    category: '',
+    desc: '',
+    autoAssign: true
   });
 
   const [confirmModalState, setConfirmModalState] = useState({
@@ -496,7 +540,9 @@ const ProductionRoutingView = () => {
               numericId: r.id,
               code: r.routing_code,
               name: r.routing_name,
-              category: r.category || '',
+              category: r.category || r.category_name || '',
+              categoryId: r.category_id || null,
+              categoryName: r.category_name || r.category || '',
               isDefault: r.is_default,
               appliedCount: r.applied_count || 0,
               nodes: effectiveNodes
@@ -564,9 +610,9 @@ const ProductionRoutingView = () => {
       const term = searchTerm.toLowerCase();
       rows = rows.filter(
         r => r.partName.toLowerCase().includes(term) ||
-             r.partSku.toLowerCase().includes(term) ||
-             r.partType.toLowerCase().includes(term) ||
-             r.material.toLowerCase().includes(term)
+          r.partSku.toLowerCase().includes(term) ||
+          r.partType.toLowerCase().includes(term) ||
+          r.material.toLowerCase().includes(term)
       );
     }
     return rows;
@@ -754,11 +800,14 @@ const ProductionRoutingView = () => {
 
   const handleOpenAddRoutingModal = () => {
     const num = Math.floor(10 + Math.random() * 90);
+    const firstCat = masterCategories[0];
     setNewRoutingForm({
-      code: `QT-APT-${num}`,
-      name: `Quy trình sản xuất Dòng hàng APT ${num}`,
-      category: 'Dòng hàng APT',
-      desc: 'Mô tả chi tiết quy trình sản xuất mới'
+      code: `QT-${num}`,
+      name: `Quy trình sản xuất mới ${num}`,
+      categoryId: firstCat ? firstCat.id : '',
+      category: firstCat ? firstCat.name : '',
+      desc: 'Mô tả chi tiết quy trình sản xuất mới',
+      autoAssign: true
     });
     setShowAddRoutingModal(true);
   };
@@ -770,13 +819,16 @@ const ProductionRoutingView = () => {
       return;
     }
 
+    const selectedCat = masterCategories.find(c => String(c.id) === String(newRoutingForm.categoryId));
     const payload = {
       routing_code: newRoutingForm.code,
       routing_name: newRoutingForm.name,
-      category: newRoutingForm.category || 'Tủ gỗ',
+      category: selectedCat ? selectedCat.name : (newRoutingForm.category || ''),
+      category_id: newRoutingForm.categoryId ? Number(newRoutingForm.categoryId) : null,
       description: newRoutingForm.desc || '',
       is_default: false,
-      applied_count: 0
+      applied_count: 0,
+      auto_assign_products: Boolean(newRoutingForm.autoAssign)
     };
 
     try {
@@ -788,7 +840,9 @@ const ProductionRoutingView = () => {
           numericId: r.id,
           code: r.routing_code,
           name: r.routing_name,
-          category: r.category || '',
+          category: r.category || r.category_name || '',
+          categoryId: r.category_id || null,
+          categoryName: r.category_name || r.category || '',
           isDefault: r.is_default,
           appliedCount: r.applied_count || 0,
           nodes: (r.nodes || []).map(n => ({
@@ -984,7 +1038,7 @@ const ProductionRoutingView = () => {
 
   return (
     <div style={{ padding: '20px 24px', backgroundColor: '#FAF6F0', minHeight: 'calc(100vh - 110px)', fontFamily: 'Inter, sans-serif', display: 'flex', flexDirection: 'column' }}>
-      
+
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -1140,7 +1194,7 @@ const ProductionRoutingView = () => {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#059669', backgroundColor: '#ECFDF5', padding: '4px 12px', borderRadius: '6px', border: '1px solid #A7F3D0' }}>
-            Đang áp dụng cho {filteredAppliedProducts.length} sản phẩm
+            Đang áp dụng cho {assignedToThisCount.toLocaleString('vi-VN')} sản phẩm
           </span>
         </div>
       </div>
@@ -1347,7 +1401,7 @@ const ProductionRoutingView = () => {
                               }}
                             >
                               <span>{node.teamName}</span>
-                              
+
                               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderLeft: '1px solid rgba(255,255,255,0.25)', paddingLeft: '8px' }}>
                                 {idx > 0 && (
                                   <button
@@ -1558,7 +1612,7 @@ const ProductionRoutingView = () => {
                   Danh sách Sản phẩm áp dụng Quy trình: <span style={{ color: '#7B5233' }}>{currentRouting.name} ({currentRouting.code})</span>
                 </span>
                 <span style={{ display: 'block', fontSize: '0.78rem', color: '#6B7280', marginTop: '2px' }}>
-                  Quản lý gán sản phẩm từ mọi Dòng hàng vào Quy trình sản xuất này (Tổng số {filteredAppliedProducts.length.toLocaleString('vi-VN')} sản phẩm)
+                  Quản lý gán sản phẩm từ mọi Dòng hàng vào Quy trình sản xuất này (Tổng số {totalMasterProducts.toLocaleString('vi-VN')} sản phẩm)
                 </span>
               </div>
 
@@ -1623,7 +1677,7 @@ const ProductionRoutingView = () => {
                     cursor: 'pointer'
                   }}
                 >
-                  Tất cả sản phẩm ({allProductsListFormatted.length})
+                  Tất cả sản phẩm ({totalMasterProducts.toLocaleString('vi-VN')})
                 </button>
                 <button
                   onClick={() => setProductScopeFilter('unassigned')}
@@ -1683,7 +1737,7 @@ const ProductionRoutingView = () => {
           </div>
 
           {/* Product Table Body */}
-          <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '520px', backgroundColor: '#FFFDF9', padding: '0 12px 12px 12px' }}>
+          <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '420px', backgroundColor: '#FFFDF9', padding: '0 12px 12px 12px' }}>
             <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 6px', textAlign: 'left', fontSize: '0.86rem' }}>
               <thead>
                 <tr style={{ color: '#8B5E3C' }}>
@@ -1755,18 +1809,55 @@ const ProductionRoutingView = () => {
                             {p.status}
                           </span>
                         </td>
-                        <td style={{ padding: '12px 14px', textAlign: 'center', borderTopRightRadius: '10px', borderBottomRightRadius: '10px', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1', borderRight: '1px solid #F3EBE1' }}>
+                        <td style={{ padding: '12px 14px', textAlign: 'center', borderTopRightRadius: '10px', borderBottomRightRadius: '10px', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1', borderRight: '1px solid #F3EBE1', position: 'relative' }}>
                           {p.isAssignedToThis ? (
-                            <button
-                              onClick={() => handleUnassignSingleProduct(p.code)}
-                              style={{ border: '1px solid #FCA5A5', backgroundColor: '#FEF2F2', color: '#EF4444', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
-                              title="Gỡ khỏi quy trình này"
-                            >
-                              Gỡ gán
-                            </button>
+                            <div style={{ position: 'relative', display: 'inline-block' }}>
+                              <button
+                                onClick={() => setOpenActionMenuSku(openActionMenuSku === p.code ? null : p.code)}
+                                style={{ border: '1px solid #EADCC9', backgroundColor: '#FFFFFF', color: '#7B5233', padding: '4px 10px', borderRadius: '6px', fontSize: '0.9rem', fontWeight: 'bold', cursor: 'pointer', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                title="Thao tác"
+                              >
+                                ⋮
+                              </button>
+                              {openActionMenuSku === p.code && (
+                                <div style={{ position: 'absolute', top: '38px', right: 0, zIndex: 20, backgroundColor: '#FFFFFF', border: '1px solid #EADCC9', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.12)', minWidth: '140px', overflow: 'hidden', textAlign: 'left' }}>
+                                  <button
+                                    onClick={() => { handleUnassignSingleProduct(p.code); setOpenActionMenuSku(null); }}
+                                    style={{ width: '100%', border: 'none', background: 'transparent', color: '#EF4444', padding: '8px 12px', fontSize: '0.8rem', fontWeight: '600', cursor: 'pointer', textAlign: 'left' }}
+                                  >
+                                    Gỡ gán
+                                  </button>
+                                  <div style={{ padding: '4px 12px', fontSize: '0.7rem', color: '#9CA3AF', borderTop: '1px solid #F3EBE1' }}>Đổi quy trình</div>
+                                  {routingsList.filter(r => r.id !== selectedRoutingId && r.code !== selectedRoutingId).map(r => (
+                                    <button
+                                      key={r.id}
+                                      onClick={() => { handleChangeRoutingForProduct(p.code, r.code); setOpenActionMenuSku(null); }}
+                                      style={{ width: '100%', border: 'none', background: 'transparent', color: '#374151', padding: '6px 12px', fontSize: '0.78rem', fontWeight: '500', cursor: 'pointer', textAlign: 'left' }}
+                                    >
+                                      {r.code}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           ) : (
                             <button
-                              onClick={() => handleAssignSingleProduct(p.code)}
+                              onClick={() => {
+                                if (p.routingCode && p.routingCode !== '---') {
+                                  setConfirmModalState({
+                                    isOpen: true,
+                                    title: 'Xác nhận đổi Quy trình sản xuất',
+                                    message: `Sản phẩm "${p.name}" (${p.code}) đang thuộc Quy trình ${p.routingCode}. Bạn có chắc muốn chuyển sang Quy trình ${selectedRoutingId || currentRouting?.code}?`,
+                                    confirmText: 'Xác nhận chuyển',
+                                    onConfirm: async () => {
+                                      await handleAssignSingleProduct(p.code);
+                                      setConfirmModalState(prev => ({ ...prev, isOpen: false }));
+                                    }
+                                  });
+                                } else {
+                                  handleAssignSingleProduct(p.code);
+                                }
+                              }}
                               style={{ border: '1px solid #7B5233', backgroundColor: '#FAF6F0', color: '#7B5233', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
                               title="Gán sản phẩm vào quy trình này"
                             >
@@ -1797,6 +1888,9 @@ const ProductionRoutingView = () => {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ color: '#6B7280', fontWeight: '600', fontSize: '0.8rem', marginRight: '4px' }}>
+                Trang {productPage + 1} / {totalProductPages}
+              </span>
               <button
                 onClick={() => setProductPage(p => Math.max(0, p - 1))}
                 disabled={productPage === 0}
@@ -2192,20 +2286,33 @@ const ProductionRoutingView = () => {
                   Dòng hàng *
                 </label>
                 <select
-                  value={newRoutingForm.category}
-                  onChange={(e) => setNewRoutingForm({ ...newRoutingForm, category: e.target.value })}
+                  value={newRoutingForm.categoryId}
+                  onChange={(e) => {
+                    const cat = masterCategories.find(c => String(c.id) === String(e.target.value));
+                    setNewRoutingForm({ ...newRoutingForm, categoryId: e.target.value, category: cat ? cat.name : '' });
+                  }}
                   style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #EADCC9', outline: 'none', fontSize: '0.88rem', fontWeight: '700' }}
                 >
-                  <option value="Dòng hàng APT">Dòng hàng APT (1,380 SP)</option>
-                  <option value="Dòng hàng ATL">Dòng hàng ATL (512 SP)</option>
-                  <option value="Dòng hàng FOL">Dòng hàng FOL (509 SP)</option>
-                  <option value="Dòng hàng ADV">Dòng hàng ADV (482 SP)</option>
-                  <option value="Dòng hàng TPH">Dòng hàng TPH (114 SP)</option>
-                  <option value="Dòng hàng HOR">Dòng hàng HOR (32 SP)</option>
-                  <option value="Dòng hàng EYC">Dòng hàng EYC (27 SP)</option>
-                  <option value="Dòng hàng COV">Dòng hàng COV (10 SP)</option>
-                  <option value="Dòng hàng Khác">Dòng hàng Khác</option>
+                  <option value="">-- Chọn Dòng hàng --</option>
+                  {masterCategories.map(cat => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name} ({(cat.product_count || 0).toLocaleString('vi-VN')} SP)
+                    </option>
+                  ))}
                 </select>
+              </div>
+
+              <div style={{ marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#FAF6F0', padding: '10px 12px', borderRadius: '8px', border: '1px solid #EADCC9' }}>
+                <input
+                  type="checkbox"
+                  id="autoAssignOnCreate"
+                  checked={newRoutingForm.autoAssign}
+                  onChange={(e) => setNewRoutingForm({ ...newRoutingForm, autoAssign: e.target.checked })}
+                  style={{ cursor: 'pointer' }}
+                />
+                <label htmlFor="autoAssignOnCreate" style={{ fontSize: '0.8rem', fontWeight: '600', color: '#5D3B32', cursor: 'pointer' }}>
+                  Tự động gán tất cả sản phẩm thuộc Dòng hàng này vào Quy trình ngay khi tạo
+                </label>
               </div>
 
               <div style={{ marginBottom: '20px' }}>
