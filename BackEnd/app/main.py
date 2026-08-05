@@ -109,6 +109,23 @@ except Exception:
     # Ignore if column already exists
     pass
 
+# [MIGRATION] Add missing columns to master_products table
+try:
+    with engine.begin() as conn:
+        for _col, _type in [
+            ("new_name", "NVARCHAR(255) NULL"),
+            ("brand_name", "NVARCHAR(100) NULL"),
+            ("adjusted_date", "DATETIME NULL"),
+            ("image_url", "NVARCHAR(500) NULL"),
+            ("total_category_count", "INT NULL DEFAULT 0")
+        ]:
+            try:
+                conn.execute(text(f"ALTER TABLE master_products ADD {_col} {_type}"))
+            except Exception:
+                pass
+except Exception:
+    pass
+
 # [MIGRATION] Add category_id (FK -> master_categories) to production_routings table
 try:
     with engine.begin() as conn:
