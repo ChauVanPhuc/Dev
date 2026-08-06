@@ -88,11 +88,8 @@ const Layout = ({ children }) => {
 
 
       {/* Nội dung chính của trang */}
-
-      <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', maxWidth: '100%', width: '100%', margin: 0, padding: 0, paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 8px)', boxSizing: 'border-box', WebkitOverflowScrolling: 'touch' }}>
-
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', maxWidth: '100%', width: '100%', margin: 0, padding: 0, boxSizing: 'border-box' }}>
         {children}
-
       </main>
 
 

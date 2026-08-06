@@ -71,20 +71,28 @@ const ProtectedRoute = () => {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Kiểm tra vai trò Admin để bỏ qua kiểm tra quyền (IT, BGD, admin)
+  // Kiểm tra vai trò Admin hoặc Nhân viên sản xuất để cấp quyền truy cập các màn hình sản xuất
   const userRoleStr = (user?.role_name || user?.role_description || '').toLowerCase();
   const userPermStr = (user?.permission_name || user?.permission_description || '').toLowerCase();
   const userNameStr = (user?.full_name || user?.username || '').toLowerCase();
-  const combinedAuthStr = `${userRoleStr} | ${userPermStr} | ${userNameStr}`;
+  const userDeptStr = (user?.department_name || user?.department_code || user?.department || '').toLowerCase();
+  const userPosStr = (user?.position_name || user?.position_code || user?.position || '').toLowerCase();
+  const combinedAuthStr = `${userRoleStr} | ${userPermStr} | ${userNameStr} | ${userDeptStr} | ${userPosStr}`;
+
   const isAdmin = combinedAuthStr.includes('admin') || combinedAuthStr.includes('it') || combinedAuthStr.includes('bgd');
+  const isProductionStaff = combinedAuthStr.includes('sx') || combinedAuthStr.includes('sản xuất') || combinedAuthStr.includes('san xuat') || combinedAuthStr.includes('quản đốc') || combinedAuthStr.includes('tổ trưởng');
 
   if (!isAdmin) {
     const key = mapPathToPermissionKey(location.pathname);
     if (key) {
+      // Cho phép nhân viên sản xuất mặc định truy cập các màn hình giao nhận sản xuất và luân chuyển
+      const isProductionRoute = key.startsWith('mobile_production') || key.startsWith('mobile_delivery') || key.startsWith('mobile_plan') || key.startsWith('mobile_inspection');
+      
       const userPerm = permissions?.[key];
-      const hasRead = userPerm && userPerm !== 'none' && userPerm.split(',').map(p => p.trim()).includes('read');
+      const hasExplicitRead = userPerm && userPerm !== 'none' && userPerm.split(',').map(p => p.trim()).includes('read');
+      const hasAccess = hasExplicitRead || (isProductionStaff && isProductionRoute) || !permissions || Object.keys(permissions).length === 0;
 
-      if (!hasRead) {
+      if (!hasAccess) {
         return (
           <div style={{
             display: 'flex',

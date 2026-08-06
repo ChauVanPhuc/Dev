@@ -614,19 +614,40 @@ def get_production_transfers(
     month: Optional[str] = Query(None),
     po_code: Optional[str] = Query(None),
     part_name: Optional[str] = Query(None),
+    stage: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
-    tab: Optional[str] = Query("transfer"),
+    tab: Optional[str] = Query("pending"),
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1),
     db: Session = Depends(get_db)
 ):
     """
     TRUY VẤN CSDL THỰC: Lấy lịch sử luân chuyển từ bảng `deliveries`
+    Phân loại chính xác theo Tab và Công đoạn hoạt động của Người dùng
     """
     try:
         skip = (page - 1) * limit
         query = db.query(Delivery)
+
+        completed_statuses = ["Hoàn thành", "Đã nhận", "Hoàn Thành QC", "Đã hủy", "done", "cancelled"]
+
+        if tab in ["history", "transfer_history"]:
+            query = query.filter(Delivery.status.in_(completed_statuses))
+        else:
+            query = query.filter(or_(Delivery.status.is_(None), ~Delivery.status.in_(completed_statuses)))
+
+        if stage and stage not in ["ALL", "Tất cả công đoạn", ""]:
+            clean = stage.replace("NM1 - ", "").replace("NM2 - ", "").strip()
+            abbrev = clean.replace("Định hình", "ĐH").replace("Lắp ráp", "LR")
+            terms = list(set([t for t in [stage.strip(), clean, abbrev, f"NM1 - {clean}", f"NM2 - {clean}", f"NM1 - {abbrev}", f"NM2 - {abbrev}"] if t]))
+
+            conditions = []
+            for t in terms:
+                # CHỈ LỌC THEO CÔNG ĐOẠN NGƯỜI GỬI (delivery_stage)
+                conditions.append(Delivery.delivery_stage.ilike(f"%{t}%"))
+
+            query = query.filter(or_(*conditions))
 
         if po_code and po_code != "ALL":
             order = db.query(Order).filter(Order.order_code == po_code).first()

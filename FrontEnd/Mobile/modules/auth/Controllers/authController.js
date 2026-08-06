@@ -54,8 +54,8 @@ export const useAuthController = () => {
           stage_description: stage_description,
           stageNames: stageNames,
           stageDescriptions: stageDescriptions,
-          activeStageName: stageNames.length === 1 ? stageNames[0] : '',
-          activeStageDescription: stageDescriptions.length === 1 ? stageDescriptions[0] : '',
+          activeStageName: stageNames[0] || '',
+          activeStageDescription: stageDescriptions[0] || '',
           role: 'user' 
         }
         setUser(userData, response.data.access_token, response.data.screen_permissions)
