@@ -137,22 +137,45 @@ const ProductDetailView = () => {
   });
 
   // State chứa danh sách Danh mục động từ Backend API (/categories)
-  const [categoriesOptions, setCategoriesOptions] = useState([]);
+  // Danh mục dòng hàng mặc định từ BOM làm fallback
+  const defaultBomLines = [
+    'Dòng hàng APT', 'Dòng hàng ATL', 'Dòng hàng FOL', 'Dòng hàng ADV',
+    'Dòng hàng TPH', 'Dòng hàng HOR', 'Dòng hàng EYC', 'Dòng hàng COV',
+    'Dòng hàng TIN', 'Dòng hàng BEZ', 'Dòng hàng MBC'
+  ];
 
-  // Lấy danh sách Danh mục từ SQL Server (/categories)
+  // Lấy danh sách Dòng hàng từ SQL Server (/categories)
   useEffect(() => {
     const fetchCategories = async () => {
       try {
         const res = await api.get('/categories').catch(() => []);
         if (Array.isArray(res) && res.length > 0) {
-          setCategoriesOptions(res);
+          setCategoriesOptions(res.map(c => typeof c === 'string' ? { name: c } : c));
+        } else {
+          setCategoriesOptions(defaultBomLines.map(name => ({ name })));
         }
       } catch (err) {
-        console.warn('Lỗi lấy danh sách danh mục từ API:', err);
+        console.warn('Lỗi lấy danh sách dòng hàng từ API:', err);
+        setCategoriesOptions(defaultBomLines.map(name => ({ name })));
       }
     };
     fetchCategories();
   }, []);
+
+  // Tự động nhận diện Dòng hàng dựa trên tiền tố SKU (APT, ATL, ADV, FOL...)
+  useEffect(() => {
+    if (!formData.sku) return;
+    const skuUpper = formData.sku.toUpperCase();
+    const matchedLine = (categoriesOptions.length > 0 ? categoriesOptions : defaultBomLines.map(name => ({ name }))).find(cat => {
+      const catNameUpper = cat.name.toUpperCase();
+      const prefix = skuUpper.slice(0, 3);
+      return catNameUpper.includes(prefix);
+    });
+    if (matchedLine && (!formData.line || formData.line === 'Nội thất')) {
+      setFormData(prev => ({ ...prev, line: matchedLine.name }));
+    }
+  }, [formData.sku, categoriesOptions]);
+
 
   // Hàm xử lý và sắp xếp cây linh kiện BOM 100% đầy đủ từ SQL Server Backend
   const processBackendBOM = (items) => {
@@ -687,31 +710,29 @@ const ProductDetailView = () => {
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                     style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #D1D5DB', borderRadius: '7px', backgroundColor: '#FFF', fontWeight: '700', color: '#1F2937', outline: 'none' }}
                   >
-                    {categoriesOptions.length > 0 ? (
-                      categoriesOptions.map(cat => (
-                        <option key={cat.id || cat.name} value={cat.name}>{cat.name}</option>
-                      ))
-                    ) : (
-                      <>
-                        <option value="Tủ quần áo">Tủ quần áo</option>
-                        <option value="Tủ trưng bày">Tủ trưng bày</option>
-                        <option value="Bàn ăn">Bàn ăn</option>
-                        <option value="Ghế">Ghế nội thất</option>
-                      </>
-                    )}
+                    <option value="Tủ quần áo">Tủ quần áo</option>
+                    <option value="Tủ trưng bày">Tủ trưng bày</option>
+                    <option value="Bàn ăn">Bàn ăn</option>
+                    <option value="Ghế nội thất">Ghế nội thất</option>
+                    <option value="Bàn làm việc">Bàn làm việc</option>
+                    <option value="Giường ngủ">Giường ngủ</option>
+                    <option value="Kệ tivi">Kệ tivi</option>
+                    <option value="Bàn trang điểm">Bàn trang điểm</option>
+                    <option value="Tủ bếp">Tủ bếp</option>
+                    <option value="Khác">Khác</option>
                   </select>
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#4B5563', marginBottom: '4px' }}>Dòng hàng</label>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#4B5563', marginBottom: '4px' }}>Dòng hàng (BOM Master)</label>
                   <select
                     value={formData.line}
                     onChange={(e) => setFormData({ ...formData, line: e.target.value })}
                     style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #D1D5DB', borderRadius: '7px', backgroundColor: '#FFF', fontWeight: '700', color: '#1F2937', outline: 'none' }}
                   >
-                    <option value="Nội thất">Nội thất</option>
-                    <option value="Nội thất xuất khẩu">Nội thất xuất khẩu</option>
-                    <option value="Đồ gỗ tự nhiên">Đồ gỗ tự nhiên</option>
+                    {(categoriesOptions.length > 0 ? categoriesOptions : defaultBomLines.map(name => ({ name }))).map(cat => (
+                      <option key={cat.id || cat.name} value={cat.name}>{cat.name}</option>
+                    ))}
                   </select>
                 </div>
 
