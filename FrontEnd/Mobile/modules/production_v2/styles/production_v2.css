@@ -1,0 +1,1165 @@
+/* ============================================================
+   PRODUCTION V2 — Scoped CSS (.pv2-*)
+   Color palette from mockup:
+     Header:    var(--primary-color) or #5c2d0e
+     Orange:    #c85a1e  (ticket codes LC04, KT04)
+     Pass:      #16a34a
+     Fail:      #dc2626
+     Pending:   #f97316
+     Section bg:#5c2d0e (table header, section title)
+   ============================================================ */
+
+/* ── Variables ─────────────────────────────────────────── */
+:root {
+  --pv2-primary:       #5c2d0e;
+  --pv2-primary-light: #f9f0e8;
+  --pv2-orange:        #c85a1e;
+  --pv2-pass:          #16a34a;
+  --pv2-fail:          #dc2626;
+  --pv2-pending:       #f97316;
+  --pv2-delivering:    #2563eb;
+  --pv2-done:          #64748b;
+  --pv2-cancelled:     #94a3b8;
+  --pv2-bg:            #f5f0ea;
+  --pv2-card-bg:       #ffffff;
+  --pv2-border:        #e2e8f0;
+  --pv2-text:          #1e293b;
+  --pv2-text-muted:    #6b7280;
+  --pv2-radius:        8px;
+}
+
+/* ── Page wrapper ───────────────────────────────────────── */
+.pv2-page {
+  background: var(--pv2-bg);
+  min-height: 100vh;
+  padding-bottom: 80px;
+}
+
+.pv2-page--form {
+  padding: 0 0 100px;
+}
+
+/* ── Toolbar ────────────────────────────────────────────── */
+.pv2-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #fff;
+  border-bottom: 1px solid var(--pv2-border);
+  gap: 8px;
+}
+
+.pv2-toolbar-left {
+  flex: 0 0 auto;
+  min-width: 110px;
+}
+
+.pv2-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pv2-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--pv2-border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--pv2-text);
+  cursor: pointer;
+}
+
+.pv2-btn-add {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 12px;
+  background: var(--pv2-primary);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* ── List / Cards ───────────────────────────────────────── */
+.pv2-list {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pv2-card {
+  background: var(--pv2-card-bg);
+  border-radius: var(--pv2-radius);
+  padding: 12px 14px;
+  border: 1px solid var(--pv2-border);
+  cursor: pointer;
+  transition: box-shadow 0.15s;
+}
+
+.pv2-card:active {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.pv2-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pv2-card-top {
+  margin-bottom: 6px;
+}
+
+.pv2-card-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pv2-card-right {
+  text-align: right;
+}
+
+.pv2-ticket-code {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--pv2-text);
+}
+
+.pv2-version-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+
+.pv2-version--v1 {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.pv2-version--v2 {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.pv2-time {
+  font-size: 12px;
+  color: var(--pv2-text-muted);
+}
+
+.pv2-route {
+  font-size: 13px;
+  color: var(--pv2-text-muted);
+}
+
+.pv2-status-tag {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pv2-status--pending    { color: var(--pv2-pending);    }
+.pv2-status--delivering { color: var(--pv2-delivering); }
+.pv2-status--done       { color: var(--pv2-done);       }
+.pv2-status--cancelled  { color: var(--pv2-cancelled);  }
+
+/* ── Pagination ─────────────────────────────────────────── */
+.pv2-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 12px;
+  background: #fff;
+  border-top: 1px solid var(--pv2-border);
+}
+
+.pv2-page-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--pv2-border);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  color: var(--pv2-text);
+}
+
+/* ── Form page (CL07 Match Mockup 1) ─────────────────────── */
+.pv2-page--form {
+  padding: 16px 12px 40px;
+  background: #fbf6ee;
+  min-height: 100vh;
+}
+
+.pv2-form-card {
+  background: #ffffff;
+  border: 1.5px solid #c8beb2;
+  border-radius: 12px;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 16px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+}
+
+.pv2-form-heading {
+  font-size: 26px;
+  font-weight: 800;
+  color: #4a240e;
+  text-align: center;
+  margin: 4px 0 16px;
+  padding: 0;
+  border: none;
+}
+
+.pv2-ticket-meta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.pv2-ticket-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.pv2-ticket-id {
+  font-size: 22px;
+  font-weight: 800;
+  color: #d96527;
+  font-style: italic;
+  line-height: 1.1;
+}
+
+.pv2-ticket-creator {
+  font-size: 12px;
+  color: #b8622c;
+  font-style: italic;
+  font-weight: 600;
+  margin-top: 3px;
+}
+
+.pv2-btn-pallet-view {
+  background: #4a240e;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.pv2-btn-pallet-view:hover {
+  background: #361a0a;
+}
+
+/* ── Form Fields ────────────────────────────────────────── */
+.pv2-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0;
+}
+
+.pv2-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.pv2-field--grow {
+  flex: 1 1 0;
+}
+
+.pv2-field > label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #333333;
+}
+
+.pv2-req {
+  color: #d9381e;
+  font-weight: 700;
+}
+
+.pv2-field-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.pv2-field-row--3col {
+  display: flex;
+  gap: 10px;
+}
+
+.pv2-field-row--3col > div:nth-child(1) { flex: 1.3; }
+.pv2-field-row--3col > div:nth-child(2) { flex: 1; }
+.pv2-field-row--3col > div:nth-child(3) { flex: 1; }
+
+.pv2-field-row--2col {
+  display: flex;
+  gap: 10px;
+}
+
+.pv2-field-row--2col > div { flex: 1; }
+
+.pv2-input {
+  width: 100%;
+  height: 42px;
+  padding: 0 10px;
+  border: 1.5px solid #a3998e;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #333333;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.pv2-input:focus {
+  outline: none;
+  border-color: #4a240e;
+}
+
+.pv2-input--disabled {
+  background: #e2ded9;
+  border-color: #c4bcae;
+  color: #666666;
+}
+
+.pv2-input-unit-wrap {
+  display: flex;
+  align-items: center;
+  border: 1.5px solid #a3998e;
+  border-radius: 10px;
+  background: #ffffff;
+  height: 42px;
+  padding-right: 10px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.pv2-input-unit-wrap .pv2-input {
+  border: none;
+  background: transparent;
+  flex: 1;
+  height: 100%;
+  padding: 0 8px;
+}
+
+.pv2-input-unit-wrap--disabled {
+  background: #e2ded9;
+  border-color: #c4bcae;
+}
+
+.pv2-unit {
+  color: #777777;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.pv2-textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1.5px solid #a3998e;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #333333;
+  background: #ffffff;
+  resize: vertical;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.pv2-textarea:focus {
+  outline: none;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #475569;
+}
+
+.pv2-toggle-row {
+  margin: -4px 0 4px;
+}
+
+.pv2-link-pill {
+  background: #fff7ed;
+  border: 1px dashed #fdba74;
+  color: #ea580c;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 5px 14px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+.pv2-link-pill:hover {
+  background: #ffedd5;
+  border-color: #f97316;
+}
+
+.pv2-readonly {
+  padding: 6px 0;
+  font-size: 14px;
+  color: var(--pv2-text-muted);
+  min-height: 28px;
+  border-bottom: 1px solid var(--pv2-border);
+}
+
+/* ── Radio group ────────────────────────────────────────── */
+.pv2-radio-group {
+  display: flex;
+  gap: 14px;
+  padding: 8px 0;
+  flex-wrap: wrap;
+}
+
+.pv2-radio-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.pv2-radio-label input[type="radio"] {
+  accent-color: var(--pv2-primary);
+  width: 15px;
+  height: 15px;
+}
+
+/* ── Section headers ────────────────────────────────────── */
+.pv2-section {
+  margin: 4px 0;
+}
+
+.pv2-section-header {
+  background: var(--pv2-primary);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 6px 6px 0 0;
+}
+
+.pv2-section-header-plain {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--pv2-orange);
+  margin-bottom: 6px;
+}
+
+/* ── Table ──────────────────────────────────────────────── */
+.pv2-table-wrap {
+  overflow-x: auto;
+  border-radius: 0 0 6px 6px;
+  border: 1px solid var(--pv2-border);
+  border-top: none;
+}
+
+.pv2-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.pv2-table thead tr {
+  background: var(--pv2-primary);
+  color: #fff;
+}
+
+.pv2-table th {
+  padding: 9px 10px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.pv2-table td {
+  padding: 10px 10px;
+  border-bottom: 1px solid var(--pv2-border);
+  color: var(--pv2-text);
+}
+
+.pv2-table tr:last-child td {
+  border-bottom: none;
+}
+
+.pv2-table tbody tr:nth-child(even) {
+  background: #fafafa;
+}
+
+.pv2-table--steps .pv2-table-wrap {
+  border-top: none;
+}
+
+.pv2-step-num {
+  text-align: center;
+  font-weight: 700;
+}
+
+/* ── Qty colors ─────────────────────────────────────────── */
+.pv2-qty--empty   { color: var(--pv2-fail);    font-weight: 600; }
+.pv2-qty--partial { color: var(--pv2-delivering); font-weight: 600; }
+.pv2-qty--full    { color: var(--pv2-pass);    font-weight: 600; }
+
+/* ── Result badges ──────────────────────────────────────── */
+.pv2-result-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.pv2-result-badge--pass {
+  background: var(--pv2-pass);
+}
+
+.pv2-result-badge--fail {
+  background: var(--pv2-fail);
+}
+
+/* ── Edit button ────────────────────────────────────────── */
+.pv2-edit-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--pv2-text-muted);
+  padding: 4px;
+  line-height: 1;
+}
+
+.pv2-edit-btn:hover {
+  color: var(--pv2-primary);
+}
+
+.pv2-inline-input {
+  width: 60px;
+  padding: 4px 6px;
+  border: 1px solid var(--pv2-primary);
+  border-radius: 4px;
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ── Image upload ───────────────────────────────────────── */
+.pv2-btn-image-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--pv2-orange);
+  font-size: 14px;
+  font-weight: 600;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.pv2-image-preview-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.pv2-img-thumb {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--pv2-border);
+}
+
+.pv2-img-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pv2-img-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Error trend ────────────────────────────────────────── */
+.pv2-error-table-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pv2-text-muted);
+  padding: 0 2px 4px;
+}
+
+.pv2-error-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.pv2-error-name {
+  flex: 1;
+}
+
+/* ── Stepper ────────────────────────────────────────────── */
+.pv2-stepper {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--pv2-border);
+  border-radius: 6px;
+  overflow: hidden;
+  height: 36px;
+}
+
+.pv2-stepper--lg {
+  height: 40px;
+}
+
+.pv2-stepper-btn {
+  background: #f1f5f9;
+  border: none;
+  cursor: pointer;
+  padding: 0 10px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  color: var(--pv2-text);
+}
+
+.pv2-stepper-btn:active {
+  background: #e2e8f0;
+}
+
+.pv2-stepper-val {
+  min-width: 32px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ── Buttons ────────────────────────────────────────────── */
+.pv2-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 20px;
+  background: linear-gradient(135deg, #7c3a1d 0%, #5c2d0e 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(92, 45, 14, 0.22);
+  transition: all 0.2s ease;
+}
+
+.pv2-btn-primary:hover {
+  background: linear-gradient(135deg, #8c4221 0%, #6c3511 100%);
+  box-shadow: 0 6px 16px rgba(92, 45, 14, 0.32);
+}
+
+.pv2-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+  box-shadow: none;
+}
+
+.pv2-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  padding: 0 20px;
+  background: #ffffff;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pv2-btn-secondary:hover {
+  background: #f8fafc;
+  color: #1e293b;
+  border-color: #94a3b8;
+}
+
+.pv2-btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 14px;
+  background: transparent;
+  color: var(--pv2-primary);
+  border: 1px solid var(--pv2-primary);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pv2-btn-last-result {
+  color: var(--pv2-orange);
+  border-color: var(--pv2-orange);
+  align-self: flex-start;
+  margin-bottom: 4px;
+}
+
+.pv2-btn-half {
+  flex: 1;
+}
+
+.pv2-link {
+  background: none;
+  border: none;
+  color: var(--pv2-orange);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 0;
+  text-decoration: underline;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ── Form actions ───────────────────────────────────────── */
+.pv2-form-actions-wrapper {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid #e2e8f0;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.05);
+  padding: 12px 16px;
+}
+
+.pv2-form-actions {
+  max-width: 680px;
+  margin: 0 auto;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+/* ── Filter Panel ───────────────────────────────────────── */
+.pv2-filter-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  z-index: 200;
+}
+
+.pv2-filter-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 280px;
+  max-width: 88vw;
+  height: 100%;
+  background: #fff;
+  z-index: 201;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 4px 0 20px rgba(0,0,0,0.15);
+  border-radius: 0 12px 12px 0;
+  animation: pv2-slidein 0.22s ease;
+}
+
+@keyframes pv2-slidein {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+
+.pv2-filter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--pv2-border);
+}
+
+.pv2-filter-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--pv2-text);
+}
+
+.pv2-filter-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--pv2-text-muted);
+  display: flex;
+}
+
+.pv2-filter-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pv2-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.pv2-filter-field > label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pv2-text);
+}
+
+.pv2-date-range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pv2-date-input {
+  flex: 1;
+  padding: 7px 8px;
+  border: 1px solid var(--pv2-border);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--pv2-text);
+  min-width: 0;
+}
+
+.pv2-date-sep {
+  color: var(--pv2-text-muted);
+  font-weight: 700;
+}
+
+.pv2-filter-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--pv2-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pv2-filter-footer .pv2-btn-primary,
+.pv2-filter-footer .pv2-btn-secondary {
+  width: 100%;
+}
+
+/* ── Modal ──────────────────────────────────────────────── */
+.pv2-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.pv2-modal {
+  background: #fff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  animation: pv2-fadein 0.2s ease;
+}
+
+.pv2-modal--sm {
+  max-width: 360px;
+}
+
+@keyframes pv2-fadein {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.pv2-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--pv2-border);
+}
+
+.pv2-modal-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--pv2-text);
+}
+
+.pv2-modal-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--pv2-text-muted);
+  display: flex;
+}
+
+.pv2-modal-body {
+  padding: 14px 16px;
+}
+
+.pv2-modal-footer {
+  display: flex;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--pv2-border);
+}
+
+.pv2-modal-footer .pv2-btn-secondary,
+.pv2-modal-footer .pv2-btn-primary {
+  flex: 1;
+}
+
+.pv2-modal-row {
+  display: flex;
+  gap: 14px;
+}
+
+.pv2-modal-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+/* ── Finish modal ───────────────────────────────────────── */
+.pv2-finish-pallet-row {
+  background: var(--pv2-primary-light);
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pv2-checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pv2-checkbox-label input[type="checkbox"] {
+  margin-top: 2px;
+  accent-color: var(--pv2-primary);
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.pv2-pallet-display {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pv2-pallet-code {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--pv2-text);
+}
+
+.pv2-btn-create-pallet {
+  background: var(--pv2-primary);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ── QA mode ────────────────────────────────────────────── */
+.pv2-qa-block {
+  border: 1px solid var(--pv2-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pv2-qa-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pv2-qa-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--pv2-text);
+}
+
+.pv2-qa-answer {
+  background: #fef9c3;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: #78350f;
+  border: 1px solid #fde68a;
+}
+
+/* ── Input wrap ─────────────────────────────────────────── */
+.pv2-input-wrap {
+  position: relative;
+}
+
+/* ── Card Actions (CL07 Bottom Buttons inside Card) ─────────────── */
+.pv2-card-actions {
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 12px !important;
+  margin-top: 16px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.pv2-btn-cancel {
+  flex: 1 !important;
+  height: 44px !important;
+  line-height: 42px !important;
+  background: #ffffff !important;
+  color: #4a240e !important;
+  border: 1.5px solid #4a240e !important;
+  border-radius: 8px !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  text-align: center !important;
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.15s ease !important;
+}
+
+.pv2-btn-cancel:hover {
+  background: #f5efe8 !important;
+}
+
+.pv2-btn-submit {
+  flex: 1 !important;
+  height: 44px !important;
+  line-height: 44px !important;
+  background: #4a240e !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 8px !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  text-align: center !important;
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.15s ease !important;
+}
+
+.pv2-btn-submit:hover {
+  background: #361a0a !important;
+}
+
+/* ── Extra CL09 Components ───────────────────────────────── */
+.pv2-btn-dark-pill {
+  background: #4a240e !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 8px 14px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  margin: 6px 0 10px !important;
+}
+
+.pv2-btn-dark-pill:hover {
+  background: #361a0a !important;
+}
+
+.pv2-section-title {
+  font-size: 16px !important;
+  font-weight: 800 !important;
+  color: #4a240e !important;
+  margin: 14px 0 8px !important;
+}
+
+.pv2-error-table-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  padding: 6px 4px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: #666666 !important;
+  border-bottom: 1px solid #dddddd !important;
+  margin-bottom: 6px !important;
+}

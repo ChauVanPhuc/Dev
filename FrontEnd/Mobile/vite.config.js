@@ -22,6 +22,7 @@ export default defineConfig({
       '@modules/kpi': path.resolve(__dirname, './modules/kpi'),
       '@modules/notification': path.resolve(__dirname, './modules/notification'),
       '@modules/production': path.resolve(__dirname, './modules/production'),
+      '@modules/production_v2': path.resolve(__dirname, './modules/production_v2'),
       '@modules/report': path.resolve(__dirname, './modules/report'),
       'axios': path.resolve(__dirname, '../node_modules/axios'),
       'zustand': path.resolve(__dirname, '../node_modules/zustand'),

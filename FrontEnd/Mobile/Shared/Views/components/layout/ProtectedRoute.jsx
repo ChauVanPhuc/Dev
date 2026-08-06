@@ -36,6 +36,7 @@ const mapPathToPermissionKey = (pathname) => {
   if (path.startsWith('/feedback')) return 'mobile_feedback';
   if (path.startsWith('/ctq-sos')) return 'mobile_ctq-sos';
   if (path.startsWith('/warnings')) return 'mobile_warnings';
+  if (path.startsWith('/production_v2')) return 'mobile_production_v2';
   
   return null;
 };

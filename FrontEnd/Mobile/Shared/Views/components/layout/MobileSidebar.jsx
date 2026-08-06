@@ -69,6 +69,29 @@ const Sidebar = () => {
           return item;
         });
 
+        // Ensure "Thông tin sản xuất v2" menu item (CL06-CL09)
+        const hasProdV2Item = items.some(i => i.title === 'Thông tin sản xuất v2' || i.id === 'prod-info-v2-menu');
+        if (!hasProdV2Item) {
+          const prodV2Group = {
+            id: 'prod-info-v2-menu',
+            title: 'Thông tin sản xuất v2',
+            route_path: '#',
+            icon: 'Boxes',
+            children: [
+              { id: 'sub-pv2-1', title: 'Danh sách luân chuyển (CL06)', route_path: '/production_v2/transfer-list', icon: 'Truck' },
+              { id: 'sub-pv2-2', title: 'Tạo phiếu luân chuyển (CL07)', route_path: '/production_v2/transfer', icon: 'PlusSquare' },
+              { id: 'sub-pv2-3', title: 'Danh sách phiếu kiểm tra (CL08)', route_path: '/production_v2/inspection-list', icon: 'ClipboardList' },
+              { id: 'sub-pv2-4', title: 'Tạo phiếu kiểm tra (CL09)', route_path: '/production_v2/inspection', icon: 'CheckSquare' }
+            ]
+          };
+          const prodIdx = items.findIndex(i => i.title === 'Thông tin sản xuất');
+          if (prodIdx !== -1) {
+            items.splice(prodIdx + 1, 0, prodV2Group);
+          } else {
+            items.push(prodV2Group);
+          }
+        }
+
         setMenuList(items)
       } catch (err) {
         console.error('Failed to load Mobile sidebar:', err)
@@ -82,6 +105,18 @@ const Sidebar = () => {
               { id: 'sub-prod-1', title: 'Lệnh sản xuất', route_path: '/production/orders', icon: 'Users' },
               { id: 'sub-prod-2', title: 'Kế hoạch sản xuất', route_path: '/production/plans', icon: 'Users' },
               { id: 'sub-prod-3', title: 'Lịch sử luân chuyển', route_path: '/production/transfers', icon: 'Users' }
+            ]
+          },
+          {
+            id: 'prod-info-v2-menu',
+            title: 'Thông tin sản xuất v2',
+            route_path: '#',
+            icon: 'Boxes',
+            children: [
+              { id: 'sub-pv2-1', title: 'Danh sách luân chuyển (CL06)', route_path: '/production_v2/transfer-list', icon: 'Truck' },
+              { id: 'sub-pv2-2', title: 'Tạo phiếu luân chuyển (CL07)', route_path: '/production_v2/transfer', icon: 'PlusSquare' },
+              { id: 'sub-pv2-3', title: 'Danh sách phiếu kiểm tra (CL08)', route_path: '/production_v2/inspection-list', icon: 'ClipboardList' },
+              { id: 'sub-pv2-4', title: 'Tạo phiếu kiểm tra (CL09)', route_path: '/production_v2/inspection', icon: 'CheckSquare' }
             ]
           },
           { id: 'quick-report-menu', title: 'Lập báo cáo', route_path: '/quick-report-list', icon: 'FileText', is_active: true }

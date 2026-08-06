@@ -78,3 +78,7 @@ htmlcov/
 # Large workspace files
 sql.ipynb
 
+# Local tools
+tools/
+
+

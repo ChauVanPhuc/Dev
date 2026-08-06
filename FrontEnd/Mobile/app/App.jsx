@@ -45,6 +45,12 @@ import AssemblyInspectionView from '@modules/inspection/Views/AssemblyInspection
 import PaintingInspectionView from '@modules/inspection/Views/PaintingInspectionView'
 import PackagingInspectionView from '@modules/inspection/Views/PackagingInspectionView'
 
+// Module Production V2 (CL06, CL07, CL08, CL09)
+import CL06_TransferListView from '@modules/production_v2/Views/CL06_TransferListView'
+import CL07_TransferCreateView from '@modules/production_v2/Views/CL07_TransferCreateView'
+import CL08_InspectionListView from '@modules/production_v2/Views/CL08_InspectionListView'
+import CL09_InspectionCreateView from '@modules/production_v2/Views/CL09_InspectionCreateView'
+
 /**
  * Component xử lý nút Back vật lý của Android
  */
@@ -133,6 +139,14 @@ function App() {
             <Route path="/inspection-daily-painting" element={<PaintingInspectionView />} />
             <Route path="/inspection-daily-packaging" element={<PackagingInspectionView />} />
             <Route path="/inspection-first-article" element={<FirstArticleInspection />} />
+
+            {/* Production V2 Routes */}
+            <Route path="/production_v2/transfer-list" element={<CL06_TransferListView />} />
+            <Route path="/production_v2/transfer" element={<CL07_TransferCreateView />} />
+            <Route path="/production_v2/transfer/:id" element={<CL07_TransferCreateView />} />
+            <Route path="/production_v2/inspection-list" element={<CL08_InspectionListView />} />
+            <Route path="/production_v2/inspection" element={<CL09_InspectionCreateView />} />
+            <Route path="/production_v2/inspection/:id" element={<CL09_InspectionCreateView />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/login" replace />} />
