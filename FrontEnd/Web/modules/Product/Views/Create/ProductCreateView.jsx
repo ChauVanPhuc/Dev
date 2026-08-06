@@ -683,8 +683,8 @@ const ProductCreateView = () => {
               <div
                 onClick={() => fileInputRef.current && fileInputRef.current.click()}
                 style={{
-                  width: '130px',
-                  height: '115px',
+                  width: '240px',
+                  height: '165px',
                   backgroundColor: '#F8FAFC',
                   border: mainImage ? '1.5px solid #5D3B32' : '1.5px dashed #CBD5E1',
                   borderRadius: '10px',
@@ -702,7 +702,7 @@ const ProductCreateView = () => {
                   <img src={mainImage} alt="Main Product" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
                   <>
-                    <Box size={36} style={{ strokeWidth: 1.5 }} />
+                    <Box size={52} style={{ strokeWidth: 1.5 }} />
                     <span style={{ fontSize: '0.72rem', fontWeight: '600', marginTop: '4px' }}>Tải ảnh chính</span>
                   </>
                 )}
@@ -714,8 +714,8 @@ const ProductCreateView = () => {
                   <div
                     key={thumbIdx}
                     style={{
-                      width: '42px',
-                      height: '37px',
+                      width: '64px',
+                      height: '51px',
                       backgroundColor: '#F8FAFC',
                       border: subImages[thumbIdx] ? '1px solid #5D3B32' : '1px solid #CBD5E1',
                       borderRadius: '6px',
@@ -730,7 +730,7 @@ const ProductCreateView = () => {
                     {subImages[thumbIdx] ? (
                       <img src={subImages[thumbIdx]} alt={`Thumb ${thumbIdx}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : (
-                      <Box size={16} />
+                      <Box size={22} />
                     )}
                   </div>
                 ))}
@@ -1240,7 +1240,7 @@ const ProductCreateView = () => {
                       <th style={{ padding: '10px 8px', textAlign: 'left', width: '110px', fontWeight: '800' }}>Loại</th>
                       <th style={{ padding: '10px 8px', textAlign: 'left', width: '110px', fontWeight: '800' }}>CĐ Vào</th>
                       <th style={{ padding: '10px 8px', textAlign: 'left', width: '110px', fontWeight: '800' }}>CĐ Ra</th>
-                      <th style={{ padding: '10px 8px', textAlign: 'left', width: '130px', fontWeight: '800' }}>Mã linh kiện</th>
+                      <th style={{ padding: '10px 8px', textAlign: 'left', width: '240px', fontWeight: '800' }}>Mã linh kiện</th>
                       <th style={{ padding: '10px 8px', textAlign: 'left', minWidth: '180px', fontWeight: '800' }}>Tên linh kiện *</th>
                       <th style={{ padding: '10px 8px', textAlign: 'center', width: '65px', fontWeight: '800' }}>SL</th>
                       <th style={{ padding: '10px 8px', textAlign: 'center', width: '70px', fontWeight: '800' }}>ĐVT</th>

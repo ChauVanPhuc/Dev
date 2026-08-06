@@ -225,24 +225,28 @@ const ProductDetailView = () => {
   };
 
   // Tải thông tin DỮ LIỆU ĐỘNG từ Backend API (/master-products/:id)
-  const fetchProduct = async () => {
+    const fetchProduct = async () => {
     try {
       setLoading(true);
-      const data = await api.get(`/master-products/${id}`).catch(() => null);
-      if (data) {
+      let res = await api.get(`/master-products/${id}`).catch(() => null);
+      if (!res) {
+        res = await api.get(`/products/${id}`).catch(() => null);
+      }
+      const data = (res && res.data && typeof res.data === 'object' && !Array.isArray(res.data) && (res.data.id || res.data.sku || res.data.product_code || res.data.name)) ? res.data : (res || {});
+
+      if (data && (data.id || data.sku || data.product_code || data.name)) {
         setProduct(data);
 
-        // Định dạng Ngày cập nhật từ SQL Server
         const formattedDate = data.adjusted_date
           ? data.adjusted_date
           : (data.created_at ? new Date(data.created_at).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN'));
 
         setFormData(prev => ({
           ...prev,
-          sku: data.sku || `ADV${id}`,
+          sku: data.sku || data.product_code || data.code || `ADV${id}`,
           category: data.category_name || data.master_category?.name || 'Tủ quần áo',
           line: data.brand_name || data.group_name || 'Nội thất',
-          name: data.name || data.new_name || 'Sven Display Cabinet',
+          name: data.name || data.product_name || data.new_name || `Sản phẩm ${id}`,
           length: (data.length !== undefined && data.length !== null) ? String(data.length) : '1200',
           width: (data.width !== undefined && data.width !== null) ? String(data.width) : '450',
           height: (data.height !== undefined && data.height !== null) ? String(data.height) : '750',
@@ -251,35 +255,36 @@ const ProductDetailView = () => {
           updatedAt: formattedDate,
           updatedBy: data.updated_by || 'Admin Hệ Thống',
           bomStatus: data.status || 'Đã duyệt',
-          totalComponents: data.master_bom_details ? String(data.master_bom_details.length) : '10',
-          estimatedCost: data.price ? Number(String(data.price).replace(/\D/g, '')).toLocaleString('vi-VN') : '5.200.000',
+          totalComponents: (data.master_bom_details || data.bom_details || data.bom || []).length ? String((data.master_bom_details || data.bom_details || data.bom).length) : '0',
+          estimatedCost: data.price ? Number(String(data.price).replace(/\D/g, '')).toLocaleString('vi-VN') : '0',
           color: data.color || 'Màu tự nhiên'
         }));
 
-        // Nếu Backend có trả về master_bom_details từ SQL Server
-        if (data.master_bom_details && data.master_bom_details.length > 0) {
-          const processed = processBackendBOM(data.master_bom_details);
+        const bomList = data.master_bom_details || data.bom_tree || data.bom_details || data.bom || [];
+        if (Array.isArray(bomList) && bomList.length > 0) {
+          const processed = processBackendBOM(bomList);
           if (processed.length > 0) {
             setBomRows(processed);
           }
         }
 
-        // Cập nhật danh sách Chi tiết (KT03.1) và Mẫu màu sơn (KT03.3)
-        if (data.product_details && Array.isArray(data.product_details)) {
-          setDetailRows(data.product_details);
+        const detailsList = data.product_details || data.details || [];
+        if (Array.isArray(detailsList)) {
+          setDetailRows(detailsList);
         }
-        if (data.paint_color_samples && Array.isArray(data.paint_color_samples)) {
-          setPaintColorRows(data.paint_color_samples);
+
+        const paintList = data.paint_color_samples || data.paint_colors || [];
+        if (Array.isArray(paintList)) {
+          setPaintColorRows(paintList);
         }
       } else {
-        // Fallback dữ liệu mẫu nếu API 404
-        setProduct({ id, sku: `ADV${id}`, name: 'Oslo Barstool Solid seat' });
+        setProduct({ id, sku: `ADV${id}`, name: `Sản phẩm ${id}` });
         setFormData(prev => ({
           ...prev,
-          sku: `ADV014`,
+          sku: `ADV${id}`,
           category: 'Tủ quần áo',
           line: 'Nội thất',
-          name: 'Oslo Barstool Solid seat',
+          name: `Sản phẩm ${id}`,
           length: '1200',
           width: '450',
           height: '750',
@@ -290,6 +295,7 @@ const ProductDetailView = () => {
       }
     } catch (err) {
       console.warn('Lỗi lấy chi tiết sản phẩm:', err);
+      setProduct({ id, sku: `ADV${id}`, name: `Sản phẩm ${id}` });
     } finally {
       setLoading(false);
     }
@@ -324,20 +330,7 @@ const ProductDetailView = () => {
   };
 
   // Dữ liệu bảng BOM 13 Cột phân cấp chuẩn Mockup 1
-  const defaultBomRows = [
-    { stt: '1', type: 'Sản phẩm', stageFrom: 'Đóng gói', stageTo: 'Lưu kho', compCode: 'ADV691', compName: 'Sven Display Cabinet', quantity: '1', unit: 'Bộ', material: '', spec: '[như trên]', volume: '[như trên]', note: '[như trên]' },
-    { stt: '1.1', type: 'Khung', stageFrom: 'Sơn', stageTo: 'Đóng gói', compCode: 'ADV691.1', compName: 'Sản phẩm', quantity: '1', unit: 'Cái', material: '', spec: '12*12*15', volume: '3', note: '' },
-    { stt: '1.1.1', type: 'Cụm hông dưới', stageFrom: 'Lắp ráp', stageTo: 'Sơn', compCode: 'ADV691.1.1', compName: 'Khung', quantity: '4', unit: 'Cái', material: '', spec: '12*12*15', volume: '5', note: '' },
-    { stt: '1.1.1.1', type: 'Chân', stageFrom: 'Định hình', stageTo: 'Lắp ráp', compCode: 'ADV691.1.1.1', compName: 'Cụm hông dưới', quantity: '4', unit: 'Cái', material: 'MDF', spec: '12*12*15', volume: '5', note: '' },
-    { stt: '1.1.1.1.1', type: 'Phôi A', stageFrom: 'Tạo phôi', stageTo: 'Định hình', compCode: 'ADV691.1.1.2', compName: 'Chân', quantity: '6', unit: 'Tấm', material: 'HMR', spec: '12*12*15', volume: '5', note: '' },
-    { stt: '1.1.1.3', type: 'Ván panel', stageFrom: 'Định hình', stageTo: 'Lắp ráp', compCode: 'ADV691.1.1.3', compName: 'Cụm hông dưới', quantity: '2', unit: 'Tấm', material: 'Cao su', spec: '12*12*15', volume: '5', note: '' },
-    { stt: '1.2', type: 'Cánh cửa', stageFrom: 'Lắp ráp', stageTo: 'Sơn', compCode: 'ADV691.2', compName: 'Sản phẩm', quantity: '2', unit: 'Cái', material: '', spec: '12*12*15', volume: '5', note: '' },
-    { stt: '2', type: 'Bìa carton', stageFrom: 'Kho', stageTo: 'Đóng gói', compCode: 'ADV691-1', compName: 'Phụ kiện', quantity: '1', unit: 'Bộ', material: '', spec: '12*12*15', volume: '5', note: '' },
-    { stt: '3', type: 'Bộ phụ kiện', stageFrom: 'Kho', stageTo: 'Đóng gói', compCode: 'ADV691-2', compName: 'Phụ kiện', quantity: '1', unit: 'Bộ', material: '', spec: '12*12*15', volume: '5', note: '' },
-    { stt: '4', type: 'Giấy hướng dẫn', stageFrom: 'Kho', stageTo: 'Đóng gói', compCode: 'ADV691-3', compName: 'Phụ kiện', quantity: '1', unit: 'Bộ', material: '', spec: '12*12*15', volume: '5', note: '' }
-  ];
-
-  const [bomRows, setBomRows] = useState(defaultBomRows);
+  const [bomRows, setBomRows] = useState([]);
 
   const getStageOrderRank = (stageName) => {
     if (!stageName) return 99;
@@ -402,7 +395,7 @@ const ProductDetailView = () => {
       .sort((a, b) => a[0] - b[0])
       .map(entry => entry[1]);
 
-    if (result.length === 0) {
+        if (result.length === 0) {
       const p = factoryPrefix || 'NM3';
       const pNum = p.replace('NM', '');
       return [`${p} - Tạo phôi ${pNum}`, `${p} - Định hình ${pNum}`, `${p} - Lắp ráp ${pNum}`, `${p} - Sơn ${pNum}`, `${p} - Đóng gói ${pNum}`];
@@ -411,45 +404,7 @@ const ProductDetailView = () => {
     return result;
   }, [bomRows]);
 
-  const filteredBomRows = useMemo(() => {
-    if (!searchTerm.trim()) return bomRows;
-    const term = searchTerm.toLowerCase().trim();
-    return bomRows.filter(r =>
-      r.stt.toLowerCase().includes(term) ||
-      r.type.toLowerCase().includes(term) ||
-      r.compCode.toLowerCase().includes(term) ||
-      r.compName.toLowerCase().includes(term) ||
-      (r.material && r.material.toLowerCase().includes(term))
-    );
-  }, [bomRows, searchTerm]);
-
-  // Dữ liệu Quy trình thực hiện (Manufacturing Routing)
-  const processSteps = [
-    { stt: '1', code: 'CD-01', name: 'Tạo phôi & Cắt gỗ', dept: 'Xưởng 1 - Tổ Tạo Phôi', machine: 'Máy cưa bàn trượt CNC', cycleTime: '15 phút', labor: '2 công nhân', cost: '25.000 VNĐ', qc: 'Độ ẩm < 12%, sai số ±0.5mm', status: 'Đã duyệt' },
-    { stt: '2', code: 'CD-02', name: 'Gọt bào & Định hình 1', dept: 'Xưởng 1 - Tổ Định Hình', machine: 'Máy bào 4 mặt, Router CNC', cycleTime: '25 phút', labor: '1 công nhân', cost: '35.000 VNĐ', qc: 'Bề mặt phẳng, không xước dăm', status: 'Đã duyệt' },
-    { stt: '3', code: 'CD-03', name: 'Định hình tinh chế & Mộng', dept: 'Xưởng 2 - Tổ Tinh Chế', machine: 'Máy đánh mộng âm dương CNC', cycleTime: '30 phút', labor: '2 công nhân', cost: '45.000 VNĐ', qc: 'Mộng khít 100%, không hở khe', status: 'Đã duyệt' },
-    { stt: '4', code: 'CD-04', name: 'Chà nhám & Xử lý bề mặt', dept: 'Xưởng 2 - Tổ Làm Nguội', machine: 'Máy chà nhám thùng + Tay', cycleTime: '40 phút', labor: '3 công nhân', cost: '30.000 VNĐ', qc: 'Độ mịn nhám P240, sạch bụi', status: 'Đã duyệt' },
-    { stt: '5', code: 'CD-05', name: 'Sơn lót & Sơn phủ PU', dept: 'Xưởng 3 - Tổ Sơn PU', machine: 'Dây chuyền sơn treo tự động', cycleTime: '60 phút', labor: '4 công nhân', cost: '85.000 VNĐ', qc: 'Độ bóng 95%, màu WOA chuẩn mẫu', status: 'Đã duyệt' },
-    { stt: '6', code: 'CD-06', name: 'Lắp ráp khung & Phụ kiện', dept: 'Xưởng 4 - Tổ Lắp Ráp', machine: 'Bàn ép khung thủy lực', cycleTime: '45 phút', labor: '3 công nhân', cost: '60.000 VNĐ', qc: 'Kết cấu chắc chắn, chịu lực >150kg', status: 'Đã duyệt' },
-    { stt: '7', code: 'CD-07', name: 'Đóng gói & Dán nhãn Barcode', dept: 'Xưởng 4 - Tổ Đóng Gói', machine: 'Dây chuyền bọc màng PE & Thùng', cycleTime: '20 phút', labor: '2 công nhân', cost: '20.000 VNĐ', qc: 'Đầy đủ phụ kiện, dán tem QR code', status: 'Đã duyệt' }
-  ];
-  // Dữ liệu Bản vẽ kỹ thuật
-  const technicalDrawings = [
-    { stt: '1', code: 'DWG-ADV014-01', name: 'Bản vẽ tổng thể 3D & Kích thước phủ bì', type: '2D / 3D CAD', ver: 'v2.1', author: 'KS. Nguyễn Văn Hùng', date: '15/06/2026', format: 'PDF / DWG' },
-    { stt: '2', code: 'DWG-ADV014-02', name: 'Bản vẽ chi tiết mộng & Khung chân', type: 'Chi tiết sản xuất', ver: 'v1.5', author: 'KS. Trần Minh Tuấn', date: '16/06/2026', format: 'PDF' },
-    { stt: '3', code: 'DWG-ADV014-03', name: 'Sơ đồ lắp ráp phụ kiện & Bìa Carton', type: 'Hướng dẫn lắp ráp', ver: 'v1.0', author: 'Bộ phận R&D', date: '18/06/2026', format: 'PDF' }
-  ];
-
-  // Dữ liệu Định mức vật tư
-  const materialNorms = [
-    { stt: '1', code: 'VT-GO-01', name: 'Gỗ Sồi tự nhiên (White Oak)', category: 'Gỗ nguyên liệu', norm: '0.045', unit: 'm3', price: '18.500.000 VNĐ/m3', total: '832.500 VNĐ' },
-    { stt: '2', code: 'VT-MDF-02', name: 'Ván MDF chống ẩm HMR 17mm', category: 'Ván công nghiệp', norm: '1.2', unit: 'Tấm', price: '380.000 VNĐ/Tấm', total: '456.000 VNĐ' },
-    { stt: '3', code: 'VT-SON-05', name: 'Sơn PU cao cấp màu WOA', category: 'Hóa chất sơn', norm: '0.8', unit: 'kg', price: '120.000 VNĐ/kg', total: '96.000 VNĐ' },
-    { stt: '4', code: 'VT-PK-12', name: 'Bộ bản lề giảm chấn Hafele', category: 'Phụ kiện kim khí', norm: '4', unit: 'Bộ', price: '45.000 VNĐ/Bộ', total: '180.000 VNĐ' },
-    { stt: '5', code: 'VT-DG-03', name: 'Thùng Carton 5 lớp in thương hiệu', category: 'Vật liệu đóng gói', norm: '1', unit: 'Bộ', price: '65.000 VNĐ/Bộ', total: '65.000 VNĐ' }
-  ];
-
-  const displayItems = useMemo(() => {
+const displayItems = useMemo(() => {
     if (!bomRows || bomRows.length === 0) return [];
     const activeNorm = (activeStage || '').trim();
     const activeLower = activeNorm.toLowerCase();
@@ -755,8 +710,8 @@ const ProductDetailView = () => {
             <div style={{ display: 'flex', gap: '6px' }}>
               {/* Ô ảnh chính vuông lớn */}
               <div style={{
-                width: '130px',
-                height: '115px',
+                width: '240px',
+                height: '165px',
                 backgroundColor: '#F8FAFC',
                 border: '1.5px dashed #CBD5E1',
                 borderRadius: '10px',
@@ -766,7 +721,7 @@ const ProductDetailView = () => {
                 flexDirection: 'column',
                 color: '#94A3B8'
               }}>
-                <Box size={36} style={{ strokeWidth: 1.5 }} />
+                <Box size={52} style={{ strokeWidth: 1.5 }} />
                 <span style={{ fontSize: '0.72rem', fontWeight: '600', marginTop: '4px' }}>Hình sản phẩm</span>
               </div>
 
@@ -776,8 +731,8 @@ const ProductDetailView = () => {
                   <div
                     key={thumbIdx}
                     style={{
-                      width: '42px',
-                      height: '41px',
+                      width: '64px',
+                      height: '51px',
                       backgroundColor: '#F8FAFC',
                       border: '1px solid #CBD5E1',
                       borderRadius: '6px',
@@ -787,7 +742,7 @@ const ProductDetailView = () => {
                       color: '#CBD5E1'
                     }}
                   >
-                    <Box size={16} />
+                    <Box size={22} />
                   </div>
                 ))}
               </div>
