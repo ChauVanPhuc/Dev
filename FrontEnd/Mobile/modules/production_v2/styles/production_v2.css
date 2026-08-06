@@ -1353,16 +1353,30 @@
   font-weight: 600;
 }
 
-/* ── CL06 Pagination Bar (Match Mockup) ──────────────────── */
+/* ── CL06 Pagination Bar (Fixed Bottom Match Mockup) ────── */
+.pv2-pagination-wrapper {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 90;
+  padding: 8px 14px 12px;
+  background: rgba(251, 246, 238, 0.95);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
 .pv2-pagination-bar {
+  max-width: 480px;
+  margin: 0 auto;
   background: #ffffff;
   border: 1.5px solid #c8beb2;
   border-radius: 12px;
   padding: 8px 12px;
-  margin: 16px 14px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.04);
 }
 
 .pv2-page-arrow-btn {

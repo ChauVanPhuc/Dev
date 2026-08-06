@@ -116,27 +116,29 @@ const CL06_TransferListView = () => {
           ))}
         </div>
 
-        {/* Pagination Bar */}
-        <div className="pv2-pagination-bar">
-          <button
-            type="button"
-            className="pv2-page-arrow-btn"
-            disabled={page <= 1}
-            onClick={() => setFilters({ page: page - 1 })}
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <div className="pv2-page-status-text">
-            Show <strong>{(page - 1) * pageSize + 1}</strong> to <span className="pv2-page-num-box">{Math.min(page * pageSize, total || 20)}</span> of <strong>{total || 20}</strong> results
+        {/* Fixed Bottom Pagination Bar */}
+        <div className="pv2-pagination-wrapper">
+          <div className="pv2-pagination-bar">
+            <button
+              type="button"
+              className="pv2-page-arrow-btn"
+              disabled={page <= 1}
+              onClick={() => setFilters({ page: page - 1 })}
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <div className="pv2-page-status-text">
+              Show <strong>{(page - 1) * pageSize + 1}</strong> to <span className="pv2-page-num-box">{Math.min(page * pageSize, total || 20)}</span> of <strong>{total || 20}</strong> results
+            </div>
+            <button
+              type="button"
+              className="pv2-page-arrow-btn"
+              disabled={page >= totalPages}
+              onClick={() => setFilters({ page: page + 1 })}
+            >
+              <ChevronRight size={18} />
+            </button>
           </div>
-          <button
-            type="button"
-            className="pv2-page-arrow-btn"
-            disabled={page >= totalPages}
-            onClick={() => setFilters({ page: page + 1 })}
-          >
-            <ChevronRight size={18} />
-          </button>
         </div>
       </div>
 
