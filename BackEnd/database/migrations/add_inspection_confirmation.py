@@ -65,24 +65,8 @@ def run_migration():
             print("[OK] Updated route /admin/claims to CL5.")
 
         # Cấu hình cho màn hình tổng quan Quản lý chất lượng CL1
-        screens_to_seed = [
-            {
-                "platform": "Web",
-                "route_path": "/admin/quality",
-                "default_code": "CL1",
-                "current_code": "CL1",
-                "title": "Quản lý chất lượng",
-                "subtitle": "Hiển thị danh sách các công việc tồn đọng cần xử lý"
-            },
-            {
-                "platform": "Web",
-                "route_path": "/admin/reports/detail/:type/:id",
-                "default_code": "CL1.1",
-                "current_code": "CL1.1",
-                "title": "Chi tiết phiếu kiểm tra",
-                "subtitle": "Xem chi tiết kết quả kiểm tra chất lượng"
-            }
-        ]
+        screens_to_seed = []
+
 
         for screen in screens_to_seed:
             check_route = text("SELECT COUNT(*) FROM system_screens WHERE route_path = :route_path AND platform = :platform")
