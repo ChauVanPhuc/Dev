@@ -1163,3 +1163,239 @@
   border-bottom: 1px solid #dddddd !important;
   margin-bottom: 6px !important;
 }
+
+/* ── CL06 Filter Card & Tabs (Match Mockup) ──────────────── */
+.pv2-plan-filter-card {
+  background: #ffffff;
+  border: 1.5px solid #a3998e;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin: 12px 14px 12px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+}
+
+.pv2-plan-filter-label {
+  font-size: 13px;
+  font-weight: 800;
+  color: #333333;
+  margin-bottom: 6px;
+}
+
+.pv2-plan-filter-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pv2-plan-select-wrap {
+  flex: 1;
+}
+
+.pv2-plan-select-wrap .pv2-input {
+  height: 38px;
+  border: 1.5px solid #a3998e;
+  border-radius: 10px;
+}
+
+.pv2-plan-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pv2-btn-icon-square {
+  width: 38px;
+  height: 38px;
+  background: #ffffff;
+  border: 1.5px solid #a3998e;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #333333;
+  cursor: pointer;
+}
+
+.pv2-btn-icon-square:hover {
+  background: #f5efe8;
+}
+
+.pv2-btn-add-primary {
+  height: 38px;
+  background: #4a240e;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.pv2-btn-add-primary:hover {
+  background: #361a0a;
+}
+
+.pv2-custom-tabs-container {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 2px solid #e5e0d8;
+  margin-bottom: 12px;
+}
+
+.pv2-custom-tab {
+  background: none;
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  color: #555555;
+  padding: 10px 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+}
+
+.pv2-custom-tab--active {
+  color: #4a240e;
+  border-bottom-color: #4a240e;
+}
+
+.pv2-badge-red {
+  background: #c8321e;
+  color: #ffffff;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+/* ── CL06 Card Styles (Match Mockup) ─────────────────────── */
+.pv2-card {
+  background: #ffffff;
+  border: 1.5px solid #c8beb2;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin: 0 14px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pv2-card--selected {
+  background: #e8e6e3 !important;
+}
+
+.pv2-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pv2-card-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pv2-ticket-code {
+  font-size: 20px;
+  font-weight: 800;
+  color: #333333;
+}
+
+.pv2-version-pill {
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-block;
+}
+
+.pv2-version-pill--v1 {
+  background: #fce8e6;
+  color: #d9381e;
+}
+
+.pv2-version-pill--v2 {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.pv2-time {
+  font-size: 13px;
+  color: #555555;
+}
+
+.pv2-route {
+  font-size: 14px;
+  color: #333333;
+  font-weight: 500;
+}
+
+.pv2-status-tag-red {
+  font-size: 14px;
+  color: #d9381e;
+  font-weight: 600;
+}
+
+/* ── CL06 Pagination Bar (Match Mockup) ──────────────────── */
+.pv2-pagination-bar {
+  background: #ffffff;
+  border: 1.5px solid #c8beb2;
+  border-radius: 12px;
+  padding: 8px 12px;
+  margin: 16px 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pv2-page-arrow-btn {
+  background: #e2ded9;
+  border: none;
+  border-radius: 8px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #555555;
+  cursor: pointer;
+}
+
+.pv2-page-arrow-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pv2-page-status-text {
+  font-size: 13px;
+  color: #666666;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pv2-page-num-box {
+  border: 1.5px solid #c8beb2;
+  border-radius: 8px;
+  padding: 2px 10px;
+  font-weight: 700;
+  color: #333333;
+  background: #ffffff;
+}
