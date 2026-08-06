@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import List
@@ -56,11 +57,12 @@ def sync_bom_data(db: Session = Depends(get_db)):
     return master_product_controller.sync_bom_data_to_auxiliary_tables(db)
 
 @router.get("/detail-suggestions")
-def get_detail_suggestions(db: Session = Depends(get_db)):
+def get_detail_suggestions(detail_name: Optional[str] = None, db: Session = Depends(get_db)):
     """
     [GET] Lấy danh sách tên chi tiết & thành phẩm duy nhất để gợi ý autocomplete.
+    Nếu truyền `detail_name`, sẽ lọc chỉ trả về những Thành phẩm thực sự chứa chi tiết đó.
     """
-    return master_product_controller.get_detail_suggestions(db)
+    return master_product_controller.get_detail_suggestions(db, detail_name=detail_name)
 
 @router.get("/paint-color-suggestions")
 def get_paint_color_suggestions(db: Session = Depends(get_db)):

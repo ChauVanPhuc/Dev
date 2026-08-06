@@ -70,9 +70,8 @@ const ProductDetailView = () => {
     spec: true,
     volume: true,
     note: true,
-    actions: true,
+    actions: true
   });
-  const mainStages = ['Tạo phôi', 'Định hình', 'Lắp ráp', 'Sơn', 'Đóng gói', 'Lưu kho'];
 
   // Đặt Tiêu đề và Subtitle chuẩn lên Thanh Nav Cố Định
   useEffect(() => {
@@ -137,6 +136,8 @@ const ProductDetailView = () => {
   });
 
   // State chứa danh sách Danh mục động từ Backend API (/categories)
+  const [categoriesOptions, setCategoriesOptions] = useState([]);
+
   // Danh mục dòng hàng mặc định từ BOM làm fallback
   const defaultBomLines = [
     'Dòng hàng APT', 'Dòng hàng ATL', 'Dòng hàng FOL', 'Dòng hàng ADV',
@@ -144,13 +145,17 @@ const ProductDetailView = () => {
     'Dòng hàng TIN', 'Dòng hàng BEZ', 'Dòng hàng MBC'
   ];
 
-  // Lấy danh sách Dòng hàng từ SQL Server (/categories)
+  // Lấy danh sách Dòng hàng từ SQL Server (/master-categories/ hoặc /categories)
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const res = await api.get('/categories').catch(() => []);
-        if (Array.isArray(res) && res.length > 0) {
-          setCategoriesOptions(res.map(c => typeof c === 'string' ? { name: c } : c));
+        let res = await api.get('/master-categories/').catch(() => null);
+        if (!res || !Array.isArray(res) || res.length === 0) {
+          res = await api.get('/categories').catch(() => []);
+        }
+        const dataList = Array.isArray(res) ? res : (res?.data || []);
+        if (dataList.length > 0) {
+          setCategoriesOptions(dataList.map(c => typeof c === 'string' ? { name: c } : c));
         } else {
           setCategoriesOptions(defaultBomLines.map(name => ({ name })));
         }
@@ -167,7 +172,7 @@ const ProductDetailView = () => {
     if (!formData.sku) return;
     const skuUpper = formData.sku.toUpperCase();
     const matchedLine = (categoriesOptions.length > 0 ? categoriesOptions : defaultBomLines.map(name => ({ name }))).find(cat => {
-      const catNameUpper = cat.name.toUpperCase();
+      const catNameUpper = (cat && cat.name) ? String(cat.name).toUpperCase() : '';
       const prefix = skuUpper.slice(0, 3);
       return catNameUpper.includes(prefix);
     });
@@ -187,7 +192,7 @@ const ProductDetailView = () => {
     const addRow = (item, defaultIndex = 0, parentStt = '') => {
       const currentStt = item.tree_stt || item.treeStt || (parentStt ? `${parentStt}.${defaultIndex + 1}` : `${defaultIndex + 1}`);
       const codeKey = `${currentStt}-${item.component_sku || item.sku || defaultIndex}`;
-      
+
       if (!seenMap.has(codeKey)) {
         seenMap.set(codeKey, true);
         result.push({
@@ -247,7 +252,7 @@ const ProductDetailView = () => {
           updatedBy: data.updated_by || 'Admin Hệ Thống',
           bomStatus: data.status || 'Đã duyệt',
           totalComponents: data.master_bom_details ? String(data.master_bom_details.length) : '10',
-          estimatedCost: data.price ? `${Number(data.price).toLocaleString('vi-VN')} VNĐ` : '5.200.000 VNĐ',
+          estimatedCost: data.price ? Number(String(data.price).replace(/\D/g, '')).toLocaleString('vi-VN') : '5.200.000',
           color: data.color || 'Màu tự nhiên'
         }));
 
@@ -334,6 +339,78 @@ const ProductDetailView = () => {
 
   const [bomRows, setBomRows] = useState(defaultBomRows);
 
+  const getStageOrderRank = (stageName) => {
+    if (!stageName) return 99;
+    const s = String(stageName).toLowerCase();
+    if (s.includes('phôi') || s.includes('cắt')) return 1;
+    if (s.includes('định hình') || s.includes('chà') || s.includes('nhám')) return 2;
+    if (s.includes('lắp ráp') || s.includes('lắp')) return 3;
+    if (s.includes('sơn')) return 4;
+    if (s.includes('qc') || s.includes('kiểm')) return 4.5;
+    if (s.includes('đóng gói') || s.includes('gói')) return 5;
+    if (s.includes('kho') || s.includes('lưu kho') || s.includes('xuất')) return 6;
+    return 10;
+  };
+
+  const normalizeStageName = (stageName, prefix = '') => {
+    if (!stageName) return '';
+    let s = String(stageName).trim();
+    const lower = s.toLowerCase();
+    if (s.startsWith('NM1') || s.startsWith('NM2') || s.startsWith('NM3')) {
+      return s;
+    }
+    if (prefix) {
+      const pNum = prefix.replace('NM', '');
+      if (lower.includes('phôi') || lower.includes('cắt')) return `${prefix} - Tạo phôi ${pNum}`;
+      if (lower.includes('định hình')) return `${prefix} - Định hình ${pNum}`;
+      if (lower.includes('chà') || lower.includes('nhám')) return `${prefix} - Chà nhám ${pNum}`;
+      if (lower.includes('lắp ráp') || lower.includes('lắp')) return `${prefix} - Lắp ráp ${pNum}`;
+      if (lower.includes('sơn')) return `${prefix} - Sơn ${pNum}`;
+      if (lower.includes('đóng gói') || lower.includes('gói')) return `${prefix} - Đóng gói ${pNum}`;
+    }
+    return s;
+  };
+
+  // Tự động rút trích và CHUẨN HÓA KHÔNG TRÙNG LẶP các Công đoạn theo thứ tự quy trình chuẩn
+  const mainStages = useMemo(() => {
+    let factoryPrefix = '';
+    (bomRows || []).forEach(r => {
+      const str = `${r.stageFrom || ''} ${r.stageTo || ''}`;
+      const match = str.match(/NM[1-3]/);
+      if (match && !factoryPrefix) {
+        factoryPrefix = match[0];
+      }
+    });
+
+    const stageMap = new Map();
+
+    (bomRows || []).forEach(row => {
+      [row.stageFrom, row.stageTo].forEach(rawStage => {
+        if (!rawStage || !rawStage.trim()) return;
+        const norm = normalizeStageName(rawStage.trim(), factoryPrefix);
+        const rank = getStageOrderRank(norm);
+        if (rank >= 6) return; // Không đưa Kho vào nút quy trình ở giữa
+        const key = Math.floor(rank);
+
+        if (!stageMap.has(key) || (norm.includes('NM') && !stageMap.get(key).includes('NM'))) {
+          stageMap.set(key, norm);
+        }
+      });
+    });
+
+    const result = Array.from(stageMap.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(entry => entry[1]);
+
+    if (result.length === 0) {
+      const p = factoryPrefix || 'NM3';
+      const pNum = p.replace('NM', '');
+      return [`${p} - Tạo phôi ${pNum}`, `${p} - Định hình ${pNum}`, `${p} - Lắp ráp ${pNum}`, `${p} - Sơn ${pNum}`, `${p} - Đóng gói ${pNum}`];
+    }
+
+    return result;
+  }, [bomRows]);
+
   const filteredBomRows = useMemo(() => {
     if (!searchTerm.trim()) return bomRows;
     const term = searchTerm.toLowerCase().trim();
@@ -356,7 +433,6 @@ const ProductDetailView = () => {
     { stt: '6', code: 'CD-06', name: 'Lắp ráp khung & Phụ kiện', dept: 'Xưởng 4 - Tổ Lắp Ráp', machine: 'Bàn ép khung thủy lực', cycleTime: '45 phút', labor: '3 công nhân', cost: '60.000 VNĐ', qc: 'Kết cấu chắc chắn, chịu lực >150kg', status: 'Đã duyệt' },
     { stt: '7', code: 'CD-07', name: 'Đóng gói & Dán nhãn Barcode', dept: 'Xưởng 4 - Tổ Đóng Gói', machine: 'Dây chuyền bọc màng PE & Thùng', cycleTime: '20 phút', labor: '2 công nhân', cost: '20.000 VNĐ', qc: 'Đầy đủ phụ kiện, dán tem QR code', status: 'Đã duyệt' }
   ];
-
   // Dữ liệu Bản vẽ kỹ thuật
   const technicalDrawings = [
     { stt: '1', code: 'DWG-ADV014-01', name: 'Bản vẽ tổng thể 3D & Kích thước phủ bì', type: '2D / 3D CAD', ver: 'v2.1', author: 'KS. Nguyễn Văn Hùng', date: '15/06/2026', format: 'PDF / DWG' },
@@ -374,100 +450,129 @@ const ProductDetailView = () => {
   ];
 
   const displayItems = useMemo(() => {
-    const stage = activeStage.trim();
+    if (!bomRows || bomRows.length === 0) return [];
+    const activeNorm = (activeStage || '').trim();
+    const activeLower = activeNorm.toLowerCase();
+
+    // Nhận diện Tiền tố Nhà máy trong dữ liệu BOM (ví dụ: NM2, NM3, NM1)
+    let factoryPrefix = '';
+    (bomRows || []).forEach(r => {
+      const str = `${r.stageFrom || ''} ${r.stageTo || ''}`;
+      const match = str.match(/NM[1-3]/);
+      if (match && !factoryPrefix) {
+        factoryPrefix = match[0];
+      }
+    });
+
+    const getPrefixedStage = (coreName) => {
+      if (!factoryPrefix) return coreName;
+      const pNum = factoryPrefix.replace('NM', '');
+      if (coreName === 'Tạo phôi') return `${factoryPrefix} - Tạo phôi ${pNum}`;
+      if (coreName === 'Định hình') return `${factoryPrefix} - Định hình ${pNum}`;
+      if (coreName === 'Lắp ráp') return `${factoryPrefix} - Lắp ráp ${pNum}`;
+      if (coreName === 'Sơn') return `${factoryPrefix} - Sơn ${pNum}`;
+      if (coreName === 'Đóng gói') return `${factoryPrefix} - Đóng gói ${pNum}`;
+      return coreName;
+    };
+
+    const matchStage = (stage, active) => {
+      if (!stage || !active) return false;
+      const s = String(stage).trim().toLowerCase();
+      const a = String(active).trim().toLowerCase();
+      if (s === a) return true;
+
+      const isPhoi = a.includes('phôi') || a.includes('cắt');
+      const isDinhHinh = a.includes('định hình') || a.includes('chà') || a.includes('nhám');
+      const isLapRap = a.includes('lắp ráp') || a.includes('lắp');
+      const isSon = a.includes('sơn');
+      const isDongGoi = a.includes('đóng gói') || a.includes('gói');
+
+      if (isPhoi && (s.includes('phôi') || s.includes('cắt'))) return true;
+      if (isDinhHinh && (s.includes('định hình') || s.includes('chà') || s.includes('nhám'))) return true;
+      if (isLapRap && (s.includes('lắp ráp') || s.includes('lắp'))) return true;
+      if (isSon && s.includes('sơn')) return true;
+      if (isDongGoi && (s.includes('đóng gói') || s.includes('gói'))) return true;
+
+      return false;
+    };
 
     const enrich = (item) => {
       const level = item.stt ? item.stt.split('.').length - 1 : 0;
-      const isRawMaterial = item.unit === 'm3' || item.unit === 'm2' || (item.compName || '').toLowerCase().includes('gỗ') || (item.compName || '').toLowerCase().includes('ván');
-      const isPackaging = (item.type || '').toLowerCase().includes('đóng gói') || (item.type || '').toLowerCase().includes('phụ kiện') || (item.compName || '').toLowerCase().includes('carton') || (item.compName || '').toLowerCase().includes('thùng') || (item.compName || '').toLowerCase().includes('nẹp') || (item.compName || '').toLowerCase().includes('hướng dẫn');
+      const compLower = (item.compName || '').toLowerCase();
+      const codeLower = (item.compCode || '').toLowerCase();
+      const typeLower = (item.type || '').toLowerCase();
+      const unitLower = (item.unit || '').toLowerCase();
+
+      const isRawMaterial = unitLower === 'm3' || unitLower === 'm2' || compLower.includes('gỗ') || compLower.includes('ván') || compLower.includes('phôi') || codeLower.startsWith('blb') || codeLower.startsWith('csu');
+      const isPackaging = typeLower.includes('đóng gói') || typeLower.includes('phụ kiện') || compLower.includes('carton') || compLower.includes('thùng') || compLower.includes('nẹp') || compLower.includes('hướng dẫn');
+
       return { ...item, level, isRawMaterial, isPackaging };
     };
 
     const enrichedRows = bomRows.map(enrich);
 
-    if (stage === 'Tạo phôi') {
-      // Stage 1: Raw lumber & wood boards (m3, m2, phôi gỗ) -> From NM3 - Tạo phôi 3 to NM3 - Định hình 3
-      const phoiItems = enrichedRows.filter(i => i.isRawMaterial);
-      if (phoiItems.length === 0) {
-        return enrichedRows.filter(i => i.level >= 2).map(i => ({
-          ...i,
-          stageFrom: 'NM3 - Tạo phôi 3',
-          stageTo: 'NM3 - Định hình 3'
-        }));
+    // BƯỚC 1: Lọc duy nhất những dòng có CÔNG ĐOẠN NHẬN (stageTo) trùng với activeStage đang chọn
+    const matchingRowsByStageTo = enrichedRows.filter(i => matchStage(i.stageTo, activeNorm));
+
+    // Hàm format thông tin Công đoạn giao (stageFrom) và Công đoạn nhận (stageTo)
+    const formatItem = (item) => {
+      let from = item.stageFrom ? normalizeStageName(item.stageFrom, factoryPrefix) : '';
+      let to = item.stageTo ? normalizeStageName(item.stageTo, factoryPrefix) : activeNorm;
+
+      // ĐẶC BIỆT: Mục Tạo phôi -> Công đoạn giao LÀ KHO
+      if (activeLower.includes('phôi') || to.toLowerCase().includes('phôi')) {
+        from = 'Kho';
+        to = activeNorm || getPrefixedStage('Tạo phôi');
+      } else {
+        // Nếu stageFrom chưa có hoặc trùng với stageTo, gán mặc định từ công đoạn trước đó
+        if (!from || from === to) {
+          if (activeLower.includes('định hình')) from = getPrefixedStage('Tạo phôi');
+          else if (activeLower.includes('lắp ráp')) from = getPrefixedStage('Định hình');
+          else if (activeLower.includes('sơn')) from = getPrefixedStage('Lắp ráp');
+          else if (activeLower.includes('đóng gói')) from = getPrefixedStage('Sơn');
+        }
       }
-      return phoiItems.map(i => ({
-        ...i,
-        stageFrom: 'NM3 - Tạo phôi 3',
-        stageTo: 'NM3 - Định hình 3'
-      }));
+
+      return { ...item, stageFrom: from, stageTo: to };
+    };
+
+    if (matchingRowsByStageTo.length > 0) {
+      return matchingRowsByStageTo.map(formatItem);
     }
 
-    if (stage === 'Định hình') {
-      // Stage 2: Machined detail components (Chân trước, Chân sau, Diềm 1, Diềm 2, Tựa cong...) -> From NM3 - Định hình 3 to NM3 - Lắp ráp 3
-      const dihItems = enrichedRows.filter(i => !i.isRawMaterial && !i.isPackaging && i.level >= 2);
-      if (dihItems.length === 0) {
-        return enrichedRows.filter(i => !i.isRawMaterial && !i.isPackaging).map(i => ({
-          ...i,
-          stageFrom: 'NM3 - Định hình 3',
-          stageTo: 'NM3 - Lắp ráp 3'
-        }));
-      }
-      return dihItems.map(i => ({
-        ...i,
-        stageFrom: 'NM3 - Định hình 3',
-        stageTo: 'NM3 - Lắp ráp 3'
-      }));
+    // BƯỚC 2: Fallback nếu trong BOM chưa khai báo stageTo cụ thể, phân loại theo tính chất linh kiện:
+    if (activeLower.includes('phôi') || activeLower.includes('cắt')) {
+      const phoiOnly = enrichedRows.filter(i => i.isRawMaterial);
+      const rows = phoiOnly.length > 0 ? phoiOnly : enrichedRows.filter(i => i.level >= 2);
+      return rows.map(formatItem);
     }
 
-    if (stage === 'Lắp ráp') {
-      // Stage 3: Sub-assemblies & main frames (KHUNG GHẾ, VÁN MÊ NGỒI...) -> From NM3 - Lắp ráp 3 to NM3 - Sơn 3
-      const lapItems = enrichedRows.filter(i => !i.isRawMaterial && !i.isPackaging && i.level === 1);
-      if (lapItems.length === 0) {
-        return enrichedRows.filter(i => !i.isRawMaterial && !i.isPackaging).slice(0, 3).map(i => ({
-          ...i,
-          stageFrom: 'NM3 - Lắp ráp 3',
-          stageTo: 'NM3 - Sơn 3'
-        }));
-      }
-      return lapItems.map(i => ({
-        ...i,
-        stageFrom: 'NM3 - Lắp ráp 3',
-        stageTo: 'NM3 - Sơn 3'
-      }));
+    if (activeLower.includes('định hình') || activeLower.includes('chà') || activeLower.includes('nhám')) {
+      const dihOnly = enrichedRows.filter(i => !i.isRawMaterial && !i.isPackaging && i.level >= 2);
+      const rows = dihOnly.length > 0 ? dihOnly : enrichedRows.filter(i => !i.isRawMaterial && !i.isPackaging);
+      return rows.map(formatItem);
     }
 
-    if (stage === 'Sơn') {
-      // Stage 4: Main assembled structures receiving PU finish -> From NM3 - Sơn 3 to NM3 - Đóng gói 3
-      const sonItems = enrichedRows.filter(i => !i.isRawMaterial && !i.isPackaging && i.level === 1);
-      return (sonItems.length > 0 ? sonItems.slice(0, 1) : enrichedRows.slice(0, 1)).map(i => ({
-        ...i,
-        stageFrom: 'NM3 - Sơn 3',
-        stageTo: 'NM3 - Đóng gói 3'
-      }));
+    if (activeLower.includes('lắp ráp') || activeLower.includes('lắp')) {
+      const lapOnly = enrichedRows.filter(i => !i.isRawMaterial && !i.isPackaging && i.level === 1);
+      const rows = lapOnly.length > 0 ? lapOnly : enrichedRows.filter(i => !i.isRawMaterial && !i.isPackaging);
+      return rows.map(formatItem);
     }
 
-    if (stage === 'Đóng gói') {
-      // Stage 5: Packaging items, cartons, accessories, PE foam -> From NM3 - Đóng gói 3 to Kho thành phẩm
-      let pkgItems = enrichedRows.filter(i => i.isPackaging);
-      if (pkgItems.length === 0) {
-        pkgItems = [
-          { stt: '1.1', type: 'Vật liệu đóng gói', compCode: 'PK-CARTON-01', compName: 'Thùng Carton 5 lớp in logo thương hiệu', quantity: '1', unit: 'Bộ', material: 'Giấy sóng BC', spec: '650*700*850', volume: '0.38', note: 'Dán tem Barcode' },
-          { stt: '1.2', type: 'Phụ kiện đóng gói', compCode: 'PK-MOUSSE-02', compName: 'Mút xốp PE foam chống trầy xước góc', quantity: '1', unit: 'Bộ', material: 'Xốp EPE 5mm', spec: 'Tiêu chuẩn', volume: '0.05', note: 'Bọc kín 4 chân' },
-          { stt: '1.3', type: 'Tài liệu dán tem', compCode: 'PK-MANUAL-03', compName: 'Giấy hướng dẫn bảo quản & Thẻ bảo hành', quantity: '1', unit: 'Bộ', material: 'Giấy Couche 150', spec: 'A5', volume: '0.01', note: 'Kèm trong thùng' }
-        ];
-      }
-      return pkgItems.map(i => ({
-        ...i,
-        stageFrom: 'NM3 - Đóng gói 3',
-        stageTo: 'Kho thành phẩm'
-      }));
+    if (activeLower.includes('sơn')) {
+      const sonOnly = enrichedRows.filter(i => !i.isRawMaterial && !i.isPackaging && i.level <= 1);
+      return sonOnly.map(formatRow);
     }
 
-    if (stage === 'Lưu kho') {
-      // Stage 6: ONLY THE FINISHED PRODUCT SKU (Sản phẩm hoàn chỉnh)! -> From Kho thành phẩm to Xuất hàng
+    if (activeLower.includes('đóng gói') || activeLower.includes('gói')) {
+      const pkgOnly = enrichedRows.filter(i => i.isPackaging || i.level === 0);
+      return pkgOnly.map(formatRow);
+    }
+
+    if (activeLower.includes('kho') || activeLower.includes('lưu kho')) {
       const prodCode = product?.product_code || product?.code || 'ADV011';
       const prodName = product?.product_name || product?.name || 'Sản phẩm hoàn chỉnh';
-      const finishedRow = {
+      return [{
         stt: '1',
         type: 'Thành phẩm',
         compCode: prodCode,
@@ -480,11 +585,10 @@ const ProductDetailView = () => {
         note: 'Sản phẩm đóng gói hoàn chỉnh sẵn sàng xuất hàng',
         stageFrom: 'Kho thành phẩm',
         stageTo: 'Xuất hàng'
-      };
-      return [finishedRow];
+      }];
     }
 
-    return enrichedRows;
+    return enrichedRows.map(formatRow);
   }, [bomRows, activeStage, product]);
 
   const handleAddNewBomRow = () => {
@@ -646,7 +750,7 @@ const ProductDetailView = () => {
 
           {/* Hàng 1 + Hàng 2: Bố cục Khung Ảnh & Form 7 Ô Nhập */}
           <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '14px', marginBottom: '10px' }}>
-            
+
             {/* Khung Ảnh Sản Phẩm (Ảnh chính + 3 Thumbnail Phụ xếp dọc bên phải) */}
             <div style={{ display: 'flex', gap: '6px' }}>
               {/* Ô ảnh chính vuông lớn */}
@@ -844,12 +948,39 @@ const ProductDetailView = () => {
 
             <div>
               <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Ước tính chi phí</label>
-              <input
-                type="text"
-                value={formData.estimatedCost}
-                onChange={(e) => setFormData({ ...formData, estimatedCost: e.target.value })}
-                style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #D1D5DB', borderRadius: '7px', backgroundColor: '#FFF', fontWeight: '700', color: '#1F2937', outline: 'none' }}
-              />
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  value={formData.estimatedCost}
+                  onChange={(e) => {
+                    const rawDigits = e.target.value.replace(/\D/g, '');
+                    const formatted = rawDigits ? Number(rawDigits).toLocaleString('vi-VN') : '';
+                    setFormData({ ...formData, estimatedCost: formatted });
+                  }}
+                  placeholder="0"
+                  style={{
+                    width: '100%',
+                    padding: '7px 48px 7px 10px',
+                    border: '1.5px solid #D1D5DB',
+                    borderRadius: '7px',
+                    backgroundColor: '#FFF',
+                    fontWeight: '700',
+                    color: '#1F2937',
+                    outline: 'none'
+                  }}
+                />
+                <span style={{
+                  position: 'absolute',
+                  right: '10px',
+                  fontSize: '0.78rem',
+                  fontWeight: '800',
+                  color: '#9CA3AF',
+                  pointerEvents: 'none',
+                  userSelect: 'none'
+                }}>
+                  VNĐ
+                </span>
+              </div>
             </div>
 
             <div>
@@ -951,7 +1082,7 @@ const ProductDetailView = () => {
         {/* NỘI DUNG CHI TIẾT CỦA TAB BAN ĐẦU */}
         {activeTab === 'bom' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            
+
             {/* THANH ACTION TOOLBAR PHÍA TRÊN BẢNG BOM - CHIA 2 BÊN TUYỆT ĐỐI */}
             <div style={{
               display: 'flex',
@@ -1006,7 +1137,7 @@ const ProductDetailView = () => {
 
               {/* BÊN PHẢI: 4 Nút Nâu Đậm (#5D3B32) ĐẨY VỀ GÓC PHẢI TUYỆT ĐỐI */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
-                
+
                 {/* NÚT CẤU HÌNH THÔNG TIN - DROPDOWN CHỨA THÊM CHI TIẾT & THÊM MẪU MÀU SƠN */}
                 <div style={{ position: 'relative' }}>
                   <button
@@ -1527,19 +1658,19 @@ const ProductDetailView = () => {
                       </tr>
                     ) : (
                       displayItems.map((r, idx) => {
-                        const defaultInputStage = 
+                        const defaultInputStage =
                           activeStage === 'Tạo phôi' ? 'NM3 - Tạo phôi 3' :
-                          activeStage === 'Định hình' ? 'NM2 - Định hình mặt tiền 2' :
-                          activeStage === 'Lắp ráp' ? 'NM2 - Lắp ráp mặt tiền 2' :
-                          activeStage === 'Sơn' ? 'NM2 - Sơn treo 2' :
-                          activeStage === 'Đóng gói' ? 'NM2 - Đóng gói 2' : 'Kho thành phẩm';
+                            activeStage === 'Định hình' ? 'NM2 - Định hình mặt tiền 2' :
+                              activeStage === 'Lắp ráp' ? 'NM2 - Lắp ráp mặt tiền 2' :
+                                activeStage === 'Sơn' ? 'NM2 - Sơn treo 2' :
+                                  activeStage === 'Đóng gói' ? 'NM2 - Đóng gói 2' : 'Kho thành phẩm';
 
-                        const defaultOutputStage = 
+                        const defaultOutputStage =
                           activeStage === 'Tạo phôi' ? 'NM2 - Định hình mặt tiền 2' :
-                          activeStage === 'Định hình' ? 'NM2 - Lắp ráp mặt tiền 2' :
-                          activeStage === 'Lắp ráp' ? 'NM2 - Sơn treo 2' :
-                          activeStage === 'Sơn' ? 'NM2 - Đóng gói 2' :
-                          activeStage === 'Đóng gói' ? 'Kho thành phẩm' : 'Xuất hàng';
+                            activeStage === 'Định hình' ? 'NM2 - Lắp ráp mặt tiền 2' :
+                              activeStage === 'Lắp ráp' ? 'NM2 - Sơn treo 2' :
+                                activeStage === 'Sơn' ? 'NM2 - Đóng gói 2' :
+                                  activeStage === 'Đóng gói' ? 'Kho thành phẩm' : 'Xuất hàng';
 
                         return (
                           <tr

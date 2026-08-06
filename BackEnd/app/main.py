@@ -245,6 +245,13 @@ app = FastAPI(
 async def health_check():
     return {"status": "ok"}
 
+# [STATIC FILES] Mount thư mục static chứa ảnh uploads (screen_bugs, component_samples, v.v.)
+static_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static"))
+os.makedirs(static_dir, exist_ok=True)
+os.makedirs(os.path.join(static_dir, "uploads", "screen_bugs"), exist_ok=True)
+os.makedirs(os.path.join(static_dir, "uploads", "component_samples"), exist_ok=True)
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
 
 
 @app.websocket("/ws/{user_id}")

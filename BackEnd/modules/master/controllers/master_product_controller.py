@@ -1,3 +1,4 @@
+from typing import Optional
 import pandas as pd
 import io
 import json
@@ -901,21 +902,43 @@ def is_raw_sku_code(text: str) -> bool:
         return True
     return False
 
-def get_detail_suggestions(db: Session):
+def get_detail_suggestions(db: Session, detail_name: Optional[str] = None):
     """
     Lấy danh sách tất cả các tên chi tiết và tên thành phẩm duy nhất để hỗ trợ gợi ý autocomplete.
-    Tự động lọc bỏ các mã SKU thuần túy để chỉ hiển thị TÊN thành phẩm/sản phẩm thực tế.
+    Nếu có `detail_name`, chỉ lọc và trả về danh sách các Thành phẩm thực sự chứa chi tiết đó.
     """
     detail_names = [r[0] for r in db.query(MasterProductDetail.name).distinct().all() if r[0]]
     bom_names = [r[0] for r in db.query(MasterBOMDetail.name).distinct().all() if r[0]]
     all_names = sorted(list(set(detail_names + bom_names)))
 
-    parent_names = [r[0] for r in db.query(MasterProductDetail.parent_name).distinct().all() if r[0]]
-    prod_names = [r[0] for r in db.query(MasterProduct.name).distinct().all() if r[0]]
-    combined_parents = set(parent_names + prod_names)
-    clean_parents = sorted([p for p in combined_parents if p and not is_raw_sku_code(p)])
+    if detail_name and detail_name.strip():
+        d_clean = detail_name.strip()
+        d_parents = [r[0] for r in db.query(MasterProductDetail.parent_name).filter(MasterProductDetail.name.ilike(f"%{d_clean}%")).distinct().all() if r[0]]
+        bom_product_ids = [r[0] for r in db.query(MasterBOMDetail.master_product_id).filter(MasterBOMDetail.name.ilike(f"%{d_clean}%")).distinct().all() if r[0]]
+        
+        bom_prods = []
+        if bom_product_ids:
+            prods = db.query(MasterProduct).filter(MasterProduct.id.in_(bom_product_ids)).all()
+            for p in prods:
+                p_code = getattr(p, 'sku', None) or getattr(p, 'product_code', None)
+                if p.name: bom_prods.append(p.name)
+                if p_code: bom_prods.append(p_code)
+                if p_code and p.name: bom_prods.append(f"{p_code} - {p.name}")
+                
+        parent_suggestions = sorted(list(set([p for p in (d_parents + bom_prods) if p])))
+    else:
+        parent_names = [r[0] for r in db.query(MasterProductDetail.parent_name).distinct().all() if r[0]]
+        prod_names = [r[0] for r in db.query(MasterProduct.name).distinct().all() if r[0]]
+        all_prods = db.query(MasterProduct).all()
+        prod_skus = []
+        prod_combos = []
+        for r in all_prods:
+            p_code = getattr(r, 'sku', None) or getattr(r, 'product_code', None)
+            if p_code: prod_skus.append(p_code)
+            if p_code and r.name: prod_combos.append(f"{p_code} - {r.name}")
+        parent_suggestions = sorted(list(set([p for p in (parent_names + prod_names + prod_skus + prod_combos) if p])))
 
-    return {"detail_names": all_names, "parent_names": clean_parents}
+    return {"detail_names": all_names, "parent_names": parent_suggestions}
 
 def get_paint_color_suggestions(db: Session):
     """

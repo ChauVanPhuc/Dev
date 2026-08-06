@@ -1377,7 +1377,7 @@ const PortalLayout = () => {
   }, [location.pathname]);
 
   const pathSegments = location.pathname.split('/').filter(Boolean);
-  const showBackButton = pathSegments.length >= 3;
+  const showBackButton = pathSegments.length >= 3 || location.pathname.includes('/product-details') || location.pathname.includes('/paint-colors');
 
   return (
     <div
@@ -1445,26 +1445,26 @@ const PortalLayout = () => {
                 <button
                   onClick={handleBackClick}
                   style={{
-                    background: 'none',
+                    backgroundColor: '#FFFFFF',
                     border: '1.5px solid #7B5233',
                     color: '#7B5233',
-                    padding: '8px 20px',
+                    padding: '7px 18px',
                     borderRadius: '10px',
                     cursor: 'pointer',
-                    fontWeight: '800',
-                    fontSize: '0.9rem',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px',
-                    boxShadow: '0 2px 4px rgba(123, 82, 51, 0.05)',
-                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+                    gap: '8px',
+                    fontSize: '0.88rem',
+                    fontWeight: '700',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 2px 4px rgba(123, 82, 51, 0.05)'
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.backgroundColor = '#7B5233';
                     e.currentTarget.style.color = '#FFFFFF';
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.backgroundColor = '#FFFFFF';
                     e.currentTarget.style.color = '#7B5233';
                   }}
                 >

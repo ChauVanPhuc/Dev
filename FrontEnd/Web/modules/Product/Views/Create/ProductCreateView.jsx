@@ -78,7 +78,7 @@ const ProductCreateView = () => {
     updatedBy: 'Admin Hệ Thống',
     bomStatus: 'Mới tạo',
     totalComponents: '1',
-    estimatedCost: '0 VNĐ',
+    estimatedCost: '0',
     color: 'Màu tự nhiên'
   });
 
@@ -112,6 +112,84 @@ const ProductCreateView = () => {
   const [detailRows, setDetailRows] = useState([]);
   const [paintColorRows, setPaintColorRows] = useState([]);
 
+  const getStageOrderRank = (stageName) => {
+    if (!stageName) return 99;
+    const s = String(stageName).toLowerCase();
+    if (s.includes('phôi') || s.includes('cắt')) return 1;
+    if (s.includes('định hình') || s.includes('chà') || s.includes('nhám')) return 2;
+    if (s.includes('lắp ráp') || s.includes('lắp')) return 3;
+    if (s.includes('sơn')) return 4;
+    if (s.includes('qc') || s.includes('kiểm')) return 4.5;
+    if (s.includes('đóng gói') || s.includes('gói')) return 5;
+    if (s.includes('kho') || s.includes('lưu kho') || s.includes('xuất')) return 6;
+    return 10;
+  };
+
+  const normalizeStageName = (stageName, prefix = '') => {
+    if (!stageName) return '';
+    let s = String(stageName).trim();
+    const lower = s.toLowerCase();
+    if (s.startsWith('NM1') || s.startsWith('NM2') || s.startsWith('NM3')) {
+      return s;
+    }
+    if (prefix) {
+      const pNum = prefix.replace('NM', '');
+      if (lower.includes('phôi') || lower.includes('cắt')) return `${prefix} - Tạo phôi ${pNum}`;
+      if (lower.includes('định hình')) return `${prefix} - Định hình ${pNum}`;
+      if (lower.includes('chà') || lower.includes('nhám')) return `${prefix} - Chà nhám ${pNum}`;
+      if (lower.includes('lắp ráp') || lower.includes('lắp')) return `${prefix} - Lắp ráp ${pNum}`;
+      if (lower.includes('sơn')) return `${prefix} - Sơn ${pNum}`;
+      if (lower.includes('đóng gói') || lower.includes('gói')) return `${prefix} - Đóng gói ${pNum}`;
+    }
+    return s;
+  };
+
+  // Tự động rút trích và CHUẨN HÓA KHÔNG TRÙNG LẶP các Công đoạn theo thứ tự quy trình chuẩn
+  const createMainStages = useMemo(() => {
+    let factoryPrefix = '';
+    (bomRows || []).forEach(r => {
+      const str = `${r.stageFrom || ''} ${r.stageTo || ''}`;
+      const match = str.match(/NM[1-3]/);
+      if (match && !factoryPrefix) {
+        factoryPrefix = match[0];
+      }
+    });
+
+    const stageMap = new Map();
+
+    (bomRows || []).forEach(row => {
+      [row.stageFrom, row.stageTo].forEach(rawStage => {
+        if (!rawStage || !rawStage.trim()) return;
+        const norm = normalizeStageName(rawStage.trim(), factoryPrefix);
+        const rank = getStageOrderRank(norm);
+        if (rank >= 6) return;
+        const key = Math.floor(rank);
+
+        if (!stageMap.has(key) || (norm.includes('NM') && !stageMap.get(key).includes('NM'))) {
+          stageMap.set(key, norm);
+        }
+      });
+    });
+
+    const result = Array.from(stageMap.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(entry => entry[1]);
+
+    if (result.length === 0) {
+      const p = factoryPrefix || 'NM3';
+      const pNum = p.replace('NM', '');
+      return [`${p} - Tạo phôi ${pNum}`, `${p} - Định hình ${pNum}`, `${p} - Lắp ráp ${pNum}`, `${p} - Sơn ${pNum}`, `${p} - Đóng gói ${pNum}`];
+    }
+
+    return result;
+  }, [bomRows]);
+
+  useEffect(() => {
+    if (createMainStages.length > 0 && (!activeStage || !createMainStages.includes(activeStage))) {
+      setActiveStage(createMainStages[0]);
+    }
+  }, [createMainStages, activeStage]);
+
   // Danh mục dòng hàng mặc định từ BOM làm fallback
   const defaultBomLines = [
     'Dòng hàng APT', 'Dòng hàng ATL', 'Dòng hàng FOL', 'Dòng hàng ADV',
@@ -119,13 +197,52 @@ const ProductCreateView = () => {
     'Dòng hàng TIN', 'Dòng hàng BEZ', 'Dòng hàng MBC'
   ];
 
-  // Lấy danh sách Dòng hàng / Danh mục từ API Backend (/categories)
+  // Danh sách Công đoạn sản xuất chuẩn
+  const defaultStageOptions = [
+    'Tạo phôi',
+    'Định hình',
+    'Chà nhám',
+    'Sơn',
+    'Sơn Pallet',
+    'Sơn treo',
+    'Lắp ráp',
+    'QC / Kiểm định',
+    'Đóng gói',
+    'Lưu kho',
+    'NM1 - Tạo phôi 1',
+    'NM1 - Định hình 1',
+    'NM1 - Định hình ván 1',
+    'NM1 - Chà nhám 1',
+    'NM1 - Lắp ráp 1',
+    'NM1 - Lắp ráp ván 1',
+    'NM1 - Lắp ráp, chà nhám 1',
+    'NM1 - Sơn 1',
+    'NM1 - Đóng gói 1',
+    'NM2 - Định hình mặt tiền 2',
+    'NM2 - Định hình tủ 2',
+    'NM2 - Lắp ráp mặt tiền 2',
+    'NM2 - Lắp ráp tủ 2',
+    'NM2 - Sơn Pallet 2',
+    'NM2 - Sơn treo 2',
+    'NM2 - Đóng gói 2',
+    'NM3 - Tạo phôi 3',
+    'NM3 - Định hình 3',
+    'NM3 - Lắp ráp 3',
+    'NM3 - Sơn 3',
+    'NM3 - Đóng gói 3'
+  ];
+
+  // Lấy danh sách Dòng hàng từ API Backend (/master-categories/ hoặc /categories)
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const res = await api.get('/categories').catch(() => []);
-        if (Array.isArray(res) && res.length > 0) {
-          setCategoriesOptions(res.map(c => typeof c === 'string' ? { name: c } : c));
+        let res = await api.get('/master-categories/').catch(() => null);
+        if (!res || !Array.isArray(res) || res.length === 0) {
+          res = await api.get('/categories').catch(() => []);
+        }
+        const dataList = Array.isArray(res) ? res : (res?.data || []);
+        if (dataList.length > 0) {
+          setCategoriesOptions(dataList.map(c => typeof c === 'string' ? { name: c } : c));
         } else {
           setCategoriesOptions(defaultBomLines.map(name => ({ name })));
         }
@@ -142,7 +259,7 @@ const ProductCreateView = () => {
     if (!formData.sku) return;
     const skuUpper = formData.sku.toUpperCase();
     const matchedLine = (categoriesOptions.length > 0 ? categoriesOptions : defaultBomLines.map(name => ({ name }))).find(cat => {
-      const catNameUpper = cat.name.toUpperCase();
+      const catNameUpper = (cat && cat.name) ? String(cat.name).toUpperCase() : '';
       const prefix = skuUpper.slice(0, 3);
       return catNameUpper.includes(prefix);
     });
@@ -783,12 +900,39 @@ const ProductCreateView = () => {
 
             <div>
               <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Ước tính chi phí</label>
-              <input
-                type="text"
-                value={formData.estimatedCost}
-                onChange={(e) => handleInputChange('estimatedCost', e.target.value)}
-                style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #D1D5DB', borderRadius: '7px', backgroundColor: '#FFF', fontWeight: '700', color: '#1F2937', outline: 'none' }}
-              />
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  value={formData.estimatedCost}
+                  onChange={(e) => {
+                    const rawDigits = e.target.value.replace(/\D/g, '');
+                    const formatted = rawDigits ? Number(rawDigits).toLocaleString('vi-VN') : '';
+                    handleInputChange('estimatedCost', formatted);
+                  }}
+                  placeholder="0"
+                  style={{
+                    width: '100%',
+                    padding: '7px 48px 7px 10px',
+                    border: '1.5px solid #D1D5DB',
+                    borderRadius: '7px',
+                    backgroundColor: '#FFF',
+                    fontWeight: '700',
+                    color: '#1F2937',
+                    outline: 'none'
+                  }}
+                />
+                <span style={{
+                  position: 'absolute',
+                  right: '10px',
+                  fontSize: '0.78rem',
+                  fontWeight: '800',
+                  color: '#9CA3AF',
+                  pointerEvents: 'none',
+                  userSelect: 'none'
+                }}>
+                  VNĐ
+                </span>
+              </div>
             </div>
 
             <div>
@@ -979,9 +1123,10 @@ const ProductCreateView = () => {
                       backgroundColor: '#FFFFFF',
                       borderRadius: '8px',
                       border: '1.5px solid #EADCC9',
-                      boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                      boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
                       zIndex: 100,
                       minWidth: '210px',
+                      overflow: 'hidden',
                       display: 'flex',
                       flexDirection: 'column'
                     }}>
@@ -989,7 +1134,7 @@ const ProductCreateView = () => {
                         type="button"
                         onClick={() => {
                           setIsConfigDropdownOpen(false);
-                          setShowConfigModal(true);
+                          navigate('/admin/product-details');
                         }}
                         style={{
                           padding: '11px 16px',
@@ -999,10 +1144,36 @@ const ProductCreateView = () => {
                           fontSize: '0.82rem',
                           fontWeight: '700',
                           color: '#2D1A12',
-                          cursor: 'pointer'
+                          cursor: 'pointer',
+                          transition: 'background-color 0.15s ease',
+                          borderBottom: '1px solid #FAF6F0'
                         }}
+                        onMouseEnter={(e) => e.target.style.backgroundColor = '#FAF6F0'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
                       >
-                        Ẩn / Hiện cột dữ liệu
+                        KT03.1: Quản lý Chi tiết
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsConfigDropdownOpen(false);
+                          navigate('/admin/paint-colors');
+                        }}
+                        style={{
+                          padding: '11px 16px',
+                          border: 'none',
+                          background: 'transparent',
+                          textAlign: 'left',
+                          fontSize: '0.82rem',
+                          fontWeight: '700',
+                          color: '#2D1A12',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.15s ease'
+                        }}
+                        onMouseEnter={(e) => e.target.style.backgroundColor = '#FAF6F0'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                      >
+                        KT03.3: Quản lý Mẫu sơn
                       </button>
                     </div>
                   )}
@@ -1108,22 +1279,28 @@ const ProductCreateView = () => {
 
                           {/* CĐ Vào */}
                           <td style={{ padding: '8px' }}>
-                            <input
-                              type="text"
-                              value={row.stageFrom}
+                            <select
+                              value={row.stageFrom || 'Tạo phôi'}
                               onChange={(e) => updateBomRow(row.id, 'stageFrom', e.target.value)}
-                              style={{ width: '100%', padding: '4px 6px', border: '1px solid #E5E7EB', borderRadius: '4px', fontSize: '0.8rem' }}
-                            />
+                              style={{ width: '100%', padding: '4px 6px', border: '1px solid #D1D5DB', borderRadius: '4px', fontSize: '0.8rem', backgroundColor: '#FFF', fontWeight: '600', color: '#1F2937', outline: 'none' }}
+                            >
+                              {Array.from(new Set([...defaultStageOptions, row.stageFrom].filter(Boolean))).map((stg) => (
+                                <option key={stg} value={stg}>{stg}</option>
+                              ))}
+                            </select>
                           </td>
 
                           {/* CĐ Ra */}
                           <td style={{ padding: '8px' }}>
-                            <input
-                              type="text"
-                              value={row.stageTo}
+                            <select
+                              value={row.stageTo || 'Đóng gói'}
                               onChange={(e) => updateBomRow(row.id, 'stageTo', e.target.value)}
-                              style={{ width: '100%', padding: '4px 6px', border: '1px solid #E5E7EB', borderRadius: '4px', fontSize: '0.8rem' }}
-                            />
+                              style={{ width: '100%', padding: '4px 6px', border: '1px solid #D1D5DB', borderRadius: '4px', fontSize: '0.8rem', backgroundColor: '#FFF', fontWeight: '600', color: '#1F2937', outline: 'none' }}
+                            >
+                              {Array.from(new Set([...defaultStageOptions, row.stageTo].filter(Boolean))).map((stg) => (
+                                <option key={stg} value={stg}>{stg}</option>
+                              ))}
+                            </select>
                           </td>
 
                           {/* Mã linh kiện */}
@@ -1274,6 +1451,128 @@ const ProductCreateView = () => {
               </div>
             </div>
 
+          </div>
+        ) : activeTab === 'process' ? (
+          /* TAB 2: QUY TRÌNH THỰC HIỆN - SƠ ĐỒ CHUẨN ĐỘNG THEO BOM */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* Khung sơ đồ quy trình dạng ngang */}
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '12px',
+              border: '1.5px solid #EADCC9',
+              padding: '16px 20px',
+              boxShadow: '0 2px 10px rgba(45, 26, 18, 0.03)'
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexWrap: 'nowrap',
+                overflowX: 'auto',
+                gap: '8px',
+                padding: '8px 0'
+              }}>
+                {createMainStages.map((stg, idx) => {
+                  const isActive = activeStage === stg;
+                  return (
+                    <React.Fragment key={stg}>
+                      <div
+                        onClick={() => setActiveStage(stg)}
+                        style={{
+                          minWidth: '110px',
+                          textAlign: 'center',
+                          padding: '12px 16px',
+                          borderRadius: '8px',
+                          backgroundColor: isActive ? '#A3E635' : '#EADCC9',
+                          border: isActive ? '2px solid #65A30D' : '1.5px solid #C4B5A5',
+                          color: '#2D1A12',
+                          fontWeight: '800',
+                          fontSize: '1rem',
+                          cursor: 'pointer',
+                          boxShadow: isActive ? '0 4px 10px rgba(163, 230, 53, 0.3)' : 'none',
+                          transition: 'all 0.2s ease',
+                          userSelect: 'none'
+                        }}
+                      >
+                        {stg}
+                      </div>
+                      {idx < createMainStages.length - 1 && (
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6D4C3D" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                            <polyline points="12 5 19 12 12 19"></polyline>
+                          </svg>
+                        </div>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Bảng linh kiện theo công đoạn được chọn */}
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '12px',
+              border: '1.5px solid #EADCC9',
+              overflow: 'hidden',
+              boxShadow: '0 4px 16px rgba(45, 26, 18, 0.05)',
+              marginBottom: '24px'
+            }}>
+              <div style={{
+                overflowX: 'auto',
+                overflowY: 'auto',
+                maxHeight: 'calc(100vh - 440px)',
+                minHeight: '280px',
+                borderRadius: '10px',
+                paddingBottom: '16px'
+              }}>
+                <table style={{ width: '100%', minWidth: '1100px', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+                    <tr style={{ backgroundColor: '#6D4C3D', color: '#FFFFFF' }}>
+                      <th style={{ padding: '10px', textAlign: 'center', width: '55px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700', backgroundColor: '#6D4C3D' }}>STT</th>
+                      <th style={{ padding: '10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700', backgroundColor: '#6D4C3D' }}>Loại</th>
+                      <th style={{ padding: '10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700', backgroundColor: '#6D4C3D' }}>Công đoạn giao</th>
+                      <th style={{ padding: '10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700', backgroundColor: '#6D4C3D' }}>Công đoạn nhận</th>
+                      <th style={{ padding: '10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700', backgroundColor: '#6D4C3D' }}>Mã linh kiện</th>
+                      <th style={{ padding: '10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700', backgroundColor: '#6D4C3D' }}>Tên linh kiện</th>
+                      <th style={{ padding: '10px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700', backgroundColor: '#6D4C3D' }}>Số lượng</th>
+                      <th style={{ padding: '10px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700', backgroundColor: '#6D4C3D' }}>Đơn vị</th>
+                      <th style={{ padding: '10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700', backgroundColor: '#6D4C3D' }}>Vật liệu</th>
+                      <th style={{ padding: '10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700', backgroundColor: '#6D4C3D' }}>Ghi chú</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const processItems = (bomRows || []).filter(r => !activeStage || r.stageFrom === activeStage || r.stageTo === activeStage);
+                      if (processItems.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: '#94A3B8', fontWeight: '600' }}>
+                              Không có linh kiện nào trong công đoạn {activeStage}
+                            </td>
+                          </tr>
+                        );
+                      }
+                      return processItems.map((r, idx) => (
+                        <tr key={r.id || idx} style={{ borderBottom: '1px solid #EADCC9', backgroundColor: idx % 2 === 1 ? '#FAF6F0' : '#FFFFFF' }}>
+                          <td style={{ padding: '9px 10px', textAlign: 'center', fontWeight: '700', color: '#2D1A12' }}>{r.stt}</td>
+                          <td style={{ padding: '9px 10px', fontWeight: '600', color: '#334155' }}>{r.type || 'Chi tiết'}</td>
+                          <td style={{ padding: '9px 10px', color: '#475569' }}>{r.stageFrom || '---'}</td>
+                          <td style={{ padding: '9px 10px', color: '#475569' }}>{r.stageTo || '---'}</td>
+                          <td style={{ padding: '9px 10px', fontWeight: '800', color: '#2D1A12' }}>{r.compCode || '---'}</td>
+                          <td style={{ padding: '9px 10px', fontWeight: '600', color: '#334155' }}>{r.compName || '---'}</td>
+                          <td style={{ padding: '9px 10px', textAlign: 'center', fontWeight: '800', color: '#1F2937' }}>{r.quantity || '1'}</td>
+                          <td style={{ padding: '9px 10px', textAlign: 'center', color: '#334155' }}>{r.unit || 'Cái'}</td>
+                          <td style={{ padding: '9px 10px', color: '#334155' }}>{r.material || '---'}</td>
+                          <td style={{ padding: '9px 10px', color: '#94A3B8' }}>{r.note || '---'}</td>
+                        </tr>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         ) : (
           <div style={{ padding: '30px', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1.5px solid #EADCC9', textAlign: 'center', color: '#6B7280' }}>
