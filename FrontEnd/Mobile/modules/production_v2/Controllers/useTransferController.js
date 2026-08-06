@@ -8,14 +8,31 @@ export const useTransferController = () => {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [availableMonths, setAvailableMonths] = useState([])
+  const [availableParts, setAvailableParts] = useState([])
+
+  // Fetch available months once on mount
+  useEffect(() => {
+    const loadMonths = async () => {
+      const data = await transferService.getAvailableMonths()
+      setAvailableMonths(data.months || [])
+      if (!transferFilters.month && data.default_month) {
+        setTransferFilters({ month: data.default_month })
+      }
+    }
+    loadMonths()
+  }, [])
 
   const fetchList = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
       const res = await transferService.getList(transferFilters)
-      setTickets(res.items)
-      setTotal(res.total)
+      setTickets(res.items || [])
+      setTotal(res.total || 0)
+      if (res.available_parts) {
+        setAvailableParts(res.available_parts)
+      }
     } catch (e) {
       setError(e.message || 'Không tải được dữ liệu')
     } finally {
@@ -37,13 +54,14 @@ export const useTransferController = () => {
     return result
   }
 
-  const pendingCount = tickets.filter((t) => t.status === 'pending').length
+  const pendingCount = tickets.filter((t) => t.status === 'pending' || t.status === 'delivering' || t.status === 'Chờ xác nhận').length
 
   const totalPages = Math.ceil(total / 10)
   const setPage = (page) => setTransferFilters({ page })
 
   return {
     tickets, total, totalPages, loading, error,
+    availableMonths, availableParts,
     filters: transferFilters,
     setFilters: setTransferFilters,
     pendingCount,
