@@ -584,6 +584,45 @@ const displayItems = useMemo(() => {
     }
   };
 
+  const filteredBomRows = useMemo(() => {
+    if (!bomRows || bomRows.length === 0) return [];
+    if (!searchTerm || searchTerm.trim() === '') return bomRows;
+    
+    const lowerSearch = searchTerm.toLowerCase();
+    return bomRows.filter(row => {
+      const compCode = (row.compCode || '').toLowerCase();
+      const compName = (row.compName || '').toLowerCase();
+      const type = (row.type || '').toLowerCase();
+      const material = (row.material || '').toLowerCase();
+      
+      return compCode.includes(lowerSearch) || 
+             compName.includes(lowerSearch) || 
+             type.includes(lowerSearch) || 
+             material.includes(lowerSearch);
+    });
+  }, [bomRows, searchTerm]);
+
+  if (loading) {
+    return (
+      <div className="mgmt-container" style={{ backgroundColor: '#FAF6F1', minHeight: '100vh', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ position: 'relative', width: '60px', height: '60px', margin: '0 auto 15px' }}>
+            <div className="spinner" style={{ 
+              border: '4px solid #f3f3f3', 
+              borderTop: '4px solid #7B5233', 
+              borderRadius: '50%', 
+              width: '60px', 
+              height: '60px', 
+              animation: 'spin 1s linear infinite' 
+            }}></div>
+          </div>
+          <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+          <p style={{ color: '#7B5233', fontWeight: '600' }}>Đang tải thông tin sản phẩm...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mgmt-container" style={{ backgroundColor: '#FAF6F1', minHeight: '100vh', padding: '12px 16px' }}>
       <div className="mgmt-main" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
