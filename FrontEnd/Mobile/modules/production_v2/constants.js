@@ -3,6 +3,11 @@ export const ROUTES = {
   TRANSFER_CREATE: '/production_v2/transfer',
   INSPECTION_LIST: '/production_v2/inspection-list',
   INSPECTION_CREATE: '/production_v2/inspection',
+  INSPECTION_FIRST_SAMPLE: '/production_v2/inspection/first-sample',
+  INSPECTION_RE_INSPECT: '/production_v2/inspection/re-inspect',
+  INSPECTION_PARAMETER: '/production_v2/inspection/parameter',
+  INSPECTION_PROCESS: '/production_v2/inspection/process',
+  INSPECTION_QA: '/production_v2/inspection/qa',
 }
 
 export const PERMISSIONS = {

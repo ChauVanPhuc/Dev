@@ -17,3 +17,5 @@ pytesseract
 openpyxl
 pillow
 groq
+pandas
+python-docx

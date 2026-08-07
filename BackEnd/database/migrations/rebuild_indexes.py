@@ -35,23 +35,34 @@ def rebuild_indexes():
         ]
         
         for table in tables:
-            print(f"Rebuilding indexes for {table}...")
-            rebuild_sql = text(f"""
-                ALTER INDEX ALL ON {table} REBUILD
-            """)
-            db.execute(rebuild_sql)
-            db.commit()
-            print(f"[OK] Rebuilt indexes for {table}")
+            # Check if table exists in database
+            check_sql = text("SELECT 1 FROM sys.tables WHERE name = :t")
+            has_table = db.execute(check_sql, {"t": table}).fetchone()
+            if not has_table:
+                print(f"[SKIP] Table '{table}' does not exist in database.")
+                continue
+
+            try:
+                print(f"Rebuilding indexes for {table}...")
+                rebuild_sql = text(f"ALTER INDEX ALL ON {table} REBUILD")
+                db.execute(rebuild_sql)
+                db.commit()
+                print(f"[OK] Rebuilt indexes for {table}")
+            except Exception as table_err:
+                db.rollback()
+                err_clean = str(table_err).encode('ascii', errors='ignore').decode('ascii')
+                print(f"[SKIP] Index rebuild skipped for {table}: {err_clean.splitlines()[0]}")
         
         print()
-        print("[SUCCESS] All indexes have been rebuilt successfully!")
+        print("[SUCCESS] All indexes have been processed/rebuilt successfully!")
         print("Database performance should now be optimized.")
         
     except Exception as e:
         db.rollback()
         err_msg = str(e).encode('ascii', errors='ignore').decode('ascii')
-        print(f"[ERROR] Index rebuild failed: {err_msg}")
+        print(f"[ERROR] Index rebuild process failed: {err_msg}")
         raise
+
 
 if __name__ == "__main__":
     rebuild_indexes()

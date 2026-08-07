@@ -26,7 +26,23 @@ if "%V_NOTE%"=="" set V_NOTE=Ban cap nhat %V_NUM%
 
 echo.
 echo [1/5] Dang cap nhat Version trong code...
-python BackEnd\scripts\bump_version.py "%V_NUM%" "%V_NOTE%"
+:: Find real Python executable (bypass 0-byte Windows Store App execution aliases)
+set "PYTHON_EXE="
+for /f "delims=" %%i in ('where python 2^>nul') do (
+    if %%~zi GTR 0 (
+        if not defined PYTHON_EXE (
+            set "PYTHON_EXE=%%i"
+        )
+    )
+)
+
+if not defined PYTHON_EXE (
+    echo [LOI] Khong tim thay Python tren he thong.
+    pause
+    exit /b
+)
+
+"%PYTHON_EXE%" BackEnd\scripts\bump_version.py "%V_NUM%" "%V_NOTE%"
 if %errorlevel% neq 0 (
     echo [LOI] Khong the cap nhat version.
     pause

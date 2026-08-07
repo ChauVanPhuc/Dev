@@ -112,6 +112,84 @@ const ProductCreateView = () => {
   const [detailRows, setDetailRows] = useState([]);
   const [paintColorRows, setPaintColorRows] = useState([]);
 
+  // Gợi ý tên thành phẩm từ master_product_details
+  const [detailSuggestions, setDetailSuggestions] = useState([]);
+  const [detailMetaMap, setDetailMetaMap] = useState({});
+  const [loaiOptions, setLoaiOptions] = useState([]);
+  const [suggestionsByParent, setSuggestionsByParent] = useState({});
+  const [activeCompNameRow, setActiveCompNameRow] = useState(null);
+  const [activeTypeRow, setActiveTypeRow] = useState(null);
+  const [loaiDropdownStyle, setLoaiDropdownStyle] = useState({ top: 0, left: 0, minWidth: 240 });
+  const [compNameDropdownStyle, setCompNameDropdownStyle] = useState({ top: 0, left: 0, minWidth: 240 });
+  const selectingCompNameRef = useRef(false);
+  const selectingTypeRef = useRef(false);
+  const loadedParentsRef = useRef(new Set());
+
+  const loadSuggestionsForParent = async (parentName) => {
+    if (!parentName || loadedParentsRef.current.has(parentName)) return;
+    try {
+      const res = await api.get(`/master-products/detail-suggestions?parent_name=${encodeURIComponent(parentName)}`).catch(() => null);
+      if (res) {
+        loadedParentsRef.current.add(parentName);
+        setSuggestionsByParent(prev => ({ ...prev, [parentName]: res.detail_names || [] }));
+      }
+    } catch (err) {
+      console.warn('Lỗi lấy chi tiết con theo loại:', err);
+    }
+  };
+
+  // Load danh sách tên thành phẩm từ master
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await api.get('/master-products/detail-suggestions').catch(() => null);
+        if (res) {
+          setDetailSuggestions(res.detail_names || []);
+          setDetailMetaMap(res.detail_meta_map || {});
+          const detailSet = new Set(res.detail_names || []);
+          setLoaiOptions((res.parent_names || []).filter(n => detailSet.has(n)));
+        }
+      } catch (err) {
+        console.warn('Lỗi lấy gợi ý tên thành phẩm:', err);
+      }
+    };
+    load();
+  }, []);
+
+  // Đồng bộ dòng sản phẩm gốc (STT 1) với thông tin form chung
+  useEffect(() => {
+    setBomRows(prev => {
+      if (prev.length === 0) return prev;
+      const root = prev[0];
+      const len = formData.length || '';
+      const wid = formData.width || '';
+      const hgt = formData.height || '';
+      const spec = [len, wid, hgt].filter(v => v !== '').join('*');
+      const compCode = formData.sku || '';
+      const compName = formData.name || '';
+      if (
+        root.compCode === compCode &&
+        root.compName === compName &&
+        root.spec === spec &&
+        root.length === (parseFloat(len) || 0) &&
+        root.width === (parseFloat(wid) || 0) &&
+        root.height === (parseFloat(hgt) || 0)
+      ) return prev;
+      const updated = [...prev];
+      updated[0] = {
+        ...root,
+        type: 'Sản phẩm',
+        compCode,
+        compName,
+        spec,
+        length: parseFloat(len) || 0,
+        width: parseFloat(wid) || 0,
+        height: parseFloat(hgt) || 0
+      };
+      return updated;
+    });
+  }, [formData.sku, formData.name, formData.length, formData.width, formData.height]);
+
   const getStageOrderRank = (stageName) => {
     if (!stageName) return 99;
     const s = String(stageName).toLowerCase();
@@ -328,7 +406,7 @@ const ProductCreateView = () => {
     const newRow = {
       id: Date.now(),
       stt: nextStt,
-      type: 'Chi tiết',
+      type: '',
       stageFrom: 'Định hình',
       stageTo: 'Lắp ráp',
       compCode: `${formData.sku || 'SKU'}.${nextStt}`,
@@ -345,10 +423,10 @@ const ProductCreateView = () => {
       note: ''
     };
     setBomRows(prev => [...prev, newRow]);
-    if (toast) toast('success', 'Đã thêm 1 dòng linh kiện mới!');
+    if (toast) toast('success', 'Đã thêm 1 dòng chi tiết mới!');
   };
 
-  // Thêm linh kiện con phân cấp (Sub-component STT 1.1, 1.1.1...)
+  // Thêm chi tiết con phân cấp (Sub-component STT 1.1, 1.1.1...)
   const handleAddSubBomRow = (parentRow) => {
     const parentStt = parentRow.stt;
     const siblings = bomRows.filter(r => r.stt.startsWith(`${parentStt}.`) && r.stt.split('.').length === parentStt.split('.').length + 1);
@@ -358,7 +436,7 @@ const ProductCreateView = () => {
     const newRow = {
       id: Date.now(),
       stt: newStt,
-      type: 'Chi tiết con',
+      type: '',
       stageFrom: 'Tạo phôi',
       stageTo: 'Định hình',
       compCode: `${formData.sku || 'SKU'}.${newStt}`,
@@ -380,13 +458,78 @@ const ProductCreateView = () => {
     const updated = [...bomRows];
     updated.splice(parentIndex + 1, 0, newRow);
     setBomRows(updated);
-    if (toast) toast('info', `Đã thêm linh kiện cấp con (${newStt})`);
+    if (toast) toast('info', `Đã thêm chi tiết cấp con (${newStt})`);
+  };
+
+  const handleAddComponentSuccess = (newDetail) => {
+    const { parentId, parentStt: pStt } = newDetail;
+
+    setBomRows(prev => {
+      let parentStt = pStt || '';
+      if (!parentStt && parentId) {
+        const parent = prev.find(r => String(r.id) === String(parentId) || r.compCode === parentId);
+        if (parent) parentStt = parent.stt;
+      }
+      // Nếu không chọn cha, mặc định là dòng sản phẩm gốc (STT 1)
+      if (!parentStt && prev.length > 0) {
+        parentStt = prev[0].stt;
+      }
+
+      let newStt;
+      if (!parentStt) {
+        const maxRoot = prev
+          .filter(r => !r.stt.includes('.'))
+          .map(r => parseInt(r.stt, 10))
+          .filter(n => !isNaN(n));
+        const nextRoot = (maxRoot.length ? Math.max(...maxRoot) : 0) + 1;
+        newStt = String(nextRoot);
+      } else {
+        const siblings = prev.filter(r => r.stt.startsWith(`${parentStt}.`) && r.stt.split('.').length === parentStt.split('.').length + 1);
+        const nextSubNum = siblings.length + 1;
+        newStt = `${parentStt}.${nextSubNum}`;
+      }
+
+      const newRow = {
+        id: Date.now(),
+        stt: newStt,
+        type: newDetail.type || 'Chi tiết',
+        stageFrom: newDetail.inputStage || 'Định hình',
+        stageTo: newDetail.outputStage || 'Lắp ráp',
+        compCode: `${formData.sku || 'SKU'}.${newStt}`,
+        compName: newDetail.detailName,
+        quantity: String(newDetail.quantity || 1),
+        unit: newDetail.unit || 'Cái',
+        material: newDetail.material || 'Gỗ / MDF',
+        spec: newDetail.specStr || '',
+        volume: String(newDetail.volume || 1),
+        length: parseFloat(newDetail.length) || 0,
+        width: parseFloat(newDetail.width) || 0,
+        height: parseFloat(newDetail.height) || 0,
+        waste_ratio: 0,
+        note: newDetail.note || ''
+      };
+
+      if (!parentId) {
+        return [...prev, newRow];
+      }
+      const parentIndex = prev.findIndex(r => String(r.id) === String(parentId) || r.compCode === parentId);
+      const updated = [...prev];
+      if (parentIndex !== -1) {
+        updated.splice(parentIndex + 1, 0, newRow);
+      } else {
+        updated.push(newRow);
+      }
+      return updated;
+    });
+
+    setFormData(prev => ({ ...prev, totalComponents: String(bomRows.length + 1) }));
+    if (toast) toast('success', `Đã thêm chi tiết ${newDetail.detailName}`);
   };
 
   // Xóa dòng BOM
   const handleRemoveBomRow = (id) => {
     if (bomRows.length === 1) {
-      if (toast) toast('warning', 'Phải giữ lại ít nhất 1 dòng linh kiện');
+      if (toast) toast('warning', 'Phải giữ lại ít nhất 1 dòng chi tiết');
       return;
     }
     setBomRows(prev => prev.filter(row => row.id !== id));
@@ -424,7 +567,7 @@ const ProductCreateView = () => {
       const childName = cells[nameIdx]?.trim() || cells[1]?.trim() || '';
       const childUnit = cells[unitIdx]?.trim() || 'Cái';
 
-      if (!childName || childName === 'Tên chi tiết' || childName === 'Tên mặt hàng') return null;
+      if (!childName || childName === 'Tên chi tiết' || childName === 'Tên thành phẩm' || childName === 'Tên mặt hàng') return null;
 
       if (!firstRowProductInfo && cells[0] && cells[1]) {
         firstRowProductInfo = {
@@ -889,7 +1032,7 @@ const ProductCreateView = () => {
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Tổng số linh kiện</label>
+              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Tổng số chi tiết</label>
               <input
                 type="text"
                 readOnly
@@ -1199,10 +1342,10 @@ const ProductCreateView = () => {
                   <FileSpreadsheet size={15} /> Dán từ Excel
                 </button>
 
-                {/* NÚT + THÊM MỚI (Dropdown Thêm dòng linh kiện chính) */}
+                {/* NÚT + THÊM MỚI (Dropdown Thêm dòng chi tiết chính) */}
                 <button
                   type="button"
-                  onClick={handleAddMainBomRow}
+                  onClick={() => setShowAddComponentModal(true)}
                   style={{
                     padding: '7px 16px',
                     backgroundColor: '#5D3B32',
@@ -1218,7 +1361,7 @@ const ProductCreateView = () => {
                     boxShadow: '0 3px 8px rgba(93, 59, 50, 0.2)'
                   }}
                 >
-                  <Plus size={15} /> Thêm linh kiện
+                  <Plus size={15} /> Thêm chi tiết
                 </button>
 
               </div>
@@ -1238,15 +1381,15 @@ const ProductCreateView = () => {
                     <tr style={{ backgroundColor: '#F5EBE1', borderBottom: '2px solid #EADCC9', color: '#2D1A12' }}>
                       <th style={{ padding: '10px 8px', textAlign: 'center', width: '60px', fontWeight: '800' }}>STT</th>
                       <th style={{ padding: '10px 8px', textAlign: 'left', width: '110px', fontWeight: '800' }}>Loại</th>
-                      <th style={{ padding: '10px 8px', textAlign: 'left', width: '110px', fontWeight: '800' }}>CĐ Vào</th>
-                      <th style={{ padding: '10px 8px', textAlign: 'left', width: '110px', fontWeight: '800' }}>CĐ Ra</th>
-                      <th style={{ padding: '10px 8px', textAlign: 'left', width: '240px', fontWeight: '800' }}>Mã linh kiện</th>
-                      <th style={{ padding: '10px 8px', textAlign: 'left', minWidth: '180px', fontWeight: '800' }}>Tên linh kiện *</th>
-                      <th style={{ padding: '10px 8px', textAlign: 'center', width: '65px', fontWeight: '800' }}>SL</th>
-                      <th style={{ padding: '10px 8px', textAlign: 'center', width: '70px', fontWeight: '800' }}>ĐVT</th>
-                      <th style={{ padding: '10px 8px', textAlign: 'left', width: '120px', fontWeight: '800' }}>Vật tư / Gỗ</th>
-                      <th style={{ padding: '10px 8px', textAlign: 'center', width: '140px', fontWeight: '800' }}>Quy cách (D-R-C)</th>
-                      <th style={{ padding: '10px 8px', textAlign: 'center', width: '80px', fontWeight: '800' }}>Thể tích</th>
+                      <th style={{ padding: '10px 8px', textAlign: 'left', width: '110px', fontWeight: '800' }}>Công đoạn giao</th>
+                      <th style={{ padding: '10px 8px', textAlign: 'left', width: '110px', fontWeight: '800' }}>Công đoạn nhận</th>
+                      <th style={{ padding: '10px 8px', textAlign: 'left', width: '240px', fontWeight: '800' }}>Mã thành phẩm</th>
+                      <th style={{ padding: '10px 8px', textAlign: 'left', minWidth: '180px', fontWeight: '800' }}>Tên thành phẩm *</th>
+                      <th style={{ padding: '10px 8px', textAlign: 'center', width: '65px', fontWeight: '800' }}>Số lượng</th>
+                      <th style={{ padding: '10px 8px', textAlign: 'center', width: '70px', fontWeight: '800' }}>Đơn vị</th>
+                      <th style={{ padding: '10px 8px', textAlign: 'left', width: '120px', fontWeight: '800' }}>Vật liệu</th>
+                      <th style={{ padding: '10px 8px', textAlign: 'center', width: '140px', fontWeight: '800' }}>Quy cách (mm)</th>
+                      <th style={{ padding: '10px 8px', textAlign: 'center', width: '80px', fontWeight: '800' }}>Khối lượng (m3)</th>
                       <th style={{ padding: '10px 8px', textAlign: 'left', width: '120px', fontWeight: '800' }}>Ghi chú</th>
                       <th style={{ padding: '10px 8px', textAlign: 'center', width: '80px', fontWeight: '800' }}>Thao tác</th>
                     </tr>
@@ -1254,6 +1397,9 @@ const ProductCreateView = () => {
                   <tbody>
                     {filteredBomRows.map((row, index) => {
                       const levelDepth = row.stt ? (row.stt.split('.').length - 1) : 0;
+                      const effectiveSuggestions = (row.type && suggestionsByParent[row.type]?.length > 0)
+                        ? suggestionsByParent[row.type]
+                        : detailSuggestions;
                       return (
                         <tr key={row.id || index} style={{ borderBottom: '1px solid #FAF6F0', backgroundColor: index % 2 === 0 ? '#FFFFFF' : '#FFFCF9' }}>
                           {/* STT */}
@@ -1268,13 +1414,87 @@ const ProductCreateView = () => {
 
                           {/* Loại */}
                           <td style={{ padding: '8px' }}>
-                            <input
-                              type="text"
-                              value={row.type}
-                              onChange={(e) => updateBomRow(row.id, 'type', e.target.value)}
-                              placeholder="Chi tiết..."
-                              style={{ width: '100%', padding: '4px 6px', border: '1px solid #E5E7EB', borderRadius: '4px', fontSize: '0.8rem' }}
-                            />
+                            <div style={{ position: 'relative' }}>
+                              <input
+                                id={`loai-input-${row.id}`}
+                                type="text"
+                                value={row.type}
+                                onChange={(e) => {
+                                  updateBomRow(row.id, 'type', e.target.value);
+                                  if (levelDepth > 0) setActiveTypeRow(row.id);
+                                }}
+                                onFocus={() => {
+                                  if (levelDepth === 0) return;
+                                  setActiveTypeRow(row.id);
+                                  const el = document.getElementById(`loai-input-${row.id}`);
+                                  if (el) {
+                                    const rect = el.getBoundingClientRect();
+                                    const dropdownHeight = 400;
+                                    const spaceBelow = window.innerHeight - rect.bottom;
+                                    const top = spaceBelow < dropdownHeight
+                                      ? rect.top + window.scrollY - dropdownHeight
+                                      : rect.bottom + window.scrollY;
+                                    setLoaiDropdownStyle({
+                                      top,
+                                      left: rect.left + window.scrollX,
+                                      minWidth: Math.max(rect.width, 240)
+                                    });
+                                  }
+                                }}
+                                onBlur={() => {
+                                  if (levelDepth === 0) return;
+                                  setTimeout(() => {
+                                    if (selectingTypeRef.current) return;
+                                    const exact = loaiOptions.find(o => o === row.type);
+                                    if (exact) {
+                                      updateBomRow(row.id, 'type', exact);
+                                      loadSuggestionsForParent(exact);
+                                    } else {
+                                      updateBomRow(row.id, 'type', '');
+                                    }
+                                    setActiveTypeRow(null);
+                                  }, 150);
+                                }}
+                                placeholder="Chi tiết..."
+                                style={{ width: '100%', padding: '4px 6px', border: '1px solid #E5E7EB', borderRadius: '4px', fontSize: '0.8rem' }}
+                              />
+                              {activeTypeRow === row.id && levelDepth > 0 && (() => {
+                                const query = (row.type || '').toLowerCase().trim();
+                                const filtered = query
+                                  ? loaiOptions.filter(o => o.toLowerCase().includes(query)).slice(0, 100)
+                                  : loaiOptions.slice(0, 100);
+                                if (filtered.length === 0) return null;
+                                return (
+                                  <div style={{
+                                    position: 'fixed', top: loaiDropdownStyle.top, left: loaiDropdownStyle.left,
+                                    minWidth: loaiDropdownStyle.minWidth, width: 'max-content', whiteSpace: 'nowrap',
+                                    backgroundColor: '#FFFFFF', border: '1.5px solid #EADCC9', borderRadius: '8px',
+                                    boxShadow: '0 8px 16px rgba(45, 26, 18, 0.15)', maxHeight: '400px', overflowY: 'auto', zIndex: 9999
+                                  }}>
+                                    {filtered.map((opt, idx) => (
+                                      <div
+                                        key={idx}
+                                        onMouseDown={() => {
+                                          selectingTypeRef.current = true;
+                                          updateBomRow(row.id, 'type', opt);
+                                          loadSuggestionsForParent(opt);
+                                          setActiveTypeRow(null);
+                                          setTimeout(() => { selectingTypeRef.current = false; }, 300);
+                                        }}
+                                        style={{
+                                          padding: '8px 12px', fontSize: '0.82rem', fontWeight: '600', color: '#2D1A12',
+                                          cursor: 'pointer', borderBottom: idx < filtered.length - 1 ? '1px solid #F1F5F9' : 'none'
+                                        }}
+                                        onMouseEnter={(e) => e.target.style.backgroundColor = '#FAF6F0'}
+                                        onMouseLeave={(e) => e.target.style.backgroundColor = '#FFFFFF'}
+                                      >
+                                        {opt}
+                                      </div>
+                                    ))}
+                                  </div>
+                                );
+                              })()}
+                            </div>
                           </td>
 
                           {/* CĐ Vào */}
@@ -1303,38 +1523,128 @@ const ProductCreateView = () => {
                             </select>
                           </td>
 
-                          {/* Mã linh kiện */}
+                          {/* Mã thành phẩm */}
                           <td style={{ padding: '8px' }}>
                             <input
                               type="text"
                               value={row.compCode}
                               onChange={(e) => updateBomRow(row.id, 'compCode', e.target.value)}
-                              placeholder="Mã LK..."
+                              placeholder="Mã TP..."
                               style={{ width: '100%', padding: '4px 6px', border: '1px solid #E5E7EB', borderRadius: '4px', fontSize: '0.8rem', fontWeight: '700' }}
                             />
                           </td>
 
-                          {/* Tên linh kiện (Hiệu ứng thụt lề cấp bậc) */}
+                          {/* Tên thành phẩm (Hiệu ứng thụt lề cấp bậc) */}
                           <td style={{ padding: '8px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                               {[...Array(levelDepth)].map((_, i) => (
                                 <div key={i} style={{ width: '14px', height: '1px', borderBottom: '1px dashed #C4B5A5' }} />
                               ))}
-                              <input
-                                type="text"
-                                value={row.compName}
-                                onChange={(e) => updateBomRow(row.id, 'compName', e.target.value)}
-                                placeholder="Tên linh kiện..."
-                                style={{
-                                  flex: 1,
-                                  padding: '4px 6px',
-                                  border: '1px solid #E5E7EB',
-                                  borderRadius: '4px',
-                                  fontSize: '0.8rem',
-                                  fontWeight: levelDepth === 0 ? '700' : '400',
-                                  color: levelDepth === 0 ? '#5D3B32' : '#1F2937'
-                                }}
-                              />
+                              <div style={{ position: 'relative', flex: 1 }}>
+                                <input
+                                  id={`compname-input-${row.id}`}
+                                  type="text"
+                                  value={row.compName}
+                                  onChange={(e) => {
+                                    updateBomRow(row.id, 'compName', e.target.value);
+                                    if (levelDepth > 0) setActiveCompNameRow(row.id);
+                                  }}
+                                  onFocus={() => {
+                                    if (levelDepth === 0) return;
+                                    setActiveCompNameRow(row.id);
+                                    const el = document.getElementById(`compname-input-${row.id}`);
+                                    if (el) {
+                                      const rect = el.getBoundingClientRect();
+                                      const dropdownHeight = 400;
+                                      const spaceBelow = window.innerHeight - rect.bottom;
+                                      const top = spaceBelow < dropdownHeight
+                                        ? rect.top + window.scrollY - dropdownHeight
+                                        : rect.bottom + window.scrollY;
+                                      setCompNameDropdownStyle({
+                                        top,
+                                        left: rect.left + window.scrollX,
+                                        minWidth: Math.max(rect.width, 240)
+                                      });
+                                    }
+                                  }}
+                                  onBlur={() => {
+                                    if (levelDepth === 0) return;
+                                    setTimeout(() => {
+                                      if (selectingCompNameRef.current) return;
+                                      const match = effectiveSuggestions.find(s => s.toLowerCase() === (row.compName || '').trim().toLowerCase());
+                                      if (match) {
+                                        const meta = detailMetaMap[match] || {};
+                                        updateBomRow(row.id, 'compName', match);
+                                        updateBomRow(row.id, 'unit', meta.unit || row.unit || 'Cái');
+                                        updateBomRow(row.id, 'material', meta.material || row.material || 'Gỗ / MDF');
+                                        updateBomRow(row.id, 'stageFrom', meta.input_stage || row.stageFrom || 'Tạo phôi');
+                                        updateBomRow(row.id, 'stageTo', meta.output_stage || row.stageTo || 'Đóng gói');
+                                        if (meta.length != null) updateBomRow(row.id, 'length', parseFloat(meta.length) || 0);
+                                        if (meta.width != null) updateBomRow(row.id, 'width', parseFloat(meta.width) || 0);
+                                        if (meta.height != null) updateBomRow(row.id, 'height', parseFloat(meta.height) || 0);
+                                        if (meta.volume != null) updateBomRow(row.id, 'volume', parseFloat(meta.volume) || 0);
+                                      } else {
+                                        updateBomRow(row.id, 'compName', '');
+                                      }
+                                      setActiveCompNameRow(null);
+                                    }, 150);
+                                  }}
+                                  placeholder="Tên thành phẩm..."
+                                  style={{
+                                    width: '100%',
+                                    padding: '4px 6px',
+                                    border: '1px solid #E5E7EB',
+                                    borderRadius: '4px',
+                                    fontSize: '0.8rem',
+                                    fontWeight: levelDepth === 0 ? '700' : '400',
+                                    color: levelDepth === 0 ? '#5D3B32' : '#1F2937'
+                                  }}
+                                />
+                                {activeCompNameRow === row.id && levelDepth > 0 && (() => {
+                                  const query = (row.compName || '').toLowerCase().trim();
+                                  const filtered = query
+                                    ? effectiveSuggestions.filter(s => s.toLowerCase().includes(query)).slice(0, 100)
+                                    : effectiveSuggestions.slice(0, 100);
+                                  if (filtered.length === 0) return null;
+                                  return (
+                                    <div style={{
+                                      position: 'fixed', top: compNameDropdownStyle.top, left: compNameDropdownStyle.left,
+                                      minWidth: compNameDropdownStyle.minWidth, width: 'max-content', whiteSpace: 'nowrap',
+                                      backgroundColor: '#FFFFFF', border: '1.5px solid #EADCC9', borderRadius: '8px',
+                                      boxShadow: '0 8px 16px rgba(45, 26, 18, 0.15)', maxHeight: '400px', overflowY: 'auto', zIndex: 9999
+                                    }}>
+                                      {filtered.map((item, idx) => (
+                                        <div
+                                          key={idx}
+                                          onMouseDown={() => {
+                                            selectingCompNameRef.current = true;
+                                            const meta = detailMetaMap[item] || {};
+                                            updateBomRow(row.id, 'compName', item);
+                                            updateBomRow(row.id, 'unit', meta.unit || row.unit || 'Cái');
+                                            updateBomRow(row.id, 'material', meta.material || row.material || 'Gỗ / MDF');
+                                            updateBomRow(row.id, 'stageFrom', meta.input_stage || row.stageFrom || 'Tạo phôi');
+                                            updateBomRow(row.id, 'stageTo', meta.output_stage || row.stageTo || 'Đóng gói');
+                                            if (meta.length != null) updateBomRow(row.id, 'length', parseFloat(meta.length) || 0);
+                                            if (meta.width != null) updateBomRow(row.id, 'width', parseFloat(meta.width) || 0);
+                                            if (meta.height != null) updateBomRow(row.id, 'height', parseFloat(meta.height) || 0);
+                                            if (meta.volume != null) updateBomRow(row.id, 'volume', parseFloat(meta.volume) || 0);
+                                            setActiveCompNameRow(null);
+                                            setTimeout(() => { selectingCompNameRef.current = false; }, 300);
+                                          }}
+                                          style={{
+                                            padding: '8px 12px', fontSize: '0.82rem', fontWeight: '600', color: '#2D1A12',
+                                            cursor: 'pointer', borderBottom: idx < filtered.length - 1 ? '1px solid #F1F5F9' : 'none'
+                                          }}
+                                          onMouseEnter={(e) => e.target.style.backgroundColor = '#FAF6F0'}
+                                          onMouseLeave={(e) => e.target.style.backgroundColor = '#FFFFFF'}
+                                        >
+                                          {item}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  );
+                                })()}
+                              </div>
                             </div>
                           </td>
 
@@ -1368,7 +1678,7 @@ const ProductCreateView = () => {
                             />
                           </td>
 
-                          {/* Kích thước D-R-C */}
+                          {/* Quy cách (mm) */}
                           <td style={{ padding: '8px' }}>
                             <div style={{ display: 'flex', gap: '2px' }}>
                               <input
@@ -1395,7 +1705,7 @@ const ProductCreateView = () => {
                             </div>
                           </td>
 
-                          {/* Thể tích / Hao hụt */}
+                          {/* Khối lượng (m3) */}
                           <td style={{ padding: '8px' }}>
                             <input
                               type="text"
@@ -1422,7 +1732,7 @@ const ProductCreateView = () => {
                                 type="button"
                                 onClick={() => handleAddSubBomRow(row)}
                                 style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#5D3B32', padding: '3px' }}
-                                title="Thêm linh kiện con"
+                                title="Thêm chi tiết con"
                               >
                                 <Plus size={15} />
                               </button>
@@ -1442,18 +1752,16 @@ const ProductCreateView = () => {
                   </tbody>
                 </table>
               </div>
-
               <div style={{ padding: '12px 16px', backgroundColor: '#FFFCF9', borderTop: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: '#6B7280' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <AlertCircle size={14} /> Có thể bấm dán dữ liệu từ file Excel (Copy từ cột STT đến Ghi chú)
                 </span>
-                <span style={{ fontWeight: '700', color: '#5D3B32' }}>Tổng số dòng linh kiện: {bomRows.length}</span>
+                <span style={{ fontWeight: '700', color: '#5D3B32' }}>Tổng số dòng thành phẩm: {bomRows.length}</span>
               </div>
             </div>
 
           </div>
         ) : activeTab === 'process' ? (
-          /* TAB 2: QUY TRÌNH THỰC HIỆN - SƠ ĐỒ CHUẨN ĐỘNG THEO BOM */
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {/* Khung sơ đồ quy trình dạng ngang */}
             <div style={{
@@ -1510,7 +1818,7 @@ const ProductCreateView = () => {
               </div>
             </div>
 
-            {/* Bảng linh kiện theo công đoạn được chọn */}
+            {/* Bảng chi tiết theo công đoạn được chọn */}
             <div style={{
               backgroundColor: '#FFFFFF',
               borderRadius: '12px',
@@ -1534,8 +1842,8 @@ const ProductCreateView = () => {
                       <th style={{ padding: '10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700', backgroundColor: '#6D4C3D' }}>Loại</th>
                       <th style={{ padding: '10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700', backgroundColor: '#6D4C3D' }}>Công đoạn giao</th>
                       <th style={{ padding: '10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700', backgroundColor: '#6D4C3D' }}>Công đoạn nhận</th>
-                      <th style={{ padding: '10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700', backgroundColor: '#6D4C3D' }}>Mã linh kiện</th>
-                      <th style={{ padding: '10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700', backgroundColor: '#6D4C3D' }}>Tên linh kiện</th>
+                      <th style={{ padding: '10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700', backgroundColor: '#6D4C3D' }}>Mã thành phẩm</th>
+                      <th style={{ padding: '10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700', backgroundColor: '#6D4C3D' }}>Tên thành phẩm</th>
                       <th style={{ padding: '10px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700', backgroundColor: '#6D4C3D' }}>Số lượng</th>
                       <th style={{ padding: '10px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700', backgroundColor: '#6D4C3D' }}>Đơn vị</th>
                       <th style={{ padding: '10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700', backgroundColor: '#6D4C3D' }}>Vật liệu</th>
@@ -1549,7 +1857,7 @@ const ProductCreateView = () => {
                         return (
                           <tr>
                             <td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: '#94A3B8', fontWeight: '600' }}>
-                              Không có linh kiện nào trong công đoạn {activeStage}
+                              Không có chi tiết nào trong công đoạn {activeStage}
                             </td>
                           </tr>
                         );
@@ -1596,7 +1904,7 @@ const ProductCreateView = () => {
             </div>
 
             <p style={{ fontSize: '0.83rem', color: '#4B5563', marginBottom: '12px' }}>
-              Sao chép các dòng trong Excel (Cột STT, Tên linh kiện, ĐVT, Kích thước D-R-C, CĐ Vào, CĐ Ra) rồi dán vào ô bên dưới:
+              Sao chép các dòng trong Excel (Cột STT, Tên thành phẩm, Đơn vị, Quy cách (mm), Công đoạn giao, Công đoạn nhận) rồi dán vào ô bên dưới:
             </p>
 
             <textarea
@@ -1623,6 +1931,17 @@ const ProductCreateView = () => {
       {/* CONFIG MODAL */}
       {showConfigModal && (
         <ConfigInfoModal onClose={() => setShowConfigModal(false)} />
+      )}
+
+      {/* ADD COMPONENT MODAL */}
+      {showAddComponentModal && (
+        <AddComponentModal
+          mode="create"
+          product={formData}
+          bomRows={bomRows}
+          onClose={() => setShowAddComponentModal(false)}
+          onSuccess={handleAddComponentSuccess}
+        />
       )}
     </div>
   );

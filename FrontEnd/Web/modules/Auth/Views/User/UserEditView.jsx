@@ -50,6 +50,7 @@ const UserEdit = ({ isProfile = false }) => {
     phone: '',
     password: '', 
     status: 'Đang sử dụng',
+    is_mobile_allowed: true,
     role_id: '',
     permission_id: '',
     stage_ids: [],
@@ -197,6 +198,7 @@ const UserEdit = ({ isProfile = false }) => {
           phone: userData.phone || '',
           password: '', 
           status: userData.status || 'Đang sử dụng',
+          is_mobile_allowed: userData.is_mobile_allowed !== undefined ? userData.is_mobile_allowed : true,
           role_id: userData.role_id || '',
           permission_id: userData.permission_id || '',
           stage_ids: userData.stage_ids || [],
@@ -374,6 +376,14 @@ const UserEdit = ({ isProfile = false }) => {
     setFormData(prev => ({
       ...prev,
       status: prev.status === 'Đang sử dụng' ? 'Dừng hoạt động' : 'Đang sử dụng'
+    }));
+    setIsDirty(true);
+  };
+
+  const toggleMobileAccess = () => {
+    setFormData(prev => ({
+      ...prev,
+      is_mobile_allowed: !prev.is_mobile_allowed
     }));
     setIsDirty(true);
   };
@@ -708,6 +718,7 @@ const UserEdit = ({ isProfile = false }) => {
         phone: formData.phone && formData.phone.trim() ? formData.phone.trim() : null,
         status: formData.status,
         is_active: formData.status === 'Đang sử dụng',
+        is_mobile_allowed: formData.is_mobile_allowed,
         permission_level: isProductionOrQC ? null : (formData.permission_level || null)
       };
 
@@ -936,6 +947,18 @@ const UserEdit = ({ isProfile = false }) => {
                     <span className="status-indicator-dot"></span>
                     {formData.status === 'Đang sử dụng' ? 'Kích hoạt' : 'Tạm dừng hoạt động'}
                   </button>
+
+                  {!isProfile && (
+                    <button 
+                      type="button" 
+                      className={`btn-action-custom btn-status ${formData.is_mobile_allowed ? 'active' : 'suspended'}`}
+                      onClick={toggleMobileAccess}
+                      style={{ marginTop: '8px', backgroundColor: formData.is_mobile_allowed ? '#EFF6FF' : '#FEF2F2', color: formData.is_mobile_allowed ? '#1D4ED8' : '#DC2626', borderColor: formData.is_mobile_allowed ? '#BFDBFE' : '#FCA5A5' }}
+                    >
+                      <span className="status-indicator-dot" style={{ backgroundColor: formData.is_mobile_allowed ? '#2563EB' : '#DC2626' }}></span>
+                      {formData.is_mobile_allowed ? 'Cho phép vào Mobile' : 'Chặn vào Mobile'}
+                    </button>
+                  )}
 
                   {isProfile && (
                     <button 

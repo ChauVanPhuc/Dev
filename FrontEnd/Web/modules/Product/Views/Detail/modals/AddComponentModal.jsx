@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { X } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 
@@ -34,17 +34,17 @@ const greyInputStyle = {
   border: '1.5px solid #D9C5B2',
 };
 
-const AddComponentModal = ({ productId, product, bomRows = [], parentId = null, onClose, onSuccess }) => {
+const AddComponentModal = ({ productId, product, bomRows = [], parentId = null, onClose, onSuccess, mode = 'detail' }) => {
   // Option lists
+  const root = bomRows[0];
   const parentOptions = [
-    { id: '', name: product?.name || 'Sven Display Cabinet', stt: '1' },
-    ...bomRows
-      .filter(r => r.stt.split('.').length <= 2)
-      .map(r => ({ id: r.id || r.compCode, name: r.compName, stt: r.stt }))
+    ...(root ? [{ id: String(root.id || ''), name: `Sản phẩm (STT gốc)${root.compName ? ' - ' + root.compName : ''}`, stt: root.stt || '1' }] : []),
+    ...bomRows.slice(1)
+      .filter(r => r.stt)
+      .map(r => ({ id: String(r.id || r.compCode), name: `${r.stt} - ${r.compName || 'Không tên'}`, stt: r.stt }))
   ];
 
-  const typeOptions = ['Chân', 'Cụm', 'Ván panel', 'Khung', 'Hộc kéo', 'Mặt', 'Phụ kiện'];
-  const nameOptions = ['Chân', 'Ván panel', 'Cụm hông dưới', 'Cánh tủ', 'Khung đỡ', 'Đế tủ'];
+  const [loaiOptions, setLoaiOptions] = useState([{ value: '', label: 'Sản phẩm (STT gốc)' }]);
   const stageOptions = [
     'Tạo phôi',
     'Định hình',
@@ -79,14 +79,15 @@ const AddComponentModal = ({ productId, product, bomRows = [], parentId = null, 
     'NM3 - Đóng gói 3'
   ];
   const materialOptions = ['MDF', 'Gỗ Sồi', 'Gỗ thông', 'HDF', 'Ván ép', 'Kim loại'];
-  const colorOptions = ['Tự nhiên', 'Màu WOA', 'Màu sồi', 'Trắng', 'Đen'];
+  const [colorOptions, setColorOptions] = useState(['Tự nhiên', 'Màu WOA', 'Màu sồi', 'Trắng', 'Đen']);
 
   // Form states
-  const [selectedParent, setSelectedParent] = useState(parentId || '');
+  const [selectedParent, setSelectedParent] = useState(parentId || (bomRows[0] ? String(bomRows[0].id) : ''));
   const [quantity, setQuantity] = useState(1);
   const [unit, setUnit] = useState('Cái');
-  const [type, setType] = useState('Chân');
-  const [detailName, setDetailName] = useState('Chân');
+  const [selectedLoai, setSelectedLoai] = useState('');
+  const [type, setType] = useState('');
+  const [detailName, setDetailName] = useState('');
   const [inputStage, setInputStage] = useState('Định hình');
   const [outputStage, setOutputStage] = useState('Lắp ráp');
   const [length, setLength] = useState('12');
@@ -97,6 +98,77 @@ const AddComponentModal = ({ productId, product, bomRows = [], parentId = null, 
   const [color, setColor] = useState('Tự nhiên');
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
+  const [detailSuggestions, setDetailSuggestions] = useState([]);
+  const [detailMetaMap, setDetailMetaMap] = useState({});
+  const [loaiSearch, setLoaiSearch] = useState('');
+  const [showLoaiMenu, setShowLoaiMenu] = useState(false);
+  const [showNameMenu, setShowNameMenu] = useState(false);
+  const selectingLoaiRef = useRef(false);
+  const selectingNameRef = useRef(false);
+
+  // Load danh sách màu sắc từ paint_color_samples
+  useEffect(() => {
+    const loadColors = async () => {
+      try {
+        const res = await api.get('/master-products/paint-color-suggestions').catch(() => null);
+        if (res && res.color_names && res.color_names.length > 0) {
+          setColorOptions(res.color_names);
+        }
+      } catch (err) {
+        console.warn('Lỗi lấy bảng màu:', err);
+      }
+    };
+    loadColors();
+  }, []);
+
+  // Load danh sách Loại từ master_product_details (các tên chi tiết đồng thời là parent)
+  useEffect(() => {
+    const loadLoai = async () => {
+      try {
+        const res = await api.get('/master-products/detail-suggestions').catch(() => null);
+        if (res) {
+          const detailSet = new Set(res.detail_names || []);
+          const parents = (res.parent_names || []).filter(n => detailSet.has(n));
+          setLoaiOptions([
+            { value: '', label: 'Sản phẩm (STT gốc)' },
+            ...parents.map(n => ({ value: n, label: n }))
+          ]);
+        }
+      } catch (err) {
+        console.warn('Lỗi lấy danh sách loại:', err);
+      }
+    };
+    loadLoai();
+  }, []);
+
+  // Fetch tên chi tiết con theo Loại đã chọn
+  useEffect(() => {
+    const fetchDetails = async () => {
+      const parentName = selectedLoai || '';
+      const url = parentName
+        ? `/master-products/detail-suggestions?parent_name=${encodeURIComponent(parentName)}`
+        : '/master-products/detail-suggestions';
+      try {
+        const res = await api.get(url).catch(() => null);
+        if (res) {
+          setDetailSuggestions(res.detail_names || []);
+          setDetailMetaMap(res.detail_meta_map || {});
+        }
+      } catch (err) {
+        console.warn('Lỗi lấy tên chi tiết con:', err);
+      }
+    };
+    fetchDetails();
+  }, [selectedLoai]);
+
+  // type của dòng BOM mới: theo Loại hoặc theo Tên chi tiết nếu Loại là gốc
+  useEffect(() => {
+    if (selectedLoai === '') {
+      setType(detailName || '');
+    } else {
+      setType(selectedLoai);
+    }
+  }, [selectedLoai, detailName]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -105,28 +177,58 @@ const AddComponentModal = ({ productId, product, bomRows = [], parentId = null, 
     try {
       setLoading(true);
       const specStr = `${length || 0}*${width || 0}*${height || 0}`;
-      
-      // Auto-generate target parent STT
-      const parentObj = parentOptions.find(o => o.id === selectedParent);
-      const parentStt = parentObj ? parentObj.stt : '1';
 
-      await api.post(`/master-products/${productId}/bom-details`, {
-        parent_id: selectedParent || null,
-        name: detailName,
-        sku: `ADV691.${parentStt}.${bomRows.length + 1}`,
-        quantity: parseFloat(quantity),
-        unit,
-        component_type: type,
-        input_stage: inputStage,
-        output_stage: outputStage,
-        specification: specStr,
-        material,
-        color,
-        volume: parseFloat(volume),
-        description: note
-      });
+      const parentObj = parentOptions.find(o => String(o.id) === String(selectedParent));
+      const parentStt = parentObj ? parentObj.stt : '';
 
-      onSuccess();
+      if (mode === 'create') {
+        onSuccess({
+          parentId: selectedParent || null,
+          parentStt,
+          quantity: parseFloat(quantity),
+          unit,
+          type,
+          detailName,
+          inputStage,
+          outputStage,
+          length,
+          width,
+          height,
+          volume: parseFloat(volume),
+          material,
+          color,
+          note,
+          specStr
+        });
+      } else {
+        let sku;
+        if (!parentStt) {
+          const rootCount = bomRows.filter(r => !r.stt.includes('.')).length;
+          sku = `ADV691.${rootCount + 1}`;
+        } else {
+          const siblings = bomRows.filter(r => r.stt.startsWith(`${parentStt}.`) && r.stt.split('.').length === parentStt.split('.').length + 1);
+          const nextSubNum = siblings.length + 1;
+          sku = `ADV691.${parentStt}.${nextSubNum}`;
+        }
+
+        await api.post(`/master-products/${productId}/bom-details`, {
+          parent_id: selectedParent || null,
+          name: detailName,
+          sku,
+          quantity: parseFloat(quantity),
+          unit,
+          component_type: type,
+          input_stage: inputStage,
+          output_stage: outputStage,
+          specification: specStr,
+          material,
+          color,
+          volume: parseFloat(volume),
+          description: note
+        });
+
+        onSuccess();
+      }
       onClose();
     } catch (err) {
       console.error('Lỗi khi thêm thành phần mới:', err);
@@ -214,22 +316,161 @@ const AddComponentModal = ({ productId, product, bomRows = [], parentId = null, 
             </div>
 
             {/* ROW 2: Loại, Tên chi tiết */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 3fr', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
                 <label style={labelStyle}>Loại *</label>
-                <select value={type} onChange={e => setType(e.target.value)} style={whiteInputStyle}>
-                  {typeOptions.map((opt, i) => (
-                    <option key={i} value={opt}>{opt}</option>
-                  ))}
-                </select>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    placeholder="Nhấp chọn hoặc gõ loại..."
+                    value={loaiSearch}
+                    onFocus={() => setShowLoaiMenu(true)}
+                    onChange={(e) => {
+                      setLoaiSearch(e.target.value);
+                      setSelectedLoai('');
+                      setShowLoaiMenu(true);
+                    }}
+                    onBlur={() => {
+                      setTimeout(() => {
+                        if (selectingLoaiRef.current) return;
+                        const exact = loaiOptions.find(o => o.value === loaiSearch);
+                        if (exact) {
+                          setSelectedLoai(exact.value);
+                        } else {
+                          setLoaiSearch('');
+                          setSelectedLoai('');
+                        }
+                      }, 150);
+                    }}
+                    style={whiteInputStyle}
+                  />
+                  {showLoaiMenu && (() => {
+                    const query = (loaiSearch || '').toLowerCase().trim();
+                    const filtered = query
+                      ? loaiOptions.filter(o => o.label.toLowerCase().includes(query) || o.value.toLowerCase().includes(query)).slice(0, 100)
+                      : loaiOptions.slice(0, 100);
+                    if (filtered.length === 0) return null;
+                    return (
+                      <div style={{
+                        position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px',
+                        backgroundColor: '#FFFFFF', border: '1.5px solid #EADCC9', borderRadius: '8px',
+                        boxShadow: '0 8px 16px rgba(45, 26, 18, 0.15)', maxHeight: '400px', overflowY: 'auto', zIndex: 3000
+                      }}>
+                        {filtered.map((opt, idx) => (
+                          <div
+                            key={idx}
+                            onMouseDown={() => {
+                              selectingLoaiRef.current = true;
+                              setLoaiSearch(opt.label);
+                              setSelectedLoai(opt.value);
+                              setShowLoaiMenu(false);
+                              setTimeout(() => { selectingLoaiRef.current = false; }, 300);
+                            }}
+                            style={{
+                              padding: '8px 12px', fontSize: '0.82rem', fontWeight: '600', color: '#2D1A12',
+                              cursor: 'pointer', borderBottom: idx < filtered.length - 1 ? '1px solid #F1F5F9' : 'none'
+                            }}
+                            onMouseEnter={(e) => e.target.style.backgroundColor = '#FAF6F0'}
+                            onMouseLeave={(e) => e.target.style.backgroundColor = '#FFFFFF'}
+                          >
+                            {opt.label}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
-              <div>
+              <div style={{ position: 'relative' }}>
                 <label style={labelStyle}>Tên chi tiết *</label>
-                <select value={detailName} onChange={e => setDetailName(e.target.value)} style={whiteInputStyle}>
-                  {nameOptions.map((opt, i) => (
-                    <option key={i} value={opt}>{opt}</option>
-                  ))}
-                </select>
+                <input
+                  type="text"
+                  required
+                  placeholder="Nhấp chọn hoặc gõ tên chi tiết..."
+                  value={detailName}
+                  onFocus={() => setShowNameMenu(true)}
+                  onChange={(e) => {
+                    setDetailName(e.target.value);
+                    setShowNameMenu(true);
+                  }}
+                  onBlur={() => {
+                    setTimeout(() => {
+                      if (selectingNameRef.current) return;
+                      const match = detailSuggestions.find(s => s.toLowerCase() === detailName.trim().toLowerCase());
+                      if (match) {
+                        const meta = detailMetaMap[match] || {};
+                        setDetailName(match);
+                        setQuantity(meta.quantity || 1);
+                        setUnit(meta.unit || 'Cái');
+                        setInputStage(meta.input_stage || 'Định hình');
+                        setOutputStage(meta.output_stage || 'Lắp ráp');
+                        setMaterial(meta.material || 'MDF');
+                        setLength(String(meta.length || '12'));
+                        setWidth(String(meta.width || '12'));
+                        setHeight(String(meta.height || '15'));
+                        setVolume(String(meta.volume || '5'));
+                      } else {
+                        setDetailName('');
+                        setQuantity(1);
+                        setUnit('Cái');
+                        setInputStage('Định hình');
+                        setOutputStage('Lắp ráp');
+                        setMaterial('MDF');
+                        setLength('12');
+                        setWidth('12');
+                        setHeight('15');
+                        setVolume('5');
+                      }
+                    }, 150);
+                  }}
+                  style={whiteInputStyle}
+                />
+                {showNameMenu && (
+                  (() => {
+                    const query = (detailName || '').toLowerCase().trim();
+                    const filtered = query
+                      ? detailSuggestions.filter(s => s.toLowerCase().includes(query)).slice(0, 100)
+                      : detailSuggestions.slice(0, 100);
+                    if (filtered.length === 0) return null;
+                    return (
+                      <div style={{
+                        position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px',
+                        backgroundColor: '#FFFFFF', border: '1.5px solid #EADCC9', borderRadius: '8px',
+                        boxShadow: '0 8px 16px rgba(45, 26, 18, 0.15)', maxHeight: '400px', overflowY: 'auto', zIndex: 3000
+                      }}>
+                        {filtered.map((item, idx) => (
+                          <div
+                            key={idx}
+                            onMouseDown={() => {
+                              selectingNameRef.current = true;
+                              const meta = detailMetaMap[item] || {};
+                              setDetailName(item);
+                              setQuantity(meta.quantity || 1);
+                              setUnit(meta.unit || 'Cái');
+                              setInputStage(meta.input_stage || 'Định hình');
+                              setOutputStage(meta.output_stage || 'Lắp ráp');
+                              setMaterial(meta.material || 'MDF');
+                              setLength(String(meta.length || '12'));
+                              setWidth(String(meta.width || '12'));
+                              setHeight(String(meta.height || '15'));
+                              setVolume(String(meta.volume || '5'));
+                              setShowNameMenu(false);
+                              setTimeout(() => { selectingNameRef.current = false; }, 300);
+                            }}
+                            style={{
+                              padding: '8px 12px', fontSize: '0.82rem', fontWeight: '600', color: '#2D1A12',
+                              cursor: 'pointer', borderBottom: idx < filtered.length - 1 ? '1px solid #F1F5F9' : 'none'
+                            }}
+                            onMouseEnter={(e) => e.target.style.backgroundColor = '#FAF6F0'}
+                            onMouseLeave={(e) => e.target.style.backgroundColor = '#FFFFFF'}
+                          >
+                            {item}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()
+                )}
               </div>
             </div>
 

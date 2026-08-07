@@ -30,56 +30,9 @@
 
 /* ── Page wrapper ───────────────────────────────────────── */
 .pv2-page {
-  background: #fbf6ee;
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.pv2-page--fixed-layout {
-  background: #fbf6ee;
-  flex: 1;
-  min-height: 0;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  box-sizing: border-box;
-}
-
-.pv2-fixed-top-section {
-  flex-shrink: 0;
-  background: #fbf6ee;
-  z-index: 20;
-}
-
-.pv2-scrollable-list-section {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 4px 0 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  -webkit-overflow-scrolling: touch;
-}
-
-.pv2-scrollable-list-section::-webkit-scrollbar {
-  width: 4px;
-}
-
-.pv2-scrollable-list-section::-webkit-scrollbar-thumb {
-  background: #c8beb2;
-  border-radius: 4px;
-}
-
-.pv2-fixed-bottom-section {
-  flex-shrink: 0;
-  margin-top: auto;
-  background: #fbf6ee;
-  padding: 8px 14px 12px;
-  z-index: 20;
+  background: var(--pv2-bg);
+  min-height: 100vh;
+  padding-bottom: 80px;
 }
 
 .pv2-page--form {
@@ -138,11 +91,10 @@
 
 /* ── List / Cards ───────────────────────────────────────── */
 .pv2-list {
-  padding: 0 0 10px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  flex: 1;
 }
 
 .pv2-card {
@@ -1174,7 +1126,46 @@
   background: #361a0a !important;
 }
 
-/* ── Extra CL09 Components ───────────────────────────────── */
+/* ── Mode selector cards (CL09 hub) ─────────────────────── */
+.pv2-mode-card {
+  width: 100%;
+  text-align: left;
+  background: #ffffff;
+  border: 1.5px solid #c8beb2;
+  border-radius: 10px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pv2-mode-card:hover {
+  background: #f9f0e8;
+  border-color: #4a240e;
+}
+
+.pv2-mode-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #4a240e;
+  margin-bottom: 4px;
+}
+
+.pv2-mode-desc {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* ── Link underline for QA answer toggle ────────────────── */
+.pv2-link-underline {
+  background: none;
+  border: none;
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
 .pv2-btn-dark-pill {
   background: #4a240e !important;
   color: #ffffff !important;
@@ -1401,17 +1392,22 @@
   font-weight: 600;
 }
 
-/* ── CL06 Pagination Bar (Pinned to Bottom of Mobile Container) ── */
+/* ── CL06 Pagination Bar (Fixed Bottom Match Mockup) ────── */
 .pv2-pagination-wrapper {
-  position: sticky;
+  position: fixed;
   bottom: 0;
-  z-index: 50;
-  padding: 10px 14px 14px;
-  margin-top: auto;
-  background: #fbf6ee;
+  left: 0;
+  right: 0;
+  z-index: 90;
+  padding: 8px 14px 12px;
+  background: rgba(251, 246, 238, 0.95);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .pv2-pagination-bar {
+  max-width: 480px;
+  margin: 0 auto;
   background: #ffffff;
   border: 1.5px solid #c8beb2;
   border-radius: 12px;
@@ -1419,7 +1415,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.04);
 }
 
 .pv2-page-arrow-btn {

@@ -8,8 +8,17 @@ echo.
 
 :: 1. Check Python
 echo [1/3] Checking Python installation...
-python --version >nul 2>&1
-if %errorlevel% neq 0 (
+:: Find real Python executable (bypass 0-byte Windows Store App execution aliases)
+set "PYTHON_EXE="
+for /f "delims=" %%i in ('where python 2^>nul') do (
+    if %%~zi GTR 0 (
+        if not defined PYTHON_EXE (
+            set "PYTHON_EXE=%%i"
+        )
+    )
+)
+
+if not defined PYTHON_EXE (
     echo [ERROR] Python is not installed or not in PATH!
     echo Please install Python and try again.
     echo.
@@ -22,7 +31,7 @@ echo.
 :: 2. Run Index Script
 echo [2/3] Executing Database Performance Indexes...
 if exist "BackEnd\scripts\run_indexes.py" (
-    python BackEnd\scripts\run_indexes.py
+    "%PYTHON_EXE%" BackEnd\scripts\run_indexes.py
     if %errorlevel% neq 0 (
         echo [ERROR] Failed to execute database indexes script.
         echo Please check your database settings in BackEnd\.env.

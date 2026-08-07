@@ -779,6 +779,7 @@ const UserManagement = () => {
                             <th onClick={() => handleSort('phone')} style={{ cursor: 'pointer' }}>
                               Số ĐT <SortIcon column="phone" />
                             </th>
+                            <th>Truy cập Mobile</th>
                             <th onClick={() => handleSort('status')} style={{ cursor: 'pointer' }}>
                               Trạng thái <SortIcon column="status" />
                             </th>
@@ -816,6 +817,23 @@ const UserManagement = () => {
                               <td>{user.permission_level ? <span style={{ fontWeight: '500', color: '#7B5233' }}>{user.permission_level}</span> : renderStages(user.stage_name)}</td>
                               <td>{user.username}</td>
                               <td>{user.phone || '-'}</td>
+                              <td>
+                                <span 
+                                  style={{
+                                    display: 'inline-block',
+                                    padding: '3px 10px',
+                                    borderRadius: '12px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: '700',
+                                    backgroundColor: user.is_mobile_allowed !== false ? '#EFF6FF' : '#FEF2F2',
+                                    color: user.is_mobile_allowed !== false ? '#1D4ED8' : '#DC2626',
+                                    border: `1px solid ${user.is_mobile_allowed !== false ? '#BFDBFE' : '#FCA5A5'}`,
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  {user.is_mobile_allowed !== false ? 'Cho phép' : 'Chặn'}
+                                </span>
+                              </td>
                               <td>
                                 <span 
                                   style={{

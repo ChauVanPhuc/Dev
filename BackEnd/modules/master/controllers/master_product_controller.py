@@ -821,12 +821,22 @@ def sync_bom_data_to_auxiliary_tables(db: Session):
     unique_details = {}
     unique_colors = {}
 
-    # 1. Deduplicate Product Details by name
+    # Build product lookup for root parent_name
+    product_map = {p.id: p for p in products}
+
+    # 1. Deduplicate Product Details by (master_product_id, name)
     for b in boms:
         if b.name and b.name.strip():
             name_clean = b.name.strip()
-            key = name_clean.lower()
+            prod = product_map.get(b.master_product_id)
+            key = f"{b.master_product_id}|{name_clean.lower()}"
             if key not in unique_details:
+                if b.parent and b.parent.name:
+                    parent_name = b.parent.name.strip()
+                else:
+                    p_name = prod.name if prod and prod.name else ''
+                    p_code = (getattr(prod, 'sku', None) or getattr(prod, 'product_code', None)) if prod else None
+                    parent_name = f"{p_code} - {p_name}".strip(' -') if p_code and p_name else (p_code or p_name or '')
                 unique_details[key] = {
                     'master_product_id': b.master_product_id,
                     'name': name_clean,
@@ -834,7 +844,7 @@ def sync_bom_data_to_auxiliary_tables(db: Session):
                     'unit': b.unit or 'Cái',
                     'input_stage': b.input_stage or 'Định hình',
                     'output_stage': b.output_stage or 'Lắp ráp',
-                    'parent_name': b.parent.name if (b.parent and b.parent.name) else '',
+                    'parent_name': parent_name,
                     'material': b.material or 'Gỗ'
                 }
 
@@ -902,29 +912,140 @@ def is_raw_sku_code(text: str) -> bool:
         return True
     return False
 
-def get_detail_suggestions(db: Session, detail_name: Optional[str] = None):
+def get_detail_suggestions(db: Session, detail_name: Optional[str] = None, parent_name: Optional[str] = None):
     """
     Lấy danh sách tất cả các tên chi tiết và tên thành phẩm duy nhất để hỗ trợ gợi ý autocomplete.
     Nếu có `detail_name`, chỉ lọc và trả về danh sách các Thành phẩm thực sự chứa chi tiết đó.
+    Nếu có `parent_name`, chỉ trả về các tên chi tiết con của thành phẩm đó.
     """
-    detail_names = [r[0] for r in db.query(MasterProductDetail.name).distinct().all() if r[0]]
-    bom_names = [r[0] for r in db.query(MasterBOMDetail.name).distinct().all() if r[0]]
-    all_names = sorted(list(set(detail_names + bom_names)))
+    p_clean = parent_name.strip() if parent_name else None
+
+    # Lấy tên chi tiết & meta từ master_product_details, có thể lọc theo parent_name
+    detail_query = db.query(
+        MasterProductDetail.name,
+        MasterProductDetail.quantity,
+        MasterProductDetail.unit,
+        MasterProductDetail.input_stage,
+        MasterProductDetail.output_stage,
+        MasterProductDetail.material
+    )
+    if p_clean:
+        detail_query = detail_query.filter(MasterProductDetail.parent_name.ilike(f'%{p_clean}%'))
+    detail_rows = detail_query.all()
+    detail_names = sorted(list(set([r[0] for r in detail_rows if r[0]])))
+
+    # Nếu không lọc theo parent_name, thêm tên từ BOM
+    if p_clean:
+        all_names = detail_names
+    else:
+        bom_names = [r[0] for r in db.query(MasterBOMDetail.name).distinct().all() if r[0]]
+        all_names = sorted(list(set(detail_names + bom_names)))
+
+    parent_product_map = {}
+
+    # Map tên chi tiết -> công đoạn giao/nhận để FE tự động gán
+    detail_stage_map = {}
+    for r in db.query(MasterBOMDetail.name, MasterBOMDetail.input_stage, MasterBOMDetail.output_stage).all():
+        if r[0]:
+            detail_stage_map.setdefault(r[0], {'input_stage': r[1] or '', 'output_stage': r[2] or ''})
+    for r in db.query(MasterProductDetail.name, MasterProductDetail.input_stage, MasterProductDetail.output_stage).all():
+        if r[0]:
+            detail_stage_map.setdefault(r[0], {'input_stage': r[1] or '', 'output_stage': r[2] or ''})
+
+    # Map tên chi tiết -> đơn vị, vật liệu, số lượng để FE auto-fill trong modal thêm thành phần
+    detail_meta_map = {}
+    for r in detail_rows:
+        if r[0] and r[0] not in detail_meta_map:
+            detail_meta_map[r[0]] = {
+                'quantity': r[1] if r[1] is not None else 1,
+                'unit': r[2] or 'Cái',
+                'input_stage': r[3] or '',
+                'output_stage': r[4] or '',
+                'material': r[5] or ''
+            }
+
+    # Bổ sung công đoạn, quy cách, kích thước, khối lượng từ MasterBOMDetail
+    if detail_meta_map:
+        detail_names = list(detail_meta_map.keys())
+        chunk_size = 1000
+        bom_rows = []
+        for i in range(0, len(detail_names), chunk_size):
+            chunk = detail_names[i:i + chunk_size]
+            bom_rows.extend(db.query(
+                MasterBOMDetail.name,
+                MasterBOMDetail.input_stage,
+                MasterBOMDetail.output_stage,
+                MasterBOMDetail.specification,
+                MasterBOMDetail.length,
+                MasterBOMDetail.width,
+                MasterBOMDetail.height,
+                MasterBOMDetail.weight
+            ).filter(MasterBOMDetail.name.in_(chunk)).all())
+        for r in bom_rows:
+            if not r[0] or r[0] not in detail_meta_map:
+                continue
+            meta = detail_meta_map[r[0]]
+            if r[1]: meta['input_stage'] = r[1]
+            if r[2]: meta['output_stage'] = r[2]
+            spec = r[3] or ''
+            length = r[4] if r[4] is not None else 0
+            width = r[5] if r[5] is not None else 0
+            height = r[6] if r[6] is not None else 0
+            if length and width and height:
+                meta['length'] = float(length)
+                meta['width'] = float(width)
+                meta['height'] = float(height)
+                meta['spec'] = f"{int(length)}*{int(width)}*{int(height)}"
+                meta['volume'] = round((float(length) * float(width) * float(height)) / 1_000_000_000, 6)
+            elif spec:
+                meta['spec'] = spec
+                meta['volume'] = round(float(r[7] or 0), 4)
+                if '*' in spec:
+                    try:
+                        parts = [p.strip() for p in spec.split('*')]
+                        if len(parts) >= 3:
+                            meta['length'] = float(parts[0])
+                            meta['width'] = float(parts[1])
+                            meta['height'] = float(parts[2])
+                    except ValueError:
+                        pass
 
     if detail_name and detail_name.strip():
         d_clean = detail_name.strip()
         d_parents = [r[0] for r in db.query(MasterProductDetail.parent_name).filter(MasterProductDetail.name.ilike(f"%{d_clean}%")).distinct().all() if r[0]]
-        bom_product_ids = [r[0] for r in db.query(MasterBOMDetail.master_product_id).filter(MasterBOMDetail.name.ilike(f"%{d_clean}%")).distinct().all() if r[0]]
-        
+
+        # Tìm các dòng BOM có tên khớp với chi tiết đang nhập, để lấy đúng THÀNH PHẨM CHA TRỰC TIẾP
+        # (không phải chỉ tên/mã của cả sản phẩm gốc) dựa vào parent_id trong cây BOM.
+        matched_bom_items = db.query(MasterBOMDetail).filter(MasterBOMDetail.name.ilike(f"%{d_clean}%")).all()
+
         bom_prods = []
-        if bom_product_ids:
-            prods = db.query(MasterProduct).filter(MasterProduct.id.in_(bom_product_ids)).all()
+        product_ids_without_parent = set()
+        for item in matched_bom_items:
+            if item.parent_id:
+                parent_item = db.query(MasterBOMDetail).filter(MasterBOMDetail.id == item.parent_id).first()
+                if parent_item and parent_item.name:
+                    bom_prods.append(parent_item.name)
+                    parent_product_map.setdefault(parent_item.name, item.master_product_id)
+                    continue
+            # Không có cha trong cây BOM -> cha chính là sản phẩm gốc (master_product)
+            if item.master_product_id:
+                product_ids_without_parent.add(item.master_product_id)
+
+        if product_ids_without_parent:
+            prods = db.query(MasterProduct).filter(MasterProduct.id.in_(product_ids_without_parent)).all()
             for p in prods:
                 p_code = getattr(p, 'sku', None) or getattr(p, 'product_code', None)
-                if p.name: bom_prods.append(p.name)
-                if p_code: bom_prods.append(p_code)
-                if p_code and p.name: bom_prods.append(f"{p_code} - {p.name}")
-                
+                if p.name:
+                    bom_prods.append(p.name)
+                    parent_product_map.setdefault(p.name, p.id)
+                if p_code:
+                    bom_prods.append(p_code)
+                    parent_product_map.setdefault(p_code, p.id)
+                if p_code and p.name:
+                    combo = f"{p_code} - {p.name}"
+                    bom_prods.append(combo)
+                    parent_product_map.setdefault(combo, p.id)
+
         parent_suggestions = sorted(list(set([p for p in (d_parents + bom_prods) if p])))
     else:
         parent_names = [r[0] for r in db.query(MasterProductDetail.parent_name).distinct().all() if r[0]]
@@ -934,11 +1055,18 @@ def get_detail_suggestions(db: Session, detail_name: Optional[str] = None):
         prod_combos = []
         for r in all_prods:
             p_code = getattr(r, 'sku', None) or getattr(r, 'product_code', None)
-            if p_code: prod_skus.append(p_code)
-            if p_code and r.name: prod_combos.append(f"{p_code} - {r.name}")
+            if r.name:
+                parent_product_map.setdefault(r.name, r.id)
+            if p_code:
+                prod_skus.append(p_code)
+                parent_product_map.setdefault(p_code, r.id)
+            if p_code and r.name:
+                combo = f"{p_code} - {r.name}"
+                prod_combos.append(combo)
+                parent_product_map.setdefault(combo, r.id)
         parent_suggestions = sorted(list(set([p for p in (parent_names + prod_names + prod_skus + prod_combos) if p])))
 
-    return {"detail_names": all_names, "parent_names": parent_suggestions}
+    return {"detail_names": all_names, "parent_names": parent_suggestions, "parent_product_map": parent_product_map, "detail_stage_map": detail_stage_map, "detail_meta_map": detail_meta_map}
 
 def get_paint_color_suggestions(db: Session):
     """

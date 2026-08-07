@@ -10,15 +10,12 @@ const ManufactureHandover = () => {
   }, []);
 
   const stats = [
-    { title: 'CHỜ BÀN GIAO', value: '45 Lệnh', color: '#FFF3E0' },
-    { title: 'ĐÃ BÀN GIAO', value: '180 Lệnh', color: '#E8F5E9' },
-    { title: 'YÊU CẦU GẤP', value: '5 Lệnh', color: '#FFEBEE' },
+    { title: 'CHỜ BÀN GIAO', value: '0 Lệnh', color: '#FFF3E0' },
+    { title: 'ĐÃ BÀN GIAO', value: '0 Lệnh', color: '#E8F5E9' },
+    { title: 'YÊU CẦU GẤP', value: '0 Lệnh', color: '#FFEBEE' },
   ];
 
-  const handoverData = [
-    { id: 1, code: 'BG-001', product: 'Tủ áo 4 cánh', qty: 5, date: '2026-03-25', status: 'Chờ duyệt', color: '#FFA726' },
-    { id: 2, code: 'BG-002', product: 'Bàn ăn gỗ sồi', qty: 2, date: '2026-03-24', status: 'Đã giao', color: '#66BB6A' },
-  ];
+  const handoverData = [];
 
   return (
     <div className="manufacture-plan-container">

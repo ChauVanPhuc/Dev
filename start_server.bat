@@ -28,6 +28,22 @@ echo   QuickEdit has been disabled to prevent freezing.
 echo ======================================================
 echo.
 
+:: Find real Python executable (bypass 0-byte Windows Store App execution aliases)
+set "PYTHON_EXE="
+for /f "delims=" %%i in ('where python 2^>nul') do (
+    if %%~zi GTR 0 (
+        if not defined PYTHON_EXE (
+            set "PYTHON_EXE=%%i"
+        )
+    )
+)
+
+if not defined PYTHON_EXE (
+    echo [ERROR] Python not found or not in PATH.
+    pause
+    exit /b 1
+)
+
 :: Khoi dong Backend Server
 cd /d %~dp0BackEnd
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+"%PYTHON_EXE%" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload

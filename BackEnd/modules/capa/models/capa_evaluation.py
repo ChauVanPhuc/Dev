@@ -20,4 +20,5 @@ class CAPAEvaluation(Base):
     images = Column(NVARCHAR(4000), nullable=True) # JSON array chứa các hình ảnh kiểm tra
 
     # Quan hệ liên kết
-    occurrence = relationship("CAPAOccurrence")
+    occurrence = relationship("CAPAOccurrence", back_populates="evaluations")
+

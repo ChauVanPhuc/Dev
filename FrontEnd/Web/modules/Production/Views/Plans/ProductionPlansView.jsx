@@ -22,12 +22,6 @@ const ProductionPlansView = () => {
   const [pageSize, setPageSize] = useState(10);
   const [loading, setLoading] = useState(true);
 
-  const initialPlans = [
-    { id: 1, code: 'KH-2026-0801', name: 'Kế hoạch sản xuất tháng 8/2026 - Lô xuất khẩu Mỹ', order: 'DH-EX-992', quantity: 500, factory: 'Nhà máy 1', progress: 70, status: 'Đang chạy' },
-    { id: 2, code: 'KH-2026-0802', name: 'Kế hoạch nội thất khách sạn Pullman Hải Phòng', order: 'DH-PM-104', quantity: 240, factory: 'Nhà máy 2', progress: 45, status: 'Đang chạy' },
-    { id: 3, code: 'KH-2026-0803', name: 'Kế hoạch bổ sung tồn kho Tủ bếp Q3', order: 'DH-TK-005', quantity: 150, factory: 'Nhà máy 1', progress: 90, status: 'Sắp hoàn thành' },
-  ];
-
   const [plans, setPlans] = useState([]);
 
   const fetchPlans = async () => {
@@ -47,11 +41,11 @@ const ProductionPlansView = () => {
         }));
         setPlans(mapped);
       } else {
-        setPlans(initialPlans);
+        setPlans([]);
       }
     } catch (err) {
-      console.warn('Dùng dữ liệu khởi tạo khi chưa kết nối API:', err);
-      setPlans(initialPlans);
+      console.warn('Không lấy được dữ liệu kế hoạch từ API:', err);
+      setPlans([]);
     } finally {
       setLoading(false);
     }

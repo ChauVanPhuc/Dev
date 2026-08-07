@@ -51,8 +51,16 @@ const UserCreate = () => {
     permission_id: '',
     stage_ids: [], // danh sách ID công đoạn được chọn
     permission_level: '', // Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
+    is_mobile_allowed: true, // Quyền truy cập ứng dụng Mobile
     status: 'Đang sử dụng'
   });
+
+  const toggleMobileAccess = () => {
+    setFormData(prev => ({
+      ...prev,
+      is_mobile_allowed: !prev.is_mobile_allowed
+    }));
+  };
 
   const toggleStatus = () => {
     setFormData(prev => ({
@@ -657,7 +665,8 @@ const UserCreate = () => {
         full_name: (formData.full_name && formData.full_name.trim()) ? formData.full_name.trim() : null,
         email: (formData.email && formData.email.trim()) ? formData.email.trim() : null,
         phone: (formData.phone && formData.phone.trim()) ? formData.phone.trim() : null,
-        is_active: formData.status === 'Đang sử dụng'
+        is_active: formData.status === 'Đang sử dụng',
+        is_mobile_allowed: formData.is_mobile_allowed
       };
 
       if (!dataToSend.phone) delete dataToSend.phone;
@@ -806,6 +815,16 @@ const UserCreate = () => {
                   >
                     <span className="status-indicator-dot"></span>
                     {formData.status === 'Đang sử dụng' ? 'Kích hoạt' : 'Tạm dừng hoạt động'}
+                  </button>
+
+                  <button 
+                    type="button" 
+                    className={`btn-action-custom btn-status ${formData.is_mobile_allowed ? 'active' : 'suspended'}`}
+                    onClick={toggleMobileAccess}
+                    style={{ marginTop: '8px', backgroundColor: formData.is_mobile_allowed ? '#EFF6FF' : '#FEF2F2', color: formData.is_mobile_allowed ? '#1D4ED8' : '#DC2626', borderColor: formData.is_mobile_allowed ? '#BFDBFE' : '#FCA5A5' }}
+                  >
+                    <span className="status-indicator-dot" style={{ backgroundColor: formData.is_mobile_allowed ? '#2563EB' : '#DC2626' }}></span>
+                    {formData.is_mobile_allowed ? 'Cho phép vào Mobile' : 'Chặn vào Mobile'}
                   </button>
                 </div>
               </div>

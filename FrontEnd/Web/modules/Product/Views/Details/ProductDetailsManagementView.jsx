@@ -121,6 +121,8 @@ const ProductDetailsManagementView = () => {
   // Suggestion states for autocomplete
   const [detailSuggestions, setDetailSuggestions] = useState([]);
   const [parentSuggestions, setParentSuggestions] = useState([]);
+  const [parentProductMap, setParentProductMap] = useState({});
+  const [detailStageMap, setDetailStageMap] = useState({});
 
   // Load products list and detail suggestions
   useEffect(() => {
@@ -134,6 +136,8 @@ const ProductDetailsManagementView = () => {
         if (sugRes) {
           setDetailSuggestions(sugRes.detail_names || []);
           setParentSuggestions(sugRes.parent_names || []);
+          setParentProductMap(sugRes.parent_product_map || {});
+          setDetailStageMap(sugRes.detail_stage_map || {});
         }
       } catch (err) {
         console.warn('Lỗi lấy dữ liệu ban đầu:', err);
@@ -215,6 +219,19 @@ const ProductDetailsManagementView = () => {
     setShowFormModal(true);
   };
 
+  // Auto-fill công đoạn khi tên chi tiết khớp trong detailStageMap
+  useEffect(() => {
+    if (!showFormModal || !formData.name) return;
+    const stages = detailStageMap[formData.name.trim()];
+    if (stages) {
+      setFormData(prev => ({
+        ...prev,
+        input_stage: stages.input_stage || prev.input_stage,
+        output_stage: stages.output_stage || prev.output_stage
+      }));
+    }
+  }, [formData.name, detailStageMap, showFormModal]);
+
   // Fetch matching parent suggestions dynamically whenever detail name changes in form modal
   useEffect(() => {
     if (!showFormModal) return;
@@ -223,6 +240,8 @@ const ProductDetailsManagementView = () => {
       const sugRes = await api.get(`/master-products/detail-suggestions${detailNameParam}`).catch(() => null);
       if (sugRes) {
         setParentSuggestions(sugRes.parent_names || []);
+        setParentProductMap(sugRes.parent_product_map || {});
+        setDetailStageMap(sugRes.detail_stage_map || {});
       }
     }, 200);
     return () => clearTimeout(timer);
@@ -231,6 +250,7 @@ const ProductDetailsManagementView = () => {
   // Helper to resolve matching product ID
   const resolveProductId = (targetParentName, currentProdId) => {
     if (targetParentName) {
+      if (parentProductMap[targetParentName]) return parentProductMap[targetParentName];
       const pName = targetParentName.trim().toLowerCase();
       const matched = products.find(p => {
         const full = `${p.product_code || ''} - ${p.name || ''}`.toLowerCase();
@@ -594,21 +614,27 @@ const ProductDetailsManagementView = () => {
                       (() => {
                         const queryStr = (formData.name || '').toLowerCase().trim();
                         const filtered = queryStr
-                          ? detailSuggestions.filter(s => s.toLowerCase().includes(queryStr)).slice(0, 8)
-                          : detailSuggestions.slice(0, 8);
+                          ? detailSuggestions.filter(s => s.toLowerCase().includes(queryStr)).slice(0, 100)
+                          : detailSuggestions.slice(0, 100);
                         if (filtered.length === 0) return null;
                         return (
                           <div style={{
                             position: 'absolute', top: '100%', left: 0, minWidth: '320px', maxWidth: '420px', marginTop: '4px',
                             backgroundColor: '#FFFFFF', border: '1.5px solid #EADCC9', borderRadius: '8px',
-                            boxShadow: '0 10px 20px rgba(45, 26, 18, 0.2)', maxHeight: '220px', overflowY: 'auto', zIndex: 3000,
+                            boxShadow: '0 10px 20px rgba(45, 26, 18, 0.2)', maxHeight: '400px', overflowY: 'auto', zIndex: 3000,
                             whiteSpace: 'nowrap'
                           }}>
                             {filtered.map((item, idx) => (
                               <div
                                 key={idx}
                                 onClick={() => {
-                                  setFormData(prev => ({ ...prev, name: item }));
+                                  const stages = detailStageMap[item] || {};
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    name: item,
+                                    input_stage: stages.input_stage || prev.input_stage,
+                                    output_stage: stages.output_stage || prev.output_stage
+                                  }));
                                   setShowNameMenu(false);
                                 }}
                                 style={{
@@ -698,14 +724,14 @@ const ProductDetailsManagementView = () => {
                         }
                         const queryStr = (formData.parent_name || '').toLowerCase().trim();
                         const filtered = queryStr
-                          ? allParentList.filter(s => s && s.toLowerCase().includes(queryStr)).slice(0, 25)
-                          : allParentList.slice(0, 25);
+                          ? allParentList.filter(s => s && s.toLowerCase().includes(queryStr)).slice(0, 100)
+                          : allParentList.slice(0, 100);
                         if (filtered.length === 0) return null;
                         return (
                           <div style={{
                             position: 'absolute', top: '100%', right: 0, minWidth: '320px', maxWidth: '420px', marginTop: '4px',
                             backgroundColor: '#FFFFFF', border: '1.5px solid #EADCC9', borderRadius: '8px',
-                            boxShadow: '0 10px 20px rgba(45, 26, 18, 0.2)', maxHeight: '220px', overflowY: 'auto', zIndex: 3000,
+                            boxShadow: '0 10px 20px rgba(45, 26, 18, 0.2)', maxHeight: '400px', overflowY: 'auto', zIndex: 3000,
                             whiteSpace: 'nowrap'
                           }}>
                             {filtered.map((item, idx) => (

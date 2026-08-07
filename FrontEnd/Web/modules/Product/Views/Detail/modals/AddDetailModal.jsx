@@ -25,10 +25,12 @@ const inputBaseStyle = {
 };
 
 const AddDetailModal = ({ productId, product, bomRows = [], detailRows = [], onClose, onSuccess }) => {
-  // Option lists từ bảng master_product_details (detailRows)
+  // Option lists từ BOM (theo STT) để chọn thành phẩm cha
   const parentOptions = [
-    { id: '', name: product?.name || 'Sản phẩm' },
-    ...detailRows.map(r => ({ id: r.id || r.name, name: r.name }))
+    { id: '', name: product?.name || 'Sản phẩm', stt: '' },
+    ...bomRows
+      .filter(r => r.stt)
+      .map(r => ({ id: String(r.id || r.compCode), name: r.stt, stt: r.stt }))
   ];
 
   const stageOptions = [
@@ -106,7 +108,7 @@ const AddDetailModal = ({ productId, product, bomRows = [], detailRows = [], onC
     try {
       setLoading(true);
       const parentObj = parentOptions.find(o => o.id === selectedParent);
-      const parentStt = parentObj ? parentObj.stt : '1';
+      const parentStt = parentObj ? parentObj.stt : '';
 
       await api.post(`/master-products/${productId}/product-details`, {
         name: detailName,
@@ -114,7 +116,7 @@ const AddDetailModal = ({ productId, product, bomRows = [], detailRows = [], onC
         unit,
         input_stage: inputStage,
         output_stage: outputStage,
-        parent_name: parentObj ? parentObj.name : '',
+        parent_name: parentStt ? parentStt : (product?.name || ''),
         material
       });
 
@@ -191,18 +193,31 @@ const AddDetailModal = ({ productId, product, bomRows = [], detailRows = [], onC
                   (() => {
                     const filtered = dynamicDetailNames
                       .filter(s => s.toLowerCase().includes(detailName.toLowerCase().trim()) && s.toLowerCase() !== detailName.toLowerCase().trim())
-                      .slice(0, 6);
+                      .slice(0, 100);
                     if (filtered.length === 0) return null;
                     return (
                       <div style={{
                         position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px',
                         backgroundColor: '#FFFFFF', border: '1.5px solid #EADCC9', borderRadius: '8px',
-                        boxShadow: '0 8px 16px rgba(45, 26, 18, 0.15)', maxHeight: '180px', overflowY: 'auto', zIndex: 3000
+                        boxShadow: '0 8px 16px rgba(45, 26, 18, 0.15)', maxHeight: '400px', overflowY: 'auto', zIndex: 3000
                       }}>
                         {filtered.map((item, idx) => (
                           <div
                             key={idx}
-                            onClick={() => setDetailName(item)}
+                            onClick={() => {
+                              setDetailName(item);
+                              const dRow = detailRows.find(r => r.name === item);
+                              if (dRow) {
+                                setInputStage(dRow.input_stage || 'Định hình');
+                                setOutputStage(dRow.output_stage || 'Lắp ráp');
+                              } else {
+                                const bRow = bomRows.find(r => r.compName === item);
+                                if (bRow) {
+                                  setInputStage(bRow.stageFrom || 'Định hình');
+                                  setOutputStage(bRow.stageTo || 'Lắp ráp');
+                                }
+                              }
+                            }}
                             style={{
                               padding: '8px 12px', fontSize: '0.82rem', fontWeight: '600', color: '#2D1A12',
                               cursor: 'pointer', borderBottom: idx < filtered.length - 1 ? '1px solid #F1F5F9' : 'none'

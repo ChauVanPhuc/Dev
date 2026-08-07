@@ -11,6 +11,7 @@ class AccountBase(BaseModel):
     phone: Union[str, None] = None          # Số điện thoại
     email: Union[EmailStr, str, None] = None # Địa chỉ Email
     is_active: bool = True                 # Trạng thái tài khoản (Đang hoạt động hay không)
+    is_mobile_allowed: bool = True          # Quyền truy cập ứng dụng Mobile
 
 class AccountCreate(AccountBase):
     """
@@ -45,6 +46,7 @@ class AccountUpdate(BaseModel):
     employee_code: Union[str, None] = None
     status: Union[str, None] = None
     permission_level: Union[str, None] = None # Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
+    is_mobile_allowed: Union[bool, None] = None # Quyền truy cập ứng dụng Mobile
 
 class Account(AccountBase):
     """
@@ -108,6 +110,7 @@ class Token(BaseModel):
     id: Union[int, None] = None
     screen_permissions: Union[str, None] = None
     permission_level: Union[str, None] = None # Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
+    is_mobile_allowed: Union[bool, None] = True # Quyền truy cập ứng dụng Mobile
 
 class TokenData(BaseModel):
     """

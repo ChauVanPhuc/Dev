@@ -51,6 +51,12 @@ from modules.hr.models.hr_models import HRDepartment, HRPosition, HRSection, HRE
 from modules.auth.models.org_structures import OrgStructure, OrgStructureKPI, OrgStructureTask
 from modules.auth.models.employees import Employee
 from modules.inspection.models.stage_inspection import StageInspection
+from modules.inspection.models.input_inspection import InputInspection
+from modules.inspection.models.checklist import CheckList
+from modules.inspection.models.user_defect_tracking import UserDefectTracking
+from modules.master.models.customer import Customer
+from modules.production.models.production_team import ProductionTeam
+from modules.production.models.production_routing import ProductionRouting, ProductionRoutingNode, ProductionRoutingComponent, ProductionRoutingProduct
 from modules.system.models.system_sidebar import SystemSidebar
 
 __all__ = [

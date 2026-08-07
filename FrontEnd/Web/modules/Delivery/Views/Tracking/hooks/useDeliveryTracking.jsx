@@ -801,17 +801,19 @@ export const useDeliveryTracking = () => {
         try {
             setLoading(true);
             const data = await deliveryService.getAllDeliveries(0, 0, year, month);
-            setDeliveries(data);
+            const safeData = Array.isArray(data) ? data : [];
+            setDeliveries(safeData);
 
             // Tính toán thống kê từ dữ liệu thực
-            const total = data.length;
-            const completed = data.filter(d => d.status === 'Hoàn thành' || d.status === 'Đã Nhận Hàng').length;
-            const pending = data.filter(d => d.status === 'Chờ Nhận Hàng' || d.status === 'Chờ Xác Nhận').length;
-            const error = data.filter(d => d.quantity_returned > 0 || d.status === 'Lỗi').length;
+            const total = safeData.length;
+            const completed = safeData.filter(d => d.status === 'Hoàn thành' || d.status === 'Đã Nhận Hàng').length;
+            const pending = safeData.filter(d => d.status === 'Chờ Nhận Hàng' || d.status === 'Chờ Xác Nhận').length;
+            const error = safeData.filter(d => d.quantity_returned > 0 || d.status === 'Lỗi').length;
 
             setStats({ total, completed, pending, error });
         } catch (error) {
-            // Thầm lặng bỏ qua lỗi lấy dữ liệu bàn giao
+            setDeliveries([]);
+            setStats({ total: 0, completed: 0, pending: 0, error: 0 });
         } finally {
             setLoading(false);
         }

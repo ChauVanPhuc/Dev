@@ -2,15 +2,12 @@ import React from 'react';
 
 const ManufactureReceive = () => {
   const stats = [
-    { title: 'CHỜ TIẾP NHẬN', value: '12 Đơn', color: '#FFF3E0' },
-    { title: 'ĐÃ TIẾP NHẬN', value: '450 Đơn', color: '#E8F5E9' },
-    { title: 'THIẾU HỤT', value: '2 Đơn', color: '#FFEBEE' },
+    { title: 'CHỜ TIẾP NHẬN', value: '0 Đơn', color: '#FFF3E0' },
+    { title: 'ĐÃ TIẾP NHẬN', value: '0 Đơn', color: '#E8F5E9' },
+    { title: 'THIẾU HỤT', value: '0 Đơn', color: '#FFEBEE' },
   ];
 
-  const receiveData = [
-    { id: 1, code: 'TN-001', supplier: 'Kho Gỗ Hà Nội', item: 'Gỗ sồi tấm', qty: 100, unit: 'm3', date: '2026-03-25', status: 'Đang giao', color: '#FFA726' },
-    { id: 2, code: 'TN-002', supplier: 'Phụ kiện ABC', item: 'Bản lề giảm chấn', qty: 500, unit: 'Cái', date: '2026-03-24', status: 'Hoàn tất', color: '#66BB6A' },
-  ];
+  const receiveData = [];
 
   return (
     <div className="manufacture-plan-container">

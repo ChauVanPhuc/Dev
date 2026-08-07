@@ -5,6 +5,16 @@ SETLOCAL EnableDelayedExpansion
 :: 0A is green on black for a professional dev feel
 COLOR 0A
 
+:: Find real Python executable (bypass 0-byte Windows Store App execution aliases)
+set "PYTHON_EXE="
+for /f "delims=" %%i in ('where python 2^>nul') do (
+    if %%~zi GTR 0 (
+        if not defined PYTHON_EXE (
+            set "PYTHON_EXE=%%i"
+        )
+    )
+)
+
 :main_menu
 cls
 echo ======================================================
@@ -39,9 +49,8 @@ echo  [SYSTEM CHECK] Initializing development environment...
 :: --- CHECK PREREQUISITES ---
 
 :: Check Python
-python --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [ERROR] Python not found. Please install Python and add to PATH.
+if not defined PYTHON_EXE (
+    echo [ERROR] Python not found or not in PATH. Please install Python and add to PATH.
     pause
     goto main_menu
 )
@@ -61,10 +70,10 @@ echo.
 echo [1/3] Processing Backend (FastAPI)...
 cd /d %~dp0BackEnd
 :: Pre-check for core libraries to avoid redundant and error-prone 'pip install'
-python -c "import uvicorn, fastapi, pyodbc, pydantic_settings, websockets, firebase_admin" >nul 2>&1
+"%PYTHON_EXE%" -c "import uvicorn, fastapi, pyodbc, pydantic_settings, websockets, firebase_admin" >nul 2>&1
 if %errorlevel% neq 0 (
     echo [!] Backend libraries missing or incomplete. Syncing requirements...
-    call pip install -r requirements.txt
+    call "%PYTHON_EXE%" -m pip install -r requirements.txt
 ) else (
     echo [OK] Backend dependencies - including Realtime/Firebase - are satisfied.
 )
@@ -234,7 +243,7 @@ if /i not "%confirm%"=="Y" goto main_menu
 echo.
 echo [1/1] Running index rebuild...
 cd /d %~dp0BackEnd
-python database\migrations\rebuild_indexes.py
+"%PYTHON_EXE%" database\migrations\rebuild_indexes.py
 
 echo.
 echo ======================================================
@@ -255,7 +264,7 @@ echo [!] Make sure you have run Option 5 (Build) before this.
 echo.
 cd /d %~dp0BackEnd
 :: Start Backend without reload, serving static dist folders
-start "ERP G7 PRODUCTION SERVER" cmd /k "uvicorn app.main:app --host 0.0.0.0 --port 8000"
+start "ERP G7 PRODUCTION SERVER" cmd /k ""%PYTHON_EXE%" -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
 :: Start Gemini Web2API AI Server
 echo Starting Gemini Web2API AI Server...

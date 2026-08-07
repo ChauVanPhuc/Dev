@@ -1,28 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { transferService } from '../services/transferService'
 import useProduction_v2Store from '../Models/production_v2Store'
-import useAuthStore from '@modules/auth/Models/authModel'
 
 export const useTransferController = () => {
-  const { user } = useAuthStore()
   const { transferFilters, setTransferFilters } = useProduction_v2Store()
-
-  const userRoleStr = (user?.role_name || user?.role_description || user?.permission_name || '').toLowerCase()
-  const isAdmin = userRoleStr.includes('admin') || userRoleStr.includes('it') || userRoleStr.includes('bgd')
-
-  const userStageDesc = (
-    user?.activeStageDescription ||
-    user?.activeStageName ||
-    (user?.stageDescriptions && user.stageDescriptions[0]) ||
-    (user?.stageNames && user.stageNames[0]) ||
-    user?.stage_description ||
-    user?.stage_name ||
-    ''
-  ).split('|')[0].trim()
-
-  const activeStage = transferFilters.stage 
-    ? (transferFilters.stage === 'ALL' ? '' : transferFilters.stage)
-    : (!isAdmin ? userStageDesc : '')
   const [tickets, setTickets] = useState([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -46,12 +27,7 @@ export const useTransferController = () => {
     setLoading(true)
     setError(null)
     try {
-      const queryParams = { ...transferFilters }
-      if (activeStage && activeStage !== 'Tất cả công đoạn') {
-        queryParams.stage = activeStage
-      }
-      console.log('[CL06 fetchList]', { activeStage, user, queryParams })
-      const res = await transferService.getList(queryParams)
+      const res = await transferService.getList(transferFilters)
       setTickets(res.items || [])
       setTotal(res.total || 0)
       if (res.available_parts) {

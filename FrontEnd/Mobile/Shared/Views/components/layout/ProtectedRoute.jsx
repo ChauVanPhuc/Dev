@@ -71,7 +71,50 @@ const ProtectedRoute = () => {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Kiểm tra vai trò Admin hoặc Nhân viên sản xuất để cấp quyền truy cập các màn hình sản xuất
+  // 1. Kiểm tra cờ cho phép vào Mobile (is_mobile_allowed)
+  const isMobileAllowed = user?.is_mobile_allowed !== false && user?.is_mobile_allowed !== 0;
+  if (!isMobileAllowed) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        padding: '20px',
+        textAlign: 'center',
+        backgroundColor: '#f9fafb',
+        color: '#1f2937',
+        fontFamily: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
+      }}>
+        <svg style={{ width: '64px', height: '64px', color: '#dc2626', marginBottom: '16px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        <h1 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '8px' }}>Từ chối truy cập Mobile</h1>
+        <p style={{ fontSize: '14px', color: '#4b5563', marginBottom: '24px', maxWidth: '320px' }}>
+          Tài khoản của bạn chưa được cấp quyền truy cập ứng dụng di động (Mobile). Vui lòng liên hệ Quản trị viên.
+        </p>
+        <button 
+          onClick={() => logout()} 
+          style={{
+            padding: '12px 24px',
+            backgroundColor: '#dc2626',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '8px',
+            fontWeight: '600',
+            cursor: 'pointer',
+            fontSize: '14px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+          }}
+        >
+          Đăng xuất
+        </button>
+      </div>
+    );
+  }
+
+  // 2. Kiểm tra phân quyền chi tiết theo màn hình (nếu màn hình đó có cấu hình 'none')
   const userRoleStr = (user?.role_name || user?.role_description || '').toLowerCase();
   const userPermStr = (user?.permission_name || user?.permission_description || '').toLowerCase();
   const userNameStr = (user?.full_name || user?.username || '').toLowerCase();
@@ -80,19 +123,15 @@ const ProtectedRoute = () => {
   const combinedAuthStr = `${userRoleStr} | ${userPermStr} | ${userNameStr} | ${userDeptStr} | ${userPosStr}`;
 
   const isAdmin = combinedAuthStr.includes('admin') || combinedAuthStr.includes('it') || combinedAuthStr.includes('bgd');
-  const isProductionStaff = combinedAuthStr.includes('sx') || combinedAuthStr.includes('sản xuất') || combinedAuthStr.includes('san xuat') || combinedAuthStr.includes('quản đốc') || combinedAuthStr.includes('tổ trưởng');
 
   if (!isAdmin) {
     const key = mapPathToPermissionKey(location.pathname);
     if (key) {
-      // Cho phép nhân viên sản xuất mặc định truy cập các màn hình giao nhận sản xuất và luân chuyển
-      const isProductionRoute = key.startsWith('mobile_production') || key.startsWith('mobile_delivery') || key.startsWith('mobile_plan') || key.startsWith('mobile_inspection');
-      
       const userPerm = permissions?.[key];
-      const hasExplicitRead = userPerm && userPerm !== 'none' && userPerm.split(',').map(p => p.trim()).includes('read');
-      const hasAccess = hasExplicitRead || (isProductionStaff && isProductionRoute) || !permissions || Object.keys(permissions).length === 0;
+      // Nếu màn hình này bị cấu hình từ chối riêng ('none')
+      const isExplicitlyDenied = userPerm === 'none';
 
-      if (!hasAccess) {
+      if (isExplicitlyDenied) {
         return (
           <div style={{
             display: 'flex',
@@ -154,6 +193,7 @@ const ProtectedRoute = () => {
       }
     }
   }
+
 
   // Nếu đã đăng nhập và có quyền, cho phép render các route con
   return <Outlet />;

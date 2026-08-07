@@ -25,7 +25,8 @@ try:
             username="admin",
             email="admin@smartflow.com",
             phone="0987654321",
-            hashed_password=get_password_hash("Admin@123"),
+            hashed_password=get_password_hash("123123"),
+
             is_active=True,
             employee_id="EMP001",
             full_name="Admin SmartFlow",

@@ -35,4 +35,5 @@ class Account(Base):
     failed_login_attempts = Column(Integer, default=0) # [NEW] Số lần đăng nhập sai liên tiếp
     screen_permissions = Column(NVARCHAR(None), nullable=True) # Lưu trữ dạng JSON string các quyền trên từng màn hình
     permission_level = Column(NVARCHAR(50), nullable=True) # Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
+    is_mobile_allowed = Column(Boolean, default=True) # Quyền truy cập ứng dụng Mobile
 

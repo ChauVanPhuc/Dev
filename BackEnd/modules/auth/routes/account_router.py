@@ -182,7 +182,8 @@ def login_for_access_token(db: Session = Depends(get_db), form_data: OAuth2Passw
         "stage_description": stage_description or stage_name or '',
         "id": user.id,
         "screen_permissions": json.dumps(resolved_perms),
-        "permission_level": getattr(user, 'permission_level', '') or ''
+        "permission_level": getattr(user, 'permission_level', '') or '',
+        "is_mobile_allowed": getattr(user, 'is_mobile_allowed', True) if getattr(user, 'is_mobile_allowed', True) is not None else True
     }
 
 @router.get("/stages")
@@ -244,6 +245,7 @@ def get_user_detail(account_id: int, db: Session = Depends(get_db)):
         "full_name": db_account.full_name,
         "status": db_account.status,
         "is_active": db_account.is_active,
+        "is_mobile_allowed": getattr(db_account, 'is_mobile_allowed', True) if getattr(db_account, 'is_mobile_allowed', True) is not None else True,
         "created_at": db_account.created_at,
         "role_id": role_id,
         "permission_id": permission_id,

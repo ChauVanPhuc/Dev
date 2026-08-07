@@ -149,6 +149,7 @@ def create_account(db: Session, account: AccountCreate):
         full_name=account.full_name or account.name,
         status=getattr(account, 'status', None) or "Đang sử dụng",
         permission_level=account.permission_level,
+        is_mobile_allowed=getattr(account, 'is_mobile_allowed', True) if getattr(account, 'is_mobile_allowed', True) is not None else True,
         created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     )
     db.add(db_account)

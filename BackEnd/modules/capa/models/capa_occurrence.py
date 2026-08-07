@@ -26,4 +26,5 @@ class CAPAOccurrence(Base):
 
     # Quan hệ liên kết
     capa = relationship("CAPA")
-    evaluations = relationship("CAPAEvaluation", cascade="all, delete-orphan")
+    evaluations = relationship("CAPAEvaluation", back_populates="occurrence", cascade="all, delete-orphan")
+

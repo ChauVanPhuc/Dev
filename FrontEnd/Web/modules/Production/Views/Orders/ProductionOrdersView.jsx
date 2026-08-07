@@ -26,6 +26,7 @@ const ProductionOrdersView = () => {
   const [viewMode, setViewMode] = useState('list');
   // Edit Mode: true = Chỉnh sửa lệnh có sẵn | false = Tạo lệnh mới
   const [isEditMode, setIsEditMode] = useState(false);
+  const [editingOrderId, setEditingOrderId] = useState(null);
 
   const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
   const [sortValue, setSortValue] = useState('time_desc');
@@ -193,43 +194,7 @@ const ProductionOrdersView = () => {
         });
       }
 
-      if (allOrders.length === 0) {
-        const detailData = await planService.getPlanById(18).catch(() => null);
-        if (detailData && detailData.orders && detailData.orders.length > 0) {
-          allOrders = detailData.orders.map((ord, idx) => {
-            const totalQty = ord.products ? ord.products.reduce((acc, p) => acc + (p.quantity || 0), 0) : 50;
-            const orderCode = ord.name || ord.order_code || `DH-2026-${100 + idx}`;
-            const cleanCode = orderCode.replace(/^LSX-?/i, '');
-            const priorityText = ord.is_priority === 1 || ord.priority === 'Cao' ? 'Cao' : (ord.priority || 'Bình thường');
 
-            return {
-              id: ord.id || idx + 1,
-              planId: 18,
-              code: cleanCode,
-              orderNo: orderCode,
-              customer: ord.customer || 'Khách hàng hệ thống',
-              totalProducts: ord.products ? ord.products.length : 1,
-              planQty: totalQty,
-              startDate: '01/08/2026',
-              endDate: '15/08/2026',
-              priority: priorityText,
-              status: idx === 3 ? 'Hoàn thành' : 'Đang sản xuất',
-              note: ord.customer || '',
-              products: ord.products || []
-            };
-          });
-        }
-      }
-
-      if (allOrders.length === 0) {
-        allOrders = [
-          { id: 1, planId: 18, code: '2026-001', orderNo: 'DH-2026-088', totalProducts: 50, planQty: 50, startDate: '01/08/2026', endDate: '15/08/2026', priority: 'Cao', status: 'Đang sản xuất', note: 'Đơn hàng gấp xuất khẩu' },
-          { id: 2, planId: 18, code: '2026-002', orderNo: 'DH-EX-992', totalProducts: 120, planQty: 120, startDate: '02/08/2026', endDate: '18/08/2026', priority: 'Bình thường', status: 'Đang sản xuất', note: 'Kèm đệm bọc da' },
-          { id: 3, planId: 18, code: '2026-003', orderNo: 'DH-PM-104', totalProducts: 30, planQty: 30, startDate: '03/08/2026', endDate: '20/08/2026', priority: 'Bình thường', status: 'Chờ phân bổ', note: 'Sơn phủ PU mờ' },
-          { id: 4, planId: 18, code: '2026-004', orderNo: 'DH-TK-005', totalProducts: 80, planQty: 80, startDate: '03/08/2026', endDate: '12/08/2026', priority: 'Bình thường', status: 'Hoàn thành', note: 'Đã nhập kho đủ' },
-          { id: 5, planId: 18, code: '2026-005', orderNo: 'DH-2026-089', totalProducts: 200, planQty: 200, startDate: '04/08/2026', endDate: '25/08/2026', priority: 'Thấp', status: 'Đang sản xuất', note: 'Lô hàng dự phòng' },
-        ];
-      }
 
       let filtered = allOrders;
       if (searchTerm.trim()) {
@@ -401,6 +366,7 @@ const ProductionOrdersView = () => {
   // Xử lý nạp DỮ LIỆU ĐỘNG khi xem/sửa Lệnh sản xuất sẵn có (CHẾ ĐỘ EDIT)
   const handleOpenOrderDetail = async (item) => {
     setIsEditMode(true); // Đánh dấu là chế độ chỉnh sửa Lệnh có sẵn
+    setEditingOrderId(item.id || item.code);
 
     setOrderForm({
       code: item.code,
@@ -487,6 +453,7 @@ const ProductionOrdersView = () => {
   // Khởi tạo TRỐNG 100% & CHO PHÉP SỬA TẤT CẢ TỪ ĐẦU khi nhấp + Thêm tài liệu (CHẾ ĐỘ TẠO MỚI)
   const handleOpenCreateOrder = () => {
     setIsEditMode(false); // Đánh dấu là chế độ Tạo mới Lệnh sản xuất
+    setEditingOrderId(null);
     setOrderForm({
       code: '',
       orderId: '',
@@ -501,29 +468,55 @@ const ProductionOrdersView = () => {
     setViewMode('create');
   };
 
-  // Xử lý lưu thông tin Lệnh SX mới
+  // Xử lý lưu thông tin Lệnh SX mới hoặc Cập nhật Lệnh SX sẵn có
   const handleSaveOrder = () => {
     if (!orderForm.code && !orderForm.orderId) {
       if (toast) toast('warning', 'Vui lòng nhập Mã lệnh sản xuất hoặc Mã đơn hàng!');
       return;
     }
-    const newOrderObj = {
-      id: Date.now(),
-      planId: Date.now(),
-      code: orderForm.code || Date.now().toString().slice(-6),
-      orderNo: orderForm.orderId || 'Đơn hàng mới',
-      customer: 'Khách hàng',
-      totalProducts: orderProducts.length,
-      planQty: orderProducts.reduce((sum, p) => sum + (p.totalQty || 0), 0),
-      startDate: orderForm.startDate,
-      endDate: orderForm.endDate,
-      priority: orderForm.priority,
-      status: orderForm.status,
-      note: 'Lệnh SX mới'
-    };
-    setOrdersList([newOrderObj, ...ordersList]);
-    setTotal(prev => prev + 1);
-    if (toast) toast('success', 'Đã lưu Lệnh sản xuất thành công!');
+
+    if (isEditMode && editingOrderId) {
+      // Đang ở chế độ EDIT: Cập nhật trực tiếp bản ghi hiện tại trong danh sách
+      setOrdersList(prev => prev.map(item => {
+        if (item.id === editingOrderId || item.code === orderForm.code) {
+          return {
+            ...item,
+            code: orderForm.code || item.code,
+            orderNo: orderForm.orderId || item.orderNo,
+            totalProducts: orderProducts.length,
+            planQty: orderProducts.reduce((sum, p) => sum + (p.totalQty || 0), 0),
+            startDate: orderForm.startDate || item.startDate,
+            endDate: orderForm.endDate || item.endDate,
+            priority: orderForm.priority || item.priority,
+            status: orderForm.status || item.status,
+            products: orderProducts
+          };
+        }
+        return item;
+      }));
+      if (toast) toast('success', 'Đã cập nhật thông tin Lệnh sản xuất thành công!');
+    } else {
+      // Đang ở chế độ TẠO MỚI: Thêm bản ghi mới vào danh sách
+      const newOrderObj = {
+        id: Date.now(),
+        planId: Date.now(),
+        code: orderForm.code || Date.now().toString().slice(-6),
+        orderNo: orderForm.orderId || 'Đơn hàng mới',
+        customer: 'Khách hàng',
+        totalProducts: orderProducts.length,
+        planQty: orderProducts.reduce((sum, p) => sum + (p.totalQty || 0), 0),
+        startDate: orderForm.startDate,
+        endDate: orderForm.endDate,
+        priority: orderForm.priority,
+        status: orderForm.status,
+        note: 'Lệnh SX mới',
+        products: orderProducts
+      };
+      setOrdersList(prev => [newOrderObj, ...prev]);
+      setTotal(prev => prev + 1);
+      if (toast) toast('success', 'Đã lưu Lệnh sản xuất mới thành công!');
+    }
+
     setViewMode('list');
   };
 
