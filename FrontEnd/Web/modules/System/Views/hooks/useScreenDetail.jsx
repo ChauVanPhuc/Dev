@@ -1042,9 +1042,10 @@ export const useScreenDetail = () => {
       if (isCodeChanged) {
         // Check trùng lặp mã màn hình
         try {
-          const allScreens = await screenService.getScreens();
-          const isDuplicate = allScreens.some(s =>
-            s.current_code === finalCode && s.id !== screen.id
+          const res = await screenService.getScreens();
+          const screenList = Array.isArray(res) ? res : (res?.data || []);
+          const isDuplicate = screenList.some(s =>
+            s && s.current_code === finalCode && s.id !== screen?.id
           );
 
           if (isDuplicate) {
@@ -1052,22 +1053,13 @@ export const useScreenDetail = () => {
             return;
           }
         } catch (err) {
-          console.error('Error checking screen code:', err);
-          showToast('Không thể kiểm tra mã màn hình!', 'error');
-          return;
+          console.warn('Bỏ qua kiểm tra trùng mã màn hình:', err);
         }
       }
     }
 
-    if (!formData.target_date) {
-      showToast('Vui lòng chọn ngày hoàn thành dự kiến!', 'error');
-      return;
-    }
     const today = new Date().toISOString().split('T')[0];
-    if (formData.target_date < today) {
-      showToast('Ngày hoàn thành dự kiến phải lớn hơn hoặc bằng ngày hiện tại!', 'error');
-      return;
-    }
+    const targetDate = formData.target_date || today;
 
     const componentsPayload = (screen?.components || []).map(c => ({
       name: c.name,
@@ -1090,9 +1082,9 @@ export const useScreenDetail = () => {
         const res = await screenService.createScreen({
           title: formData.title,
           route_path: normalizeRoutePath(formData.route_path),
-          platform: formData.platform,
+          platform: formData.platform || 'Web',
           status: formData.status || 'Mới thiết kế',
-          target_date: formData.target_date,
+          target_date: targetDate,
           subtitle: formData.subtitle,
           subsystem: formData.subsystem || 'Quản lý hệ thống',
           components: componentsPayload,
@@ -1113,9 +1105,9 @@ export const useScreenDetail = () => {
         const updatePayload = {
           title: formData.title,
           route_path: normalizeRoutePath(formData.route_path),
-          platform: formData.platform,
+          platform: formData.platform || 'Web',
           status: formData.status,
-          target_date: formData.target_date,
+          target_date: targetDate,
           subtitle: formData.subtitle,
           mockup_path: screen.mockup_path,
           components: componentsPayload,

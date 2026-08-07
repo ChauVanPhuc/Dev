@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { Edit2, Trash2, X, AlertTriangle, Palette, Image as ImageIcon, MoreVertical } from 'lucide-react';
+import { Edit2, Trash2, X, AlertTriangle, Palette, Image as ImageIcon, MoreVertical, ArrowLeft } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
@@ -66,41 +66,30 @@ const PaintColorManagementView = () => {
     note: ''
   });
 
-  // Setup header Title & Navigation Back button
+  // Setup header Title
   useEffect(() => {
     if (setCustomTitle) setCustomTitle('Quản lý sản phẩm');
     if (setCustomSubtitle) setCustomSubtitle('KT03.3: Quản lý Mẫu sơn');
     if (setCustomScreenCode) setCustomScreenCode('KT03.3');
-    if (setHeaderExtra) {
-      setHeaderExtra(
-        <button
-          type="button"
-          className="secondary-btn"
-          onClick={() => navigate('/admin/products')}
-          style={{
-            padding: '7px 16px',
-            backgroundColor: '#FFFFFF',
-            border: '1.5px solid #5D3B32',
-            borderRadius: '8px',
-            color: '#5D3B32',
-            fontWeight: '800',
-            fontSize: '0.85rem',
-            cursor: 'pointer'
-          }}
-        >
-          ‹ Quay lại danh sách sản phẩm
-        </button>
-      );
-    }
-    return () => {
-      if (setHeaderExtra) setHeaderExtra(null);
-    };
-  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra, navigate]);
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   // Suggestion states for autocomplete
   const [colorCodeSuggestions, setColorCodeSuggestions] = useState([]);
   const [colorNameSuggestions, setColorNameSuggestions] = useState([]);
   const [supplierSuggestions, setSupplierSuggestions] = useState([]);
+  const [showColorNameMenu, setShowColorNameMenu] = useState(false);
+  const [showSupplierMenu, setShowSupplierMenu] = useState(false);
+  const [showNoteMenu, setShowNoteMenu] = useState(false);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.suggest-color-name-box')) setShowColorNameMenu(false);
+      if (!e.target.closest('.suggest-supplier-box')) setShowSupplierMenu(false);
+      if (!e.target.closest('.suggest-note-box')) setShowNoteMenu(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Load products list and paint color suggestions
   useEffect(() => {
@@ -577,53 +566,121 @@ const PaintColorManagementView = () => {
                       />
                     </div>
 
-                    <div>
+                    <div className="suggest-color-name-box" style={{ position: 'relative' }}>
                       <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#334155', marginBottom: '2px' }}>Tên màu sơn *</label>
-                      <select
+                      <input
+                        type="text"
                         required
+                        placeholder="Nhập hoặc chọn tên màu sơn..."
                         value={formData.color_name}
-                        onChange={(e) => setFormData(prev => ({ ...prev, color_name: e.target.value }))}
-                        style={{ width: '100%', padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.84rem', outline: 'none', backgroundColor: '#FFFFFF' }}
-                      >
-                        <option value="">-- Chọn tên màu sơn --</option>
-                        {Array.from(new Set([
-                          ...colorNameSuggestions,
-                          'Sơn PU mờ 50%',
-                          'Sơn PU mờ 70%',
-                          'Sơn PU bóng 100%',
-                          'Sơn bóng gỗ sồi',
-                          'Sơn lót Polyurethane',
-                          'Sơn trắng 2K',
-                          'Sơn màu Walnut'
-                        ])).map((opt, i) => (
-                          <option key={i} value={opt}>{opt}</option>
-                        ))}
-                      </select>
+                        onFocus={() => setShowColorNameMenu(true)}
+                        onChange={(e) => {
+                          setFormData(prev => ({ ...prev, color_name: e.target.value }));
+                          setShowColorNameMenu(true);
+                        }}
+                        style={{ width: '100%', padding: '8px 10px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.84rem', outline: 'none', backgroundColor: '#FFFFFF' }}
+                      />
+                      {showColorNameMenu && (
+                        (() => {
+                          const options = Array.from(new Set([
+                            ...colorNameSuggestions,
+                            'Sơn PU mờ 50%',
+                            'Sơn PU mờ 70%',
+                            'Sơn PU bóng 100%',
+                            'Sơn bóng gỗ sồi',
+                            'Sơn lót Polyurethane',
+                            'Sơn trắng 2K',
+                            'Sơn màu Walnut'
+                          ]));
+                          const queryStr = (formData.color_name || '').toLowerCase().trim();
+                          const filtered = queryStr ? options.filter(s => s.toLowerCase().includes(queryStr)) : options;
+                          if (filtered.length === 0) return null;
+                          return (
+                            <div style={{
+                              position: 'absolute', top: '100%', left: 0, width: '100%', marginTop: '4px',
+                              backgroundColor: '#FFFFFF', border: '1.5px solid #EADCC9', borderRadius: '8px',
+                              boxShadow: '0 10px 20px rgba(45, 26, 18, 0.15)', maxHeight: '180px', overflowY: 'auto', zIndex: 3000
+                            }}>
+                              {filtered.map((item, idx) => (
+                                <div
+                                  key={idx}
+                                  onClick={() => {
+                                    setFormData(prev => ({ ...prev, color_name: item }));
+                                    setShowColorNameMenu(false);
+                                  }}
+                                  style={{
+                                    padding: '8px 12px', fontSize: '0.84rem', fontWeight: '600', color: '#2D1A12',
+                                    cursor: 'pointer', borderBottom: idx < filtered.length - 1 ? '1px solid #F1F5F9' : 'none'
+                                  }}
+                                  onMouseEnter={(e) => e.target.style.backgroundColor = '#FAF6F0'}
+                                  onMouseLeave={(e) => e.target.style.backgroundColor = '#FFFFFF'}
+                                >
+                                  {item}
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()
+                      )}
                     </div>
                   </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <div>
+                  <div className="suggest-supplier-box" style={{ position: 'relative' }}>
                     <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#334155', marginBottom: '2px' }}>Nhà cung cấp *</label>
-                    <select
+                    <input
+                      type="text"
                       required
+                      placeholder="Nhập hoặc chọn nhà cung cấp..."
                       value={formData.supplier}
-                      onChange={(e) => setFormData(prev => ({ ...prev, supplier: e.target.value }))}
-                      style={{ width: '100%', padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.84rem', outline: 'none', backgroundColor: '#FFFFFF' }}
-                    >
-                      <option value="">-- Chọn nhà cung cấp --</option>
-                      {Array.from(new Set([
-                        ...supplierSuggestions,
-                        'Công ty Sơn Nippon',
-                        'NPP Sơn Oseven',
-                        'NPP Sơn Dulux',
-                        'Sơn Á Châu',
-                        'Nội bộ G7'
-                      ])).map((opt, i) => (
-                        <option key={i} value={opt}>{opt}</option>
-                      ))}
-                    </select>
+                      onFocus={() => setShowSupplierMenu(true)}
+                      onChange={(e) => {
+                        setFormData(prev => ({ ...prev, supplier: e.target.value }));
+                        setShowSupplierMenu(true);
+                      }}
+                      style={{ width: '100%', padding: '8px 10px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.84rem', outline: 'none', backgroundColor: '#FFFFFF' }}
+                    />
+                    {showSupplierMenu && (
+                      (() => {
+                        const options = Array.from(new Set([
+                          ...supplierSuggestions,
+                          'Công ty Sơn Nippon',
+                          'NPP Sơn Oseven',
+                          'NPP Sơn Dulux',
+                          'Sơn Á Châu',
+                          'Nội bộ G7'
+                        ]));
+                        const queryStr = (formData.supplier || '').toLowerCase().trim();
+                        const filtered = queryStr ? options.filter(s => s.toLowerCase().includes(queryStr)) : options;
+                        if (filtered.length === 0) return null;
+                        return (
+                          <div style={{
+                            position: 'absolute', top: '100%', left: 0, width: '100%', marginTop: '4px',
+                            backgroundColor: '#FFFFFF', border: '1.5px solid #EADCC9', borderRadius: '8px',
+                            boxShadow: '0 10px 20px rgba(45, 26, 18, 0.15)', maxHeight: '180px', overflowY: 'auto', zIndex: 3000
+                          }}>
+                            {filtered.map((item, idx) => (
+                              <div
+                                key={idx}
+                                onClick={() => {
+                                  setFormData(prev => ({ ...prev, supplier: item }));
+                                  setShowSupplierMenu(false);
+                                }}
+                                style={{
+                                  padding: '8px 12px', fontSize: '0.84rem', fontWeight: '600', color: '#2D1A12',
+                                  cursor: 'pointer', borderBottom: idx < filtered.length - 1 ? '1px solid #F1F5F9' : 'none'
+                                }}
+                                onMouseEnter={(e) => e.target.style.backgroundColor = '#FAF6F0'}
+                                onMouseLeave={(e) => e.target.style.backgroundColor = '#FFFFFF'}
+                              >
+                                {item}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()
+                    )}
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#334155', marginBottom: '2px' }}>Ngày hết hạn của mẫu *</label>
@@ -636,25 +693,58 @@ const PaintColorManagementView = () => {
                   </div>
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#334155', marginBottom: '2px' }}>Ghi chú *</label>
-                  <select
-                    required
+                <div className="suggest-note-box" style={{ position: 'relative' }}>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#334155', marginBottom: '2px' }}>Ghi chú</label>
+                  <input
+                    type="text"
+                    placeholder="Nhập hoặc chọn ghi chú / điều kiện bảo quản..."
                     value={formData.note}
-                    onChange={(e) => setFormData(prev => ({ ...prev, note: e.target.value }))}
-                    style={{ width: '100%', padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.84rem', outline: 'none', backgroundColor: '#FFFFFF' }}
-                  >
-                    <option value="">-- Chọn điều kiện bảo quản / ghi chú --</option>
-                    {[
-                      'Bảo quản nơi khô ráo, thoáng mát (25-30°C)',
-                      'Đóng kín nắp ngay sau khi lấy mẫu',
-                      'Tránh ánh nắng trực tiếp',
-                      'Mẫu thử tiêu chuẩn kiểm định chất lượng',
-                      'Dùng cho công đoạn sơn phủ bề mặt'
-                    ].map((opt, i) => (
-                      <option key={i} value={opt}>{opt}</option>
-                    ))}
-                  </select>
+                    onFocus={() => setShowNoteMenu(true)}
+                    onChange={(e) => {
+                      setFormData(prev => ({ ...prev, note: e.target.value }));
+                      setShowNoteMenu(true);
+                    }}
+                    style={{ width: '100%', padding: '8px 10px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.84rem', outline: 'none', backgroundColor: '#FFFFFF' }}
+                  />
+                  {showNoteMenu && (
+                    (() => {
+                      const options = [
+                        'Bảo quản nơi khô ráo, thoáng mát (25-30°C)',
+                        'Đóng kín nắp ngay sau khi lấy mẫu',
+                        'Tránh ánh nắng trực tiếp',
+                        'Mẫu thử tiêu chuẩn kiểm định chất lượng',
+                        'Dùng cho công đoạn sơn phủ bề mặt'
+                      ];
+                      const queryStr = (formData.note || '').toLowerCase().trim();
+                      const filtered = queryStr ? options.filter(s => s.toLowerCase().includes(queryStr)) : options;
+                      if (filtered.length === 0) return null;
+                      return (
+                        <div style={{
+                          position: 'absolute', top: '100%', left: 0, width: '100%', marginTop: '4px',
+                          backgroundColor: '#FFFFFF', border: '1.5px solid #EADCC9', borderRadius: '8px',
+                          boxShadow: '0 10px 20px rgba(45, 26, 18, 0.15)', maxHeight: '180px', overflowY: 'auto', zIndex: 3000
+                        }}>
+                          {filtered.map((item, idx) => (
+                            <div
+                              key={idx}
+                              onClick={() => {
+                                setFormData(prev => ({ ...prev, note: item }));
+                                setShowNoteMenu(false);
+                              }}
+                              style={{
+                                padding: '8px 12px', fontSize: '0.84rem', fontWeight: '600', color: '#2D1A12',
+                                cursor: 'pointer', borderBottom: idx < filtered.length - 1 ? '1px solid #F1F5F9' : 'none'
+                              }}
+                              onMouseEnter={(e) => e.target.style.backgroundColor = '#FAF6F0'}
+                              onMouseLeave={(e) => e.target.style.backgroundColor = '#FFFFFF'}
+                            >
+                              {item}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px' }}>

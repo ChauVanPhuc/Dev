@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { Edit2, Trash2, X, AlertTriangle, MoreVertical } from 'lucide-react';
+import { Edit2, Trash2, X, AlertTriangle, MoreVertical, ArrowLeft } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
@@ -75,40 +75,48 @@ const ProductDetailsManagementView = () => {
     material: 'Gỗ tự nhiên'
   });
 
-  const stageOptions = ['Tạo phôi', 'Định hình', 'Lắp ráp', 'Sơn', 'Đóng gói', 'Lưu kho'];
+  const stageOptions = [
+    'Tạo phôi',
+    'Định hình',
+    'Chà nhám',
+    'Sơn',
+    'Sơn Pallet',
+    'Sơn treo',
+    'Lắp ráp',
+    'QC / Kiểm định',
+    'Đóng gói',
+    'Lưu kho',
+    'NM1 - Tạo phôi 1',
+    'NM1 - Định hình 1',
+    'NM1 - Định hình ván 1',
+    'NM1 - Chà nhám 1',
+    'NM1 - Lắp ráp 1',
+    'NM1 - Lắp ráp ván 1',
+    'NM1 - Lắp ráp, chà nhám 1',
+    'NM1 - Sơn 1',
+    'NM1 - Đóng gói 1',
+    'NM2 - Định hình mặt tiền 2',
+    'NM2 - Định hình tủ 2',
+    'NM2 - Lắp ráp mặt tiền 2',
+    'NM2 - Lắp ráp tủ 2',
+    'NM2 - Sơn Pallet 2',
+    'NM2 - Sơn treo 2',
+    'NM2 - Đóng gói 2',
+    'NM3 - Tạo phôi 3',
+    'NM3 - Định hình 3',
+    'NM3 - Lắp ráp 3',
+    'NM3 - Sơn 3',
+    'NM3 - Đóng gói 3'
+  ];
   const materialOptions = ['Gỗ tự nhiên', 'MDF', 'Gỗ Sồi', 'Gỗ thông', 'Ván ép', 'Kim loại'];
   const unitOptions = ['Cái', 'Tấm', 'Bộ', 'm2', 'm3'];
 
-  // Setup header Title & Navigation Back button
+  // Setup header Title
   useEffect(() => {
     if (setCustomTitle) setCustomTitle('Quản lý sản phẩm');
     if (setCustomSubtitle) setCustomSubtitle('KT03.1: Quản lý Chi tiết');
     if (setCustomScreenCode) setCustomScreenCode('KT03.1');
-    if (setHeaderExtra) {
-      setHeaderExtra(
-        <button
-          type="button"
-          className="secondary-btn"
-          onClick={() => navigate('/admin/products')}
-          style={{
-            padding: '7px 16px',
-            backgroundColor: '#FFFFFF',
-            border: '1.5px solid #5D3B32',
-            borderRadius: '8px',
-            color: '#5D3B32',
-            fontWeight: '800',
-            fontSize: '0.85rem',
-            cursor: 'pointer'
-          }}
-        >
-          ‹ Quay lại danh sách sản phẩm
-        </button>
-      );
-    }
-    return () => {
-      if (setHeaderExtra) setHeaderExtra(null);
-    };
-  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra, navigate]);
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   // Suggestion states for autocomplete
   const [detailSuggestions, setDetailSuggestions] = useState([]);
@@ -207,6 +215,37 @@ const ProductDetailsManagementView = () => {
     setShowFormModal(true);
   };
 
+  // Fetch matching parent suggestions dynamically whenever detail name changes in form modal
+  useEffect(() => {
+    if (!showFormModal) return;
+    const timer = setTimeout(async () => {
+      const detailNameParam = formData.name ? `?detail_name=${encodeURIComponent(formData.name.trim())}` : '';
+      const sugRes = await api.get(`/master-products/detail-suggestions${detailNameParam}`).catch(() => null);
+      if (sugRes) {
+        setParentSuggestions(sugRes.parent_names || []);
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [formData.name, showFormModal]);
+
+  // Helper to resolve matching product ID
+  const resolveProductId = (targetParentName, currentProdId) => {
+    if (targetParentName) {
+      const pName = targetParentName.trim().toLowerCase();
+      const matched = products.find(p => {
+        const full = `${p.product_code || ''} - ${p.name || ''}`.toLowerCase();
+        const fullNoSpace = `${p.product_code || ''}-${p.name || ''}`.toLowerCase();
+        const code = (p.product_code || '').toLowerCase();
+        const name = (p.name || '').toLowerCase();
+        return full === pName || fullNoSpace === pName || code === pName || name === pName || (code && pName.includes(code));
+      });
+      if (matched) return matched.id;
+    }
+    if (currentProdId) return currentProdId;
+    if (products.length > 0) return products[0].id;
+    return 1;
+  };
+
   // Submit form (Create / Update)
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -214,7 +253,7 @@ const ProductDetailsManagementView = () => {
       if (toast) toast('error', 'Vui lòng nhập Tên chi tiết');
       return;
     }
-    const prodId = formData.master_product_id || (products.length > 0 ? products[0].id : 1);
+    const prodId = resolveProductId(formData.parent_name, formData.master_product_id);
     const payload = { ...formData, master_product_id: prodId };
 
     try {
@@ -651,10 +690,16 @@ const ProductDetailsManagementView = () => {
                     />
                     {showParentMenu && (
                       (() => {
+                        const isDetailSpecified = Boolean(formData.name && formData.name.trim());
+                        let allParentList = parentSuggestions;
+                        if (!isDetailSpecified) {
+                          const productOptions = products.map(p => p.name ? `${p.product_code ? p.product_code + ' - ' : ''}${p.name}` : p.product_code).filter(Boolean);
+                          allParentList = Array.from(new Set([...productOptions, ...parentSuggestions]));
+                        }
                         const queryStr = (formData.parent_name || '').toLowerCase().trim();
                         const filtered = queryStr
-                          ? parentSuggestions.filter(s => s.toLowerCase().includes(queryStr)).slice(0, 8)
-                          : parentSuggestions.slice(0, 8);
+                          ? allParentList.filter(s => s && s.toLowerCase().includes(queryStr)).slice(0, 25)
+                          : allParentList.slice(0, 25);
                         if (filtered.length === 0) return null;
                         return (
                           <div style={{
@@ -667,7 +712,19 @@ const ProductDetailsManagementView = () => {
                               <div
                                 key={idx}
                                 onClick={() => {
-                                  setFormData(prev => ({ ...prev, parent_name: item }));
+                                  const pName = item;
+                                  const matched = products.find(p => {
+                                    const full = `${p.product_code || ''} - ${p.name || ''}`.toLowerCase();
+                                    const fullNoSpace = `${p.product_code || ''}-${p.name || ''}`.toLowerCase();
+                                    const code = (p.product_code || '').toLowerCase();
+                                    const name = (p.name || '').toLowerCase();
+                                    return full === pName.toLowerCase() || fullNoSpace === pName.toLowerCase() || code === pName.toLowerCase() || name === pName.toLowerCase() || (code && pName.toLowerCase().includes(code));
+                                  });
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    parent_name: item,
+                                    master_product_id: matched ? String(matched.id) : prev.master_product_id
+                                  }));
                                   setShowParentMenu(false);
                                 }}
                                 style={{

@@ -26,8 +26,8 @@ export const useScreenMetadata = (routePath) => {
         setMetadata(prev => ({ ...prev, loading: true, error: null }));
         
         // Gọi API lấy screen theo route_path
-        const screens = await screenService.getScreens();
-        
+        const res = await screenService.getScreens().catch(() => []);
+        const screens = Array.isArray(res) ? res : (res?.data && Array.isArray(res.data) ? res.data : []);
         const normalizePathForMatching = (p) => {
           if (!p) return '';
           return p.replace(/^\//, '').replace(/^(admin|manufacture)\//, '');
@@ -113,8 +113,8 @@ export const useScreenMetadataCached = (routePath) => {
       try {
         setMetadata(prev => ({ ...prev, loading: true, error: null }));
         
-        const screens = await screenService.getScreens();
-        
+        const res = await screenService.getScreens().catch(() => []);
+        const screens = Array.isArray(res) ? res : (res?.data && Array.isArray(res.data) ? res.data : []);
         const normalizePathForMatching = (p) => {
           if (!p) return '';
           return p.replace(/^\//, '').replace(/^(admin|manufacture)\//, '');

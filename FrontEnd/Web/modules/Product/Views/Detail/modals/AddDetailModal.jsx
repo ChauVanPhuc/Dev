@@ -31,7 +31,39 @@ const AddDetailModal = ({ productId, product, bomRows = [], detailRows = [], onC
     ...detailRows.map(r => ({ id: r.id || r.name, name: r.name }))
   ];
 
-  const stageOptions = ['Định hình', 'Tạo phôi', 'Lắp ráp', 'Sơn', 'Đóng gói', 'Lưu kho'];
+  const stageOptions = [
+    'Tạo phôi',
+    'Định hình',
+    'Chà nhám',
+    'Sơn',
+    'Sơn Pallet',
+    'Sơn treo',
+    'Lắp ráp',
+    'QC / Kiểm định',
+    'Đóng gói',
+    'Lưu kho',
+    'NM1 - Tạo phôi 1',
+    'NM1 - Định hình 1',
+    'NM1 - Định hình ván 1',
+    'NM1 - Chà nhám 1',
+    'NM1 - Lắp ráp 1',
+    'NM1 - Lắp ráp ván 1',
+    'NM1 - Lắp ráp, chà nhám 1',
+    'NM1 - Sơn 1',
+    'NM1 - Đóng gói 1',
+    'NM2 - Định hình mặt tiền 2',
+    'NM2 - Định hình tủ 2',
+    'NM2 - Lắp ráp mặt tiền 2',
+    'NM2 - Lắp ráp tủ 2',
+    'NM2 - Sơn Pallet 2',
+    'NM2 - Sơn treo 2',
+    'NM2 - Đóng gói 2',
+    'NM3 - Tạo phôi 3',
+    'NM3 - Định hình 3',
+    'NM3 - Lắp ráp 3',
+    'NM3 - Sơn 3',
+    'NM3 - Đóng gói 3'
+  ];
   const materialOptions = ['Gỗ tự nhiên', 'MDF', 'Gỗ Sồi', 'Gỗ thông', 'Ván ép', 'Kim loại'];
   const unitOptions = ['Cái', 'Tấm', 'Bộ', 'm2', 'm3'];
 

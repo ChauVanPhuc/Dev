@@ -159,9 +159,6 @@ try:
             ('TIN', 'Dòng hàng TIN'),
             ('BEZ', 'Dòng hàng BEZ'),
             ('MBC', 'Dòng hàng MBC'),
-            ('TU', 'Dòng hàng TU'),
-            ('BAN', 'Dòng hàng BAN'),
-            ('GIUONG', 'Dòng hàng GIUONG'),
         ]
         for prefix, cat_name in known_categories:
             conn.execute(text(
@@ -170,7 +167,6 @@ try:
             ), {"name": cat_name, "desc": f"Dòng hàng {prefix}"})
 
         # 2. Link master_products to categories by SKU prefix (first 3-6 chars)
-        #    Try longer prefixes first (GIUONG, BAN) then shorter (APT, ATL, etc.)
         for prefix, cat_name in known_categories:
             conn.execute(text(
                 "UPDATE mp SET mp.category_id = mc.id "
@@ -191,6 +187,12 @@ try:
                 "AND (pr.category_id IS NULL) "
                 "AND (pr.category LIKE :pattern OR pr.routing_code LIKE :code_pattern)"
             ), {"cat_name": cat_name, "pattern": f"%{prefix}%", "code_pattern": f"%{prefix}%"})
+
+        # 4. Clean up any empty categories with 0 products
+        conn.execute(text(
+            "DELETE FROM master_categories "
+            "WHERE id NOT IN (SELECT DISTINCT category_id FROM master_products WHERE category_id IS NOT NULL)"
+        ))
 except Exception as seed_err:
     print(f"[MIGRATION] Seed master_categories warning: {seed_err}")
 
@@ -242,6 +244,13 @@ app = FastAPI(
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
+
+# [STATIC FILES] Mount thư mục static chứa ảnh uploads (screen_bugs, component_samples, v.v.)
+static_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static"))
+os.makedirs(static_dir, exist_ok=True)
+os.makedirs(os.path.join(static_dir, "uploads", "screen_bugs"), exist_ok=True)
+os.makedirs(os.path.join(static_dir, "uploads", "component_samples"), exist_ok=True)
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
 
