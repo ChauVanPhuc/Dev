@@ -75,6 +75,7 @@ const CL09_InspectionCreateView = () => {
   const [showAnswers, setShowAnswers] = useState([false, false, false])
   const [qaResult, setQaResult] = useState('pass')
   const [stageOptions, setStageOptions] = useState([{ value: '', label: 'Chọn công đoạn' }])
+  const [processOptions, setProcessOptions] = useState([{ value: '', label: 'Chọn quy trình' }])
   const [poOptions, setPoOptions] = useState([{ value: '', label: 'Chọn PO' }])
   const [productOptions, setProductOptions] = useState([{ value: '', label: 'Chọn sản phẩm' }])
   const [specOptions, setSpecOptions] = useState([{ value: '', label: 'Chọn quy cách' }])
@@ -156,6 +157,18 @@ const CL09_InspectionCreateView = () => {
       })
       .catch(() => {
         setPoOptions([{ value: '', label: 'Chọn PO' }])
+      })
+
+    inspectionService.getProcessGuides()
+      .then((data) => {
+        const opts = (data || []).map((g) => ({
+          value: String(g.id),
+          label: g.code ? `${g.code} - ${g.name}` : g.name
+        }))
+        setProcessOptions([{ value: '', label: 'Chọn quy trình' }, ...opts])
+      })
+      .catch(() => {
+        setProcessOptions([{ value: '', label: 'Chọn quy trình' }])
       })
   }, [])
 
@@ -291,11 +304,19 @@ const CL09_InspectionCreateView = () => {
   // Tự động load SOP steps khi tạo mới
   useEffect(() => {
     if (!isNew && ticket?.steps && ticket.steps.length > 0) return
+    if (mode === INSPECT_MODES.PROCESS) {
+      if (process) {
+        loadGuide(mode, null, null, process)
+      } else {
+        setSteps([])
+      }
+      return
+    }
     const activeStage = mode === INSPECT_MODES.PARAMETER ? paramStage : stage
     const matchedStage = stagesList.find((s) => s.name === activeStage)
     const stageId = matchedStage ? matchedStage.id : null
     loadGuide(mode, null, stageId)
-  }, [mode, stage, paramStage, stagesList, isNew, ticket])
+  }, [mode, stage, paramStage, process, stagesList, isNew, ticket])
 
   const hasFailedStep = steps.some((s) => s.result === 'fail')
   const isFailedResult =
@@ -621,7 +642,7 @@ const CL09_InspectionCreateView = () => {
             ) : mode === INSPECT_MODES.PROCESS ? (
               <div className="pv2-field">
                 <label>Chọn quy trình</label>
-                <CustomSelect value={process} options={processOpts} onChange={setProcess} disabled={readOnly} />
+                <CustomSelect value={process} options={processOptions} onChange={setProcess} disabled={readOnly} />
               </div>
             ) : mode === INSPECT_MODES.QA ? (
               <div className="pv2-field">
@@ -854,7 +875,7 @@ const CL09_InspectionCreateView = () => {
                 </div>
 
                 <div className="pv2-section-title">Các bước của quy trình</div>
-                <InspectionStepsTable steps={steps} onStepChange={handleStepResultChange} disabled={readOnly} />
+                <InspectionStepsTable steps={steps} onStepChange={handleStepResultChange} disabled={readOnly} mode={mode} processSelected={process} />
 
                 {renderImageUploadArea()}
 

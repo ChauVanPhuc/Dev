@@ -85,9 +85,9 @@ export const useInspectionDetail = (id) => {
     })
   }, [id])
 
-  const loadGuide = async (mode, productId = null, stageId = null) => {
+  const loadGuide = async (mode, productId = null, stageId = null, guideId = null) => {
     try {
-      const guideData = await inspectionService.getGuide(mode, productId, stageId)
+      const guideData = await inspectionService.getGuide(mode, productId, stageId, guideId)
       if (guideData && Array.isArray(guideData.steps)) {
         const formattedSteps = guideData.steps.map((st) => ({
           id: st.id,

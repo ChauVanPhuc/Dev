@@ -42,15 +42,21 @@ export const inspectionService = {
     }
   },
 
-  async getGuide(mode, productId = null, stageId = null) {
+  async getGuide(mode, productId = null, stageId = null, guideId = null) {
     try {
+      if (guideId) {
+        const res = await apiClient.get(`/inspection-guides/${guideId}`)
+        const guideData = res?.data !== undefined ? res.data : res
+        if (guideData && (guideData.id || guideData.steps)) {
+          return guideData
+        }
+      }
       const params = new URLSearchParams()
       if (productId) params.append('product_id', productId)
       if (stageId) params.append('stage_id', stageId)
       const queryStr = params.toString() ? `?${params.toString()}` : ''
       const url = `/inspection-guides/mobile/${mode}${queryStr}`
       const res = await apiClient.get(url)
-      // Axios trả về { data, status, ... }. apiClient có thể wrapper hoặc không.
       const guideData = res?.data !== undefined ? res.data : res
       if (guideData && (guideData.id || guideData.steps)) {
         return guideData
@@ -61,6 +67,17 @@ export const inspectionService = {
       console.warn(`[inspectionService.getGuide] mode=${mode}, status=${status}:`, detail)
     }
     return null
+  },
+
+  async getProcessGuides() {
+    try {
+      const res = await apiClient.get('/inspection-guides?inspection_type=process')
+      const guides = res?.data !== undefined ? res.data : res
+      return Array.isArray(guides) ? guides : []
+    } catch (e) {
+      console.warn('[inspectionService.getProcessGuides] error:', e)
+      return []
+    }
   },
 
   async create(payload) {

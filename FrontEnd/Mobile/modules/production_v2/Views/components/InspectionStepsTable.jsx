@@ -12,7 +12,7 @@ import {
 import { getFullImageUrl } from '@shared/services/api'
 import { FormattedTextView } from '@shared/utils/textFormatter'
 
-const InspectionStepsTable = ({ steps = [], onStepChange, sampleQty, disabled = false }) => {
+const InspectionStepsTable = ({ steps = [], onStepChange, sampleQty, disabled = false, mode = '', processSelected = '' }) => {
   const [selectedStepModal, setSelectedStepModal] = useState(null)
   const [selectedImage, setSelectedImage] = useState(null)
 
@@ -30,6 +30,30 @@ const InspectionStepsTable = ({ steps = [], onStepChange, sampleQty, disabled = 
   }
 
   if (!steps || steps.length === 0) {
+    if (mode === 'process' && !processSelected) {
+      return (
+        <div className="pv2-sop-empty-box" style={{ backgroundColor: '#FAF6F0', borderColor: '#EADCC9' }}>
+          <Info size={20} className="pv2-sop-empty-icon" style={{ color: '#7B5233' }} />
+          <div className="pv2-sop-empty-text">
+            <strong style={{ color: '#7B5233' }}>💡 Vui lòng chọn Quy trình</strong>
+            <span style={{ color: '#64748b' }}>Vui lòng chọn 1 quy trình ở mục "Chọn quy trình" phía trên để hiển thị danh sách các bước SOP.</span>
+          </div>
+        </div>
+      )
+    }
+
+    if (mode === 'process' && processSelected) {
+      return (
+        <div className="pv2-sop-empty-box">
+          <Info size={20} className="pv2-sop-empty-icon" />
+          <div className="pv2-sop-empty-text">
+            <strong>Quy trình chưa có bước SOP</strong>
+            <span>Quy trình đã chọn hiện chưa được khai báo chi tiết các bước hướng dẫn trên hệ thống.</span>
+          </div>
+        </div>
+      )
+    }
+
     return (
       <div className="pv2-sop-empty-box">
         <Info size={20} className="pv2-sop-empty-icon" />
