@@ -58,7 +58,7 @@ export const inspectionService = {
 
         // 2. Try ISO processes endpoint
         try {
-          const isoRes = await apiClient.get(`/iso/processes/${guideId}/details`)
+          const isoRes = await apiClient.get(`/iso-documents/processes/${guideId}/details`)
           const details = isoRes?.data !== undefined ? isoRes.data : isoRes
           if (details && (details.id || details.steps)) {
             return {
@@ -80,7 +80,7 @@ export const inspectionService = {
 
         // 3. Try ISO documents endpoint
         try {
-          const docRes = await apiClient.get(`/iso/${guideId}/details`)
+          const docRes = await apiClient.get(`/iso-documents/${guideId}/details`)
           const details = docRes?.data !== undefined ? docRes.data : docRes
           if (details && (details.id || details.steps)) {
             return {
@@ -133,8 +133,8 @@ export const inspectionService = {
 
   async getProcessGuides() {
     try {
-      // 1. Lấy từ /iso/processes (Quy trình ISO thực tế tạo từ Admin ISO Process Editor)
-      const isoRes = await apiClient.get('/iso/processes')
+      // 1. Lấy từ /iso-documents/processes (Quy trình ISO thực tế tạo từ Admin ISO Process Editor)
+      const isoRes = await apiClient.get('/iso-documents/processes')
       const isoProcs = isoRes?.data !== undefined ? isoRes.data : isoRes
       if (Array.isArray(isoProcs) && isoProcs.length > 0) {
         return isoProcs.map((p) => ({
@@ -144,8 +144,8 @@ export const inspectionService = {
         }))
       }
 
-      // 2. Lấy từ /iso/ (Danh sách Tài liệu ISO mẫu)
-      const docRes = await apiClient.get('/iso/')
+      // 2. Lấy từ /iso-documents/ (Danh sách Tài liệu ISO mẫu)
+      const docRes = await apiClient.get('/iso-documents/')
       const isoDocs = docRes?.data !== undefined ? docRes.data : docRes
       if (Array.isArray(isoDocs) && isoDocs.length > 0) {
         return isoDocs.map((d) => ({

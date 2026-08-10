@@ -859,7 +859,7 @@ const CL09_InspectionCreateView = () => {
                 <div className="pv2-field-row pv2-field-row--2col">
                   <div className="pv2-field">
                     <label>Chọn khu vực kiểm tra <span className="pv2-req">*</span></label>
-                    <CustomSelect value={area} options={areaOpts} onChange={setArea} disabled={readOnly} />
+                    <CustomSelect value={area} options={stageOptions.map(o => o.value === '' ? { value: '', label: 'Chọn khu vực' } : o)} onChange={setArea} disabled={readOnly} />
                   </div>
                   <div className="pv2-field">
                     <label>Kết quả <span className="pv2-req">*</span></label>
