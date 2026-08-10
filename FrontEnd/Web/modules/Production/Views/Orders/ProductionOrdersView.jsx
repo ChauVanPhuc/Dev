@@ -8,6 +8,7 @@ import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import { planService } from '@modules/Plan/Models/plan.service';
 import { purchasingService } from '@modules/Purchasing/Models/purchasing.service';
+import api from '@webShared/Services/api.service';
 import '@styles/components.css';
 
 /**
@@ -121,6 +122,55 @@ const ProductionOrdersView = () => {
 
   // Sản phẩm đang được chọn ở Bảng 1 để lọc Bảng 2
   const [selectedProductCode, setSelectedProductCode] = useState(null);
+
+  // Danh sách công đoạn mặc định khớp 1:1 với bảng 'stages' trong CSDL
+  const defaultDbStages = [
+    'NM1 - Tạo phôi 1',
+    'NM1 - Định hình mặt tiền 1',
+    'NM1 - Định hình tủ 1',
+    'NM1 - Lắp ráp mặt tiền 1',
+    'NM1 - Lắp ráp tủ 1',
+    'NM1 - Sơn Pallet 1',
+    'NM1 - Sơn treo 1',
+    'NM1 - Đóng gói 1',
+    'NM1 - QC / Kiểm định 1',
+    'NM2 - Định hình mặt tiền 2',
+    'NM2 - Định hình tủ 2',
+    'NM2 - Lắp ráp mặt tiền 2',
+    'NM2 - Lắp ráp tủ 2',
+    'NM2 - Sơn Pallet 2',
+    'NM2 - Sơn treo 2',
+    'NM2 - Đóng gói 2',
+    'NM3 - Tạo phôi 3',
+    'NM3 - Định hình 3',
+    'NM3 - Lắp ráp 3',
+    'NM3 - Sơn 3',
+    'NM3 - Đóng gói 3'
+  ];
+
+  // State danh sách công đoạn phục vụ Dropdown chọn Công đoạn giao / nhận (Load từ bảng DB 'stages')
+  const [stageOptions, setStageOptions] = useState(defaultDbStages);
+
+  // Fetch danh sách công đoạn từ DB (bảng stages) - Lấy nguyên bản từ CSDL
+  useEffect(() => {
+    const fetchStagesFromDb = async () => {
+      try {
+        const res = await api.get('/stages/').catch(() => api.get('/stages')).catch(() => null);
+        if (res && Array.isArray(res) && res.length > 0) {
+          const rawDbStages = res
+            .map(s => (s.name || s.stage_name || '').trim())
+            .filter(Boolean);
+          const uniqueDbStages = Array.from(new Set(rawDbStages));
+          if (uniqueDbStages.length > 0) {
+            setStageOptions(uniqueDbStages);
+          }
+        }
+      } catch (err) {
+        console.warn('Lỗi lấy danh sách công đoạn từ DB:', err);
+      }
+    };
+    fetchStagesFromDb();
+  }, []);
 
   // --- STATE VÀ LOGIC CHO TAB QUY TRÌNH - KẾ HOẠCH (ĐỘNG THEO SẢN PHẨM & CÔNG ĐOẠN) ---
   const [activeStage, setActiveStage] = useState('Định hình');
@@ -555,6 +605,19 @@ const ProductionOrdersView = () => {
     const qtyVal = targetProd ? targetProd.orderQty : 50;
     return generateBomForProduct(selectedProductCode, targetProd?.productName, qtyVal);
   }, [productDetails, selectedProductCode, orderProducts]);
+
+  // Xử lý cập nhật Công đoạn giao / nhận khi người dùng chỉnh sửa trong Bảng Chi tiết sản phẩm
+  const handleUpdateDetStage = (detId, field, newValue) => {
+    setProductDetails(prev => {
+      const exists = prev.some(d => d.id === detId);
+      if (exists) {
+        return prev.map(d => (d.id === detId ? { ...d, [field]: newValue } : d));
+      } else {
+        const updatedList = displayedProductDetails.map(d => (d.id === detId ? { ...d, [field]: newValue } : d));
+        return [...prev.filter(p => p.parentCode !== selectedProductCode), ...updatedList];
+      }
+    });
+  };
 
   // --- LOGIC TAB QUY TRÌNH - KẾ HOẠCH (ĐỘNG THEO SẢN PHẨM & CÔNG ĐOẠN) ---
   // 1. Tự sinh Công đoạn con / Tổ máy (Oval xanh dương) ĐỘNG theo loại sản phẩm và công đoạn được chọn
@@ -1416,8 +1479,52 @@ const ProductionOrdersView = () => {
                             <tr key={det.id || idx} style={{ borderBottom: '1px solid #EADCC9' }}>
                               <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '600', color: '#475569' }}>{idx + 1}</td>
                               <td style={{ padding: '8px 10px', fontWeight: '600', color: '#334155' }}>{det.type || '---'}</td>
-                              <td style={{ padding: '8px 10px', color: '#475569' }}>{det.stageFrom || '---'}</td>
-                              <td style={{ padding: '8px 10px', color: '#475569' }}>{det.stageTo || '---'}</td>
+                              <td style={{ padding: '4px 6px' }}>
+                                <select
+                                  value={det.stageFrom || (stageOptions[0] || '')}
+                                  onChange={(e) => handleUpdateDetStage(det.id, 'stageFrom', e.target.value)}
+                                  style={{
+                                    width: '100%',
+                                    minWidth: '110px',
+                                    padding: '5px 8px',
+                                    borderRadius: '6px',
+                                    border: '1.5px solid #EADCC9',
+                                    fontSize: '0.82rem',
+                                    fontWeight: '600',
+                                    color: '#2D1A12',
+                                    backgroundColor: '#FFFFFF',
+                                    outline: 'none',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  {stageOptions.map((stg, sIdx) => (
+                                    <option key={sIdx} value={stg}>{stg}</option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td style={{ padding: '4px 6px' }}>
+                                <select
+                                  value={det.stageTo || (stageOptions[1] || '')}
+                                  onChange={(e) => handleUpdateDetStage(det.id, 'stageTo', e.target.value)}
+                                  style={{
+                                    width: '100%',
+                                    minWidth: '110px',
+                                    padding: '5px 8px',
+                                    borderRadius: '6px',
+                                    border: '1.5px solid #EADCC9',
+                                    fontSize: '0.82rem',
+                                    fontWeight: '600',
+                                    color: '#2D1A12',
+                                    backgroundColor: '#FFFFFF',
+                                    outline: 'none',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  {stageOptions.map((stg, sIdx) => (
+                                    <option key={sIdx} value={stg}>{stg}</option>
+                                  ))}
+                                </select>
+                              </td>
                               <td style={{ padding: '8px 10px', fontWeight: '800', color: '#2D1A12' }}>{det.compCode || '---'}</td>
                               <td style={{ padding: '8px 10px', fontWeight: '600', color: '#334155' }}>{det.compName || '---'}</td>
                               <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: '#1F2937' }}>{det.quantity || '0/0'}</td>
