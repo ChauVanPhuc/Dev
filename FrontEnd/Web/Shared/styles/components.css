@@ -2414,8 +2414,6 @@ tbody tr:nth-child(10) { animation-delay: 0.3s !important; }
   margin-bottom: 20px;
   border-bottom: 2px solid #f1f5f9;
   overflow-x: auto;
-  position: sticky;
-  top: 60px;
   z-index: 105;
   background: #FAF8F6; /* Đảm bảo không bị trong suốt khi cuộn */
 }

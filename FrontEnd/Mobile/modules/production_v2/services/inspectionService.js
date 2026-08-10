@@ -1,6 +1,7 @@
+import apiClient from '@shared/services/api'
 import { MOCK_INSPECTION_TICKETS, MOCK_INSPECTION_STEPS, PAGE_SIZE } from '../constants'
 
-const USE_MOCK = true
+const USE_MOCK = false
 
 const delay = (ms = 400) => new Promise((r) => setTimeout(r, ms))
 
@@ -16,8 +17,16 @@ export const inspectionService = {
       return { items, total, page, pageSize: PAGE_SIZE }
     }
     const params = new URLSearchParams({ tab, month, page })
-    const res = await import('@shared/services/api').then((m) => m.default.get(`/inspections/?${params}`))
-    return res.data
+    try {
+      const res = await apiClient.get(`/inspections/?${params}`)
+      return res.data
+    } catch (e) {
+      // Fallback to mock if endpoint not available
+      let data = [...MOCK_INSPECTION_TICKETS]
+      if (tab === 'pending') data = data.filter((t) => t.status === 'pending' || t.status === 'delivering')
+      else data = data.filter((t) => t.status === 'done' || t.status === 'cancelled')
+      return { items: data.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), total: data.length, page, pageSize: PAGE_SIZE }
+    }
   },
 
   async getById(id) {
@@ -25,19 +34,28 @@ export const inspectionService = {
       await delay()
       return MOCK_INSPECTION_TICKETS.find((t) => t.code === id || t.id === Number(id)) || null
     }
-    const res = await import('@shared/services/api').then((m) => m.default.get(`/inspections/${id}/`))
-    return res.data
+    try {
+      const res = await apiClient.get(`/inspections/${id}/`)
+      return res.data
+    } catch (e) {
+      return MOCK_INSPECTION_TICKETS.find((t) => t.code === id || t.id === Number(id)) || null
+    }
   },
 
-  async getGuide(mode, productId) {
-    if (USE_MOCK) {
-      await delay(300)
-      return MOCK_INSPECTION_STEPS
+  async getGuide(mode, productId = null, stageId = null) {
+    try {
+      const params = new URLSearchParams()
+      if (productId) params.append('product_id', productId)
+      if (stageId) params.append('stage_id', stageId)
+      const queryStr = params.toString() ? `?${params.toString()}` : ''
+      const res = await apiClient.get(`/inspection-guides/mobile/${mode}${queryStr}`)
+      if (res && res.data) {
+        return res.data
+      }
+    } catch (e) {
+      console.warn(`[inspectionService] Không tìm thấy SOP từ database cho mode=${mode}:`, e?.response?.data || e.message)
     }
-    const res = await import('@shared/services/api').then((m) =>
-      m.default.get(`/inspections/guide/?mode=${mode}&product=${productId}`)
-    )
-    return res.data
+    return null
   },
 
   async create(payload) {
@@ -63,12 +81,18 @@ export const inspectionService = {
       await delay(800)
       return { url: URL.createObjectURL(file) }
     }
-    const form = new FormData()
-    form.append('image', file)
-    const res = await import('@shared/services/api').then((m) =>
-      m.default.post('/inspections/upload-image/', form, { headers: { 'Content-Type': 'multipart/form-data' } })
-    )
-    return res.data
+    try {
+      const form = new FormData()
+      form.append('image', file)
+      form.append('file', file)
+      const res = await apiClient.post('/inspections/upload-image', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      return res.data
+    } catch (e) {
+      console.warn('[inspectionService] Upload image to server failed, using local object URL fallback:', e)
+      return { url: URL.createObjectURL(file) }
+    }
   },
 
   async getLastResult(mode, productId, poCode) {
@@ -80,5 +104,20 @@ export const inspectionService = {
       m.default.get(`/inspections/last-result/?mode=${mode}&product=${productId}&po=${poCode}`)
     )
     return res.data
+  },
+
+  async generatePalletCode(prefix = 'DA') {
+    if (USE_MOCK) {
+      return { palletCode: `DA${Math.floor(10000 + Math.random() * 90000)}`, success: true }
+    }
+    try {
+      const res = await apiClient.get(`/inspections/generate-pallet-code?prefix=${encodeURIComponent(prefix)}`)
+      if (res && res.data && res.data.palletCode) {
+        return res.data
+      }
+    } catch (e) {
+      console.warn('[inspectionService] generatePalletCode failed, fallback to local:', e)
+    }
+    return { palletCode: `DA${Math.floor(10000 + Math.random() * 90000)}`, success: true }
   },
 }

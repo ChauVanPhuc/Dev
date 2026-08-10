@@ -7,7 +7,9 @@ import CustomSelect from '@mobile/Shared/Views/components/form/CustomSelect'
 import { useTransferController, useTransferDetail } from '../Controllers/useTransferController'
 import TransferItemTable from './components/TransferItemTable'
 import ConfirmQtyModal from './components/ConfirmQtyModal'
+import MessageModal from '@mobile/Shared/Views/components/feedback/MessageModal'
 import { MOCK_PALLETS, MOCK_STAGE_OPTIONS, MOCK_PRODUCTS, ROUTES } from '../constants'
+import { getFullImageUrl } from '@shared/services/api'
 import '../styles/production_v2.css'
 
 const palletOpts = [{ value: '', label: 'Chọn mã pallet' }, ...MOCK_PALLETS]
@@ -51,6 +53,27 @@ const CL07_TransferCreateView = () => {
     }
   }, [ticket])
 
+  const [modalConfig, setModalConfig] = useState({
+    isOpen: false,
+    type: 'info',
+    title: '',
+    message: '',
+    onConfirm: null,
+  })
+
+  const showMessage = (title, message, type = 'info', onConfirm = null) => {
+    setModalConfig({
+      isOpen: true,
+      type,
+      title,
+      message,
+      onConfirm: () => {
+        setModalConfig((prev) => ({ ...prev, isOpen: false }))
+        if (onConfirm) onConfirm()
+      },
+    })
+  }
+
   const upd = (k, v) => setForm((p) => ({ ...p, [k]: v }))
 
   const handlePalletChange = (val) => {
@@ -70,20 +93,29 @@ const CL07_TransferCreateView = () => {
   }
 
   const handleSubmit = async () => {
-    if (!noPallet && !form.palletCode) { alert('Vui lòng chọn mã pallet'); return }
-    if (!form.toStage) { alert('Vui lòng chọn công đoạn nhận'); return }
+    if (!noPallet && !form.palletCode) {
+      showMessage('Chưa chọn mã pallet', 'Vui lòng chọn mã pallet trước khi tiếp tục.', 'warning')
+      return
+    }
+    if (!form.toStage) {
+      showMessage('Chưa chọn công đoạn', 'Vui lòng chọn công đoạn nhận trước khi tiếp tục.', 'warning')
+      return
+    }
     setSubmitting(true)
     try {
       if (isNew) {
         await createTicket({ ...form, items })
-        alert('Tạo phiếu thành công')
+        showMessage('Thành công', 'Đã tạo phiếu luân chuyển thành công!', 'success', () => {
+          navigate(ROUTES.TRANSFER_LIST)
+        })
       } else {
         await confirmTicket(id, { items })
-        alert('Xác nhận thành công')
+        showMessage('Thành công', 'Đã xác nhận luân chuyển thành công!', 'success', () => {
+          navigate(ROUTES.TRANSFER_LIST)
+        })
       }
-      navigate(ROUTES.TRANSFER_LIST)
     } catch (e) {
-      alert(e.message || 'Lỗi xử lý phiếu')
+      showMessage('Lỗi xử lý phiếu', e.message || 'Không thể xử lý phiếu luân chuyển. Vui lòng thử lại.', 'error')
     } finally {
       setSubmitting(false)
     }
@@ -209,7 +241,7 @@ const CL07_TransferCreateView = () => {
                 <div className="pv2-image-preview-row">
                   {images.map((src, i) => (
                     <div key={i} className="pv2-img-thumb">
-                      <img src={src} alt="" />
+                      <img src={getFullImageUrl(src)} alt="Ảnh pallet" />
                       <button type="button" className="pv2-img-remove" onClick={() => removeImage(i)}>
                         <X size={12} />
                       </button>
@@ -245,6 +277,14 @@ const CL07_TransferCreateView = () => {
         items={items}
         onConfirm={handleConfirmQty}
         onClose={() => setConfirmModal(false)}
+      />
+
+      <MessageModal
+        isOpen={modalConfig.isOpen}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onConfirm={modalConfig.onConfirm}
       />
     </Layout>
   )

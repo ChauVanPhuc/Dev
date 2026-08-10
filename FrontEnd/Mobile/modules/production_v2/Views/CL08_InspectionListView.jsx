@@ -1,62 +1,85 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { SlidersHorizontal, ArrowUpDown, Plus } from 'lucide-react'
+import { ArrowDownAZ, Filter, Plus, ChevronLeft, ChevronRight } from 'lucide-react'
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout'
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader'
-import Tabs from '@mobile/Shared/Views/components/ui/Tabs'
 import CustomSelect from '@mobile/Shared/Views/components/form/CustomSelect'
 import { useInspectionController } from '../Controllers/useInspectionController'
 import InspectionCard from './components/InspectionCard'
 import { MONTH_OPTIONS, ROUTES } from '../constants'
 import '../styles/production_v2.css'
 
-const monthOpts = [{ value: '', label: 'Kế hoạch' }, ...MONTH_OPTIONS]
-
 const CL08_InspectionListView = () => {
   const navigate = useNavigate()
-  const { tickets, total, loading, error, filters, setFilters, pendingCount } = useInspectionController()
+  const {
+    tickets, total, loading, error, availableMonths,
+    filters, setFilters, pendingCount
+  } = useInspectionController()
   const [filterOpen, setFilterOpen] = useState(false)
 
-  const tabs = [
-    { id: 'pending', label: 'Chờ Kiểm Tra', badge: pendingCount },
-    { id: 'history', label: 'Lịch sử lập phiếu' },
-  ]
+  const monthOptions = availableMonths && availableMonths.length > 0
+    ? availableMonths.map((m) => ({ value: String(m.month), label: `Tháng ${m.month}` }))
+    : MONTH_OPTIONS
 
+  const activeTab = filters.tab || 'pending'
   const page = filters.page || 1
-  const totalPages = Math.ceil(total / 10)
+  const pageSize = 10
+  const totalPages = Math.ceil(total / pageSize) || 1
 
   return (
     <Layout>
       <PageHeader title="CL08: Danh sách phiếu kiểm tra" subTitle="Khởi tạo phiếu" showBack={false} />
 
       <div className="pv2-page">
-        <div className="pv2-toolbar">
-          <div className="pv2-toolbar-left">
-            <CustomSelect
-              value={filters.month}
-              options={monthOpts}
-              onChange={(v) => setFilters({ month: v, page: 1 })}
-            />
-          </div>
-          <div className="pv2-toolbar-right">
-            <button className="pv2-icon-btn" title="Sắp xếp">
-              <ArrowUpDown size={18} />
-            </button>
-            <button className="pv2-icon-btn" onClick={() => setFilterOpen(true)} title="Bộ lọc">
-              <SlidersHorizontal size={18} />
-            </button>
-            <button className="pv2-btn-add" onClick={() => navigate(`${ROUTES.INSPECTION_CREATE}/NEW`)}>
-              <Plus size={16} /> Thêm mới
-            </button>
+        {/* Top Outer Filter Card */}
+        <div className="pv2-plan-filter-card">
+          <div className="pv2-plan-filter-label">Kế hoạch</div>
+          <div className="pv2-plan-filter-row">
+            <div className="pv2-plan-select-wrap">
+              <CustomSelect
+                value={String(filters.month || new Date().getMonth() + 1)}
+                options={monthOptions}
+                onChange={(v) => setFilters({ month: String(v), page: 1 })}
+              />
+            </div>
+            <div className="pv2-plan-actions-right">
+              <button type="button" className="pv2-btn-icon-square" title="Sắp xếp">
+                <ArrowDownAZ size={18} />
+              </button>
+              <button type="button" className="pv2-btn-icon-square" onClick={() => setFilterOpen(true)} title="Bộ lọc">
+                <Filter size={18} />
+              </button>
+              <button
+                type="button"
+                className="pv2-btn-add-primary"
+                onClick={() => navigate(`${ROUTES.INSPECTION_CREATE}/NEW`)}
+              >
+                <Plus size={16} /> Thêm mới
+              </button>
+            </div>
           </div>
         </div>
 
-        <Tabs
-          tabs={tabs}
-          activeTab={filters.tab}
-          onTabChange={(tab) => setFilters({ tab, page: 1 })}
-        />
+        {/* Custom Tabs */}
+        <div className="pv2-custom-tabs-container">
+          <button
+            type="button"
+            className={`pv2-custom-tab ${activeTab === 'pending' ? 'pv2-custom-tab--active' : ''}`}
+            onClick={() => setFilters({ tab: 'pending', page: 1 })}
+          >
+            <span>Chờ kiểm tra</span>
+            {pendingCount > 0 && <span className="pv2-badge-red">{pendingCount}</span>}
+          </button>
+          <button
+            type="button"
+            className={`pv2-custom-tab ${activeTab === 'history' ? 'pv2-custom-tab--active' : ''}`}
+            onClick={() => setFilters({ tab: 'history', page: 1 })}
+          >
+            <span>Lịch sử lập phiếu</span>
+          </button>
+        </div>
 
+        {/* Cards List */}
         <div className="pv2-list">
           {loading && <p className="pv2-status-text">Đang tải...</p>}
           {error && <p className="pv2-status-text pv2-status-text--error">{error}</p>}
@@ -67,28 +90,39 @@ const CL08_InspectionListView = () => {
             <InspectionCard
               key={t.id}
               ticket={t}
-              onClick={() => navigate(`${ROUTES.INSPECTION_CREATE}/${t.code}`)}
+              onClick={() => navigate(`${ROUTES.INSPECTION_CREATE}/${t.code || t.id}`)}
             />
           ))}
         </div>
 
-        {totalPages > 1 && (
-          <div className="pv2-pagination">
+        {/* Fixed Bottom Pagination Bar */}
+        <div className="pv2-pagination-wrapper">
+          <div className="pv2-pagination-bar">
             <button
-              className="pv2-page-btn"
+              type="button"
+              className="pv2-page-arrow-btn"
               disabled={page <= 1}
               onClick={() => setFilters({ page: page - 1 })}
-            >&lt;</button>
-            <span className="pv2-page-info">
-              Show {(page - 1) * 10 + 1} to {Math.min(page * 10, total)} of {total} results
-            </span>
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <div className="pv2-page-status-text">
+              {total > 0 ? (
+                <>Show <strong>{(page - 1) * pageSize + 1}</strong> to <span className="pv2-page-num-box">{Math.min(page * pageSize, total)}</span> of <strong>{total}</strong> results</>
+              ) : (
+                'Không có kết quả'
+              )}
+            </div>
             <button
-              className="pv2-page-btn"
+              type="button"
+              className="pv2-page-arrow-btn"
               disabled={page >= totalPages}
               onClick={() => setFilters({ page: page + 1 })}
-            >&gt;</button>
+            >
+              <ChevronRight size={18} />
+            </button>
           </div>
-        )}
+        </div>
       </div>
     </Layout>
   )

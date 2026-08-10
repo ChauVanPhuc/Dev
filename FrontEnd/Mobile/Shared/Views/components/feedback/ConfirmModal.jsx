@@ -83,8 +83,8 @@ const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel, confirmText
             onClick={onConfirm}
             style={{
               flex: 1, padding: '12px', borderRadius: '14px', border: 'none', 
-              backgroundColor: 'var(--primary-color)', color: '#fff', fontWeight: '700', fontSize: '0.9rem', 
-              cursor: 'pointer', boxShadow: '0 4px 6px rgba(160, 28, 28, 0.2)'
+              backgroundColor: 'var(--primary-color, #2b1810)', color: '#fff', fontWeight: '700', fontSize: '0.9rem', 
+              cursor: 'pointer', boxShadow: '0 4px 10px rgba(0, 0, 0, 0.15)'
             }}
           >
             {confirmText}

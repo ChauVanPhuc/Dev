@@ -20,10 +20,19 @@ from modules.kpi.models.kpi import KPI
 from modules.inspection.models.daily_inspection import DailyInspectionRecord, DailyInspectionDefect
 from modules.inspection.models.defect_type import DefectType
 from modules.production.models.bom_detail import BOMDetail
+from modules.production.models.stages import Stage
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# ----------------------------------------------------------------------
+# 0.5 API: Lấy danh sách tất cả công đoạn từ bảng Stage
+# ----------------------------------------------------------------------
+@router.get("/stages", response_model=List[dict])
+def read_stages_v2(db: Session = Depends(get_db)):
+    """[GET] Lấy toàn bộ công đoạn từ bảng Stage."""
+    return [{"id": s.id, "name": s.name, "description": s.description} for s in db.query(Stage).all()]
 
 # ----------------------------------------------------------------------
 # 0. API: Lấy danh sách Tháng có kế hoạch sản xuất từ CSDL
@@ -148,7 +157,7 @@ def get_production_orders(
     user_role: Optional[str] = Query(None),
     user_factory: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=50),
+    limit: int = Query(10, ge=1, le=1000),
     db: Session = Depends(get_db)
 ):
     """
@@ -567,6 +576,82 @@ def get_production_order_detail(po_code: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ----------------------------------------------------------------------
+# 3.5: Lấy danh sách chi tiết BOM theo PO
+# ----------------------------------------------------------------------
+@router.get("/orders/{po_code}/bom")
+def get_order_bom(po_code: str, stage: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    """TRUY VẤN CSDL THỰC: Trả về danh sách chi tiết (part_name), quy cách (specification) và tổng số lượng của từng chi tiết trong PO."""
+    try:
+        order = db.query(Order).options(joinedload(Order.products)).filter(Order.order_code == po_code).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="PO not found")
+
+        product_ids = [p.id for p in order.products]
+        boms = db.query(BOMDetail).filter(BOMDetail.product_id.in_(product_ids)).all() if product_ids else []
+
+        # Lọc theo công đoạn giao (input_stage) nếu có stage
+        if stage:
+            stage_names = [
+                ("dinh_hinh", "Định hình"),
+                ("lap_rap", "Lắp ráp"),
+                ("son", "Sơn"),
+                ("dong_goi", "Đóng gói"),
+                ("load_cont", "Load cont")
+            ]
+
+            def matches_stage(bom_item, st_id: str) -> bool:
+                inp = (bom_item.input_stage or "").lower()
+                if st_id == "dinh_hinh":
+                    return any(k in inp for k in ["định hình", "dinh hinh", "nh hnh", "nh hình", "tạo phôi", "to phi"]) or not bom_item.input_stage
+                elif st_id == "lap_rap":
+                    return any(k in inp for k in ["lắp ráp", "lap rap", "lp rp", "chà nhám", "ch nhm"])
+                elif st_id == "son":
+                    return any(k in inp for k in ["sơn", "son", "sn"])
+                elif st_id == "dong_goi":
+                    return any(k in inp for k in ["đóng gói", "dong goi", "ng gi"])
+                elif st_id == "load_cont":
+                    return any(k in inp for k in ["load cont", "kho", "container"])
+                return False
+
+            selected = stage.lower()
+            matched_stage_id = None
+            for st_id, st_name in stage_names:
+                if st_id in selected or st_name.lower() in selected:
+                    matched_stage_id = st_id
+                    break
+
+            if matched_stage_id:
+                boms = [b for b in boms if matches_stage(b, matched_stage_id)]
+
+        parts_map = {}
+        for p in order.products:
+            prod_q = float(p.order_qty or p.quantity or 1.0)
+            for b in [b for b in boms if b.product_id == p.id]:
+                qty = max(1, int(prod_q * float(b.quantity or 1.0)))
+                name = b.name or b.sku or "Chi tiết"
+                spec = b.specification or "Không quy cách"
+
+                if name not in parts_map:
+                    parts_map[name] = {"part_name": name, "total_qty": 0, "specs_map": {}}
+
+                parts_map[name]["total_qty"] += qty
+                if spec not in parts_map[name]["specs_map"]:
+                    parts_map[name]["specs_map"][spec] = 0
+                parts_map[name]["specs_map"][spec] += qty
+
+        return [
+            {
+                "part_name": data["part_name"],
+                "total_qty": data["total_qty"],
+                "specs": [{"specification": k, "qty": v} for k, v in data["specs_map"].items()]
+            }
+            for _, data in parts_map.items()
+        ]
+    except Exception as e:
+        logger.error(f"Lỗi khi lấy BOM của PO {po_code}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ----------------------------------------------------------------------
 # 4. CL04: Kế hoạch sản xuất từ CSDL
 # ----------------------------------------------------------------------
 @router.get("/plans")
@@ -638,16 +723,11 @@ def get_production_transfers(
             query = query.filter(or_(Delivery.status.is_(None), ~Delivery.status.in_(completed_statuses)))
 
         if stage and stage not in ["ALL", "Tất cả công đoạn", ""]:
-            clean = stage.replace("NM1 - ", "").replace("NM2 - ", "").strip()
-            abbrev = clean.replace("Định hình", "ĐH").replace("Lắp ráp", "LR")
-            terms = list(set([t for t in [stage.strip(), clean, abbrev, f"NM1 - {clean}", f"NM2 - {clean}", f"NM1 - {abbrev}", f"NM2 - {abbrev}"] if t]))
-
-            conditions = []
-            for t in terms:
-                # CHỈ LỌC THEO CÔNG ĐOẠN NGƯỜI GỬI (delivery_stage)
-                conditions.append(Delivery.delivery_stage.ilike(f"%{t}%"))
-
-            query = query.filter(or_(*conditions))
+            # LỌC THEO CẢ CÔNG ĐOẠN NGƯỜI GỬI VÀ NGƯỜI NHẬN, GIỮ NGUYÊN TIỀN TỐ
+            query = query.filter(or_(
+                Delivery.delivery_stage.ilike(f"%{stage}%"),
+                Delivery.receiving_stage.ilike(f"%{stage}%")
+            ))
 
         if po_code and po_code != "ALL":
             order = db.query(Order).filter(Order.order_code == po_code).first()

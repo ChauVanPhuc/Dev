@@ -1418,3 +1418,34 @@ def delete_delivery(delivery_id: int, db: Session = Depends(get_db)):
     db.commit()
     
     return {"message": "Đã xóa phiếu bàn giao thành công.", "id": delivery_id}
+
+
+@router.post("/upload-image")
+@router.post("/upload-image/")
+async def upload_delivery_image(
+    image: Optional[UploadFile] = File(None),
+    file: Optional[UploadFile] = File(None)
+):
+    """
+    [POST] Tải lên hình ảnh bàn giao (Delivery image).
+    Lưu vào BackEnd/static/uploads/deliveries/
+    """
+    upload_file = image or file
+    if not upload_file:
+        raise HTTPException(status_code=400, detail="Không tìm thấy tệp ảnh tải lên.")
+
+    upload_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "static", "uploads", "deliveries"))
+    os.makedirs(upload_dir, exist_ok=True)
+
+    file_ext = os.path.splitext(upload_file.filename or "")[1]
+    if not file_ext:
+        file_ext = ".jpg"
+    new_filename = f"{uuid.uuid4()}{file_ext}"
+    file_path = os.path.join(upload_dir, new_filename)
+
+    with open(file_path, "wb") as buffer:
+        content = await upload_file.read()
+        buffer.write(content)
+
+    return {"url": f"/static/uploads/deliveries/{new_filename}", "success": True}
+

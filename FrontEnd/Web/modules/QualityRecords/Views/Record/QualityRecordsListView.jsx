@@ -28,6 +28,7 @@ const QualityRecordsListView = () => {
     const [plans, setPlans] = useState([]);
     const [selectedPlan, setSelectedPlan] = useState(null);
     const [selectedPlanId, setSelectedPlanId] = useState('');
+    const [selectedMonth, setSelectedMonth] = useState('');
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -99,8 +100,10 @@ const QualityRecordsListView = () => {
                         parseInt(p.month) === currentMonth && parseInt(p.year) === currentYear
                     );
 
-                    // Nếu có KHSX tháng hiện tại thì chọn, không thì lấy plan đầu tiên (mới nhất)
+                    // Nếu có tháng hiện tại thì chọn, không thì lấy tháng mới nhất
                     const defaultPlan = currentMonthPlan || plansData[0];
+                    const defaultMonth = `${defaultPlan.month}-${defaultPlan.year}`;
+                    setSelectedMonth(defaultMonth);
                     setSelectedPlanId(defaultPlan.id.toString());
                 }
             } catch (error) {
@@ -161,8 +164,27 @@ const QualityRecordsListView = () => {
     const currentOrders = orders;
     const totalPages = Math.ceil(totalCount / itemsPerPage) || 1;
 
-    const handlePlanChange = (e) => {
-        setSelectedPlanId(e.target.value);
+    const monthOptions = useMemo(() => {
+        const map = new Map();
+        plans.forEach(p => {
+            if (p.month && p.year) {
+                const key = `${p.month}-${p.year}`;
+                if (!map.has(key)) {
+                    map.set(key, { ...p, key, label: `Tháng ${p.month}/${p.year}` });
+                }
+            }
+        });
+        return Array.from(map.values()).sort((a, b) => {
+            if (parseInt(b.year) !== parseInt(a.year)) return parseInt(b.year) - parseInt(a.year);
+            return parseInt(b.month) - parseInt(a.month);
+        });
+    }, [plans]);
+
+    const handleMonthChange = (e) => {
+        const monthKey = e.target.value;
+        setSelectedMonth(monthKey);
+        const target = monthOptions.find(m => m.key === monthKey);
+        if (target) setSelectedPlanId(target.id.toString());
         setCurrentPage(1);
     };
 
@@ -947,7 +969,7 @@ const QualityRecordsListView = () => {
                 showFilter={true}
                 isFilterOpen={isFilterBarOpen}
                 onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
-                activeFiltersCount={(statusFilter !== 'all' ? 1 : 0) + (selectedPlanId ? 1 : 0) + (filterProduct !== 'all' ? 1 : 0)}
+                activeFiltersCount={(statusFilter !== 'all' ? 1 : 0) + (selectedMonth ? 1 : 0) + (filterProduct !== 'all' ? 1 : 0)}
                 onExport={() => setShowExportModal(true)}
                 isExporting={isExporting}
                 hasWritePermission={true}
@@ -969,16 +991,16 @@ const QualityRecordsListView = () => {
                         </select>
                     </div>
 
-                    {/* Chọn KHSX */}
+                    {/* Chọn tháng */}
                     <div className="filter-field-group">
-                        <label className="filter-field-label">Chọn KHSX tháng</label>
+                        <label className="filter-field-label">Chọn tháng</label>
                         <select
-                            value={selectedPlanId}
-                            onChange={handlePlanChange}
+                            value={selectedMonth}
+                            onChange={handleMonthChange}
                         >
-                            {plans.length > 0 ? plans.map(p => (
-                                <option key={p.id} value={p.id}>
-                                    {p.name || `KHSX T${p.month} - ${p.year}`}
+                            {monthOptions.length > 0 ? monthOptions.map(m => (
+                                <option key={m.key} value={m.key}>
+                                    {m.label}
                                 </option>
                             )) : <option value="">Đang tải kế hoạch...</option>}
                         </select>
@@ -1028,7 +1050,7 @@ const QualityRecordsListView = () => {
                         <div style={{ padding: '5rem', textAlign: 'center', backgroundColor: '#fff', borderRadius: '12px' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                                 <FileText size={48} opacity={0.3} style={{ color: '#8D6E63' }} />
-                                <span>Không tìm thấy hồ sơ PO nào cho {selectedPlan?.name || 'kế hoạch này'}.</span>
+                                <span>Không tìm thấy hồ sơ PO nào cho {monthOptions.find(m => m.key === selectedMonth)?.label || selectedPlan?.name || 'kế hoạch này'}.</span>
                             </div>
                         </div>
                     ) : (

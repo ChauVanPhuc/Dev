@@ -1,8 +1,10 @@
 import { create } from 'zustand'
 
+const currentMonth = String(new Date().getMonth() + 1)
+
 const useProduction_v2Store = create((set) => ({
   transferFilters: {
-    month: '7',
+    month: currentMonth,
     dateFrom: '',
     dateTo: '',
     status: '',
@@ -16,7 +18,7 @@ const useProduction_v2Store = create((set) => ({
     set((s) => ({ transferFilters: { ...s.transferFilters, ...partial } })),
 
   inspectionFilters: {
-    month: '7',
+    month: currentMonth,
     tab: 'pending',
     page: 1,
   },

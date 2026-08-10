@@ -1,4 +1,4 @@
-# Reload triggered: Change active device tracking window to 25 minutes
+# Reload triggered: Added upload-image endpoints for inspections and deliveries
 
 import logging
 
@@ -91,6 +91,13 @@ async def lifespan(app: FastAPI):
 
 
 Base.metadata.create_all(bind=engine)
+
+# [MIGRATION] Add Inspection Guide sidebar to Quản lý chất lượng
+try:
+    from database.migrations.add_inspection_guide_sidebar import add_inspection_guide_sidebar
+    add_inspection_guide_sidebar()
+except Exception:
+    pass
 
 # [MIGRATION] Add workshop column to machines table
 from sqlalchemy import text

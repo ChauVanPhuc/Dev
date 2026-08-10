@@ -7,6 +7,7 @@ import CustomSelect from '@mobile/Shared/Views/components/form/CustomSelect'
 import { useTransferController } from '../Controllers/useTransferController'
 import TransferCard from './components/TransferCard'
 import FilterPanel from './components/FilterPanel'
+import useAuthStore from '@modules/auth/Models/authModel'
 import { ROUTES } from '../constants'
 import '../styles/production_v2.css'
 
@@ -29,12 +30,24 @@ const CL06_TransferListView = () => {
   const pageSize = 10
   const totalPages = Math.ceil(total / pageSize) || 1
 
-  const mockTickets = [
-    { id: 1, code: 'LC01', version: 'V1', version_badge: 'V1', time_str: '16:40 | 22/1/2026', route_str: 'Định hình 1 - Lắp ráp 1', status: 'Chờ xác nhận' },
-    { id: 3, code: 'LC03', version: 'V2', version_badge: 'V2', time_str: '16:45 | 22/1/2026', route_str: 'Lắp ráp 1 - Định hình 1', status: 'Chờ xác nhận' },
-  ]
+  const user = useAuthStore((state) => state.user)
+  const userStage = user?.activeStageName || user?.stage_name || user?.stageNames?.[0]
+  const normalize = (s) => String(s || '').toLowerCase().trim()
 
-  const displayTickets = tickets.length > 0 ? tickets : mockTickets
+  const isMyTicket = (t) => {
+    if (!userStage) return true
+    const u = normalize(userStage)
+    const stages = [t.delivery_stage, t.receiving_stage]
+    return stages.some((s) => normalize(s) === u)
+  }
+
+  const isHistoryStatus = (status) => ['done', 'hoàn thành'].includes(String(status).toLowerCase())
+
+  const myTickets = tickets.filter(isMyTicket)
+  const displayTickets = myTickets.filter((t) =>
+    activeTab === 'history' ? isHistoryStatus(t.status) : !isHistoryStatus(t.status)
+  )
+  const myPendingCount = myTickets.filter((t) => !isHistoryStatus(t.status)).length
 
   const handleConfirmReceived = async (ticket) => {
     setConfirming(true)
@@ -92,7 +105,7 @@ const CL06_TransferListView = () => {
             onClick={() => setFilters({ tab: 'pending', page: 1 })}
           >
             <span>Phiếu cần xác nhận</span>
-            <span className="pv2-badge-red">{pendingCount || 9}</span>
+            {myPendingCount > 0 && <span className="pv2-badge-red">{myPendingCount}</span>}
           </button>
           <button
             type="button"
@@ -107,6 +120,9 @@ const CL06_TransferListView = () => {
         <div className="pv2-list">
           {loading && <p className="pv2-status-text">Đang tải...</p>}
           {error && <p className="pv2-status-text pv2-status-text--error">{error}</p>}
+          {!loading && !error && displayTickets.length === 0 && (
+            <p className="pv2-status-text">Không có dữ liệu</p>
+          )}
           {!loading && displayTickets.map((t) => (
             <TransferCard
               key={t.id}
@@ -128,7 +144,11 @@ const CL06_TransferListView = () => {
               <ChevronLeft size={18} />
             </button>
             <div className="pv2-page-status-text">
-              Show <strong>{(page - 1) * pageSize + 1}</strong> to <span className="pv2-page-num-box">{Math.min(page * pageSize, total || 20)}</span> of <strong>{total || 20}</strong> results
+              {total > 0 ? (
+                <>Show <strong>{(page - 1) * pageSize + 1}</strong> to <span className="pv2-page-num-box">{Math.min(page * pageSize, total)}</span> of <strong>{total}</strong> results</>
+              ) : (
+                'Không có kết quả'
+              )}
             </div>
             <button
               type="button"

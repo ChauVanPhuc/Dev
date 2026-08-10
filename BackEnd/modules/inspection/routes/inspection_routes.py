@@ -3,7 +3,7 @@ import uuid
 import datetime
 from typing import List, Optional
 import app.models
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Body, Request, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_, or_, Date, cast
 from config.database import get_db
@@ -412,36 +412,345 @@ if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
-@router.post("/", response_model=InspectionSchema)
-async def create_inspection(
-    plan_id:         int   = Form(...),
-    part_name:       str   = Form(...),
-    specification:   Optional[str]   = Form(None),
-    cont_name:       Optional[str]   = Form(None),
-    stage:           Optional[str]   = Form(None),
-    inspector_id:    Optional[int]   = Form(None),
-    measured_length: Optional[float] = Form(None),
-    measured_width:  Optional[float] = Form(None),
-    measured_height: Optional[float] = Form(None),
-    result:          str   = Form(...),   # 'Đạt' | 'Không đạt'
-    note:            Optional[str]   = Form(None),
-    files: List[UploadFile] = File([]),
+@router.get("/")
+def get_inspections_list(
+    tab: Optional[str] = Query("pending"),
+    month: Optional[int] = Query(None),
+    stage: Optional[str] = Query(None),
+    po_code: Optional[str] = Query(None),
+    product: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1),
     db: Session = Depends(get_db)
 ):
     """
-    [POST] Tạo kết quả kiểm tra đầu vào mới.
-    Nhận tối đa 3 ảnh minh chứng.
+    [GET] Lấy danh sách phiếu kiểm tra cho Mobile CL08 (phân trang, lọc theo tab/tháng).
     """
+    import json
+    from sqlalchemy import extract
+    query = db.query(StageInspection)
+
+    if tab in ["pending", "transfer"]:
+        query = query.filter(or_(StageInspection.is_confirmed == False, StageInspection.is_confirmed.is_(None)))
+    elif tab in ["done", "history", "completed"]:
+        query = query.filter(StageInspection.is_confirmed == True)
+
+    if month and int(month) > 0:
+        query = query.filter(extract('month', StageInspection.created_at) == int(month))
+
+    if stage and stage not in ["ALL", "Tất cả công đoạn", ""]:
+        query = query.filter(
+            or_(
+                StageInspection.inspection_type.ilike(f"%{stage}%"),
+                StageInspection.data_json.ilike(f"%{stage}%")
+            )
+        )
+    if po_code and po_code != "ALL":
+        query = query.filter(StageInspection.batch_no.ilike(f"%{po_code}%"))
+    if product and product not in ["ALL", "Tất cả sản phẩm", ""]:
+        query = query.filter(StageInspection.product_sku.ilike(f"%{product}%"))
+
+    total_count = query.count()
+    skip = (page - 1) * limit
+    records = query.order_by(StageInspection.created_at.desc(), StageInspection.id.desc()).offset(skip).limit(limit).all()
+
+    items = []
+    for r in records:
+        data_dict = {}
+        if r.data_json:
+            try:
+                data_dict = json.loads(r.data_json) if isinstance(r.data_json, str) else r.data_json
+            except Exception:
+                pass
+
+        img_list = []
+        if r.images_json:
+            try:
+                ij = json.loads(r.images_json) if isinstance(r.images_json, str) else r.images_json
+                if isinstance(ij, dict):
+                    img_list = ij.get("images") or ij.get("Ảnh kiểm tra mẫu") or []
+                elif isinstance(ij, list):
+                    img_list = ij
+            except Exception:
+                pass
+        if not img_list:
+            img_list = [img for img in [r.image_path_1, r.image_path_2, r.image_path_3] if img]
+
+        stage_name = data_dict.get("stage") or r.inspection_type
+        sample_qty = data_dict.get("sampleQty", 0)
+        error_qty = data_dict.get("errorQty", 0)
+
+        items.append({
+            "id": r.id,
+            "code": f"KT{r.id:03d}",
+            "time_str": r.created_at.strftime("%H:%M | %d/%m/%Y") if r.created_at else "",
+            "time": r.created_at.strftime("%H:%M") if r.created_at else "",
+            "date": r.created_at.strftime("%d/%m/%Y") if r.created_at else "",
+            "mode": r.inspection_type or "input",
+            "stage": stage_name,
+            "po": r.batch_no or "",
+            "poCode": r.batch_no or "",
+            "product": r.product_sku or "",
+            "spec": r.specification or "",
+            "result": r.conclusion or "pass",
+            "sampleQty": sample_qty,
+            "errorQty": error_qty,
+            "note": r.notes or "",
+            "images": img_list,
+            "errors": data_dict.get("errors", []),
+            "palletCode": data_dict.get("palletCode") or "",
+            "requiredQty": data_dict.get("requiredQty") or "",
+            "creator": r.inspector_name or data_dict.get("created_by") or "QC",
+            "status": "done" if r.is_confirmed else "pending",
+            "is_confirmed": bool(r.is_confirmed),
+            "created_at": r.created_at.isoformat() if r.created_at else ""
+        })
+
+    return {
+        "items": items,
+        "total": total_count,
+        "page": page,
+        "pageSize": limit
+    }
+
+
+@router.get("/last-result")
+@router.get("/last-result/")
+def get_last_inspection_result(
+    mode: Optional[str] = Query(None),
+    product: Optional[str] = Query(None),
+    po: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy kết quả kiểm tra gần nhất theo mode, product, po.
+    """
+    import json
+    query = db.query(StageInspection)
+    if mode:
+        query = query.filter(StageInspection.inspection_type == mode)
+    if po:
+        query = query.filter(StageInspection.batch_no == po)
+    if product:
+        query = query.filter(StageInspection.product_sku == product)
+    last_rec = query.order_by(StageInspection.id.desc()).first()
+    if last_rec:
+        sample_qty = 0
+        error_qty = 0
+        if last_rec.data_json:
+            try:
+                pj = json.loads(last_rec.data_json) if isinstance(last_rec.data_json, str) else last_rec.data_json
+                sample_qty = pj.get("sampleQty", 0)
+                error_qty = pj.get("errorQty", 0)
+            except Exception:
+                pass
+        return {
+            "sampleQty": sample_qty,
+            "errorQty": error_qty,
+            "result": last_rec.conclusion or "pass"
+        }
+    return {"sampleQty": 0, "errorQty": 0, "result": "pass"}
+
+
+@router.get("/generate-pallet-code")
+@router.get("/generate-pallet-code/")
+def generate_unique_pallet_code(
+    prefix: str = Query("DA"),
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Sinh mã Pallet duy nhất, đảm bảo KHÔNG trùng lặp với bất kỳ mã nào trong CSDL
+    (bao gồm bảng pallet_cards và stage_inspections).
+    """
+    import random
+    import json
+    from modules.delivery.models.pallet_card import PalletCard
+
+    clean_prefix = prefix.strip().upper() or "DA"
+    existing_codes = set()
+
+    # 1. Từ bảng pallet_cards
     try:
-        part_name = clean_and_standardize_name(part_name)
+        cards = db.query(PalletCard.pallet_code).filter(PalletCard.pallet_code.isnot(None)).all()
+        for c in cards:
+            if c[0]:
+                existing_codes.add(str(c[0]).strip().upper())
+    except Exception:
+        pass
+
+    # 2. Từ bảng stage_inspections (data_json chứa palletCode)
+    try:
+        records = db.query(StageInspection.data_json).filter(StageInspection.data_json.ilike('%"palletCode"%')).all()
+        for r in records:
+            if r[0]:
+                try:
+                    pj = json.loads(r[0]) if isinstance(r[0], str) else r[0]
+                    p_code = pj.get("palletCode")
+                    if p_code:
+                        existing_codes.add(str(p_code).strip().upper())
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    # Sinh mã mới ngẫu nhiên 5 số không trùng
+    for _ in range(500):
+        num = random.randint(10000, 99999)
+        candidate = f"{clean_prefix}{num}"
+        if candidate not in existing_codes:
+            return {"palletCode": candidate, "success": True}
+
+    # Fallback timestamp 6 số nếu dãy 5 số đã dùng nhiều
+    timestamp_suffix = str(int(datetime.datetime.now().timestamp()))[-6:]
+    candidate = f"{clean_prefix}{timestamp_suffix}"
+    return {"palletCode": candidate, "success": True}
+
+
+@router.post("/")
+async def create_inspection(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    [POST] Tạo kết quả kiểm tra mới.
+    Hỗ trợ cả JSON payload (Mobile QC V2) và multipart/form-data (Legacy Web V1).
+    """
+    import json
+    content_type = request.headers.get("content-type", "")
+
+    if "application/json" in content_type:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+
+        mode = body.get("mode", "input")
+        stage = body.get("stage") or ""
+        po = body.get("po") or ""
+        result = body.get("result", "pass")
+        product = body.get("product") or ""
+        spec = body.get("spec") or ""
+        sample_qty = int(body.get("sampleQty") or 0)
+        error_qty = int(body.get("errorQty") or 0)
+        note = body.get("note") or ""
+        errors = body.get("errors") or []
+        images = body.get("images") or []
+        creator = body.get("creator") or "QC Hệ thống"
+
+        img1 = images[0] if len(images) > 0 else None
+        img2 = images[1] if len(images) > 1 else None
+        img3 = images[2] if len(images) > 2 else None
+
+        data_json_obj = {
+            "mode": mode,
+            "stage": stage,
+            "po": po,
+            "product": product,
+            "spec": spec,
+            "requiredQty": body.get("requiredQty"),
+            "sampleQty": sample_qty,
+            "errorQty": error_qty,
+            "errors": errors,
+            "palletCode": body.get("palletCode"),
+            "subLot": body.get("subLot"),
+            "humidity": body.get("humidity"),
+            "machine": body.get("machine"),
+            "area": body.get("area"),
+            "process": body.get("process"),
+            "staff": body.get("staff"),
+            "parameter": body.get("parameter"),
+            "paramStage": body.get("paramStage"),
+            "paramPo": body.get("paramPo"),
+            "paramProduct": body.get("paramProduct"),
+            "paramSample": body.get("paramSample"),
+            "paramPass": body.get("paramPass"),
+            "paramFail": body.get("paramFail"),
+            "answers": body.get("answers"),
+            "steps": body.get("steps"),
+            "created_by": creator
+        }
+
+        new_stage = StageInspection(
+            inspection_type = mode,
+            batch_no        = po,
+            product_sku     = product,
+            specification   = spec,
+            inspector_name  = creator,
+            conclusion      = result,
+            notes           = note,
+            data_json       = json.dumps(data_json_obj, ensure_ascii=False),
+            image_path_1    = img1,
+            image_path_2    = img2,
+            image_path_3    = img3,
+            images_json     = json.dumps({"images": images}, ensure_ascii=False) if images else None,
+            is_confirmed    = False
+        )
+        db.add(new_stage)
+        db.flush()
+
+        # Đồng bộ lỗi nếu có vào DailyInspectionDefect
+        if errors and stage:
+            try:
+                defect_items = []
+                for err in errors:
+                    if isinstance(err, dict) and int(err.get("qty", 0)) > 0:
+                        defect_id = err.get("defect_id") or err.get("id")
+                        defect_name = err.get("name")
+                        if not defect_id and defect_name:
+                            dt = db.query(DefectType).filter(DefectType.name.ilike(defect_name.strip())).first()
+                            if dt:
+                                defect_id = dt.id
+                        if defect_id:
+                            defect_items.append({"defect_id": defect_id, "quantity": int(err.get("qty", 1))})
+                if defect_items:
+                    sync_defects_to_daily_inspection(stage, defect_items, creator, db, inspected_qty=sample_qty)
+            except Exception as sync_e:
+                print(f"[Mobile Inspection Sync Error] {sync_e}")
+
+        db.commit()
+        db.refresh(new_stage)
+        return {
+            "id": new_stage.id,
+            "code": f"KT{new_stage.id:03d}",
+            "mode": mode,
+            "stage": stage,
+            "po": po,
+            "result": result,
+            "product": product,
+            "spec": spec,
+            "sampleQty": sample_qty,
+            "errorQty": error_qty,
+            "note": note,
+            "images": images,
+            "status": "pending",
+            "created_at": new_stage.created_at.isoformat() if new_stage.created_at else ""
+        }
+
+    else:
+        # Xử lý multipart/form-data legacy
+        form = await request.form()
+        plan_id = int(form.get("plan_id", 0))
+        part_name = clean_and_standardize_name(form.get("part_name", ""))
+        specification = form.get("specification")
+        cont_name = form.get("cont_name")
+        stage = form.get("stage")
+        inspector_id = int(form.get("inspector_id")) if form.get("inspector_id") else None
+        measured_length = float(form.get("measured_length")) if form.get("measured_length") else None
+        measured_width = float(form.get("measured_width")) if form.get("measured_width") else None
+        measured_height = float(form.get("measured_height")) if form.get("measured_height") else None
+        result = form.get("result", "Đạt")
+        note = form.get("note")
+        
+        files = form.getlist("files")
         image_paths = []
-        for file in files[:3]:  # Giới hạn tối đa 3 ảnh
-            ext = os.path.splitext(file.filename)[1]
-            filename = f"{uuid.uuid4()}{ext}"
-            filepath = os.path.join(UPLOAD_DIR, filename)
-            with open(filepath, "wb") as buffer:
-                buffer.write(await file.read())
-            image_paths.append(f"/static/uploads/inspections/{filename}")
+        for file in files[:3]:
+            if hasattr(file, "filename") and file.filename:
+                ext = os.path.splitext(file.filename)[1]
+                filename = f"{uuid.uuid4()}{ext}"
+                filepath = os.path.join(UPLOAD_DIR, filename)
+                with open(filepath, "wb") as buffer:
+                    buffer.write(await file.read())
+                image_paths.append(f"/static/uploads/inspections/{filename}")
 
         new_inspection = InputInspection(
             plan_id         = plan_id,
@@ -466,35 +775,39 @@ async def create_inspection(
             _inspections_swr_cache.clear()
         db.refresh(new_inspection)
 
-        # [Realtime WebSocket] Báo cho toàn bộ phận tại công đoạn này cập nhật kết quả KT mới nhất
-        try:
-            from shared.services.websocket_service import socket_manager
-            await socket_manager.broadcast_to_stage(
-                db, 
-                stage_name=stage, 
-                message={
-                    "type": "QC_CONFIRMED", 
-                    "plan_id": plan_id, 
-                    "part_name": part_name, 
-                    "specification": specification,
-                    "result": result
-                }
-            )
-        except Exception as e:
-            print(f"Lỗi WebSocket khi gửi kết quả KT: {e}")
-
         return new_inspection
 
+
+@router.post("/upload-image")
+@router.post("/upload-image/")
+async def upload_inspection_image_file(
+    image: Optional[UploadFile] = File(None),
+    file: Optional[UploadFile] = File(None),
+):
+    """
+    [POST] Tải 1 ảnh lên máy chủ và trả về đường dẫn.
+    """
+    upload_file = image or file
+    if not upload_file:
+        raise HTTPException(status_code=400, detail="Không có file ảnh nào được gửi")
+    try:
+        ext = os.path.splitext(upload_file.filename)[1] or ".jpg"
+        filename = f"{uuid.uuid4()}{ext}"
+        filepath = os.path.join(UPLOAD_DIR, filename)
+        with open(filepath, "wb") as buffer:
+            buffer.write(await upload_file.read())
+        url = f"/static/uploads/inspections/{filename}"
+        return {"url": url, "path": url}
     except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Lỗi khi lưu kết quả KT: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Lỗi tải ảnh: {str(e)}")
+
 
 @router.post("/upload")
 async def upload_inspection_images(
     files: List[UploadFile] = File(...)
 ):
     """
-    [POST] Tải ảnh lên máy chủ và trả về danh sách đường dẫn.
+    [POST] Tải danh sách ảnh lên máy chủ và trả về danh sách đường dẫn.
     """
     try:
         image_paths = []
@@ -508,6 +821,130 @@ async def upload_inspection_images(
         return {"paths": image_paths}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi khi tải ảnh lên: {str(e)}")
+
+
+@router.patch("/{id}/confirm")
+@router.patch("/{id}/confirm/")
+@router.post("/{id}/confirm")
+@router.post("/{id}/confirm/")
+def confirm_inspection_ticket(
+    id: int,
+    data: Optional[dict] = Body(None),
+    db: Session = Depends(get_db)
+):
+    """
+    [PATCH/POST] Xác nhận hoàn thành phiếu kiểm tra QC.
+    """
+    rec = db.query(StageInspection).filter(StageInspection.id == id).first()
+    if not rec:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu kiểm tra")
+    rec.is_confirmed = True
+    rec.confirmed_at = datetime.datetime.now()
+    if data and isinstance(data, dict):
+        if 'conclusion' in data:
+            rec.conclusion = data['conclusion']
+        if 'notes' in data:
+            rec.notes = data['notes']
+    db.commit()
+    db.refresh(rec)
+    return {"success": True, "id": rec.id, "status": "done"}
+
+
+@router.get("/{id}")
+@router.get("/{id}/")
+def get_inspection_detail(id: str, db: Session = Depends(get_db)):
+    """
+    [GET] Lấy chi tiết một phiếu kiểm tra theo ID hoặc Mã phiếu (KT001).
+    """
+    import json
+    numeric_id = None
+    if id.isdigit():
+        numeric_id = int(id)
+    elif id.upper().startswith("KT") and id[2:].isdigit():
+        numeric_id = int(id[2:])
+
+    rec = None
+    if numeric_id:
+        rec = db.query(StageInspection).filter(StageInspection.id == numeric_id).first()
+    if not rec:
+        rec = db.query(StageInspection).filter(StageInspection.batch_no == id).first()
+
+    if not rec:
+        if numeric_id:
+            inp = db.query(InputInspection).filter(InputInspection.id == numeric_id).first()
+            if inp:
+                return {
+                    "id": inp.id,
+                    "code": f"KT{inp.id:03d}",
+                    "mode": "input",
+                    "stage": inp.stage or "Sơ chế",
+                    "po": inp.cont_name or "",
+                    "product": inp.part_name,
+                    "spec": inp.specification or "",
+                    "result": "pass" if inp.result == "Đạt" else "fail",
+                    "sampleQty": 1,
+                    "errorQty": 0 if inp.result == "Đạt" else 1,
+                    "note": inp.note,
+                    "images": [img for img in [inp.image_path_1, inp.image_path_2, inp.image_path_3] if img],
+                    "status": "done",
+                    "creator": "QC"
+                }
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu kiểm tra")
+
+    data_dict = {}
+    if rec.data_json:
+        try:
+            data_dict = json.loads(rec.data_json) if isinstance(rec.data_json, str) else rec.data_json
+        except Exception:
+            pass
+
+    img_list = []
+    if rec.images_json:
+        try:
+            ij = json.loads(rec.images_json) if isinstance(rec.images_json, str) else rec.images_json
+            if isinstance(ij, dict):
+                img_list = ij.get("images") or ij.get("Ảnh kiểm tra mẫu") or []
+            elif isinstance(ij, list):
+                img_list = ij
+        except Exception:
+            pass
+    if not img_list:
+        img_list = [img for img in [rec.image_path_1, rec.image_path_2, rec.image_path_3] if img]
+
+    return {
+        "id": rec.id,
+        "code": f"KT{rec.id:03d}",
+        "time_str": rec.created_at.strftime("%H:%M | %d/%m/%Y") if rec.created_at else "",
+        "mode": rec.inspection_type or data_dict.get("mode") or "first_sample",
+        "stage": data_dict.get("stage") or rec.inspection_type or "",
+        "po": rec.batch_no or data_dict.get("po") or "",
+        "poCode": rec.batch_no or data_dict.get("po") or "",
+        "product": rec.product_sku or data_dict.get("product") or "",
+        "spec": rec.specification or data_dict.get("spec") or "",
+        "result": rec.conclusion or data_dict.get("result") or "pass",
+        "sampleQty": data_dict.get("sampleQty", 0),
+        "errorQty": data_dict.get("errorQty", 0),
+        "note": rec.notes or data_dict.get("note") or "",
+        "images": img_list,
+        "errors": data_dict.get("errors", []),
+        "steps": data_dict.get("steps", []),
+        "answers": data_dict.get("answers", []),
+        "palletCode": data_dict.get("palletCode", ""),
+        "parameter": data_dict.get("parameter", ""),
+        "paramStage": data_dict.get("paramStage", ""),
+        "paramPo": data_dict.get("paramPo", ""),
+        "paramProduct": data_dict.get("paramProduct", ""),
+        "paramSample": data_dict.get("paramSample", ""),
+        "paramPass": data_dict.get("paramPass", ""),
+        "paramFail": data_dict.get("paramFail", ""),
+        "process": data_dict.get("process", ""),
+        "area": data_dict.get("area", ""),
+        "staff": data_dict.get("staff", ""),
+        "creator": rec.inspector_name or data_dict.get("creator") or "QC",
+        "status": "done" if rec.is_confirmed else "pending",
+        "is_confirmed": bool(rec.is_confirmed),
+        "created_at": rec.created_at.isoformat() if rec.created_at else ""
+    }
 
 
 @router.post("/upload-ocr")
@@ -1560,5 +1997,35 @@ def confirm_inspection(type: str, id: int, confirmed_by: Optional[int] = Body(No
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Lỗi khi lưu xác nhận: {str(e)}")
+
+
+@router.post("/upload-image")
+@router.post("/upload-image/")
+async def upload_inspection_image(
+    image: Optional[UploadFile] = File(None),
+    file: Optional[UploadFile] = File(None)
+):
+    """
+    [POST] Tải lên hình ảnh kiểm tra chất lượng (QC inspection).
+    Lưu vào BackEnd/static/uploads/inspections/
+    """
+    upload_file = image or file
+    if not upload_file:
+        raise HTTPException(status_code=400, detail="Không tìm thấy tệp ảnh tải lên.")
+
+    upload_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "static", "uploads", "inspections"))
+    os.makedirs(upload_dir, exist_ok=True)
+
+    file_ext = os.path.splitext(upload_file.filename or "")[1]
+    if not file_ext:
+        file_ext = ".jpg"
+    new_filename = f"{uuid.uuid4()}{file_ext}"
+    file_path = os.path.join(upload_dir, new_filename)
+
+    with open(file_path, "wb") as buffer:
+        content = await upload_file.read()
+        buffer.write(content)
+
+    return {"url": f"/static/uploads/inspections/{new_filename}", "success": True}
 
 

@@ -10,6 +10,7 @@ from config.database import get_db
 from database.migrations.update_account_email_phone import run_migration as run_account_migration
 from database.migrations.add_reporter_to_screen_bugs import run_migration as run_screen_bug_reporter_migration
 from database.migrations.add_inspection_confirmation import run_migration as run_inspection_confirmation_migration
+from database.migrations.add_inspection_guide_sidebar import add_inspection_guide_sidebar as run_inspection_guide_sidebar_migration
 
 def run_allocation_method_migration():
     """Add allocation_method column to delivery_returns table"""
@@ -176,6 +177,7 @@ if __name__ == "__main__":
         run_screen_bug_reporter_migration()
         run_iso_process_revision_logs_migration()
         run_stage_inspection_new_columns_migration()
+        run_inspection_guide_sidebar_migration()
         run_inspection_confirmation_migration()
         print("-" * 50)
         print("[SUCCESS] All migrations completed successfully!")

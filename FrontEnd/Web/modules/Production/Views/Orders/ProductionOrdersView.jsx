@@ -177,6 +177,28 @@ const ProductionOrdersView = () => {
   const mainStages = ['Tạo phôi', 'Định hình', 'Lắp ráp', 'Sơn', 'Đóng gói', 'Lưu kho'];
   const [customScheduleRows, setCustomScheduleRows] = useState([]);
 
+  // Hàm chuyển đổi ngày dd/mm/yyyy <-> yyyy-mm-dd
+  const toISODate = (val) => {
+    if (!val) return '';
+    if (val.includes('-') && val.length === 10) return val;
+    const parts = (val || '').split('/');
+    if (parts.length === 3) {
+      const [d, m, y] = parts;
+      return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    }
+    return val;
+  };
+  const toDisplayDate = (val) => {
+    if (!val) return '';
+    if (val.includes('/')) return val;
+    const parts = (val || '').split('-');
+    if (parts.length === 3) {
+      const [y, m, d] = parts;
+      return `${d}/${m}/${y}`;
+    }
+    return val;
+  };
+
   // Lấy danh sách Đơn bán hàng từ module Purchasing (/admin/purchase-requisitions)
   useEffect(() => {
     const fetchPOList = async () => {
@@ -232,8 +254,8 @@ const ProductionOrdersView = () => {
                 customer: ord.customer || plan.customer || 'Khách hàng hệ thống',
                 totalProducts: ord.products ? ord.products.length : 1,
                 planQty: totalQty,
-                startDate: '01/08/2026',
-                endDate: '15/08/2026',
+                startDate: '2026-08-01',
+                endDate: '2026-08-15',
                 priority: priorityText,
                 status: 'Đang sản xuất',
                 note: ord.customer || '',
@@ -382,9 +404,9 @@ const ProductionOrdersView = () => {
           spareQty: spare,
           totalQty: qty + spare,
           unit: it.unit || 'Bộ',
-          startDate: orderDateVal || '01/08/2026',
-          endDate: deliveryDateVal || '15/08/2026',
-          deliveryDate: it.requested_delivery_date ? it.requested_delivery_date.split('T')[0] : (deliveryDateVal || '15/08/2026'),
+          startDate: toISODate(orderDateVal) || '2026-08-01',
+          endDate: toISODate(deliveryDateVal) || '2026-08-15',
+          deliveryDate: toISODate(it.requested_delivery_date ? it.requested_delivery_date.split('T')[0] : deliveryDateVal) || '2026-08-15',
           drawingCode: `BV-${code}`
         };
       });
@@ -422,8 +444,8 @@ const ProductionOrdersView = () => {
       code: item.code,
       orderId: item.orderNo,
       priority: item.priority,
-      startDate: item.startDate || '01/08/2026',
-      endDate: item.endDate || '15/08/2026',
+      startDate: toISODate(item.startDate) || '2026-08-01',
+      endDate: toISODate(item.endDate) || '2026-08-15',
       status: item.status
     });
 
@@ -449,9 +471,9 @@ const ProductionOrdersView = () => {
             spareQty: spare,
             totalQty: total,
             unit: p.unit || 'Cái',
-            startDate: p.startDate || item.startDate || '01/08/2026',
-            endDate: p.endDate || item.endDate || '15/08/2026',
-            deliveryDate: p.deliveryDate || item.endDate || '15/08/2026',
+            startDate: toISODate(p.startDate || item.startDate) || '2026-08-01',
+            endDate: toISODate(p.endDate || item.endDate) || '2026-08-15',
+            deliveryDate: toISODate(p.deliveryDate || item.endDate) || '2026-08-15',
             drawingCode: p.drawingCode || p.drawing_code || `BV-${code}`
           };
         });
@@ -519,55 +541,128 @@ const ProductionOrdersView = () => {
   };
 
   // Xử lý lưu thông tin Lệnh SX mới hoặc Cập nhật Lệnh SX sẵn có
-  const handleSaveOrder = () => {
+  const handleSaveOrder = async () => {
     if (!orderForm.code && !orderForm.orderId) {
       if (toast) toast('warning', 'Vui lòng nhập Mã lệnh sản xuất hoặc Mã đơn hàng!');
       return;
     }
 
-    if (isEditMode && editingOrderId) {
-      // Đang ở chế độ EDIT: Cập nhật trực tiếp bản ghi hiện tại trong danh sách
-      setOrdersList(prev => prev.map(item => {
-        if (item.id === editingOrderId || item.code === orderForm.code) {
-          return {
-            ...item,
-            code: orderForm.code || item.code,
-            orderNo: orderForm.orderId || item.orderNo,
-            totalProducts: orderProducts.length,
-            planQty: orderProducts.reduce((sum, p) => sum + (p.totalQty || 0), 0),
-            startDate: orderForm.startDate || item.startDate,
-            endDate: orderForm.endDate || item.endDate,
-            priority: orderForm.priority || item.priority,
-            status: orderForm.status || item.status,
-            products: orderProducts
-          };
-        }
-        return item;
-      }));
-      if (toast) toast('success', 'Đã cập nhật thông tin Lệnh sản xuất thành công!');
-    } else {
-      // Đang ở chế độ TẠO MỚI: Thêm bản ghi mới vào danh sách
-      const newOrderObj = {
-        id: Date.now(),
-        planId: Date.now(),
-        code: orderForm.code || Date.now().toString().slice(-6),
-        orderNo: orderForm.orderId || 'Đơn hàng mới',
-        customer: 'Khách hàng',
-        totalProducts: orderProducts.length,
-        planQty: orderProducts.reduce((sum, p) => sum + (p.totalQty || 0), 0),
-        startDate: orderForm.startDate,
-        endDate: orderForm.endDate,
-        priority: orderForm.priority,
-        status: orderForm.status,
-        note: 'Lệnh SX mới',
-        products: orderProducts
-      };
-      setOrdersList(prev => [newOrderObj, ...prev]);
-      setTotal(prev => prev + 1);
-      if (toast) toast('success', 'Đã lưu Lệnh sản xuất mới thành công!');
-    }
+    const statusToOrderStatus = {
+      'Đang sản xuất': 1,
+      'Hoàn thành': 3,
+      'Chờ sản xuất': 0
+    };
 
-    setViewMode('list');
+    const productsDetails = orderProducts.map(p => {
+      const children = productDetails
+        .filter(d => d.parentCode === p.productCode)
+        .map(d => {
+          const parts = (d.quantity || '').toString().split('/');
+          const planned = parseInt(parts[parts.length - 1] || '0', 10) || Number(p.orderQty) || 1;
+          return {
+            name: d.compName || d.type || 'Chi tiết',
+            sku: d.compCode || `${p.productCode}-${d.id}`,
+            quantity: planned,
+            unit: d.unit || 'Cái',
+            specification: [d.spec, d.material].filter(Boolean).join(' - '),
+            input_stage: d.stageFrom || 'Định hình',
+            output_stage: d.stageTo || 'Lắp ráp',
+            description: d.note || '',
+            children: []
+          };
+        });
+      return {
+        name: p.productName || p.productCode,
+        sku: p.productCode,
+        quantity: Number(p.totalQty) || Number(p.orderQty) || 1,
+        bom_details: children
+      };
+    });
+
+    try {
+      setLoading(true);
+
+      if (isEditMode && editingOrderId) {
+        const existing = ordersList.find(o => o.id === editingOrderId);
+        const startDateStr = toISODate(orderForm.startDate) || new Date().toISOString().split('T')[0];
+        const endDateStr = toISODate(orderForm.endDate) || startDateStr;
+
+        const updatePayload = {
+          plan_id: existing?.planId || null,
+          order_status: statusToOrderStatus[orderForm.status] ?? 1,
+          is_priority: orderForm.priority === 'Cao' ? 1 : 0,
+          estimated_date: endDateStr,
+          note: orderForm.status,
+          products_details: productsDetails
+        };
+
+        const updated = await api.put(`/orders/${Number(editingOrderId) || editingOrderId}`, updatePayload).catch(() => null);
+        if (!updated) {
+          setLoading(false);
+          if (toast) toast('error', 'Không thể cập nhật Lệnh sản xuất!');
+          return;
+        }
+        if (toast) toast('success', 'Đã cập nhật thông tin Lệnh sản xuất thành công!');
+        await fetchProductionOrders();
+        setViewMode('list');
+        return;
+      }
+
+      const statusToPlanStatus = {
+        'Đang sản xuất': 1,
+        'Hoàn thành': 2,
+        'Chờ sản xuất': 0
+      };
+
+      const startDateStr = toISODate(orderForm.startDate) || new Date().toISOString().split('T')[0];
+      const endDateStr = toISODate(orderForm.endDate) || startDateStr;
+      const planStartDate = new Date(startDateStr);
+
+      const planPayload = {
+        code: `KHSX-${orderForm.code || orderForm.orderId}`,
+        name: `Lệnh sản xuất ${orderForm.code || orderForm.orderId}`,
+        month: planStartDate.getMonth() + 1,
+        year: planStartDate.getFullYear(),
+        estimated_date: startDateStr,
+        finished_date: endDateStr,
+        status: statusToPlanStatus[orderForm.status] ?? 1
+      };
+
+      const planRes = await planService.createPlan(planPayload).catch(() => null);
+      const planId = planRes && (planRes.id || planRes.plan_id);
+      if (!planId) {
+        setLoading(false);
+        if (toast) toast('error', 'Không thể tạo kế hoạch sản xuất!');
+        return;
+      }
+
+      const orderPayload = {
+        order_code: orderForm.code || orderForm.orderId,
+        customer: 'Khách hàng',
+        plan_id: planId,
+        order_status: statusToOrderStatus[orderForm.status] ?? 1,
+        is_priority: orderForm.priority === 'Cao' ? 1 : 0,
+        estimated_date: endDateStr,
+        note: orderForm.status,
+        products_details: productsDetails
+      };
+
+      const savedOrder = await api.post('/orders/', orderPayload).catch(() => null);
+      if (!savedOrder) {
+        setLoading(false);
+        if (toast) toast('error', 'Không thể lưu Lệnh sản xuất!');
+        return;
+      }
+
+      if (toast) toast('success', 'Đã lưu Lệnh sản xuất mới thành công!');
+      await fetchProductionOrders();
+      setViewMode('list');
+    } catch (err) {
+      console.warn('Lỗi lưu Lệnh sản xuất:', err);
+      if (toast) toast('error', 'Lưu Lệnh sản xuất thất bại!');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const totalCount = total || ordersList.length;
@@ -661,7 +756,7 @@ const ProductionOrdersView = () => {
     const bomItems = displayedProductDetails || [];
 
     const todayStr = orderForm.startDate || new Date().toISOString().split('T')[0];
-    const endStr = orderForm.endDate || '15/08/2026';
+    const endStr = toISODate(orderForm.endDate) || '2026-08-15';
 
     if (activeStage === 'Tạo phôi') {
       const rawItems = bomItems.filter(i => (i.unit === 'm3' || (i.material || '').toLowerCase().includes('gỗ') || (i.compName || '').toLowerCase().includes('gỗ') || (i.compName || '').toLowerCase().includes('phôi')));
@@ -773,7 +868,7 @@ const ProductionOrdersView = () => {
     const newRow = {
       id: Date.now(),
       startDate: orderForm.startDate || new Date().toISOString().split('T')[0],
-      endDate: orderForm.endDate || '15/08/2026',
+      endDate: toISODate(orderForm.endDate) || '2026-08-15',
       team: 'Tổ mới',
       type: 'Chi tiết mới',
       stageFrom: activeStage,
@@ -880,8 +975,8 @@ const ProductionOrdersView = () => {
                               <td style={{ color: '#475569', fontWeight: '600' }}>{item.orderNo}</td>
                               <td style={{ textAlign: 'center', fontWeight: '700', color: '#334155' }}>{item.totalProducts}</td>
                               <td style={{ textAlign: 'center', fontWeight: '800', color: '#2D1A12' }}>{item.planQty}</td>
-                              <td style={{ textAlign: 'center', color: '#64748B' }}>{item.startDate}</td>
-                              <td style={{ textAlign: 'center', color: '#64748B' }}>{item.endDate}</td>
+                              <td style={{ textAlign: 'center', color: '#64748B' }}>{toDisplayDate(item.startDate)}</td>
+                              <td style={{ textAlign: 'center', color: '#64748B' }}>{toDisplayDate(item.endDate)}</td>
                               <td style={{ textAlign: 'center' }}>
                                 <span style={{
                                   display: 'inline-block',
@@ -1411,9 +1506,9 @@ const ProductionOrdersView = () => {
                                   <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '700', color: '#1F2937' }}>{p.spareQty !== undefined ? p.spareQty : 0}</td>
                                   <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '800', color: '#2D1A12' }}>{p.totalQty !== undefined ? p.totalQty : 0}</td>
                                   <td style={{ padding: '8px 10px', textAlign: 'center', color: '#334155' }}>{p.unit || 'Bộ'}</td>
-                                  <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>{p.startDate || '---'}</td>
-                                  <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>{p.endDate || '---'}</td>
-                                  <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>{p.deliveryDate || '---'}</td>
+                                  <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>{toDisplayDate(p.startDate) || '---'}</td>
+                                  <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>{toDisplayDate(p.endDate) || '---'}</td>
+                                  <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>{toDisplayDate(p.deliveryDate) || '---'}</td>
                                   <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '700', color: '#2D1A12' }}>
                                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} title="Xem bản vẽ kỹ thuật">
                                       <Eye size={14} style={{ color: '#475569' }} /> {p.drawingCode || '---'}
@@ -1448,23 +1543,23 @@ const ProductionOrdersView = () => {
                     </h3>
                   </div>
 
-                  <div style={{ overflowX: 'auto', border: '1px solid #EADCC9', borderRadius: '8px' }}>
+                  <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '420px', border: '1px solid #EADCC9', borderRadius: '8px' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                       <thead>
                         <tr style={{ backgroundColor: '#6D4C3D', color: '#FFFFFF' }}>
-                          <th style={{ padding: '9px 10px', textAlign: 'center', width: '45px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>STT</th>
-                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Loại</th>
-                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Công đoạn giao</th>
-                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Công đoạn nhận</th>
-                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Mã thành phẩm</th>
-                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Tên thành phẩm</th>
-                          <th style={{ padding: '9px 10px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Số lượng</th>
-                          <th style={{ padding: '9px 10px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Đơn vị</th>
-                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Vật liệu</th>
-                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Quy cách (mm)</th>
-                          <th style={{ padding: '9px 10px', textAlign: 'right', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Khối lượng (m3)</th>
-                          <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Ghi chú</th>
-                          <th style={{ padding: '9px 10px', textAlign: 'center', fontWeight: '700' }}>Trạng thái</th>
+                          <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#6D4C3D', padding: '9px 10px', textAlign: 'center', width: '45px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>STT</th>
+                          <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#6D4C3D', padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Loại</th>
+                          <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#6D4C3D', padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Công đoạn giao</th>
+                          <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#6D4C3D', padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Công đoạn nhận</th>
+                          <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#6D4C3D', padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Mã thành phẩm</th>
+                          <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#6D4C3D', padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Tên thành phẩm</th>
+                          <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#6D4C3D', padding: '9px 10px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Số lượng</th>
+                          <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#6D4C3D', padding: '9px 10px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Đơn vị</th>
+                          <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#6D4C3D', padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Vật liệu</th>
+                          <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#6D4C3D', padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Quy cách (mm)</th>
+                          <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#6D4C3D', padding: '9px 10px', textAlign: 'right', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Khối lượng (m3)</th>
+                          <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#6D4C3D', padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Ghi chú</th>
+                          <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#6D4C3D', padding: '9px 10px', textAlign: 'center', fontWeight: '700' }}>Trạng thái</th>
                         </tr>
                       </thead>
                       <tbody>

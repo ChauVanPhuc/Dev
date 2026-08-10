@@ -37,6 +37,16 @@ export const API_ROOT = `${getBaseURL()}/`
 export const API_URL = `${API_ROOT}api/v1/`
 const API_BASE_URL = API_URL
 
+export const getFullImageUrl = (path) => {
+  if (!path) return ''
+  if (path.startsWith('blob:') || path.startsWith('data:') || path.startsWith('http://') || path.startsWith('https://')) {
+    return path
+  }
+  const cleanRoot = API_ROOT ? API_ROOT.replace(/\/$/, '') : ''
+  const cleanPath = path.startsWith('/') ? path : `/${path}`
+  return `${cleanRoot}${cleanPath}`
+}
+
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: { 

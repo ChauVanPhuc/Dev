@@ -5,7 +5,7 @@ import { ChevronDown } from 'lucide-react'
  * CustomSelect Component (Premium Version)
  * Một dropdown tùy chỉnh hoàn toàn mang lại trải nghiệm mobile cao cấp.
  */
-const CustomSelect = ({ value, options, onChange, style }) => {
+const CustomSelect = ({ value, options = [], onChange, style, disabled = false }) => {
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef(null)
 
@@ -20,7 +20,8 @@ const CustomSelect = ({ value, options, onChange, style }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const selectedOption = options.find(opt => opt.value === value) || options[0]
+  const selectedOption = options.find(opt => String(opt.value) === String(value))
+    || (value ? { value, label: value } : options[0])
 
   return (
     <div 
@@ -32,18 +33,21 @@ const CustomSelect = ({ value, options, onChange, style }) => {
     >
       {/* Nút bấm hiển thị giá trị hiện tại */}
       <div 
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => !disabled && setIsOpen(!isOpen)}
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '8px 14px',
-          backgroundColor: '#ffffff',
+          height: '40px',
+          minHeight: '40px',
+          boxSizing: 'border-box',
+          backgroundColor: disabled ? '#f1f5f9' : '#ffffff',
           border: '1px solid #e2e8f0',
           borderRadius: '12px',
-          cursor: 'pointer',
+          cursor: disabled ? 'default' : 'pointer',
           fontSize: '0.85rem',
-          color: '#1e293b',
+          color: disabled ? '#475569' : '#1e293b',
           transition: 'boxShadow 0.2s ease, borderColor 0.2s ease',
           boxShadow: isOpen ? '0 4px 12px rgba(0, 0, 0, 0.05)' : 'none',
           borderColor: isOpen ? 'var(--primary-color)' : '#e2e8f0',
@@ -54,20 +58,24 @@ const CustomSelect = ({ value, options, onChange, style }) => {
           whiteSpace: 'nowrap', 
           overflow: 'hidden', 
           textOverflow: 'ellipsis',
-          fontWeight: '700'
+          fontWeight: '700',
+          flex: '1 1 auto',
+          minWidth: 0
         }}>
           {selectedOption ? selectedOption.label : 'Chọn...'}
         </span>
-        <ChevronDown 
-          size={16} 
-          style={{ 
-            transition: 'transform 0.3s ease',
-            transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-            color: '#64748b',
-            flexShrink: 0,
-            marginLeft: '8px'
-          }} 
-        />
+        {!disabled && (
+          <ChevronDown 
+            size={16} 
+            style={{ 
+              transition: 'transform 0.3s ease',
+              transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+              color: '#64748b',
+              flexShrink: 0,
+              marginLeft: '8px'
+            }} 
+          />
+        )}
       </div>
 
       {/* Danh sách các lựa chọn (Options Menu) */}
@@ -103,7 +111,8 @@ const CustomSelect = ({ value, options, onChange, style }) => {
                 backgroundColor: value === option.value ? '#fdf2f2' : 'transparent',
                 cursor: 'pointer',
                 fontWeight: value === option.value ? '700' : '500',
-                transition: 'background-color 0.2s ease'
+                transition: 'background-color 0.2s ease',
+                wordBreak: 'break-word'
               }}
               onMouseEnter={(e) => {
                 if (value !== option.value) e.target.style.backgroundColor = '#f9fafb'

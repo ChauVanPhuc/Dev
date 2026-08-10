@@ -43,6 +43,9 @@ const SystemConfig = lazy(() => import('@modules/System/Views/SystemConfig/Syste
 const ScreenBugManagement = lazy(() => import('@modules/System/Views/Screen/ScreenBugManagementView'));
 const ProjectProgress = lazy(() => import('@modules/System/Views/Project/ProjectProgressView'));
 const DefectManagement = lazy(() => import('@modules/Inspection/Views/Defect/DefectManagementView'));
+const InspectionGuideManagement = lazy(() => import('@modules/InspectionGuide/Views/InspectionGuideManagementView'));
+const InspectionGuideForm = lazy(() => import('@modules/InspectionGuide/Views/InspectionGuideFormView'));
+const InspectionGuideDetail = lazy(() => import('@modules/InspectionGuide/Views/InspectionGuideDetailView'));
 const QualityRecords = lazy(() => import('@modules/QualityRecords/Views/Record/QualityRecordsListView'));
 const QualityRecordsDetail = lazy(() => import('@modules/QualityRecords/Views/Record/QualityRecordsDetailView'));
 const SystemMonitor = lazy(() => import('@modules/System/Views/Monitor/SystemMonitorView'));
@@ -605,6 +608,9 @@ function App() {
                 <Route path="hr/employees" element={<ProtectedRoute permissionKey="users"><EmployeeListView /></ProtectedRoute>} />
                 <Route path="handovers" element={<ProtectedRoute permissionKey="handovers"><HandoverList /></ProtectedRoute>} />
                 <Route path="logs" element={<ProtectedRoute permissionKey="logs"><IncidentLogs /></ProtectedRoute>} />
+                <Route path="inspection-guides" element={<ProtectedRoute permissionKey="inspection-guides"><InspectionGuideManagement /></ProtectedRoute>} />
+                <Route path="inspection-guides/create" element={<ProtectedRoute permissionKey="inspection-guides"><InspectionGuideForm /></ProtectedRoute>} />
+                <Route path="inspection-guides/edit/:id" element={<ProtectedRoute permissionKey="inspection-guides"><InspectionGuideDetail /></ProtectedRoute>} />
                 <Route path="defects" element={<ProtectedRoute permissionKey="defects"><DefectManagement /></ProtectedRoute>} />
                 <Route path="reports" element={<ProtectedRoute permissionKey="reports"><InspectionReports /></ProtectedRoute>} />
                 <Route path="reports/detail/:type/:id" element={<ProtectedRoute permissionKey="reports"><InspectionDetail /></ProtectedRoute>} />

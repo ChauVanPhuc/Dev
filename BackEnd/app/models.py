@@ -54,6 +54,10 @@ from modules.inspection.models.stage_inspection import StageInspection
 from modules.inspection.models.input_inspection import InputInspection
 from modules.inspection.models.checklist import CheckList
 from modules.inspection.models.user_defect_tracking import UserDefectTracking
+from modules.inspection_guide.models.inspection_guide import (
+    InspectionGuide, InspectionGuideStep, InspectionGuideSubStep,
+    InspectionGuideStepImage, InspectionGuideAssignment
+)
 from modules.master.models.customer import Customer
 from modules.production.models.production_team import ProductionTeam
 from modules.production.models.production_routing import ProductionRouting, ProductionRoutingNode, ProductionRoutingComponent, ProductionRoutingProduct
@@ -75,6 +79,8 @@ __all__ = [
     "ISOProcess", "ISOProcessSection", "ISOProcessStepInstance",
     "HRDepartment", "HRPosition", "HRSection", "HREmployee", "HROrgNode", "HRNodeAssignment",
     "OrgStructure", "OrgStructureKPI", "OrgStructureTask", "Employee", "StageInspection", "SystemSidebar",
-    "MasterProductDetail"
+    "MasterProductDetail",
+    "InspectionGuide", "InspectionGuideStep", "InspectionGuideSubStep",
+    "InspectionGuideStepImage", "InspectionGuideAssignment"
 ]
 

@@ -213,7 +213,7 @@ def get_plans(
     # Nếu KHÔNG phân trang (tương thích ngược cho Mobile)
     if page is None:
         plans = query.options(
-            selectinload(ProductPlan.orders).selectinload(Order.products)
+            selectinload(ProductPlan.orders).selectinload(Order.products).selectinload(Product.bom_details)
         ).order_by(ProductPlan.id.desc()).all()
 
         result = []
@@ -225,11 +225,37 @@ def get_plans(
                     continue
                 products = []
                 for product in order.products:
+                    boms = []
+                    for b in product.bom_details:
+                        boms.append({
+                            "id": b.id,
+                            "sku": b.sku,
+                            "compCode": b.sku,
+                            "compName": b.name,
+                            "name": b.name,
+                            "planned": int(b.quantity or 0),
+                            "quantity": int(b.quantity or 0),
+                            "delivered": 0,
+                            "delivered_qty": 0,
+                            "unit": b.unit,
+                            "material": b.material,
+                            "specification": b.specification,
+                            "spec": b.specification,
+                            "input_stage": b.input_stage,
+                            "output_stage": b.output_stage,
+                            "stageFrom": b.input_stage,
+                            "stageTo": b.output_stage,
+                            "volume": b.weight or 1,
+                            "status": b.status,
+                            "description": b.description,
+                            "note": b.description
+                        })
                     products.append({
                         "id": product.id,
                         "sku": product.sku,
                         "name": product.name,
-                        "quantity": int(product.total_qty or product.quantity or 0)
+                        "quantity": int(product.total_qty or product.quantity or 0),
+                        "bom_details": boms
                     })
                 order_list.append({
                     "id": order.id,
@@ -283,7 +309,7 @@ def get_plans(
     # 4. Phân trang
     total_count = query.count()
     paginated_plans = query.options(
-        selectinload(ProductPlan.orders).selectinload(Order.products)
+        selectinload(ProductPlan.orders).selectinload(Order.products).selectinload(Product.bom_details)
     ).offset((page - 1) * pageSize).limit(pageSize).all()
 
     result = []
@@ -295,11 +321,37 @@ def get_plans(
                 continue
             products = []
             for product in order.products:
+                boms = []
+                for b in product.bom_details:
+                    boms.append({
+                        "id": b.id,
+                        "sku": b.sku,
+                        "compCode": b.sku,
+                        "compName": b.name,
+                        "name": b.name,
+                        "planned": int(b.quantity or 0),
+                        "quantity": int(b.quantity or 0),
+                        "delivered": 0,
+                        "delivered_qty": 0,
+                        "unit": b.unit,
+                        "material": b.material,
+                        "specification": b.specification,
+                        "spec": b.specification,
+                        "input_stage": b.input_stage,
+                        "output_stage": b.output_stage,
+                        "stageFrom": b.input_stage,
+                        "stageTo": b.output_stage,
+                        "volume": b.weight or 1,
+                        "status": b.status,
+                        "description": b.description,
+                        "note": b.description
+                    })
                 products.append({
                     "id": product.id,
                     "sku": product.sku,
                     "name": product.name,
-                    "quantity": int(product.total_qty or product.quantity or 0)
+                    "quantity": int(product.total_qty or product.quantity or 0),
+                    "bom_details": boms
                 })
             order_list.append({
                 "id": order.id,
@@ -1414,9 +1466,16 @@ def get_plan_detail(
 def create_plan(plan_data: ProductPlanCreate, db: Session = Depends(get_db)):
     try:
         plan_code = plan_data.code or f"KHSX_{datetime.now().strftime('%m%Y_%H%M%S')}"
+        plan_month = plan_data.month
+        plan_year = plan_data.year
+        if (plan_month is None or plan_year is None) and plan_data.estimated_date:
+            plan_month = plan_data.estimated_date.month
+            plan_year = plan_data.estimated_date.year
         new_plan = ProductPlan(
             code=plan_code,
             name=plan_data.name,
+            month=plan_month,
+            year=plan_year,
             estimated_date=plan_data.estimated_date,
             finished_date=plan_data.finished_date,
             status=plan_data.status

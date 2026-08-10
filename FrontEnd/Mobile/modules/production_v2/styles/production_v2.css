@@ -197,9 +197,12 @@
 
 /* ── Form page (CL07 Match Mockup 1) ─────────────────────── */
 .pv2-page--form {
+  flex: 1;
+  min-height: 0;
   padding: 16px 12px 40px;
   background: #fbf6ee;
-  min-height: 100vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .pv2-form-card {
@@ -282,6 +285,7 @@
   flex-direction: column;
   gap: 4px;
   flex: 1;
+  min-width: 0;
 }
 
 .pv2-field--grow {
@@ -310,16 +314,16 @@
   gap: 10px;
 }
 
-.pv2-field-row--3col > div:nth-child(1) { flex: 1.3; }
-.pv2-field-row--3col > div:nth-child(2) { flex: 1; }
-.pv2-field-row--3col > div:nth-child(3) { flex: 1; }
+.pv2-field-row--3col > div:nth-child(1) { flex: 1.3; min-width: 0; }
+.pv2-field-row--3col > div:nth-child(2) { flex: 1; min-width: 0; }
+.pv2-field-row--3col > div:nth-child(3) { flex: 1; min-width: 0; }
 
 .pv2-field-row--2col {
   display: flex;
   gap: 10px;
 }
 
-.pv2-field-row--2col > div { flex: 1; }
+.pv2-field-row--2col > div { flex: 1; min-width: 0; }
 
 .pv2-input {
   width: 100%;
@@ -528,6 +532,562 @@
   font-weight: 700;
 }
 
+/* ── SOP 5-Column Table (Super Compact & Clean) ────────── */
+.pv2-sop-container {
+  margin-top: 4px;
+}
+
+.pv2-sop-table-wrap {
+  border: 1px solid #d4c8bd;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+}
+
+.pv2-table--sop-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.pv2-table--sop-grid thead tr {
+  background: #63391f;
+  color: #ffffff;
+}
+
+.pv2-table--sop-grid thead th {
+  padding: 8px 6px;
+  font-weight: 700;
+  font-size: 12.5px;
+  color: #ffffff;
+  border: none;
+  line-height: 1.25;
+}
+
+.pv2-sop-tr {
+  border-bottom: 1px solid #ede4db;
+  transition: background-color 0.15s ease;
+}
+
+.pv2-sop-tr:last-child {
+  border-bottom: none;
+}
+
+.pv2-sop-tr--fail {
+  background-color: #fff6f6 !important;
+}
+
+.pv2-table--sop-grid tbody td {
+  padding: 8px 6px;
+  vertical-align: middle;
+  font-size: 12px;
+  color: #334155;
+  line-height: 1.35;
+}
+
+.pv2-sop-step-num-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2d1a12;
+}
+
+/* Clickable Table Cells */
+.pv2-sop-td--clickable {
+  cursor: pointer;
+}
+
+.pv2-sop-td--clickable:active {
+  background: #faf6f1;
+}
+
+.pv2-sop-short-title {
+  font-weight: 700;
+  color: #2d1a12;
+  font-size: 12.5px;
+  line-height: 1.3;
+}
+
+.pv2-sop-view-detail-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #c85a1e;
+  margin-top: 2px;
+}
+
+.pv2-sop-substep-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: #fdf2e9;
+  color: #9a3412;
+  border: 1px solid #fed7aa;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pv2-sop-standard-preview {
+  font-size: 11.5px;
+  color: #4b5563;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pv2-sop-img-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  padding: 1px 5px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.pv2-sop-empty-dash {
+  color: #94a3b8;
+}
+
+.pv2-sop-qty-num-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2d1a12;
+}
+
+/* Action Result Buttons */
+.pv2-sop-btn-res {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.pv2-sop-btn-res--pass {
+  background: #5c8227;
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(92, 130, 39, 0.25);
+}
+
+.pv2-sop-btn-res--pass:active {
+  background: #4d6e1f;
+}
+
+.pv2-sop-btn-res--fail {
+  background: #a83439;
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(168, 52, 57, 0.25);
+}
+
+.pv2-sop-btn-res--fail:active {
+  background: #8e2b30;
+}
+
+/* ── STEP DETAIL POPUP MODAL ────────────────────────────── */
+.pv2-sop-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(3px);
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.pv2-sop-modal-content {
+  background: #ffffff;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 30px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  animation: pv2ModalPop 0.18s ease-out;
+}
+
+@keyframes pv2ModalPop {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.pv2-sop-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: #faf6f1;
+  border-bottom: 1px solid #eee4db;
+}
+
+.pv2-sop-modal-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pv2-sop-modal-badge {
+  background: #63391f;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.pv2-sop-modal-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #2d1a12;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pv2-sop-modal-close-btn {
+  background: #ede3d8;
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #5a3c26;
+}
+
+.pv2-sop-modal-body {
+  padding: 14px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pv2-sop-modal-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pv2-sop-modal-sec-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #78350f;
+}
+
+.pv2-sop-modal-sec-box {
+  background: #fafaf9;
+  border: 1px solid #e7e5e4;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.pv2-modal-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pv2-modal-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+  color: #334155;
+  line-height: 1.45;
+}
+
+.pv2-modal-bullet {
+  color: #c85a1e;
+  font-weight: 800;
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.pv2-modal-line-text {
+  flex: 1;
+}
+
+.pv2-modal-label {
+  color: #4a240e;
+  font-weight: 700;
+}
+
+.pv2-modal-p {
+  font-size: 12px;
+  color: #334155;
+  line-height: 1.45;
+  margin: 0;
+}
+
+/* Sub-steps in Modal */
+.pv2-sop-modal-substeps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pv2-sop-modal-substep-card {
+  background: #ffffff;
+  border: 1px solid #eddcd1;
+  border-left: 3.5px solid #c85a1e;
+  border-radius: 7px;
+  padding: 8px 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.pv2-sop-modal-substep-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.pv2-sop-modal-substep-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #c85a1e;
+  background: #fdf0e6;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.pv2-sop-modal-substep-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #2d1a12;
+}
+
+.pv2-sop-modal-substep-body {
+  font-size: 12px;
+  color: #475569;
+}
+
+/* Images Grid in Modal */
+.pv2-sop-modal-images-grid {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pv2-sop-modal-thumb-box {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  background: #f1f5f9;
+  cursor: pointer;
+}
+
+.pv2-sop-modal-thumb-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pv2-sop-modal-thumb-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 9.5px;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.pv2-sop-modal-thumb-box:hover .pv2-sop-modal-thumb-overlay {
+  opacity: 1;
+}
+
+/* Modal Footer */
+.pv2-sop-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  gap: 10px;
+}
+
+.pv2-sop-modal-btn-res {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pv2-sop-modal-btn-res--pass {
+  background: #5c8227;
+  color: #ffffff;
+}
+
+.pv2-sop-modal-btn-res--fail {
+  background: #a83439;
+  color: #ffffff;
+}
+
+.pv2-sop-modal-btn-close {
+  padding: 8px 16px;
+  background: #e2e8f0;
+  color: #475569;
+  border: none;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Empty SOP State */
+.pv2-sop-empty-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 10px;
+  margin: 6px 0;
+}
+
+.pv2-sop-empty-icon {
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.pv2-sop-empty-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pv2-sop-empty-text strong {
+  font-size: 13px;
+  color: #475569;
+}
+
+.pv2-sop-empty-text span {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* Lightbox Modal */
+.pv2-sop-lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.pv2-sop-lightbox-content {
+  background: #ffffff;
+  border-radius: 12px;
+  max-width: 90vw;
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+}
+
+.pv2-sop-lightbox-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.pv2-sop-lightbox-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: #1e293b;
+}
+
+.pv2-sop-lightbox-close {
+  background: #f1f5f9;
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #64748b;
+}
+
+.pv2-sop-lightbox-img-wrap {
+  padding: 10px;
+  overflow: auto;
+  text-align: center;
+}
+
+.pv2-sop-lightbox-img-wrap img {
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
 /* ── Qty colors ─────────────────────────────────────────── */
 .pv2-qty--empty   { color: var(--pv2-fail);    font-weight: 600; }
 .pv2-qty--partial { color: var(--pv2-delivering); font-weight: 600; }
@@ -599,15 +1159,21 @@
   position: relative;
   width: 72px;
   height: 72px;
-  border-radius: 6px;
+  border-radius: 8px;
   overflow: hidden;
-  border: 1px solid var(--pv2-border);
+  border: 1px solid #cbd5e1;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .pv2-img-thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
 
 .pv2-img-remove {
@@ -624,6 +1190,42 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* ── Image Upload Area & Required Indicator ───────────────── */
+.pv2-upload-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pv2-req-inline {
+  color: #dc2626;
+  font-weight: 700;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+.pv2-req-tag {
+  font-size: 11px;
+  font-weight: 600;
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 2px 8px;
+  border-radius: 5px;
+}
+
+.pv2-req-tag-ok {
+  font-size: 11px;
+  font-weight: 600;
+  color: #16a34a;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  padding: 2px 8px;
+  border-radius: 5px;
 }
 
 /* ── Error trend ────────────────────────────────────────── */
@@ -1394,7 +1996,7 @@
 
 /* ── CL06 Pagination Bar (Fixed Bottom Match Mockup) ────── */
 .pv2-pagination-wrapper {
-  position: fixed;
+  position: absolute;
   bottom: 0;
   left: 0;
   right: 0;

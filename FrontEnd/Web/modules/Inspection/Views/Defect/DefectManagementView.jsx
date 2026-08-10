@@ -7,6 +7,7 @@ import {
 import { Calendar, Filter, ChevronDown, ChevronUp, BarChart3, PieChart as PieChartIcon, TrendingUp, RefreshCw, ChevronLeft, ChevronRight, Search, Edit, Trash2 } from 'lucide-react';
 import '@styles/components.css';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
+import ClaimListView from '@modules/Claim/views/Claim/ClaimListView';
 
 const COLORS = ['#7B5233', '#A67C52', '#D9B99B', '#F2E2CE', '#4b301e', '#8c6a51'];
 
@@ -804,6 +805,13 @@ const DefectManagement = () => {
           min-height: 0;
           overflow-y: auto;
         }
+        .complaint-view {
+          flex: 1;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
         .defect-list-layout {
           display: flex;
           flex-direction: column;
@@ -1568,14 +1576,7 @@ const DefectManagement = () => {
         {/* ── Complaint Defects Tab Content ── */}
         {viewTab === 'complaint' && (
           <div className="complaint-view animate-fade-in">
-            <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
-              <div style={{ fontSize: '3rem', marginBottom: '20px' }}>⚠️</div>
-              <h3 style={{ color: '#4b301e', marginBottom: '10px' }}>Lỗi khiếu nại</h3>
-              <p style={{ color: '#64748b', marginBottom: '20px' }}>Quản lý các lỗi khiếu nại từ khách hàng</p>
-              <div style={{ padding: '20px', backgroundColor: '#f8fafc', borderRadius: '10px', color: '#94a3b8' }}>
-                Tính năng đang được phát triển...
-              </div>
-            </div>
+            <ClaimListView />
           </div>
         )}
 
