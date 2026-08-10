@@ -35,6 +35,16 @@ export default defineConfig({
     open: false,
     host: "0.0.0.0",
     allowedHosts: true,
+    proxy: {
+      '/static': {
+        target: 'http://localhost:8000',
+        changeOrigin: true
+      },
+      '/uploads': {
+        target: 'http://localhost:8000',
+        changeOrigin: true
+      }
+    },
     fs: {
       allow: [
         path.resolve(__dirname),

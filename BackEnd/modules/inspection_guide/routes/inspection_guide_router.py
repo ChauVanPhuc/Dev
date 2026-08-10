@@ -33,6 +33,21 @@ def read_guides(
     return items
 
 
+# --- Mobile (PHẢI đặt TRƯỚC /{guide_id} để tránh xung đột route) ---
+@router.get("/mobile/{inspection_type}", response_model=Optional[InspectionGuideOut])
+def mobile_guide(
+    inspection_type: str,
+    product_id: Optional[int] = None,
+    category_id: Optional[int] = None,
+    stage_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    guide = get_mobile_guide(db, inspection_type, product_id, category_id, stage_id)
+    if not guide:
+        raise HTTPException(status_code=404, detail="Không tìm thấy hướng dẫn cho loại phiếu này.")
+    return guide
+
+
 @router.get("/{guide_id}", response_model=InspectionGuideOut)
 def read_guide(guide_id: int, db: Session = Depends(get_db)):
     guide = get_guide(db, guide_id)
@@ -190,18 +205,3 @@ def assign_guide(guide_id: int, payload: GuideAssignmentPayload, db: Session = D
     data = [a.model_dump() for a in payload.assignments]
     set_assignments(db, guide_id, data)
     return {"message": "Đã cập nhật gán loại phiếu."}
-
-
-# --- Mobile ---
-@router.get("/mobile/{inspection_type}", response_model=Optional[InspectionGuideOut])
-def mobile_guide(
-    inspection_type: str,
-    product_id: Optional[int] = None,
-    category_id: Optional[int] = None,
-    stage_id: Optional[int] = None,
-    db: Session = Depends(get_db)
-):
-    guide = get_mobile_guide(db, inspection_type, product_id, category_id, stage_id)
-    if not guide:
-        raise HTTPException(status_code=404, detail="Không tìm thấy hướng dẫn cho loại phiếu này.")
-    return guide

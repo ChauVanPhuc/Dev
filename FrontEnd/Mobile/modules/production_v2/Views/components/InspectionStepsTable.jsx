@@ -10,44 +10,7 @@ import {
   FileText
 } from 'lucide-react'
 import { getFullImageUrl } from '@shared/services/api'
-
-// Component định dạng văn bản nhiều dòng / gạch đầu dòng gọn gàng trong popup
-const FormattedPopupContent = ({ text }) => {
-  if (!text) return null
-
-  const lines = text
-    .split(/\n|•\s*|(?<=[.;])\s*(?=\d+\.\s)|(?<=[a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF])\s*•\s*/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0)
-
-  if (lines.length <= 1) {
-    return <p className="pv2-modal-p">{text}</p>
-  }
-
-  return (
-    <div className="pv2-modal-lines">
-      {lines.map((line, lIdx) => {
-        const match = line.match(/^((?:\d+\.\s*)?[^:–—]{2,35}[:–—])\s*(.*)$/)
-        if (match) {
-          return (
-            <div key={lIdx} className="pv2-modal-line">
-              <span className="pv2-modal-bullet">›</span>
-              <div className="pv2-modal-line-text">
-                <strong className="pv2-modal-label">{match[1]}</strong> {match[2]}
-              </div>
-            </div>
-          )
-        }
-        return (
-          <div key={lIdx} className="pv2-modal-line">
-            <span className="pv2-modal-bullet">›</span>
-            <div className="pv2-modal-line-text">{line}</div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
+import { FormattedTextView } from '@shared/utils/textFormatter'
 
 const InspectionStepsTable = ({ steps = [], onStepChange, sampleQty, disabled = false }) => {
   const [selectedStepModal, setSelectedStepModal] = useState(null)
@@ -215,7 +178,7 @@ const InspectionStepsTable = ({ steps = [], onStepChange, sampleQty, disabled = 
                     <span>Mô tả & Hướng dẫn thao tác</span>
                   </div>
                   <div className="pv2-sop-modal-sec-box">
-                    <FormattedPopupContent text={selectedStepModal.content || selectedStepModal.description} />
+                    <FormattedTextView text={selectedStepModal.content || selectedStepModal.description} />
                   </div>
                 </div>
               )}
@@ -240,7 +203,7 @@ const InspectionStepsTable = ({ steps = [], onStepChange, sampleQty, disabled = 
                         </div>
                         {sub.content && (
                           <div className="pv2-sop-modal-substep-body">
-                            <FormattedPopupContent text={sub.content} />
+                            <FormattedTextView text={sub.content} />
                           </div>
                         )}
                       </div>

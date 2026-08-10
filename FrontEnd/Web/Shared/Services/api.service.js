@@ -26,6 +26,16 @@ export const getBaseURL = () => {
 export const API_ROOT = `${getBaseURL()}/`;
 export const API_URL = `${API_ROOT}api/v1/`;
 
+export const getFullImageUrl = (path) => {
+  if (!path) return '';
+  if (path.startsWith('blob:') || path.startsWith('data:') || path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  }
+  const cleanRoot = API_ROOT ? API_ROOT.replace(/\/$/, '') : '';
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  return `${cleanRoot}${cleanPath}`;
+};
+
 const api = axios.create({
   baseURL: API_URL,
   timeout: 300000, // 5 phút cho các file lớn

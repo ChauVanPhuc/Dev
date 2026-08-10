@@ -48,12 +48,17 @@ export const inspectionService = {
       if (productId) params.append('product_id', productId)
       if (stageId) params.append('stage_id', stageId)
       const queryStr = params.toString() ? `?${params.toString()}` : ''
-      const res = await apiClient.get(`/inspection-guides/mobile/${mode}${queryStr}`)
-      if (res && res.data) {
-        return res.data
+      const url = `/inspection-guides/mobile/${mode}${queryStr}`
+      const res = await apiClient.get(url)
+      // Axios trả về { data, status, ... }. apiClient có thể wrapper hoặc không.
+      const guideData = res?.data !== undefined ? res.data : res
+      if (guideData && (guideData.id || guideData.steps)) {
+        return guideData
       }
     } catch (e) {
-      console.warn(`[inspectionService] Không tìm thấy SOP từ database cho mode=${mode}:`, e?.response?.data || e.message)
+      const status = e?.response?.status
+      const detail = e?.response?.data?.detail || e.message
+      console.warn(`[inspectionService.getGuide] mode=${mode}, status=${status}:`, detail)
     }
     return null
   },

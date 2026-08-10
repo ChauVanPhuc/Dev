@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { X, Smartphone, ChevronLeft, ChevronRight, CheckCircle2, Circle, Image as ImageIcon } from 'lucide-react';
+import { getFullImageUrl } from '@webShared/Services/api.service';
+import { FormattedTextView } from '@shared/utils/textFormatter';
 
 const GuideMobilePreviewModal = ({ isOpen, onClose, guide }) => {
   const [currentStepIdx, setCurrentStepIdx] = useState(0);
@@ -208,16 +210,12 @@ const GuideMobilePreviewModal = ({ isOpen, onClose, guide }) => {
 
                     {currentStep.content && (
                       <div style={{
-                        fontSize: 12.5,
-                        color: '#4B5563',
-                        lineHeight: '1.5',
                         backgroundColor: '#FAF8F6',
                         padding: '8px 10px',
                         borderRadius: 6,
-                        borderLeft: '3px solid #7B5233',
-                        whiteSpace: 'pre-line'
+                        borderLeft: '3px solid #7B5233'
                       }}>
-                        {currentStep.content}
+                        <FormattedTextView text={currentStep.content} />
                       </div>
                     )}
                   </div>
@@ -275,17 +273,13 @@ const GuideMobilePreviewModal = ({ isOpen, onClose, guide }) => {
                               {sub.content && sub.title && (
                                 <div style={{
                                   marginLeft: 26,
-                                  fontSize: 12,
-                                  color: isDone ? '#047857' : '#4B5563',
-                                  lineHeight: '1.45',
-                                  whiteSpace: 'pre-line',
                                   padding: '6px 8px',
                                   backgroundColor: isDone ? '#D1FAE5' : '#FFFFFF',
                                   borderRadius: 6,
                                   borderLeft: '2px solid #059669',
                                   opacity: isDone ? 0.85 : 1
                                 }}>
-                                  {sub.content}
+                                  <FormattedTextView text={sub.content} />
                                 </div>
                               )}
                             </div>
@@ -325,7 +319,7 @@ const GuideMobilePreviewModal = ({ isOpen, onClose, guide }) => {
                             }}
                           >
                             <img
-                              src={img.image_url}
+                              src={getFullImageUrl(img.image_url)}
                               alt={img.file_name}
                               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             />

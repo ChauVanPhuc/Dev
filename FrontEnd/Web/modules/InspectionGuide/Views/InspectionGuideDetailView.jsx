@@ -5,11 +5,11 @@ import {
   Layers, Image as ImageIcon, Smartphone, ShieldCheck,
   CheckSquare, ListChecks, Edit3, Check, AlertCircle
 } from 'lucide-react';
-import api from '@webShared/Services/api.service';
+import api, { getFullImageUrl } from '@webShared/Services/api.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
-import GuideMobilePreviewModal from './components/GuideMobilePreviewModal';
 import GuideAssignmentTab from './components/GuideAssignmentTab';
+import { cleanWordClipboardText, handlePasteCleanText, FormattedTextView } from '@shared/utils/textFormatter';
 import '@styles/components.css';
 
 const IMAGE_LIMIT = 10;
@@ -43,16 +43,15 @@ const InspectionGuideDetailView = () => {
   const [confirmDeleteSubStep, setConfirmDeleteSubStep] = useState(null);
 
   // Modals & Popups
-  const [showMobilePreview, setShowMobilePreview] = useState(false);
   const [lightboxImage, setLightboxImage] = useState(null);
   const [confirmDeleteGuide, setConfirmDeleteGuide] = useState(false);
   const [confirmDeleteStep, setConfirmDeleteStep] = useState(null);
   const [confirmDeleteImage, setConfirmDeleteImage] = useState(null);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
-  useEffect(() => {
-    fetchGuide();
-  }, [id]);
+  // Derived state
+  const selectedStep = (guide?.steps || []).find(s => s.id === selectedStepId) || null;
 
   const fetchGuide = async (preferredStepId = null) => {
     setLoading(true);
@@ -86,7 +85,9 @@ const InspectionGuideDetailView = () => {
     }
   };
 
-  const selectedStep = (guide?.steps || []).find(s => s.id === selectedStepId) || null;
+  useEffect(() => {
+    fetchGuide();
+  }, [id]);
 
   // Change selected step in left panel
   const handleSelectStep = (step) => {
@@ -307,21 +308,22 @@ const InspectionGuideDetailView = () => {
   // Upload images
   const handleUploadImages = async (files) => {
     if (!selectedStep || !files || files.length === 0) return;
+    const fileList = Array.from(files);
     const currentCount = selectedStep.images?.length || 0;
-    if (currentCount + files.length > IMAGE_LIMIT) {
+    if (currentCount + fileList.length > IMAGE_LIMIT) {
       if (toast) toast('warning', `Mỗi bước tối đa ${IMAGE_LIMIT} ảnh (Hiện có: ${currentCount}).`);
       return;
     }
 
     setUploadingImages(true);
     const fd = new FormData();
-    for (const f of files) fd.append('files', f);
+    for (const f of fileList) fd.append('files', f);
 
     try {
       await api.post(`/inspection-guides/${id}/steps/${selectedStep.id}/images`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      if (toast) toast('success', `Đã tải lên ${files.length} hình ảnh thành công.`);
+      if (toast) toast('success', `Đã tải lên ${fileList.length} hình ảnh thành công.`);
       await fetchGuide(selectedStep.id);
     } catch (err) {
       console.error('Lỗi upload ảnh:', err);
@@ -344,6 +346,70 @@ const InspectionGuideDetailView = () => {
       if (toast) toast('error', 'Lỗi khi xóa hình ảnh.');
     }
   };
+
+  // --- PASTE (Ctrl+V) & DRAG-AND-DROP IMAGE HANDLERS ---
+  useEffect(() => {
+    const handleGlobalPaste = (e) => {
+      if (!selectedStep) return;
+
+      const items = e.clipboardData?.items;
+      if (!items || items.length === 0) return;
+
+      const imageFiles = [];
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type && item.type.startsWith('image/')) {
+          const blob = item.getAsFile();
+          if (blob) {
+            const ext = item.type.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+            const file = new File([blob], `clipboard_${Date.now()}_${i + 1}.${ext}`, { type: blob.type || item.type });
+            imageFiles.push(file);
+          }
+        }
+      }
+
+      if (imageFiles.length > 0) {
+        e.preventDefault();
+        handleUploadImages(imageFiles);
+      }
+    };
+
+    window.addEventListener('paste', handleGlobalPaste);
+    return () => {
+      window.removeEventListener('paste', handleGlobalPaste);
+    };
+  }, [selectedStep, uploadingImages, id]);
+
+  // Drag and Drop handlers
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragging) setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      const imageFiles = Array.from(files).filter(f => f.type && f.type.startsWith('image/'));
+      if (imageFiles.length > 0) {
+        handleUploadImages(imageFiles);
+      } else if (toast) {
+        toast('warning', 'Vui lòng chỉ kéo thả các file định dạng hình ảnh (PNG, JPG, JPEG, WEBP).');
+      }
+    }
+  };
+
+
 
   if (loading && !guide) {
     return (
@@ -456,30 +522,6 @@ const InspectionGuideDetailView = () => {
             />
             {metaForm.is_active ? 'Đang hoạt động' : 'Tạm ngưng'}
           </label>
-
-          {/* Mobile Preview Button */}
-          <button
-            type="button"
-            onClick={() => setShowMobilePreview(true)}
-            style={{
-              padding: '8px 16px',
-              borderRadius: 8,
-              border: '1.5px solid #7B5233',
-              backgroundColor: '#FAF8F6',
-              color: '#7B5233',
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              transition: 'all 0.2s'
-            }}
-            onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#7B5233'; e.currentTarget.style.color = '#FFF'; }}
-            onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FAF8F6'; e.currentTarget.style.color = '#7B5233'; }}
-          >
-            <Smartphone size={16} /> Xem trước Mobile
-          </button>
 
           {/* Delete Guide Button */}
           <button
@@ -972,14 +1014,54 @@ const InspectionGuideDetailView = () => {
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 6 }}>
-                    Nội dung hướng dẫn chi tiết / Tiêu chuẩn kỹ thuật
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
+                      Nội dung hướng dẫn chi tiết / Tiêu chuẩn kỹ thuật
+                    </label>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button
+                        type="button"
+                        onClick={() => setStepDraft(prev => ({ ...prev, content: (prev.content ? prev.content + '\n✓ ' : '✓ ') }))}
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: 4,
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          backgroundColor: '#DCFCE7',
+                          color: '#16A34A',
+                          border: '1px solid #86EFAC',
+                          cursor: 'pointer'
+                        }}
+                        title="Chèn dòng tiêu chí kiểm tra (Dấu tick xanh)"
+                      >
+                        + ✓ Tiêu chí
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStepDraft(prev => ({ ...prev, content: (prev.content ? prev.content + '\n• ' : '• ') }))}
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: 4,
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          backgroundColor: '#F3F4F6',
+                          color: '#374151',
+                          border: '1px solid #D1D5DB',
+                          cursor: 'pointer'
+                        }}
+                        title="Chèn dòng gạch đầu dòng"
+                      >
+                        + • Gạch đầu dòng
+                      </button>
+                    </div>
+                  </div>
+
                   <textarea
                     rows={4}
                     value={stepDraft.content}
-                    onChange={e => setStepDraft(prev => ({ ...prev, content: e.target.value }))}
-                    placeholder="Nhập hướng dẫn thao tác tổng quan, phương pháp đo đạc hoặc tiêu chuẩn chất lượng..."
+                    onPaste={e => handlePasteCleanText(e, val => setStepDraft(prev => ({ ...prev, content: val })))}
+                    onChange={e => setStepDraft(prev => ({ ...prev, content: cleanWordClipboardText(e.target.value) }))}
+                    placeholder="Nhập hướng dẫn thao tác tổng quan, phương pháp đo đạc hoặc tiêu chuẩn chất lượng (hỗ trợ copy từ Word, tự động giữ dấu ✓, • và in đậm nhãn)..."
                     style={{
                       width: '100%',
                       padding: '10px 14px',
@@ -991,6 +1073,23 @@ const InspectionGuideDetailView = () => {
                       backgroundColor: '#FAF8F6'
                     }}
                   />
+
+                  {/* Live visual preview when content exists */}
+                  {stepDraft.content && (
+                    <div style={{
+                      marginTop: 10,
+                      padding: '12px 16px',
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: 8,
+                      border: '1px solid #EADCC9',
+                      borderLeft: '4px solid #7B5233'
+                    }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#7B5233', marginBottom: 6 }}>
+                        Xem trước định dạng thực tế trên App & SOP:
+                      </div>
+                      <FormattedTextView text={stepDraft.content} />
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1130,8 +1229,9 @@ const InspectionGuideDetailView = () => {
                                 <textarea
                                   rows={4}
                                   value={editingSubStepDraft.content}
-                                  onChange={e => setEditingSubStepDraft(prev => ({ ...prev, content: e.target.value }))}
-                                  placeholder="Nhập điều kiện, tiêu chuẩn và hành động thao tác (hỗ trợ nhiều dòng)..."
+                                  onPaste={e => handlePasteCleanText(e, val => setEditingSubStepDraft(prev => ({ ...prev, content: val })))}
+                                  onChange={e => setEditingSubStepDraft(prev => ({ ...prev, content: cleanWordClipboardText(e.target.value) }))}
+                                  placeholder="Nhập điều kiện, tiêu chuẩn và hành động thao tác (hỗ trợ copy từ Word, dấu ✓, •, in đậm nhãn)..."
                                   style={{
                                     width: '100%',
                                     padding: '7px 10px',
@@ -1329,13 +1429,9 @@ const InspectionGuideDetailView = () => {
                                 padding: '8px 12px',
                                 backgroundColor: '#FAF8F6',
                                 borderRadius: 6,
-                                borderLeft: '3px solid #059669',
-                                fontSize: 12.5,
-                                color: '#4B5563',
-                                lineHeight: '1.55',
-                                whiteSpace: 'pre-line'
+                                borderLeft: '3px solid #059669'
                               }}>
-                                {sub.content}
+                                <FormattedTextView text={sub.content} />
                               </div>
                             )}
                           </div>
@@ -1365,7 +1461,7 @@ const InspectionGuideDetailView = () => {
                       type="text"
                       autoFocus={showSubStepInput}
                       value={subStepDraft.title}
-                      onChange={e => setSubStepDraft(prev => ({ ...prev, title: e.target.value }))}
+                      onChange={e => setSubStepDraft(prev => ({ ...prev, title: cleanWordClipboardText(e.target.value) }))}
                       placeholder={`Tiêu đề / Tên trường hợp (VD: Trường hợp 1: Lô hàng ĐẠT chất lượng...)`}
                       style={{
                         width: '100%',
@@ -1382,8 +1478,9 @@ const InspectionGuideDetailView = () => {
                     <textarea
                       rows={3}
                       value={subStepDraft.content}
-                      onChange={e => setSubStepDraft(prev => ({ ...prev, content: e.target.value }))}
-                      placeholder="Nội dung chi tiết / Điều kiện & Hành động (hỗ trợ nhiều dòng, số 1, 2, gạch đầu dòng •)..."
+                      onPaste={e => handlePasteCleanText(e, val => setSubStepDraft(prev => ({ ...prev, content: val })))}
+                      onChange={e => setSubStepDraft(prev => ({ ...prev, content: cleanWordClipboardText(e.target.value) }))}
+                      placeholder="Nội dung chi tiết / Điều kiện & Hành động (hỗ trợ copy từ Word, dấu ✓, •, in đậm nhãn)..."
                       style={{
                         width: '100%',
                         padding: '7px 10px',
@@ -1448,22 +1545,45 @@ const InspectionGuideDetailView = () => {
               )}
 
               {/* PHOTO GALLERY SECTION */}
-              <div style={{
-                backgroundColor: '#FAF8F6',
-                borderRadius: 14,
-                padding: 18,
-                border: '1px solid #EADCC9'
-              }}>
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                style={{
+                  backgroundColor: isDragging ? '#FFF7ED' : '#FAF8F6',
+                  borderRadius: 14,
+                  padding: 18,
+                  border: isDragging ? '2px dashed #C2410C' : '1px solid #EADCC9',
+                  transition: 'all 0.2s ease',
+                  position: 'relative'
+                }}
+              >
                 <div style={{
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  marginBottom: 14
+                  marginBottom: 14,
+                  flexWrap: 'wrap',
+                  gap: 8
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <ImageIcon size={18} color="#7B5233" />
                     <span style={{ fontWeight: 800, fontSize: 13.5, color: '#2D1A12' }}>
                       Ảnh minh họa tiêu chuẩn ({selectedStep.images?.length || 0} / {IMAGE_LIMIT})
+                    </span>
+                    <span style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      backgroundColor: '#EFE6DD',
+                      color: '#7B5233',
+                      padding: '2px 8px',
+                      borderRadius: 6,
+                      border: '1px solid #D6C2B0',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4
+                    }}>
+                      ⌨️ Hỗ trợ Ctrl+V dán ảnh trực tiếp
                     </span>
                   </div>
 
@@ -1492,7 +1612,8 @@ const InspectionGuideDetailView = () => {
                       cursor: (selectedStep.images?.length || 0) >= IMAGE_LIMIT ? 'not-allowed' : 'pointer',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 6
+                      gap: 6,
+                      boxShadow: '0 2px 6px rgba(123, 82, 51, 0.2)'
                     }}
                   >
                     <Upload size={14} /> {uploadingImages ? 'Đang tải lên...' : '+ Tải ảnh lên'}
@@ -1504,24 +1625,57 @@ const InspectionGuideDetailView = () => {
                   <div
                     onClick={() => fileInputRef.current?.click()}
                     style={{
-                      padding: '28px 16px',
+                      padding: '32px 20px',
                       textAlign: 'center',
-                      backgroundColor: '#FFFFFF',
-                      borderRadius: 10,
-                      border: '1.5px dashed #D1D5DB',
+                      backgroundColor: isDragging ? '#FFEDD5' : '#FFFFFF',
+                      borderRadius: 12,
+                      border: isDragging ? '2px dashed #EA580C' : '1.5px dashed #D1D5DB',
                       cursor: 'pointer',
-                      transition: 'border-color 0.2s'
+                      transition: 'all 0.2s',
+                      userSelect: 'none'
                     }}
-                    onMouseEnter={e => e.currentTarget.style.borderColor = '#7B5233'}
-                    onMouseLeave={e => e.currentTarget.style.borderColor = '#D1D5DB'}
+                    onMouseEnter={e => { if (!isDragging) e.currentTarget.style.borderColor = '#7B5233'; }}
+                    onMouseLeave={e => { if (!isDragging) e.currentTarget.style.borderColor = '#D1D5DB'; }}
                   >
-                    <ImageIcon size={32} color="#9CA3AF" style={{ margin: '0 auto 8px auto' }} />
-                    <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#4B5563' }}>
-                      Chưa có hình ảnh minh họa cho bước này.
+                    <div style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: '50%',
+                      backgroundColor: '#FAF5F0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: '0 auto 10px auto',
+                      border: '1px solid #EADCC9'
+                    }}>
+                      <ImageIcon size={26} color="#7B5233" />
+                    </div>
+                    <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: '#2D1A12' }}>
+                      {isDragging ? 'Thả file ảnh vào đây để tải lên ngay' : 'Chưa có hình ảnh minh họa cho bước này.'}
                     </p>
-                    <span style={{ fontSize: 12, color: '#9CA3AF' }}>
-                      Nhấp vào đây hoặc kéo thả file ảnh để tải lên (Tối đa 10 ảnh)
-                    </span>
+                    <div style={{
+                      marginTop: 6,
+                      fontSize: 12.5,
+                      color: '#6B7280',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      flexWrap: 'wrap'
+                    }}>
+                      <span>Nhấp để chọn file, kéo thả vào đây hoặc bấm</span>
+                      <kbd style={{
+                        padding: '2px 7px',
+                        backgroundColor: '#F3F4F6',
+                        border: '1px solid #D1D5DB',
+                        borderRadius: 4,
+                        fontWeight: 700,
+                        fontSize: 11.5,
+                        color: '#1F2937',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                      }}>Ctrl + V</kbd>
+                      <span>để dán ảnh chụp màn hình (Tối đa 10 ảnh)</span>
+                    </div>
                   </div>
                 ) : (
                   <div style={{
@@ -1544,7 +1698,7 @@ const InspectionGuideDetailView = () => {
                         }}
                       >
                         <img
-                          src={img.image_url}
+                          src={getFullImageUrl(img.image_url)}
                           alt={img.file_name}
                           onClick={() => setLightboxImage(img)}
                           style={{
@@ -1605,6 +1759,44 @@ const InspectionGuideDetailView = () => {
                         </div>
                       </div>
                     ))}
+
+                    {/* Add More Tile if < IMAGE_LIMIT */}
+                    {selectedStep.images.length < IMAGE_LIMIT && (
+                      <div
+                        onClick={() => fileInputRef.current?.click()}
+                        style={{
+                          aspectRatio: '1',
+                          borderRadius: 10,
+                          border: isDragging ? '2px dashed #EA580C' : '1.5px dashed #D1D5DB',
+                          backgroundColor: isDragging ? '#FFEDD5' : '#FFFFFF',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          gap: 4,
+                          transition: 'all 0.2s',
+                          padding: 8,
+                          textAlign: 'center'
+                        }}
+                        onMouseEnter={e => {
+                          if (!isDragging) {
+                            e.currentTarget.style.borderColor = '#7B5233';
+                            e.currentTarget.style.backgroundColor = '#FAF5F0';
+                          }
+                        }}
+                        onMouseLeave={e => {
+                          if (!isDragging) {
+                            e.currentTarget.style.borderColor = '#D1D5DB';
+                            e.currentTarget.style.backgroundColor = '#FFFFFF';
+                          }
+                        }}
+                      >
+                        <Plus size={22} color="#7B5233" />
+                        <span style={{ fontSize: 11.5, fontWeight: 700, color: '#7B5233' }}>Thêm ảnh</span>
+                        <span style={{ fontSize: 10, color: '#9CA3AF' }}>(hoặc Ctrl+V)</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1680,7 +1872,7 @@ const InspectionGuideDetailView = () => {
           </button>
           <div style={{ maxWidth: '90vw', maxHeight: '90vh', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
             <img
-              src={lightboxImage.image_url}
+              src={getFullImageUrl(lightboxImage.image_url)}
               alt={lightboxImage.file_name}
               style={{
                 maxWidth: '100%',
@@ -1696,13 +1888,6 @@ const InspectionGuideDetailView = () => {
           </div>
         </div>
       )}
-
-      {/* Mobile QC Simulation Preview Modal */}
-      <GuideMobilePreviewModal
-        isOpen={showMobilePreview}
-        onClose={() => setShowMobilePreview(false)}
-        guide={guide}
-      />
 
       {/* Delete Guide Confirm Modal */}
       <BeautifulConfirmModal

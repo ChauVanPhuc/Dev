@@ -1,13 +1,13 @@
-import React from 'react';
+import api from '@webShared/Services/api.service';
 import {
-  Plus, Trash2, Edit, Upload, Eye, FileText, Settings
+  Plus, Trash2, Edit, Upload, Eye, FileText, Settings, Download
 } from 'lucide-react';
 
 const ProcessTemplatesTab = ({ editor }) => {
   const {
-    a, activeTab, file, formData, handleAddRelatedTemplate, handleDeleteAttachment,
-    handleDeleteRelatedTemplate, handleOpenSystemTemplatesModal, handleUpdateRelatedTemplate, handleUploadAttachment, height, isSelected,
-    label, selectedTemplateId, setSelectedTemplateId, systemScreens, width,
+    activeTab, formData, handleAddRelatedTemplate, handleDeleteAttachment,
+    handleDeleteRelatedTemplate, handleOpenSystemTemplatesModal, handleUpdateRelatedTemplate, handleUploadAttachment,
+    selectedTemplateId, setSelectedTemplateId, systemScreens,
   } = editor;
 
   return (

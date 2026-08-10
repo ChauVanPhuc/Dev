@@ -269,6 +269,11 @@ const CL09_InspectionCreateView = () => {
             const calcSample = Math.max(1, Math.ceil(Number(firstPart.total_qty) * 0.05))
             setSampleQty((prev) => prev || String(calcSample))
           }
+        } else if (isNew) {
+          setProduct('')
+          setSpec('')
+          setSpecOptions([{ value: '', label: 'Chọn quy cách' }])
+          setRequiredQty('')
         }
       })
       .catch(() => {
@@ -276,6 +281,9 @@ const CL09_InspectionCreateView = () => {
         if (isNew) {
           setProductOptions([{ value: '', label: 'Chọn sản phẩm' }])
           setSpecOptions([{ value: '', label: 'Chọn quy cách' }])
+          setProduct('')
+          setSpec('')
+          setRequiredQty('')
         }
       })
   }, [po, stage, isNew])

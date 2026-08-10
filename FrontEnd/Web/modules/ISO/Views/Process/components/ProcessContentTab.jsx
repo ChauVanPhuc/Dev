@@ -6,19 +6,17 @@ import {
 import FlowchartCanvas from '../FlowchartCanvas';
 import FlowchartTable from '../FlowchartTable';
 import { FlowchartConnectors } from './FlowchartConnectors';
+import RichTextEditor from './RichTextEditor';
 
 const ProcessContentTab = ({ editor }) => {
   const {
-    accentColor, activeMenu, activeTab, canvas, cardBorderColor, cardStyle,
-    container, currStep, current, currentStep, explanationExpanded, failPath,
-    file, flowchartCanvasRef, flowchartMode, formData, getSectionHint, getStepFailPath,
+    accentColor, activeMenu, activeTab, cardBorderColor, cardStyle,
+    explanationExpanded, flowchartCanvasRef, flowchartMode, formData, getSectionHint, getStepFailPath,
     handleAddStep, handleAddStepFromCanvas, handleAutoLayoutClassic, handleNodeSelect, handlePositionsChange, handleRemoveStep,
-    handleSectionChange, handleSetFlowchartMode, handleUpdateStep, headerStyle, headerTextStyle, height,
-    idx, instructions, isDecision, isSelected, isStepSelected, label,
-    mainSteps, maxLeftChainLength, newFailPath, newStep, nextStepNum, renderSingleStepCard,
+    handleSectionChange, handleSetFlowchartMode, handleUpdateStep, headerStyle, headerTextStyle,
+    isStepSelected, maxLeftChainLength, renderSingleStepCard,
     selectedStepIdx, setActiveMenu, setExplanationExpanded, setFormData, setInfoExpanded, setSelectedStepIdx,
-    setShowPdfPreview, setZoomScale, step, stepDisplayLabels, stepNum, steps,
-    visited, width, zoomScale,
+    setShowPdfPreview, setZoomScale, stepDisplayLabels, zoomScale, sidestepSet,
   } = editor;
 
   return (

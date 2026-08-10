@@ -590,38 +590,16 @@ def get_order_bom(po_code: str, stage: Optional[str] = Query(None), db: Session 
         boms = db.query(BOMDetail).filter(BOMDetail.product_id.in_(product_ids)).all() if product_ids else []
 
         # Lọc theo công đoạn giao (input_stage) nếu có stage
-        if stage:
-            stage_names = [
-                ("dinh_hinh", "Định hình"),
-                ("lap_rap", "Lắp ráp"),
-                ("son", "Sơn"),
-                ("dong_goi", "Đóng gói"),
-                ("load_cont", "Load cont")
-            ]
+        if stage and stage.strip() and stage.strip().upper() not in ["ALL", "TẤT CẢ", "TẤT CẢ CÔNG ĐOẠN", ""]:
+            selected_stage_norm = " ".join(stage.strip().lower().replace("-", " - ").split())
+            
+            def is_matching_stage(bom_item) -> bool:
+                if not bom_item.input_stage:
+                    return False
+                item_stage_norm = " ".join(bom_item.input_stage.strip().lower().replace("-", " - ").split())
+                return item_stage_norm == selected_stage_norm
 
-            def matches_stage(bom_item, st_id: str) -> bool:
-                inp = (bom_item.input_stage or "").lower()
-                if st_id == "dinh_hinh":
-                    return any(k in inp for k in ["định hình", "dinh hinh", "nh hnh", "nh hình", "tạo phôi", "to phi"]) or not bom_item.input_stage
-                elif st_id == "lap_rap":
-                    return any(k in inp for k in ["lắp ráp", "lap rap", "lp rp", "chà nhám", "ch nhm"])
-                elif st_id == "son":
-                    return any(k in inp for k in ["sơn", "son", "sn"])
-                elif st_id == "dong_goi":
-                    return any(k in inp for k in ["đóng gói", "dong goi", "ng gi"])
-                elif st_id == "load_cont":
-                    return any(k in inp for k in ["load cont", "kho", "container"])
-                return False
-
-            selected = stage.lower()
-            matched_stage_id = None
-            for st_id, st_name in stage_names:
-                if st_id in selected or st_name.lower() in selected:
-                    matched_stage_id = st_id
-                    break
-
-            if matched_stage_id:
-                boms = [b for b in boms if matches_stage(b, matched_stage_id)]
+            boms = [b for b in boms if is_matching_stage(b)]
 
         parts_map = {}
         for p in order.products:

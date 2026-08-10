@@ -5,13 +5,12 @@ import {
 
 const ProcessInstructionsTab = ({ editor }) => {
   const {
-    Icon, activeTab, file, formData, handleAddWorkInstruction, handleOpenAddStepPopup,
+    activeTab, formData, handleAddWorkInstruction, handleOpenAddStepPopup,
     handleOpenEditStepPopup, handlePopupImageUpload, handleRemoveWorkInstruction, handleReorderStepInPopup, handleSaveStep, handleUpdateWorkInstructionNote,
-    handleUpdateWorkInstructionScope, handleUpdateWorkInstructionTitle, height, idx, img, instructions,
-    isActive, isEditingStep, isProcessMode, label, selectedInstructionId, setActiveTab,
-    setSelectedInstructionId, setShowPdfPreview, setShowStepPopup, setStepForm, showStepPopup, step,
-    stepForm, steps, systemScreens, table, td, tr,
-    width,
+    handleUpdateWorkInstructionScope, handleUpdateWorkInstructionTitle,
+    isEditingStep, isProcessMode, selectedInstructionId, setActiveTab,
+    setSelectedInstructionId, setShowPdfPreview, setShowStepPopup, setStepForm, showStepPopup,
+    stepForm, systemScreens,
   } = editor;
 
   const activeInst = (formData.work_instructions || []).find(inst => inst.id === selectedInstructionId);

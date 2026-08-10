@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { X, BookOpen, CheckSquare, Image as ImageIcon, Layers, ExternalLink } from 'lucide-react';
+import { getFullImageUrl } from '@webShared/Services/api.service';
+import { FormattedTextView } from '@shared/utils/textFormatter';
 
 const GuideQuickPreviewModal = ({ isOpen, onClose, guide, onEdit }) => {
   const [activeImage, setActiveImage] = useState(null);
@@ -229,19 +231,15 @@ const GuideQuickPreviewModal = ({ isOpen, onClose, guide, onEdit }) => {
 
                 {/* Step Description */}
                 {step.content && (
-                  <p style={{
+                  <div style={{
                     margin: '0 0 16px 0',
-                    color: '#4B5563',
-                    fontSize: 14,
-                    lineHeight: '1.6',
-                    whiteSpace: 'pre-line',
                     backgroundColor: '#FAF8F6',
                     padding: '10px 14px',
                     borderRadius: 8,
                     borderLeft: '3px solid #7B5233'
                   }}>
-                    {step.content}
-                  </p>
+                    <FormattedTextView text={step.content} />
+                  </div>
                 )}
 
                 {/* Sub-steps checklist */}
@@ -285,16 +283,12 @@ const GuideQuickPreviewModal = ({ isOpen, onClose, guide, onEdit }) => {
                           {sub.content && sub.title && (
                             <div style={{
                               marginLeft: 26,
-                              fontSize: 13,
-                              color: '#4B5563',
-                              lineHeight: '1.55',
-                              whiteSpace: 'pre-line',
                               padding: '6px 10px',
                               backgroundColor: '#FFFFFF',
                               borderRadius: 6,
                               borderLeft: '2.5px solid #059669'
                             }}>
-                              {sub.content}
+                              <FormattedTextView text={sub.content} />
                             </div>
                           )}
                         </div>
@@ -334,7 +328,7 @@ const GuideQuickPreviewModal = ({ isOpen, onClose, guide, onEdit }) => {
                           }}
                         >
                           <img
-                            src={img.image_url}
+                            src={getFullImageUrl(img.image_url)}
                             alt={img.file_name || `Ảnh ${imgIdx + 1}`}
                             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           />
@@ -429,7 +423,7 @@ const GuideQuickPreviewModal = ({ isOpen, onClose, guide, onEdit }) => {
           </button>
           <div style={{ maxWidth: '90vw', maxHeight: '90vh', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
             <img
-              src={activeImage.image_url}
+              src={getFullImageUrl(activeImage.image_url)}
               alt={activeImage.file_name}
               style={{
                 maxWidth: '100%',

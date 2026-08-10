@@ -39,6 +39,16 @@ export default defineConfig({
     allowedHosts: true,
     watch: {
       usePolling: true
+    },
+    proxy: {
+      '/static': {
+        target: 'http://localhost:8000',
+        changeOrigin: true
+      },
+      '/uploads': {
+        target: 'http://localhost:8000',
+        changeOrigin: true
+      }
     }
   },
   build: {
