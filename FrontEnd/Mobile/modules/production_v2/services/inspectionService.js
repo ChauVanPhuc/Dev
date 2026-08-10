@@ -132,22 +132,8 @@ export const inspectionService = {
   },
 
   async getProcessGuides() {
-    // Default fallback process list if DB has no process records
-    const DEFAULT_PROCESSES = [
-      { id: '1', code: 'QT01', name: 'Quy trình kiểm tra 5S khu vực sản xuất' },
-      { id: '2', code: 'QT02', name: 'Quy trình kiểm tra vận hành thiết bị' },
-      { id: '3', code: 'QT03', name: 'Quy trình an toàn lao động & PCCC' }
-    ]
-
     try {
-      // 1. Try /inspection-guides?inspection_type=process
-      const res = await apiClient.get('/inspection-guides?inspection_type=process')
-      const guides = res?.data !== undefined ? res.data : res
-      if (Array.isArray(guides) && guides.length > 0) {
-        return guides
-      }
-
-      // 2. Try /iso/processes
+      // 1. Lấy từ /iso/processes (Quy trình ISO thực tế tạo từ Admin ISO Process Editor)
       const isoRes = await apiClient.get('/iso/processes')
       const isoProcs = isoRes?.data !== undefined ? isoRes.data : isoRes
       if (Array.isArray(isoProcs) && isoProcs.length > 0) {
@@ -158,7 +144,7 @@ export const inspectionService = {
         }))
       }
 
-      // 3. Try /iso/
+      // 2. Lấy từ /iso/ (Danh sách Tài liệu ISO mẫu)
       const docRes = await apiClient.get('/iso/')
       const isoDocs = docRes?.data !== undefined ? docRes.data : docRes
       if (Array.isArray(isoDocs) && isoDocs.length > 0) {
@@ -169,10 +155,17 @@ export const inspectionService = {
         }))
       }
 
-      return DEFAULT_PROCESSES
+      // 3. Lấy từ /inspection-guides?inspection_type=process
+      const res = await apiClient.get('/inspection-guides?inspection_type=process')
+      const guides = res?.data !== undefined ? res.data : res
+      if (Array.isArray(guides) && guides.length > 0) {
+        return guides
+      }
+
+      return []
     } catch (e) {
       console.warn('[inspectionService.getProcessGuides] error:', e)
-      return DEFAULT_PROCESSES
+      return []
     }
   },
 
