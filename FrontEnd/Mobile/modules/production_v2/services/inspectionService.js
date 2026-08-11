@@ -6,7 +6,7 @@ const USE_MOCK = false
 const delay = (ms = 400) => new Promise((r) => setTimeout(r, ms))
 
 export const inspectionService = {
-  async getList({ tab, month, page = 1 }) {
+  async getList({ tab, month, stage, poCode, product, sort, page = 1 } = {}) {
     if (USE_MOCK) {
       await delay()
       let data = [...MOCK_INSPECTION_TICKETS]
@@ -14,18 +14,25 @@ export const inspectionService = {
       else data = data.filter((t) => t.status === 'done' || t.status === 'cancelled')
       const total = data.length
       const items = data.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-      return { items, total, page, pageSize: PAGE_SIZE }
+      return { items, total, total_pending: MOCK_INSPECTION_TICKETS.filter((t) => t.status === 'pending').length, page, pageSize: PAGE_SIZE }
     }
-    const params = new URLSearchParams({ tab, month, page })
+    const params = new URLSearchParams()
+    if (tab) params.append('tab', tab)
+    if (month) params.append('month', month)
+    if (stage) params.append('stage', stage)
+    if (poCode) params.append('po_code', poCode)
+    if (product) params.append('product', product)
+    if (sort) params.append('sort', sort)
+    if (page) params.append('page', page)
+
     try {
-      const res = await apiClient.get(`/inspections/?${params}`)
+      const res = await apiClient.get(`/inspections/?${params.toString()}`)
       return res.data
     } catch (e) {
-      // Fallback to mock if endpoint not available
       let data = [...MOCK_INSPECTION_TICKETS]
       if (tab === 'pending') data = data.filter((t) => t.status === 'pending' || t.status === 'delivering')
       else data = data.filter((t) => t.status === 'done' || t.status === 'cancelled')
-      return { items: data.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), total: data.length, page, pageSize: PAGE_SIZE }
+      return { items: data.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), total: data.length, total_pending: 0, page, pageSize: PAGE_SIZE }
     }
   },
 
@@ -45,71 +52,29 @@ export const inspectionService = {
   async getGuide(mode, productId = null, stageId = null, guideId = null) {
     try {
       if (guideId) {
-        // 1. Try inspection-guides endpoint
+        // Fetch directly from inspection-guides endpoint (/admin/inspection-guides)
         try {
           const res = await apiClient.get(`/inspection-guides/${guideId}`)
           const guideData = res?.data !== undefined ? res.data : res
           if (guideData && (guideData.id || guideData.steps)) {
-            return guideData
-          }
-        } catch (err) {
-          // ignore and try next source
-        }
-
-        // 2. Try ISO processes endpoint
-        try {
-          const isoRes = await apiClient.get(`/iso-documents/processes/${guideId}/details`)
-          const details = isoRes?.data !== undefined ? isoRes.data : isoRes
-          if (details && (details.id || details.steps)) {
             return {
-              id: details.id,
-              name: details.name,
-              code: details.code,
-              steps: (details.steps || []).map((s, idx) => ({
+              id: guideData.id,
+              name: guideData.name,
+              code: guideData.code,
+              steps: (guideData.steps || []).map((s, idx) => ({
                 id: s.id || idx + 1,
-                step_no: s.step_number || idx + 1,
-                title: s.name || `Bước ${idx + 1}`,
-                content: s.instructions || s.name || '',
-                sub_steps: Array.isArray(s.checklist) ? s.checklist.map((c, ci) => ({ id: ci + 1, title: typeof c === 'string' ? c : (c.title || c.text || '') })) : []
+                step_no: s.step_no || idx + 1,
+                title: s.title || `Bước ${idx + 1}`,
+                content: s.content || '',
+                sub_steps: Array.isArray(s.sub_steps) ? s.sub_steps.map((sub, si) => ({
+                  id: sub.id || si + 1,
+                  title: sub.title || sub.content || ''
+                })) : []
               }))
             }
           }
         } catch (err) {
-          // ignore and try next source
-        }
-
-        // 3. Try ISO documents endpoint
-        try {
-          const docRes = await apiClient.get(`/iso-documents/${guideId}/details`)
-          const details = docRes?.data !== undefined ? docRes.data : docRes
-          if (details && (details.id || details.steps)) {
-            return {
-              id: details.id,
-              name: details.name,
-              code: details.code,
-              steps: (details.steps || []).map((s, idx) => ({
-                id: s.id || idx + 1,
-                step_no: s.step_number || idx + 1,
-                title: s.name || `Bước ${idx + 1}`,
-                content: s.instructions || s.name || '',
-                sub_steps: Array.isArray(s.checklist) ? s.checklist.map((c, ci) => ({ id: ci + 1, title: typeof c === 'string' ? c : (c.title || c.text || '') })) : []
-              }))
-            }
-          }
-        } catch (err) {
-          // ignore
-        }
-
-        // 4. Safe fallback steps if guideId has no steps in DB
-        return {
-          id: guideId,
-          name: 'Quy trình kiểm tra SOP',
-          code: 'SOP-PROC',
-          steps: [
-            { id: 1, step_no: 1, title: 'Chuẩn bị thiết bị & Khu vực làm việc', content: 'Vệ sinh sạch sẽ, kiểm tra an toàn trang thiết bị trước khi bắt đầu', sub_steps: [] },
-            { id: 2, step_no: 2, title: 'Đối chiếu thông số kỹ thuật & Tiêu chuẩn ISO', content: 'Thực hiện kiểm tra theo đúng quy chuẩn ban hành', sub_steps: [] },
-            { id: 3, step_no: 3, title: 'Ghi nhận kết quả & Đánh giá tuân thủ', content: 'Đánh giá Đạt/Không đạt và báo cáo nếu có bất thường', sub_steps: [] }
-          ]
+          console.warn('[inspectionService.getGuide] error fetching guide:', err)
         }
       }
 
@@ -133,35 +98,16 @@ export const inspectionService = {
 
   async getProcessGuides() {
     try {
-      // 1. Lấy từ /iso-documents/processes (Quy trình ISO thực tế tạo từ Admin ISO Process Editor)
-      const isoRes = await apiClient.get('/iso-documents/processes')
-      const isoProcs = isoRes?.data !== undefined ? isoRes.data : isoRes
-      if (Array.isArray(isoProcs) && isoProcs.length > 0) {
-        return isoProcs.map((p) => ({
-          id: String(p.id),
-          code: p.code,
-          name: p.name
-        }))
-      }
-
-      // 2. Lấy từ /iso-documents/ (Danh sách Tài liệu ISO mẫu)
-      const docRes = await apiClient.get('/iso-documents/')
-      const isoDocs = docRes?.data !== undefined ? docRes.data : docRes
-      if (Array.isArray(isoDocs) && isoDocs.length > 0) {
-        return isoDocs.map((d) => ({
-          id: String(d.id),
-          code: d.code,
-          name: d.name
-        }))
-      }
-
-      // 3. Lấy từ /inspection-guides?inspection_type=process
-      const res = await apiClient.get('/inspection-guides?inspection_type=process')
+      // Lấy trực tiếp 100% từ /inspection-guides (Quản lý bộ Hướng dẫn kiểm tra tại Web Admin /admin/inspection-guides)
+      const res = await apiClient.get('/inspection-guides')
       const guides = res?.data !== undefined ? res.data : res
       if (Array.isArray(guides) && guides.length > 0) {
-        return guides
+        return guides.map((g) => ({
+          id: String(g.id),
+          code: g.code,
+          name: g.name
+        }))
       }
-
       return []
     } catch (e) {
       console.warn('[inspectionService.getProcessGuides] error:', e)
@@ -218,17 +164,34 @@ export const inspectionService = {
   },
 
   async generatePalletCode(prefix = 'DA') {
-    if (USE_MOCK) {
-      return { palletCode: `DA${Math.floor(10000 + Math.random() * 90000)}`, success: true }
-    }
+    const uniqueSuffix = String(Date.now()).slice(-4) + String(Math.floor(10 + Math.random() * 90))
+    return { palletCode: `${prefix}${uniqueSuffix}`, success: true }
+  },
+
+  async generateTicketCode(prefix = 'KT') {
+    const uniqueSuffix = String(Date.now()).slice(-4) + String(Math.floor(10 + Math.random() * 90))
+    return { ticketCode: `${prefix}${uniqueSuffix}`, success: true }
+  },
+
+  async getDefectTypes(userId = null) {
     try {
-      const res = await apiClient.get(`/inspections/generate-pallet-code?prefix=${encodeURIComponent(prefix)}`)
-      if (res && res.data && res.data.palletCode) {
-        return res.data
-      }
+      const url = userId ? `/inspections/defect-types?user_id=${userId}` : '/inspections/defect-types'
+      const res = await apiClient.get(url)
+      return Array.isArray(res.data) ? res.data : []
     } catch (e) {
-      console.warn('[inspectionService] generatePalletCode failed, fallback to local:', e)
+      console.warn('[inspectionService.getDefectTypes] error:', e)
+      return []
     }
-    return { palletCode: `DA${Math.floor(10000 + Math.random() * 90000)}`, success: true }
+  },
+
+  async getCTQGuides() {
+    try {
+      const res = await apiClient.get('/inspection-guides?doc_type=CTQ&limit=500')
+      const data = res?.data !== undefined ? res.data : res
+      return Array.isArray(data) ? data : (data?.items || [])
+    } catch (e) {
+      console.warn('[inspectionService.getCTQGuides] error:', e)
+      return []
+    }
   },
 }

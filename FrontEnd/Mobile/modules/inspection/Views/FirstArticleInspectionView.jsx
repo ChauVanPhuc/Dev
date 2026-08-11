@@ -1573,10 +1573,10 @@ const FirstArticleInspectionView = () => {
                             {/* Hiện lỗi đang được chọn + những lỗi chưa chọn */}
                             {def.defectId && !availableDefects.find(t => String(t.id) === String(def.defectId)) && (() => {
                               const current = defectTypes.find(t => String(t.id) === String(def.defectId));
-                              return current ? <option key={current.id} value={current.id}>{current.name} ({current.code || 'N/A'})</option> : null;
+                              return current ? <option key={current.id} value={current.id}>{current.code ? `[${current.code}] ${current.name}` : current.name}</option> : null;
                             })()}
                             {availableDefects.map(t => (
-                              <option key={t.id} value={t.id}>{t.name} ({t.code || 'N/A'})</option>
+                              <option key={t.id} value={t.id}>{t.code ? `[${t.code}] ${t.name}` : t.name}</option>
                             ))}
                           </select>
 

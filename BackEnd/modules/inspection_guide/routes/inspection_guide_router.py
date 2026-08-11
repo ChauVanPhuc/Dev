@@ -9,7 +9,8 @@ from modules.inspection_guide.services.inspection_guide_service import (
     list_guides, get_guide, create_guide, update_guide, delete_guide,
     create_step, update_step, delete_step, reorder_steps,
     create_sub_step, update_sub_step, delete_sub_step, reorder_sub_steps,
-    upload_images, delete_image, set_assignments, get_mobile_guide
+    upload_images, delete_image, set_assignments, get_mobile_guide,
+    generate_next_code
 )
 from modules.inspection_guide.schemas.inspection_guide import (
     InspectionGuideCreate, InspectionGuideUpdate, InspectionGuideOut, InspectionGuideListOut,
@@ -21,15 +22,25 @@ from modules.inspection_guide.schemas.inspection_guide import (
 router = APIRouter()
 
 
+@router.get("/next-code")
+def get_next_guide_code(doc_type: str = "SOS", db: Session = Depends(get_db)):
+    """
+    Sinh mã kế tiếp tự động theo loại tài liệu (SOS -> G7.CL.SOS.xxx, HDKT -> G7.CL.HDKT.xxx, CTQ -> G7.CL.CTQ.xxx)
+    """
+    next_code = generate_next_code(db, doc_type)
+    return {"code": next_code, "doc_type": doc_type}
+
+
 @router.get("", response_model=List[InspectionGuideListOut])
 def read_guides(
     skip: int = 0,
     limit: int = 50,
     search: Optional[str] = "",
     inspection_type: Optional[str] = None,
+    doc_type: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    items, _ = list_guides(db, skip, limit, search, inspection_type)
+    items, _ = list_guides(db, skip, limit, search, inspection_type, doc_type)
     return items
 
 
@@ -62,7 +73,7 @@ def create_new_guide(
     user_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
-    return create_guide(db, guide.code, guide.name, guide.description, user_id)
+    return create_guide(db, guide.code, guide.name, guide.description, user_id, guide.doc_type or "HDKT")
 
 
 @router.put("/{guide_id}", response_model=InspectionGuideOut)
@@ -70,7 +81,7 @@ def update_existing_guide(guide_id: int, guide: InspectionGuideUpdate, db: Sessi
     existing = get_guide(db, guide_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Không tìm thấy hướng dẫn.")
-    return update_guide(db, existing, guide.name, guide.description, guide.is_active)
+    return update_guide(db, existing, guide.name, guide.description, guide.is_active, guide.doc_type)
 
 
 @router.delete("/{guide_id}")

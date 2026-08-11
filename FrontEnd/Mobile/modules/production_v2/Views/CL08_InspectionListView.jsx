@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowDownAZ, Filter, Plus, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowDownAZ, ArrowUpAZ, Filter, Plus, ChevronLeft, ChevronRight, ClipboardX } from 'lucide-react'
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout'
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader'
 import CustomSelect from '@mobile/Shared/Views/components/form/CustomSelect'
 import { useInspectionController } from '../Controllers/useInspectionController'
 import InspectionCard from './components/InspectionCard'
+import FilterPanel from './components/FilterPanel'
 import { MONTH_OPTIONS, ROUTES } from '../constants'
 import '../styles/production_v2.css'
 
@@ -17,14 +18,27 @@ const CL08_InspectionListView = () => {
   } = useInspectionController()
   const [filterOpen, setFilterOpen] = useState(false)
 
-  const monthOptions = availableMonths && availableMonths.length > 0
-    ? availableMonths.map((m) => ({ value: String(m.month), label: `Tháng ${m.month}` }))
-    : MONTH_OPTIONS
+  // Khử trùng lặp danh sách tháng để tránh trùng key trong CustomSelect
+  const monthOptions = useMemo(() => {
+    if (availableMonths && availableMonths.length > 0) {
+      const monthNums = availableMonths.map((m) => Number(m.month || m)).filter(Boolean)
+      const uniqueMonths = Array.from(new Set(monthNums)).sort((a, b) => b - a)
+      if (uniqueMonths.length > 0) {
+        return uniqueMonths.map((m) => ({ value: String(m), label: `Tháng ${m}` }))
+      }
+    }
+    return MONTH_OPTIONS
+  }, [availableMonths])
 
   const activeTab = filters.tab || 'pending'
   const page = filters.page || 1
   const pageSize = 10
   const totalPages = Math.ceil(total / pageSize) || 1
+  const isAscending = filters.sort === 'asc'
+
+  const toggleSort = () => {
+    setFilters({ sort: isAscending ? 'desc' : 'asc', page: 1 })
+  }
 
   return (
     <Layout>
@@ -43,10 +57,20 @@ const CL08_InspectionListView = () => {
               />
             </div>
             <div className="pv2-plan-actions-right">
-              <button type="button" className="pv2-btn-icon-square" title="Sắp xếp">
-                <ArrowDownAZ size={18} />
+              <button
+                type="button"
+                className={`pv2-btn-icon-square ${filters.sort ? 'pv2-btn-icon-active' : ''}`}
+                onClick={toggleSort}
+                title={isAscending ? 'Sắp xếp cũ nhất trước' : 'Sắp xếp mới nhất trước'}
+              >
+                {isAscending ? <ArrowUpAZ size={18} /> : <ArrowDownAZ size={18} />}
               </button>
-              <button type="button" className="pv2-btn-icon-square" onClick={() => setFilterOpen(true)} title="Bộ lọc">
+              <button
+                type="button"
+                className={`pv2-btn-icon-square ${filterOpen || filters.stage || filters.status ? 'pv2-btn-icon-active' : ''}`}
+                onClick={() => setFilterOpen(true)}
+                title="Bộ lọc chi tiết"
+              >
                 <Filter size={18} />
               </button>
               <button
@@ -84,7 +108,15 @@ const CL08_InspectionListView = () => {
           {loading && <p className="pv2-status-text">Đang tải...</p>}
           {error && <p className="pv2-status-text pv2-status-text--error">{error}</p>}
           {!loading && !error && tickets.length === 0 && (
-            <p className="pv2-status-text">Không có phiếu nào</p>
+            <div className="pv2-empty-state">
+              <div className="pv2-empty-icon-wrap">
+                <ClipboardX size={32} />
+              </div>
+              <div className="pv2-empty-title">Không có phiếu kiểm tra nào</div>
+              <div className="pv2-empty-desc">
+                Chưa có dữ liệu phiếu nào phù hợp với bộ lọc {filters.month ? `Tháng ${filters.month}` : 'kỳ kế hoạch'}.
+              </div>
+            </div>
           )}
           {!loading && tickets.map((t) => (
             <InspectionCard
@@ -123,6 +155,14 @@ const CL08_InspectionListView = () => {
             </button>
           </div>
         </div>
+
+        {/* Drawer / Popup Bộ Lọc Chi Tiết */}
+        <FilterPanel
+          open={filterOpen}
+          filters={filters}
+          onApply={(newFilters) => setFilters({ ...newFilters, page: 1 })}
+          onClose={() => setFilterOpen(false)}
+        />
       </div>
     </Layout>
   )

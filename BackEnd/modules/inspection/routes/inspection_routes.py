@@ -419,40 +419,54 @@ def get_inspections_list(
     stage: Optional[str] = Query(None),
     po_code: Optional[str] = Query(None),
     product: Optional[str] = Query(None),
+    sort: Optional[str] = Query("desc"),
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1),
     db: Session = Depends(get_db)
 ):
     """
-    [GET] Lấy danh sách phiếu kiểm tra cho Mobile CL08 (phân trang, lọc theo tab/tháng).
+    [GET] Lấy danh sách phiếu kiểm tra cho Mobile CL08 (phân trang, lọc theo tab/tháng/sắp xếp).
     """
     import json
     from sqlalchemy import extract
-    query = db.query(StageInspection)
 
-    if tab in ["pending", "transfer"]:
-        query = query.filter(or_(StageInspection.is_confirmed == False, StageInspection.is_confirmed.is_(None)))
-    elif tab in ["done", "history", "completed"]:
-        query = query.filter(StageInspection.is_confirmed == True)
-
+    # Tạo query lọc theo các điều kiện chung (Tháng, Công đoạn, PO, Sản phẩm)
+    base_query = db.query(StageInspection)
     if month and int(month) > 0:
-        query = query.filter(extract('month', StageInspection.created_at) == int(month))
-
+        base_query = base_query.filter(extract('month', StageInspection.created_at) == int(month))
     if stage and stage not in ["ALL", "Tất cả công đoạn", ""]:
-        query = query.filter(
+        base_query = base_query.filter(
             or_(
                 StageInspection.inspection_type.ilike(f"%{stage}%"),
                 StageInspection.data_json.ilike(f"%{stage}%")
             )
         )
     if po_code and po_code != "ALL":
+        base_query = base_query.filter(StageInspection.batch_no.ilike(f"%{po_code}%"))
+    if product and product not in ["ALL", "Tất cả sản phẩm", ""]:
+        base_query = base_query.filter(StageInspection.product_sku.ilike(f"%{product}%"))
+
+    # Đếm số phiếu Chờ kiểm tra theo đúng bộ lọc đang chọn
+    total_pending = base_query.filter(
+        or_(StageInspection.is_confirmed == False, StageInspection.is_confirmed.is_(None))
+    ).count()
+
+    query = base_query
+    if tab in ["pending", "transfer"]:
+        query = query.filter(or_(StageInspection.is_confirmed == False, StageInspection.is_confirmed.is_(None)))
+    elif tab in ["done", "history", "completed"]:
+        query = query.filter(StageInspection.is_confirmed == True)
         query = query.filter(StageInspection.batch_no.ilike(f"%{po_code}%"))
     if product and product not in ["ALL", "Tất cả sản phẩm", ""]:
         query = query.filter(StageInspection.product_sku.ilike(f"%{product}%"))
 
     total_count = query.count()
     skip = (page - 1) * limit
-    records = query.order_by(StageInspection.created_at.desc(), StageInspection.id.desc()).offset(skip).limit(limit).all()
+
+    if sort == "asc":
+        records = query.order_by(StageInspection.created_at.asc(), StageInspection.id.asc()).offset(skip).limit(limit).all()
+    else:
+        records = query.order_by(StageInspection.created_at.desc(), StageInspection.id.desc()).offset(skip).limit(limit).all()
 
     items = []
     for r in records:
@@ -509,6 +523,7 @@ def get_inspections_list(
     return {
         "items": items,
         "total": total_count,
+        "total_pending": total_pending,
         "page": page,
         "pageSize": limit
     }
@@ -694,14 +709,30 @@ async def create_inspection(
                 defect_items = []
                 for err in errors:
                     if isinstance(err, dict) and int(err.get("qty", 0)) > 0:
-                        defect_id = err.get("defect_id") or err.get("id")
+                        defect_id = err.get("defectId") or err.get("defect_id")
                         defect_name = err.get("name")
-                        if not defect_id and defect_name:
-                            dt = db.query(DefectType).filter(DefectType.name.ilike(defect_name.strip())).first()
-                            if dt:
-                                defect_id = dt.id
+                        defect_code = err.get("code")
+
+                        # Tra cứu defect_id từ DB nếu chưa có
+                        if not defect_id:
+                            if defect_code:
+                                dt = db.query(DefectType).filter(DefectType.code == defect_code.strip()).first()
+                                if dt:
+                                    defect_id = dt.id
+                            if not defect_id and defect_name:
+                                dt = db.query(DefectType).filter(DefectType.name.ilike(defect_name.strip())).first()
+                                if dt:
+                                    defect_id = dt.id
+
+                        # Chỉ đồng bộ nếu defect_id hợp lệ và tồn tại trong bảng defect_types (tránh lỗi Khoá ngoại FK)
                         if defect_id:
-                            defect_items.append({"defect_id": defect_id, "quantity": int(err.get("qty", 1))})
+                            try:
+                                dt_exists = db.query(DefectType.id).filter(DefectType.id == int(defect_id)).first()
+                                if dt_exists:
+                                    defect_items.append({"defect_id": int(defect_id), "quantity": int(err.get("qty", 1))})
+                            except (ValueError, TypeError):
+                                pass
+
                 if defect_items:
                     sync_defects_to_daily_inspection(stage, defect_items, creator, db, inspected_qty=sample_qty)
             except Exception as sync_e:
@@ -848,103 +879,6 @@ def confirm_inspection_ticket(
     db.commit()
     db.refresh(rec)
     return {"success": True, "id": rec.id, "status": "done"}
-
-
-@router.get("/{id}")
-@router.get("/{id}/")
-def get_inspection_detail(id: str, db: Session = Depends(get_db)):
-    """
-    [GET] Lấy chi tiết một phiếu kiểm tra theo ID hoặc Mã phiếu (KT001).
-    """
-    import json
-    numeric_id = None
-    if id.isdigit():
-        numeric_id = int(id)
-    elif id.upper().startswith("KT") and id[2:].isdigit():
-        numeric_id = int(id[2:])
-
-    rec = None
-    if numeric_id:
-        rec = db.query(StageInspection).filter(StageInspection.id == numeric_id).first()
-    if not rec:
-        rec = db.query(StageInspection).filter(StageInspection.batch_no == id).first()
-
-    if not rec:
-        if numeric_id:
-            inp = db.query(InputInspection).filter(InputInspection.id == numeric_id).first()
-            if inp:
-                return {
-                    "id": inp.id,
-                    "code": f"KT{inp.id:03d}",
-                    "mode": "input",
-                    "stage": inp.stage or "Sơ chế",
-                    "po": inp.cont_name or "",
-                    "product": inp.part_name,
-                    "spec": inp.specification or "",
-                    "result": "pass" if inp.result == "Đạt" else "fail",
-                    "sampleQty": 1,
-                    "errorQty": 0 if inp.result == "Đạt" else 1,
-                    "note": inp.note,
-                    "images": [img for img in [inp.image_path_1, inp.image_path_2, inp.image_path_3] if img],
-                    "status": "done",
-                    "creator": "QC"
-                }
-        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu kiểm tra")
-
-    data_dict = {}
-    if rec.data_json:
-        try:
-            data_dict = json.loads(rec.data_json) if isinstance(rec.data_json, str) else rec.data_json
-        except Exception:
-            pass
-
-    img_list = []
-    if rec.images_json:
-        try:
-            ij = json.loads(rec.images_json) if isinstance(rec.images_json, str) else rec.images_json
-            if isinstance(ij, dict):
-                img_list = ij.get("images") or ij.get("Ảnh kiểm tra mẫu") or []
-            elif isinstance(ij, list):
-                img_list = ij
-        except Exception:
-            pass
-    if not img_list:
-        img_list = [img for img in [rec.image_path_1, rec.image_path_2, rec.image_path_3] if img]
-
-    return {
-        "id": rec.id,
-        "code": f"KT{rec.id:03d}",
-        "time_str": rec.created_at.strftime("%H:%M | %d/%m/%Y") if rec.created_at else "",
-        "mode": rec.inspection_type or data_dict.get("mode") or "first_sample",
-        "stage": data_dict.get("stage") or rec.inspection_type or "",
-        "po": rec.batch_no or data_dict.get("po") or "",
-        "poCode": rec.batch_no or data_dict.get("po") or "",
-        "product": rec.product_sku or data_dict.get("product") or "",
-        "spec": rec.specification or data_dict.get("spec") or "",
-        "result": rec.conclusion or data_dict.get("result") or "pass",
-        "sampleQty": data_dict.get("sampleQty", 0),
-        "errorQty": data_dict.get("errorQty", 0),
-        "note": rec.notes or data_dict.get("note") or "",
-        "images": img_list,
-        "errors": data_dict.get("errors", []),
-        "steps": data_dict.get("steps", []),
-        "answers": data_dict.get("answers", []),
-        "palletCode": data_dict.get("palletCode", ""),
-        "parameter": data_dict.get("parameter", ""),
-        "paramStage": data_dict.get("paramStage", ""),
-        "paramPo": data_dict.get("paramPo", ""),
-        "paramProduct": data_dict.get("paramProduct", ""),
-        "paramSample": data_dict.get("paramSample", ""),
-        "paramPass": data_dict.get("paramPass", ""),
-        "paramFail": data_dict.get("paramFail", ""),
-        "process": data_dict.get("process", ""),
-        "area": data_dict.get("area", ""),
-        "staff": data_dict.get("staff", ""),
-        "creator": rec.inspector_name or data_dict.get("creator") or "QC",
-        "status": "done" if rec.is_confirmed else "pending",
-        "is_confirmed": bool(rec.is_confirmed),
-        "created_at": rec.created_at.isoformat() if rec.created_at else ""
-    }
 
 
 @router.post("/upload-ocr")
@@ -2027,5 +1961,102 @@ async def upload_inspection_image(
         buffer.write(content)
 
     return {"url": f"/static/uploads/inspections/{new_filename}", "success": True}
+
+
+@router.get("/{id}")
+@router.get("/{id}/")
+def get_inspection_detail(id: str, db: Session = Depends(get_db)):
+    """
+    [GET] Lấy chi tiết một phiếu kiểm tra theo ID hoặc Mã phiếu (KT001).
+    """
+    import json
+    numeric_id = None
+    if id.isdigit():
+        numeric_id = int(id)
+    elif id.upper().startswith("KT") and id[2:].isdigit():
+        numeric_id = int(id[2:])
+
+    rec = None
+    if numeric_id:
+        rec = db.query(StageInspection).filter(StageInspection.id == numeric_id).first()
+    if not rec:
+        rec = db.query(StageInspection).filter(StageInspection.batch_no == id).first()
+
+    if not rec:
+        if numeric_id:
+            inp = db.query(InputInspection).filter(InputInspection.id == numeric_id).first()
+            if inp:
+                return {
+                    "id": inp.id,
+                    "code": f"KT{inp.id:03d}",
+                    "mode": "input",
+                    "stage": inp.stage or "Sơ chế",
+                    "po": inp.cont_name or "",
+                    "product": inp.part_name,
+                    "spec": inp.specification or "",
+                    "result": "pass" if inp.result == "Đạt" else "fail",
+                    "sampleQty": 1,
+                    "errorQty": 0 if inp.result == "Đạt" else 1,
+                    "note": inp.note,
+                    "images": [img for img in [inp.image_path_1, inp.image_path_2, inp.image_path_3] if img],
+                    "status": "done",
+                    "creator": "QC"
+                }
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu kiểm tra")
+
+    data_dict = {}
+    if rec.data_json:
+        try:
+            data_dict = json.loads(rec.data_json) if isinstance(rec.data_json, str) else rec.data_json
+        except Exception:
+            pass
+
+    img_list = []
+    if rec.images_json:
+        try:
+            ij = json.loads(rec.images_json) if isinstance(rec.images_json, str) else rec.images_json
+            if isinstance(ij, dict):
+                img_list = ij.get("images") or ij.get("Ảnh kiểm tra mẫu") or []
+            elif isinstance(ij, list):
+                img_list = ij
+        except Exception:
+            pass
+    if not img_list:
+        img_list = [img for img in [rec.image_path_1, rec.image_path_2, rec.image_path_3] if img]
+
+    return {
+        "id": rec.id,
+        "code": f"KT{rec.id:03d}",
+        "time_str": rec.created_at.strftime("%H:%M | %d/%m/%Y") if rec.created_at else "",
+        "mode": rec.inspection_type or data_dict.get("mode") or "first_sample",
+        "stage": data_dict.get("stage") or rec.inspection_type or "",
+        "po": rec.batch_no or data_dict.get("po") or "",
+        "poCode": rec.batch_no or data_dict.get("po") or "",
+        "product": rec.product_sku or data_dict.get("product") or "",
+        "spec": rec.specification or data_dict.get("spec") or "",
+        "result": rec.conclusion or data_dict.get("result") or "pass",
+        "sampleQty": data_dict.get("sampleQty", 0),
+        "errorQty": data_dict.get("errorQty", 0),
+        "note": rec.notes or data_dict.get("note") or "",
+        "images": img_list,
+        "errors": data_dict.get("errors", []),
+        "steps": data_dict.get("steps", []),
+        "answers": data_dict.get("answers", []),
+        "palletCode": data_dict.get("palletCode", ""),
+        "parameter": data_dict.get("parameter", ""),
+        "paramStage": data_dict.get("paramStage", ""),
+        "paramPo": data_dict.get("paramPo", ""),
+        "paramProduct": data_dict.get("paramProduct", ""),
+        "paramSample": data_dict.get("paramSample", ""),
+        "paramPass": data_dict.get("paramPass", ""),
+        "paramFail": data_dict.get("paramFail", ""),
+        "process": data_dict.get("process", ""),
+        "area": data_dict.get("area", ""),
+        "staff": data_dict.get("staff", ""),
+        "creator": rec.inspector_name or data_dict.get("creator") or "QC",
+        "status": "done" if rec.is_confirmed else "pending",
+        "is_confirmed": bool(rec.is_confirmed),
+        "created_at": rec.created_at.isoformat() if rec.created_at else ""
+    }
 
 

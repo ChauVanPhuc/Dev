@@ -753,7 +753,19 @@ export default function SystemConfigView() {
   };
 
   return (
-    <div style={{ fontFamily: 'Inter, sans-serif', padding: '20px', backgroundColor: '#F9FBFB', minHeight: '85vh' }}>
+    <div className="system-config-container" style={{ fontFamily: 'Inter, sans-serif', padding: '20px', backgroundColor: '#F9FBFB', minHeight: '100%', boxSizing: 'border-box' }}>
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        .dashboard-content:has(.system-config-container) {
+          overflow-y: auto !important;
+        }
+        .dashboard-content:has(.system-config-container) > div {
+          height: auto !important;
+          min-height: 100% !important;
+          overflow-y: visible !important;
+          flex: none !important;
+        }
+      `}} />
       
       {/* 2-Pane Master-Detail Flex Layout */}
       <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>

@@ -11,6 +11,13 @@ const GuideQuickPreviewModal = ({ isOpen, onClose, guide, onEdit }) => {
   const totalSubSteps = (guide.steps || []).reduce((acc, s) => acc + (s.sub_steps?.length || 0), 0);
   const totalImages = (guide.steps || []).reduce((acc, s) => acc + (s.images?.length || 0), 0);
 
+  const isSOS = guide.doc_type === 'SOS';
+  const isCTQ = guide.doc_type === 'CTQ';
+  const themeColor = isSOS ? '#0284C7' : isCTQ ? '#E11D48' : '#7B5233';
+  const themeBg = isSOS ? '#F0F9FF' : isCTQ ? '#FFF1F2' : '#FAF6F0';
+  const themeBorder = isSOS ? '#BAE6FD' : isCTQ ? '#FECDD3' : '#EADCC9';
+  const typeLabel = isSOS ? 'Hướng dẫn thao tác (SOS)' : isCTQ ? 'Lỗi cần chú ý (CTQ)' : 'Hướng dẫn kiểm tra (HDKT)';
+
   return (
     <div style={{
       position: 'fixed',
@@ -29,7 +36,7 @@ const GuideQuickPreviewModal = ({ isOpen, onClose, guide, onEdit }) => {
           backgroundColor: '#FFFFFF',
           borderRadius: 20,
           width: '100%',
-          maxWidth: 900,
+          maxWidth: 920,
           maxHeight: '90vh',
           display: 'flex',
           flexDirection: 'column',
@@ -42,22 +49,23 @@ const GuideQuickPreviewModal = ({ isOpen, onClose, guide, onEdit }) => {
         {/* Modal Header */}
         <div style={{
           padding: '20px 24px',
-          borderBottom: '1px solid #EADCC9',
+          borderBottom: `1px solid ${themeBorder}`,
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          backgroundColor: '#FAF8F6'
+          backgroundColor: themeBg
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{
               width: 42,
               height: 42,
               borderRadius: 10,
-              backgroundColor: '#7B5233',
+              backgroundColor: themeColor,
               color: '#FFF',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              boxShadow: `0 4px 10px ${themeColor}35`
             }}>
               <BookOpen size={22} />
             </div>
@@ -67,12 +75,23 @@ const GuideQuickPreviewModal = ({ isOpen, onClose, guide, onEdit }) => {
                   padding: '2px 8px',
                   borderRadius: 6,
                   fontSize: 12,
-                  fontWeight: 700,
-                  backgroundColor: '#EADCC9',
-                  color: '#7B5233',
+                  fontWeight: 800,
+                  backgroundColor: '#FFFFFF',
+                  color: themeColor,
+                  border: `1px solid ${themeBorder}`,
                   fontFamily: 'monospace'
                 }}>
                   {guide.code}
+                </span>
+                <span style={{
+                  padding: '2px 8px',
+                  borderRadius: 6,
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  backgroundColor: themeColor,
+                  color: '#FFFFFF'
+                }}>
+                  {typeLabel}
                 </span>
                 <span style={{
                   padding: '2px 8px',
@@ -101,7 +120,7 @@ const GuideQuickPreviewModal = ({ isOpen, onClose, guide, onEdit }) => {
                 style={{
                   padding: '8px 16px',
                   borderRadius: 8,
-                  backgroundColor: '#7B5233',
+                  backgroundColor: themeColor,
                   color: '#FFF',
                   border: 'none',
                   fontSize: 13,
@@ -110,12 +129,13 @@ const GuideQuickPreviewModal = ({ isOpen, onClose, guide, onEdit }) => {
                   display: 'flex',
                   alignItems: 'center',
                   gap: 6,
-                  transition: 'all 0.2s'
+                  transition: 'all 0.2s',
+                  boxShadow: `0 2px 8px ${themeColor}30`
                 }}
-                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#5D3E26'}
-                onMouseLeave={e => e.currentTarget.style.backgroundColor = '#7B5233'}
+                onMouseEnter={e => e.currentTarget.style.filter = 'brightness(0.9)'}
+                onMouseLeave={e => e.currentTarget.style.filter = 'brightness(1)'}
               >
-                <ExternalLink size={15} /> Chỉnh sửa SOP
+                <ExternalLink size={15} /> Soạn thảo {guide.doc_type || 'tài liệu'}
               </button>
             )}
             <button
@@ -213,7 +233,7 @@ const GuideQuickPreviewModal = ({ isOpen, onClose, guide, onEdit }) => {
                     width: 32,
                     height: 32,
                     borderRadius: 8,
-                    backgroundColor: '#7B5233',
+                    backgroundColor: themeColor,
                     color: '#FFF',
                     fontWeight: 800,
                     fontSize: 14,
@@ -236,7 +256,7 @@ const GuideQuickPreviewModal = ({ isOpen, onClose, guide, onEdit }) => {
                     backgroundColor: '#FAF8F6',
                     padding: '10px 14px',
                     borderRadius: 8,
-                    borderLeft: '3px solid #7B5233'
+                    borderLeft: `3.5px solid ${themeColor}`
                   }}>
                     <FormattedTextView text={step.content} />
                   </div>
@@ -300,7 +320,7 @@ const GuideQuickPreviewModal = ({ isOpen, onClose, guide, onEdit }) => {
                 {/* Step Images Grid */}
                 {step.images && step.images.length > 0 && (
                   <div>
-                    <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', color: '#7B5233', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', color: themeColor, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
                       <ImageIcon size={14} /> Ảnh minh họa tiêu chuẩn ({step.images.length})
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
@@ -319,7 +339,7 @@ const GuideQuickPreviewModal = ({ isOpen, onClose, guide, onEdit }) => {
                             boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
                           }}
                           onMouseEnter={e => {
-                            e.currentTarget.style.borderColor = '#7B5233';
+                            e.currentTarget.style.borderColor = themeColor;
                             e.currentTarget.style.transform = 'scale(1.03)';
                           }}
                           onMouseLeave={e => {

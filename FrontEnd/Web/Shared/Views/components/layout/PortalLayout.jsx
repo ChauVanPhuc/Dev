@@ -377,7 +377,11 @@ const PortalLayout = () => {
     location.pathname.includes('/create') ||
     location.pathname.includes('/new') ||
     location.pathname.includes('/permission') ||
-    location.pathname.includes('/detail');
+    location.pathname.includes('/detail') ||
+    location.pathname.includes('/profile') ||
+    location.pathname.includes('/sidebar') ||
+    location.pathname.includes('/system-config') ||
+    /^\/admin\/screens\/[0-9]+/.test(location.pathname);
 
   const [sidebarActive, setSidebarActive] = useState(false);
 
@@ -2139,8 +2143,11 @@ const PortalLayout = () => {
           overflow-y: auto !important;
         }
         .dashboard-content.allow-y-scroll > div,
+        .dashboard-content.allow-y-scroll .guide-management-container,
         .dashboard-content.allow-y-scroll .user-create-container,
-        .dashboard-content.allow-y-scroll .user-edit-container {
+        .dashboard-content.allow-y-scroll .user-edit-container,
+        .dashboard-content.allow-y-scroll .sidebar-management-container,
+        .dashboard-content.allow-y-scroll .system-config-container {
           overflow-y: visible !important;
           height: auto !important;
           min-height: min-content !important;
@@ -2149,7 +2156,8 @@ const PortalLayout = () => {
         .dashboard-content:not(.allow-y-scroll) > div,
         .mgmt-container,
         .manufacture-plan-container,
-        .quality-records-container {
+        .quality-records-container,
+        .guide-management-container {
           flex: 1 !important;
           height: 100% !important;
           min-height: 0 !important;

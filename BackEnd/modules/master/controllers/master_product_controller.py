@@ -838,71 +838,151 @@ def update_paint_color_sample(db: Session, sample_id: int, data: dict):
     db.refresh(sample)
     return sample
 
+def resolve_detail_stages(in_stage: Optional[str], out_stage: Optional[str]):
+    """
+    Chuẩn hóa cặp công đoạn giao - nhận logic theo quy trình sản xuất thực tế:
+    Tạo phôi -> Định hình -> Lắp ráp -> Sơn -> Đóng gói.
+    Không bao giờ để 2 công đoạn giao nhận giống nhau (ví dụ: Định hình -> Định hình).
+    """
+    in_s = (in_stage or '').strip()
+    out_s = (out_stage or '').strip()
+
+    if in_s and out_s and in_s.lower() != out_s.lower():
+        if in_s == 'Định hình' and out_s == 'Tạo phôi':
+            return 'Tạo phôi', 'Định hình'
+        return in_s, out_s
+
+    stage_ref = out_s or in_s or 'Định hình'
+    if stage_ref == 'Tạo phôi':
+        return 'Tạo phôi', 'Định hình'
+    elif stage_ref == 'Định hình':
+        return 'Định hình', 'Lắp ráp'
+    elif stage_ref == 'Lắp ráp':
+        return 'Lắp ráp', 'Sơn'
+    elif stage_ref == 'Sơn':
+        return 'Sơn', 'Đóng gói'
+    elif stage_ref == 'Đóng gói':
+        return 'Sơn', 'Đóng gói'
+    else:
+        return 'Định hình', 'Lắp ráp'
+
+
 def sync_bom_data_to_auxiliary_tables(db: Session):
     """
     Trích xuất & lọc KHÔNG TRÙNG LẶP toàn bộ dữ liệu BOM hiện có trong hệ thống
     để nạp vào 2 bảng: master_product_details (KT03.1) và paint_color_samples (KT03.3).
     """
+    import re
+    import datetime
+    from datetime import timedelta
+
     boms = db.query(MasterBOMDetail).all()
     products = db.query(MasterProduct).all()
 
     unique_details = {}
     unique_colors = {}
 
-    # Build product lookup for root parent_name
+    # Build lookups
     product_map = {p.id: p for p in products}
+    bom_map = {b.id: b for b in boms}
 
-    # 1. Deduplicate Product Details by (master_product_id, name)
+    def get_real_direct_parent_name(bom_item):
+        curr = bom_item
+        visited = set()
+        while curr.parent_id and curr.parent_id in bom_map:
+            if curr.id in visited:
+                break
+            visited.add(curr.id)
+            parent_bom = bom_map[curr.parent_id]
+            if parent_bom.name and parent_bom.name.strip() and parent_bom.name.strip().lower() != bom_item.name.strip().lower():
+                return parent_bom.name.strip()
+            curr = parent_bom
+        
+        prod = product_map.get(bom_item.master_product_id)
+        if prod:
+            p_code = getattr(prod, 'sku', None) or getattr(prod, 'product_code', None)
+            p_name = prod.name or ''
+            return f"{p_code} - {p_name}".strip(' -') if p_code and p_name else (p_code or p_name or '')
+        return ""
+
+    # 1. Deduplicate & Extract Product Details with exact direct parent component from BOM
     for b in boms:
         if b.name and b.name.strip():
             name_clean = b.name.strip()
-            prod = product_map.get(b.master_product_id)
-            key = f"{b.master_product_id}|{name_clean.lower()}"
+            parent_clean = get_real_direct_parent_name(b)
+
+            in_stage, out_stage = resolve_detail_stages(b.input_stage, b.output_stage)
+
+            key = f"{b.master_product_id}|{name_clean.lower()}|{parent_clean.lower()}"
             if key not in unique_details:
-                if b.parent and b.parent.name:
-                    parent_name = b.parent.name.strip()
-                else:
-                    p_name = prod.name if prod and prod.name else ''
-                    p_code = (getattr(prod, 'sku', None) or getattr(prod, 'product_code', None)) if prod else None
-                    parent_name = f"{p_code} - {p_name}".strip(' -') if p_code and p_name else (p_code or p_name or '')
                 unique_details[key] = {
                     'master_product_id': b.master_product_id,
                     'name': name_clean,
                     'quantity': b.quantity or 1.0,
                     'unit': b.unit or 'Cái',
-                    'input_stage': b.input_stage or 'Định hình',
-                    'output_stage': b.output_stage or 'Lắp ráp',
-                    'parent_name': parent_name,
-                    'material': b.material or 'Gỗ'
+                    'input_stage': in_stage,
+                    'output_stage': out_stage,
+                    'parent_name': parent_clean,
+                    'material': b.material or 'Gỗ / MDF'
                 }
 
-    # 2. Deduplicate Paint Colors from BOM details
+    # 2. Extract and Deduplicate Paint Colors from BOM details & descriptions
+    color_index = 1
+    today = datetime.datetime.now()
+
+    def add_unique_color(prod_id, c_name, supplier="NPP Sơn Nippon", note=None):
+        nonlocal color_index
+        if not c_name or not c_name.strip():
+            return
+        c_clean = c_name.strip()
+        key = c_clean.lower()
+        if key not in unique_colors:
+            unique_colors[key] = {
+                'master_product_id': prod_id or (products[0].id if products else 1),
+                'color_code': f"MS-{str(color_index).zfill(3)}",
+                'color_name': c_clean,
+                'supplier': supplier,
+                'expiry_date': today + timedelta(days=180),
+                'note': note or f"Mẫu màu sơn trích xuất từ BOM kỹ thuật ({c_clean})"
+            }
+            color_index += 1
+
+    # 2.1 Check BOM colors
     for b in boms:
         if b.color and b.color.strip():
-            c_clean = b.color.strip()
-            key = c_clean.lower()
-            if key not in unique_colors:
-                unique_colors[key] = {
-                    'master_product_id': b.master_product_id,
-                    'color_code': f"MS-{c_clean[:10].upper().replace(' ', '-')}",
-                    'color_name': c_clean,
-                    'supplier': 'NPP Sơn Nippon',
-                    'note': 'Mẫu màu sơn độc nhất lọc từ BOM'
-                }
+            add_unique_color(b.master_product_id, b.color, supplier="NPP Sơn Nippon")
 
-    # 3. Deduplicate Paint Colors from Master Products
+    # 2.2 Check Master Product colors
     for p in products:
         if p.color and p.color.strip():
-            c_clean = p.color.strip()
-            key = c_clean.lower()
-            if key not in unique_colors:
-                unique_colors[key] = {
-                    'master_product_id': p.id,
-                    'color_code': f"MS-{c_clean[:10].upper().replace(' ', '-')}",
-                    'color_name': c_clean,
-                    'supplier': 'Nội bộ G7',
-                    'note': 'Mẫu màu sơn độc nhất lọc từ sản phẩm'
-                }
+            add_unique_color(p.id, p.color, supplier="Nội bộ G7")
+
+    # 2.3 Check BOM descriptions for paint color specifications
+    for b in boms:
+        desc = b.description or ''
+        if desc:
+            match = re.search(r'(sơn\s+màu\s+[^\n,\.;]+|sơn\s+pu\s+[^\n,\.;]+|sơn\s+bóng\s+[^\n,\.;]+)', desc, re.IGNORECASE)
+            if match:
+                extracted_color = match.group(1).strip()
+                add_unique_color(b.master_product_id, extracted_color, supplier="Công ty TNHH Sơn Nippon", note=f"Mẫu màu sơn từ chi tiết {b.name} ({b.sku})")
+
+    # 2.4 Seed essential standard factory paint color specifications
+    standard_paint_palette = [
+        ("Sơn màu Walnut", "Công ty TNHH Sơn Nippon", "Màu hạt dẻ ấm tiêu chuẩn, áp dụng cho dòng tủ Sven & bàn Signature"),
+        ("SƠN MÀU NA CLEAR", "NPP Sơn Oseven", "Sơn bóng trong suốt giữ màu gỗ tự nhiên Red Oak / White Oak"),
+        ("Sơn PU mờ 50%", "Công ty Sơn Dulux", "Sơn PU mờ 50% bảo vệ bề mặt chống trầy xước"),
+        ("Sơn PU mờ 70%", "Công ty TNHH Sơn Nippon", "Sơn PU mờ 70% mịn cao cấp xuất khẩu EU"),
+        ("Sơn bóng gỗ sồi (Oak USA)", "Sơn Á Châu", "Sơn bóng chuyên dụng cho dòng gỗ Sồi Bắc Mỹ"),
+        ("Sơn lót Polyurethane 2K", "Nội bộ G7", "Sơn lót tăng độ bám dính chống ẩm mốc cho MDF và gỗ tự nhiên"),
+        ("Sơn trắng 2K cao cấp", "Công ty TNHH Sơn Nippon", "Sơn màu trắng phủ mặt ngoài cánh tủ và vách hông"),
+        ("Sơn NC cánh gián", "NPP Sơn Oseven", "Màu cánh gián cổ điển phủ bóng hoàn thiện"),
+        ("Sơn lau Wood Stain Teak", "Sơn Á Châu", "Sơn lau thẩm thấu tôn vân gỗ tự nhiên"),
+        ("Sơn UV chống ố vàng", "Công ty TNHH Sơn Nippon", "Lớp phủ UV bảo vệ mặt bàn chống tác động nhiệt và ánh sáng")
+    ]
+
+    for idx, (p_name, p_sup, p_note) in enumerate(standard_paint_palette):
+        prod_id = products[idx % len(products)].id if products else 1
+        add_unique_color(prod_id, p_name, supplier=p_sup, note=p_note)
 
     # Clear current data
     db.query(MasterProductDetail).delete()
@@ -921,7 +1001,7 @@ def sync_bom_data_to_auxiliary_tables(db: Session):
 
     return {
         "status": "success",
-        "message": "Đã trích xuất & lọc không trùng lặp thành công!",
+        "message": "Đã trích xuất & đồng bộ dữ liệu từ BOM thành công!",
         "unique_product_details_inserted": len(detail_objects),
         "unique_paint_colors_inserted": len(color_objects)
     }
@@ -962,43 +1042,50 @@ def get_detail_suggestions(db: Session, detail_name: Optional[str] = None, paren
     detail_rows = detail_query.all()
     detail_names = sorted(list(set([r[0] for r in detail_rows if r[0]])))
 
-    # Nếu không lọc theo parent_name, thêm tên từ BOM
+    # Nếu không lọc theo parent_name, thêm tên từ BOM (chỉ lấy chi tiết, loại bỏ m3, m2, kg)
     if p_clean:
         all_names = detail_names
     else:
-        bom_names = [r[0] for r in db.query(MasterBOMDetail.name).distinct().all() if r[0]]
+        bom_names = [
+            r[0] for r in db.query(MasterBOMDetail.name)
+            .filter(~MasterBOMDetail.unit.in_(['m3', 'm2', 'kg', 'lít', 'lit', 'm']))
+            .distinct().all() if r[0]
+        ]
         all_names = sorted(list(set(detail_names + bom_names)))
 
     parent_product_map = {}
 
     # Map tên chi tiết -> công đoạn giao/nhận để FE tự động gán
     detail_stage_map = {}
-    for r in db.query(MasterBOMDetail.name, MasterBOMDetail.input_stage, MasterBOMDetail.output_stage).all():
-        if r[0]:
-            detail_stage_map.setdefault(r[0], {'input_stage': r[1] or '', 'output_stage': r[2] or ''})
     for r in db.query(MasterProductDetail.name, MasterProductDetail.input_stage, MasterProductDetail.output_stage).all():
         if r[0]:
-            detail_stage_map.setdefault(r[0], {'input_stage': r[1] or '', 'output_stage': r[2] or ''})
+            in_s, out_s = resolve_detail_stages(r[1], r[2])
+            detail_stage_map.setdefault(r[0], {'input_stage': in_s, 'output_stage': out_s})
+    for r in db.query(MasterBOMDetail.name, MasterBOMDetail.input_stage, MasterBOMDetail.output_stage).all():
+        if r[0] and r[0] not in detail_stage_map:
+            in_s, out_s = resolve_detail_stages(r[1], r[2])
+            detail_stage_map.setdefault(r[0], {'input_stage': in_s, 'output_stage': out_s})
 
     # Map tên chi tiết -> đơn vị, vật liệu, số lượng để FE auto-fill trong modal thêm thành phần
     detail_meta_map = {}
     for r in detail_rows:
         if r[0] and r[0] not in detail_meta_map:
+            in_s, out_s = resolve_detail_stages(r[3], r[4])
             detail_meta_map[r[0]] = {
                 'quantity': r[1] if r[1] is not None else 1,
                 'unit': r[2] or 'Cái',
-                'input_stage': r[3] or '',
-                'output_stage': r[4] or '',
+                'input_stage': in_s,
+                'output_stage': out_s,
                 'material': r[5] or ''
             }
 
     # Bổ sung công đoạn, quy cách, kích thước, khối lượng từ MasterBOMDetail
     if detail_meta_map:
-        detail_names = list(detail_meta_map.keys())
+        detail_names_list = list(detail_meta_map.keys())
         chunk_size = 1000
         bom_rows = []
-        for i in range(0, len(detail_names), chunk_size):
-            chunk = detail_names[i:i + chunk_size]
+        for i in range(0, len(detail_names_list), chunk_size):
+            chunk = detail_names_list[i:i + chunk_size]
             bom_rows.extend(db.query(
                 MasterBOMDetail.name,
                 MasterBOMDetail.input_stage,
@@ -1040,59 +1127,57 @@ def get_detail_suggestions(db: Session, detail_name: Optional[str] = None, paren
 
     if detail_name and detail_name.strip():
         d_clean = detail_name.strip()
-        d_parents = [r[0] for r in db.query(MasterProductDetail.parent_name).filter(MasterProductDetail.name.ilike(f"%{d_clean}%")).distinct().all() if r[0]]
+        # Lấy trực tiếp các thành phẩm / cụm cha từ master_product_details
+        detail_parents_query = db.query(
+            MasterProductDetail.parent_name,
+            MasterProductDetail.master_product_id
+        ).filter(MasterProductDetail.name.ilike(f"%{d_clean}%")).all()
 
-        # Tìm các dòng BOM có tên khớp với chi tiết đang nhập, để lấy đúng THÀNH PHẨM CHA TRỰC TIẾP
-        # (không phải chỉ tên/mã của cả sản phẩm gốc) dựa vào parent_id trong cây BOM.
-        matched_bom_items = db.query(MasterBOMDetail).filter(MasterBOMDetail.name.ilike(f"%{d_clean}%")).all()
+        d_parents_set = set()
+        for r in detail_parents_query:
+            if r[0]:
+                d_parents_set.add(r[0])
+                if r[1]:
+                    parent_product_map.setdefault(r[0], r[1])
 
-        bom_prods = []
-        product_ids_without_parent = set()
-        for item in matched_bom_items:
-            if item.parent_id:
-                parent_item = db.query(MasterBOMDetail).filter(MasterBOMDetail.id == item.parent_id).first()
-                if parent_item and parent_item.name:
-                    bom_prods.append(parent_item.name)
-                    parent_product_map.setdefault(parent_item.name, item.master_product_id)
-                    continue
-            # Không có cha trong cây BOM -> cha chính là sản phẩm gốc (master_product)
-            if item.master_product_id:
-                product_ids_without_parent.add(item.master_product_id)
-
-        if product_ids_without_parent:
-            prods = db.query(MasterProduct).filter(MasterProduct.id.in_(product_ids_without_parent)).all()
-            for p in prods:
-                p_code = getattr(p, 'sku', None) or getattr(p, 'product_code', None)
-                if p.name:
-                    bom_prods.append(p.name)
-                    parent_product_map.setdefault(p.name, p.id)
-                if p_code:
-                    bom_prods.append(p_code)
-                    parent_product_map.setdefault(p_code, p.id)
-                if p_code and p.name:
-                    combo = f"{p_code} - {p.name}"
-                    bom_prods.append(combo)
-                    parent_product_map.setdefault(combo, p.id)
-
-        parent_suggestions = sorted(list(set([p for p in (d_parents + bom_prods) if p])))
+        if d_parents_set:
+            # Sắp xếp các cụm chi tiết cha trực tiếp lên đầu (ví dụ: Thanh chính, Tăng dày 1, Chân...)
+            sub_parents = sorted([p for p in d_parents_set if not p.startswith('ADV')])
+            root_parents = sorted([p for p in d_parents_set if p.startswith('ADV')])
+            parent_suggestions = sub_parents + root_parents
+        else:
+            all_prods = db.query(MasterProduct).all()
+            prod_combos = []
+            for r in all_prods:
+                p_code = getattr(r, 'sku', None) or getattr(r, 'product_code', None)
+                if p_code and r.name:
+                    combo = f"{p_code} - {r.name}"
+                    prod_combos.append(combo)
+                    parent_product_map.setdefault(combo, r.id)
+                elif r.name:
+                    prod_combos.append(r.name)
+                    parent_product_map.setdefault(r.name, r.id)
+            parent_suggestions = sorted(prod_combos)
     else:
         parent_names = [r[0] for r in db.query(MasterProductDetail.parent_name).distinct().all() if r[0]]
-        prod_names = [r[0] for r in db.query(MasterProduct.name).distinct().all() if r[0]]
         all_prods = db.query(MasterProduct).all()
-        prod_skus = []
         prod_combos = []
         for r in all_prods:
             p_code = getattr(r, 'sku', None) or getattr(r, 'product_code', None)
-            if r.name:
-                parent_product_map.setdefault(r.name, r.id)
-            if p_code:
-                prod_skus.append(p_code)
-                parent_product_map.setdefault(p_code, r.id)
             if p_code and r.name:
                 combo = f"{p_code} - {r.name}"
                 prod_combos.append(combo)
                 parent_product_map.setdefault(combo, r.id)
-        parent_suggestions = sorted(list(set([p for p in (parent_names + prod_names + prod_skus + prod_combos) if p])))
+            elif r.name:
+                prod_combos.append(r.name)
+                parent_product_map.setdefault(r.name, r.id)
+            elif p_code:
+                prod_combos.append(p_code)
+                parent_product_map.setdefault(p_code, r.id)
+
+        sub_assemblies = sorted([p for p in parent_names if not p.startswith('ADV')])
+        root_prods = sorted(list(set(prod_combos + [p for p in parent_names if p.startswith('ADV')])))
+        parent_suggestions = sub_assemblies + root_prods
 
     return {"detail_names": all_names, "parent_names": parent_suggestions, "parent_product_map": parent_product_map, "detail_stage_map": detail_stage_map, "detail_meta_map": detail_meta_map}
 

@@ -9,6 +9,7 @@ import api, { getFullImageUrl } from '@webShared/Services/api.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
 import GuideAssignmentTab from './components/GuideAssignmentTab';
+import RichTextEditor from '../../ISO/components/RichTextEditor';
 import { cleanWordClipboardText, handlePasteCleanText, FormattedTextView } from '@shared/utils/textFormatter';
 import '@styles/components.css';
 
@@ -27,7 +28,7 @@ const InspectionGuideDetailView = () => {
   const [activeTab, setActiveTab] = useState('steps'); // 'steps' | 'assignments'
 
   // General info state
-  const [metaForm, setMetaForm] = useState({ name: '', description: '', is_active: true });
+  const [metaForm, setMetaForm] = useState({ name: '', description: '', doc_type: 'HDKT', is_active: true });
 
   // Selected Step for editing in Right Column
   const [selectedStepId, setSelectedStepId] = useState(null);
@@ -53,6 +54,14 @@ const InspectionGuideDetailView = () => {
   // Derived state
   const selectedStep = (guide?.steps || []).find(s => s.id === selectedStepId) || null;
 
+  const isSOS = (guide?.doc_type || metaForm.doc_type) === 'SOS';
+  const isCTQ = (guide?.doc_type || metaForm.doc_type) === 'CTQ';
+  const themeColor = isSOS ? '#0284C7' : isCTQ ? '#E11D48' : '#7B5233';
+  const themeBg = isSOS ? '#F0F9FF' : isCTQ ? '#FFF1F2' : '#FAF6F0';
+  const themeBorder = isSOS ? '#BAE6FD' : isCTQ ? '#FECDD3' : '#EADCC9';
+  const stepNoun = isSOS ? 'thao tác' : isCTQ ? 'chú ý' : 'kiểm tra';
+  const stepLabel = isSOS ? 'bước thao tác' : isCTQ ? 'điểm kiểm soát' : 'bước kiểm tra';
+
   const fetchGuide = async (preferredStepId = null) => {
     setLoading(true);
     try {
@@ -61,6 +70,7 @@ const InspectionGuideDetailView = () => {
       setMetaForm({
         name: res.name || '',
         description: res.description || '',
+        doc_type: res.doc_type || 'HDKT',
         is_active: res.is_active !== false
       });
 
@@ -106,29 +116,37 @@ const InspectionGuideDetailView = () => {
       await api.put(`/inspection-guides/${id}`, {
         name: metaForm.name,
         description: metaForm.description,
+        doc_type: metaForm.doc_type,
         is_active: metaForm.is_active
       });
       setGuide(prev => ({
         ...prev,
         name: metaForm.name,
         description: metaForm.description,
+        doc_type: metaForm.doc_type,
         is_active: metaForm.is_active
       }));
-      if (toast) toast('success', 'Đã lưu thông tin tài liệu SOP thành công!');
+      if (toast) toast('success', 'Đã lưu thông tin tài liệu ban hành thành công!');
     } catch (err) {
-      console.error('Lỗi lưu thông tin SOP:', err);
-      if (toast) toast('error', err?.response?.data?.detail || err.message || 'Lỗi lưu thông tin SOP.');
+      console.error('Lỗi lưu thông tin tài liệu:', err);
+      if (toast) toast('error', err?.response?.data?.detail || err.message || 'Lỗi lưu thông tin tài liệu.');
     } finally {
       setSavingMeta(false);
     }
+  };
+
+  const getBackUrl = () => {
+    if (guide?.doc_type === 'SOS' || metaForm.doc_type === 'SOS') return '/admin/sos-guides';
+    if (guide?.doc_type === 'CTQ' || metaForm.doc_type === 'CTQ') return '/admin/ctq-guides';
+    return '/admin/inspection-guides';
   };
 
   // Delete Guide
   const handleDeleteGuide = async () => {
     try {
       await api.delete(`/inspection-guides/${id}`);
-      if (toast) toast('success', 'Đã xóa tài liệu SOP thành công.');
-      navigate('/admin/inspection-guides');
+      if (toast) toast('success', 'Đã xóa tài liệu thành công.');
+      navigate(getBackUrl());
     } catch (err) {
       if (toast) toast('error', 'Lỗi khi xóa tài liệu.');
     }
@@ -437,7 +455,7 @@ const InspectionGuideDetailView = () => {
   const steps = guide.steps || [];
 
   return (
-    <div style={{ padding: '20px 32px', fontFamily: 'Inter, sans-serif', backgroundColor: '#FAF8F6', minHeight: '100vh' }}>
+    <div className="guide-management-container" style={{ padding: '20px 32px', fontFamily: 'Inter, sans-serif', backgroundColor: '#FAF8F6', minHeight: '100%', boxSizing: 'border-box' }}>
       {/* Top Sticky Header */}
       <div style={{
         display: 'flex',
@@ -455,23 +473,24 @@ const InspectionGuideDetailView = () => {
         {/* Left: Breadcrumbs & Title */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button
-            onClick={() => navigate('/admin/inspection-guides')}
+            onClick={() => navigate(getBackUrl())}
             style={{
-              width: 36,
-              height: 36,
-              borderRadius: 8,
+              width: 38,
+              height: 38,
+              borderRadius: 10,
               border: '1px solid #E2E8F0',
-              backgroundColor: '#FAF8F6',
-              color: '#7B5233',
+              backgroundColor: '#FFFFFF',
+              color: themeColor,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              transition: 'all 0.2s'
+              transition: 'all 0.2s',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
             }}
             title="Quay lại danh sách"
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#EADCC9'}
-            onMouseLeave={e => e.currentTarget.style.backgroundColor = '#FAF8F6'}
+            onMouseEnter={e => e.currentTarget.style.borderColor = themeColor}
+            onMouseLeave={e => e.currentTarget.style.borderColor = '#E2E8F0'}
           >
             <ArrowLeft size={18} />
           </button>
@@ -479,21 +498,32 @@ const InspectionGuideDetailView = () => {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{
-                padding: '2px 8px',
+                padding: '3px 8px',
                 borderRadius: 6,
-                backgroundColor: '#EADCC9',
-                color: '#7B5233',
+                backgroundColor: themeBg,
+                color: themeColor,
+                border: `1px solid ${themeBorder}`,
                 fontWeight: 800,
                 fontSize: 12,
                 fontFamily: 'monospace'
               }}>
                 {guide.code}
               </span>
+              <span style={{
+                padding: '3px 8px',
+                borderRadius: 6,
+                backgroundColor: themeColor,
+                color: '#FFF',
+                fontWeight: 800,
+                fontSize: 11.5
+              }}>
+                {isSOS ? 'Hướng dẫn thao tác (SOS)' : isCTQ ? 'Lỗi cần chú ý (CTQ)' : 'Hướng dẫn kiểm tra (HDKT)'}
+              </span>
               <span style={{ fontSize: 13, color: '#64748B', fontWeight: 600 }}>
-                Hệ thống SOP Kiểm Định Chất Lượng
+                Tài liệu ban hành
               </span>
             </div>
-            <h1 style={{ margin: '2px 0 0 0', fontSize: '1.35rem', color: '#2D1A12', fontWeight: 800 }}>
+            <h1 style={{ margin: '4px 0 0 0', fontSize: '1.35rem', color: '#2D1A12', fontWeight: 800 }}>
               {guide.name}
             </h1>
           </div>
@@ -543,7 +573,7 @@ const InspectionGuideDetailView = () => {
             onMouseEnter={e => e.currentTarget.style.backgroundColor = '#FEE2E2'}
             onMouseLeave={e => e.currentTarget.style.backgroundColor = '#FFF'}
           >
-            <Trash2 size={16} /> Xóa SOP
+            <Trash2 size={16} /> Xóa tài liệu
           </button>
         </div>
       </div>
@@ -558,16 +588,58 @@ const InspectionGuideDetailView = () => {
         boxShadow: '0 4px 12px rgba(123, 82, 51, 0.04)'
       }}>
         {/* Main Form Fields */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 1.2fr) minmax(320px, 2fr) 140px', gap: 16, alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 220px) minmax(260px, 1.4fr) minmax(280px, 1.6fr) 120px', gap: 14, alignItems: 'start' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#7B5233', textTransform: 'uppercase', marginBottom: 6 }}>
-              Tên hướng dẫn kiểm tra SOP *
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: themeColor, textTransform: 'uppercase', marginBottom: 6 }}>
+              Phân loại & Mã tài liệu
+            </label>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '8px 12px',
+              borderRadius: 8,
+              backgroundColor: themeBg,
+              border: `1.5px solid ${themeBorder}`,
+              height: 42,
+              boxSizing: 'border-box'
+            }}>
+              <span style={{
+                fontWeight: 800,
+                fontSize: 13,
+                color: themeColor,
+                fontFamily: 'monospace'
+              }}>
+                {guide.code}
+              </span>
+              <span style={{
+                fontSize: 11,
+                fontWeight: 800,
+                backgroundColor: themeColor,
+                color: '#FFF',
+                padding: '2px 8px',
+                borderRadius: 6
+              }}>
+                {isSOS ? 'SOS' : isCTQ ? 'CTQ' : 'HDKT'}
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: themeColor, textTransform: 'uppercase', marginBottom: 6 }}>
+              {isSOS ? 'Tên Hướng dẫn thao tác *' : isCTQ ? 'Tên Tiêu chuẩn Lỗi *' : 'Tên Hướng dẫn kiểm tra *'}
             </label>
             <input
               type="text"
               value={metaForm.name}
               onChange={e => setMetaForm(prev => ({ ...prev, name: e.target.value }))}
-              placeholder="VD: Hướng dẫn kiểm tra ngoại quan phôi gỗ sấy"
+              placeholder={
+                isSOS
+                  ? "VD: Hướng dẫn thao tác căn chỉnh cữ máy phay mộng dương"
+                  : isCTQ
+                  ? "VD: Các điểm lỗi chất lượng trọng yếu công đoạn ghép finger"
+                  : "VD: Hướng dẫn kiểm tra ngoại quan phôi gỗ sấy"
+              }
               style={{
                 width: '100%',
                 padding: '9px 12px',
@@ -576,14 +648,16 @@ const InspectionGuideDetailView = () => {
                 fontSize: 14,
                 fontWeight: 600,
                 color: '#2D1A12',
-                backgroundColor: '#FAF8F6'
+                backgroundColor: '#FAF8F6',
+                height: 42,
+                boxSizing: 'border-box'
               }}
             />
           </div>
 
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 6 }}>
-              Mô tả / Phạm vi áp dụng
+              {isSOS ? 'Vị trí & Phạm vi áp dụng' : 'Mô tả / Phạm vi áp dụng'}
             </label>
             <input
               type="text"
@@ -595,9 +669,11 @@ const InspectionGuideDetailView = () => {
                 padding: '9px 12px',
                 borderRadius: 8,
                 border: '1px solid #D1D5DB',
-                fontSize: 13.5,
+                fontSize: 14,
                 color: '#374151',
-                backgroundColor: '#FAF8F6'
+                backgroundColor: '#FAF8F6',
+                height: 42,
+                boxSizing: 'border-box'
               }}
             />
           </div>
@@ -612,7 +688,7 @@ const InspectionGuideDetailView = () => {
                 padding: '9px 16px',
                 borderRadius: 8,
                 border: 'none',
-                backgroundColor: '#7B5233',
+                backgroundColor: themeColor,
                 color: '#FFF',
                 fontWeight: 700,
                 fontSize: 13.5,
@@ -621,10 +697,11 @@ const InspectionGuideDetailView = () => {
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: 6,
-                boxShadow: '0 2px 6px rgba(123, 82, 51, 0.2)'
+                boxShadow: `0 2px 6px ${themeColor}30`,
+                height: 42
               }}
             >
-              <Save size={16} /> {savingMeta ? 'Đang lưu...' : 'Lưu SOP'}
+              <Save size={16} /> {savingMeta ? 'Đang lưu...' : 'Lưu'}
             </button>
           </div>
         </div>
@@ -644,7 +721,7 @@ const InspectionGuideDetailView = () => {
               padding: '8px 18px',
               borderRadius: 8,
               border: 'none',
-              backgroundColor: activeTab === 'steps' ? '#7B5233' : '#F1F5F9',
+              backgroundColor: activeTab === 'steps' ? themeColor : '#F1F5F9',
               color: activeTab === 'steps' ? '#FFF' : '#64748B',
               fontSize: 13.5,
               fontWeight: 700,
@@ -652,10 +729,11 @@ const InspectionGuideDetailView = () => {
               display: 'flex',
               alignItems: 'center',
               gap: 8,
-              transition: 'all 0.2s'
+              transition: 'all 0.2s',
+              boxShadow: activeTab === 'steps' ? `0 2px 8px ${themeColor}30` : 'none'
             }}
           >
-            <Layers size={16} /> Danh mục các bước kiểm tra ({steps.length})
+            <Layers size={16} /> Danh mục các {stepLabel} ({steps.length})
           </button>
 
           <button
@@ -665,7 +743,7 @@ const InspectionGuideDetailView = () => {
               padding: '8px 18px',
               borderRadius: 8,
               border: 'none',
-              backgroundColor: activeTab === 'assignments' ? '#7B5233' : '#F1F5F9',
+              backgroundColor: activeTab === 'assignments' ? themeColor : '#F1F5F9',
               color: activeTab === 'assignments' ? '#FFF' : '#64748B',
               fontSize: 13.5,
               fontWeight: 700,
@@ -673,7 +751,8 @@ const InspectionGuideDetailView = () => {
               display: 'flex',
               alignItems: 'center',
               gap: 8,
-              transition: 'all 0.2s'
+              transition: 'all 0.2s',
+              boxShadow: activeTab === 'assignments' ? `0 2px 8px ${themeColor}30` : 'none'
             }}
           >
             <ShieldCheck size={16} /> Cấu hình Liên kết Loại phiếu & Công đoạn ({guide.assignments?.length || 0})
@@ -700,9 +779,9 @@ const InspectionGuideDetailView = () => {
           <div style={{
             backgroundColor: '#FFFFFF',
             borderRadius: 16,
-            border: '1px solid #EADCC9',
+            border: `1px solid ${themeBorder}`,
             padding: 16,
-            boxShadow: '0 4px 12px rgba(123, 82, 51, 0.04)',
+            boxShadow: `0 4px 12px ${themeColor}0a`,
             display: 'flex',
             flexDirection: 'column',
             gap: 12
@@ -715,7 +794,7 @@ const InspectionGuideDetailView = () => {
               borderBottom: '1px solid #F1F5F9'
             }}>
               <div style={{ fontWeight: 800, fontSize: 14, color: '#2D1A12', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Layers size={16} color="#7B5233" /> Quy trình kiểm tra ({steps.length})
+                <Layers size={16} color={themeColor} /> Quy trình {stepNoun} ({steps.length})
               </div>
             </div>
 
@@ -724,25 +803,26 @@ const InspectionGuideDetailView = () => {
               <div style={{
                 padding: '30px 16px',
                 textAlign: 'center',
-                backgroundColor: '#FAF8F6',
+                backgroundColor: themeBg,
                 borderRadius: 10,
-                border: '1px dashed #EADCC9',
+                border: `1px dashed ${themeBorder}`,
                 color: '#64748B'
               }}>
-                <BookOpen size={32} style={{ opacity: 0.4, margin: '0 auto 8px auto' }} />
-                <p style={{ fontSize: 13, margin: '0 0 12px 0' }}>Chưa có bước nào trong quy trình.</p>
+                <BookOpen size={32} style={{ opacity: 0.4, margin: '0 auto 8px auto', color: themeColor }} />
+                <p style={{ fontSize: 13, margin: '0 0 12px 0' }}>Chưa có {stepLabel} nào trong quy trình.</p>
                 <button
                   type="button"
                   onClick={handleAddStep}
                   style={{
                     padding: '6px 14px',
                     borderRadius: 6,
-                    backgroundColor: '#7B5233',
+                    backgroundColor: themeColor,
                     color: '#FFF',
                     border: 'none',
                     fontSize: 12.5,
                     fontWeight: 700,
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    boxShadow: `0 2px 6px ${themeColor}30`
                   }}
                 >
                   + Thêm bước 1
@@ -762,9 +842,9 @@ const InspectionGuideDetailView = () => {
                       style={{
                         padding: '12px 14px',
                         borderRadius: 12,
-                        backgroundColor: isSelected ? '#FAF8F6' : '#FFFFFF',
-                        border: isSelected ? '2px solid #7B5233' : '1px solid #E5E7EB',
-                        boxShadow: isSelected ? '0 4px 12px rgba(123, 82, 51, 0.12)' : 'none',
+                        backgroundColor: isSelected ? themeBg : '#FFFFFF',
+                        border: isSelected ? `2px solid ${themeColor}` : '1px solid #E5E7EB',
+                        boxShadow: isSelected ? `0 4px 12px ${themeColor}20` : 'none',
                         cursor: 'pointer',
                         transition: 'all 0.15s',
                         display: 'flex',
@@ -785,7 +865,7 @@ const InspectionGuideDetailView = () => {
                             width: 24,
                             height: 24,
                             borderRadius: 6,
-                            backgroundColor: isSelected ? '#7B5233' : '#E2E8F0',
+                            backgroundColor: isSelected ? themeColor : '#E2E8F0',
                             color: isSelected ? '#FFF' : '#475569',
                             fontWeight: 800,
                             fontSize: 12,
@@ -798,7 +878,7 @@ const InspectionGuideDetailView = () => {
                           <span style={{
                             fontSize: 13.5,
                             fontWeight: 800,
-                            color: isSelected ? '#7B5233' : '#2D1A12',
+                            color: isSelected ? themeColor : '#2D1A12',
                             whiteSpace: 'nowrap',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
@@ -876,9 +956,9 @@ const InspectionGuideDetailView = () => {
                 marginTop: 4,
                 padding: '10px',
                 borderRadius: 10,
-                border: '1.5px dashed #7B5233',
-                backgroundColor: '#FAF8F6',
-                color: '#7B5233',
+                border: `1.5px dashed ${themeColor}`,
+                backgroundColor: themeBg,
+                color: themeColor,
                 fontWeight: 700,
                 fontSize: 13,
                 cursor: 'pointer',
@@ -888,10 +968,10 @@ const InspectionGuideDetailView = () => {
                 gap: 6,
                 transition: 'all 0.2s'
               }}
-              onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#7B5233'; e.currentTarget.style.color = '#FFF'; }}
-              onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FAF8F6'; e.currentTarget.style.color = '#7B5233'; }}
+              onMouseEnter={e => { e.currentTarget.style.backgroundColor = themeColor; e.currentTarget.style.color = '#FFF'; }}
+              onMouseLeave={e => { e.currentTarget.style.backgroundColor = themeBg; e.currentTarget.style.color = themeColor; }}
             >
-              <Plus size={16} /> Thêm bước kiểm tra mới
+              <Plus size={16} /> Thêm {stepLabel} mới
             </button>
           </div>
 
@@ -900,9 +980,9 @@ const InspectionGuideDetailView = () => {
             <div style={{
               backgroundColor: '#FFFFFF',
               borderRadius: 16,
-              border: '1px solid #EADCC9',
+              border: `1px solid ${themeBorder}`,
               padding: 24,
-              boxShadow: '0 4px 14px rgba(123, 82, 51, 0.05)',
+              boxShadow: `0 4px 14px ${themeColor}0a`,
               display: 'flex',
               flexDirection: 'column',
               gap: 20
@@ -922,13 +1002,14 @@ const InspectionGuideDetailView = () => {
                     width: 32,
                     height: 32,
                     borderRadius: 8,
-                    backgroundColor: '#7B5233',
+                    backgroundColor: themeColor,
                     color: '#FFF',
                     fontWeight: 800,
                     fontSize: 14,
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center'
+                    justifyContent: 'center',
+                    boxShadow: `0 2px 6px ${themeColor}35`
                   }}>
                     {selectedStep.step_no}
                   </span>
@@ -937,7 +1018,7 @@ const InspectionGuideDetailView = () => {
                       Chỉnh sửa Bước #{selectedStep.step_no}
                     </h2>
                     <span style={{ fontSize: 12.5, color: '#64748B' }}>
-                      Thiết lập tiêu đề, hướng dẫn kỹ thuật, các bước nhỏ chi tiết và ảnh minh họa
+                      Thiết lập tiêu đề, hướng dẫn {stepNoun} chi tiết, các bước nhỏ và ảnh minh họa
                     </span>
                   </div>
                 </div>
@@ -973,7 +1054,7 @@ const InspectionGuideDetailView = () => {
                       padding: '8px 18px',
                       borderRadius: 8,
                       border: 'none',
-                      backgroundColor: '#7B5233',
+                      backgroundColor: themeColor,
                       color: '#FFF',
                       fontWeight: 700,
                       fontSize: 13,
@@ -981,7 +1062,7 @@ const InspectionGuideDetailView = () => {
                       display: 'flex',
                       alignItems: 'center',
                       gap: 6,
-                      boxShadow: '0 2px 6px rgba(123, 82, 51, 0.2)'
+                      boxShadow: `0 2px 8px ${themeColor}35`
                     }}
                   >
                     <Save size={15} /> {savingStep ? 'Đang lưu...' : 'Lưu bước'}
@@ -992,14 +1073,20 @@ const InspectionGuideDetailView = () => {
               {/* Step Title & Instructions */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#7B5233', textTransform: 'uppercase', marginBottom: 6 }}>
-                    Tiêu đề bước kiểm tra *
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: themeColor, textTransform: 'uppercase', marginBottom: 6 }}>
+                    Tiêu đề {stepLabel} *
                   </label>
                   <input
                     type="text"
                     value={stepDraft.title}
                     onChange={e => setStepDraft(prev => ({ ...prev, title: e.target.value }))}
-                    placeholder="VD: Kiểm tra ngoại quan bề mặt gỗ và vết nứt"
+                    placeholder={
+                      isSOS
+                        ? "VD: Căn chỉnh cữ dao và kiểm tra độ sắc bén"
+                        : isCTQ
+                        ? "VD: Kiểm tra điểm nứt gãy và khuyết tật đầu mộng"
+                        : "VD: Kiểm tra ngoại quan bề mặt gỗ và vết nứt"
+                    }
                     style={{
                       width: '100%',
                       padding: '10px 14px',
@@ -1014,82 +1101,20 @@ const InspectionGuideDetailView = () => {
                 </div>
 
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <label style={{ fontSize: 12, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
-                      Nội dung hướng dẫn chi tiết / Tiêu chuẩn kỹ thuật
-                    </label>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button
-                        type="button"
-                        onClick={() => setStepDraft(prev => ({ ...prev, content: (prev.content ? prev.content + '\n✓ ' : '✓ ') }))}
-                        style={{
-                          padding: '3px 8px',
-                          borderRadius: 4,
-                          fontSize: 11.5,
-                          fontWeight: 700,
-                          backgroundColor: '#DCFCE7',
-                          color: '#16A34A',
-                          border: '1px solid #86EFAC',
-                          cursor: 'pointer'
-                        }}
-                        title="Chèn dòng tiêu chí kiểm tra (Dấu tick xanh)"
-                      >
-                        + ✓ Tiêu chí
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setStepDraft(prev => ({ ...prev, content: (prev.content ? prev.content + '\n• ' : '• ') }))}
-                        style={{
-                          padding: '3px 8px',
-                          borderRadius: 4,
-                          fontSize: 11.5,
-                          fontWeight: 700,
-                          backgroundColor: '#F3F4F6',
-                          color: '#374151',
-                          border: '1px solid #D1D5DB',
-                          cursor: 'pointer'
-                        }}
-                        title="Chèn dòng gạch đầu dòng"
-                      >
-                        + • Gạch đầu dòng
-                      </button>
-                    </div>
-                  </div>
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
+                    Nội dung hướng dẫn {stepNoun} chi tiết & Lưu ý an toàn
+                  </label>
 
-                  <textarea
-                    rows={4}
+                  <RichTextEditor
                     value={stepDraft.content}
-                    onPaste={e => handlePasteCleanText(e, val => setStepDraft(prev => ({ ...prev, content: val })))}
-                    onChange={e => setStepDraft(prev => ({ ...prev, content: cleanWordClipboardText(e.target.value) }))}
-                    placeholder="Nhập hướng dẫn thao tác tổng quan, phương pháp đo đạc hoặc tiêu chuẩn chất lượng (hỗ trợ copy từ Word, tự động giữ dấu ✓, • và in đậm nhãn)..."
-                    style={{
-                      width: '100%',
-                      padding: '10px 14px',
-                      borderRadius: 8,
-                      border: '1px solid #D1D5DB',
-                      fontSize: 13.5,
-                      lineHeight: '1.6',
-                      color: '#374151',
-                      backgroundColor: '#FAF8F6'
-                    }}
+                    onChange={val => setStepDraft(prev => ({ ...prev, content: val }))}
+                    placeholder={
+                      isSOS
+                        ? "Mô tả chi tiết các thao tác của công nhân, tư thế làm việc, thông số máy, điểm an toàn lao động..."
+                        : "Nhập hướng dẫn thao tác tổng quan, phương pháp đo đạc hoặc tiêu chuẩn chất lượng (hỗ trợ soạn thảo văn bản, bảng biểu, danh sách, màu sắc)..."
+                    }
+                    style={{ minHeight: 220 }}
                   />
-
-                  {/* Live visual preview when content exists */}
-                  {stepDraft.content && (
-                    <div style={{
-                      marginTop: 10,
-                      padding: '12px 16px',
-                      backgroundColor: '#FFFFFF',
-                      borderRadius: 8,
-                      border: '1px solid #EADCC9',
-                      borderLeft: '4px solid #7B5233'
-                    }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#7B5233', marginBottom: 6 }}>
-                        Xem trước định dạng thực tế trên App & SOP:
-                      </div>
-                      <FormattedTextView text={stepDraft.content} />
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -1226,21 +1251,11 @@ const InspectionGuideDetailView = () => {
                                 <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: '#64748B', marginBottom: 4 }}>
                                   Nội dung chi tiết / Điều kiện & Hành động thực hiện
                                 </label>
-                                <textarea
-                                  rows={4}
+                                <RichTextEditor
+                                  minHeight={90}
                                   value={editingSubStepDraft.content}
-                                  onPaste={e => handlePasteCleanText(e, val => setEditingSubStepDraft(prev => ({ ...prev, content: val })))}
-                                  onChange={e => setEditingSubStepDraft(prev => ({ ...prev, content: cleanWordClipboardText(e.target.value) }))}
-                                  placeholder="Nhập điều kiện, tiêu chuẩn và hành động thao tác (hỗ trợ copy từ Word, dấu ✓, •, in đậm nhãn)..."
-                                  style={{
-                                    width: '100%',
-                                    padding: '7px 10px',
-                                    borderRadius: 6,
-                                    border: '1px solid #D1D5DB',
-                                    fontSize: 13,
-                                    lineHeight: '1.5',
-                                    color: '#374151'
-                                  }}
+                                  onChange={val => setEditingSubStepDraft(prev => ({ ...prev, content: val }))}
+                                  placeholder="Nội dung chi tiết / Điều kiện & Hành động..."
                                 />
                               </div>
 
@@ -1475,22 +1490,11 @@ const InspectionGuideDetailView = () => {
                       }}
                     />
 
-                    <textarea
-                      rows={3}
+                    <RichTextEditor
+                      minHeight={90}
                       value={subStepDraft.content}
-                      onPaste={e => handlePasteCleanText(e, val => setSubStepDraft(prev => ({ ...prev, content: val })))}
-                      onChange={e => setSubStepDraft(prev => ({ ...prev, content: cleanWordClipboardText(e.target.value) }))}
-                      placeholder="Nội dung chi tiết / Điều kiện & Hành động (hỗ trợ copy từ Word, dấu ✓, •, in đậm nhãn)..."
-                      style={{
-                        width: '100%',
-                        padding: '7px 10px',
-                        borderRadius: 6,
-                        border: '1px solid #D1D5DB',
-                        fontSize: 12.5,
-                        lineHeight: '1.5',
-                        color: '#374151',
-                        backgroundColor: '#FAF8F6'
-                      }}
+                      onChange={val => setSubStepDraft(prev => ({ ...prev, content: val }))}
+                      placeholder="Nội dung chi tiết / Điều kiện & Hành động (hỗ trợ định dạng văn bản, bảng biểu, danh sách, màu sắc)..."
                     />
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 2 }}>
@@ -1553,7 +1557,7 @@ const InspectionGuideDetailView = () => {
                   backgroundColor: isDragging ? '#FFF7ED' : '#FAF8F6',
                   borderRadius: 14,
                   padding: 18,
-                  border: isDragging ? '2px dashed #C2410C' : '1px solid #EADCC9',
+                  border: isDragging ? '2px dashed #C2410C' : `1px solid ${themeBorder}`,
                   transition: 'all 0.2s ease',
                   position: 'relative'
                 }}
@@ -1567,18 +1571,18 @@ const InspectionGuideDetailView = () => {
                   gap: 8
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <ImageIcon size={18} color="#7B5233" />
+                    <ImageIcon size={18} color={themeColor} />
                     <span style={{ fontWeight: 800, fontSize: 13.5, color: '#2D1A12' }}>
-                      Ảnh minh họa tiêu chuẩn ({selectedStep.images?.length || 0} / {IMAGE_LIMIT})
+                      Ảnh minh họa {stepNoun} chuẩn ({selectedStep.images?.length || 0} / {IMAGE_LIMIT})
                     </span>
                     <span style={{
                       fontSize: 11,
                       fontWeight: 700,
-                      backgroundColor: '#EFE6DD',
-                      color: '#7B5233',
+                      backgroundColor: themeBg,
+                      color: themeColor,
                       padding: '2px 8px',
                       borderRadius: 6,
-                      border: '1px solid #D6C2B0',
+                      border: `1px solid ${themeBorder}`,
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: 4
@@ -1604,7 +1608,7 @@ const InspectionGuideDetailView = () => {
                     style={{
                       padding: '6px 14px',
                       borderRadius: 8,
-                      backgroundColor: (selectedStep.images?.length || 0) >= IMAGE_LIMIT ? '#CBD5E1' : '#7B5233',
+                      backgroundColor: (selectedStep.images?.length || 0) >= IMAGE_LIMIT ? '#CBD5E1' : themeColor,
                       color: '#FFF',
                       border: 'none',
                       fontSize: 12.5,
@@ -1613,7 +1617,7 @@ const InspectionGuideDetailView = () => {
                       display: 'flex',
                       alignItems: 'center',
                       gap: 6,
-                      boxShadow: '0 2px 6px rgba(123, 82, 51, 0.2)'
+                      boxShadow: `0 2px 6px ${themeColor}30`
                     }}
                   >
                     <Upload size={14} /> {uploadingImages ? 'Đang tải lên...' : '+ Tải ảnh lên'}
@@ -1634,24 +1638,24 @@ const InspectionGuideDetailView = () => {
                       transition: 'all 0.2s',
                       userSelect: 'none'
                     }}
-                    onMouseEnter={e => { if (!isDragging) e.currentTarget.style.borderColor = '#7B5233'; }}
+                    onMouseEnter={e => { if (!isDragging) e.currentTarget.style.borderColor = themeColor; }}
                     onMouseLeave={e => { if (!isDragging) e.currentTarget.style.borderColor = '#D1D5DB'; }}
                   >
                     <div style={{
                       width: 48,
                       height: 48,
                       borderRadius: '50%',
-                      backgroundColor: '#FAF5F0',
+                      backgroundColor: themeBg,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       margin: '0 auto 10px auto',
-                      border: '1px solid #EADCC9'
+                      border: `1px solid ${themeBorder}`
                     }}>
-                      <ImageIcon size={26} color="#7B5233" />
+                      <ImageIcon size={26} color={themeColor} />
                     </div>
                     <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: '#2D1A12' }}>
-                      {isDragging ? 'Thả file ảnh vào đây để tải lên ngay' : 'Chưa có hình ảnh minh họa cho bước này.'}
+                      {isDragging ? 'Thả file ảnh vào đây để tải lên ngay' : `Chưa có hình ảnh minh họa cho ${stepLabel} này.`}
                     </p>
                     <div style={{
                       marginTop: 6,

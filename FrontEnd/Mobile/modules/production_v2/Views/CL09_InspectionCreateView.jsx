@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ImagePlus, X, Plus, ChevronDown, ChevronUp, Eye, ArrowLeft, CheckCircle2 } from 'lucide-react'
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout'
@@ -34,6 +34,80 @@ const compactSpec = (spec) => {
   if (!spec) return ''
   const firstPart = String(spec).split(/\s*[-–—]\s*/)[0]?.trim() || ''
   return firstPart || spec
+}
+
+const parseCTQStage = (description) => {
+  if (!description) return 'Chung'
+  const match = description.match(/^\[Công đoạn:\s*([^\]]+)\]\s*(.*)$/i)
+  if (match) {
+    return match[1].trim()
+  }
+  return 'Chung'
+}
+
+const normalizeStageName = (name) => {
+  if (!name) return ''
+  return String(name)
+    .replace(/^NM\d+\s*[-–—]\s*/i, '') // Bỏ tiền tố nhà máy như NM1 -, NM2 -, NM3 -
+    .replace(/\s+\d+$/i, '') // Bỏ hậu tố số như " 1", " 2", " 3"
+    .toLowerCase()
+    .trim()
+}
+
+const isStageMatching = (selectedStage, targetStage) => {
+  // 1. Nếu chưa chọn công đoạn hoặc công đoạn được chọn là 'Chung' / 'Tất cả' -> hiển thị tất cả
+  if (!selectedStage) return true
+  const sRaw = String(selectedStage).toLowerCase().trim()
+  if (sRaw === '' || sRaw === 'chung' || sRaw === 'tất cả công đoạn' || sRaw === 'tất cả' || sRaw === 'all') {
+    return true
+  }
+
+  // 2. Nếu lỗi / CTQ chưa có công đoạn hoặc được gán công đoạn 'Chung' -> công đoạn nào cũng gặp
+  if (!targetStage) return true
+  if (typeof targetStage === 'string') {
+    const tRaw = targetStage.toLowerCase().trim()
+    if (tRaw === '' || tRaw === 'chung' || tRaw === 'tất cả công đoạn' || tRaw === 'tất cả' || tRaw === 'all' || tRaw === 'toàn bộ') {
+      return true
+    }
+  }
+
+  let list = []
+  if (Array.isArray(targetStage)) {
+    list = targetStage
+  } else if (typeof targetStage === 'string') {
+    const trimmed = targetStage.trim()
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        list = JSON.parse(trimmed)
+      } catch (e) {
+        list = [trimmed]
+      }
+    } else {
+      list = [trimmed]
+    }
+  }
+
+  // Nếu danh sách rỗng -> áp dụng chung cho mọi công đoạn
+  if (!list || list.length === 0) return true
+
+  const sNorm = normalizeStageName(selectedStage)
+
+  return list.some((st) => {
+    if (!st) return true // phần tử rỗng -> coi như chung
+    const stRaw = String(st).toLowerCase().trim()
+    if (stRaw === '' || stRaw === 'tất cả công đoạn' || stRaw === 'tất cả' || stRaw === 'chung' || stRaw === 'all' || stRaw === 'toàn bộ') {
+      return true
+    }
+
+    const stNorm = normalizeStageName(st)
+    return (
+      sRaw === stRaw ||
+      sNorm === stNorm ||
+      sRaw.includes(stRaw) ||
+      stRaw.includes(sRaw) ||
+      (sNorm && stNorm && (sNorm.includes(stNorm) || stNorm.includes(sNorm)))
+    )
+  })
 }
 
 const CL09_InspectionCreateView = () => {
@@ -84,11 +158,145 @@ const CL09_InspectionCreateView = () => {
 
   const [guideVisible, setGuideVisible] = useState(false)
   const [palletCode, setPalletCode] = useState('DA7819')
+  const [autoTicketCode, setAutoTicketCode] = useState(() => `KT${String(Date.now()).slice(-4)}${Math.floor(10 + Math.random() * 90)}`)
   const [confirmErrModal, setConfirmErrModal] = useState(false)
   const [finishModal, setFinishModal] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [stagesList, setStagesList] = useState([])
+  const [defectCatalog, setDefectCatalog] = useState([])
+  const [ctqGuides, setCtqGuides] = useState([])
   const [previewImage, setPreviewImage] = useState(null)
+
+  useEffect(() => {
+    // 1. Tải danh mục lỗi hệ thống
+    inspectionService.getDefectTypes(user?.id)
+      .then((data) => setDefectCatalog(data || []))
+      .catch((err) => console.warn('Lỗi tải danh mục lỗi:', err))
+
+    // 2. Tải danh sách lỗi cần chú ý (CTQ guides) từ /admin/ctq-guides
+    inspectionService.getCTQGuides()
+      .then((data) => setCtqGuides(data || []))
+      .catch((err) => console.warn('Lỗi tải danh sách CTQ:', err))
+  }, [user?.id])
+
+  const currentSelectedStage = useMemo(() => {
+    if (mode === INSPECT_MODES.PARAMETER) return paramStage
+    if (mode === INSPECT_MODES.PROCESS) return area || process
+    return stage
+  }, [mode, paramStage, area, process, stage])
+
+  const combinedDefects = useMemo(() => {
+    const list = []
+    const seenCodes = new Set()
+    const seenNames = new Set()
+
+    const ctqList = Array.isArray(ctqGuides) ? ctqGuides : []
+    const catList = Array.isArray(defectCatalog) ? defectCatalog : []
+
+    // 1. Nạp danh sách CTQ guides từ /admin/ctq-guides trước (Ưu tiên lỗi trọng yếu CTQ lên đầu)
+    ctqList.forEach((ctq) => {
+      const ctqStage = parseCTQStage(ctq.description)
+
+      // Lọc theo công đoạn hiện tại (nếu là 'Chung' hoặc chưa có công đoạn -> công đoạn nào cũng gặp)
+      if (!isStageMatching(currentSelectedStage, ctqStage)) {
+        return // Bỏ qua nếu không cùng công đoạn
+      }
+
+      // Trích xuất mã lỗi nếu tiêu đề có dạng [APP-02] Tên lỗi
+      let code = ctq.code || ''
+      let name = ctq.name || ''
+      const codeMatch = ctq.name?.match(/^\[([A-Za-z0-9_-]+)\]\s*(.*)$/)
+      if (codeMatch) {
+        code = codeMatch[1]
+        name = codeMatch[2]
+      }
+
+      const item = {
+        id: `ctq_${ctq.id}`,
+        ctq_id: ctq.id,
+        code: code,
+        name: name,
+        label: code ? `[${code}] ${name}` : name,
+        category: 'CTQ',
+        stage: ctqStage && ctqStage !== 'Chung' ? [ctqStage] : null,
+        description: ctq.description,
+        needs_tracking: true,
+        isQA: true,
+        isCTQ: true,
+        source: 'CTQ',
+      }
+
+      if (code) seenCodes.add(code.toLowerCase().trim())
+      if (name) seenNames.add(name.toLowerCase().trim())
+      list.push(item)
+    })
+
+    // 2. Nạp danh mục lỗi từ /inspections/defect-types
+    catList.forEach((d) => {
+      // Lọc theo công đoạn hiện tại (nếu là 'Chung' hoặc chưa có công đoạn -> công đoạn nào cũng gặp)
+      if (!isStageMatching(currentSelectedStage, d.stage)) {
+        return // Bỏ qua nếu không cùng công đoạn
+      }
+
+      const dCode = (d.code || '').toLowerCase().trim()
+      const dName = (d.name || '').toLowerCase().trim()
+
+      // Nếu lỗi đã có trong danh sách CTQ (trùng code hoặc trùng name)
+      if ((dCode && seenCodes.has(dCode)) || (dName && seenNames.has(dName))) {
+        const existing = list.find(
+          (item) =>
+            (dCode && item.code?.toLowerCase().trim() === dCode) ||
+            (dName && item.name?.toLowerCase().trim() === dName)
+        )
+        if (existing) {
+          existing.defect_type_id = d.id
+          if (!existing.category || existing.category === 'CTQ') {
+            existing.category = d.category || 'CTQ'
+          }
+          if (d.needs_tracking) existing.needs_tracking = true
+          if (d.qc_tracking) existing.qc_tracking = true
+          if (d.is_tracked_by_me) existing.is_tracked_by_me = true
+        }
+        return
+      }
+
+      // Thêm lỗi từ catalog
+      list.push({
+        id: d.id,
+        code: d.code,
+        name: d.name,
+        label: d.code ? `[${d.code}] ${d.name}` : d.name,
+        category: d.category,
+        stage: d.stage,
+        description: d.description,
+        needs_tracking: d.needs_tracking,
+        qc_tracking: d.qc_tracking,
+        is_tracked_by_me: d.is_tracked_by_me,
+        isQA: Boolean(d.needs_tracking || d.qc_tracking || d.is_tracked_by_me),
+        source: 'catalog',
+      })
+    })
+
+    return list
+  }, [defectCatalog, ctqGuides, currentSelectedStage])
+
+  const defectOptions = useMemo(() => {
+    return combinedDefects.map((d) => ({
+      value: d.id,
+      id: d.id,
+      code: d.code,
+      name: d.name,
+      label: d.code ? `[${d.code}] ${d.name}` : d.name,
+      category: d.category,
+      needs_tracking: d.needs_tracking,
+      qc_tracking: d.qc_tracking,
+      is_tracked_by_me: d.is_tracked_by_me,
+      isQA: Boolean(d.needs_tracking || d.qc_tracking || d.is_tracked_by_me || d.isCTQ),
+      isCTQ: d.isCTQ,
+      ctq_id: d.ctq_id,
+      defect_type_id: d.defect_type_id,
+    }))
+  }, [combinedDefects])
   const [modalConfig, setModalConfig] = useState({
     isOpen: false,
     type: 'info',
@@ -170,7 +378,17 @@ const CL09_InspectionCreateView = () => {
       .catch(() => {
         setProcessOptions([{ value: '', label: 'Chọn quy trình' }])
       })
-  }, [])
+
+    if (isNew) {
+      inspectionService.generateTicketCode('KT')
+        .then((res) => {
+          if (res && res.ticketCode) {
+            setAutoTicketCode(res.ticketCode)
+          }
+        })
+        .catch(() => { })
+    }
+  }, [isNew])
 
   // Nạp dữ liệu từ phiếu kiểm tra đã có
   useEffect(() => {
@@ -382,7 +600,12 @@ const CL09_InspectionCreateView = () => {
 
   const addErrorRow = () => {
     if (readOnly) return
-    setErrors((p) => [...p, { id: Date.now(), name: '', qty: 0 }])
+    setErrors((p) => [...p, { id: Date.now(), defectId: null, code: '', name: '', qty: 0 }])
+  }
+
+  const removeErrorRow = (idx) => {
+    if (readOnly) return
+    setErrors((p) => p.filter((_, i) => i !== idx))
   }
 
   const updateError = (idx, row) => {
@@ -411,6 +634,50 @@ const CL09_InspectionCreateView = () => {
 
   const handleSubmit = async () => {
     if (readOnly) return
+
+    // Ràng buộc chọn đầy đủ thông tin bắt buộc theo từng cách kiểm tra
+    if (mode === INSPECT_MODES.FIRST_SAMPLE || mode === INSPECT_MODES.RE_INSPECT) {
+      if (!stage) {
+        showMessage('Thiếu thông tin', 'Vui lòng chọn Công đoạn trước khi tiếp tục.', 'warning')
+        return
+      }
+      if (!po) {
+        showMessage('Thiếu thông tin', 'Vui lòng chọn PO trước khi tiếp tục.', 'warning')
+        return
+      }
+      if (!product) {
+        showMessage('Thiếu thông tin', 'Vui lòng chọn Sản phẩm trước khi tiếp tục.', 'warning')
+        return
+      }
+    } else if (mode === INSPECT_MODES.PARAMETER) {
+      if (!paramStage) {
+        showMessage('Thiếu thông tin', 'Vui lòng chọn Công đoạn trước khi tiếp tục.', 'warning')
+        return
+      }
+      if (!paramPo) {
+        showMessage('Thiếu thông tin', 'Vui lòng chọn PO trước khi tiếp tục.', 'warning')
+        return
+      }
+      if (!paramProduct) {
+        showMessage('Thiếu thông tin', 'Vui lòng chọn Sản phẩm trước khi tiếp tục.', 'warning')
+        return
+      }
+    } else if (mode === INSPECT_MODES.PROCESS) {
+      if (!process) {
+        showMessage('Thiếu thông tin', 'Vui lòng chọn Quy trình trước khi tiếp tục.', 'warning')
+        return
+      }
+      if (!area) {
+        showMessage('Thiếu thông tin', 'Vui lòng chọn Khu vực kiểm tra trước khi tiếp tục.', 'warning')
+        return
+      }
+    } else if (mode === INSPECT_MODES.QA) {
+      if (!staff) {
+        showMessage('Thiếu thông tin', 'Vui lòng chọn Tên nhân sự trước khi tiếp tục.', 'warning')
+        return
+      }
+    }
+
     if (isFailedResult && images.length === 0) {
       showMessage(
         'Thiếu ảnh bằng chứng',
@@ -423,26 +690,41 @@ const CL09_InspectionCreateView = () => {
       return
     }
 
-    // Tự động sinh mã Pallet duy nhất từ server nếu chưa có
-    if (!palletCode) {
-      await handleCreatePallet()
-    }
+    // Hiển thị popup xác nhận trước khi tiến hành tạo/hoàn thành phiếu kiểm tra
+    showConfirm({
+      title: 'Xác nhận tạo phiếu',
+      message: 'Bạn có chắc chắn muốn xác nhận lưu phiếu kiểm tra này?',
+      confirmText: 'Xác nhận',
+      cancelText: 'Hủy bỏ',
+      onConfirm: async () => {
+        // Kiểm tra quy trình không dùng mã Pallet hay popup CL09.2 hoàn thành kiểm tra với các trường sản phẩm/PO
+        if (mode === INSPECT_MODES.PROCESS) {
+          handleFinishConfirm({ palletCode: '' })
+          return
+        }
 
-    // Mở popup hoàn thành kiểm tra CL09.2 để review thông tin và xác nhận mã pallet
-    setFinishModal(true)
+        // Tự động sinh mã Pallet duy nhất từ server nếu chưa có (cho các chế độ kiểm hàng sản xuất)
+        if (!palletCode) {
+          await handleCreatePallet()
+        }
+
+        // Mở popup hoàn thành kiểm tra CL09.2 để review thông tin và xác nhận mã pallet
+        setFinishModal(true)
+      }
+    })
   }
 
   const handleFinishConfirm = async (modalData) => {
     setFinishModal(false)
     setSubmitting(true)
     try {
-      const activeStage = mode === INSPECT_MODES.PARAM ? paramStage : (mode === INSPECT_MODES.PROCESS ? area : stage)
-      const activePo = mode === INSPECT_MODES.PARAM ? paramPo : po
-      const activeProduct = mode === INSPECT_MODES.PARAM ? paramProduct : product
+      const activeStage = mode === INSPECT_MODES.PARAMETER ? paramStage : (mode === INSPECT_MODES.PROCESS ? area : stage)
+      const activePo = mode === INSPECT_MODES.PARAMETER ? paramPo : po
+      const activeProduct = mode === INSPECT_MODES.PARAMETER ? paramProduct : product
       const activeResult = mode === INSPECT_MODES.QA ? qaResult : result
-      const activeSampleQty = mode === INSPECT_MODES.PARAM ? paramSample : sampleQty
-      const activeErrorQty = mode === INSPECT_MODES.PARAM ? paramFail : errorQty
-      const finalPalletCode = modalData?.palletCode || palletCode
+      const activeSampleQty = mode === INSPECT_MODES.PARAMETER ? paramSample : sampleQty
+      const activeErrorQty = mode === INSPECT_MODES.PARAMETER ? paramFail : errorQty
+      const finalPalletCode = mode === INSPECT_MODES.PROCESS ? '' : (modalData?.palletCode || palletCode)
 
       await createTicket({
         mode,
@@ -470,7 +752,9 @@ const CL09_InspectionCreateView = () => {
 
       showMessage(
         'Hoàn thành kiểm tra',
-        `Đã lưu phiếu kiểm tra thành công cho mã Pallet: ${finalPalletCode}!`,
+        mode === INSPECT_MODES.PROCESS
+          ? 'Đã lưu phiếu kiểm tra quy trình thành công!'
+          : `Đã lưu phiếu kiểm tra thành công cho mã Pallet: ${finalPalletCode}!`,
         'success',
         () => {
           navigate(ROUTES.INSPECTION_LIST)
@@ -514,18 +798,18 @@ const CL09_InspectionCreateView = () => {
     }
   }
 
-  const ticketCode = ticket?.code || (isNew ? `KT${String(Date.now()).slice(-3)}` : id)
+  const ticketCode = ticket?.code || (isNew ? autoTicketCode : id)
   const displayCreator = ticket?.creator || creatorName
   const displayTime = ticket?.time_str || (ticket?.created_at ? new Date(ticket.created_at).toLocaleString('vi-VN') : '')
   const isDone = ticket?.status === 'done' || ticket?.is_confirmed === true
   const summary = {
-    poCode: mode === INSPECT_MODES.PARAM ? (paramPo || '—') : (po || ticket?.po_code || ticket?.po || '—'),
+    poCode: mode === INSPECT_MODES.PARAMETER ? (paramPo || '—') : (po || ticket?.po_code || ticket?.po || '—'),
     result: mode === INSPECT_MODES.QA ? qaResult : (result || ticket?.conclusion || ticket?.result || 'pass'),
-    product: mode === INSPECT_MODES.PARAM ? (paramProduct || '—') : (product || ticket?.product_name || ticket?.detail_name || ticket?.product || '—'),
+    product: mode === INSPECT_MODES.PARAMETER ? (paramProduct || '—') : (product || ticket?.product_name || ticket?.detail_name || ticket?.product || '—'),
     spec: compactSpec(spec || ticket?.specification || ticket?.spec) || '—',
     needQty: requiredQty || ticket?.quantity_plan || ticket?.required_qty || sampleQty || '—',
-    sampleQty: (mode === INSPECT_MODES.PARAM ? paramSample : (sampleQty || ticket?.sample_qty || ticket?.sampleQty)) || '—',
-    errorQty: (mode === INSPECT_MODES.PARAM ? paramFail : (errorQty || ticket?.error_qty || ticket?.errorQty)) || '0',
+    sampleQty: (mode === INSPECT_MODES.PARAMETER ? paramSample : (sampleQty || ticket?.sample_qty || ticket?.sampleQty)) || '—',
+    errorQty: (mode === INSPECT_MODES.PARAMETER ? paramFail : (errorQty || ticket?.error_qty || ticket?.errorQty)) || '0',
   }
 
   const renderImageUploadArea = () => (
@@ -641,17 +925,17 @@ const CL09_InspectionCreateView = () => {
               </div>
             ) : mode === INSPECT_MODES.PROCESS ? (
               <div className="pv2-field">
-                <label>Chọn quy trình</label>
+                <label>Chọn quy trình <span className="pv2-req">*</span></label>
                 <CustomSelect value={process} options={processOptions} onChange={setProcess} disabled={readOnly} />
               </div>
             ) : mode === INSPECT_MODES.QA ? (
               <div className="pv2-field">
-                <label>Tên nhân sự</label>
+                <label>Tên nhân sự <span className="pv2-req">*</span></label>
                 <CustomSelect value={staff} options={staffOpts} onChange={setStaff} disabled={readOnly} />
               </div>
             ) : (
               <div className="pv2-field">
-                <label>Công đoạn</label>
+                <label>Công đoạn <span className="pv2-req">*</span></label>
                 <CustomSelect value={stage} options={stageOptions} onChange={setStage} disabled={readOnly} />
               </div>
             )}
@@ -750,7 +1034,15 @@ const CL09_InspectionCreateView = () => {
                     <span>SL Ghi nhận</span>
                   </div>
                   {errors.map((row, idx) => (
-                    <ErrorTrendRow key={row.id} row={row} onChange={(r) => updateError(idx, r)} disabled={readOnly} />
+                    <ErrorTrendRow
+                      key={row.id}
+                      row={row}
+                      defectOptions={defectOptions}
+                      selectedDefectIds={errors.map((e) => e.defectId || e.code).filter(Boolean)}
+                      onChange={(r) => updateError(idx, r)}
+                      onRemove={errors.length > 1 ? () => removeErrorRow(idx) : null}
+                      disabled={readOnly}
+                    />
                   ))}
                   {!readOnly && (
                     <button type="button" className="pv2-btn-add-image-link" onClick={addErrorRow} style={{ marginTop: 6 }}>
@@ -842,7 +1134,15 @@ const CL09_InspectionCreateView = () => {
                     <span>SL Ghi nhận</span>
                   </div>
                   {errors.map((row, idx) => (
-                    <ErrorTrendRow key={row.id} row={row} onChange={(r) => updateError(idx, r)} disabled={readOnly} />
+                    <ErrorTrendRow
+                      key={row.id}
+                      row={row}
+                      defectOptions={defectOptions}
+                      selectedDefectIds={errors.map((e) => e.defectId || e.code).filter(Boolean)}
+                      onChange={(r) => updateError(idx, r)}
+                      onRemove={errors.length > 1 ? () => removeErrorRow(idx) : null}
+                      disabled={readOnly}
+                    />
                   ))}
                   {!readOnly && (
                     <button type="button" className="pv2-btn-add-image-link" onClick={addErrorRow} style={{ marginTop: 6 }}>
@@ -963,7 +1263,7 @@ const CL09_InspectionCreateView = () => {
                     Hủy bỏ
                   </button>
                   <button type="button" className="pv2-btn-submit" onClick={handleSubmit} disabled={submitting}>
-                    {submitting ? 'Đang lưu...' : 'Hoàn thành'}
+                    {submitting ? 'Đang lưu...' : 'Xác nhận'}
                   </button>
                 </>
               )}

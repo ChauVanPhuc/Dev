@@ -15,6 +15,7 @@ class InspectionGuide(Base):
     id = Column(Integer, primary_key=True, index=True)
     code = Column(NVARCHAR(50), unique=True, index=True, nullable=False)
     name = Column(NVARCHAR(250), nullable=False)
+    doc_type = Column(NVARCHAR(50), default="HDKT", nullable=False) # 'HDKT' (Hướng dẫn kiểm tra), 'SOS' (Hướng dẫn thao tác), 'CTQ' (Lỗi cần chú ý)
     description = Column(NVARCHAR(1000), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     created_by = Column(Integer, ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True)

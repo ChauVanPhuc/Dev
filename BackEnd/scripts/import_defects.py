@@ -22,9 +22,9 @@ else:
 from config.database import SessionLocal
 from modules.inspection.models.defect_type import DefectType, ClientDefect, DefectGlossary
 
-EXCEL_PATH = os.path.abspath(os.path.join(backend_dir, "..", "bảng phân loại lỗi.xlsx"))
+EXCEL_PATH = r"D:\File\bảng phân loại lỗi.xlsx"
 if not os.path.exists(EXCEL_PATH):
-    EXCEL_PATH = r"M:\ERP\bảng phân loại lỗi.xlsx"
+    EXCEL_PATH = os.path.abspath(os.path.join(backend_dir, "..", "bảng phân loại lỗi.xlsx"))
 
 # Định nghĩa danh sách công đoạn theo nhóm lỗi theo quy tắc người dùng xác nhận
 STAGE_MAPPINGS = {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { Edit2, Trash2, X, AlertTriangle, MoreVertical, ArrowLeft } from 'lucide-react';
+import { Edit2, Trash2, X, AlertTriangle, MoreVertical, ArrowLeft, RefreshCw, ChevronDown } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
@@ -20,6 +20,7 @@ const ProductDetailsManagementView = () => {
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [products, setProducts] = useState([]);
 
   // Action menu state & Autocomplete menu states
@@ -226,6 +227,20 @@ const ProductDetailsManagementView = () => {
     return () => clearTimeout(timer);
   }, [formData.name, showFormModal]);
 
+  // Đóng dropdown khi nhấp chuột ra ngoài
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.suggest-name-box')) {
+        setShowNameMenu(false);
+      }
+      if (!e.target.closest('.suggest-parent-box')) {
+        setShowParentMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   // Helper to resolve matching product ID
   const resolveProductId = (targetParentName, currentProdId) => {
     if (targetParentName) {
@@ -291,6 +306,25 @@ const ProductDetailsManagementView = () => {
     }
   };
 
+  // Sync all data directly from Master BOM
+  const handleSyncBom = async () => {
+    try {
+      setSyncing(true);
+      const res = await api.post('/master-products/sync-bom-data');
+      if (res && res.status === 'success') {
+        if (toast) toast('success', `Đã đồng bộ thành công ${res.unique_product_details_inserted} chi tiết từ BOM!`);
+        fetchDetails();
+      } else {
+        if (toast) toast('error', res?.message || 'Không thể đồng bộ dữ liệu BOM');
+      }
+    } catch (err) {
+      console.error('Lỗi khi đồng bộ BOM:', err);
+      if (toast) toast('error', 'Có lỗi xảy ra khi đồng bộ từ BOM');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const totalPages = Math.ceil(total / pageSize) || 1;
 
   return (
@@ -306,6 +340,13 @@ const ProductDetailsManagementView = () => {
           isFilterOpen={showFilterPanel}
           onFilterToggle={() => setShowFilterPanel(!showFilterPanel)}
           activeFiltersCount={activeFiltersCount}
+          importActions={[
+            {
+              label: syncing ? 'Đang trích xuất BOM...' : 'Đồng bộ từ BOM',
+              icon: <RefreshCw size={14} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />,
+              onClick: handleSyncBom
+            }
+          ]}
           onCreate={handleOpenCreate}
           createLabel="Tạo mới"
           hasWritePermission={true}
@@ -314,6 +355,23 @@ const ProductDetailsManagementView = () => {
         {/* ── INLINE EXPANDABLE FILTER BAR (Chuẩn 100% Trang Gốc UserManagement) ── */}
         {showFilterPanel && (
           <div className="filter-inline-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', padding: '14px 20px', backgroundColor: '#FAF6F0', borderRadius: '12px', border: '1.5px solid #EADCC9', marginBottom: '16px', alignItems: 'flex-end' }}>
+
+            {/* Lọc theo Sản phẩm mẫu */}
+            <div className="filter-field-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label className="filter-field-label" style={{ fontWeight: '700', fontSize: '0.82rem', color: '#5D3B32' }}>Sản phẩm mẫu</label>
+              <select
+                value={selectedProductId}
+                onChange={(e) => { setSelectedProductId(e.target.value); setCurrentPage(1); }}
+                style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.84rem', outline: 'none', color: '#2D1A12', fontWeight: '600', backgroundColor: '#FFF', minWidth: '180px' }}
+              >
+                <option value="">Tất cả sản phẩm</option>
+                {products.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.product_code || p.sku ? `${p.product_code || p.sku} - ${p.name}` : p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             {/* Lọc theo Công đoạn giao */}
             <div className="filter-field-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -550,7 +608,7 @@ const ProductDetailsManagementView = () => {
             width: '100%',
             maxWidth: '780px',
             boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)',
-            overflow: 'hidden',
+            overflow: 'visible',
             border: '1.5px solid #EADCC9'
           }}>
             <div style={{
@@ -577,18 +635,30 @@ const ProductDetailsManagementView = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '12px' }}>
                   <div className="suggest-name-box" style={{ position: 'relative' }}>
                     <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: '700', color: '#2D1A12', marginBottom: '4px' }}>Tên chi tiết *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Nhấp chọn hoặc gõ tên chi tiết..."
-                      value={formData.name}
-                      onFocus={() => setShowNameMenu(true)}
-                      onChange={(e) => {
-                        setFormData(prev => ({ ...prev, name: e.target.value }));
-                        setShowNameMenu(true);
-                      }}
-                      style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #EADCC9', borderRadius: '8px', fontSize: '0.88rem', outline: 'none' }}
-                    />
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Nhấp chọn hoặc gõ tên chi tiết..."
+                        value={formData.name}
+                        onFocus={() => setShowNameMenu(true)}
+                        onClick={() => setShowNameMenu(prev => !prev)}
+                        onChange={(e) => {
+                          setFormData(prev => ({ ...prev, name: e.target.value, parent_name: '' }));
+                          setShowNameMenu(true);
+                        }}
+                        style={{ width: '100%', padding: '9px 32px 9px 12px', border: '1.5px solid #EADCC9', borderRadius: '8px', fontSize: '0.88rem', outline: 'none' }}
+                      />
+                      <ChevronDown
+                        size={18}
+                        onClick={() => setShowNameMenu(prev => !prev)}
+                        style={{
+                          position: 'absolute', right: '10px', color: '#7B5233', cursor: 'pointer',
+                          transform: showNameMenu ? 'rotate(180deg)' : 'rotate(0deg)',
+                          transition: 'transform 0.2s ease', pointerEvents: 'auto'
+                        }}
+                      />
+                    </div>
                     {showNameMenu && (
                       (() => {
                         const queryStr = (formData.name || '').toLowerCase().trim();
@@ -598,9 +668,9 @@ const ProductDetailsManagementView = () => {
                         if (filtered.length === 0) return null;
                         return (
                           <div style={{
-                            position: 'absolute', top: '100%', left: 0, minWidth: '320px', maxWidth: '420px', marginTop: '4px',
-                            backgroundColor: '#FFFFFF', border: '1.5px solid #EADCC9', borderRadius: '8px',
-                            boxShadow: '0 10px 20px rgba(45, 26, 18, 0.2)', maxHeight: '400px', overflowY: 'auto', zIndex: 3000,
+                            position: 'absolute', top: 'calc(100% + 4px)', left: 0, minWidth: '320px', maxWidth: '420px',
+                            backgroundColor: '#FFFFFF', border: '1.5px solid #EADCC9', borderRadius: '10px',
+                            boxShadow: '0 12px 28px rgba(45, 26, 18, 0.22)', maxHeight: '280px', overflowY: 'auto', zIndex: 9999,
                             whiteSpace: 'nowrap'
                           }}>
                             {filtered.map((item, idx) => (
@@ -611,13 +681,14 @@ const ProductDetailsManagementView = () => {
                                   setFormData(prev => ({
                                     ...prev,
                                     name: item,
+                                    parent_name: '',
                                     input_stage: stages.input_stage || prev.input_stage,
                                     output_stage: stages.output_stage || prev.output_stage
                                   }));
                                   setShowNameMenu(false);
                                 }}
                                 style={{
-                                  padding: '9px 14px', fontSize: '0.84rem', fontWeight: '600', color: '#2D1A12',
+                                  padding: '10px 14px', fontSize: '0.84rem', fontWeight: '600', color: '#2D1A12',
                                   cursor: 'pointer', borderBottom: idx < filtered.length - 1 ? '1px solid #F1F5F9' : 'none',
                                   textOverflow: 'ellipsis', overflow: 'hidden'
                                 }}
@@ -682,17 +753,29 @@ const ProductDetailsManagementView = () => {
                   </div>
                   <div className="suggest-parent-box" style={{ position: 'relative' }}>
                     <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: '700', color: '#2D1A12', marginBottom: '4px' }}>Thành phẩm</label>
-                    <input
-                      type="text"
-                      placeholder="Nhấp chọn hoặc gõ tên thành phẩm..."
-                      value={formData.parent_name}
-                      onFocus={() => setShowParentMenu(true)}
-                      onChange={(e) => {
-                        setFormData(prev => ({ ...prev, parent_name: e.target.value }));
-                        setShowParentMenu(true);
-                      }}
-                      style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #EADCC9', borderRadius: '8px', fontSize: '0.88rem', outline: 'none' }}
-                    />
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        placeholder="Nhấp chọn hoặc gõ tên thành phẩm..."
+                        value={formData.parent_name}
+                        onFocus={() => setShowParentMenu(true)}
+                        onClick={() => setShowParentMenu(prev => !prev)}
+                        onChange={(e) => {
+                          setFormData(prev => ({ ...prev, parent_name: e.target.value }));
+                          setShowParentMenu(true);
+                        }}
+                        style={{ width: '100%', padding: '9px 32px 9px 12px', border: '1.5px solid #EADCC9', borderRadius: '8px', fontSize: '0.88rem', outline: 'none' }}
+                      />
+                      <ChevronDown
+                        size={18}
+                        onClick={() => setShowParentMenu(prev => !prev)}
+                        style={{
+                          position: 'absolute', right: '10px', color: '#7B5233', cursor: 'pointer',
+                          transform: showParentMenu ? 'rotate(180deg)' : 'rotate(0deg)',
+                          transition: 'transform 0.2s ease', pointerEvents: 'auto'
+                        }}
+                      />
+                    </div>
                     {showParentMenu && (
                       (() => {
                         const isDetailSpecified = Boolean(formData.name && formData.name.trim());
@@ -708,9 +791,9 @@ const ProductDetailsManagementView = () => {
                         if (filtered.length === 0) return null;
                         return (
                           <div style={{
-                            position: 'absolute', top: '100%', right: 0, minWidth: '320px', maxWidth: '420px', marginTop: '4px',
-                            backgroundColor: '#FFFFFF', border: '1.5px solid #EADCC9', borderRadius: '8px',
-                            boxShadow: '0 10px 20px rgba(45, 26, 18, 0.2)', maxHeight: '400px', overflowY: 'auto', zIndex: 3000,
+                            position: 'absolute', top: 'calc(100% + 4px)', right: 0, minWidth: '320px', maxWidth: '420px',
+                            backgroundColor: '#FFFFFF', border: '1.5px solid #EADCC9', borderRadius: '10px',
+                            boxShadow: '0 12px 28px rgba(45, 26, 18, 0.22)', maxHeight: '280px', overflowY: 'auto', zIndex: 9999,
                             whiteSpace: 'nowrap'
                           }}>
                             {filtered.map((item, idx) => (
@@ -733,7 +816,7 @@ const ProductDetailsManagementView = () => {
                                   setShowParentMenu(false);
                                 }}
                                 style={{
-                                  padding: '9px 14px', fontSize: '0.84rem', fontWeight: '600', color: '#2D1A12',
+                                  padding: '10px 14px', fontSize: '0.84rem', fontWeight: '600', color: '#2D1A12',
                                   cursor: 'pointer', borderBottom: idx < filtered.length - 1 ? '1px solid #F1F5F9' : 'none',
                                   textOverflow: 'ellipsis', overflow: 'hidden'
                                 }}

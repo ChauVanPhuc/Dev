@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   BookOpen, Plus, Search, Filter, LayoutGrid, List, Eye, Edit3, Trash2,
   CheckCircle2, XCircle, Layers, CheckSquare, Image as ImageIcon,
-  Tag, RefreshCw, Sparkles, ShieldCheck
+  Tag, RefreshCw, Sparkles, ShieldCheck, FileText, AlertTriangle, MoreVertical
 } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
@@ -12,15 +12,73 @@ import GuideQuickPreviewModal from './components/GuideQuickPreviewModal';
 import { INSPECTION_TYPE_OPTIONS } from './components/GuideAssignmentTab';
 import '@styles/components.css';
 
-const InspectionGuideManagementView = () => {
+const DOC_CONFIGS = {
+  HDKT: {
+    type: 'HDKT',
+    title: 'Hướng dẫn kiểm tra (HDKT)',
+    shortLabel: 'HDKT',
+    subtitle: 'Quản lý quy chuẩn, danh mục các bước thực hiện và ảnh minh họa tiêu chuẩn kiểm định chất lượng QA/QC.',
+    icon: BookOpen,
+    color: '#7B5233',
+    bg: '#FAF6F0',
+    border: '#EADCC9',
+    createPath: '/admin/inspection-guides/create',
+    editBasePath: '/admin/inspection-guides/edit',
+    createText: '+ Tạo HDKT mới',
+    emptyTitle: 'Chưa có tài liệu Hướng dẫn kiểm tra (HDKT) nào'
+  },
+  SOS: {
+    type: 'SOS',
+    title: 'Hướng dẫn thao tác (SOS)',
+    shortLabel: 'SOS',
+    subtitle: 'Bảng phân tích thao tác chuẩn (Standard Operating Sheet) cho công nhân tại từng vị trí, từng công đoạn sản xuất.',
+    icon: FileText,
+    color: '#0284C7',
+    bg: '#F0F9FF',
+    border: '#BAE6FD',
+    createPath: '/admin/sos-guides/create',
+    editBasePath: '/admin/sos-guides/edit',
+    createText: '+ Tạo SOS mới',
+    emptyTitle: 'Chưa có tài liệu Hướng dẫn thao tác (SOS) nào'
+  },
+  CTQ: {
+    type: 'CTQ',
+    title: 'Lỗi cần chú ý (CTQ)',
+    shortLabel: 'CTQ',
+    subtitle: 'Điểm kiểm soát chất lượng trọng yếu (Critical To Quality) & cảnh báo lỗi nguy cơ cao trong quá trình sản xuất.',
+    icon: AlertTriangle,
+    color: '#E11D48',
+    bg: '#FFF1F2',
+    border: '#FECDD3',
+    createPath: '/admin/ctq-guides/create',
+    editBasePath: '/admin/ctq-guides/edit',
+    createText: '+ Tạo CTQ mới',
+    emptyTitle: 'Chưa có tài liệu Lỗi cần chú ý (CTQ) nào'
+  }
+};
+
+const InspectionGuideManagementView = ({ docType }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
+
+  // Determine current active doc type (HDKT, SOS, or CTQ) based on prop or route path
+  const activeDocType = useMemo(() => {
+    if (docType && DOC_CONFIGS[docType]) return docType;
+    const pathname = location.pathname.toLowerCase();
+    if (pathname.includes('/sos-guides')) return 'SOS';
+    if (pathname.includes('/ctq-guides')) return 'CTQ';
+    return 'HDKT';
+  }, [docType, location.pathname]);
+
+  const config = DOC_CONFIGS[activeDocType] || DOC_CONFIGS.HDKT;
+  const HeaderIcon = config.icon;
 
   const [guides, setGuides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Filters & State
+  // Filters & View State
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all, active, inactive
   const [typeFilter, setTypeFilter] = useState('all');
@@ -30,22 +88,36 @@ const InspectionGuideManagementView = () => {
   const [previewGuide, setPreviewGuide] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [actionMenuId, setActionMenuId] = useState(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.action-btn') && !e.target.closest('.action-menu')) {
+        setActionMenuId(null);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     fetchGuides();
-  }, []);
+  }, [activeDocType]);
 
   const fetchGuides = async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get('/inspection-guides?limit=200');
+      // Fetch specifically for this doc_type
+      const res = await api.get(`/inspection-guides?doc_type=${activeDocType}&limit=500`);
       const items = res?.items || (Array.isArray(res) ? res : []);
-      setGuides(items);
+      // Filter strictly by activeDocType
+      const filteredItems = items.filter(g => (g.doc_type || 'HDKT') === activeDocType);
+      setGuides(filteredItems);
     } catch (err) {
-      console.error('Lỗi tải danh sách hướng dẫn:', err);
-      setError(err.message || 'Lỗi tải dữ liệu hướng dẫn kiểm tra');
-      if (toast) toast('error', 'Không thể tải danh mục hướng dẫn kiểm tra.');
+      console.error(`Lỗi tải danh sách ${config.title}:`, err);
+      setError(err.message || `Lỗi tải dữ liệu ${config.title}`);
+      if (toast) toast('error', `Không thể tải danh mục ${config.title}.`);
     } finally {
       setLoading(false);
     }
@@ -59,11 +131,12 @@ const InspectionGuideManagementView = () => {
       await api.put(`/inspection-guides/${g.id}`, {
         code: g.code,
         name: g.name,
+        doc_type: g.doc_type || activeDocType,
         description: g.description,
         is_active: updatedStatus
       });
       setGuides(prev => prev.map(item => item.id === g.id ? { ...item, is_active: updatedStatus } : item));
-      if (toast) toast('success', `Đã ${updatedStatus ? 'kích hoạt' : 'tạm ngưng'} hướng dẫn "${g.code}"`);
+      if (toast) toast('success', `Đã ${updatedStatus ? 'kích hoạt' : 'tạm ngưng'} tài liệu "${g.code}"`);
     } catch (err) {
       if (toast) toast('error', 'Lỗi cập nhật trạng thái');
     }
@@ -76,17 +149,17 @@ const InspectionGuideManagementView = () => {
     try {
       await api.delete(`/inspection-guides/${deleteTarget.id}`);
       setGuides(prev => prev.filter(g => g.id !== deleteTarget.id));
-      if (toast) toast('success', `Đã xóa hướng dẫn "${deleteTarget.name}" thành công`);
+      if (toast) toast('success', `Đã xóa tài liệu "${deleteTarget.name}" thành công`);
       setDeleteTarget(null);
     } catch (err) {
-      console.error('Lỗi xóa hướng dẫn:', err);
-      if (toast) toast('error', err?.response?.data?.detail || err.message || 'Lỗi khi xóa hướng dẫn');
+      console.error('Lỗi xóa tài liệu:', err);
+      if (toast) toast('error', err?.response?.data?.detail || err.message || 'Lỗi khi xóa tài liệu');
     } finally {
       setDeleting(false);
     }
   };
 
-  // Open Preview Modal (fetch full details with steps if needed)
+  // Open Preview Modal
   const handleOpenPreview = async (g, e) => {
     if (e) e.stopPropagation();
     try {
@@ -115,7 +188,7 @@ const InspectionGuideManagementView = () => {
     });
   }, [guides, search, statusFilter, typeFilter]);
 
-  // Statistics calculation
+  // Statistics calculation for activeDocType
   const stats = useMemo(() => {
     const total = guides.length;
     const active = guides.filter(g => g.is_active).length;
@@ -126,6 +199,7 @@ const InspectionGuideManagementView = () => {
         g.assignments.forEach(a => assignedTypes.add(a.inspection_type));
       }
     });
+
     return { total, active, inactive, typesCount: assignedTypes.size };
   }, [guides]);
 
@@ -144,37 +218,56 @@ const InspectionGuideManagementView = () => {
   };
 
   return (
-    <div style={{ padding: '24px 32px', fontFamily: 'Inter, sans-serif', backgroundColor: '#FAF8F6', minHeight: '100vh' }}>
+    <div
+      className="guide-management-container"
+      style={{
+        padding: '20px 28px',
+        fontFamily: 'Inter, sans-serif',
+        backgroundColor: '#FAF8F6',
+        height: '100%',
+        maxHeight: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        boxSizing: 'border-box'
+      }}
+    >
       {/* Page Header */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
-        marginBottom: 24,
+        marginBottom: 16,
         flexWrap: 'wrap',
-        gap: 16
+        gap: 12,
+        flexShrink: 0
       }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
             <div style={{
-              width: 36,
-              height: 36,
-              borderRadius: 10,
-              backgroundColor: '#7B5233',
+              width: 40,
+              height: 40,
+              borderRadius: 12,
+              backgroundColor: config.color,
               color: '#FFF',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 4px 10px rgba(123, 82, 51, 0.2)'
+              boxShadow: `0 4px 12px ${config.color}35`
             }}>
-              <BookOpen size={20} />
+              <HeaderIcon size={22} />
             </div>
-            <h1 style={{ margin: 0, fontSize: '1.65rem', color: '#2D1A12', fontWeight: 800, letterSpacing: '-0.02em' }}>
-              Hướng dẫn kiểm tra SOP
-            </h1>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Tài liệu ban hành
+              </div>
+              <h1 style={{ margin: 0, fontSize: '1.65rem', color: '#2D1A12', fontWeight: 800, letterSpacing: '-0.02em' }}>
+                {config.title}
+              </h1>
+            </div>
           </div>
-          <p style={{ margin: 0, color: '#64748B', fontSize: 14 }}>
-            Quản lý quy chuẩn, danh mục các bước thực hiện và ảnh minh họa tiêu chuẩn kiểm định chất lượng QA/QC.
+          <p style={{ margin: '4px 0 0 0', color: '#64748B', fontSize: 14 }}>
+            {config.subtitle}
           </p>
         </div>
 
@@ -203,12 +296,12 @@ const InspectionGuideManagementView = () => {
           </button>
 
           <button
-            onClick={() => navigate('/admin/inspection-guides/create')}
+            onClick={() => navigate(config.createPath)}
             style={{
               padding: '10px 20px',
               borderRadius: 10,
               border: 'none',
-              backgroundColor: '#7B5233',
+              backgroundColor: config.color,
               color: '#FFFFFF',
               fontWeight: 700,
               fontSize: 14,
@@ -216,13 +309,13 @@ const InspectionGuideManagementView = () => {
               display: 'flex',
               alignItems: 'center',
               gap: 8,
-              boxShadow: '0 4px 12px rgba(123, 82, 51, 0.25)',
+              boxShadow: `0 4px 12px ${config.color}40`,
               transition: 'all 0.2s'
             }}
-            onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#5D3E26'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-            onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#7B5233'; e.currentTarget.style.transform = 'translateY(0)'; }}
+            onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(0.9)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+            onMouseLeave={e => { e.currentTarget.style.filter = 'brightness(1)'; e.currentTarget.style.transform = 'translateY(0)'; }}
           >
-            <Plus size={18} /> Tạo hướng dẫn mới
+            <Plus size={18} /> {config.createText}
           </button>
         </div>
       </div>
@@ -231,14 +324,15 @@ const InspectionGuideManagementView = () => {
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-        gap: 16,
-        marginBottom: 24
+        gap: 14,
+        marginBottom: 14,
+        flexShrink: 0
       }}>
         {/* Metric 1 */}
         <div style={{
           backgroundColor: '#FFFFFF',
           borderRadius: 14,
-          padding: '18px 20px',
+          padding: '16px 20px',
           border: '1px solid #EADCC9',
           boxShadow: '0 2px 8px rgba(123, 82, 51, 0.04)',
           display: 'flex',
@@ -246,22 +340,22 @@ const InspectionGuideManagementView = () => {
           gap: 16
         }}>
           <div style={{
-            width: 48,
-            height: 48,
+            width: 44,
+            height: 44,
             borderRadius: 12,
-            backgroundColor: '#F5EFE9',
-            color: '#7B5233',
+            backgroundColor: config.bg,
+            color: config.color,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'
           }}>
-            <BookOpen size={24} />
+            <HeaderIcon size={22} />
           </div>
           <div>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>
-              Tổng số tài liệu SOP
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>
+              Tổng số {config.shortLabel}
             </div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#2D1A12', marginTop: 2 }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#2D1A12', marginTop: 2 }}>
               {stats.total}
             </div>
           </div>
@@ -271,7 +365,7 @@ const InspectionGuideManagementView = () => {
         <div style={{
           backgroundColor: '#FFFFFF',
           borderRadius: 14,
-          padding: '18px 20px',
+          padding: '16px 20px',
           border: '1px solid #EADCC9',
           boxShadow: '0 2px 8px rgba(123, 82, 51, 0.04)',
           display: 'flex',
@@ -279,8 +373,8 @@ const InspectionGuideManagementView = () => {
           gap: 16
         }}>
           <div style={{
-            width: 48,
-            height: 48,
+            width: 44,
+            height: 44,
             borderRadius: 12,
             backgroundColor: '#ECFDF5',
             color: '#059669',
@@ -288,13 +382,13 @@ const InspectionGuideManagementView = () => {
             alignItems: 'center',
             justifyContent: 'center'
           }}>
-            <CheckCircle2 size={24} />
+            <CheckCircle2 size={22} />
           </div>
           <div>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>
               Đang hoạt động
             </div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#059669', marginTop: 2 }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#059669', marginTop: 2 }}>
               {stats.active}
             </div>
           </div>
@@ -304,7 +398,7 @@ const InspectionGuideManagementView = () => {
         <div style={{
           backgroundColor: '#FFFFFF',
           borderRadius: 14,
-          padding: '18px 20px',
+          padding: '16px 20px',
           border: '1px solid #EADCC9',
           boxShadow: '0 2px 8px rgba(123, 82, 51, 0.04)',
           display: 'flex',
@@ -312,8 +406,8 @@ const InspectionGuideManagementView = () => {
           gap: 16
         }}>
           <div style={{
-            width: 48,
-            height: 48,
+            width: 44,
+            height: 44,
             borderRadius: 12,
             backgroundColor: '#FEF2F2',
             color: '#DC2626',
@@ -321,13 +415,13 @@ const InspectionGuideManagementView = () => {
             alignItems: 'center',
             justifyContent: 'center'
           }}>
-            <XCircle size={24} />
+            <XCircle size={22} />
           </div>
           <div>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>
               Tạm ngưng
             </div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#DC2626', marginTop: 2 }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#DC2626', marginTop: 2 }}>
               {stats.inactive}
             </div>
           </div>
@@ -337,7 +431,7 @@ const InspectionGuideManagementView = () => {
         <div style={{
           backgroundColor: '#FFFFFF',
           borderRadius: 14,
-          padding: '18px 20px',
+          padding: '16px 20px',
           border: '1px solid #EADCC9',
           boxShadow: '0 2px 8px rgba(123, 82, 51, 0.04)',
           display: 'flex',
@@ -345,8 +439,8 @@ const InspectionGuideManagementView = () => {
           gap: 16
         }}>
           <div style={{
-            width: 48,
-            height: 48,
+            width: 44,
+            height: 44,
             borderRadius: 12,
             backgroundColor: '#EFF6FF',
             color: '#2563EB',
@@ -354,32 +448,33 @@ const InspectionGuideManagementView = () => {
             alignItems: 'center',
             justifyContent: 'center'
           }}>
-            <ShieldCheck size={24} />
+            <ShieldCheck size={22} />
           </div>
           <div>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>
               Loại phiếu đã gán
             </div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#2563EB', marginTop: 2 }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#2563EB', marginTop: 2 }}>
               {stats.typesCount}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Smart Control & Filter Bar */}
+      {/* Filter & Control Bar */}
       <div style={{
         backgroundColor: '#FFFFFF',
         borderRadius: 14,
-        padding: '16px 20px',
+        padding: '12px 16px',
         border: '1px solid #EADCC9',
         boxShadow: '0 2px 8px rgba(123, 82, 51, 0.04)',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
         flexWrap: 'wrap',
-        gap: 16,
-        marginBottom: 20
+        gap: 12,
+        marginBottom: 14,
+        flexShrink: 0
       }}>
         {/* Left: Search input */}
         <div style={{ position: 'relative', minWidth: 280, flex: 1, maxWidth: 420 }}>
@@ -388,7 +483,7 @@ const InspectionGuideManagementView = () => {
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Tìm theo mã, tên quy trình hoặc mô tả..."
+            placeholder={`Tìm kiếm theo mã, tên ${config.shortLabel} hoặc mô tả...`}
             style={{
               width: '100%',
               padding: '9px 12px 9px 38px',
@@ -399,12 +494,12 @@ const InspectionGuideManagementView = () => {
               transition: 'border-color 0.2s',
               backgroundColor: '#FAF8F6'
             }}
-            onFocus={e => { e.currentTarget.style.borderColor = '#7B5233'; e.currentTarget.style.backgroundColor = '#FFF'; }}
+            onFocus={e => { e.currentTarget.style.borderColor = config.color; e.currentTarget.style.backgroundColor = '#FFF'; }}
             onBlur={e => { e.currentTarget.style.borderColor = '#D1D5DB'; e.currentTarget.style.backgroundColor = '#FAF8F6'; }}
           />
         </div>
 
-        {/* Right: Filters & View Mode */}
+        {/* Right: Status & Type Filters */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           {/* Status filter */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -506,7 +601,7 @@ const InspectionGuideManagementView = () => {
         </div>
       </div>
 
-      {/* Main Content Area */}
+      {/* Main Content List Area */}
       {loading ? (
         <div style={{
           backgroundColor: '#FFF',
@@ -517,7 +612,7 @@ const InspectionGuideManagementView = () => {
           color: '#7B5233'
         }}>
           <RefreshCw size={32} className="animate-spin" style={{ margin: '0 auto 12px auto' }} />
-          <p style={{ margin: 0, fontWeight: 700 }}>Đang tải danh sách tài liệu SOP...</p>
+          <p style={{ margin: 0, fontWeight: 700 }}>Đang tải danh sách {config.title}...</p>
         </div>
       ) : filteredGuides.length === 0 ? (
         <div style={{
@@ -527,19 +622,21 @@ const InspectionGuideManagementView = () => {
           textAlign: 'center',
           border: '1px dashed #D1D5DB'
         }}>
-          <BookOpen size={48} style={{ color: '#D1D5DB', margin: '0 auto 16px auto' }} />
-          <h3 style={{ margin: '0 0 8px 0', color: '#2D1A12', fontWeight: 800 }}>Không tìm thấy hướng dẫn kiểm tra phù hợp</h3>
+          <HeaderIcon size={48} style={{ color: '#D1D5DB', margin: '0 auto 16px auto' }} />
+          <h3 style={{ margin: '0 0 8px 0', color: '#2D1A12', fontWeight: 800 }}>
+            {config.emptyTitle}
+          </h3>
           <p style={{ margin: '0 0 20px 0', color: '#64748B', fontSize: 14 }}>
             {search || statusFilter !== 'all' || typeFilter !== 'all'
               ? 'Thử thay đổi bộ lọc tìm kiếm hoặc từ khóa.'
-              : 'Chưa có tài liệu SOP nào được tạo.'}
+              : `Bắt đầu bằng cách tạo tài liệu ${config.shortLabel} đầu tiên.`}
           </p>
           <button
-            onClick={() => navigate('/admin/inspection-guides/create')}
+            onClick={() => navigate(config.createPath)}
             style={{
               padding: '10px 20px',
               borderRadius: 8,
-              backgroundColor: '#7B5233',
+              backgroundColor: config.color,
               color: '#FFF',
               border: 'none',
               fontWeight: 700,
@@ -547,20 +644,24 @@ const InspectionGuideManagementView = () => {
               cursor: 'pointer'
             }}
           >
-            + Tạo hướng dẫn đầu tiên
+            {config.createText}
           </button>
         </div>
       ) : viewMode === 'table' ? (
         /* TABLE VIEW */
         <div style={{
+          flex: 1,
+          minHeight: 0,
           backgroundColor: '#FFFFFF',
-          borderRadius: 16,
+          borderRadius: 14,
           border: '1px solid #EADCC9',
           boxShadow: '0 4px 14px rgba(123, 82, 51, 0.05)',
-          overflow: 'hidden'
+          overflowY: 'auto',
+          overflowX: 'auto',
+          position: 'relative'
         }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF8F6' }}>
               <tr style={{
                 backgroundColor: '#FAF8F6',
                 borderBottom: '1.5px solid #EADCC9',
@@ -570,12 +671,12 @@ const InspectionGuideManagementView = () => {
                 textTransform: 'uppercase',
                 letterSpacing: '0.04em'
               }}>
-                <th style={{ padding: '14px 18px', textAlign: 'left', width: 140 }}>Mã SOP</th>
-                <th style={{ padding: '14px 18px', textAlign: 'left' }}>Tên hướng dẫn & Mô tả</th>
-                <th style={{ padding: '14px 18px', textAlign: 'left', width: 220 }}>Quy mô các bước</th>
-                <th style={{ padding: '14px 18px', textAlign: 'left', width: 200 }}>Loại phiếu áp dụng</th>
-                <th style={{ padding: '14px 18px', textAlign: 'center', width: 140 }}>Trạng thái</th>
-                <th style={{ padding: '14px 18px', textAlign: 'center', width: 140 }}>Thao tác</th>
+                <th style={{ padding: '12px 16px', textAlign: 'left', width: 140, backgroundColor: '#FAF8F6', position: 'sticky', top: 0, zIndex: 10 }}>Mã tài liệu</th>
+                <th style={{ padding: '12px 16px', textAlign: 'left', backgroundColor: '#FAF8F6', position: 'sticky', top: 0, zIndex: 10 }}>Tên tài liệu & Mô tả</th>
+                <th style={{ padding: '12px 16px', textAlign: 'left', width: 220, backgroundColor: '#FAF8F6', position: 'sticky', top: 0, zIndex: 10 }}>Quy mô các bước</th>
+                <th style={{ padding: '12px 16px', textAlign: 'left', width: 200, backgroundColor: '#FAF8F6', position: 'sticky', top: 0, zIndex: 10 }}>Loại phiếu áp dụng</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', width: 140, backgroundColor: '#FAF8F6', position: 'sticky', top: 0, zIndex: 10 }}>Trạng thái</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', width: 140, backgroundColor: '#FAF8F6', position: 'sticky', top: 0, zIndex: 10 }}>Thao tác</th>
               </tr>
             </thead>
             <tbody>
@@ -592,18 +693,25 @@ const InspectionGuideManagementView = () => {
                       borderBottom: '1px solid #F1F5F9',
                       cursor: 'pointer',
                       transition: 'background-color 0.15s',
-                      backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FCFBFA'
+                      backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FCFBFA',
+                      position: 'relative',
+                      zIndex: actionMenuId === g.id ? 40 : 1
                     }}
-                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#F5EFE9'}
-                    onMouseLeave={e => e.currentTarget.style.backgroundColor = idx % 2 === 0 ? '#FFFFFF' : '#FCFBFA'}
+                    onMouseEnter={e => {
+                      if (actionMenuId !== g.id) e.currentTarget.style.backgroundColor = '#F5EFE9';
+                    }}
+                    onMouseLeave={e => {
+                      if (actionMenuId !== g.id) e.currentTarget.style.backgroundColor = idx % 2 === 0 ? '#FFFFFF' : '#FCFBFA';
+                    }}
                   >
-                    {/* Mã SOP */}
+                    {/* Mã tài liệu */}
                     <td style={{ padding: '14px 18px' }}>
                       <span style={{
                         padding: '4px 10px',
                         borderRadius: 6,
-                        backgroundColor: '#EADCC9',
-                        color: '#7B5233',
+                        backgroundColor: config.bg,
+                        color: config.color,
+                        border: `1px solid ${config.border}`,
                         fontWeight: 800,
                         fontSize: 12.5,
                         fontFamily: 'monospace',
@@ -623,7 +731,7 @@ const InspectionGuideManagementView = () => {
                           color: '#64748B',
                           fontSize: 12.5,
                           marginTop: 3,
-                          maxWidth: 400,
+                          maxWidth: 450,
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap'
@@ -722,7 +830,7 @@ const InspectionGuideManagementView = () => {
                       )}
                     </td>
 
-                    {/* Trạng thái (Switch) */}
+                    {/* Trạng thái */}
                     <td style={{ padding: '14px 18px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                       <button
                         onClick={e => handleToggleActive(g, e)}
@@ -745,84 +853,63 @@ const InspectionGuideManagementView = () => {
                           width: 6,
                           height: 6,
                           borderRadius: '50%',
-                          backgroundColor: g.is_active ? '#10B981' : '#EF4444'
+                          backgroundColor: g.is_active ? '#059669' : '#DC2626'
                         }} />
-                        {g.is_active ? 'Hoạt động' : 'Tắt'}
+                        {g.is_active ? 'Hoạt động' : 'Tạm ngưng'}
                       </button>
                     </td>
 
                     {/* Thao tác */}
-                    <td style={{ padding: '14px 18px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                        {/* Quick Preview Button */}
-                        <button
-                          onClick={e => handleOpenPreview(g, e)}
-                          title="Xem trước SOP"
-                          style={{
-                            width: 32,
-                            height: 32,
-                            borderRadius: 6,
-                            border: '1px solid #E2E8F0',
-                            backgroundColor: '#FFF',
-                            color: '#475569',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            transition: 'all 0.2s'
-                          }}
-                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#7B5233'; e.currentTarget.style.color = '#FFF'; }}
-                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FFF'; e.currentTarget.style.color = '#475569'; }}
-                        >
-                          <Eye size={15} />
-                        </button>
+                    <td style={{ padding: '14px 18px', textAlign: 'center', position: 'relative', zIndex: actionMenuId === g.id ? 50 : 1 }} onClick={e => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="action-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActionMenuId(actionMenuId === g.id ? null : g.id);
+                        }}
+                        title="Thao tác"
+                      >
+                        <MoreVertical size={16} />
+                      </button>
 
-                        {/* Edit Button */}
-                        <button
-                          onClick={() => navigate(`/admin/inspection-guides/edit/${g.id}`)}
-                          title="Biên soạn SOP"
-                          style={{
-                            width: 32,
-                            height: 32,
-                            borderRadius: 6,
-                            border: '1px solid #E2E8F0',
-                            backgroundColor: '#FFF',
-                            color: '#7B5233',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            transition: 'all 0.2s'
-                          }}
-                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#7B5233'; e.currentTarget.style.color = '#FFF'; }}
-                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FFF'; e.currentTarget.style.color = '#7B5233'; }}
-                        >
-                          <Edit3 size={15} />
-                        </button>
-
-                        {/* Delete Button */}
-                        <button
-                          onClick={() => setDeleteTarget(g)}
-                          title="Xóa hướng dẫn"
-                          style={{
-                            width: 32,
-                            height: 32,
-                            borderRadius: 6,
-                            border: '1px solid #FEE2E2',
-                            backgroundColor: '#FFF',
-                            color: '#DC2626',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            transition: 'all 0.2s'
-                          }}
-                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#DC2626'; e.currentTarget.style.color = '#FFF'; }}
-                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FFF'; e.currentTarget.style.color = '#DC2626'; }}
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
+                      {actionMenuId === g.id && (
+                        <div className="action-menu" style={{ right: '50%', transform: 'translateX(50%)', top: '80%', zIndex: 100 }}>
+                          <button
+                            type="button"
+                            className="action-menu-item"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActionMenuId(null);
+                              handleOpenPreview(g, e);
+                            }}
+                          >
+                            Xem trước
+                          </button>
+                          <button
+                            type="button"
+                            className="action-menu-item"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActionMenuId(null);
+                              navigate(`/admin/inspection-guides/edit/${g.id}`);
+                            }}
+                          >
+                            Chỉnh sửa
+                          </button>
+                          <button
+                            type="button"
+                            className="action-menu-item danger"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActionMenuId(null);
+                              setDeleteTarget(g);
+                            }}
+                          >
+                            Xóa tài liệu
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
@@ -833,9 +920,14 @@ const InspectionGuideManagementView = () => {
       ) : (
         /* GRID CARD VIEW */
         <div style={{
+          flex: 1,
+          minHeight: 0,
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-          gap: 20
+          gap: 16,
+          overflowY: 'auto',
+          padding: '4px 2px 20px 2px',
+          alignContent: 'start'
         }}>
           {filteredGuides.map(g => {
             const stepsCount = g.steps?.length ?? g.steps_count ?? 0;
@@ -859,7 +951,7 @@ const InspectionGuideManagementView = () => {
                   transition: 'all 0.2s'
                 }}
                 onMouseEnter={e => {
-                  e.currentTarget.style.borderColor = '#7B5233';
+                  e.currentTarget.style.borderColor = config.color;
                   e.currentTarget.style.transform = 'translateY(-3px)';
                   e.currentTarget.style.boxShadow = '0 10px 24px rgba(123, 82, 51, 0.12)';
                 }}
@@ -875,8 +967,9 @@ const InspectionGuideManagementView = () => {
                     <span style={{
                       padding: '3px 8px',
                       borderRadius: 6,
-                      backgroundColor: '#EADCC9',
-                      color: '#7B5233',
+                      backgroundColor: config.bg,
+                      color: config.color,
+                      border: `1px solid ${config.border}`,
                       fontWeight: 800,
                       fontSize: 12,
                       fontFamily: 'monospace'
@@ -991,19 +1084,19 @@ const InspectionGuideManagementView = () => {
                     onClick={e => handleOpenPreview(g, e)}
                     style={{
                       padding: '6px 12px',
-                      borderRadius: 6,
-                      border: '1px solid #E2E8F0',
-                      backgroundColor: '#FFF',
-                      color: '#475569',
-                      fontSize: 12,
+                      borderRadius: 8,
+                      border: '1px solid #EADCC9',
+                      backgroundColor: '#FAF8F6',
+                      color: '#7B5233',
+                      fontSize: 12.5,
                       fontWeight: 700,
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 4
+                      gap: 6
                     }}
                   >
-                    <Eye size={14} /> Xem nhanh
+                    <Eye size={14} /> Xem trước
                   </button>
 
                   <div style={{ display: 'flex', gap: 6 }}>
@@ -1011,34 +1104,33 @@ const InspectionGuideManagementView = () => {
                       onClick={() => navigate(`/admin/inspection-guides/edit/${g.id}`)}
                       style={{
                         padding: '6px 12px',
-                        borderRadius: 6,
+                        borderRadius: 8,
                         border: 'none',
                         backgroundColor: '#7B5233',
                         color: '#FFF',
-                        fontSize: 12,
+                        fontSize: 12.5,
                         fontWeight: 700,
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 4
+                        gap: 6
                       }}
                     >
-                      <Edit3 size={14} /> Biên soạn
+                      <Edit3 size={14} /> Soạn thảo
                     </button>
+
                     <button
                       onClick={() => setDeleteTarget(g)}
                       style={{
-                        width: 30,
-                        height: 30,
-                        borderRadius: 6,
+                        padding: '6px 8px',
+                        borderRadius: 8,
                         border: '1px solid #FEE2E2',
                         backgroundColor: '#FFF',
                         color: '#DC2626',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
+                        fontSize: 12.5,
+                        cursor: 'pointer'
                       }}
+                      title="Xóa tài liệu"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -1050,25 +1142,28 @@ const InspectionGuideManagementView = () => {
         </div>
       )}
 
-      {/* Quick Preview Modal */}
-      <GuideQuickPreviewModal
-        isOpen={Boolean(previewGuide)}
-        onClose={() => setPreviewGuide(null)}
-        guide={previewGuide}
-        onEdit={(id) => navigate(`/admin/inspection-guides/edit/${id}`)}
+      {/* Delete Confirmation Modal */}
+      <BeautifulConfirmModal
+        isOpen={!!deleteTarget}
+        title={`Xác nhận xóa ${config.shortLabel}`}
+        message={`Bạn có chắc chắn muốn xóa tài liệu "${deleteTarget?.name}" (${deleteTarget?.code})? Toàn bộ các bước thực hiện và ảnh tiêu chuẩn đính kèm sẽ bị xóa hoàn toàn.`}
+        confirmText={deleting ? 'Đang xóa...' : 'Xóa vĩnh viễn'}
+        confirmColor="#DC2626"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteTarget(null)}
       />
 
-      {/* Delete Confirm Modal */}
-      <BeautifulConfirmModal
-        isOpen={Boolean(deleteTarget)}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={handleConfirmDelete}
-        title="Xóa tài liệu SOP kiểm tra?"
-        message={`Bạn có chắc chắn muốn xóa tài liệu "${deleteTarget?.name}" (${deleteTarget?.code})?\nThao tác này sẽ xóa vĩnh viễn toàn bộ các bước, checklist con và hình ảnh đính kèm.`}
-        type="danger"
-        confirmText={deleting ? 'Đang xóa...' : 'Xác nhận xóa'}
-        cancelText="Hủy bỏ"
-      />
+      {/* Quick Preview Modal */}
+      {previewGuide && (
+        <GuideQuickPreviewModal
+          guide={previewGuide}
+          onClose={() => setPreviewGuide(null)}
+          onEdit={(id) => {
+            setPreviewGuide(null);
+            navigate(`/admin/inspection-guides/edit/${id}`);
+          }}
+        />
+      )}
     </div>
   );
 };

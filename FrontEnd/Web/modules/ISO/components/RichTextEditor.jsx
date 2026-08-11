@@ -4,7 +4,7 @@ import {
   AlignRight, AlignJustify, Quote, Link, Image, Grid, Smile, Undo, Redo 
 } from 'lucide-react';
 
-const RichTextEditor = ({ value, onChange, placeholder, style = {} }) => {
+const RichTextEditor = ({ value, onChange, placeholder, style = {}, minHeight }) => {
   const editorRef = React.useRef(null);
 
   React.useEffect(() => {
@@ -294,8 +294,8 @@ const RichTextEditor = ({ value, onChange, placeholder, style = {} }) => {
         onInput={handleInput}
         className="rich-editor-canvas"
         style={{
-          minHeight: '260px',
-          padding: '16px 20px',
+          minHeight: minHeight ? (typeof minHeight === 'number' ? `${minHeight}px` : minHeight) : (style.minHeight ? (typeof style.minHeight === 'number' ? `${style.minHeight}px` : style.minHeight) : '200px'),
+          padding: '12px 16px',
           outline: 'none',
           fontSize: '0.9rem',
           lineHeight: '1.6',

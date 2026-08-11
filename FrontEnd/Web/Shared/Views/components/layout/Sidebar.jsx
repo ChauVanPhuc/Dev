@@ -21,9 +21,21 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
   const [menuList, setMenuList] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [expandedGroups, setExpandedGroups] = React.useState({});
+  const [expandedSubGroups, setExpandedSubGroups] = React.useState({});
 
   const handleLinkClick = () => {
     if (onClose) onClose();
+  };
+
+  const toggleSubGroup = (subId, e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setExpandedSubGroups(prev => ({
+      ...prev,
+      [subId]: !prev[subId]
+    }));
   };
 
   const user = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
@@ -106,6 +118,14 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
               hasExactMatchSibling = true;
               break;
             }
+            if (child.children) {
+              for (const sub of child.children) {
+                if (location.pathname === sub.route_path || (location.pathname + location.search) === sub.route_path) {
+                  hasExactMatchSibling = true;
+                  break;
+                }
+              }
+            }
           }
         }
         if (hasExactMatchSibling) break;
@@ -129,19 +149,26 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     return group.children || [];
   };
 
-  // Helper check xem group co child nao dang active ko
+  // Helper check xem group co child nao dang active ko (bao gom ca sub-children)
   const hasActiveChild = (group) => {
     if (group.title === 'Quản lý hệ thống' && (location.pathname === '/admin/monitor' || location.pathname === '/admin/monitor/')) {
       return true;
     }
     const children = getGroupChildren(group);
-    return children.some(child => checkIsActive(child));
+    return children.some(child => {
+      if (checkIsActive(child)) return true;
+      if (child.children && child.children.length > 0) {
+        return child.children.some(sub => checkIsActive(sub));
+      }
+      return false;
+    });
   };
 
   React.useEffect(() => {
     if (menuList.length === 0) return;
 
     let activeGroupId = null;
+    const newSubGroups = {};
 
     // 1. Kiểm tra xem nhóm đang mở ĐÃ chứa trang con active này chưa
     for (const groupIdStr in expandedGroups) {
@@ -165,9 +192,24 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
       }
     }
 
-    // 3. Nếu tìm thấy nhóm phù hợp -> CHỈ MỞ nhóm đó (Accordion style)
+    // 3. Auto expand sub-group if sub-child is active
+    for (const group of menuList) {
+      const children = getGroupChildren(group);
+      for (const child of children) {
+        if (child.children && child.children.length > 0) {
+          if (child.children.some(sub => checkIsActive(sub)) || checkIsActive(child)) {
+            newSubGroups[child.id] = true;
+          }
+        }
+      }
+    }
+
+    // 4. Nếu tìm thấy nhóm phù hợp -> CHỈ MỞ nhóm đó (Accordion style)
     if (activeGroupId !== null) {
       setExpandedGroups({ [activeGroupId]: true });
+    }
+    if (Object.keys(newSubGroups).length > 0) {
+      setExpandedSubGroups(prev => ({ ...prev, ...newSubGroups }));
     }
   }, [menuList, location.pathname, location.search]);
 
@@ -376,6 +418,89 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
                     {isExpanded && (
                       <ul className="sidebar-group-children" style={{ listStyle: 'none', padding: '2px 0 6px 0', margin: 0 }}>
                         {item.children.map(child => {
+                          if (child.children && child.children.length > 0) {
+                            const isSubExpanded = !!expandedSubGroups[child.id];
+                            const isAnySubActive = child.children.some(sub => checkIsActive(sub)) || checkIsActive(child);
+
+                            return (
+                              <li key={child.id} className="nav-item" style={{ marginBottom: '2px' }}>
+                                <div
+                                  onClick={(e) => toggleSubGroup(child.id, e)}
+                                  className={`nav-link-child ${isAnySubActive ? 'active' : ''}`}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '10px 16px 10px 36px',
+                                    color: isAnySubActive ? '#5D3B32' : '#6B7280',
+                                    backgroundColor: isAnySubActive ? '#FAF6F0' : 'transparent',
+                                    fontWeight: isAnySubActive ? '800' : '600',
+                                    fontSize: '0.85rem',
+                                    transition: 'all 0.2s ease',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    userSelect: 'none'
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                                    <span className="nav-icon" style={{ marginRight: '10px', display: 'flex', alignItems: 'center', color: isAnySubActive ? '#5D3B32' : '#9CA3AF' }}>
+                                      <DynamicIcon name={child.icon || 'BookOpen'} size={14} />
+                                    </span>
+                                    <span className="nav-text">{child.title}</span>
+                                  </div>
+                                  <span style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    transform: isSubExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                                    transition: 'transform 0.2s ease',
+                                    color: isAnySubActive ? '#5D3B32' : '#9CA3AF'
+                                  }}>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                      <polyline points="6 9 12 15 18 9"></polyline>
+                                    </svg>
+                                  </span>
+                                </div>
+
+                                {isSubExpanded && (
+                                  <ul style={{ listStyle: 'none', padding: '2px 0 4px 0', margin: 0 }}>
+                                    {child.children.map(subChild => {
+                                      const isSubActive = checkIsActive(subChild);
+                                      return (
+                                        <li key={subChild.id} style={{ marginBottom: '2px' }}>
+                                          <Link
+                                            to={subChild.route_path}
+                                            onClick={handleLinkClick}
+                                            title={subChild.title}
+                                            style={{
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              padding: '7px 12px 7px 38px',
+                                              textDecoration: 'none',
+                                              color: isSubActive ? '#5D3B32' : '#64748B',
+                                              backgroundColor: isSubActive ? '#F5EFE9' : 'transparent',
+                                              fontWeight: isSubActive ? '800' : '500',
+                                              fontSize: '0.82rem',
+                                              transition: 'all 0.2s ease',
+                                              borderRadius: '6px',
+                                              borderLeft: isSubActive ? '3px solid #7B5233' : '3px solid transparent'
+                                            }}
+                                          >
+                                            <span style={{ marginRight: '8px', display: 'flex', alignItems: 'center', color: isSubActive ? '#7B5233' : '#94A3B8' }}>
+                                              <DynamicIcon name={subChild.icon || 'FileText'} size={13} />
+                                            </span>
+                                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                              {subChild.title}
+                                            </span>
+                                          </Link>
+                                        </li>
+                                      );
+                                    })}
+                                  </ul>
+                                )}
+                              </li>
+                            );
+                          }
+
                           const isChildActive = checkIsActive(child);
 
                           return (

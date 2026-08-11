@@ -390,21 +390,33 @@ export default function SidebarManagementView() {
   };
 
   return (
-    <div style={{ fontFamily: 'Inter, sans-serif', padding: '20px', backgroundColor: '#F9FBFB', minHeight: '85vh' }}>
+    <div className="sidebar-management-container" style={{ fontFamily: 'Inter, sans-serif', padding: '20px', backgroundColor: '#F9FBFB', minHeight: '100%', boxSizing: 'border-box' }}>
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        .dashboard-content:has(.sidebar-management-container) {
+          overflow-y: auto !important;
+        }
+        .dashboard-content:has(.sidebar-management-container) > div {
+          height: auto !important;
+          min-height: 100% !important;
+          overflow-y: visible !important;
+          flex: none !important;
+        }
+      `}} />
 
       {/* Platform tab selector - Sticky toolbar */}
       <div style={{
         position: 'sticky',
-        // top: '50px',
+        top: '-20px',
         backgroundColor: '#F9FBFB',
         zIndex: 90,
         display: 'flex',
         gap: '8px',
         marginBottom: '20px',
         borderBottom: '1px solid #E5E7EB',
-        paddingBottom: '10px',
-        paddingTop: '10px',
-        marginTop: '-10px'
+        paddingBottom: '12px',
+        paddingTop: '12px',
+        marginTop: '-20px'
       }}>
         <button
           onClick={() => setActiveTab('Web')}

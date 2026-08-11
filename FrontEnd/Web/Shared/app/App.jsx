@@ -43,9 +43,21 @@ const SystemConfig = lazy(() => import('@modules/System/Views/SystemConfig/Syste
 const ScreenBugManagement = lazy(() => import('@modules/System/Views/Screen/ScreenBugManagementView'));
 const ProjectProgress = lazy(() => import('@modules/System/Views/Project/ProjectProgressView'));
 const DefectManagement = lazy(() => import('@modules/Inspection/Views/Defect/DefectManagementView'));
-const InspectionGuideManagement = lazy(() => import('@modules/InspectionGuide/Views/InspectionGuideManagementView'));
-const InspectionGuideForm = lazy(() => import('@modules/InspectionGuide/Views/InspectionGuideFormView'));
-const InspectionGuideDetail = lazy(() => import('@modules/InspectionGuide/Views/InspectionGuideDetailView'));
+// 1. HDKT (Hướng dẫn kiểm tra)
+const HDKTManagement = lazy(() => import('@modules/InspectionGuide/Views/InspectionGuideManagementView'));
+const HDKTForm = lazy(() => import('@modules/InspectionGuide/Views/InspectionGuideFormView'));
+const HDKTDetail = lazy(() => import('@modules/InspectionGuide/Views/InspectionGuideDetailView'));
+
+// 2. SOS (Hướng dẫn thao tác)
+const SOSManagement = lazy(() => import('@modules/SOSGuide/Views/SOSGuideManagementView'));
+const SOSForm = lazy(() => import('@modules/SOSGuide/Views/SOSGuideFormView'));
+const SOSDetail = lazy(() => import('@modules/SOSGuide/Views/SOSGuideDetailView'));
+
+// 3. CTQ (Lỗi cần chú ý)
+const CTQManagement = lazy(() => import('@modules/CTQGuide/Views/CTQGuideManagementView'));
+const CTQForm = lazy(() => import('@modules/CTQGuide/Views/CTQGuideFormView'));
+const CTQDetail = lazy(() => import('@modules/CTQGuide/Views/CTQGuideDetailView'));
+
 const QualityRecords = lazy(() => import('@modules/QualityRecords/Views/Record/QualityRecordsListView'));
 const QualityRecordsDetail = lazy(() => import('@modules/QualityRecords/Views/Record/QualityRecordsDetailView'));
 const SystemMonitor = lazy(() => import('@modules/System/Views/Monitor/SystemMonitorView'));
@@ -572,7 +584,7 @@ function App() {
   return (
     <ToastProvider>
       <ScreenProvider>
-        <Router>
+        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Suspense fallback={
             <div style={{
               display: 'flex',
@@ -608,9 +620,22 @@ function App() {
                 <Route path="hr/employees" element={<ProtectedRoute permissionKey="users"><EmployeeListView /></ProtectedRoute>} />
                 <Route path="handovers" element={<ProtectedRoute permissionKey="handovers"><HandoverList /></ProtectedRoute>} />
                 <Route path="logs" element={<ProtectedRoute permissionKey="logs"><IncidentLogs /></ProtectedRoute>} />
-                <Route path="inspection-guides" element={<ProtectedRoute permissionKey="inspection-guides"><InspectionGuideManagement /></ProtectedRoute>} />
-                <Route path="inspection-guides/create" element={<ProtectedRoute permissionKey="inspection-guides"><InspectionGuideForm /></ProtectedRoute>} />
-                <Route path="inspection-guides/edit/:id" element={<ProtectedRoute permissionKey="inspection-guides"><InspectionGuideDetail /></ProtectedRoute>} />
+                {/* 3 Mục Tài liệu ban hành hoàn toàn riêng biệt */}
+                {/* 1. Hướng dẫn kiểm tra (HDKT) */}
+                <Route path="inspection-guides" element={<ProtectedRoute permissionKey="inspection-guides"><HDKTManagement /></ProtectedRoute>} />
+                <Route path="inspection-guides/create" element={<ProtectedRoute permissionKey="inspection-guides"><HDKTForm /></ProtectedRoute>} />
+                <Route path="inspection-guides/edit/:id" element={<ProtectedRoute permissionKey="inspection-guides"><HDKTDetail /></ProtectedRoute>} />
+
+                {/* 2. Hướng dẫn thao tác (SOS) */}
+                <Route path="sos-guides" element={<ProtectedRoute permissionKey="inspection-guides"><SOSManagement /></ProtectedRoute>} />
+                <Route path="sos-guides/create" element={<ProtectedRoute permissionKey="inspection-guides"><SOSForm /></ProtectedRoute>} />
+                <Route path="sos-guides/edit/:id" element={<ProtectedRoute permissionKey="inspection-guides"><SOSDetail /></ProtectedRoute>} />
+
+                {/* 3. Lỗi cần chú ý (CTQ) */}
+                <Route path="ctq-guides" element={<ProtectedRoute permissionKey="inspection-guides"><CTQManagement /></ProtectedRoute>} />
+                <Route path="ctq-guides/create" element={<ProtectedRoute permissionKey="inspection-guides"><CTQForm /></ProtectedRoute>} />
+                <Route path="ctq-guides/edit/:id" element={<ProtectedRoute permissionKey="inspection-guides"><CTQDetail /></ProtectedRoute>} />
+
                 <Route path="defects" element={<ProtectedRoute permissionKey="defects"><DefectManagement /></ProtectedRoute>} />
                 <Route path="reports" element={<ProtectedRoute permissionKey="reports"><InspectionReports /></ProtectedRoute>} />
                 <Route path="reports/detail/:type/:id" element={<ProtectedRoute permissionKey="reports"><InspectionDetail /></ProtectedRoute>} />

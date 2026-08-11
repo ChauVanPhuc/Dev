@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowDownAZ, Filter, Plus, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowDownAZ, Filter, Plus, X, ChevronLeft, ChevronRight, ClipboardX } from 'lucide-react'
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout'
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader'
 import CustomSelect from '@mobile/Shared/Views/components/form/CustomSelect'
@@ -121,7 +121,15 @@ const CL06_TransferListView = () => {
           {loading && <p className="pv2-status-text">Đang tải...</p>}
           {error && <p className="pv2-status-text pv2-status-text--error">{error}</p>}
           {!loading && !error && displayTickets.length === 0 && (
-            <p className="pv2-status-text">Không có dữ liệu</p>
+            <div className="pv2-empty-state">
+              <div className="pv2-empty-icon-wrap">
+                <ClipboardX size={32} />
+              </div>
+              <div className="pv2-empty-title">Không có dữ liệu luân chuyển</div>
+              <div className="pv2-empty-desc">
+                Chưa có phiếu luân chuyển nào phù hợp với bộ lọc hiện tại.
+              </div>
+            </div>
           )}
           {!loading && displayTickets.map((t) => (
             <TransferCard

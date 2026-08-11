@@ -47,14 +47,20 @@ def _validate_image(file: UploadFile):
 
 
 # --- Guides ---
-def list_guides(db: Session, skip: int = 0, limit: int = 50, search: str = "", inspection_type: Optional[str] = None):
-    query = db.query(InspectionGuide).filter(InspectionGuide.deleted_at.is_(None))
+def list_guides(db: Session, skip: int = 0, limit: int = 50, search: str = "", inspection_type: Optional[str] = None, doc_type: Optional[str] = None):
+    query = db.query(InspectionGuide).filter(InspectionGuide.deleted_at.is_(None)).options(
+        selectinload(InspectionGuide.steps).selectinload(InspectionGuideStep.sub_steps),
+        selectinload(InspectionGuide.steps).selectinload(InspectionGuideStep.images),
+        selectinload(InspectionGuide.assignments)
+    )
     if search:
         query = query.filter(or_(
             InspectionGuide.name.ilike(f"%{search}%"),
             InspectionGuide.code.ilike(f"%{search}%")
         ))
-    if inspection_type:
+    if doc_type and doc_type != 'all':
+        query = query.filter(InspectionGuide.doc_type == doc_type)
+    if inspection_type and inspection_type != 'all':
         query = query.join(InspectionGuide.assignments).filter(
             InspectionGuideAssignment.inspection_type == inspection_type,
             InspectionGuideAssignment.is_active == True
@@ -75,23 +81,55 @@ def get_guide(db: Session, guide_id: int) -> Optional[InspectionGuide]:
     ).first()
 
 
-def create_guide(db: Session, code: str, name: str, description: Optional[str], user_id: Optional[int] = None) -> InspectionGuide:
+def create_guide(db: Session, code: str, name: str, description: Optional[str], user_id: Optional[int] = None, doc_type: str = "HDKT") -> InspectionGuide:
     if db.query(InspectionGuide).filter(InspectionGuide.code == code).first():
         raise HTTPException(status_code=400, detail=f"Mã hướng dẫn {code} đã tồn tại.")
-    guide = InspectionGuide(code=code, name=name, description=description, created_by=user_id)
+    guide = InspectionGuide(code=code, name=name, description=description, created_by=user_id, doc_type=doc_type or "HDKT")
     db.add(guide)
     db.commit()
     db.refresh(guide)
     return guide
 
 
-def update_guide(db: Session, guide: InspectionGuide, name: Optional[str], description: Optional[str], is_active: Optional[bool]):
+def generate_next_code(db: Session, doc_type: str = "SOS") -> str:
+    """
+    Tự động sinh mã kế tiếp theo chuẩn doanh nghiệp:
+    - SOS: G7.CL.SOS.xxx (VD: G7.CL.SOS.001)
+    - HDKT: G7.CL.HDKT.xxx (hoặc HDKT-xxx)
+    - CTQ: G7.CL.CTQ.xxx (hoặc CTQ-xxx)
+    """
+    prefix_map = {
+        "SOS": "G7.CL.SOS.",
+        "HDKT": "G7.CL.HDKT.",
+        "CTQ": "G7.CL.CTQ."
+    }
+    prefix = prefix_map.get(doc_type.upper(), f"G7.CL.{doc_type.upper()}.")
+
+    # Lấy tất cả mã hiện tại
+    existing_guides = db.query(InspectionGuide.code).filter(
+        InspectionGuide.deleted_at.is_(None)
+    ).all()
+    
+    existing_codes = {g[0].upper().strip() for g in existing_guides if g[0]}
+    
+    # Tìm số thứ tự chưa sử dụng
+    num = 1
+    while True:
+        candidate = f"{prefix}{num:03d}"
+        if candidate not in existing_codes:
+            return candidate
+        num += 1
+
+
+def update_guide(db: Session, guide: InspectionGuide, name: Optional[str], description: Optional[str], is_active: Optional[bool], doc_type: Optional[str] = None):
     if name is not None:
         guide.name = name
     if description is not None:
         guide.description = description
     if is_active is not None:
         guide.is_active = is_active
+    if doc_type is not None:
+        guide.doc_type = doc_type
     guide.updated_at = func.now()
     db.commit()
     db.refresh(guide)

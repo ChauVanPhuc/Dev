@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { Edit2, Trash2, X, AlertTriangle, Palette, Image as ImageIcon, MoreVertical, ArrowLeft } from 'lucide-react';
+import { Edit2, Trash2, X, AlertTriangle, Palette, Image as ImageIcon, MoreVertical, ArrowLeft, RefreshCw } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
@@ -20,6 +20,7 @@ const PaintColorManagementView = () => {
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [products, setProducts] = useState([]);
 
   // Action menu state
@@ -259,6 +260,25 @@ const PaintColorManagementView = () => {
     }
   };
 
+  // Sync all data directly from Master BOM
+  const handleSyncBom = async () => {
+    try {
+      setSyncing(true);
+      const res = await api.post('/master-products/sync-bom-data');
+      if (res && res.status === 'success') {
+        if (toast) toast('success', `Đã đồng bộ thành công ${res.unique_paint_colors_inserted} mẫu màu sơn từ BOM!`);
+        fetchPaintColors();
+      } else {
+        if (toast) toast('error', res?.message || 'Không thể đồng bộ dữ liệu BOM');
+      }
+    } catch (err) {
+      console.error('Lỗi khi đồng bộ BOM:', err);
+      if (toast) toast('error', 'Có lỗi xảy ra khi đồng bộ từ BOM');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const totalPages = Math.ceil(total / pageSize) || 1;
 
   return (
@@ -274,6 +294,13 @@ const PaintColorManagementView = () => {
           isFilterOpen={showFilterPanel}
           onFilterToggle={() => setShowFilterPanel(!showFilterPanel)}
           activeFiltersCount={activeFiltersCount}
+          importActions={[
+            {
+              label: syncing ? 'Đang trích xuất BOM...' : 'Đồng bộ từ BOM',
+              icon: <RefreshCw size={14} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />,
+              onClick: handleSyncBom
+            }
+          ]}
           onCreate={handleOpenCreate}
           createLabel="Tạo mới"
           hasWritePermission={true}
@@ -282,6 +309,23 @@ const PaintColorManagementView = () => {
         {/* ── INLINE EXPANDABLE FILTER BAR (Chuẩn 100% Trang Gốc UserManagement) ── */}
         {showFilterPanel && (
           <div className="filter-inline-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', padding: '14px 20px', backgroundColor: '#FAF6F0', borderRadius: '12px', border: '1.5px solid #EADCC9', marginBottom: '16px', alignItems: 'flex-end' }}>
+
+            {/* Lọc theo Sản phẩm mẫu */}
+            <div className="filter-field-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label className="filter-field-label" style={{ fontWeight: '700', fontSize: '0.82rem', color: '#5D3B32' }}>Sản phẩm mẫu</label>
+              <select
+                value={selectedProductId}
+                onChange={(e) => { setSelectedProductId(e.target.value); setCurrentPage(1); }}
+                style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.84rem', outline: 'none', color: '#2D1A12', fontWeight: '600', backgroundColor: '#FFF', minWidth: '180px' }}
+              >
+                <option value="">Tất cả sản phẩm</option>
+                {products.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.product_code || p.sku ? `${p.product_code || p.sku} - ${p.name}` : p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             {/* Lọc theo Nhà cung cấp */}
             <div className="filter-field-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -292,7 +336,10 @@ const PaintColorManagementView = () => {
                 style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.84rem', outline: 'none', color: '#2D1A12', fontWeight: '600', backgroundColor: '#FFF', minWidth: '160px' }}
               >
                 <option value="">Tất cả nhà cung cấp</option>
-                <option value="NPP Sơn Nippon">NPP Sơn Nippon</option>
+                <option value="Công ty TNHH Sơn Nippon">Công ty TNHH Sơn Nippon</option>
+                <option value="NPP Sơn Oseven">NPP Sơn Oseven</option>
+                <option value="Công ty Sơn Dulux">Công ty Sơn Dulux</option>
+                <option value="Sơn Á Châu">Sơn Á Châu</option>
                 <option value="Nội bộ G7">Nội bộ G7</option>
               </select>
             </div>

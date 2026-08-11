@@ -220,8 +220,9 @@ def create_product_detail(id: int, payload: dict, db: Session = Depends(get_db))
     """
     return master_product_controller.create_product_detail(db, id, payload)
 
+@router.delete("/product-details/{detail_id}")
 @router.delete("/{id}/product-details/{detail_id}")
-def delete_product_detail(id: int, detail_id: int, db: Session = Depends(get_db)):
+def delete_product_detail(detail_id: int, id: int = None, db: Session = Depends(get_db)):
     """
     [DELETE] Xóa chi tiết sản phẩm (KT03.1).
     """
@@ -230,8 +231,9 @@ def delete_product_detail(id: int, detail_id: int, db: Session = Depends(get_db)
         raise HTTPException(status_code=404, detail="Không tìm thấy chi tiết sản phẩm để xóa")
     return {"message": "Đã xóa chi tiết sản phẩm thành công"}
 
+@router.delete("/paint-colors/{sample_id}")
 @router.delete("/{id}/paint-colors/{sample_id}")
-def delete_paint_color_sample(id: int, sample_id: int, db: Session = Depends(get_db)):
+def delete_paint_color_sample(sample_id: int, id: int = None, db: Session = Depends(get_db)):
     """
     [DELETE] Xóa mẫu màu sơn (KT03.3).
     """
@@ -239,3 +241,4 @@ def delete_paint_color_sample(id: int, sample_id: int, db: Session = Depends(get
     if not success:
         raise HTTPException(status_code=404, detail="Không tìm thấy mẫu màu sơn để xóa")
     return {"message": "Đã xóa mẫu màu sơn thành công"}
+

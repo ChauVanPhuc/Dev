@@ -32,7 +32,9 @@ def get_sidebar(
             SystemSidebar.parent_id == None,
             SystemSidebar.is_active == True
         )
-        .options(joinedload(SystemSidebar.children))
+        .options(
+            joinedload(SystemSidebar.children).joinedload(SystemSidebar.children)
+        )
         .order_by(SystemSidebar.sort_order.asc())
         .all()
     )
@@ -67,7 +69,9 @@ def get_all_sidebar(
     menus = (
         db.query(SystemSidebar)
         .filter(SystemSidebar.parent_id == None)
-        .options(joinedload(SystemSidebar.children))
+        .options(
+            joinedload(SystemSidebar.children).joinedload(SystemSidebar.children)
+        )
         .order_by(SystemSidebar.platform.desc(), SystemSidebar.sort_order.asc())
         .all()
     )

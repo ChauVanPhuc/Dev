@@ -81,18 +81,23 @@ const ErrorTrendRow = ({
       return !isUsedElsewhere
     })
 
-    // 2. Sắp xếp: Lỗi QA track (needs_tracking / qc_tracking / is_tracked_by_me / isQA) đưa lên đầu
+    // 2. Sắp xếp:
+    // Rank 2: Lỗi CTQ (isCTQ) -> Lên VỊ TRÍ CAO NHẤT (trên cùng của danh sách)
+    // Rank 1: Lỗi QA Track (needs_tracking / qc_tracking / is_tracked_by_me / isQA)
+    // Rank 0: Lỗi thông thường
     const sorted = [...filtered].sort((a, b) => {
-      const aQA = a.needs_tracking || a.qc_tracking || a.is_tracked_by_me || a.isQA ? 1 : 0
-      const bQA = b.needs_tracking || b.qc_tracking || b.is_tracked_by_me || b.isQA ? 1 : 0
-      if (aQA !== bQA) return bQA - aQA
-      return (a.code || '').localeCompare(b.code || '')
+      const aRank = a.isCTQ ? 2 : (a.needs_tracking || a.qc_tracking || a.is_tracked_by_me || a.isQA ? 1 : 0)
+      const bRank = b.isCTQ ? 2 : (b.needs_tracking || b.qc_tracking || b.is_tracked_by_me || b.isQA ? 1 : 0)
+      if (aRank !== bRank) return bRank - aRank
+      return (a.code || a.name || '').localeCompare(b.code || b.name || '')
     })
 
     return sorted.map((opt) => {
+      const isCTQ = Boolean(opt.isCTQ)
       const isQA = Boolean(opt.needs_tracking || opt.qc_tracking || opt.is_tracked_by_me || opt.isQA)
       return {
         ...opt,
+        isCTQ,
         isQA,
       }
     })
@@ -280,24 +285,39 @@ const ErrorTrendRow = ({
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-              {/* Badge QA Track NẰM BÊN PHẢI VÀ MÀU ĐỎ */}
-              {currentSelectedOpt?.isQA && (
+              {/* Badge CTQ hoặc QA Track NẰM BÊN PHẢI */}
+              {currentSelectedOpt?.isCTQ ? (
                 <span
                   style={{
                     backgroundColor: '#fee2e2',
-                    color: '#dc2626',
-                    border: '1px solid #fca5a5',
+                    color: '#b91c1c',
+                    border: '1px solid #f87171',
+                    padding: '2px 8px',
+                    borderRadius: 12,
+                    fontSize: 10,
+                    fontWeight: 800,
+                    letterSpacing: '0.4px',
+                    boxShadow: '0 1px 2px rgba(185, 28, 28, 0.15)',
+                  }}
+                >
+                  CTQ
+                </span>
+              ) : currentSelectedOpt?.isQA ? (
+                <span
+                  style={{
+                    backgroundColor: '#fff7ed',
+                    color: '#c2410c',
+                    border: '1px solid #fdba74',
                     padding: '2px 8px',
                     borderRadius: 12,
                     fontSize: 10,
                     fontWeight: 700,
                     letterSpacing: '0.4px',
-                    boxShadow: '0 1px 2px rgba(220, 38, 38, 0.1)',
                   }}
                 >
                   QA Track
                 </span>
-              )}
+              ) : null}
               <ChevronDown
                 size={16}
                 style={{
@@ -400,13 +420,30 @@ const ErrorTrendRow = ({
                           </span>
                         </div>
 
-                        {/* Bên Phải: Badge QA Track MÀU ĐỎ NỔI BẬT */}
-                        {opt.isQA && (
+                        {/* Bên Phải: Badge CTQ / QA Track NỔI BẬT */}
+                        {opt.isCTQ ? (
                           <span
                             style={{
                               backgroundColor: '#fee2e2',
-                              color: '#dc2626',
-                              border: '1px solid #fca5a5',
+                              color: '#b91c1c',
+                              border: '1px solid #f87171',
+                              padding: '2px 8px',
+                              borderRadius: 12,
+                              fontSize: 10,
+                              fontWeight: 800,
+                              letterSpacing: '0.4px',
+                              flexShrink: 0,
+                              boxShadow: '0 1px 2px rgba(185, 28, 28, 0.15)',
+                            }}
+                          >
+                            CTQ
+                          </span>
+                        ) : opt.isQA ? (
+                          <span
+                            style={{
+                              backgroundColor: '#fff7ed',
+                              color: '#c2410c',
+                              border: '1px solid #fdba74',
                               padding: '2px 8px',
                               borderRadius: 12,
                               fontSize: 10,
@@ -417,7 +454,7 @@ const ErrorTrendRow = ({
                           >
                             QA Track
                           </span>
-                        )}
+                        ) : null}
                       </div>
                     )
                   })

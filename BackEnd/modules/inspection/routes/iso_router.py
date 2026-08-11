@@ -662,7 +662,9 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
 
     # Các bước quy trình thực tế
     steps = []
-    steps_db = sorted(proc.steps, key=lambda x: x.step_number)
+    steps_db = sorted(proc.steps, key=lambda x: x.step_number) if proc.steps else []
+    if not steps_db and proc.iso_document and proc.iso_document.steps:
+        steps_db = sorted(proc.iso_document.steps, key=lambda x: x.step_number)
     
     for st in steps_db:
         checklist = []

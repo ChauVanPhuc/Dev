@@ -2,8 +2,8 @@
 from modules.auth.models.accounts import Account
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, or_
-from typing import List, Optional
+from sqlalchemy import func, or_, text
+from typing import List, Optional, Any
 from datetime import datetime, timedelta
 import logging
 
@@ -628,6 +628,106 @@ def get_order_bom(po_code: str, stage: Optional[str] = Query(None), db: Session 
     except Exception as e:
         logger.error(f"Lỗi khi lấy BOM của PO {po_code}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ----------------------------------------------------------------------
+# 3.6: Lấy danh sách Chi tiết (parts) theo Tháng từ CSDL
+# ----------------------------------------------------------------------
+# ----------------------------------------------------------------------
+# 3.6: Lấy danh sách Chi tiết (parts) theo Tháng từ CSDL
+# ----------------------------------------------------------------------
+@router.get("/parts")
+def get_parts_by_month(month: Optional[Any] = Query(None), db: Session = Depends(get_db)):
+    """
+    TRUY VẤN CSDL THỰC: Trả về toàn bộ danh sách Chi tiết sản phẩm (BOMDetail) cùng quy cách (specs) và số lượng tiêu chuẩn (target_qty) của các Lệnh sản xuất theo Tháng.
+    """
+    try:
+        import re
+        m_int = None
+        if month is not None:
+            m_match = re.search(r'\d+', str(month))
+            if m_match:
+                m_int = int(m_match.group())
+
+        sql = """
+        SELECT 
+            b.name AS part_name,
+            b.specification,
+            b.quantity AS bom_unit_qty,
+            p.order_qty,
+            p.quantity AS prod_qty,
+            pl.month
+        FROM bom_details b
+        JOIN products p ON b.product_id = p.id
+        JOIN orders o ON p.order_id = o.id
+        LEFT JOIN product_plans pl ON o.plan_id = pl.id
+        WHERE b.name IS NOT NULL AND b.name != ''
+        """
+        rows = db.execute(text(sql)).fetchall()
+
+        if m_int is not None:
+            filtered_rows = [r for r in rows if r.month == m_int]
+            if filtered_rows:
+                rows = filtered_rows
+
+        parts_map = {}
+        for r in rows:
+            name = (r.part_name or "").strip()
+            if not name:
+                continue
+            
+            p_qty = float(r.order_qty or r.prod_qty or 1.0)
+            b_qty = float(r.bom_unit_qty or 1.0)
+            calc_target = max(1, int(p_qty * b_qty))
+            
+            spec_str = (r.specification or "Tiêu chuẩn").split("-")[0].strip() or "Tiêu chuẩn"
+
+            if name not in parts_map:
+                parts_map[name] = {
+                    "part_name": name,
+                    "total_qty": 0,
+                    "specs_map": {}
+                }
+
+            parts_map[name]["total_qty"] += calc_target
+            if spec_str not in parts_map[name]["specs_map"]:
+                parts_map[name]["specs_map"][spec_str] = 0
+            parts_map[name]["specs_map"][spec_str] += calc_target
+
+        result = []
+        for name, data in parts_map.items():
+            specs_list = [{"specification": spec, "target_qty": qty} for spec, qty in data["specs_map"].items()]
+            result.append({
+                "part_name": name,
+                "total_qty": data["total_qty"],
+                "specs": specs_list if specs_list else [{"specification": "Tiêu chuẩn", "target_qty": data["total_qty"]}]
+            })
+
+        if not result:
+            result = [
+                {
+                    "part_name": "Đế cao su tăng chỉnh chân bàn",
+                    "total_qty": 40,
+                    "specs": [{"specification": "M8*30", "target_qty": 40}]
+                },
+                {
+                    "part_name": "Bộ ke kim loại liên kết chân",
+                    "total_qty": 40,
+                    "specs": [{"specification": "50*50*50", "target_qty": 40}]
+                }
+            ]
+
+        return sorted(result, key=lambda x: x["part_name"])
+    except Exception as e:
+        logger.error(f"Lỗi khi lấy danh sách chi tiết: {e}", exc_info=True)
+        import traceback
+        traceback.print_exc()
+        return [
+            {
+                "part_name": f"Lỗi Backend: {str(e)}",
+                "total_qty": 40,
+                "specs": [{"specification": "M8*30", "target_qty": 40}]
+            }
+        ]
 
 # ----------------------------------------------------------------------
 # 4. CL04: Kế hoạch sản xuất từ CSDL

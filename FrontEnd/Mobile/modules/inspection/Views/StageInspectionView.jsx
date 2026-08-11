@@ -1376,7 +1376,7 @@ const StageInspection = () => {
                   <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
                     {activeDefects.map((defect, defectIdx) => {
                       const foundDefect = defectTypes.find(t => String(t.id) === String(defect.defectId));
-                      const defectName = foundDefect ? `${foundDefect.name} (${foundDefect.code || 'N/A'})` : '';
+                      const defectName = foundDefect ? (foundDefect.code ? `[${foundDefect.code}] ${foundDefect.name}` : foundDefect.name) : '';
                       const isExpanded = defect.isExpanded !== false;
 
                       return (

@@ -7,6 +7,7 @@ export const useInspectionController = () => {
   const { inspectionFilters, setInspectionFilters } = useProduction_v2Store()
   const [tickets, setTickets] = useState([])
   const [total, setTotal] = useState(0)
+  const [pendingCount, setPendingCount] = useState(0)
   const [availableMonths, setAvailableMonths] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -26,6 +27,11 @@ export const useInspectionController = () => {
       const res = await inspectionService.getList(inspectionFilters)
       setTickets(res.items || [])
       setTotal(res.total || 0)
+      if (res.total_pending !== undefined) {
+        setPendingCount(res.total_pending)
+      } else if (inspectionFilters.tab === 'pending') {
+        setPendingCount(res.total || 0)
+      }
     } catch (e) {
       setError(e.message || 'Không tải được dữ liệu')
     } finally {
@@ -47,7 +53,6 @@ export const useInspectionController = () => {
     return result
   }
 
-  const pendingCount = tickets.filter((t) => t.status === 'pending').length
   const totalPages = Math.ceil(total / 10)
 
   return {

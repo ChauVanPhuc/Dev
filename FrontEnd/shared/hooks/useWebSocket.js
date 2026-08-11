@@ -152,21 +152,22 @@ export const useWebSocket = (onMessage) => {
 
 
   useEffect(() => {
-
     connect();
 
     return () => {
-
       const socket = socketRef.current;
-
       socketRef.current = null; // Đánh dấu là đã unmount
-
-      if (socket) socket.close();
-
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-
+      if (socket) {
+        socket.onopen = null;
+        socket.onmessage = null;
+        socket.onclose = null;
+        socket.onerror = null;
+        if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+          socket.close();
+        }
+      }
     };
-
   }, [connect]);
 
 
