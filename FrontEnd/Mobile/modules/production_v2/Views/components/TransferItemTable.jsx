@@ -1,7 +1,7 @@
 import React from 'react'
 import { Pencil } from 'lucide-react'
 
-const TransferItemTable = ({ items = [], onEditItem }) => (
+const TransferItemTable = ({ items = [], onEditItem, onUpdateQty }) => (
   <div className="pv2-table-wrap">
     <table className="pv2-table" style={{ width: '100%', tableLayout: 'fixed' }}>
       <colgroup>
@@ -54,12 +54,23 @@ const TransferItemTable = ({ items = [], onEditItem }) => (
               </td>
               <td style={{ textAlign: 'center', padding: '8px 2px', whiteSpace: 'nowrap' }}>
                 <span className="pv2-qty-container" style={{ display: 'inline-flex', alignItems: 'baseline', justifyContent: 'center' }}>
-                  <strong
-                    className={isEmpty ? 'pv2-qty-num--empty' : isFull ? 'pv2-qty-num--full' : 'pv2-qty-num--partial'}
-                    style={{ fontSize: 12.5, fontWeight: 700 }}
-                  >
-                    {item.qty ?? 0}
-                  </strong>
+                  <input
+                    type="number"
+                    min={0}
+                    value={item.qty}
+                    onChange={(e) => onUpdateQty && onUpdateQty(idx, e.target.value)}
+                    style={{
+                      width: 48,
+                      textAlign: 'center',
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      color: isEmpty ? '#dc2626' : isFull ? '#16a34a' : '#ea580c',
+                      border: '1.5px solid #c85a1e',
+                      borderRadius: 6,
+                      padding: '4px 2px',
+                      boxSizing: 'border-box'
+                    }}
+                  />
                   <span className="pv2-qty-total" style={{ fontSize: 11, color: '#94a3b8' }}>/{item.total ?? 0}</span>
                 </span>
               </td>

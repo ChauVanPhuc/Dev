@@ -1,15 +1,19 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import useAuthStore from '@modules/auth/Models/authModel'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Eye, ImagePlus, X } from 'lucide-react'
+import { Eye, ImagePlus, X, ChevronDown, Check } from 'lucide-react'
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout'
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader'
 import CustomSelect from '@mobile/Shared/Views/components/form/CustomSelect'
 import { useTransferController, useTransferDetail } from '../Controllers/useTransferController'
 import useProduction_v2Store from '../Models/production_v2Store'
 import { stageService } from '../services/stageService'
+import { transferService } from '../services/transferService'
 import TransferItemTable from './components/TransferItemTable'
 import ConfirmQtyModal from './components/ConfirmQtyModal'
+import PalletCardModal from '@modules/delivery/Views/components/PalletCardModal'
 import MessageModal from '@mobile/Shared/Views/components/feedback/MessageModal'
+import ActionConfirmModal from '@mobile/Shared/Views/components/ui/ActionConfirmModal'
 import { MOCK_PALLETS, MOCK_STAGE_OPTIONS, MOCK_PRODUCTS, ROUTES } from '../constants'
 import apiClient, { getFullImageUrl } from '@shared/services/api'
 import '../styles/production_v2.css'
@@ -34,7 +38,23 @@ const CL07_TransferCreateView = () => {
   const { id } = useParams()
   const navigate = useNavigate()
   const isNew = !id || id === 'NEW'
+  const [ticketCode, setTicketCode] = useState('LC---')
+  const user = useAuthStore((state) => state.user)
+  const creatorName = user?.full_name || user?.username || 'Nguyễn Văn A'
   const { createTicket, confirmTicket } = useTransferController()
+
+  useEffect(() => {
+    if (!isNew) {
+      const raw = String(id)
+      setTicketCode(/^LC\d+/i.test(raw) ? raw.toUpperCase() : `LC${raw.padStart(3, '0')}`)
+      return
+    }
+    let mounted = true
+    transferService.getNextCode().then((code) => {
+      if (mounted) setTicketCode(code)
+    })
+    return () => { mounted = false }
+  }, [isNew, id])
   const { ticket, loading, images, addImage, removeImage } = useTransferDetail(isNew ? null : id)
   const { transferFilters } = useProduction_v2Store()
 
@@ -50,16 +70,32 @@ const CL07_TransferCreateView = () => {
   const [editItem, setEditItem] = useState(null)
   const [editIdx, setEditIdx] = useState(null)
   const [confirmModal, setConfirmModal] = useState(false)
-  const [productOptions, setProductOptions] = useState(
-    MOCK_PRODUCTS.map((p) => ({ value: p.label || p.value, label: p.label || p.value }))
-  )
+  const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false)
+  const [showPalletModal, setShowPalletModal] = useState(false)
+  const [palletData, setPalletData] = useState(null)
+  const [palletPartProducts, setPalletPartProducts] = useState([])
+  const [planName, setPlanName] = useState('Luân chuyển sản xuất')
+  const [productOptions, setProductOptions] = useState([{ value: '', label: 'Chọn chi tiết' }])
   const [stageOptions, setStageOptions] = useState(
     [{ value: '', label: 'Chọn công đoạn' }, ...MOCK_STAGE_OPTIONS]
   )
   const fileRef = useRef()
+  const specDropRef = useRef()
 
   const [partsData, setPartsData] = useState([])
   const [specOptions, setSpecOptions] = useState([{ value: '', label: 'Chọn quy cách' }])
+  const [specDropdownOpen, setSpecDropdownOpen] = useState(false)
+
+  // Click outside đóng dropdown spec
+  useEffect(() => {
+    const handler = (e) => {
+      if (specDropRef.current && !specDropRef.current.contains(e.target)) {
+        setSpecDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   // Load available stages from DB
   useEffect(() => {
@@ -72,6 +108,13 @@ const CL07_TransferCreateView = () => {
       console.warn('Lỗi khi tải công đoạn từ DB:', err)
     })
   }, [])
+
+  // Load KHSX theo tháng đã chọn
+  useEffect(() => {
+    transferService.getPlanByMonth(selectedMonth).then((p) => {
+      setPlanName(p.code || p.name || 'Luân chuyển sản xuất')
+    })
+  }, [selectedMonth])
 
   // Load Chi tiết sản phẩm (Component Parts) based on selectedMonth
   useEffect(() => {
@@ -133,7 +176,7 @@ const CL07_TransferCreateView = () => {
 
   const upd = (k, v) => setForm((p) => ({ ...p, [k]: v }))
 
-  const recalculateQtyAndSurplus = (updatedItems) => {
+  const recalculateQtyAndSurplus = useCallback((updatedItems) => {
     const totalQty = updatedItems.reduce((acc, item) => acc + (Number(item.qty) || 0), 0)
     const itemSurplus = updatedItems.reduce((acc, item) => {
       const q = Number(item.qty) || 0
@@ -146,33 +189,25 @@ const CL07_TransferCreateView = () => {
       totalQty: String(totalQty),
       surplus: itemSurplus > 0 ? String(itemSurplus) : ''
     }))
-  }
+  }, [])
+
+  useEffect(() => {
+    recalculateQtyAndSurplus(items)
+  }, [items, recalculateQtyAndSurplus])
 
   const handleDetailChange = (detailName) => {
     upd('detail', detailName)
     if (!detailName) return
 
     const partObj = partsData.find((p) => (p.part_name || p.name) === detailName)
-    let newItems = []
     let newSpecOpts = [{ value: '', label: 'Chọn quy cách' }]
 
     if (partObj && Array.isArray(partObj.specs) && partObj.specs.length > 0) {
-      newItems = partObj.specs.map((s, idx) => ({
-        id: String(idx + 1),
-        detail: detailName,
-        spec: s.specification || 'Tiêu chuẩn',
-        qty: 0,
-        total: Number(s.target_qty) || Number(partObj.total_qty) || 40
-      }))
       newSpecOpts = [
         { value: '', label: 'Chọn quy cách' },
         ...partObj.specs.map((s) => ({ value: s.specification, label: s.specification }))
       ]
     } else {
-      const fallbackTarget = Number(partObj?.total_qty) || 40
-      newItems = [
-        { id: '1', detail: detailName, spec: 'Tiêu chuẩn', qty: 0, total: fallbackTarget }
-      ]
       newSpecOpts = [
         { value: '', label: 'Chọn quy cách' },
         { value: 'Tiêu chuẩn', label: 'Tiêu chuẩn' }
@@ -180,13 +215,59 @@ const CL07_TransferCreateView = () => {
     }
 
     setSpecOptions(newSpecOpts)
-    if (newSpecOpts.length > 1) {
-      upd('spec', newSpecOpts[1].value)
+
+    // Tự động điền công đoạn giao nhận từ dữ liệu chi tiết BOM
+    if (partObj) {
+      setForm((prev) => ({
+        ...prev,
+        fromStage: partObj.input_stage || prev.fromStage,
+        toStage: partObj.output_stage || prev.toStage
+      }))
     }
 
-    setItems(newItems)
-    recalculateQtyAndSurplus(newItems)
+    // Nếu chỉ có 1 quy cách → tự động thêm luôn 1 dòng
+    if (newSpecOpts.length === 2) {
+      const singleSpec = newSpecOpts[1].value
+      upd('spec', singleSpec)
+      const target = partObj?.specs?.[0]?.target_qty || partObj?.total_qty || 40
+      const newItems = [{ id: '1', detail: detailName, spec: singleSpec, qty: 0, total: Number(target) }]
+      setItems(newItems)
+    } else {
+      // Nhiều quy cách → reset bảng, chờ user chọn từng cái
+      upd('spec', '')
+      setItems([])
+    }
   }
+
+  // Toggle checkbox quy cách: tick = thêm dòng, bỏ tick = xóa dòng
+  const handleSpecToggle = (specValue) => {
+    if (!specValue || !form.detail) return
+
+    const exists = items.some((it) => it.spec === specValue && it.detail === form.detail)
+
+    if (exists) {
+      // Bỏ tick → xóa dòng
+      const updatedItems = items.filter((it) => !(it.spec === specValue && it.detail === form.detail))
+      setItems(updatedItems)
+    } else {
+      // Tick → thêm dòng mới
+      const partObj = partsData.find((p) => (p.part_name || p.name) === form.detail)
+      const specObj = partObj?.specs?.find((s) => s.specification === specValue)
+      const target = Number(specObj?.target_qty) || Number(partObj?.total_qty) || 40
+
+      const newItem = {
+        id: String(Date.now()),
+        detail: form.detail,
+        spec: specValue,
+        qty: 0,
+        total: target
+      }
+      const updatedItems = [...items, newItem]
+      setItems(updatedItems)
+    }
+  }
+
+  const selectedSpecs = items.map((it) => it.spec)
 
   const handlePalletChange = (val) => {
     const pallet = MOCK_PALLETS.find((p) => p.value === val)
@@ -212,11 +293,54 @@ const CL07_TransferCreateView = () => {
 
   const handleConfirmQty = (updated) => {
     setItems(updated)
-    recalculateQtyAndSurplus(updated)
     setConfirmModal(false)
   }
 
-  const handleSubmit = async () => {
+  const handleUpdateQty = (idx, val) => {
+    const qty = Math.max(0, Number(val) || 0)
+    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, qty } : it)))
+  }
+
+  const handleOpenPallet = async () => {
+    const partName = form.detail || items[0]?.detail || ''
+    const spec = items.length === 1 ? items[0]?.spec : (form.spec || items.map((it) => it.spec).filter(Boolean).join(', ') || '')
+    const matching = partName
+      ? await transferService.getOrdersByPart({
+          part_name: partName,
+          specification: items.length === 1 ? spec : undefined
+        })
+      : []
+    console.log('orders-by-part matching:', matching)
+    const partProducts = matching.map((m) => ({
+      order_id: m.product_sku,
+      order_code: m.po_code,
+      customer: m.customer,
+      prod_sku: m.product_sku || `${m.part_name}${m.specification ? ' - ' + m.specification : ''}`,
+      part_qty_needed: m.part_qty_needed || m.order_qty || 0,
+      delivered: 0
+    }))
+    console.log('partProducts:', partProducts)
+    const data = {
+      id: ticketCode,
+      qr_code: ticketCode,
+      plan_name: planName,
+      part_name: matching[0]?.part_name || partName || '---',
+      specification: matching[0]?.specification || spec || '',
+      quantity: items.reduce((sum, it) => sum + Number(it.qty || 0), 0),
+      residual: Number(form.surplus) || 0,
+      delivery_stage: form.fromStage || '',
+      receiving_stage: form.toStage || '',
+      note: form.note || '',
+      created_at: new Date(),
+      user_name: creatorName,
+      qc_status: 'Chưa test'
+    }
+    setPalletPartProducts(partProducts)
+    setPalletData(data)
+    setShowPalletModal(true)
+  }
+
+  const handleSubmit = () => {
     if (!form.palletCode) {
       showMessage('Chưa chọn mã pallet', 'Vui lòng chọn hoặc tự sinh mã pallet trước khi tiếp tục.', 'warning')
       return
@@ -225,6 +349,10 @@ const CL07_TransferCreateView = () => {
       showMessage('Chưa chọn công đoạn', 'Vui lòng chọn công đoạn nhận trước khi tiếp tục.', 'warning')
       return
     }
+    setConfirmSubmitOpen(true)
+  }
+
+  const doSubmit = async () => {
     setSubmitting(true)
     try {
       if (isNew) {
@@ -245,7 +373,6 @@ const CL07_TransferCreateView = () => {
     }
   }
 
-  const ticketCode = isNew ? `LC${String(Date.now()).slice(-3)}` : id
   const title = isNew ? 'Tạo phiếu luân chuyển' : 'Xác nhận luân chuyển'
 
   return (
@@ -259,9 +386,9 @@ const CL07_TransferCreateView = () => {
           <div className="pv2-ticket-meta">
             <div className="pv2-ticket-info">
               <div className="pv2-ticket-id">Phiếu: {ticketCode}</div>
-              <div className="pv2-ticket-creator">Được tạo bởi: Nguyễn Văn A</div>
+              <div className="pv2-ticket-creator">Được tạo bởi: {creatorName}</div>
             </div>
-            <button type="button" className="pv2-btn-pallet-view">
+            <button type="button" className="pv2-btn-pallet-view" onClick={handleOpenPallet}>
               <Eye size={15} /> Xem thẻ pallet
             </button>
           </div>
@@ -284,12 +411,13 @@ const CL07_TransferCreateView = () => {
               </div>
               <div className="pv2-field">
                 <label>Tổng số lượng <span className="pv2-req">*</span></label>
-                <div className="pv2-input-unit-wrap">
+                <div className="pv2-input-unit-wrap pv2-input-unit-wrap--disabled">
                   <input
                     type="text"
-                    className="pv2-input"
+                    className="pv2-input pv2-input--disabled"
                     value={form.totalQty}
-                    onChange={(e) => upd('totalQty', e.target.value)}
+                    readOnly
+                    disabled
                     placeholder="0"
                   />
                   <span className="pv2-unit">Cái</span>
@@ -326,13 +454,56 @@ const CL07_TransferCreateView = () => {
                   onChange={(v) => handleDetailChange(v)}
                 />
               </div>
-              <div className="pv2-field">
+              <div className="pv2-field" ref={specDropRef} style={{ position: 'relative' }}>
                 <label>Quy cách <span className="pv2-req">*</span></label>
-                <CustomSelect
-                  value={form.spec}
-                  options={specOptions}
-                  onChange={(v) => upd('spec', v)}
-                />
+                <div
+                  className="pv2-input"
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => setSpecDropdownOpen((v) => !v)}
+                >
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {selectedSpecs.length > 0 ? `${selectedSpecs.length} quy cách đã chọn` : 'Chọn quy cách'}
+                  </span>
+                  <ChevronDown size={16} style={{ flexShrink: 0, transform: specDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                </div>
+                {specDropdownOpen && specOptions.filter((o) => o.value).length > 0 && (
+                  <div style={{
+                    position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+                    background: '#fff', border: '1px solid #d4a574', borderRadius: 8,
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 50,
+                    maxHeight: 220, overflowY: 'auto'
+                  }}>
+                    {specOptions.filter((o) => o.value).map((opt) => {
+                      const isChecked = selectedSpecs.includes(opt.value)
+                      return (
+                        <div
+                          key={opt.value}
+                          onClick={() => handleSpecToggle(opt.value)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 10,
+                            padding: '10px 14px', cursor: 'pointer',
+                            background: isChecked ? '#fdf6ef' : '#fff',
+                            borderBottom: '1px solid #f0e6da',
+                            transition: 'background 0.15s'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = isChecked ? '#faecd8' : '#fdf6ef'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = isChecked ? '#fdf6ef' : '#fff'}
+                        >
+                          <div style={{
+                            width: 20, height: 20, borderRadius: 4,
+                            border: isChecked ? '2px solid #8B5E3C' : '2px solid #ccc',
+                            background: isChecked ? '#8B5E3C' : '#fff',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            flexShrink: 0, transition: 'all 0.15s'
+                          }}>
+                            {isChecked && <Check size={14} color="#fff" strokeWidth={3} />}
+                          </div>
+                          <span style={{ fontSize: 14, color: '#333' }}>{opt.label}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -390,6 +561,7 @@ const CL07_TransferCreateView = () => {
                 setEditIdx(idx)
                 setConfirmModal(true)
               }}
+              onUpdateQty={handleUpdateQty}
             />
 
             <div className="pv2-card-actions">
@@ -417,6 +589,24 @@ const CL07_TransferCreateView = () => {
         title={modalConfig.title}
         message={modalConfig.message}
         onConfirm={modalConfig.onConfirm}
+      />
+
+      <ActionConfirmModal
+        isOpen={confirmSubmitOpen}
+        onClose={() => setConfirmSubmitOpen(false)}
+        onAction={doSubmit}
+        title="Xác nhận lưu phiếu"
+        message="Bạn có chắc chắn muốn lưu phiếu luân chuyển này?"
+        type="save"
+        confirmText="Lưu"
+        cancelText="Hủy"
+      />
+
+      <PalletCardModal
+        isOpen={showPalletModal}
+        onClose={() => setShowPalletModal(false)}
+        data={palletData}
+        partProducts={palletPartProducts}
       />
     </Layout>
   )

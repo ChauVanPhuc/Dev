@@ -31,6 +31,16 @@ const ProductionOrdersView = () => {
 
   const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
   const [sortValue, setSortValue] = useState('time_desc');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterPriority, setFilterPriority] = useState('');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
+
+  const activeFiltersCount = [filterStatus, filterPriority, filterDateFrom, filterDateTo].filter(Boolean).length;
+
+  useEffect(() => {
+    setPage(1);
+  }, [filterStatus, filterPriority, filterDateFrom, filterDateTo]);
 
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/production-orders');
 
@@ -177,9 +187,12 @@ const ProductionOrdersView = () => {
   const mainStages = ['Tạo phôi', 'Định hình', 'Lắp ráp', 'Sơn', 'Đóng gói', 'Lưu kho'];
   const [customScheduleRows, setCustomScheduleRows] = useState([]);
 
-  // Hàm chuyển đổi ngày dd/mm/yyyy <-> yyyy-mm-dd
+  // Hàm chuyển đổi ngày dd/mm/yyyy <-> yyyy-mm-dd (có xử lý ISO datetime)
   const toISODate = (val) => {
     if (!val) return '';
+    if (typeof val === 'string' && val.includes('T')) {
+      return val.split('T')[0].trim();
+    }
     if (val.includes('-') && val.length === 10) return val;
     const parts = (val || '').split('/');
     if (parts.length === 3) {
@@ -191,10 +204,11 @@ const ProductionOrdersView = () => {
   const toDisplayDate = (val) => {
     if (!val) return '';
     if (val.includes('/')) return val;
-    const parts = (val || '').split('-');
+    const cleanVal = (typeof val === 'string' && val.includes('T') ? val.split('T')[0] : val) || '';
+    const parts = cleanVal.split('-');
     if (parts.length === 3) {
       const [y, m, d] = parts;
-      return `${d}/${m}/${y}`;
+      return `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y}`;
     }
     return val;
   };
@@ -246,6 +260,20 @@ const ProductionOrdersView = () => {
               const cleanCode = orderCode.replace(/^LSX-?/i, '');
               const priorityText = ord.is_priority === 1 || ord.priority === 'Cao' ? 'Cao' : (ord.priority || 'Bình thường');
 
+              const rawStatus = ord.status ?? ord.order_status;
+              let statusText;
+              if (rawStatus == null) {
+                statusText = 'Đang sản xuất';
+              } else if (['Đang sản xuất', 'Hoàn thành', 'Chờ sản xuất'].includes(rawStatus)) {
+                statusText = rawStatus;
+              } else if (['0', '1', '3'].includes(String(rawStatus))) {
+                statusText = { '0': 'Chờ sản xuất', '1': 'Đang sản xuất', '3': 'Hoàn thành' }[String(rawStatus)];
+              } else {
+                statusText = String(rawStatus);
+              }
+              const rawStart = ord.start_date || ord.order_date || plan.estimated_date || plan.start_date || '';
+              const rawEnd = ord.end_date || ord.delivery_date || ord.estimated_date || plan.finished_date || plan.end_date || '';
+
               allOrders.push({
                 id: ord.id || `${plan.id}-${oIdx}`,
                 planId: plan.id,
@@ -254,10 +282,10 @@ const ProductionOrdersView = () => {
                 customer: ord.customer || plan.customer || 'Khách hàng hệ thống',
                 totalProducts: ord.products ? ord.products.length : 1,
                 planQty: totalQty,
-                startDate: '2026-08-01',
-                endDate: '2026-08-15',
+                startDate: toISODate(rawStart) || '2026-08-01',
+                endDate: toISODate(rawEnd) || '2026-08-15',
                 priority: priorityText,
-                status: 'Đang sản xuất',
+                status: statusText,
                 note: ord.customer || '',
                 products: ord.products || []
               });
@@ -665,11 +693,27 @@ const ProductionOrdersView = () => {
     }
   };
 
-  const totalCount = total || ordersList.length;
+  const filteredOrders = useMemo(() => {
+    let res = ordersList;
+    if (filterStatus) res = res.filter(o => o.status === filterStatus);
+    if (filterPriority) res = res.filter(o => o.priority === filterPriority);
+    if (filterDateFrom) res = res.filter(o => o.startDate >= filterDateFrom);
+    if (filterDateTo) res = res.filter(o => o.endDate <= filterDateTo);
+    return res;
+  }, [ordersList, filterStatus, filterPriority, filterDateFrom, filterDateTo]);
+
+  const sortedOrders = useMemo(() => {
+    const res = [...filteredOrders];
+    if (sortValue === 'code_asc') res.sort((a, b) => a.code.localeCompare(b.code));
+    if (sortValue === 'code_desc') res.sort((a, b) => b.code.localeCompare(a.code));
+    return res;
+  }, [filteredOrders, sortValue]);
+
+  const totalCount = sortedOrders.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const startIndex = totalCount > 0 ? (page - 1) * pageSize + 1 : 0;
   const endIndex = Math.min(page * pageSize, totalCount);
-  const currentItems = ordersList.slice((page - 1) * pageSize, page * pageSize);
+  const currentItems = sortedOrders.slice((page - 1) * pageSize, page * pageSize);
 
   const filteredPOList = useMemo(() => {
     // CHỈ LỌC VÀ LẤY ĐƠN BÁN HÀNG (Loại bỏ các Đơn mua hàng)
@@ -900,7 +944,7 @@ const ProductionOrdersView = () => {
             <PageToolbar
               searchValue={searchTerm}
               onSearchChange={(val) => { setSearchTerm(val); setPage(1); }}
-              searchPlaceholder="Search..."
+              searchPlaceholder="Tìm mã lệnh, đơn hàng, khách hàng..."
               showSort={true}
               sortOptions={[
                 { value: 'time_desc', label: 'Mới nhất' },
@@ -913,7 +957,7 @@ const ProductionOrdersView = () => {
               showFilter={true}
               isFilterOpen={isFilterBarOpen}
               onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
-              activeFiltersCount={0}
+              activeFiltersCount={activeFiltersCount}
               importActions={[]}
               onExport={handleExport}
               onCreate={handleOpenCreateOrder}
@@ -927,6 +971,78 @@ const ProductionOrdersView = () => {
                 }
               ]}
             />
+
+            {isFilterBarOpen && (
+              <div className="filter-bar" style={{ margin: '0 0 20px 0', padding: '16px 20px', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1.5px solid #EADCC9', boxShadow: '0 2px 8px rgba(45,26,18,0.04)' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px', flexWrap: 'nowrap' }}>
+                  <div style={{ flex: '1 1 0', minWidth: '130px' }}>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#4B5563', marginBottom: '5px' }}>Trạng thái</label>
+                    <select
+                      value={filterStatus}
+                      onChange={(e) => setFilterStatus(e.target.value)}
+                      style={{ width: '100%', padding: '8px 12px', border: '1.5px solid #D1D5DB', borderRadius: '8px', fontSize: '0.88rem', color: '#1F2937', outline: 'none', backgroundColor: '#FFFFFF' }}
+                    >
+                      <option value="">Tất cả</option>
+                      <option value="Đang sản xuất">Đang sản xuất</option>
+                      <option value="Hoàn thành">Hoàn thành</option>
+                      <option value="Chờ sản xuất">Chờ sản xuất</option>
+                    </select>
+                  </div>
+                  <div style={{ flex: '1 1 0', minWidth: '130px' }}>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#4B5563', marginBottom: '5px' }}>Mức độ ưu tiên</label>
+                    <select
+                      value={filterPriority}
+                      onChange={(e) => setFilterPriority(e.target.value)}
+                      style={{ width: '100%', padding: '8px 12px', border: '1.5px solid #D1D5DB', borderRadius: '8px', fontSize: '0.88rem', color: '#1F2937', outline: 'none', backgroundColor: '#FFFFFF' }}
+                    >
+                      <option value="">Tất cả</option>
+                      <option value="Cao">Cao</option>
+                      <option value="Bình thường">Bình thường</option>
+                    </select>
+                  </div>
+                  <div style={{ flex: '1 1 0', minWidth: '130px' }}>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#4B5563', marginBottom: '5px' }}>Từ ngày</label>
+                    <input
+                      type="date"
+                      value={filterDateFrom}
+                      onChange={(e) => setFilterDateFrom(e.target.value)}
+                      style={{ width: '100%', padding: '8px 12px', border: '1.5px solid #D1D5DB', borderRadius: '8px', fontSize: '0.88rem', color: '#1F2937', outline: 'none', backgroundColor: '#FFFFFF' }}
+                    />
+                  </div>
+                  <div style={{ flex: '1 1 0', minWidth: '130px' }}>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#4B5563', marginBottom: '5px' }}>Đến ngày</label>
+                    <input
+                      type="date"
+                      value={filterDateTo}
+                      onChange={(e) => setFilterDateTo(e.target.value)}
+                      style={{ width: '100%', padding: '8px 12px', border: '1.5px solid #D1D5DB', borderRadius: '8px', fontSize: '0.88rem', color: '#1F2937', outline: 'none', backgroundColor: '#FFFFFF' }}
+                    />
+                  </div>
+                  <div style={{ flex: '1 1 0', minWidth: '100px' }}>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#4B5563', marginBottom: '5px' }}>Số lượng dòng</label>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                      style={{ width: '100%', padding: '8px 12px', border: '1.5px solid #D1D5DB', borderRadius: '8px', fontSize: '0.88rem', color: '#1F2937', outline: 'none', backgroundColor: '#FFFFFF' }}
+                    >
+                      <option value={15}>15</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+                    <button
+                      type="button"
+                      onClick={() => { setFilterStatus(''); setFilterPriority(''); setFilterDateFrom(''); setFilterDateTo(''); }}
+                      style={{ padding: '8px 16px', border: '1.5px solid #D1D5DB', borderRadius: '8px', backgroundColor: '#FFFFFF', color: '#5D3B32', fontWeight: '700', fontSize: '0.85rem', cursor: 'pointer' }}
+                    >
+                      Đặt lại
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="admin-list-layout">
               <div className="mgmt-table card admin-table-card">

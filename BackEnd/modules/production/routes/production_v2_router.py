@@ -630,6 +630,56 @@ def get_order_bom(po_code: str, stage: Optional[str] = Query(None), db: Session 
         raise HTTPException(status_code=500, detail=str(e))
 
 # ----------------------------------------------------------------------
+# 3.55: Lấy danh sách đơn hàng theo chi tiết và quy cách
+# ----------------------------------------------------------------------
+@router.get("/orders-by-part")
+def get_orders_by_part(
+    part_name: Optional[str] = Query(None),
+    specification: Optional[str] = Query(None),
+    month: Optional[int] = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """
+    TRUY VẤN CSDL THỰC: Trả về danh sách đơn hàng (PO) chứa chi tiết/quy cách đã chọn.
+    Dùng để điền PO, Khách hàng, Mã sản phẩm trên Thẻ Pallet.
+    """
+    try:
+        query = db.query(Order, Product, BOMDetail, ProductPlan). \
+            join(Product, Product.order_id == Order.id). \
+            join(BOMDetail, BOMDetail.product_id == Product.id). \
+            outerjoin(ProductPlan, ProductPlan.id == Order.plan_id)
+
+        if part_name:
+            query = query.filter(func.lower(BOMDetail.name).like(f"%{part_name.strip().lower()}%"))
+        if specification:
+            query = query.filter(func.lower(BOMDetail.specification).like(f"%{specification.strip().lower()}%"))
+        if month is not None:
+            query = query.filter(ProductPlan.month == month)
+
+        rows = query.limit(limit).all()
+        results = []
+        for o, p, b, plan in rows:
+            prod_q = float(p.order_qty or p.quantity or 1.0)
+            bom_q = float(b.quantity or 1.0)
+            target = max(1, int(prod_q * bom_q))
+            results.append({
+                "po_code": o.order_code or f"APT {o.id:03d}",
+                "customer": o.customer or (plan.customer if plan else '') or '',
+                "plan_name": plan.name if plan else '',
+                "product_sku": p.sku or p.name or '',
+                "product_name": p.name or '',
+                "order_qty": int(p.order_qty or p.quantity or 0),
+                "part_name": b.name or '',
+                "specification": b.specification or '',
+                "part_qty_needed": target
+            })
+        return results
+    except Exception as e:
+        logger.error(f"Lỗi khi lấy đơn hàng theo chi tiết: {e}", exc_info=True)
+        return []
+
+# ----------------------------------------------------------------------
 # 3.6: Lấy danh sách Chi tiết (parts) theo Tháng từ CSDL
 # ----------------------------------------------------------------------
 # ----------------------------------------------------------------------
@@ -638,24 +688,27 @@ def get_order_bom(po_code: str, stage: Optional[str] = Query(None), db: Session 
 @router.get("/parts")
 def get_parts_by_month(month: Optional[Any] = Query(None), db: Session = Depends(get_db)):
     """
-    TRUY VẤN CSDL THỰC: Trả về toàn bộ danh sách Chi tiết sản phẩm (BOMDetail) cùng quy cách (specs) và số lượng tiêu chuẩn (target_qty) của các Lệnh sản xuất theo Tháng.
+    Trả về danh sách Chi tiết sản phẩm từ:
+    1. bom_details (BOM đơn hàng) - ưu tiên lọc theo tháng kế hoạch
+    2. master_bom_details (BOM master kỹ thuật) - bổ sung chi tiết chưa có
+    Kèm input_stage và output_stage động từ master_product_details.
     """
     try:
         import re
+        from modules.master.controllers.master_product_controller import resolve_detail_stages
+
         m_int = None
         if month is not None:
             m_match = re.search(r'\d+', str(month))
             if m_match:
                 m_int = int(m_match.group())
 
+        # 1. Lấy chi tiết từ bom_details (BOM đơn hàng thực tế)
         sql = """
         SELECT 
-            b.name AS part_name,
-            b.specification,
-            b.quantity AS bom_unit_qty,
-            p.order_qty,
-            p.quantity AS prod_qty,
-            pl.month
+            b.name AS part_name, b.specification,
+            b.quantity AS bom_unit_qty, p.order_qty,
+            p.quantity AS prod_qty, pl.month
         FROM bom_details b
         JOIN products p ON b.product_id = p.id
         JOIN orders o ON p.order_id = o.id
@@ -674,60 +727,103 @@ def get_parts_by_month(month: Optional[Any] = Query(None), db: Session = Depends
             name = (r.part_name or "").strip()
             if not name:
                 continue
-            
             p_qty = float(r.order_qty or r.prod_qty or 1.0)
             b_qty = float(r.bom_unit_qty or 1.0)
             calc_target = max(1, int(p_qty * b_qty))
-            
             spec_str = (r.specification or "Tiêu chuẩn").split("-")[0].strip() or "Tiêu chuẩn"
 
             if name not in parts_map:
-                parts_map[name] = {
-                    "part_name": name,
-                    "total_qty": 0,
-                    "specs_map": {}
-                }
-
+                parts_map[name] = {"part_name": name, "total_qty": 0, "specs_map": {}}
             parts_map[name]["total_qty"] += calc_target
             if spec_str not in parts_map[name]["specs_map"]:
                 parts_map[name]["specs_map"][spec_str] = 0
             parts_map[name]["specs_map"][spec_str] += calc_target
 
+        # 2. Bổ sung chi tiết từ master_bom_details (bỏ qua nguyên vật liệu thô m3/m2/kg)
+        try:
+            master_rows = db.execute(text("""
+                SELECT name, specification, quantity, unit
+                FROM master_bom_details
+                WHERE name IS NOT NULL AND name != ''
+                  AND (unit IS NULL OR unit NOT IN ('m3', 'm2', 'kg', N'lít', 'lit', 'm'))
+            """)).fetchall()
+            for mr in master_rows:
+                name = (mr[0] or "").strip()
+                if not name:
+                    continue
+                spec_str = (mr[1] or "Tiêu chuẩn").split("-")[0].strip() or "Tiêu chuẩn"
+                qty = max(1, int(float(mr[2] or 1.0)))
+
+                if name not in parts_map:
+                    parts_map[name] = {"part_name": name, "total_qty": 0, "specs_map": {}}
+
+                parts_map[name]["total_qty"] += qty
+                if spec_str not in parts_map[name]["specs_map"]:
+                    parts_map[name]["specs_map"][spec_str] = 0
+                parts_map[name]["specs_map"][spec_str] += qty
+        except Exception as me:
+            logger.warning(f"Không thể bổ sung từ master_bom_details: {me}")
+
+        # 3. Truy vấn công đoạn giao nhận động từ DB
+        stage_map = {}
+        try:
+            for sr in db.execute(text(
+                "SELECT DISTINCT name, input_stage, output_stage FROM master_product_details WHERE name IS NOT NULL"
+            )).fetchall():
+                if sr[0] and sr[0] not in stage_map:
+                    in_s, out_s = resolve_detail_stages(sr[1], sr[2])
+                    stage_map[sr[0]] = {"input_stage": in_s, "output_stage": out_s}
+        except Exception:
+            pass
+        try:
+            for mr in db.execute(text(
+                "SELECT DISTINCT name, input_stage, output_stage FROM master_bom_details WHERE name IS NOT NULL"
+            )).fetchall():
+                if mr[0] and mr[0] not in stage_map:
+                    in_s, out_s = resolve_detail_stages(mr[1], mr[2])
+                    stage_map[mr[0]] = {"input_stage": in_s, "output_stage": out_s}
+        except Exception:
+            pass
+
+        # 4. Build kết quả
         result = []
         for name, data in parts_map.items():
-            specs_list = [{"specification": spec, "target_qty": qty} for spec, qty in data["specs_map"].items()]
+            specs_list = [{"specification": s, "target_qty": q} for s, q in data["specs_map"].items()]
+            stages = stage_map.get(name, {})
             result.append({
                 "part_name": name,
                 "total_qty": data["total_qty"],
-                "specs": specs_list if specs_list else [{"specification": "Tiêu chuẩn", "target_qty": data["total_qty"]}]
+                "specs": specs_list or [{"specification": "Tiêu chuẩn", "target_qty": data["total_qty"]}],
+                "input_stage": stages.get("input_stage", ""),
+                "output_stage": stages.get("output_stage", "")
             })
-
-        if not result:
-            result = [
-                {
-                    "part_name": "Đế cao su tăng chỉnh chân bàn",
-                    "total_qty": 40,
-                    "specs": [{"specification": "M8*30", "target_qty": 40}]
-                },
-                {
-                    "part_name": "Bộ ke kim loại liên kết chân",
-                    "total_qty": 40,
-                    "specs": [{"specification": "50*50*50", "target_qty": 40}]
-                }
-            ]
 
         return sorted(result, key=lambda x: x["part_name"])
     except Exception as e:
         logger.error(f"Lỗi khi lấy danh sách chi tiết: {e}", exc_info=True)
-        import traceback
-        traceback.print_exc()
-        return [
-            {
-                "part_name": f"Lỗi Backend: {str(e)}",
-                "total_qty": 40,
-                "specs": [{"specification": "M8*30", "target_qty": 40}]
-            }
-        ]
+        return []
+
+# ----------------------------------------------------------------------
+# 3.7: Lấy thông tin KHSX theo tháng đã chọn
+# ----------------------------------------------------------------------
+@router.get("/plan-by-month")
+def get_plan_by_month(month: Optional[Any] = Query(None), db: Session = Depends(get_db)):
+    """Trả về KHSX (ProductPlan) theo tháng đã chọn."""
+    try:
+        import re
+        m_int = None
+        if month is not None:
+            m_match = re.search(r'\d+', str(month))
+            if m_match:
+                m_int = int(m_match.group())
+        if m_int is not None:
+            plan = db.query(ProductPlan).filter(ProductPlan.month == m_int).order_by(ProductPlan.id.desc()).first()
+            if plan:
+                return {"code": plan.code or "", "name": plan.name or "", "month": plan.month, "year": plan.year}
+        return {"code": "", "name": f"Tháng {m_int}", "month": m_int, "year": None}
+    except Exception as e:
+        logger.error(f"Lỗi lấy KHSX theo tháng: {e}", exc_info=True)
+        return {"code": "", "name": "Luân chuyển sản xuất", "month": None, "year": None}
 
 # ----------------------------------------------------------------------
 # 4. CL04: Kế hoạch sản xuất từ CSDL

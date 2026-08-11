@@ -84,6 +84,43 @@ export const transferService = {
     }
   },
 
+  async getNextCode() {
+    try {
+      const res = await apiClient.get('/deliveries/next-id')
+      const nextId = res.data?.next_id || 1
+      return `LC${String(nextId).padStart(3, '0')}`
+    } catch (e) {
+      console.warn('Lỗi lấy mã phiếu tiếp theo, dùng mã tạm:', e)
+      return `LC${String(Date.now()).slice(-3)}`
+    }
+  },
+
+  async getPlanByMonth(month) {
+    try {
+      const m = month ? String(month).match(/\d+/) : null
+      const res = await apiClient.get(`/production-v2/plan-by-month${m ? '?month=' + m[0] : ''}`)
+      return res.data || { name: 'Luân chuyển sản xuất' }
+    } catch (e) {
+      console.warn('Lỗi lấy KHSX theo tháng:', e)
+      return { name: 'Luân chuyển sản xuất' }
+    }
+  },
+
+  async getOrdersByPart({ part_name, specification, month }) {
+    try {
+      const params = new URLSearchParams()
+      if (part_name) params.append('part_name', part_name)
+      if (specification) params.append('specification', specification)
+      const m = month ? String(month).match(/\d+/) : null
+      if (m) params.append('month', m[0])
+      const res = await apiClient.get(`/production-v2/orders-by-part?${params.toString()}`)
+      return res.data || []
+    } catch (e) {
+      console.warn('Lỗi lấy đơn hàng theo chi tiết:', e)
+      return []
+    }
+  },
+
   async uploadImage(file) {
     try {
       const form = new FormData()
