@@ -1011,7 +1011,7 @@ const UserCreate = () => {
 
                     {/* 3. Vị Trí / Chức Vụ */}
                     <div className={`form-group ${!formData.role_id ? 'disabled' : ''}`}>
-                      <label>3. Vị Trí / Chức Vụ <span className="required" style={{ color: '#E11D48' }}>*</span></label>
+                      <label>3. Vị Trí <span className="required" style={{ color: '#E11D48' }}>*</span></label>
                       <select 
                         name="permission_id" 
                         value={formData.permission_id} 
@@ -1019,7 +1019,7 @@ const UserCreate = () => {
                         disabled={!formData.role_id}
                         required
                       >
-                        <option value="">-- Chọn Vị Trí / Chức Vụ --</option>
+                        <option value="">-- Chọn Vị Trí --</option>
                         {permissions.map(p => (
                           <option key={p.id} value={p.id}>{p.name}</option>
                         ))}

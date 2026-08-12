@@ -110,13 +110,8 @@ def delete_employee(db: Session, employee_id: int):
 def get_departments(db: Session, search: str = None):
     query = db.query(HRDepartment)
     if search:
-        query = query.filter(
-            or_(
-                HRDepartment.name.ilike(f"%{search}%"),
-                HRDepartment.code.ilike(f"%{search}%")
-            )
-        )
-    return query.order_by(HRDepartment.code.asc()).all()
+        query = query.filter(HRDepartment.name.ilike(f"%{search}%"))
+    return query.order_by(HRDepartment.name.asc()).all()
 
 def create_department(db: Session, department: HRDepartmentCreate):
     db_dept = HRDepartment(**department.model_dump())
@@ -141,13 +136,8 @@ def delete_department(db: Session, dept_id: int):
 def get_positions(db: Session, search: str = None):
     query = db.query(HRPosition)
     if search:
-        query = query.filter(
-            or_(
-                HRPosition.name.ilike(f"%{search}%"),
-                HRPosition.code.ilike(f"%{search}%")
-            )
-        )
-    return query.order_by(HRPosition.code.asc()).all()
+        query = query.filter(HRPosition.name.ilike(f"%{search}%"))
+    return query.order_by(HRPosition.name.asc()).all()
 
 def create_position(db: Session, position: HRPositionCreate):
     db_pos = HRPosition(**position.model_dump())

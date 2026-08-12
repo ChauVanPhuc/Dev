@@ -5,7 +5,7 @@ from datetime import datetime
 
 # --- DEPARTMENT SCHEMAS ---
 class HRDepartmentBase(BaseModel):
-    code: str
+    code: Optional[str] = None
     name: str
     description: Optional[str] = None
 
@@ -14,14 +14,14 @@ class HRDepartmentCreate(HRDepartmentBase):
 
 class HRDepartmentResponse(HRDepartmentBase):
     id: int
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
 
 # --- POSITION SCHEMAS ---
 class HRPositionBase(BaseModel):
-    code: str
+    code: Optional[str] = None
     name: str
     description: Optional[str] = None
 
@@ -30,15 +30,15 @@ class HRPositionCreate(HRPositionBase):
 
 class HRPositionResponse(HRPositionBase):
     id: int
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
 
 # --- SECTION SCHEMAS ---
 class HRSectionBase(BaseModel):
-    code: str
-    name: str
+    code: Optional[str] = None
+    name: Optional[str] = None
     description: Optional[str] = None
 
 class HRSectionCreate(HRSectionBase):
@@ -46,7 +46,7 @@ class HRSectionCreate(HRSectionBase):
 
 class HRSectionResponse(HRSectionBase):
     id: int
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

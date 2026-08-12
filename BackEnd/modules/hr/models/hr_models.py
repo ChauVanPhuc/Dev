@@ -1,45 +1,14 @@
 # -*- coding: utf-8 -*-
-from sqlalchemy import Column, Integer, ForeignKey, text, DateTime
+from sqlalchemy import Column, Integer, text, DateTime
 from sqlalchemy.dialects.mssql import NVARCHAR
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from config.database import Base
 
-class HRDepartment(Base):
-    """
-    Bảng danh mục Phòng ban cho Nhân sự
-    """
-    __tablename__ = "hr_departments"
-
-    id = Column(Integer, primary_key=True, index=True)
-    code = Column(NVARCHAR(50), unique=True, index=True, nullable=False)
-    name = Column(NVARCHAR(100), nullable=False)
-    description = Column(NVARCHAR(255), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-class HRPosition(Base):
-    """
-    Bảng danh mục Vị trí / Chức danh cho Nhân sự
-    """
-    __tablename__ = "hr_positions"
-
-    id = Column(Integer, primary_key=True, index=True)
-    code = Column(NVARCHAR(50), unique=True, index=True, nullable=False)
-    name = Column(NVARCHAR(100), nullable=False)
-    description = Column(NVARCHAR(255), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-class HRSection(Base):
-    """
-    Bảng danh mục Bộ phận / Tổ nhóm cho Nhân sự
-    """
-    __tablename__ = "hr_sections"
-
-    id = Column(Integer, primary_key=True, index=True)
-    code = Column(NVARCHAR(50), unique=True, index=True, nullable=False)
-    name = Column(NVARCHAR(100), nullable=False)
-    description = Column(NVARCHAR(255), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+# Reuse auth catalog tables for HR concepts
+from modules.auth.models.role import Role as HRDepartment
+from modules.auth.models.departments import Department as HRSection
+from modules.auth.models.permissions import Permission as HRPosition
 
 class HREmployee(Base):
     """
@@ -54,9 +23,9 @@ class HREmployee(Base):
     hire_date = Column(NVARCHAR(50), nullable=True) # Ngày vào làm
     avatar_path = Column(NVARCHAR(None), nullable=True) # Đường dẫn ảnh đại diện
 
-    department_id = Column(Integer, nullable=True)
-    position_id = Column(Integer, nullable=True)
-    section_id = Column(Integer, nullable=True)
+    department_id = Column(Integer, nullable=True) # -> roles.id (Phòng ban)
+    position_id = Column(Integer, nullable=True)   # -> permissions.id (Vị trí)
+    section_id = Column(Integer, nullable=True)    # -> departments.id (Bộ phận)
 
 class HROrgNode(Base):
     """
@@ -68,9 +37,9 @@ class HROrgNode(Base):
     level_name = Column(NVARCHAR(50), nullable=False) # Cấp 1, Cấp 2, Cấp 3...
     parent_id = Column(Integer, nullable=True) # ID nút cha (HROrgNode)
     
-    department_id = Column(Integer, nullable=True)
-    position_id = Column(Integer, nullable=True)
-    section_id = Column(Integer, nullable=True)
+    department_id = Column(Integer, nullable=True) # -> roles.id
+    position_id = Column(Integer, nullable=True)   # -> permissions.id
+    section_id = Column(Integer, nullable=True)    # -> departments.id
     
     note = Column(NVARCHAR(500), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -96,7 +65,7 @@ class HRHierarchyNode(Base):
     id = Column(Integer, primary_key=True, index=True)
     rank_level = Column(NVARCHAR(50), nullable=False) # Cấp 1, Cấp 2, Cấp 3...
     parent_id = Column(Integer, nullable=True) # ID nút cha
-    position_id = Column(Integer, nullable=True)
+    position_id = Column(Integer, nullable=True) # -> permissions.id
     description = Column(NVARCHAR(500), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -109,8 +78,8 @@ class HRPersonnelNode(Base):
     id = Column(Integer, primary_key=True, index=True)
     node_name = Column(NVARCHAR(100), nullable=False)
     parent_id = Column(Integer, nullable=True) # ID nút cha
-    department_id = Column(Integer, nullable=True)
-    section_id = Column(Integer, nullable=True)
+    department_id = Column(Integer, nullable=True) # -> roles.id
+    section_id = Column(Integer, nullable=True)    # -> departments.id
     employee_count = Column(Integer, default=0)
     description = Column(NVARCHAR(500), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -126,29 +95,6 @@ class HRFactoryStructure(Base):
     structure_name = Column(NVARCHAR(100), nullable=False)
     structure_type = Column(NVARCHAR(50), nullable=False) # Nhà máy / Phân xưởng / Tổ sản xuất
     parent_id = Column(Integer, nullable=True) # ID cấu trúc cha
-    department_id = Column(Integer, nullable=True)
+    department_id = Column(Integer, nullable=True) # -> roles.id
     description = Column(NVARCHAR(500), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-
-class HRFactoryDepartment(Base):
-    """
-    Bảng liên kết Nhà máy - Phòng ban thuộc nhà máy
-    """
-    __tablename__ = "hr_factory_departments"
-
-    id = Column(Integer, primary_key=True, index=True)
-    factory_structure_id = Column(Integer, ForeignKey("hr_factory_structures.id", ondelete="CASCADE"), nullable=False)
-    department_id = Column(Integer, ForeignKey("hr_departments.id", ondelete="CASCADE"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-class HRDepartmentPosition(Base):
-    """
-    Bảng liên kết Phòng ban - Vị trí / Chức danh cho phép
-    """
-    __tablename__ = "hr_department_positions"
-
-    id = Column(Integer, primary_key=True, index=True)
-    department_id = Column(Integer, ForeignKey("hr_departments.id", ondelete="CASCADE"), nullable=False)
-    position_id = Column(Integer, ForeignKey("hr_positions.id", ondelete="CASCADE"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-

@@ -11,6 +11,14 @@ from database.migrations.update_account_email_phone import run_migration as run_
 from database.migrations.add_reporter_to_screen_bugs import run_migration as run_screen_bug_reporter_migration
 from database.migrations.add_inspection_confirmation import run_migration as run_inspection_confirmation_migration
 from database.migrations.add_inspection_guide_sidebar import add_inspection_guide_sidebar as run_inspection_guide_sidebar_migration
+from database.migrations.add_is_mobile_allowed_to_accounts import run_migration as run_is_mobile_allowed_migration
+from database.migrations.add_order_columns_to_purchase_requisitions import run_migration as run_purchase_requisition_columns_migration
+from database.migrations.add_account_department_permission_factory import run_migration as run_account_dept_perm_factory_migration
+from database.migrations.add_department_columns import run_migration as run_department_columns_migration
+from database.migrations.drop_hr_catalog_tables import run_migration as run_drop_hr_catalog_migration
+from database.migrations.seed_positions import run_migration as run_seed_positions_migration
+from database.migrations.set_department_names import run_migration as run_set_department_names_migration
+from database.migrations.fix_hr_screens import run_migration as run_fix_hr_screens_migration
 
 def run_allocation_method_migration():
     """Add allocation_method column to delivery_returns table"""
@@ -179,6 +187,14 @@ if __name__ == "__main__":
         run_stage_inspection_new_columns_migration()
         run_inspection_guide_sidebar_migration()
         run_inspection_confirmation_migration()
+        run_is_mobile_allowed_migration()
+        run_purchase_requisition_columns_migration()
+        run_account_dept_perm_factory_migration()
+        run_department_columns_migration()
+        run_drop_hr_catalog_migration()
+        run_seed_positions_migration()
+        run_set_department_names_migration()
+        run_fix_hr_screens_migration()
         print("-" * 50)
         print("[SUCCESS] All migrations completed successfully!")
     except Exception as e:

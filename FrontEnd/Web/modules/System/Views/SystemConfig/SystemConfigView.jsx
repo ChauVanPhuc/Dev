@@ -65,6 +65,8 @@ export default function SystemConfigView() {
   const [generalCode, setGeneralCode] = useState('');
   const [generalName, setGeneralName] = useState('');
   const [generalDesc, setGeneralDesc] = useState('');
+  const [deptRoleId, setDeptRoleId] = useState('');
+  const [roleOptions, setRoleOptions] = useState([]);
 
   // --- CATEGORY (Dòng hàng) FORM STATES ---
   const [catName, setCatName] = useState('');
@@ -142,8 +144,12 @@ export default function SystemConfigView() {
         const res = await hrService.getFactoryStructures();
         setDataList(res || []);
       } else if (activeTab === 'department') {
-        const res = await hrService.getDepartments();
-        setDataList(res || []);
+        const [deptRes, roleRes] = await Promise.all([
+          api.get('/departments/'),
+          api.get('/roles/?include_inactive=true')
+        ]);
+        setDataList(Array.isArray(deptRes) ? deptRes : (deptRes?.data || []));
+        setRoleOptions(Array.isArray(roleRes) ? roleRes : (roleRes?.data || []));
       } else if (activeTab === 'position') {
         const res = await hrService.getPositions();
         setDataList(res || []);
@@ -199,13 +205,7 @@ export default function SystemConfigView() {
           setSubTableData(res || []);
         }
       } else if (mainTab === 'department') {
-        if (subTabKey === 'subtab1') {
-          const res = await hrService.getDepartmentEmployees(row.id);
-          setSubTableData(res || []);
-        } else if (subTabKey === 'subtab2') {
-          const res = await hrService.getDepartmentPositions(row.id);
-          setSubTableData(res || []);
-        }
+        setSubTableData([]);
       } else if (mainTab === 'position') {
         if (subTabKey === 'subtab1') {
           const res = await hrService.getPositionEmployees(row.id);
@@ -414,7 +414,12 @@ export default function SystemConfigView() {
                (item.structure_code || '').toLowerCase().includes(query) ||
                (item.structure_type || '').toLowerCase().includes(query);
       }
-      if (activeTab === 'department' || activeTab === 'position') {
+      if (activeTab === 'department') {
+        return (item.name || '').toLowerCase().includes(query) ||
+               (item.code || '').toLowerCase().includes(query) ||
+               (item.role_name || '').toLowerCase().includes(query);
+      }
+      if (activeTab === 'position') {
         return (item.name || '').toLowerCase().includes(query) ||
                (item.code || '').toLowerCase().includes(query);
       }
@@ -458,7 +463,12 @@ export default function SystemConfigView() {
       setFactoryType('Nhà máy');
       setFactoryParentId('');
       setFactoryDesc('');
-    } else if (activeTab === 'department' || activeTab === 'position') {
+    } else if (activeTab === 'department') {
+      setGeneralCode('');
+      setGeneralName('');
+      setGeneralDesc('');
+      setDeptRoleId('');
+    } else if (activeTab === 'position') {
       setGeneralCode('');
       setGeneralName('');
       setGeneralDesc('');
@@ -502,7 +512,12 @@ export default function SystemConfigView() {
       setFactoryType(item.structure_type || 'Nhà máy');
       setFactoryParentId(item.parent_id ? String(item.parent_id) : '');
       setFactoryDesc(item.description || '');
-    } else if (activeTab === 'department' || activeTab === 'position') {
+    } else if (activeTab === 'department') {
+      setGeneralCode(item.code || '');
+      setGeneralName(item.name || '');
+      setGeneralDesc('');
+      setDeptRoleId(item.role_id ? String(item.role_id) : '');
+    } else if (activeTab === 'position') {
       setGeneralCode(item.code || '');
       setGeneralName(item.name || '');
       setGeneralDesc(item.description || '');
@@ -566,14 +581,14 @@ export default function SystemConfigView() {
         const payload = {
           code: generalCode.trim(),
           name: generalName.trim(),
-          description: generalDesc.trim() || null
+          role_id: parseInt(deptRoleId)
         };
         if (selectedItem) {
-          await hrService.updateDepartment(selectedItem.id, payload);
-          toast('success', 'Cập nhật phòng ban thành công!');
+          await api.put(`/departments/${selectedItem.id}`, payload);
+          toast('success', 'Cập nhật bộ phận thành công!');
         } else {
-          await hrService.createDepartment(payload);
-          toast('success', 'Thêm mới phòng ban thành công!');
+          await api.post('/departments/', payload);
+          toast('success', 'Thêm mới bộ phận thành công!');
         }
       } else if (activeTab === 'position') {
         const payload = {
@@ -689,7 +704,7 @@ export default function SystemConfigView() {
       if (activeTab === 'factory') {
         await hrService.deleteFactoryStructure(deletingItem.id);
       } else if (activeTab === 'department') {
-        await hrService.deleteDepartment(deletingItem.id);
+        await api.delete(`/departments/${deletingItem.id}`);
       } else if (activeTab === 'position') {
         await hrService.deletePosition(deletingItem.id);
       } else if (activeTab === 'role') {
@@ -1037,9 +1052,9 @@ export default function SystemConfigView() {
             </div>
             {[
               { id: 'factory', label: 'Nhà máy', icon: Building2 },
-              { id: 'department', label: 'Phòng ban', icon: Users },
-              { id: 'position', label: 'Vị trí', icon: Briefcase },
-              { id: 'role', label: 'Bộ phận', icon: Layers }
+              { id: 'role', label: 'Phòng ban', icon: Users },
+              { id: 'department', label: 'Bộ phận', icon: Layers },
+              { id: 'permission', label: 'Vị trí', icon: ShieldCheck }
             ].map(tab => {
               const IconComp = tab.icon;
               const isSelected = activeTab === tab.id;
@@ -1081,8 +1096,7 @@ export default function SystemConfigView() {
               HỆ THỐNG & PHÂN QUYỀN
             </div>
             {[
-              { id: 'sidebar', label: 'Cấu hình Sidebar', icon: Sliders },
-              { id: 'permission', label: 'Chức vụ & Phân quyền', icon: ShieldCheck }
+              { id: 'sidebar', label: 'Cấu hình Sidebar', icon: Sliders }
             ].map(tab => {
               const IconComp = tab.icon;
               const isSelected = activeTab === tab.id;
@@ -1236,25 +1250,25 @@ export default function SystemConfigView() {
                 <div>
                   <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#2D1A12', fontWeight: 800 }}>
                     {activeTab === 'factory' && 'Danh mục Cấu trúc nhà máy'}
-                {activeTab === 'department' && 'Danh mục Phòng ban Nhân sự'}
-                {activeTab === 'position' && 'Danh mục Vị trí / Chức danh'}
-                {activeTab === 'role' && 'Danh mục Bộ phận & Phân quyền mặc định'}
+                {activeTab === 'department' && 'Danh mục Bộ phận'}
+                {activeTab === 'position' && 'Danh mục Chức danh'}
+                {activeTab === 'role' && 'Danh mục Phòng ban'}
                 {activeTab === 'sidebar' && 'Cấu hình Menu Sidebar'}
                 {activeTab === 'category' && 'Danh mục Dòng hàng sản phẩm'}
                 {activeTab === 'stage' && 'Danh mục Công đoạn sản xuất'}
                 {activeTab === 'customer' && 'Danh mục Khách hàng & Đối tác'}
-                {activeTab === 'permission' && 'Danh mục Chức vụ & Phân quyền công đoạn'}
+                {activeTab === 'permission' && 'Danh mục Vị trí'}
               </h3>
               <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#9CA3AF' }}>
                 {activeTab === 'factory' && 'Quản lý sơ đồ các Nhà máy, Phân xưởng và Tổ sản xuất vật lý.'}
-                {activeTab === 'department' && 'Quản lý các phòng ban hỗ trợ định danh nhân viên.'}
-                {activeTab === 'position' && 'Thiết lập danh mục chức vụ công tác trong công ty.'}
-                {activeTab === 'role' && 'Cấu hình các bộ phận chính và nhóm phân quyền màn hình tương ứng.'}
+                {activeTab === 'department' && 'Quản lý các bộ phận thuộc phòng ban.'}
+                {activeTab === 'position' && 'Thiết lập danh mục chức danh công tác trong công ty.'}
+                {activeTab === 'role' && 'Cấu hình các phòng ban và nhóm phân quyền màn hình tương ứng.'}
                 {activeTab === 'sidebar' && 'Thiết lập lưu đồ menu điều hướng cho bản Web và Mobile.'}
                 {activeTab === 'category' && 'Quản lý các dòng hàng mẫu và danh mục sản phẩm của toàn hệ thống.'}
                 {activeTab === 'stage' && 'Quản lý danh sách các công đoạn sản xuất tại các nhà máy và xưởng.'}
                 {activeTab === 'customer' && 'Quản lý danh bạ khách hàng, đối tác, mã số thuế và thông tin liên hệ.'}
-                {activeTab === 'permission' && 'Thiết lập chức vụ, gán công đoạn phụ trách và quyền thao tác.'}
+                {activeTab === 'permission' && 'Thiết lập vị trí, gán công đoạn phụ trách và quyền thao tác.'}
               </p>
             </div>
 
@@ -1371,7 +1385,14 @@ export default function SystemConfigView() {
                           <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Mô tả</th>
                         </>
                       )}
-                      {(activeTab === 'department' || activeTab === 'position') && (
+                      {activeTab === 'department' && (
+                        <>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Mã viết tắt</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Tên bộ phận</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Phòng ban</th>
+                        </>
+                      )}
+                      {activeTab === 'position' && (
                         <>
                           <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Mã viết tắt</th>
                           <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Tên danh mục</th>
@@ -1466,7 +1487,14 @@ export default function SystemConfigView() {
                             </>
                           )}
 
-                          {(activeTab === 'department' || activeTab === 'position') && (
+                          {activeTab === 'department' && (
+                            <>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1F2937', fontWeight: 'bold' }}>{item.code}</td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#4B5563', fontWeight: 600 }}>{item.name}</td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#6B7280' }}>{item.role_name || '---'}</td>
+                            </>
+                          )}
+                          {activeTab === 'position' && (
                             <>
                               <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1F2937', fontWeight: 'bold' }}>{item.code}</td>
                               <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#4B5563', fontWeight: 600 }}>{item.name}</td>
@@ -2236,16 +2264,35 @@ export default function SystemConfigView() {
                       />
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>DIỄN GIẢI CHI TIẾT</label>
-                      <textarea
-                        value={generalDesc}
-                        onChange={(e) => setGeneralDesc(e.target.value)}
-                        placeholder="Nhập mô tả cho danh mục..."
-                        rows="3"
-                        style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', resize: 'vertical' }}
-                      />
-                    </div>
+                    {activeTab === 'department' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>PHÒNG BAN *</label>
+                        <select
+                          value={deptRoleId}
+                          onChange={(e) => setDeptRoleId(e.target.value)}
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', backgroundColor: '#FFFFFF' }}
+                          required
+                        >
+                          <option value="">-- Chọn Phòng Ban --</option>
+                          {roleOptions.map(role => (
+                            <option key={role.id} value={role.id}>{role.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {activeTab === 'position' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>DIỄN GIẢI CHI TIẾT</label>
+                        <textarea
+                          value={generalDesc}
+                          onChange={(e) => setGeneralDesc(e.target.value)}
+                          placeholder="Nhập mô tả cho danh mục..."
+                          rows="3"
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', resize: 'vertical' }}
+                        />
+                      </div>
+                    )}
                   </>
                 )}
 

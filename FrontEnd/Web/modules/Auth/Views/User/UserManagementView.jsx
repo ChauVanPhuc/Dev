@@ -700,11 +700,6 @@ const UserManagement = () => {
               label: 'Bộ phận',
               icon: <FolderTree size={14} />,
               onClick: () => navigate('/admin/users/departments')
-            },
-            {
-              label: 'Chức vụ',
-              icon: <Briefcase size={14} />,
-              onClick: () => navigate('/admin/users/positions')
             }
           ]}
           onExport={handleExportExcel}

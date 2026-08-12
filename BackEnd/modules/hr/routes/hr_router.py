@@ -13,8 +13,7 @@ from modules.hr.schemas import hr_schemas
 from modules.hr.controllers import hr_controller
 from modules.hr.models.hr_models import (
     HREmployee, HRDepartment, HRPosition, HRSection,
-    HRHierarchyNode, HRPersonnelNode, HRFactoryStructure,
-    HRFactoryDepartment, HRDepartmentPosition
+    HRHierarchyNode, HRPersonnelNode, HRFactoryStructure
 )
 
 router = APIRouter()

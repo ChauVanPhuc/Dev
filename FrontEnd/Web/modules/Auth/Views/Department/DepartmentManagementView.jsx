@@ -214,11 +214,6 @@ const DepartmentManagement = () => {
               icon: <FolderTree size={14} />, // FolderTree or similar as placeholder
               onClick: () => navigate('/admin/users')
             },
-            {
-              label: 'Chức vụ',
-              icon: <Briefcase size={14} />,
-              onClick: () => navigate('/admin/users/positions')
-            }
           ]}
           onExport={handleExportExcel}
           isExporting={isExporting}

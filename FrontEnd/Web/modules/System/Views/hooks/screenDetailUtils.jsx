@@ -1171,7 +1171,6 @@ export const ROUTE_SUGGESTIONS = {
   'Quản lý nhân sự': [
     { title: 'Sơ đồ tổ chức', path: '/admin/hr/org-chart' },
     { title: 'Danh sách nhân viên', path: '/admin/hr/employees' },
-    { title: 'Quản lý chức vụ', path: '/admin/users/positions' },
     { title: 'Quản lý phòng ban', path: '/admin/users/departments' }
   ],
   'Hồ sơ ISO': [

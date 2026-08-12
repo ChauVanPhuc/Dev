@@ -75,3 +75,34 @@ def create_department(
         code=new_dept.code,
         role_id=new_dept.role_id
     )
+
+@router.put("/{id}", response_model=DepartmentItemResponse)
+def update_department(id: int, dept_data: DepartmentItemCreate, db: Session = Depends(get_db)):
+    dept = db.query(Department).filter(Department.id == id).first()
+    if not dept:
+        raise HTTPException(status_code=404, detail="Department not found")
+
+    dept.name = dept_data.name
+    dept.code = dept_data.code
+    dept.role_id = dept_data.role_id
+    db.commit()
+    db.refresh(dept)
+
+    roles_map = {r.id: r.name for r in db.query(Role).all()}
+    return DepartmentItemResponse(
+        id=dept.id,
+        name=dept.name,
+        code=dept.code,
+        role_id=dept.role_id,
+        role_name=roles_map.get(dept.role_id)
+    )
+
+@router.delete("/{id}")
+def delete_department(id: int, db: Session = Depends(get_db)):
+    dept = db.query(Department).filter(Department.id == id).first()
+    if not dept:
+        raise HTTPException(status_code=404, detail="Department not found")
+
+    db.delete(dept)
+    db.commit()
+    return {"message": "Department deleted successfully"}

@@ -228,18 +228,18 @@
       "status": "migrated"
     },
     "AD05": {
-      "route": "/admin/departments",
+      "route": "/admin/users/departments",
       "file": "Auth/Views/DepartmentManagementView.jsx",
       "title": "Quản lý phòng ban",
       "subtitle": "Danh sách phòng ban",
       "status": "migrated"
     },
     "AD06": {
-      "route": "/admin/positions",
+      "route": "/admin/users/positions",
       "file": "Auth/Views/PositionManagementView.jsx",
       "title": "Quản lý chức vụ",
       "subtitle": "Danh sách chức vụ",
-      "status": "migrated"
+      "status": "inactive"
     }
   },
   "statistics": {

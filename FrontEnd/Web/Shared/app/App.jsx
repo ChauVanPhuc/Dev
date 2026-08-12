@@ -11,7 +11,6 @@ const UserCreate = lazy(() => import('@modules/Auth/Views/User/UserCreateView'))
 const UserEdit = lazy(() => import('@modules/Auth/Views/User/UserEditView'));
 const UserPermissionView = lazy(() => import('@modules/Auth/Views/User/UserPermissionView'));
 const DepartmentManagement = lazy(() => import('@modules/Auth/Views/Department/DepartmentManagementView'));
-const PositionManagement = lazy(() => import('@modules/Auth/Views/User/PositionManagementView'));
 const EmployeeListView = lazy(() => import('@modules/Auth/Views/Employee/EmployeeListView'));
 const OrgChartView = lazy(() => import('@modules/Auth/Views/HR/OrgChartView'));
 const HierarchyChartView = lazy(() => import('@modules/Auth/Views/HR/HierarchyChartView'));
@@ -614,7 +613,6 @@ function App() {
                 <Route path="users/edit/:id" element={<ProtectedRoute permissionKey="users"><UserEdit /></ProtectedRoute>} />
                 <Route path="users/permissions/:id" element={<ProtectedRoute permissionKey="users"><UserEdit /></ProtectedRoute>} />
                 <Route path="users/departments" element={<ProtectedRoute permissionKey="users"><DepartmentManagement /></ProtectedRoute>} />
-                <Route path="users/positions" element={<ProtectedRoute permissionKey="users"><PositionManagement /></ProtectedRoute>} />
                 <Route path="hr" element={<Navigate to="hr/org-chart" />} />
                 <Route path="hr/org-chart" element={<ProtectedRoute permissionKey="users"><HRManagementView /></ProtectedRoute>} />
                 <Route path="hr/employees" element={<ProtectedRoute permissionKey="users"><EmployeeListView /></ProtectedRoute>} />
