@@ -242,7 +242,7 @@ const KPIChecklistView = () => {
             </div>
 
             {/* Pagination */}
-            <div className="admin-pagination-desktop" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px' }}>
+            <div className="admin-pagination-desktop desktop-only">
               <div style={{ fontSize: '0.85rem', color: '#7B5233', fontWeight: '600' }}>
                 Hiển thị <b>{filteredPool.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}</b> - <b>{Math.min(currentPage * itemsPerPage, filteredPool.length)}</b> trên <b>{filteredPool.length}</b> kết quả
               </div>

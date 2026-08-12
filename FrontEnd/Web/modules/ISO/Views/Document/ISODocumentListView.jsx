@@ -526,8 +526,8 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            <div style={{ overflowX: 'auto', minHeight: '220px', flex: 1 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '900px' }}>
+            <div className="admin-table-scroll" style={{ overflowX: 'auto', minHeight: '220px', flex: 1 }}>
+            <table className="data-table" style={{ width: '100%', minWidth: '900px' }}>
               <thead>
                 <tr style={{ backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9' }}>
                   <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '50px' }}>STT</th>
@@ -674,7 +674,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
           {(() => {
             const totalPages = Math.ceil(filteredDocs.length / pageSize);
             return filteredDocs.length > 0 ? (
-              <div className="admin-pagination-desktop" style={{ borderTop: '1px solid #EADCC9', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', borderBottomLeftRadius: '12px', borderBottomRightRadius: '12px' }}>
+              <div className="admin-pagination-desktop desktop-only">
                 <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
                   Hiển thị <b>{paginatedDocs.length}</b> trên <b>{filteredDocs.length}</b> tài liệu
                 </div>

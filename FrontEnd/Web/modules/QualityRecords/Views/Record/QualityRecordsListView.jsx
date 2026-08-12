@@ -1033,6 +1033,36 @@ const QualityRecordsListView = () => {
                             <option value={100}>100 dòng</option>
                         </select>
                     </div>
+
+                    {(statusFilter !== 'all' || filterProduct !== 'all' || itemsPerPage !== 15 || searchTerm || sortBy !== 'none') && (
+                        <div className="filter-field-group">
+                            <button
+                                type="button"
+                                className="page-btn"
+                                onClick={() => {
+                                    setStatusFilter('all');
+                                    setFilterProduct('all');
+                                    setItemsPerPage(15);
+                                    setSearchTerm('');
+                                    setSortBy('none');
+                                    setCurrentPage(1);
+                                }}
+                                style={{
+                                    height: '36px',
+                                    padding: '0 12px',
+                                    fontSize: '0.8rem',
+                                    backgroundColor: '#FAF6F0',
+                                    color: '#7B5233',
+                                    border: '1px solid #EADCC9',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    fontWeight: '600'
+                                }}
+                            >
+                                Xóa bộ lọc
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -1182,7 +1212,7 @@ const QualityRecordsListView = () => {
                             {/* Phân trang - Desktop */}
                             <div className="admin-pagination-desktop desktop-only">
                                 <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600', textAlign: 'center' }}>
-                                    Hiển thị <b>{currentOrders.length}</b> trên <b>{totalCount}</b> hồ sơ
+                                    Hiển thị <b>{totalCount > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} - {Math.min(currentPage * itemsPerPage, totalCount)}</b> trên <b>{totalCount}</b> hồ sơ
                                 </div>
 
                                 {totalPages > 1 && (
@@ -1191,7 +1221,6 @@ const QualityRecordsListView = () => {
                                             className="page-btn"
                                             onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                                             disabled={currentPage === 1}
-                                            style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', opacity: currentPage === 1 ? 0.5 : 1, color: '#7B5233' }}
                                         >
                                             <ChevronLeft size={14} />
                                         </button>
@@ -1209,7 +1238,7 @@ const QualityRecordsListView = () => {
 
                                             if (start > 1) {
                                                 pages.push(
-                                                    <button key={1} className="page-btn" onClick={() => setCurrentPage(1)} style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#7B5233', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer' }}>1</button>
+                                                    <button key={1} className={`page-btn ${currentPage === 1 ? 'active' : ''}`} onClick={() => setCurrentPage(1)}>1</button>
                                                 );
                                                 if (start > 2) pages.push(<span key="dots-start" style={{ color: '#8D6E63', fontSize: '0.7rem' }}>...</span>);
                                             }
@@ -1221,12 +1250,6 @@ const QualityRecordsListView = () => {
                                                         key={i}
                                                         className={`page-btn ${currentPage === i ? 'active' : ''}`}
                                                         onClick={() => setCurrentPage(i)}
-                                                        style={{
-                                                            padding: '6px 10px', borderRadius: '8px', border: '1px solid #EADCC9',
-                                                            backgroundColor: currentPage === i ? '#7B5233' : '#FAF6F0',
-                                                            color: currentPage === i ? '#fff' : '#7B5233',
-                                                            fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer'
-                                                        }}
                                                     >
                                                         {i}
                                                     </button>
@@ -1236,7 +1259,7 @@ const QualityRecordsListView = () => {
                                             if (end < totalPages) {
                                                 if (end < totalPages - 1) pages.push(<span key="dots-end" style={{ color: '#8D6E63', fontSize: '0.7rem' }}>...</span>);
                                                 pages.push(
-                                                    <button key={totalPages} className="page-btn" onClick={() => setCurrentPage(totalPages)} style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#7B5233', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer' }}>{totalPages}</button>
+                                                    <button key={totalPages} className={`page-btn ${currentPage === totalPages ? 'active' : ''}`} onClick={() => setCurrentPage(totalPages)}>{totalPages}</button>
                                                 );
                                             }
                                             return pages;
@@ -1246,7 +1269,6 @@ const QualityRecordsListView = () => {
                                             className="page-btn"
                                             onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                                             disabled={currentPage === totalPages}
-                                            style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', opacity: currentPage === totalPages ? 0.5 : 1, color: '#7B5233' }}
                                         >
                                             <ChevronRight size={14} />
                                         </button>

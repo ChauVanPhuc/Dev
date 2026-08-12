@@ -12,6 +12,11 @@ class AccountBase(BaseModel):
     email: Union[EmailStr, str, None] = None # Địa chỉ Email
     is_active: bool = True                 # Trạng thái tài khoản (Đang hoạt động hay không)
     is_mobile_allowed: bool = True          # Quyền truy cập ứng dụng Mobile
+    role_id: Union[int, None] = None        # ID Phòng Ban (Role)
+    department_id: Union[int, None] = None  # ID Bộ Phận (Department)
+    permission_id: Union[int, None] = None  # ID Vị Trí (Permission)
+    factory_id: Union[int, None] = None     # ID Nhà Máy (Factory)
+    factory_name: Union[str, None] = None   # Tên Nhà Máy
 
 class AccountCreate(AccountBase):
     """
@@ -24,8 +29,11 @@ class AccountCreate(AccountBase):
     employee_code: Union[str, None] = None  # Mã nhân viên (phương án 2)
     full_name: Union[str, None] = None      # Họ và tên
     name: Union[str, None] = None           # Họ và tên (phương án 2)
-    role_id: Union[int, None] = None        # ID vai trò (Role)
-    permission_id: Union[int, None] = None  # ID quyền hạn (Permission)
+    role_id: Union[int, None] = None        # ID Phòng Ban (Role)
+    department_id: Union[int, None] = None  # ID Bộ Phận (Department)
+    permission_id: Union[int, None] = None  # ID Vị Trí (Permission)
+    factory_id: Union[int, None] = None     # ID Nhà Máy (Factory)
+    factory_name: Union[str, None] = None   # Tên Nhà Máy
     stage_id: Union[int, None] = None       # ID công đoạn (Stage) phụ trách
     stage_ids: Union[List[int], None] = None # Danh sách ID các công đoạn phụ trách
     permission_level: Union[str, None] = None # Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
@@ -45,6 +53,13 @@ class AccountUpdate(BaseModel):
     employee_id: Union[str, None] = None
     employee_code: Union[str, None] = None
     status: Union[str, None] = None
+    role_id: Union[int, None] = None
+    department_id: Union[int, None] = None
+    permission_id: Union[int, None] = None
+    factory_id: Union[int, None] = None
+    factory_name: Union[str, None] = None
+    stage_id: Union[int, None] = None
+    stage_ids: Union[List[int], None] = None
     permission_level: Union[str, None] = None # Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
     is_mobile_allowed: Union[bool, None] = None # Quyền truy cập ứng dụng Mobile
 
@@ -70,11 +85,17 @@ class AccountInfo(AccountBase):
     status: Union[str, None] = None
     created_at: Union[str, datetime, None] = None # Thời gian tạo
     
-    # Thông tin mở rộng từ các phép Join (Role, Stage)
-    role_name: Union[str, None] = None # Tên vai trò
-    permission_name: Union[str, None] = None # Tên chức vụ
+    # Thông tin mở rộng từ các phép Join (Role, Department, Permission, Stage, Factory)
+    role_id: Union[int, None] = None
+    role_name: Union[str, None] = None # Tên Phòng Ban (Role)
+    department_id: Union[int, None] = None
+    department_name: Union[str, None] = None # Tên Bộ Phận (Department)
+    permission_id: Union[int, None] = None
+    permission_name: Union[str, None] = None # Tên Vị Trí (Chức vụ)
+    factory_id: Union[int, None] = None
+    factory_name: Union[str, None] = None # Tên Nhà Máy
     stage_name: Union[str, None] = None # Tên công đoạn phụ trách
-    permission_level: Union[str, None] = None # Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
+    permission_level: Union[str, None] = None # Quyền hạn
 
     class Config:
         from_attributes = True
@@ -101,16 +122,23 @@ class Token(BaseModel):
     email: Union[str, None] = None
     phone: Union[str, None] = None
     employee_id: Union[str, None] = None
+    role_id: Union[int, None] = None
     role_name: Union[str, None] = None
     role_description: Union[str, None] = None
+    department_id: Union[int, None] = None
+    department_name: Union[str, None] = None
+    permission_id: Union[int, None] = None
     permission_name: Union[str, None] = None
     permission_description: Union[str, None] = None
+    factory_id: Union[int, None] = None
+    factory_name: Union[str, None] = None
     stage_name: Union[str, None] = None
     stage_description: Union[str, None] = None
     id: Union[int, None] = None
     screen_permissions: Union[str, None] = None
     permission_level: Union[str, None] = None # Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
     is_mobile_allowed: Union[bool, None] = True # Quyền truy cập ứng dụng Mobile
+
 
 class TokenData(BaseModel):
     """

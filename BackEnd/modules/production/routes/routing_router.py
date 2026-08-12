@@ -26,6 +26,15 @@ def delete_team(team_id: int, db: Session = Depends(get_db)):
 
 
 # --- ROUTINGS ENDPOINTS ---
+@router.get("/routings/next-code")
+def get_next_routing_code(db: Session = Depends(get_db)):
+    """Trả về mã Quy trình tự tăng tiếp theo dạng QTSX-xx"""
+    from modules.production.models.production_routing import ProductionRouting
+    from sqlalchemy import func
+    max_id = db.query(func.max(ProductionRouting.id)).scalar() or 0
+    next_num = max_id + 1
+    return {"next_code": f"QTSX-{str(next_num).zfill(2)}", "next_num": next_num}
+
 @router.get("/routings")
 def get_routings(db: Session = Depends(get_db)):
     """Lấy danh sách tất cả Quy trình sản xuất kèm danh sách Tổ và Linh kiện"""

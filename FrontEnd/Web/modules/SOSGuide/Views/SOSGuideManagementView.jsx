@@ -391,18 +391,10 @@ const SOSGuideManagementView = () => {
 
       {/* Table View */}
       {viewMode === 'table' ? (
-        <div style={{
-          flex: 1,
-          minHeight: 0,
-          backgroundColor: '#FFFFFF',
-          borderRadius: 14,
-          border: `1px solid ${THEME.borderLight}`,
-          overflowY: 'auto',
-          overflowX: 'auto',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
-          position: 'relative'
-        }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13.5 }}>
+        <div className="admin-list-layout">
+          <div className="mgmt-table card admin-table-card">
+            <div className="admin-table-scroll">
+              <table className="data-table">
             <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: THEME.bgLight }}>
               <tr style={{ backgroundColor: THEME.bgLight, borderBottom: `1.5px solid ${THEME.borderLight}`, color: THEME.primary, fontWeight: 800, fontSize: 12.5, textTransform: 'uppercase' }}>
                 <th style={{ padding: '12px 16px', width: 60, backgroundColor: THEME.bgLight, position: 'sticky', top: 0, zIndex: 10 }}>STT</th>
@@ -591,6 +583,8 @@ const SOSGuideManagementView = () => {
               )}
             </tbody>
           </table>
+            </div>
+          </div>
         </div>
       ) : (
         /* Grid View */

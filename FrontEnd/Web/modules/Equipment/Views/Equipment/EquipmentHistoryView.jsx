@@ -184,7 +184,7 @@ const EquipmentHistoryView = () => {
               </div>
 
               {/* Pagination - chuẩn hóa */}
-              <div className="admin-pagination-desktop" style={{ borderTop: '1px solid #EADCC9', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="admin-pagination-desktop desktop-only">
                 <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
                   Hiển thị <b>{paginatedData.length}</b> trên <b>{filtered.length}</b> bản ghi
                 </div>

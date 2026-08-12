@@ -36,7 +36,9 @@ const UserCreate = () => {
   
   // Dữ liệu từ API
   const [roles, setRoles] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [permissions, setPermissions] = useState([]);
+  const [factories, setFactories] = useState([]);
   const [stages, setStages] = useState([]);
   
   // Trạng thái Form
@@ -48,12 +50,16 @@ const UserCreate = () => {
     phone: '',
     password: '',
     role_id: '',
+    department_id: '',
     permission_id: '',
+    factory_id: '',
+    factory_name: '',
     stage_ids: [], // danh sách ID công đoạn được chọn
     permission_level: '', // Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
     is_mobile_allowed: true, // Quyền truy cập ứng dụng Mobile
     status: 'Đang sử dụng'
   });
+
 
   const toggleMobileAccess = () => {
     setFormData(prev => ({
@@ -203,18 +209,32 @@ const UserCreate = () => {
     return result;
   }, [stages, selectedFactory]);
 
-  // 1. Tải danh mục Roles, Sidebar và Screens khi mount
+  // 1. Tải danh mục Roles, Factories, Sidebar và Screens khi mount
   useEffect(() => {
     const initData = async () => {
       try {
-        const [rolesRes, sidebarRes, screensRes] = await Promise.all([
+        const [rolesRes, sidebarRes, screensRes, factoriesRes, permsRes] = await Promise.all([
           api.get('/roles/'),
           api.get('/system/sidebar/all'),
-          api.get('/screens')
+          api.get('/screens'),
+          api.get('/hr/factory-structures').catch(() => []),
+          api.get('/permissions/?include_inactive=false').catch(() => [])
         ]);
         setRoles(rolesRes || []);
         setSidebarItems(sidebarRes || []);
         setScreens(screensRes || []);
+        if (permsRes && permsRes.length > 0) {
+          setPermissions(permsRes);
+        }
+        
+        const parsedFactories = (factoriesRes && factoriesRes.length > 0) 
+          ? factoriesRes 
+          : [
+              { id: 1, structure_name: 'Văn Phòng', structure_code: 'VP' },
+              { id: 2, structure_name: 'Nhà máy 1', structure_code: 'NM1' },
+              { id: 3, structure_name: 'Nhà máy 2', structure_code: 'NM2' }
+            ];
+        setFactories(parsedFactories);
 
         // Khởi tạo phân quyền ban đầu: mặc định là 'none' (Chặn)
         const webGroups = buildPermissionGroupsFromSidebar(sidebarRes || [], 'web', screensRes || []);
@@ -277,32 +297,42 @@ const UserCreate = () => {
     }
   }, [formData.role_id, formData.permission_id, formData.permission_level, dynamicWebGroups, dynamicMobileGroups]);
 
-  // 2. Khi Role thay đổi -> Lấy danh sách Permissions
+  // 2. Khi Role (Phòng Ban) thay đổi -> Lấy danh sách Departments (Bộ Phận) và Permissions (Vị Trí)
   useEffect(() => {
     if (formData.role_id) {
-      const fetchPermissions = async () => {
-        try {
-          const data = await api.get(`/roles/${formData.role_id}/permissions`);
-          setPermissions(data);
-          setFormData(prev => {
-            const hasMatch = data.some(p => String(p.id) === String(prev.permission_id));
-            return {
-              ...prev,
-              permission_id: hasMatch ? prev.permission_id : (data.length > 0 ? String(data[0].id) : ''),
-              stage_ids: []
-            };
-          });
-          setStages([]);
-        } catch (err) {
+      // Load departments (Bộ phận)
+      api.get(`/departments/?role_id=${formData.role_id}`)
+        .then(data => setDepartments(Array.isArray(data) ? data : []))
+        .catch(err => {
+          console.error('Lỗi khi tải Departments:', err);
+          setDepartments([]);
+        });
+
+      // Load permissions (Vị trí): lấy danh sách tất cả các vị trí đang hoạt động trong hệ thống
+      api.get('/permissions/?include_inactive=false')
+        .then(data => {
+          if (Array.isArray(data) && data.length > 0) {
+            setPermissions(data);
+          }
+        })
+        .catch(err => {
           console.error('Lỗi khi tải Permissions:', err);
-        }
-      };
-      fetchPermissions();
-    } else {
-      setPermissions([]);
+        });
+
+      setFormData(prev => ({
+        ...prev,
+        department_id: '',
+        permission_id: '', // Để trống để người dùng chủ động chọn vị trí mong muốn
+        stage_ids: []
+      }));
       setStages([]);
+    } else {
+      setDepartments([]);
+      setStages([]);
+      setFormData(prev => ({ ...prev, department_id: '', permission_id: '', stage_ids: [] }));
     }
   }, [formData.role_id]);
+
 
   // 3. Khi Permission thay đổi -> Lấy danh sách Stages (có fallback tự động nếu trống)
   useEffect(() => {
@@ -674,7 +704,7 @@ const UserCreate = () => {
       if (!dataToSend.employee_id) delete dataToSend.employee_id;
       
       // Chuyển các trường ID từ chuỗi rỗng thành số hoặc null
-      ['role_id', 'permission_id'].forEach(field => {
+      ['role_id', 'department_id', 'permission_id', 'factory_id'].forEach(field => {
         if (!dataToSend[field] || dataToSend[field] === '') {
           dataToSend[field] = null;
         } else {
@@ -732,7 +762,8 @@ const UserCreate = () => {
         permissions: permissionsToSave
       });
 
-      setToastMessage('Tạo tài khoản và phân quyền thành công!');
+      setSuccess(true);
+      setToastMessage('Tạo mới tài khoản và phân quyền thành công!');
       setTimeout(() => {
         setToastMessage(null);
         navigate('/admin/users');
@@ -751,6 +782,7 @@ const UserCreate = () => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setLoading(false);
+      setShowConfirmModal(false);
     }
   };
 
@@ -943,38 +975,79 @@ const UserCreate = () => {
                       </svg>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      <h3 className="section-title" style={{ fontSize: '1.05rem', margin: 0, fontWeight: 800 }}>Phân quyền phân cấp</h3>
-                      <span style={{ fontSize: '0.78rem', color: '#8C7B72', fontWeight: 500 }}>Chọn bộ phận/phòng ban, vị trí và phạm vi phụ trách.</span>
+                      <h3 className="section-title" style={{ fontSize: '1.05rem', margin: 0, fontWeight: 800 }}>Phân quyền 4 tầng</h3>
+                      <span style={{ fontSize: '0.78rem', color: '#8C7B72', fontWeight: 500 }}>Thiết lập cấu trúc: Phòng Ban → Bộ Phận → Vị Trí → Nhà Máy.</span>
                     </div>
                   </div>
                   
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px 18px', marginBottom: '20px' }}>
-                    {/* Bộ phận/phòng ban */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px 18px', marginBottom: '20px' }}>
+                    {/* 1. Phòng Ban */}
                     <div className="form-group">
-                      <label>Bộ phận/phòng ban</label>
-                      <select name="role_id" value={formData.role_id} onChange={handleChange}>
-                        <option value="">-- Chọn bộ phận --</option>
+                      <label>1. Phòng Ban <span className="required" style={{ color: '#E11D48' }}>*</span></label>
+                      <select name="role_id" value={formData.role_id} onChange={handleChange} required>
+                        <option value="">-- Chọn Phòng Ban --</option>
                         {roles.map(r => (
                           <option key={r.id} value={r.id}>{r.name}</option>
                         ))}
                       </select>
                     </div>
 
-                    {/* Vị trí, chức vụ */}
+                    {/* 2. Bộ Phận */}
                     <div className={`form-group ${!formData.role_id ? 'disabled' : ''}`}>
-                      <label>Vị trí, chức vụ</label>
+                      <label>2. Bộ Phận</label>
+                      <select 
+                        name="department_id" 
+                        value={formData.department_id} 
+                        onChange={handleChange}
+                        disabled={!formData.role_id}
+                      >
+                        <option value="">-- Chọn Bộ Phận --</option>
+                        {departments?.map(d => (
+                          <option key={d.id} value={d.id}>{d.name || d.code}</option>
+                        ))}
+                      </select>
+                      {!formData.role_id && <small className="hint">Hãy chọn Phòng Ban trước</small>}
+                    </div>
+
+                    {/* 3. Vị Trí / Chức Vụ */}
+                    <div className={`form-group ${!formData.role_id ? 'disabled' : ''}`}>
+                      <label>3. Vị Trí / Chức Vụ <span className="required" style={{ color: '#E11D48' }}>*</span></label>
                       <select 
                         name="permission_id" 
                         value={formData.permission_id} 
                         onChange={handleChange} 
                         disabled={!formData.role_id}
+                        required
                       >
-                        <option value="">-- Chọn chức vụ --</option>
+                        <option value="">-- Chọn Vị Trí / Chức Vụ --</option>
                         {permissions.map(p => (
                           <option key={p.id} value={p.id}>{p.name}</option>
                         ))}
                       </select>
-                      {!formData.role_id && <small className="hint">Hãy chọn Bộ phận trước</small>}
+                      {!formData.role_id && <small className="hint">Hãy chọn Phòng Ban trước</small>}
+                    </div>
+
+                    {/* 4. Nhà Máy */}
+                    <div className="form-group">
+                      <label>4. Nhà Máy</label>
+                      <select 
+                        name="factory_id" 
+                        value={formData.factory_id} 
+                        onChange={(e) => {
+                          const selId = e.target.value;
+                          const found = factories.find(f => String(f.id) === String(selId));
+                          setFormData(prev => ({
+                            ...prev,
+                            factory_id: selId,
+                            factory_name: found ? (found.structure_name || found.name || found.structure_code) : ''
+                          }));
+                        }}
+                      >
+                        <option value="">-- Chọn Nhà Máy --</option>
+                        {factories.map(f => (
+                          <option key={f.id} value={f.id}>{f.structure_name || f.name || f.structure_code}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 

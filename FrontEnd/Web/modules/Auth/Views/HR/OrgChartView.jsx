@@ -570,7 +570,7 @@ const OrgChartView = ({ diagramDropdown }) => {
             </div>
 
             {/* Phân trang */}
-            <div className="admin-pagination-desktop desktop-only" style={{ marginTop: '16px' }}>
+            <div className="admin-pagination-desktop desktop-only">
               <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
                 Hiển thị <b>{paginatedNodes.length}</b> trên <b>{filteredNodes.length}</b> kết quả
               </div>

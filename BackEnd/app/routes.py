@@ -8,7 +8,8 @@ from modules.master.routes import master_product_router, master_category_router,
 
 from modules.delivery.routes import order_router, delivery_router, return_router, pallet_router
 
-from modules.auth.routes import account_router, role_router, permission_router, org_structure_router, employee_router
+from modules.auth.routes import account_router, role_router, permission_router, org_structure_router, employee_router, department_router
+
 
 from modules.notification.routes import notification_router
 
@@ -52,6 +53,8 @@ api_router.include_router(category_router.router, prefix="/categories", tags=["c
 api_router.include_router(order_router.router, prefix="/orders", tags=["orders"])
 
 api_router.include_router(account_router.router, prefix="/accounts", tags=["accounts"])
+api_router.include_router(department_router.router, prefix="/departments", tags=["departments"])
+
 
 api_router.include_router(role_router.router, prefix="/roles", tags=["roles"])
 

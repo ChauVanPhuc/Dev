@@ -29,6 +29,7 @@ const ManufacturePlan = () => {
     const [plans, setPlans] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filterStatus, setFilterStatus] = useState('all');
+    const [quantityScaleFilter, setQuantityScaleFilter] = useState('all');
     const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
     const [showFilterDropdown, setShowFilterDropdown] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -298,7 +299,7 @@ const ManufacturePlan = () => {
               showFilter={true}
               isFilterOpen={isFilterBarOpen}
               onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
-              activeFiltersCount={filterStatus !== 'all' ? 1 : 0}
+              activeFiltersCount={(filterStatus !== 'all' ? 1 : 0) + (quantityScaleFilter !== 'all' ? 1 : 0)}
               importActions={[
                 {
                   label: 'Nhập Excel',
@@ -322,10 +323,10 @@ const ManufacturePlan = () => {
 
             {/* INLINE EXPANDABLE FILTER BAR */}
             {isFilterBarOpen && (
-              <div className="filter-inline-bar">
+              <div className="filter-inline-bar" style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
                 {/* Trạng thái */}
                 <div className="filter-field-group">
-                  <label className="filter-field-label">Trạng thái</label>
+                  <label className="filter-field-label">Trạng thái KHSX</label>
                   <select 
                     value={filterStatus} 
                     onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}
@@ -334,6 +335,20 @@ const ManufacturePlan = () => {
                     <option value="production">Đang sản xuất</option>
                     <option value="completed">Đã hoàn thành</option>
                     <option value="overdue">Quá hạn</option>
+                  </select>
+                </div>
+
+                {/* Quy mô sản lượng */}
+                <div className="filter-field-group">
+                  <label className="filter-field-label">Quy mô sản lượng</label>
+                  <select 
+                    value={quantityScaleFilter} 
+                    onChange={(e) => { setQuantityScaleFilter(e.target.value); setCurrentPage(1); }}
+                  >
+                    <option value="all">Tất cả quy mô</option>
+                    <option value="small">Nhỏ (&lt; 1,000 SP)</option>
+                    <option value="medium">Vừa (1,000 - 5,000 SP)</option>
+                    <option value="large">Lớn (&gt; 5,000 SP)</option>
                   </select>
                 </div>
 
@@ -350,6 +365,34 @@ const ManufacturePlan = () => {
                     <option value={100}>100 dòng</option>
                   </select>
                 </div>
+
+                {(filterStatus !== 'all' || quantityScaleFilter !== 'all' || itemsPerPage !== 15) && (
+                  <div className="filter-field-group">
+                    <button
+                      type="button"
+                      className="page-btn"
+                      onClick={() => {
+                        setFilterStatus('all');
+                        setQuantityScaleFilter('all');
+                        setItemsPerPage(15);
+                        setCurrentPage(1);
+                      }}
+                      style={{
+                        height: '36px',
+                        padding: '0 12px',
+                        fontSize: '0.8rem',
+                        backgroundColor: '#FAF6F0',
+                        color: '#7B5233',
+                        border: '1px solid #EADCC9',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontWeight: '600'
+                      }}
+                    >
+                      Xóa bộ lọc
+                    </button>
+                  </div>
+                )}
               </div>
             )}
             </div> {/* end sticky-top-zone */}
@@ -417,26 +460,45 @@ const ManufacturePlan = () => {
                 {/* Footer Section */}
                 <div className="admin-pagination-desktop">
                     <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
-                        Tổng cộng <b>{totalCount}</b> Kế hoạch
+                        Hiển thị <b>{totalCount > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} - {Math.min(currentPage * itemsPerPage, totalCount)}</b> trên <b>{totalCount}</b> kế hoạch
                     </div>
 
-                    <div style={{ display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+                    <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
                         <button 
                             className="page-btn"
                             onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
                             disabled={currentPage === 1}
                         >
-                            &lt; Trước
+                            <ChevronLeft size={14} />
                         </button>
-                        <span style={{ margin: '0 10px', fontSize: '0.85rem', fontWeight: '700', color: '#7B5233' }}>
-                            Trang {currentPage} / {totalPages || 1}
-                        </span>
+
+                        {(() => {
+                            const pages = [];
+                            const maxVisible = 5;
+                            let start = Math.max(1, currentPage - 2);
+                            let end = Math.min(totalPages, start + maxVisible - 1);
+                            if (end - start < maxVisible - 1) start = Math.max(1, end - maxVisible + 1);
+
+                            for (let i = start; i <= end; i++) {
+                                pages.push(
+                                    <button
+                                        key={i}
+                                        className={`page-btn ${currentPage === i ? 'active' : ''}`}
+                                        onClick={() => setCurrentPage(i)}
+                                    >
+                                        {i}
+                                    </button>
+                                );
+                            }
+                            return pages;
+                        })()}
+
                         <button 
                             className="page-btn"
                             onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
                             disabled={currentPage === totalPages || totalPages <= 1}
                         >
-                            Sau &gt;
+                            <ChevronRight size={14} />
                         </button>
                     </div>
                 </div>

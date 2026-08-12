@@ -493,18 +493,17 @@ const PaintColorManagementView = ({ isEmbedded = false }) => {
                 {/* ── Thanh Phân Trang chuẩn Gốc UserManagement ── */}
                 <div className="admin-pagination-desktop desktop-only">
                   <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
-                    Hiển thị <b>{items.length}</b> trên <b>{total}</b> mẫu màu sơn
+                    Hiển thị <b>{total > 0 ? (currentPage - 1) * pageSize + 1 : 0} - {Math.min(currentPage * pageSize, total)}</b> trên <b>{total}</b> mẫu màu sơn
                   </div>
 
                   {totalPages > 1 && (
-                    <div style={{ display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+                    <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
                       <button
                         disabled={currentPage === 1}
                         onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                         className="page-btn"
-                        style={{ padding: '8px 12px' }}
                       >
-                        &lt; Trước
+                        <ChevronLeft size={14} />
                       </button>
                       {(() => {
                         const pages = [];
@@ -519,7 +518,7 @@ const PaintColorManagementView = ({ isEmbedded = false }) => {
                         return pages.map((p, idx) => {
                           if (p === '...') {
                             return (
-                              <span key={`ell-${idx}`} style={{ padding: '0 8px', color: '#7B5233', fontWeight: '700' }}>
+                              <span key={`ell-${idx}`} style={{ padding: '0 4px', color: '#8D6E63', fontWeight: '700' }}>
                                 ...
                               </span>
                             );
@@ -539,9 +538,8 @@ const PaintColorManagementView = ({ isEmbedded = false }) => {
                         disabled={currentPage >= totalPages}
                         onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                         className="page-btn"
-                        style={{ padding: '8px 12px' }}
                       >
-                        Sau &gt;
+                        <ChevronRight size={14} />
                       </button>
                     </div>
                   )}

@@ -1518,15 +1518,15 @@ const ScreenManagement = () => {
                 {totalPages > 1 && (
                   <div className="admin-pagination-desktop">
                     <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
-                      Hiển thị <b>{paginatedScreens.length}</b> trên <b>{filteredScreens.length}</b> kết quả
+                      Hiển thị <b>{filteredScreens.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} - {Math.min(currentPage * pageSize, filteredScreens.length)}</b> trên <b>{filteredScreens.length}</b> kết quả
                     </div>
-                    <div style={{ display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+                    <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
                       <button
                         disabled={currentPage === 1}
                         onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                         className="page-btn"
                       >
-                        &lt; Trước
+                        <ChevronLeft size={14} />
                       </button>
                       {(() => {
                         const pages = [];
@@ -1541,7 +1541,7 @@ const ScreenManagement = () => {
                         return pages.map((p, idx) => {
                           if (p === '...') {
                             return (
-                              <span key={`ell-${idx}`} style={{ padding: '0 8px', color: '#7B5233', fontWeight: '700' }}>
+                              <span key={`ell-${idx}`} style={{ padding: '0 4px', color: '#8D6E63', fontWeight: '700' }}>
                                 ...
                               </span>
                             );
@@ -1562,7 +1562,7 @@ const ScreenManagement = () => {
                         onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                         className="page-btn"
                       >
-                        Sau &gt;
+                        <ChevronRight size={14} />
                       </button>
                     </div>
                   </div>

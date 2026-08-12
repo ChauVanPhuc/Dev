@@ -22,6 +22,11 @@ export const purchasingService = {
     if (params.skip !== undefined) query.append('skip', params.skip);
     if (params.limit !== undefined) query.append('limit', params.limit);
     if (params.search) query.append('search', params.search);
+    if (params.status) query.append('status', params.status);
+    if (params.order_type) query.append('order_type', params.order_type);
+    if (params.supplier_name) query.append('supplier_name', params.supplier_name);
+    if (params.priority) query.append('priority', params.priority);
+    if (params.month) query.append('month', params.month);
     return await api.get(`/purchase-requisitions/shipping-monitoring?${query.toString()}`);
   },
 

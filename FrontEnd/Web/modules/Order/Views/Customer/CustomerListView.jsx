@@ -20,6 +20,9 @@ export default function CustomerListView() {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [countryFilter, setCountryFilter] = useState('');
 
   const [actionMenuId, setActionMenuId] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -195,10 +198,86 @@ export default function CustomerListView() {
         searchValue={searchTerm}
         onSearchChange={(val) => { setSearchTerm(val); setCurrentPage(1); }}
         searchPlaceholder="Tìm theo mã, tên KH, SĐT, MST..."
+        showFilter={true}
+        isFilterOpen={isFilterOpen}
+        onFilterToggle={() => setIsFilterOpen(!isFilterOpen)}
+        activeFiltersCount={(statusFilter ? 1 : 0) + (countryFilter ? 1 : 0)}
         onCreate={handleOpenAddModal}
         createLabel="Thêm Khách hàng"
         hasWritePermission={true}
       />
+
+      {/* Filter Bar */}
+      {isFilterOpen && (
+        <div className="filter-inline-bar" style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: '16px' }}>
+          <div className="filter-field-group">
+            <label className="filter-field-label">Trạng thái đối tác</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+            >
+              <option value="">Tất cả trạng thái</option>
+              <option value="1">Đang hoạt động</option>
+              <option value="0">Tạm ngưng</option>
+            </select>
+          </div>
+
+          <div className="filter-field-group">
+            <label className="filter-field-label">Quốc gia / Thị trường</label>
+            <select
+              value={countryFilter}
+              onChange={(e) => { setCountryFilter(e.target.value); setCurrentPage(1); }}
+            >
+              <option value="">Tất cả thị trường</option>
+              <option value="Việt Nam">Việt Nam</option>
+              <option value="USA">Mỹ (USA)</option>
+              <option value="Japan">Nhật Bản (Japan)</option>
+              <option value="EU">Châu Âu (EU)</option>
+            </select>
+          </div>
+
+          <div className="filter-field-group">
+            <label className="filter-field-label">Hiển thị số dòng</label>
+            <select
+              value={pageSize}
+              onChange={(e) => { setPageSize(parseInt(e.target.value)); setCurrentPage(1); }}
+            >
+              <option value={15}>15 dòng</option>
+              <option value={30}>30 dòng</option>
+              <option value={50}>50 dòng</option>
+              <option value={100}>100 dòng</option>
+            </select>
+          </div>
+
+          {(statusFilter || countryFilter || pageSize !== 15) && (
+            <div className="filter-field-group">
+              <button
+                type="button"
+                className="page-btn"
+                onClick={() => {
+                  setStatusFilter('');
+                  setCountryFilter('');
+                  setPageSize(15);
+                  setCurrentPage(1);
+                }}
+                style={{
+                  height: '36px',
+                  padding: '0 12px',
+                  fontSize: '0.8rem',
+                  backgroundColor: '#FAF6F0',
+                  color: '#7B5233',
+                  border: '1px solid #EADCC9',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: '600'
+                }}
+              >
+                Xóa bộ lọc
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Main Table */}
       <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #E5E7EB', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
@@ -281,28 +360,47 @@ export default function CustomerListView() {
         </div>
 
         {/* Pagination Footer */}
-        <div style={{ padding: '16px', borderTop: '1px solid #F3F4F6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontSize: '0.85rem', color: '#6B7280', fontWeight: 600 }}>
-            Hiển thị <b>{customers.length}</b> trên <b>{total}</b> Khách hàng
+        <div className="admin-pagination-desktop" style={{ borderTop: '1px solid #F3F4F6' }}>
+          <div style={{ fontSize: '0.8rem', color: '#8D6E63', fontWeight: 600 }}>
+            Hiển thị <b>{total > 0 ? (currentPage - 1) * pageSize + 1 : 0} - {Math.min(currentPage * pageSize, total)}</b> trên <b>{total}</b> Khách hàng
           </div>
           {totalPages > 1 && (
-            <div style={{ display: 'flex', gap: '6px' }}>
+            <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
               <button
+                className="page-btn"
                 onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
                 disabled={currentPage === 1}
-                style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #D1D5DB', backgroundColor: '#FFFFFF', cursor: currentPage === 1 ? 'not-allowed' : 'pointer' }}
               >
-                Trước
+                <ChevronLeft size={14} />
               </button>
-              <span style={{ padding: '6px 12px', fontSize: '0.85rem', fontWeight: 'bold', color: '#7B5233' }}>
-                {currentPage} / {totalPages}
-              </span>
+
+              {(() => {
+                const pages = [];
+                const maxVisible = 5;
+                let start = Math.max(1, currentPage - 2);
+                let end = Math.min(totalPages, start + maxVisible - 1);
+                if (end - start < maxVisible - 1) start = Math.max(1, end - maxVisible + 1);
+
+                for (let i = start; i <= end; i++) {
+                  pages.push(
+                    <button
+                      key={i}
+                      className={`page-btn ${currentPage === i ? 'active' : ''}`}
+                      onClick={() => setCurrentPage(i)}
+                    >
+                      {i}
+                    </button>
+                  );
+                }
+                return pages;
+              })()}
+
               <button
+                className="page-btn"
                 onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
                 disabled={currentPage === totalPages}
-                style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #D1D5DB', backgroundColor: '#FFFFFF', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer' }}
               >
-                Sau
+                <ChevronRight size={14} />
               </button>
             </div>
           )}

@@ -210,34 +210,6 @@ const PurchaseRequisitionListView = () => {
 
   return (
     <div className="manufacture-plan-container mgmt-container" style={{ width: '100%', maxWidth: '100%' }}>
-      
-      {/* Dynamic CSS override for Super Compact Table & Ultra Clean 1-Page View */}
-      <style dangerouslySetInnerHTML={{ __html: `
-        .pr-compact-table table.data-table thead tr th {
-          padding: 6px 8px !important;
-          font-size: 0.73rem !important;
-          white-space: nowrap !important;
-          line-height: 1.15 !important;
-          height: 32px !important;
-          letter-spacing: -0.2px;
-        }
-        .pr-compact-table table.data-table tbody tr td {
-          padding: 4px 8px !important;
-          font-size: 0.76rem !important;
-          white-space: nowrap !important;
-          line-height: 1.15 !important;
-          height: 28px !important;
-          vertical-align: middle !important;
-        }
-        .pr-compact-table .admin-table-card {
-          margin-bottom: 0 !important;
-        }
-        .pr-compact-table .admin-pagination-desktop {
-          height: 38px !important;
-          min-height: 38px !important;
-          padding: 0 12px !important;
-        }
-      `}} />
 
       {/* ── STICKY TOP ZONE ── */}
       <div className="sticky-top-zone" style={{ width: '100%' }}>
@@ -662,18 +634,17 @@ const PurchaseRequisitionListView = () => {
 
           {/* Footers Phân Trang Compact Chuẩn Dynamic */}
           <div className="admin-pagination-desktop desktop-only">
-            <div style={{ color: '#8D6E63', fontSize: '0.78rem', fontWeight: '600' }}>
-              Hiển thị <b>{startIndex}–{endIndex}</b> trên <b>{totalCount}</b> đơn hàng
+            <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
+              Hiển thị <b>{totalCount > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} - {Math.min(currentPage * itemsPerPage, totalCount)}</b> trên <b>{totalCount}</b> đơn hàng
             </div>
 
-            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+            <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
               <button
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage(currentPage - 1)}
                 className="page-btn"
-                style={{ padding: '4px 10px', fontSize: '0.78rem', cursor: currentPage === 1 ? 'not-allowed' : 'pointer' }}
               >
-                &lt; Trước
+                <ChevronLeft size={14} />
               </button>
               {(() => {
                 if (totalPages <= 7) {
@@ -704,22 +675,12 @@ const PurchaseRequisitionListView = () => {
                 return result;
               })().map((p, idx) => (
                 p === '...' ? (
-                  <span key={`dots-${idx}`} style={{ color: '#7B5233', fontWeight: '700', padding: '0 4px', fontSize: '0.78rem' }}>...</span>
+                  <span key={`dots-${idx}`} style={{ color: '#8D6E63', fontWeight: '700', padding: '0 4px', fontSize: '0.78rem' }}>...</span>
                 ) : (
                   <button
                     key={p}
                     onClick={() => setCurrentPage(p)}
                     className={`page-btn ${currentPage === p ? 'active' : ''}`}
-                    style={{
-                      padding: '4px 10px',
-                      backgroundColor: currentPage === p ? '#7B5233' : '#fff',
-                      color: currentPage === p ? '#fff' : '#334155',
-                      fontWeight: '700',
-                      border: '1px solid #CBD5E1',
-                      borderRadius: '5px',
-                      fontSize: '0.78rem',
-                      cursor: 'pointer'
-                    }}
                   >
                     {p}
                   </button>
@@ -729,9 +690,8 @@ const PurchaseRequisitionListView = () => {
                 disabled={currentPage === totalPages}
                 onClick={() => setCurrentPage(currentPage + 1)}
                 className="page-btn"
-                style={{ padding: '4px 10px', fontSize: '0.78rem', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer' }}
               >
-                Sau &gt;
+                <ChevronRight size={14} />
               </button>
             </div>
           </div>

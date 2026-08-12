@@ -89,6 +89,8 @@ const UserManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');      // '' = tất cả
+  const [roleFilter, setRoleFilter] = useState('');          // '' = tất cả
+  const [stageFilter, setStageFilter] = useState('');        // '' = tất cả
   const [showFilterPanel, setShowFilterPanel] = useState(false);
 
   // ─── State sắp xếp ───────────────────────────────────────────────────────────
@@ -181,6 +183,8 @@ const UserManagement = () => {
       const params = new URLSearchParams({ page, size: pageSize, sort_by: sortBy, sort_dir: sortDir });
       if (debouncedSearch) params.append('search', debouncedSearch);
       if (statusFilter) params.append('status', statusFilter);
+      if (roleFilter) params.append('role', roleFilter);
+      if (stageFilter) params.append('stage', stageFilter);
       const res = await api.get(`/accounts/?${params.toString()}`);
       setUsers(res.items || []);
       setTotal(res.total || 0);
@@ -191,7 +195,7 @@ const UserManagement = () => {
     }
   };
 
-  useEffect(() => { fetchUsers(); }, [page, pageSize, debouncedSearch, statusFilter, sortBy, sortDir]);
+  useEffect(() => { fetchUsers(); }, [page, pageSize, debouncedSearch, statusFilter, roleFilter, stageFilter, sortBy, sortDir]);
 
   // Tải chi tiết phân quyền của toàn bộ user trên trang hiện tại khi ở chế độ Phân quyền
   useEffect(() => {
@@ -355,7 +359,7 @@ const UserManagement = () => {
       // Headers
       const headers1 = [
         "STT", "Mã NV", "Họ và tên", "Username", "Số điện thoại", 
-        "Phân loại", "Bộ phận", "Chức vụ", "Quyền hạn / Công đoạn", "Trạng thái"
+        "Phòng ban", "Bộ phận", "Vị trí", "Nhà máy", "Quyền hạn / Công đoạn", "Truy cập Mobile", "Trạng thái"
       ];
       ws1.addRow([]);
       ws1.getRow(2).height = 10;
@@ -382,10 +386,12 @@ const UserManagement = () => {
           user.full_name || "",
           user.username || "",
           user.phone || "-",
-          user.role_name === 'IT' || user.role_name === 'BGD' ? 'Hành chính' : 'Sản xuất',
           user.role_name || "-",
+          user.department_name || "-",
           user.permission_name || "-",
+          user.factory_name || "-",
           user.permission_level ? user.permission_level : (user.stage_name || "-"),
+          user.is_mobile_allowed !== false ? "Cho phép" : "Chặn",
           user.status || ""
         ];
         const addedRow = ws1.addRow(rowData);
@@ -401,12 +407,12 @@ const UserManagement = () => {
           if (isEven) {
             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFDFBF7' } };
           }
-          if (colNum === 1 || colNum === 2 || colNum === 5 || colNum === 6 || colNum === 10) {
+          if (colNum === 1 || colNum === 2 || colNum === 5 || colNum === 11 || colNum === 12) {
             cell.alignment = { horizontal: 'center', vertical: 'middle' };
           } else {
             cell.alignment = { horizontal: 'left', vertical: 'middle' };
           }
-          if (colNum === 10) {
+          if (colNum === 12) {
             const status = user.status;
             cell.font = { name: 'Segoe UI', size: 10, bold: true };
             if (status === 'Đang sử dụng') {
@@ -429,12 +435,15 @@ const UserManagement = () => {
         { width: 25 },  // Họ tên
         { width: 18 },  // Username
         { width: 16 },  // Số ĐT
-        { width: 15 },  // Phân loại
-        { width: 20 },  // Bộ phận
-        { width: 20 },  // Chức vụ
-        { width: 30 },  // Quyền hạn / công đoạn
+        { width: 18 },  // Phòng ban
+        { width: 18 },  // Bộ phận
+        { width: 18 },  // Vị trí
+        { width: 16 },  // Nhà máy
+        { width: 28 },  // Quyền hạn / công đoạn
+        { width: 16 },  // Mobile
         { width: 18 }   // Trạng thái
       ];
+
 
       // --- SHEET 2: PHÂN QUYỀN CHI TIẾT (WEB) ---
       const ws2 = workbook.addWorksheet("Phân quyền Web");
@@ -685,7 +694,7 @@ const UserManagement = () => {
           showFilter={true}
           isFilterOpen={showFilterPanel}
           onFilterToggle={() => setShowFilterPanel(!showFilterPanel)}
-          activeFiltersCount={statusFilter ? 1 : 0}
+          activeFiltersCount={(statusFilter ? 1 : 0) + (roleFilter ? 1 : 0) + (stageFilter ? 1 : 0) + (viewMode !== 'account_info' ? 1 : 0)}
           extraActions={[
             {
               label: 'Bộ phận',
@@ -707,7 +716,7 @@ const UserManagement = () => {
 
         {/* INLINE EXPANDABLE FILTER BAR */}
         {showFilterPanel && (
-          <div className="filter-inline-bar">
+          <div className="filter-inline-bar" style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
             {/* Lọc theo Trạng thái */}
             <div className="filter-field-group">
               <label className="filter-field-label">Trạng thái nhân viên</label>
@@ -715,10 +724,42 @@ const UserManagement = () => {
                 value={statusFilter}
                 onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
               >
-                <option value="">Tất cả</option>
+                <option value="">Tất cả trạng thái</option>
                 <option value="Đang sử dụng">Đang sử dụng</option>
                 <option value="Dừng hoạt động">Dừng hoạt động</option>
                 <option value="Đang chờ xóa">Đang chờ xóa</option>
+              </select>
+            </div>
+
+            {/* Lọc theo Chức vụ / Role */}
+            <div className="filter-field-group">
+              <label className="filter-field-label">Chức vụ / Vai trò</label>
+              <select
+                value={roleFilter}
+                onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
+              >
+                <option value="">Tất cả chức vụ</option>
+                <option value="IT">IT System</option>
+                <option value="BGD">Ban Giám Đốc</option>
+                <option value="Quản lý">Quản lý sản xuất</option>
+                <option value="Tổ trưởng">Tổ trưởng</option>
+                <option value="QC">QC / Kiểm định</option>
+                <option value="Nhân viên">Nhân viên</option>
+              </select>
+            </div>
+
+            {/* Lọc theo Công đoạn gán */}
+            <div className="filter-field-group">
+              <label className="filter-field-label">Công đoạn gán</label>
+              <select
+                value={stageFilter}
+                onChange={(e) => { setStageFilter(e.target.value); setPage(1); }}
+              >
+                <option value="">Tất cả công đoạn</option>
+                <option value="Sơn">Phân xưởng Sơn</option>
+                <option value="Lắp ráp">Lắp ráp</option>
+                <option value="Đóng gói">Đóng gói</option>
+                <option value="Mộc">Chế biến Mộc</option>
               </select>
             </div>
 
@@ -748,6 +789,37 @@ const UserManagement = () => {
                 <option value={100}>100 dòng</option>
               </select>
             </div>
+
+            {/* Nút Xóa bộ lọc */}
+            {(statusFilter || roleFilter || stageFilter || viewMode !== 'account_info' || pageSize !== 15) && (
+              <div className="filter-field-group">
+                <button
+                  type="button"
+                  className="page-btn"
+                  onClick={() => {
+                    setStatusFilter('');
+                    setRoleFilter('');
+                    setStageFilter('');
+                    setViewMode('account_info');
+                    setPageSize(15);
+                    setPage(1);
+                  }}
+                  style={{
+                    height: '36px',
+                    padding: '0 12px',
+                    fontSize: '0.8rem',
+                    backgroundColor: '#FAF6F0',
+                    color: '#7B5233',
+                    border: '1px solid #EADCC9',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontWeight: '600'
+                  }}
+                >
+                  Xóa bộ lọc
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -769,11 +841,12 @@ const UserManagement = () => {
                         <th onClick={() => handleSort('full_name')} style={{ cursor: 'pointer' }}>
                           Tên <SortIcon column="full_name" />
                         </th>
-                        <th>Phân loại</th>
                         {viewMode === 'account_info' ? (
                           <>
+                            <th>Phòng ban</th>
                             <th>Bộ phận</th>
-                            <th>Chức vụ</th>
+                            <th>Vị trí</th>
+                            <th>Nhà máy</th>
                             <th>Công đoạn / Quyền hạn</th>
                             <th>Username</th>
                             <th onClick={() => handleSort('phone')} style={{ cursor: 'pointer' }}>
@@ -809,11 +882,12 @@ const UserManagement = () => {
                         >
                           <td>{user.employee_id}</td>
                           <td className="font-bold">{user.full_name}</td>
-                          <td>{user.role_name === 'IT' || user.role_name === 'BGD' ? 'Hành chính' : 'Sản xuất'}</td>
                           {viewMode === 'account_info' ? (
                             <>
                               <td>{user.role_name || '-'}</td>
+                              <td>{user.department_name || '-'}</td>
                               <td>{user.permission_name || '-'}</td>
+                              <td>{user.factory_name || '-'}</td>
                               <td>{user.permission_level ? <span style={{ fontWeight: '500', color: '#7B5233' }}>{user.permission_level}</span> : renderStages(user.stage_name)}</td>
                               <td>{user.username}</td>
                               <td>{user.phone || '-'}</td>
@@ -869,6 +943,8 @@ const UserManagement = () => {
                             </>
                           ) : (
                             <>
+                              <td>{user.role_name === 'IT' || user.role_name === 'BGD' ? 'Hành chính' : 'Sản xuất'}</td>
+
                               {currentGroups.map((group, groupIdx) => {
                                 const userPerms = userPermissions[user.id];
                                 if (!userPerms || permsLoading) {
@@ -1047,18 +1123,17 @@ const UserManagement = () => {
                 {/* Phân trang - Desktop */}
                 <div className="admin-pagination-desktop desktop-only">
                   <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
-                    Hiển thị <b>{users.length}</b> trên <b>{total}</b> người dùng
+                    Hiển thị <b>{total > 0 ? (page - 1) * pageSize + 1 : 0} - {Math.min(page * pageSize, total)}</b> trên <b>{total}</b> người dùng
                   </div>
 
                   {totalPages > 1 && (
-                    <div style={{ display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+                    <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
                       <button
                         disabled={page === 1}
                         onClick={() => setPage(page - 1)}
                         className="page-btn"
-                        style={{ padding: '8px 12px' }}
                       >
-                        &lt; Trước
+                        <ChevronLeft size={14} />
                       </button>
                       {(() => {
                         const pages = [];
@@ -1073,7 +1148,7 @@ const UserManagement = () => {
                         return pages.map((p, idx) => {
                           if (p === '...') {
                             return (
-                              <span key={`ell-${idx}`} style={{ padding: '0 8px', color: '#7B5233', fontWeight: '700' }}>
+                              <span key={`ell-${idx}`} style={{ padding: '0 4px', color: '#8D6E63', fontWeight: '700' }}>
                                 ...
                               </span>
                             );
@@ -1093,9 +1168,8 @@ const UserManagement = () => {
                         disabled={page >= totalPages}
                         onClick={() => setPage(page + 1)}
                         className="page-btn"
-                        style={{ padding: '8px 12px' }}
                       >
-                        Sau &gt;
+                        <ChevronRight size={14} />
                       </button>
                     </div>
                   )}

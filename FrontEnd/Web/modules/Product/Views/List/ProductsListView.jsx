@@ -20,6 +20,8 @@ const ManufactureProducts = () => {
   const [limit, setLimit] = useState(15);
   const [actionMenuId, setActionMenuId] = useState(null);
   const [filterType, setFilterType] = useState('all');
+  const [woodFilter, setWoodFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
   const [confirmModal, setConfirmModal] = useState({
     visible: false,
@@ -154,7 +156,7 @@ const ManufactureProducts = () => {
           showFilter={true}
           isFilterOpen={isFilterBarOpen}
           onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
-          activeFiltersCount={filterType !== 'all' ? 1 : 0}
+          activeFiltersCount={(filterType !== 'all' ? 1 : 0) + (woodFilter ? 1 : 0) + (statusFilter ? 1 : 0)}
           importActions={[
             {
               label: 'Nhập Excel',
@@ -162,11 +164,11 @@ const ManufactureProducts = () => {
               onClick: () => document.getElementById('excel-upload').click()
             }
           ]}
-          onExport={null} // Wait, let's pass custom actions for export/pdf, or pass as extraActions
+          onExport={null}
           extraActions={[
             {
               label: 'Xuất Excel',
-              onClick: () => {} // Wait, let's keep the click handlers
+              onClick: () => {}
             },
             {
               label: 'Xuất PDF',
@@ -182,10 +184,10 @@ const ManufactureProducts = () => {
 
         {/* INLINE EXPANDABLE FILTER BAR */}
         {isFilterBarOpen && (
-          <div className="filter-inline-bar">
+          <div className="filter-inline-bar" style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
             {/* Bộ lọc phân loại */}
             <div className="filter-field-group">
-              <label className="filter-field-label">Phân loại</label>
+              <label className="filter-field-label">Phân loại Dòng hàng</label>
               <select
                 value={filterType}
                 onChange={(e) => {
@@ -193,10 +195,46 @@ const ManufactureProducts = () => {
                   setPage(0);
                 }}
               >
-                <option value="all">Tất cả</option>
+                <option value="all">Tất cả dòng hàng</option>
                 <option value="atlas">Dòng tủ Atlas (A)</option>
                 <option value="table">Dòng tủ Table (T)</option>
                 <option value="other">Dòng khác</option>
+              </select>
+            </div>
+
+            {/* Chất liệu gỗ */}
+            <div className="filter-field-group">
+              <label className="filter-field-label">Chất liệu gỗ</label>
+              <select
+                value={woodFilter}
+                onChange={(e) => {
+                  setWoodFilter(e.target.value);
+                  setPage(0);
+                }}
+              >
+                <option value="">Tất cả chất liệu</option>
+                <option value="Oak">Gỗ Sồi (Oak)</option>
+                <option value="Walnut">Gỗ Óc chó (Walnut)</option>
+                <option value="Ash">Gỗ Tần bì (Ash)</option>
+                <option value="Beech">Gỗ Dẻ dẻ (Beech)</option>
+                <option value="Rubber">Gỗ Cao su</option>
+              </select>
+            </div>
+
+            {/* Trạng thái phát triển */}
+            <div className="filter-field-group">
+              <label className="filter-field-label">Trạng thái phát triển</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setPage(0);
+                }}
+              >
+                <option value="">Tất cả trạng thái</option>
+                <option value="Active">Đang sản xuất hàng loạt</option>
+                <option value="Sample">Đang làm mẫu</option>
+                <option value="Pending">Chờ phê duyệt kỹ thuật</option>
               </select>
             </div>
 
@@ -216,6 +254,35 @@ const ManufactureProducts = () => {
                 <option value={100}>100 dòng</option>
               </select>
             </div>
+
+            {(filterType !== 'all' || woodFilter || statusFilter || limit !== 15) && (
+              <div className="filter-field-group">
+                <button
+                  type="button"
+                  className="page-btn"
+                  onClick={() => {
+                    setFilterType('all');
+                    setWoodFilter('');
+                    setStatusFilter('');
+                    setLimit(15);
+                    setPage(0);
+                  }}
+                  style={{
+                    height: '36px',
+                    padding: '0 12px',
+                    fontSize: '0.8rem',
+                    backgroundColor: '#FAF6F0',
+                    color: '#7B5233',
+                    border: '1px solid #EADCC9',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontWeight: '600'
+                  }}
+                >
+                  Xóa bộ lọc
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -249,7 +316,7 @@ const ManufactureProducts = () => {
           <div className="admin-list-layout desktop-only">
             <div className="mgmt-table admin-table-card card-shadow" style={{ position: 'relative', backgroundColor: 'white', minHeight: '400px' }}>
               <div className="table-responsive admin-table-scroll">
-                <table className="manufacture-table">
+                <table className="manufacture-table data-table">
                   <thead>
                     <tr>
                       <th style={{ width: '60px', textAlign: 'center' }}>STT</th>
@@ -367,25 +434,20 @@ const ManufactureProducts = () => {
               {/* Desktop Pagination */}
               {!loading && (
                 <div className="admin-pagination-desktop desktop-only">
-                  <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#111827' }}>
-                    Hiển thị {displayedProducts.length} trên {total} sản phẩm
+                  <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
+                    Hiển thị <b>{total > 0 ? page * limit + 1 : 0} - {Math.min((page + 1) * limit, total)}</b> trên <b>{total}</b> sản phẩm
                   </div>
                   
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div className="pagination-controls" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                     <button 
+                      className="page-btn"
                       onClick={() => setPage(p => Math.max(0, p - 1))}
                       disabled={page === 0}
-                      style={{ 
-                        ...purpleButtonStyle(false),
-                        backgroundColor: page === 0 ? '#F3F4F6' : 'white',
-                        cursor: page === 0 ? 'not-allowed' : 'pointer',
-                        color: page === 0 ? '#D1D5DB' : '#374151'
-                      }}
                     >
-                      <ChevronLeft size={18} />
+                      <ChevronLeft size={14} />
                     </button>
                     
-                    <div style={{ display: 'flex' }}>
+                    <div style={{ display: 'flex', gap: '5px' }}>
                       {(() => {
                         const totalPages = Math.ceil(total / limit);
                         const pages = [];
@@ -394,17 +456,41 @@ const ManufactureProducts = () => {
                         if (end - start < 2) start = Math.max(0, end - 2);
 
                         if (start > 0) {
-                          pages.push(<button key={0} onClick={() => setPage(0)} style={purpleButtonStyle(page === 0)}>1</button>);
-                          if (start > 1) pages.push(<span key="s1" style={{ padding: '0 8px', alignSelf: 'center', color: '#6B7280' }}>...</span>);
+                          pages.push(
+                            <button 
+                              key={0} 
+                              className={`page-btn ${page === 0 ? 'active' : ''}`} 
+                              onClick={() => setPage(0)}
+                            >
+                              1
+                            </button>
+                          );
+                          if (start > 1) pages.push(<span key="s1" style={{ padding: '0 4px', alignSelf: 'center', color: '#8D6E63' }}>...</span>);
                         }
 
                         for (let i = start; i <= end; i++) {
-                          pages.push(<button key={i} onClick={() => setPage(i)} style={purpleButtonStyle(page === i)}>{i + 1}</button>);
+                          pages.push(
+                            <button 
+                              key={i} 
+                              className={`page-btn ${page === i ? 'active' : ''}`} 
+                              onClick={() => setPage(i)}
+                            >
+                              {i + 1}
+                            </button>
+                          );
                         }
 
                         if (end < totalPages - 1) {
-                          if (end < totalPages - 2) pages.push(<span key="s2" style={{ padding: '0 8px', alignSelf: 'center', color: '#6B7280' }}>...</span>);
-                          pages.push(<button key={totalPages - 1} onClick={() => setPage(totalPages - 1)} style={purpleButtonStyle(page === totalPages - 1)}>{totalPages}</button>);
+                          if (end < totalPages - 2) pages.push(<span key="s2" style={{ padding: '0 4px', alignSelf: 'center', color: '#8D6E63' }}>...</span>);
+                          pages.push(
+                            <button 
+                              key={totalPages - 1} 
+                              className={`page-btn ${page === totalPages - 1 ? 'active' : ''}`} 
+                              onClick={() => setPage(totalPages - 1)}
+                            >
+                              {totalPages}
+                            </button>
+                          );
                         }
                         
                         return pages;
@@ -412,16 +498,11 @@ const ManufactureProducts = () => {
                     </div>
 
                     <button 
+                      className="page-btn"
                       onClick={() => setPage(p => p + 1)}
                       disabled={(page + 1) * limit >= total}
-                      style={{ 
-                        ...purpleButtonStyle(false),
-                        backgroundColor: (page + 1) * limit >= total ? '#F3F4F6' : 'white',
-                        cursor: (page + 1) * limit >= total ? 'not-allowed' : 'pointer',
-                        color: (page + 1) * limit >= total ? '#D1D5DB' : '#374151'
-                      }}
                     >
-                      <ChevronRight size={18} />
+                      <ChevronRight size={14} />
                     </button>
                   </div>
                 </div>

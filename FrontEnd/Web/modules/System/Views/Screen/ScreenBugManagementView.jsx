@@ -644,8 +644,8 @@ const ScreenBugManagementView = () => {
                                       </div>
                                     )}
                                   </td>
-                            </>
-                          )}
+                                </>
+                              )}
                             </tr>
                           );
                         })}
@@ -654,27 +654,19 @@ const ScreenBugManagementView = () => {
                   </div>
 
                   {/* Pagination */}
-                  <div className="admin-pagination-desktop" style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '12px 20px',
-                    borderTop: '1px solid #E5E7EB',
-                    backgroundColor: '#fff'
-                  }}>
+                  <div className="admin-pagination-desktop desktop-only">
                     <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
-                      Hiển thị <b>{paginatedBugs.length}</b> trên <b>{filteredBugs.length}</b> lỗi màn hình
+                      Hiển thị <b>{filteredBugs.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} - {Math.min(currentPage * pageSize, filteredBugs.length)}</b> trên <b>{filteredBugs.length}</b> lỗi màn hình
                     </div>
 
                     {totalPages > 1 && (
-                      <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                      <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
                         <button
                           disabled={currentPage === 1}
                           onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                           className="page-btn"
-                          style={{ padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: '6px', backgroundColor: '#fff', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontSize: '0.75rem' }}
                         >
-                          &lt; Trước
+                          <ChevronLeft size={14} />
                         </button>
                         {(() => {
                           const pages = [];
@@ -689,7 +681,7 @@ const ScreenBugManagementView = () => {
                           return pages.map((p, idx) => {
                             if (p === '...') {
                               return (
-                                <span key={`ell-${idx}`} style={{ padding: '0 8px', color: '#7B5233', fontWeight: '700' }}>
+                                <span key={`ell-${idx}`} style={{ padding: '0 4px', color: '#8D6E63', fontWeight: '700' }}>
                                   ...
                                 </span>
                               );
@@ -699,16 +691,6 @@ const ScreenBugManagementView = () => {
                                 key={p}
                                 className={`page-btn ${currentPage === p ? 'active' : ''}`}
                                 onClick={() => setCurrentPage(p)}
-                                style={{
-                                  border: '1px solid #D1D5DB',
-                                  padding: '5px 10px',
-                                  borderRadius: '6px',
-                                  backgroundColor: currentPage === p ? '#7B5233' : '#fff',
-                                  color: currentPage === p ? '#fff' : '#374151',
-                                  fontWeight: currentPage === p ? 'bold' : 'normal',
-                                  cursor: 'pointer',
-                                  fontSize: '0.75rem'
-                                }}
                               >
                                 {p}
                               </button>
@@ -718,9 +700,9 @@ const ScreenBugManagementView = () => {
                         <button
                           disabled={currentPage >= totalPages}
                           onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                          style={{ border: '1px solid #D1D5DB', padding: '5px 10px', borderRadius: '6px', backgroundColor: '#fff', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', fontSize: '0.75rem' }}
+                          className="page-btn"
                         >
-                          Sau
+                          <ChevronRight size={14} />
                         </button>
                       </div>
                     )}

@@ -233,55 +233,33 @@ const QualityOverviewView = () => {
 
               {/* PAGINATION */}
               {totalPages > 1 && (
-                <div className="admin-pagination-desktop" style={{ borderTop: '1px solid #EADCC9', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff' }}>
+                <div className="admin-pagination-desktop desktop-only">
                   <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
-                    Hiển thị <b>{paginatedTasks.length}</b> trên <b>{filteredTasks.length}</b> công việc
+                    Hiển thị <b>{filteredTasks.length > 0 ? (currentPage - 1) * limit + 1 : 0} - {Math.min(currentPage * limit, filteredTasks.length)}</b> trên <b>{filteredTasks.length}</b> công việc
                   </div>
-                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
                     <button 
+                      className="page-btn"
                       onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                       disabled={currentPage === 1}
-                      style={{
-                        padding: '6px',
-                        border: '1px solid #EADCC9',
-                        background: currentPage === 1 ? '#F9F6F0' : '#fff',
-                        borderRadius: '6px',
-                        cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-                        color: '#7B5233'
-                      }}
                     >
-                      <ChevronLeft size={16} />
+                      <ChevronLeft size={14} />
                     </button>
                     {Array.from({ length: totalPages }).map((_, i) => (
                       <button
                         key={i}
+                        className={`page-btn ${currentPage === i + 1 ? 'active' : ''}`}
                         onClick={() => setCurrentPage(i + 1)}
-                        style={{
-                          padding: '6px 12px',
-                          border: '1px solid #EADCC9',
-                          background: currentPage === i + 1 ? '#7B5233' : '#fff',
-                          color: currentPage === i + 1 ? '#fff' : '#7B5233',
-                          borderRadius: '6px',
-                          fontWeight: 'bold',
-                          cursor: 'pointer'
-                        }}
                       >
                         {i + 1}
                       </button>
                     ))}
                     <button 
+                      className="page-btn"
                       onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                       disabled={currentPage === totalPages}
-                      style={{
-                        padding: '6px',
-                        border: '1px solid #EADCC9',
-                        background: currentPage === totalPages ? '#F9F6F0' : '#fff',
-                        borderRadius: '6px',
-                        cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
-                        color: '#7B5233'
-                      }}
                     >
-                      <ChevronRight size={16} />
+                      <ChevronRight size={14} />
                     </button>
                   </div>
                 </div>

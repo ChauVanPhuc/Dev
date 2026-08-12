@@ -251,33 +251,58 @@ def delete(db: Session, requisition_id: int):
     return True
 
 
-def get_shipping_monitoring(db: Session, skip: int = 0, limit: int = 50, search: str = None):
+def get_shipping_monitoring(
+    db: Session, skip: int = 0, limit: int = 50, 
+    search: str = None, status: str = None, 
+    order_type: str = None, supplier_name: str = None,
+    priority: str = None, month: str = None
+):
     """Lấy danh sách thời gian vận chuyển hàng cho màn hình KD04."""
     query = db.query(PurchaseRequisition)
+    if status:
+        query = query.filter(PurchaseRequisition.status == status)
+    if order_type:
+        query = query.filter(PurchaseRequisition.order_type == order_type)
+    if supplier_name:
+        query = query.filter(PurchaseRequisition.supplier_name.ilike(f"%{supplier_name}%"))
+    if priority:
+        query = query.filter(PurchaseRequisition.priority == priority)
+    if month:
+        query = query.filter(PurchaseRequisition.note.ilike(f"%{month}%"))
     if search:
         term = f"%{search}%"
         query = query.filter(or_(
             PurchaseRequisition.po_code.ilike(term),
             PurchaseRequisition.supplier_name.ilike(term),
+            PurchaseRequisition.creator.ilike(term),
+            PurchaseRequisition.supplier_code.ilike(term),
+            PurchaseRequisition.note.ilike(term),
         ))
     total = query.count()
-    items = query.order_by(PurchaseRequisition.id.desc()).offset(skip).limit(limit).all()
+    items = query.order_by(PurchaseRequisition.order_date.desc(), PurchaseRequisition.id.desc()).offset(skip).limit(limit).all()
 
     result = []
     for req in items:
-        # Mock mốc ngày nếu chưa có dữ liệu mốc trong DB để khớp UI
         result.append({
             "id": req.id,
             "po_code": req.po_code,
-            "order_type": "Đơn bán" if req.order_type == "Đơn bán hàng" else "Đơn mua",
-            "status": req.status or "Đã xuất kho",
-            "updated_at": req.created_at.strftime("%d/%m/%Y") if req.created_at else "25/07/2026",
-            "order_date": req.order_date.strftime("%d/%m/%Y") if req.order_date else "01/01/2026",
-            "production_date": req.production_date.strftime("%d/%m/%Y") if req.production_date else "03/03/2026",
-            "warehouse_in_date": req.warehouse_in_date.strftime("%d/%m/%Y") if req.warehouse_in_date else "22/04/2026",
-            "storage_date": req.storage_date.strftime("%d/%m/%Y") if req.storage_date else "12/06/2026",
-            "warehouse_out_date": req.warehouse_out_date.strftime("%d/%m/%Y") if req.warehouse_out_date else "12/07/2026",
+            "order_type": req.order_type or "Đơn bán hàng",
+            "priority": req.priority or "Bình thường",
+            "status": req.status or "Đã duyệt",
+            "supplier_name": req.supplier_name or "Atlas International",
+            "supplier_code": req.supplier_code or "",
+            "total_amount": req.total_amount or 0,
+            "creator": req.creator or "",
+            "approver": req.approver or "",
+            "approval_date": req.approval_date.strftime("%d/%m/%Y") if req.approval_date else "",
+            "order_date": req.order_date.strftime("%d/%m/%Y") if req.order_date else "",
+            "est_completion_date": req.est_completion_date.strftime("%d/%m/%Y") if req.est_completion_date else "",
+            "real_completion_date": req.real_completion_date.strftime("%d/%m/%Y") if req.real_completion_date else "",
+            "production_date": req.production_date.strftime("%d/%m/%Y") if req.production_date else (req.order_date.strftime("%d/%m/%Y") if req.order_date else ""),
+            "warehouse_in_date": req.warehouse_in_date.strftime("%d/%m/%Y") if req.warehouse_in_date else (req.est_completion_date.strftime("%d/%m/%Y") if req.est_completion_date else ""),
+            "storage_date": req.storage_date.strftime("%d/%m/%Y") if req.storage_date else "",
+            "warehouse_out_date": req.warehouse_out_date.strftime("%d/%m/%Y") if req.warehouse_out_date else (req.real_completion_date.strftime("%d/%m/%Y") if req.real_completion_date else ""),
             "completed_date": req.completed_date.strftime("%d/%m/%Y") if req.completed_date else "",
+            "note": req.note or "",
         })
     return {"items": result, "total": total}
-    return True

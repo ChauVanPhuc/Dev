@@ -19,3 +19,6 @@ class Department(Base):
     stage_id = Column(Integer, nullable=True)      # Liên kết với bảng stages
     input_stage = Column(NVARCHAR(50), nullable=True) # Tên công đoạn đầu vào
     output_stage = Column(NVARCHAR(50), nullable=True) # Tên công đoạn đầu ra
+    name = Column(NVARCHAR(100), nullable=True) # Tên bộ phận
+    code = Column(NVARCHAR(50), nullable=True) # Mã bộ phận
+

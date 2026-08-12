@@ -48,10 +48,19 @@ def get_stats(db: Session = Depends(get_db)):
 def get_shipping_monitoring(
     skip: int = 0, limit: int = 50,
     search: Optional[str] = None,
+    status: Optional[str] = None,
+    order_type: Optional[str] = None,
+    supplier_name: Optional[str] = None,
+    priority: Optional[str] = None,
+    month: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """[GET] Danh sách mốc thời gian vận chuyển đơn hàng cho KD04."""
-    return controller.get_shipping_monitoring(db, skip=skip, limit=limit, search=search)
+    return controller.get_shipping_monitoring(
+        db, skip=skip, limit=limit, search=search,
+        status=status, order_type=order_type,
+        supplier_name=supplier_name, priority=priority, month=month
+    )
 
 
 @router.get("/{requisition_id}", response_model=PurchaseRequisitionResponse)

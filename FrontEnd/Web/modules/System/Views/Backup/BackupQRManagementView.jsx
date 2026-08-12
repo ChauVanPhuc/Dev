@@ -343,8 +343,8 @@ const BackupQRManagement = () => {
 
                     {/* Phân trang - Desktop */}
                     <div className="admin-pagination-desktop desktop-only">
-                        <span className="pagination-info">
-                            Hiển thị {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredQRs.length)} / {filteredQRs.length} kết quả
+                        <span className="pagination-info" style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
+                            Hiển thị <b>{filteredQRs.length > 0 ? (page - 1) * pageSize + 1 : 0} - {Math.min(page * pageSize, filteredQRs.length)}</b> trên <b>{filteredQRs.length}</b> kết quả
                         </span>
                         <div className="pagination-controls" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                             <button
@@ -352,7 +352,7 @@ const BackupQRManagement = () => {
                                 onClick={() => setPage(prev => Math.max(prev - 1, 1))}
                                 className="page-btn"
                             >
-                                &lt; Trước
+                                <ChevronLeft size={14} />
                             </button>
                             {(() => {
                                 const totalPages = Math.ceil(filteredQRs.length / pageSize);
@@ -368,7 +368,7 @@ const BackupQRManagement = () => {
                                 return pages.map((p, idx) => {
                                     if (p === '...') {
                                         return (
-                                            <span key={`ell-${idx}`} style={{ padding: '0 8px', color: '#7B5233', fontWeight: '700' }}>
+                                            <span key={`ell-${idx}`} style={{ padding: '0 4px', color: '#8D6E63', fontWeight: '700' }}>
                                                 ...
                                             </span>
                                         );
@@ -389,7 +389,7 @@ const BackupQRManagement = () => {
                                 onClick={() => setPage(prev => Math.min(prev + 1, Math.ceil(filteredQRs.length / pageSize)))}
                                 className="page-btn"
                             >
-                                Sau &gt;
+                                <ChevronRight size={14} />
                             </button>
                         </div>
                     </div>

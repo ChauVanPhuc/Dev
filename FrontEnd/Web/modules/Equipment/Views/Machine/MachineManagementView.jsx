@@ -641,7 +641,7 @@ const MachineManagementView = () => {
                 const buttons = getPaginationButtons();
 
                 return (
-                  <div className="admin-pagination-desktop" style={{ borderTop: '1px solid #e2e8f0', padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div className="admin-pagination-desktop desktop-only">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
                       <span className="pagination-info" style={{ fontWeight: '600', color: '#64748b', fontSize: '13px' }}>
                         Hiển thị {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredMachines.length)} / {filteredMachines.length} máy móc

@@ -36,4 +36,9 @@ class Account(Base):
     screen_permissions = Column(NVARCHAR(None), nullable=True) # Lưu trữ dạng JSON string các quyền trên từng màn hình
     permission_level = Column(NVARCHAR(50), nullable=True) # Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
     is_mobile_allowed = Column(Boolean, default=True) # Quyền truy cập ứng dụng Mobile
+    department_id = Column(Integer, nullable=True) # ID Bộ phận (bảng departments)
+    permission_id = Column(Integer, nullable=True) # ID Vị trí (bảng permissions)
+    factory_id = Column(Integer, nullable=True) # ID Nhà máy (bảng hr_factory_structures)
+    factory_name = Column(NVARCHAR(100), nullable=True) # Tên Nhà máy
+
 

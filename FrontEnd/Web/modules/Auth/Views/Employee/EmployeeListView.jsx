@@ -8,7 +8,7 @@ const EmployeeListView = () => {
   const [employees, setEmployees] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [size, setSize] = useState(10);
+  const [size, setSize] = useState(15);
   const [pages, setPages] = useState(1);
   const [search, setSearch] = useState('');
   
@@ -22,6 +22,7 @@ const EmployeeListView = () => {
   const [selectedDept, setSelectedDept] = useState('');
   const [selectedPos, setSelectedPos] = useState('');
   const [selectedSec, setSelectedSec] = useState('');
+  const [workStatus, setWorkStatus] = useState('');
 
   // Modals
   const [modalOpen, setModalOpen] = useState(false);
@@ -118,7 +119,7 @@ const EmployeeListView = () => {
     }
   };
 
-  const activeFiltersCount = [selectedDept, selectedPos, selectedSec].filter(Boolean).length;
+  const activeFiltersCount = [selectedDept, selectedPos, selectedSec, workStatus].filter(Boolean).length;
 
   return (
     <div className="mgmt-container">
@@ -151,58 +152,101 @@ const EmployeeListView = () => {
 
       {/* Filter Bar Dropdowns */}
       {filterOpen && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr 1fr',
-          gap: '12px',
-          backgroundColor: '#FAF7F2',
-          padding: '16px',
-          borderRadius: '8px',
-          border: '1px solid #EADCC9',
-          marginBottom: '16px',
-          animation: 'slideDown 0.2s ease-out'
-        }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#5C3D2E', marginBottom: '6px' }}>Phòng ban</label>
+        <div className="filter-inline-bar" style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div className="filter-field-group">
+            <label className="filter-field-label">Phòng ban</label>
             <select
               value={selectedDept}
               onChange={(e) => { setSelectedDept(e.target.value); setPage(1); }}
-              style={{ width: '100%', padding: '8px 10px', border: '1px solid #EADCC9', borderRadius: '6px', fontSize: '0.85rem', backgroundColor: '#fff' }}
             >
-              <option value="">Tất cả</option>
+              <option value="">Tất cả phòng ban</option>
               {departments.map(d => (
                 <option key={d.id} value={d.id}>{d.name}</option>
               ))}
             </select>
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#5C3D2E', marginBottom: '6px' }}>Vị trí</label>
+          <div className="filter-field-group">
+            <label className="filter-field-label">Vị trí</label>
             <select
               value={selectedPos}
               onChange={(e) => { setSelectedPos(e.target.value); setPage(1); }}
-              style={{ width: '100%', padding: '8px 10px', border: '1px solid #EADCC9', borderRadius: '6px', fontSize: '0.85rem', backgroundColor: '#fff' }}
             >
-              <option value="">Tất cả</option>
+              <option value="">Tất cả vị trí</option>
               {positions.map(p => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#5C3D2E', marginBottom: '6px' }}>Bộ phận</label>
+          <div className="filter-field-group">
+            <label className="filter-field-label">Bộ phận</label>
             <select
               value={selectedSec}
               onChange={(e) => { setSelectedSec(e.target.value); setPage(1); }}
-              style={{ width: '100%', padding: '8px 10px', border: '1px solid #EADCC9', borderRadius: '6px', fontSize: '0.85rem', backgroundColor: '#fff' }}
             >
-              <option value="">Tất cả</option>
+              <option value="">Tất cả bộ phận</option>
               {sections.map(s => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
           </div>
+
+          <div className="filter-field-group">
+            <label className="filter-field-label">Trạng thái làm việc</label>
+            <select
+              value={workStatus}
+              onChange={(e) => { setWorkStatus(e.target.value); setPage(1); }}
+            >
+              <option value="">Tất cả trạng thái</option>
+              <option value="Đang làm việc">Đang làm việc</option>
+              <option value="Thử việc">Thử việc</option>
+              <option value="Thôi việc">Thôi việc</option>
+            </select>
+          </div>
+
+          <div className="filter-field-group">
+            <label className="filter-field-label">Hiển thị số dòng</label>
+            <select
+              value={size}
+              onChange={(e) => { setSize(parseInt(e.target.value)); setPage(1); }}
+            >
+              <option value={15}>15 dòng</option>
+              <option value={30}>30 dòng</option>
+              <option value={50}>50 dòng</option>
+              <option value={100}>100 dòng</option>
+            </select>
+          </div>
+
+          {(selectedDept || selectedPos || selectedSec || workStatus || size !== 15) && (
+            <div className="filter-field-group">
+              <button
+                type="button"
+                className="page-btn"
+                onClick={() => {
+                  setSelectedDept('');
+                  setSelectedPos('');
+                  setSelectedSec('');
+                  setWorkStatus('');
+                  setSize(15);
+                  setPage(1);
+                }}
+                style={{
+                  height: '36px',
+                  padding: '0 12px',
+                  fontSize: '0.8rem',
+                  backgroundColor: '#FAF6F0',
+                  color: '#7B5233',
+                  border: '1px solid #EADCC9',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: '600'
+                }}
+              >
+                Xóa bộ lọc
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -262,18 +306,18 @@ const EmployeeListView = () => {
         </div>
 
         {/* Phân trang */}
-        <div className="admin-pagination-desktop desktop-only" style={{ marginTop: '16px' }}>
+        <div className="admin-pagination-desktop desktop-only">
           <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
-            Hiển thị <b>{employees.length}</b> trên <b>{total}</b> nhân sự
+            Hiển thị <b>{total > 0 ? (page - 1) * size + 1 : 0} - {Math.min(page * size, total)}</b> trên <b>{total}</b> nhân sự
           </div>
           {pages > 1 && (
-            <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+            <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
               <button
                 disabled={page === 1}
                 onClick={() => setPage(page - 1)}
                 className="page-btn"
               >
-                &lt; Trước
+                <ChevronLeft size={14} />
               </button>
               {(() => {
                 const pageButtons = [];
@@ -295,7 +339,7 @@ const EmployeeListView = () => {
                 onClick={() => setPage(page + 1)}
                 className="page-btn"
               >
-                Sau &gt;
+                <ChevronRight size={14} />
               </button>
             </div>
           )}

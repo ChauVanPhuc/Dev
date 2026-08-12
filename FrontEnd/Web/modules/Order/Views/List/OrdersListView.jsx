@@ -41,6 +41,7 @@ const Orders = () => {
     const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
     const [filterCustomer, setFilterCustomer] = useState('all');
     const [filterDeadline, setFilterDeadline] = useState('all');
+    const [filterPriority, setFilterPriority] = useState('all');
 
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -190,14 +191,14 @@ const Orders = () => {
                     showFilter={true}
                     isFilterOpen={isFilterBarOpen}
                     onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
-                    activeFiltersCount={(filterStatus !== 'all' ? 1 : 0) + (filterCustomer !== 'all' ? 1 : 0) + (filterDeadline !== 'all' ? 1 : 0)}
+                    activeFiltersCount={(filterStatus !== 'all' ? 1 : 0) + (filterCustomer !== 'all' ? 1 : 0) + (filterDeadline !== 'all' ? 1 : 0) + (filterPriority !== 'all' ? 1 : 0)}
                     onCreate={() => navigate('/admin/orders/create')}
                     createLabel="Thêm Đơn hàng"
                     hasWritePermission={true}
                 />
 
                 {isFilterBarOpen && (
-                    <div className="filter-inline-bar">
+                    <div className="filter-inline-bar" style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
                         {/* Trạng thái */}
                         <div className="filter-field-group">
                             <label className="filter-field-label">Trạng thái</label>
@@ -239,6 +240,19 @@ const Orders = () => {
                             </select>
                         </div>
 
+                        {/* Mức độ ưu tiên */}
+                        <div className="filter-field-group">
+                            <label className="filter-field-label">Mức độ ưu tiên</label>
+                            <select
+                                value={filterPriority}
+                                onChange={(e) => { setFilterPriority(e.target.value); setCurrentPage(1); }}
+                            >
+                                <option value="all">Tất cả ưu tiên</option>
+                                <option value="high">Khẩn cấp / Cao</option>
+                                <option value="normal">Bình thường</option>
+                            </select>
+                        </div>
+
                         {/* Hiển thị số dòng */}
                         <div className="filter-field-group">
                             <label className="filter-field-label">Hiển thị số dòng</label>
@@ -252,6 +266,36 @@ const Orders = () => {
                                 <option value={100}>100 dòng</option>
                             </select>
                         </div>
+
+                        {(filterStatus !== 'all' || filterCustomer !== 'all' || filterDeadline !== 'all' || filterPriority !== 'all' || itemsPerPage !== 15) && (
+                            <div className="filter-field-group">
+                                <button
+                                    type="button"
+                                    className="page-btn"
+                                    onClick={() => {
+                                        setFilterStatus('all');
+                                        setFilterCustomer('all');
+                                        setFilterDeadline('all');
+                                        setFilterPriority('all');
+                                        setItemsPerPage(15);
+                                        setCurrentPage(1);
+                                    }}
+                                    style={{
+                                        height: '36px',
+                                        padding: '0 12px',
+                                        fontSize: '0.8rem',
+                                        backgroundColor: '#FAF6F0',
+                                        color: '#7B5233',
+                                        border: '1px solid #EADCC9',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        fontWeight: '600'
+                                    }}
+                                >
+                                    Xóa bộ lọc
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
@@ -331,19 +375,19 @@ const Orders = () => {
 
                 {/* Footer với Phân trang */}
                 <div className="admin-pagination-desktop">
-                    <div style={{ color: '#1e293b', fontWeight: '600', fontSize: '0.9rem' }}>
-                        Hiển thị <b>{indexOfFirstItem + 1}–{Math.min(indexOfLastItem, totalCount)}</b> trên <b>{totalCount}</b> Đơn hàng
+                    <div style={{ color: '#8D6E63', fontWeight: '600', fontSize: '0.8rem' }}>
+                        Hiển thị <b>{totalCount > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} - {Math.min(currentPage * itemsPerPage, totalCount)}</b> trên <b>{totalCount}</b> Đơn hàng
                     </div>
                     
                     {/* Nút bấm Phân trang */}
                     {totalPages > 1 && (
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
                             <button 
+                                className="page-btn"
                                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                                 disabled={currentPage === 1}
-                                style={{ padding: '6px', borderRadius: '6px', border: '1px solid #e2e8f0', backgroundColor: '#fff', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', opacity: currentPage === 1 ? 0.5 : 1 }}
                             >
-                                <ChevronLeft size={16} />
+                                <ChevronLeft size={14} />
                             </button>
                             
                             {(() => {
@@ -357,13 +401,8 @@ const Orders = () => {
                                     pages.push(
                                         <button 
                                             key={i}
+                                            className={`page-btn ${currentPage === i ? 'active' : ''}`}
                                             onClick={() => setCurrentPage(i)}
-                                            style={{ 
-                                                padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', 
-                                                backgroundColor: currentPage === i ? '#5d3b32' : '#fff', 
-                                                color: currentPage === i ? '#fff' : '#444',
-                                                fontWeight: '700', fontSize: '0.85rem', cursor: 'pointer'
-                                            }}
                                         >
                                             {i}
                                         </button>
@@ -373,11 +412,11 @@ const Orders = () => {
                             })()}
 
                             <button 
+                                className="page-btn"
                                 onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                                 disabled={currentPage === totalPages}
-                                style={{ padding: '6px', borderRadius: '6px', border: '1px solid #e2e8f0', backgroundColor: '#fff', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', opacity: currentPage === totalPages ? 0.5 : 1 }}
                             >
-                                <ChevronRight size={16} />
+                                <ChevronRight size={14} />
                             </button>
                         </div>
                     )}

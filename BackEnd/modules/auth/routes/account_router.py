@@ -163,6 +163,17 @@ def login_for_access_token(db: Session = Depends(get_db), form_data: OAuth2Passw
     stage_name = " | ".join(stage_names) if stage_names else None
     stage_description = " | ".join(stage_descriptions) if stage_descriptions else None
 
+    # Resolve department name and factory
+    department_id = getattr(user, 'department_id', None)
+    department_name = None
+    if department_id:
+        dept_obj = db.query(Department).filter(Department.id == department_id).first()
+        if dept_obj:
+            department_name = dept_obj.name
+
+    factory_id = getattr(user, 'factory_id', None)
+    factory_name = getattr(user, 'factory_name', None)
+
     import json
     resolved_perms = account_controller.resolve_user_permissions(user, db)
 
@@ -174,10 +185,16 @@ def login_for_access_token(db: Session = Depends(get_db), form_data: OAuth2Passw
         "email": getattr(user, 'email', '') or '',
         "phone": getattr(user, 'phone', '') or '',
         "employee_id": getattr(user, 'employee_id', None) or '',
+        "role_id": role.id if ('role' in locals() and role) else None,
         "role_name": role_name or '',
         "role_description": role_description or role_name or '',
+        "department_id": department_id,
+        "department_name": department_name or '',
+        "permission_id": perm.id if ('perm' in locals() and perm) else getattr(user, 'permission_id', None),
         "permission_name": permission_name or '',
         "permission_description": permission_description or permission_name or '',
+        "factory_id": factory_id,
+        "factory_name": factory_name or '',
         "stage_name": stage_name or '',
         "stage_description": stage_description or stage_name or '',
         "id": user.id,
@@ -215,13 +232,13 @@ def register_user(account: AccountCreate, db: Session = Depends(get_db)):
 @router.get("/{account_id}")
 def get_user_detail(account_id: int, db: Session = Depends(get_db)):
     """
-    [GET] Lấy chi tiết thông tin tài khoản và phân quyền liên quan.
+    [GET] Lấy chi tiết thông tin tài khoản và phân quyền liên quan (4 chiều).
     """
     db_account = db.query(AccountModel).filter(AccountModel.id == account_id).first()
     if not db_account:
         raise HTTPException(status_code=404, detail="Tài khoản không tồn tại")
     
-    # Lấy thông tin phân quyền từ bảng Department
+    # Lấy thông tin phân quyền từ bảng Department (junction)
     depts = db.query(Department).filter(Department.account_id == account_id).all()
     
     role_id = None
@@ -247,8 +264,11 @@ def get_user_detail(account_id: int, db: Session = Depends(get_db)):
         "is_active": db_account.is_active,
         "is_mobile_allowed": getattr(db_account, 'is_mobile_allowed', True) if getattr(db_account, 'is_mobile_allowed', True) is not None else True,
         "created_at": db_account.created_at,
-        "role_id": role_id,
-        "permission_id": permission_id,
+        "role_id": role_id or getattr(db_account, 'role_id', None),
+        "department_id": getattr(db_account, 'department_id', None),
+        "permission_id": getattr(db_account, 'permission_id', None) or permission_id,
+        "factory_id": getattr(db_account, 'factory_id', None),
+        "factory_name": getattr(db_account, 'factory_name', None),
         "stage_ids": stage_ids,
         "screen_permissions": db_account.screen_permissions,
         "permission_level": db_account.permission_level
@@ -276,6 +296,18 @@ def sync_account_departments(account_id: int, payload: dict, db: Session = Depen
     """
     [POST] Đồng bộ hóa phòng ban / vai trò / quyền / công đoạn cho một tài khoản.
     """
+    # Cập nhật các cột 4 chiều trên bảng accounts
+    db_account = db.query(AccountModel).filter(AccountModel.id == account_id).first()
+    if db_account:
+        if "department_id" in payload:
+            db_account.department_id = payload.get("department_id")
+        if "permission_id" in payload:
+            db_account.permission_id = payload.get("permission_id")
+        if "factory_id" in payload:
+            db_account.factory_id = payload.get("factory_id")
+        if "factory_name" in payload:
+            db_account.factory_name = payload.get("factory_name")
+
     # Xóa toàn bộ các bản ghi cũ của user này trong bảng departments
     db.query(Department).filter(Department.account_id == account_id).delete()
     
@@ -304,6 +336,7 @@ def sync_account_departments(account_id: int, payload: dict, db: Session = Depen
         
     db.commit()
     return {"message": "Đồng bộ quyền hạn phòng ban thành công"}
+
 
 @router.delete("/{account_id}")
 def delete_user(account_id: int, db: Session = Depends(get_db)):

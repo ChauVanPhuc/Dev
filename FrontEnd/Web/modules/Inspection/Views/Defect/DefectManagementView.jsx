@@ -1133,6 +1133,37 @@ const DefectManagement = () => {
                     <span className="checkbox-text" style={{ fontSize: '0.8rem', fontWeight: '700', color: '#7B5233', whiteSpace: 'nowrap' }}>Hiện ngưng dùng</span>
                   </label>
                 </div>
+
+                {(activeTab !== 'all' || selectedAql !== 'all' || selectedStage || !showInactive || pageSize !== 15 || searchQuery) && (
+                  <div className="filter-field-group">
+                    <button
+                      type="button"
+                      className="page-btn"
+                      onClick={() => {
+                        setActiveTab('all');
+                        setSelectedAql('all');
+                        setSelectedStage('');
+                        setShowInactive(true);
+                        setPageSize(15);
+                        setSearchQuery('');
+                        setCurrentPage(1);
+                      }}
+                      style={{
+                        height: '36px',
+                        padding: '0 12px',
+                        fontSize: '0.8rem',
+                        backgroundColor: '#FAF6F0',
+                        color: '#7B5233',
+                        border: '1px solid #EADCC9',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontWeight: '600'
+                      }}
+                    >
+                      Xóa bộ lọc
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

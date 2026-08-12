@@ -109,8 +109,10 @@ const ProductionPlansView = () => {
       </div>
 
       {/* Table */}
-      <div style={{ background: '#FFF', borderRadius: '12px', border: '1.5px solid #EADCC9', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
+      <div className="admin-list-layout">
+        <div className="mgmt-table card admin-table-card">
+          <div className="admin-table-scroll">
+            <table className="data-table">
           <thead>
             <tr style={{ background: '#FAF6F0', borderBottom: '1.5px solid #EADCC9', color: '#5D3B32' }}>
               <th style={{ padding: '14px 16px', fontWeight: '800' }}>STT</th>
@@ -149,6 +151,8 @@ const ProductionPlansView = () => {
             ))}
           </tbody>
         </table>
+          </div>
+        </div>
       </div>
 
       <AddPlanModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSavePlan} />

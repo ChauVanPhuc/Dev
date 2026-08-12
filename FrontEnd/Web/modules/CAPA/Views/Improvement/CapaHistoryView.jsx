@@ -376,7 +376,7 @@ const CapaHistoryView = () => {
           </div>
 
           {/* Standard Pagination Desktop */}
-          <div className="admin-pagination-desktop desktop-only" style={{ marginTop: '16px' }}>
+          <div className="admin-pagination-desktop desktop-only">
             <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
               Hiển thị <b>{totalItems > 0 ? (page - 1) * pageSize + 1 : 0}</b> - <b>{Math.min(page * pageSize, totalItems)}</b> trên <b>{totalItems}</b> kết quả
             </div>

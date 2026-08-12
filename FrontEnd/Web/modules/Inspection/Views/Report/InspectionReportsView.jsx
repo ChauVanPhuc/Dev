@@ -659,9 +659,9 @@ const InspectionReportsView = () => {
               </div>
 
               {/* Pagination Controls */}
-              <div className="admin-pagination-desktop" style={{ borderTop: '1px solid #EADCC9', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', borderBottomLeftRadius: '12px', borderBottomRightRadius: '12px' }}>
+              <div className="admin-pagination-desktop desktop-only">
                 <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
-                  Hiển thị <b>{paginatedUnifiedList.length}</b> trên <b>{filteredUnifiedList.length}</b> phiếu kiểm tra
+                  Hiển thị <b>{filteredUnifiedList.length > 0 ? (unifiedPage - 1) * unifiedLimit + 1 : 0} - {Math.min(unifiedPage * unifiedLimit, filteredUnifiedList.length)}</b> trên <b>{filteredUnifiedList.length}</b> phiếu kiểm tra
                 </div>
                 {totalUnifiedPages > 1 && (
                   <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
@@ -669,7 +669,6 @@ const InspectionReportsView = () => {
                       className="page-btn" 
                       onClick={() => setUnifiedPage(prev => Math.max(prev - 1, 1))} 
                       disabled={unifiedPage === 1}
-                      style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#7B5233', cursor: unifiedPage === 1 ? 'not-allowed' : 'pointer', opacity: unifiedPage === 1 ? 0.5 : 1 }}
                     >
                       <ChevronLeft size={14} />
                     </button>
@@ -685,17 +684,8 @@ const InspectionReportsView = () => {
                         pages.push(
                           <button
                             key={p}
+                            className={`page-btn ${unifiedPage === p ? 'active' : ''}`}
                             onClick={() => setUnifiedPage(p)}
-                            style={{
-                              padding: '6px 10px',
-                              borderRadius: '8px',
-                              border: '1px solid #EADCC9',
-                              backgroundColor: unifiedPage === p ? '#7B5233' : '#FAF6F0',
-                              color: unifiedPage === p ? '#fff' : '#7B5233',
-                              fontWeight: '700',
-                              fontSize: '0.8rem',
-                              cursor: 'pointer'
-                            }}
                           >
                             {p}
                           </button>

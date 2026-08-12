@@ -38,7 +38,9 @@ const UserEdit = ({ isProfile = false }) => {
   
   // Dữ liệu danh mục từ API
   const [roles, setRoles] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [permissions, setPermissions] = useState([]);
+  const [factories, setFactories] = useState([]);
   const [stages, setStages] = useState([]);
   
   // Trạng thái Form thông tin cơ bản
@@ -52,10 +54,14 @@ const UserEdit = ({ isProfile = false }) => {
     status: 'Đang sử dụng',
     is_mobile_allowed: true,
     role_id: '',
+    department_id: '',
     permission_id: '',
+    factory_id: '',
+    factory_name: '',
     stage_ids: [],
     permission_level: '' 
   });
+
 
   // Trạng thái phân quyền chi tiết (screen_key -> permission_string)
   const [screenPermissions, setScreenPermissions] = useState({});
@@ -159,17 +165,32 @@ const UserEdit = ({ isProfile = false }) => {
   const [pwdSuccess, setPwdSuccess] = useState(false);
   const [pwdLoading, setPwdLoading] = useState(false);
 
-  // 1. Tải danh mục Roles khi mount
+  // 1. Tải danh mục Roles & Factories khi mount
   useEffect(() => {
-    const fetchRoles = async () => {
+    const fetchInit = async () => {
       try {
-        const data = await api.get('/roles/');
-        setRoles(data);
+        const [rolesData, factoriesData, permsData] = await Promise.all([
+          api.get('/roles/'),
+          api.get('/hr/factory-structures').catch(() => []),
+          api.get('/permissions/?include_inactive=false').catch(() => [])
+        ]);
+        setRoles(rolesData || []);
+        if (permsData && permsData.length > 0) {
+          setPermissions(permsData);
+        }
+        const parsedFactories = (factoriesData && factoriesData.length > 0) 
+          ? factoriesData 
+          : [
+              { id: 1, structure_name: 'Văn Phòng', structure_code: 'VP' },
+              { id: 2, structure_name: 'Nhà máy 1', structure_code: 'NM1' },
+              { id: 3, structure_name: 'Nhà máy 2', structure_code: 'NM2' }
+            ];
+        setFactories(parsedFactories);
       } catch (err) {
-        console.error('Lỗi khi tải Roles:', err);
+        console.error('Lỗi khi tải Roles / Factories / Permissions:', err);
       }
     };
-    fetchRoles();
+    fetchInit();
   }, []);
 
   // 2. Tải thông tin người dùng & phân quyền khi mount/id thay đổi
@@ -200,7 +221,10 @@ const UserEdit = ({ isProfile = false }) => {
           status: userData.status || 'Đang sử dụng',
           is_mobile_allowed: userData.is_mobile_allowed !== undefined ? userData.is_mobile_allowed : true,
           role_id: userData.role_id || '',
+          department_id: userData.department_id || '',
           permission_id: userData.permission_id || '',
+          factory_id: userData.factory_id || '',
+          factory_name: userData.factory_name || '',
           stage_ids: userData.stage_ids || [],
           permission_level: userData.permission_level || ''
         });
@@ -236,21 +260,27 @@ const UserEdit = ({ isProfile = false }) => {
     fetchUserDetailAndPermissions();
   }, [id]);
 
-  // 3. Khi Role thay đổi -> Lấy danh sách Chức vụ (Permissions) tương ứng
+  // 3. Khi Role thay đổi -> Lấy danh sách Departments (Bộ phận)
   useEffect(() => {
     if (formData.role_id) {
-      const fetchPermissions = async () => {
-        try {
-          const data = await api.get(`/roles/${formData.role_id}/permissions`);
-          setPermissions(data);
-        } catch (err) {
+      // Load departments (Bộ phận)
+      api.get(`/departments/?role_id=${formData.role_id}`)
+        .then(data => setDepartments(Array.isArray(data) ? data : []))
+        .catch(err => {
+          console.error('Lỗi khi tải Departments:', err);
+          setDepartments([]);
+        });
+
+      // Load permissions (Vị trí): lấy toàn bộ danh mục vị trí đang hoạt động
+      api.get('/permissions/?include_inactive=false')
+        .then(data => {
+          if (Array.isArray(data) && data.length > 0) setPermissions(data);
+        })
+        .catch(err => {
           console.error('Lỗi khi tải Permissions:', err);
-        }
-      };
-      fetchPermissions();
+        });
     } else {
-      setPermissions([]);
-      setStages([]);
+      setDepartments([]);
     }
   }, [formData.role_id]);
 
@@ -719,6 +749,11 @@ const UserEdit = ({ isProfile = false }) => {
         status: formData.status,
         is_active: formData.status === 'Đang sử dụng',
         is_mobile_allowed: formData.is_mobile_allowed,
+        role_id: formData.role_id ? parseInt(formData.role_id, 10) : null,
+        department_id: formData.department_id ? parseInt(formData.department_id, 10) : null,
+        permission_id: formData.permission_id ? parseInt(formData.permission_id, 10) : null,
+        factory_id: formData.factory_id ? parseInt(formData.factory_id, 10) : null,
+        factory_name: formData.factory_name || null,
         permission_level: isProductionOrQC ? null : (formData.permission_level || null)
       };
 
@@ -749,13 +784,17 @@ const UserEdit = ({ isProfile = false }) => {
         // 2. Đồng bộ bộ phận / chức vụ / công đoạn (sync-departments)
         const syncPayload = {
           role_id: formData.role_id ? parseInt(formData.role_id, 10) : null,
+          department_id: formData.department_id ? parseInt(formData.department_id, 10) : null,
           permission_id: formData.permission_id ? parseInt(formData.permission_id, 10) : null,
+          factory_id: formData.factory_id ? parseInt(formData.factory_id, 10) : null,
+          factory_name: formData.factory_name || null,
           stage_ids: isProductionOrQC && formData.stage_ids && formData.stage_ids.length > 0 
             ? formData.stage_ids.map(sid => parseInt(sid, 10)) 
             : null
         };
 
         await api.post(`/accounts/${id}/sync-departments/`, syncPayload);
+
 
         // Chỉ lưu những key mà user đã thực sự thay đổi so với resolved mặc định
         // Tránh lưu lại toàn bộ resolved permissions (gây vòng lặp reset)
@@ -1109,45 +1148,91 @@ const UserEdit = ({ isProfile = false }) => {
                       </svg>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      <h3 className="section-title" style={{ fontSize: '1.05rem', margin: 0, fontWeight: 800 }}>Phân quyền phân cấp</h3>
-                      <span style={{ fontSize: '0.78rem', color: '#8C7B72', fontWeight: 500 }}>Chọn bộ phận/phòng ban, vị trí và phạm vi phụ trách.</span>
+                      <h3 className="section-title" style={{ fontSize: '1.05rem', margin: 0, fontWeight: 800 }}>Phân quyền 4 tầng</h3>
+                      <span style={{ fontSize: '0.78rem', color: '#8C7B72', fontWeight: 500 }}>Thiết lập cấu trúc: Phòng Ban → Bộ Phận → Vị Trí → Nhà Máy.</span>
                     </div>
                   </div>
                   
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px 18px', marginBottom: '20px' }}>
-                    {/* Bộ phận/phòng ban */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px 18px', marginBottom: '20px' }}>
+                    {/* 1. Phòng Ban */}
                     <div className="form-group">
-                      <label>Bộ phận/phòng ban</label>
+                      <label>1. Phòng Ban <span className="required" style={{ color: '#E11D48' }}>*</span></label>
                       <select 
                         name="role_id" 
                         value={formData.role_id} 
                         onChange={handleChange} 
                         disabled={isProfile}
                         className={isProfile ? "select-disabled" : ""}
+                        required
                       >
-                        <option value="">-- Chọn bộ phận --</option>
+                        <option value="">-- Chọn Phòng Ban --</option>
                         {roles.map(r => (
                           <option key={r.id} value={r.id}>{r.name}</option>
                         ))}
                       </select>
                     </div>
 
-                    {/* Vị trí, chức vụ */}
+                    {/* 2. Bộ Phận */}
                     <div className={`form-group ${(!formData.role_id || isProfile) ? 'disabled' : ''}`}>
-                      <label>Vị trí, chức vụ</label>
+                      <label>2. Bộ Phận</label>
+                      <select 
+                        name="department_id" 
+                        value={formData.department_id} 
+                        onChange={handleChange} 
+                        disabled={isProfile || !formData.role_id}
+                        className={(isProfile || !formData.role_id) ? "select-disabled" : ""}
+                      >
+                        <option value="">-- Chọn Bộ Phận --</option>
+                        {departments?.map(d => (
+                          <option key={d.id} value={d.id}>{d.name || d.code}</option>
+                        ))}
+                      </select>
+                      {!formData.role_id && <small className="hint">Hãy chọn Phòng Ban trước</small>}
+                    </div>
+
+                    {/* 3. Vị Trí / Chức Vụ */}
+                    <div className={`form-group ${(!formData.role_id || isProfile) ? 'disabled' : ''}`}>
+                      <label>3. Vị Trí / Chức Vụ <span className="required" style={{ color: '#E11D48' }}>*</span></label>
                       <select 
                         name="permission_id" 
                         value={formData.permission_id} 
                         onChange={handleChange} 
                         disabled={isProfile || !formData.role_id}
                         className={(isProfile || !formData.role_id) ? "select-disabled" : ""}
+                        required
                       >
-                        <option value="">-- Chọn chức vụ --</option>
+                        <option value="">-- Chọn Vị Trí / Chức Vụ --</option>
                         {permissions.map(p => (
                           <option key={p.id} value={p.id}>{p.name}</option>
                         ))}
                       </select>
-                      {!formData.role_id && <small className="hint">Hãy chọn Bộ phận trước</small>}
+                      {!formData.role_id && <small className="hint">Hãy chọn Phòng Ban trước</small>}
+                    </div>
+
+                    {/* 4. Nhà Máy */}
+                    <div className="form-group">
+                      <label>4. Nhà Máy</label>
+                      <select 
+                        name="factory_id" 
+                        value={formData.factory_id} 
+                        onChange={(e) => {
+                          const selId = e.target.value;
+                          const found = factories.find(f => String(f.id) === String(selId));
+                          setFormData(prev => ({
+                            ...prev,
+                            factory_id: selId,
+                            factory_name: found ? (found.structure_name || found.name || found.structure_code) : ''
+                          }));
+                          setIsDirty(true);
+                        }}
+                        disabled={isProfile}
+                        className={isProfile ? "select-disabled" : ""}
+                      >
+                        <option value="">-- Chọn Nhà Máy --</option>
+                        {factories.map(f => (
+                          <option key={f.id} value={f.id}>{f.structure_name || f.name || f.structure_code}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 

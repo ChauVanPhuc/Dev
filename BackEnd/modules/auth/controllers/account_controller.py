@@ -68,37 +68,63 @@ def get_accounts(db: Session, skip: int = 0, limit: int = 10, search: str = None
     # Lấy dữ liệu thực tế theo giới hạn skip/limit
     accounts = query.offset(skip).limit(limit).all()
 
-    # Chuyển đổi kết quả thành danh sách các dictionary dễ xử lý ở frontend, bổ sung role_name và stage_name từ bảng liên kết Department
+    # Chuyển đổi kết quả thành danh sách các dictionary dễ xử lý ở frontend, bổ sung role_name, department_name, permission_name, factory_name và stage_name
     items = []
+    # Cache lookup maps for high performance
+    roles_cache = {r.id: (r.name or r.description) for r in db.query(Role).all()}
+    depts_cache = {d.id: (d.name or d.code or f"BP-{d.id}") for d in db.query(Department).all()}
+    perms_cache = {p.id: (p.name or p.description) for p in db.query(Permission).all()}
+
     for account in accounts:
         acc_dict = {c.name: getattr(account, c.name) for c in account.__table__.columns}
         
-        # Lấy danh sách liên kết Department
+        # Lấy danh sách liên kết Department (legacy junction)
         depts = db.query(Department).filter(Department.account_id == account.id).all()
         
+        role_ids = []
         role_names = []
         stage_names = []
         permission_names = []
+        
         for dept in depts:
             if dept.role_id:
-                role = db.query(Role).filter(Role.id == dept.role_id).first()
-                if role:
-                    val = role.description or role.name
-                    if val not in role_names:
-                        role_names.append(val)
+                if dept.role_id not in role_ids:
+                    role_ids.append(dept.role_id)
+                val = roles_cache.get(dept.role_id)
+                if val and val not in role_names:
+                    role_names.append(val)
             if dept.permission_id:
-                perm = db.query(Permission).filter(Permission.id == dept.permission_id).first()
-                if perm:
-                    val = perm.description or perm.name
-                    if val not in permission_names:
-                        permission_names.append(val)
+                val = perms_cache.get(dept.permission_id)
+                if val and val not in permission_names:
+                    permission_names.append(val)
             if dept.stage_id:
                 stage_obj = db.query(Stage).filter(Stage.id == dept.stage_id).first()
                 if stage_obj and stage_obj.name not in stage_names:
                     stage_names.append(stage_obj.name)
                     
+        acc_dict["role_id"] = role_ids[0] if role_ids else None
         acc_dict["role_name"] = ", ".join(role_names) if role_names else None
-        acc_dict["permission_name"] = ", ".join(permission_names) if permission_names else None
+        
+        # Resolve department (Bộ phận)
+        acc_dept_id = getattr(account, 'department_id', None)
+        if acc_dept_id:
+            acc_dict["department_id"] = acc_dept_id
+            acc_dict["department_name"] = depts_cache.get(acc_dept_id)
+        else:
+            acc_dict["department_name"] = None
+            
+        # Resolve permission (Vị trí)
+        acc_perm_id = getattr(account, 'permission_id', None)
+        if acc_perm_id:
+            acc_dict["permission_id"] = acc_perm_id
+            acc_dict["permission_name"] = perms_cache.get(acc_perm_id) or (", ".join(permission_names) if permission_names else None)
+        else:
+            acc_dict["permission_name"] = ", ".join(permission_names) if permission_names else None
+            
+        # Resolve factory (Nhà máy)
+        acc_dict["factory_id"] = getattr(account, 'factory_id', None)
+        acc_dict["factory_name"] = getattr(account, 'factory_name', None)
+
         acc_dict["stage_name"] = ", ".join(stage_names) if stage_names else None
         items.append(acc_dict)
 
@@ -126,7 +152,7 @@ def create_account(db: Session, account: AccountCreate):
     
     Quy trình xử lý:
     1. Băm mật khẩu (Hashing) trước khi lưu để đảm bảo bảo mật.
-    2. Lưu thông tin cơ bản vào bảng Account.
+    2. Lưu thông tin cơ bản và 4 chiều phân quyền vào bảng Account.
     3. Lưu thông tin phân quyền và bộ phận vào bảng Department (liên kết qua account_id).
     
     Args:
@@ -150,6 +176,10 @@ def create_account(db: Session, account: AccountCreate):
         status=getattr(account, 'status', None) or "Đang sử dụng",
         permission_level=account.permission_level,
         is_mobile_allowed=getattr(account, 'is_mobile_allowed', True) if getattr(account, 'is_mobile_allowed', True) is not None else True,
+        department_id=account.department_id,
+        permission_id=account.permission_id,
+        factory_id=account.factory_id,
+        factory_name=account.factory_name,
         created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     )
     db.add(db_account)
@@ -179,6 +209,7 @@ def create_account(db: Session, account: AccountCreate):
     # Cập nhật lại đối tượng từ DB (để lấy các trường mặc định như created_at)
     db.refresh(db_account)
     return db_account
+
 
 def update_account(db: Session, account_id: int, account: AccountUpdate):
     """

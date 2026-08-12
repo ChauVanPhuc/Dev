@@ -435,13 +435,18 @@ const ProductionRoutingView = () => {
   });
 
   const [showAddTeamModal, setShowAddTeamModal] = useState(false);
+  const [isStageDropdownOpen, setIsStageDropdownOpen] = useState(false);
   const [newTeamForm, setNewTeamForm] = useState({
-    factory: 'Nhà máy 1',
+    factory: '',
     teamCode: 'TO-NM1-501',
     teamName: '',
+    selectedStages: [],
     members: 10,
     desc: ''
   });
+
+  // Danh sách nhà máy lấy từ CSDL cấu hình (hr_factory_structures)
+  const [factoryStructures, setFactoryStructures] = useState([]);
 
   const factoryStagesMap = useMemo(() => ({
     'Nhà máy 1': [
@@ -471,22 +476,33 @@ const ProductionRoutingView = () => {
     ]
   }), []);
 
+  // 5 công đoạn sản xuất chuẩn hóa cho Tổ sản xuất
+  const STANDARD_PRODUCTION_STAGES = useMemo(() => [
+    'Tạo Phôi',
+    'Định Hình',
+    'Lắp Ráp',
+    'Sơn',
+    'Đóng Gói'
+  ], []);
+
   const availableStagesForFactory = useMemo(() => {
-    const fac = (newTeamForm && newTeamForm.factory) ? newTeamForm.factory : 'Nhà máy 1';
-    const dbTeams = (teamsList || [])
-      .filter(t => t.factory === fac)
-      .map(t => t.teamName);
-    const presetStages = factoryStagesMap[fac] || factoryStagesMap['Nhà máy 1'];
-    return Array.from(new Set([...presetStages, ...dbTeams]));
-  }, [newTeamForm?.factory, factoryStagesMap, teamsList]);
+    return STANDARD_PRODUCTION_STAGES;
+  }, [STANDARD_PRODUCTION_STAGES]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [teamsRes, routingsRes] = await Promise.all([
+        const [teamsRes, routingsRes, factoryRes] = await Promise.all([
           api.get('/production/teams'),
-          api.get('/production/routings')
+          api.get('/production/routings'),
+          api.get('/hr/factory-structures').catch(() => [])
         ]);
+
+        // Cập nhật danh sách nhà máy từ CSDL cấu hình
+        const rawFactories = Array.isArray(factoryRes) ? factoryRes : (factoryRes?.data || []);
+        if (rawFactories.length > 0) {
+          setFactoryStructures(rawFactories);
+        }
         const productsRes = [];
         const stagesRes = [];
 
@@ -694,30 +710,42 @@ const ProductionRoutingView = () => {
   };
 
   const handleOpenAddTeamModal = () => {
-    const code = `TO-NM1-${Math.floor(100 + Math.random() * 900)}`;
-    const defaultFac = 'Nhà máy 1';
-    const firstStage = (factoryStagesMap[defaultFac] || [])[0] || 'Tổ định hình 1';
+    // Lấy nhà máy đầu tiên từ CSDL cấu hình, fallback hardcoded nếu chưa có
+    const defaultFac = (factoryStructures.length > 0)
+      ? (factoryStructures[0].structure_name || 'Nhà máy 1')
+      : 'Nhà máy 1';
+    const facCode = (factoryStructures.length > 0)
+      ? (factoryStructures[0].structure_code || 'NM1')
+      : 'NM1';
+    const code = `TO-${facCode}-${Math.floor(100 + Math.random() * 900)}`;
+    const firstStage = (STANDARD_PRODUCTION_STAGES && STANDARD_PRODUCTION_STAGES[0]) || 'Tạo Phôi';
     setNewTeamForm({
       factory: defaultFac,
       teamCode: code,
-      teamName: firstStage,
+      teamName: '',
+      selectedStages: [firstStage],
       members: 10,
       desc: ''
     });
+    setIsStageDropdownOpen(false);
     setShowAddTeamModal(true);
   };
 
   const handleCreateNewTeam = async (e) => {
     e.preventDefault();
-    if (!newTeamForm.teamName) {
-      if (toast) toast('warning', 'Vui lòng nhập Tên tổ sản xuất!');
+    const finalTeamName = (newTeamForm.teamName && newTeamForm.teamName.trim())
+      ? newTeamForm.teamName.trim()
+      : ((newTeamForm.selectedStages && newTeamForm.selectedStages.length > 0) ? newTeamForm.selectedStages.join(', ') : 'Tổ sản xuất');
+
+    if (!finalTeamName) {
+      if (toast) toast('warning', 'Vui lòng nhập Tên tổ sản xuất hoặc chọn Công đoạn!');
       return;
     }
     const tCode = newTeamForm.teamCode || `TO-NM1-${Math.floor(100 + Math.random() * 900)}`;
 
     const payload = {
       team_code: tCode,
-      team_name: newTeamForm.teamName,
+      team_name: finalTeamName,
       factory: newTeamForm.factory || 'Nhà máy 1',
       members_count: Number(newTeamForm.members) || 10,
       description: newTeamForm.desc || 'Tổ sản xuất mới',
@@ -730,9 +758,10 @@ const ProductionRoutingView = () => {
       const newTeamObj = {
         id: created.id || Date.now(),
         teamCode: created.team_code || tCode,
-        teamName: created.team_name || newTeamForm.teamName,
+        teamName: created.team_name || finalTeamName,
         factory: created.factory || newTeamForm.factory,
         members: created.members_count || 10,
+        stages: newTeamForm.selectedStages || [],
         desc: created.description || ''
       };
 
@@ -798,12 +827,29 @@ const ProductionRoutingView = () => {
     }
   };
 
-  const handleOpenAddRoutingModal = () => {
-    const num = Math.floor(10 + Math.random() * 90);
+  const handleOpenAddRoutingModal = async () => {
+    // Fetch mã QTSX-xx tự tăng tiếp theo từ CSDL
+    let nextCode = 'QTSX-01';
+    let nextNum = 1;
+    try {
+      const res = await api.get('/production/routings/next-code');
+      if (res && res.next_code) {
+        nextCode = res.next_code;
+        nextNum = res.next_num || 1;
+      }
+    } catch (e) {
+      console.warn('Lỗi lấy mã QTSX tiếp theo:', e);
+      // Fallback: tính từ danh sách hiện tại
+      const maxNum = routingsList.reduce((max, r) => {
+        const m = (r.code || '').match(/QTSX-(\d+)/);
+        return m ? Math.max(max, parseInt(m[1])) : max;
+      }, 0);
+      nextCode = `QTSX-${String(maxNum + 1).zfill ? String(maxNum + 1).padStart(2, '0') : String(maxNum + 1).padStart(2, '0')}`;
+    }
     const firstCat = masterCategories[0];
     setNewRoutingForm({
-      code: `QT-${num}`,
-      name: `Quy trình sản xuất mới ${num}`,
+      code: nextCode,
+      name: `Quy trình sản xuất mới ${nextNum}`,
       categoryId: firstCat ? firstCat.id : '',
       category: firstCat ? firstCat.name : '',
       desc: 'Mô tả chi tiết quy trình sản xuất mới',
@@ -1511,7 +1557,7 @@ const ProductionRoutingView = () => {
             </div>
 
             <div style={{ overflowX: 'auto', border: '1px solid #EADCC9', borderRadius: '8px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', height: filteredExecutionPlanRows.length === 0 ? '100%' : 'auto' }}>
+              <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', height: filteredExecutionPlanRows.length === 0 ? '100%' : 'auto' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#6D4C3D', color: '#FFFFFF' }}>
                     <th style={{ padding: '9px 10px', textAlign: 'center', width: '45px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>STT</th>
@@ -1700,7 +1746,7 @@ const ProductionRoutingView = () => {
                   <Filter size={14} style={{ color: '#6B7280' }} />
                   <select
                     value={productCategoryFilter}
-                    onChange={(e) => setProductCategoryFilter(e.target.value)}
+                    onChange={(e) => { setProductCategoryFilter(e.target.value); setProductPage(0); }}
                     style={{
                       padding: '6px 10px', borderRadius: '8px', border: '1.5px solid #EADCC9',
                       fontSize: '0.8rem', fontWeight: 'bold', outline: 'none', backgroundColor: '#FFFFFF', color: '#374151'
@@ -1713,6 +1759,49 @@ const ProductionRoutingView = () => {
                   </select>
                 </div>
 
+                {/* Rows per page selector */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <select
+                    value={productRowsPerPage}
+                    onChange={(e) => { setProductRowsPerPage(Number(e.target.value)); setProductPage(0); }}
+                    style={{
+                      padding: '6px 10px', borderRadius: '8px', border: '1.5px solid #EADCC9',
+                      fontSize: '0.8rem', fontWeight: 'bold', outline: 'none', backgroundColor: '#FFFFFF', color: '#374151'
+                    }}
+                  >
+                    <option value={15}>15 dòng</option>
+                    <option value={30}>30 dòng</option>
+                    <option value={50}>50 dòng</option>
+                    <option value={100}>100 dòng</option>
+                  </select>
+                </div>
+
+                {/* Reset button */}
+                {(productCategoryFilter !== 'ALL' || productScopeFilter !== 'all' || productSearchTerm || productRowsPerPage !== 15) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProductCategoryFilter('ALL');
+                      setProductScopeFilter('all');
+                      setProductSearchTerm('');
+                      setProductRowsPerPage(15);
+                      setProductPage(0);
+                    }}
+                    style={{
+                      padding: '6px 10px',
+                      borderRadius: '8px',
+                      border: '1px solid #EADCC9',
+                      backgroundColor: '#FAF6F0',
+                      color: '#7B5233',
+                      fontSize: '0.8rem',
+                      fontWeight: 'bold',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Xóa bộ lọc
+                  </button>
+                )}
+
                 {/* Search input */}
                 <div style={{ position: 'relative', width: '220px' }}>
                   <Search size={14} color="#9CA3AF" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
@@ -1720,12 +1809,12 @@ const ProductionRoutingView = () => {
                     type="text"
                     placeholder="Tìm SKU, tên sản phẩm..."
                     value={productSearchTerm}
-                    onChange={(e) => setProductSearchTerm(e.target.value)}
+                    onChange={(e) => { setProductSearchTerm(e.target.value); setProductPage(0); }}
                     style={{ width: '100%', padding: '6px 26px 6px 30px', borderRadius: '8px', border: '1.5px solid #EADCC9', outline: 'none', fontSize: '0.8rem' }}
                   />
                   {productSearchTerm && (
                     <button
-                      onClick={() => setProductSearchTerm('')}
+                      onClick={() => { setProductSearchTerm(''); setProductPage(0); }}
                       style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', cursor: 'pointer', color: '#9CA3AF' }}
                     >
                       <X size={12} />
@@ -1738,7 +1827,7 @@ const ProductionRoutingView = () => {
 
           {/* Product Table Body */}
           <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '420px', backgroundColor: '#FFFDF9', padding: '0 12px 12px 12px' }}>
-            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 6px', textAlign: 'left', fontSize: '0.86rem' }}>
+            <table className="data-table" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 6px', textAlign: 'left', fontSize: '0.86rem' }}>
               <thead>
                 <tr style={{ color: '#8B5E3C' }}>
                   <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0', padding: '12px 14px', width: '45px', textAlign: 'center', borderRadius: '8px 0 0 8px' }}>
@@ -1874,40 +1963,18 @@ const ProductionRoutingView = () => {
           </div>
 
           {/* Pagination Controls Footer matching reference screenshot */}
-          <div style={{
-            padding: '14px 20px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            borderTop: '1px solid #F3EBE1',
-            backgroundColor: '#FFFDF9',
-            fontSize: '0.84rem'
-          }}>
-            <div style={{ color: '#6B7280', fontWeight: '500' }}>
-              Hiển thị <strong style={{ color: '#111827', fontWeight: '700' }}>{paginatedAppliedProducts.length}</strong> trên <strong style={{ color: '#111827', fontWeight: '700' }}>{filteredAppliedProducts.length.toLocaleString('vi-VN')}</strong> sản phẩm
+          <div className="admin-pagination-desktop" style={{ borderTop: '1px solid #F3EBE1', backgroundColor: '#FFFDF9' }}>
+            <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
+              Hiển thị <b>{filteredAppliedProducts.length > 0 ? productPage * productRowsPerPage + 1 : 0} - {Math.min((productPage + 1) * productRowsPerPage, filteredAppliedProducts.length)}</b> trên <b>{filteredAppliedProducts.length.toLocaleString('vi-VN')}</b> sản phẩm
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ color: '#6B7280', fontWeight: '600', fontSize: '0.8rem', marginRight: '4px' }}>
-                Trang {productPage + 1} / {totalProductPages}
-              </span>
+            <div className="pagination-controls" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
               <button
+                className="page-btn"
                 onClick={() => setProductPage(p => Math.max(0, p - 1))}
                 disabled={productPage === 0}
-                style={{
-                  border: 'none',
-                  background: 'transparent',
-                  color: productPage === 0 ? '#CBD5E1' : '#64748B',
-                  cursor: productPage === 0 ? 'not-allowed' : 'pointer',
-                  fontWeight: '600',
-                  fontSize: '0.84rem',
-                  padding: '4px 8px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '2px'
-                }}
               >
-                &lt; Trước
+                <ChevronLeft size={14} />
               </button>
 
               {(() => {
@@ -1924,21 +1991,8 @@ const ProductionRoutingView = () => {
                   pages.push(
                     <button
                       key={i}
+                      className={`page-btn ${isActive ? 'active' : ''}`}
                       onClick={() => setProductPage(i)}
-                      style={{
-                        width: '30px',
-                        height: '30px',
-                        borderRadius: '6px',
-                        border: 'none',
-                        backgroundColor: isActive ? '#5D3B32' : 'transparent',
-                        color: isActive ? '#FFFFFF' : '#334155',
-                        fontWeight: isActive ? '800' : '600',
-                        fontSize: '0.84rem',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
                     >
                       {i + 1}
                     </button>
@@ -1948,22 +2002,11 @@ const ProductionRoutingView = () => {
               })()}
 
               <button
+                className="page-btn"
                 onClick={() => setProductPage(p => Math.min(totalProductPages - 1, p + 1))}
                 disabled={productPage >= totalProductPages - 1}
-                style={{
-                  border: 'none',
-                  background: 'transparent',
-                  color: productPage >= totalProductPages - 1 ? '#CBD5E1' : '#64748B',
-                  cursor: productPage >= totalProductPages - 1 ? 'not-allowed' : 'pointer',
-                  fontWeight: '600',
-                  fontSize: '0.84rem',
-                  padding: '4px 8px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '2px'
-                }}
               >
-                Sau &gt;
+                <ChevronRight size={14} />
               </button>
             </div>
           </div>
@@ -2129,23 +2172,34 @@ const ProductionRoutingView = () => {
                   value={newTeamForm.factory}
                   onChange={(e) => {
                     const fac = e.target.value;
-                    const facNum = fac.replace(/\D/g, '') || '1';
-                    const stages = factoryStagesMap[fac] || [];
-                    const defaultStage = stages[0] || '';
+                    const facObj = factoryStructures.find(f => f.structure_name === fac);
+                    const facCode = facObj ? facObj.structure_code : (fac.replace(/\D/g, '') ? `NM${fac.replace(/\D/g, '')}` : 'NM1');
+                    const defaultStage = 'Tạo Phôi';
                     setNewTeamForm({
                       ...newTeamForm,
                       factory: fac,
-                      teamCode: `TO-NM${facNum}-${Math.floor(100 + Math.random() * 900)}`,
-                      teamName: defaultStage,
+                      teamCode: `TO-${facCode}-${Math.floor(100 + Math.random() * 900)}`,
+                      teamName: '',
+                      selectedStages: [defaultStage],
                       desc: ''
                     });
                   }}
                   style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #EADCC9', outline: 'none', fontSize: '0.88rem', fontWeight: '700' }}
                 >
-                  <option value="Nhà máy 1">Nhà máy 1</option>
-                  <option value="Nhà máy 2">Nhà máy 2</option>
-                  <option value="Nhà máy 3">Nhà máy 3</option>
-                  <option value="Nhà máy 4">Nhà máy 4</option>
+                  {factoryStructures.length > 0 ? (
+                    factoryStructures.map((fs, idx) => (
+                      <option key={fs.id || idx} value={fs.structure_name}>
+                        {fs.structure_name} ({fs.structure_code})
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="Nhà máy 1">Nhà máy 1</option>
+                      <option value="Nhà máy 2">Nhà máy 2</option>
+                      <option value="Nhà máy 3">Nhà máy 3</option>
+                      <option value="Nhà máy 4">Nhà máy 4</option>
+                    </>
+                  )}
                 </select>
               </div>
 
@@ -2155,24 +2209,101 @@ const ProductionRoutingView = () => {
                   Tên Tổ sản xuất (Lọc theo {newTeamForm.factory}) *
                 </label>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <select
-                    value={availableStagesForFactory.includes(newTeamForm.teamName) ? newTeamForm.teamName : ''}
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        const selectedName = e.target.value;
-                        setNewTeamForm({
-                          ...newTeamForm,
-                          teamName: selectedName
-                        });
-                      }
-                    }}
-                    style={{ width: '50%', padding: '9px 10px', borderRadius: '8px', border: '1.5px solid #EADCC9', outline: 'none', fontSize: '0.84rem', fontWeight: '700', backgroundColor: '#FAF6F0', color: '#2D1A12' }}
-                  >
-                    <option value="">-- Chọn công đoạn {newTeamForm.factory} --</option>
-                    {availableStagesForFactory.map((stage, idx) => (
-                      <option key={idx} value={stage}>{stage}</option>
-                    ))}
-                  </select>
+                  {/* BỘ CHỌN CÔNG ĐOẠN ĐA CHỌN (MULTI-SELECT DROPDOWN) */}
+                  <div style={{ position: 'relative', width: '50%' }}>
+                    <button
+                      type="button"
+                      onClick={() => setIsStageDropdownOpen(!isStageDropdownOpen)}
+                      style={{
+                        width: '100%',
+                        padding: '9px 10px',
+                        borderRadius: '8px',
+                        border: '1.5px solid #EADCC9',
+                        outline: 'none',
+                        fontSize: '0.84rem',
+                        fontWeight: '700',
+                        backgroundColor: '#FAF6F0',
+                        color: '#2D1A12',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        textAlign: 'left'
+                      }}
+                    >
+                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginRight: '4px' }}>
+                        {(newTeamForm.selectedStages && newTeamForm.selectedStages.length > 0)
+                          ? newTeamForm.selectedStages.join(', ')
+                          : '-- Chọn công đoạn --'}
+                      </span>
+                      <ChevronDown size={16} style={{ flexShrink: 0, color: '#5D3B32' }} />
+                    </button>
+
+                    {isStageDropdownOpen && (
+                      <>
+                        <div
+                          onClick={() => setIsStageDropdownOpen(false)}
+                          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1050 }}
+                        />
+                        <div style={{
+                          position: 'absolute',
+                          top: '100%',
+                          left: 0,
+                          right: 0,
+                          marginTop: '4px',
+                          backgroundColor: '#FFFFFF',
+                          border: '1.5px solid #EADCC9',
+                          borderRadius: '8px',
+                          boxShadow: '0 8px 20px rgba(0,0,0,0.15)',
+                          zIndex: 1100,
+                          maxHeight: '220px',
+                          overflowY: 'auto',
+                          padding: '4px 0'
+                        }}>
+                          {availableStagesForFactory.map((stage, idx) => {
+                            const isChecked = (newTeamForm.selectedStages || []).includes(stage);
+                            return (
+                              <label
+                                key={idx}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  padding: '8px 12px',
+                                  cursor: 'pointer',
+                                  fontSize: '0.84rem',
+                                  fontWeight: isChecked ? '800' : '600',
+                                  color: isChecked ? '#5D3B32' : '#374151',
+                                  backgroundColor: isChecked ? '#FAF6F0' : 'transparent',
+                                  borderBottom: idx < availableStagesForFactory.length - 1 ? '1px solid #F9FAFB' : 'none'
+                                }}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={(e) => {
+                                    const current = newTeamForm.selectedStages || [];
+                                    let updated = [];
+                                    if (e.target.checked) {
+                                      updated = [...current, stage];
+                                    } else {
+                                      updated = current.filter(s => s !== stage);
+                                    }
+                                    setNewTeamForm({
+                                      ...newTeamForm,
+                                      selectedStages: updated
+                                    });
+                                  }}
+                                  style={{ accentColor: '#5D3B32', width: '16px', height: '16px', cursor: 'pointer' }}
+                                />
+                                <span>{stage}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
                   <input
                     type="text"
                     placeholder="Hoặc nhập tên Tổ..."
@@ -2260,10 +2391,22 @@ const ProductionRoutingView = () => {
                 <input
                   type="text"
                   required
-                  placeholder="Ví dụ: QT-TU-02"
+                  disabled
+                  readOnly
                   value={newRoutingForm.code}
-                  onChange={(e) => setNewRoutingForm({ ...newRoutingForm, code: e.target.value.toUpperCase() })}
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #EADCC9', outline: 'none', fontSize: '0.88rem', fontWeight: '800', fontFamily: 'monospace' }}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #D1D5DB',
+                    backgroundColor: '#F3F4F6',
+                    color: '#4B5563',
+                    outline: 'none',
+                    fontSize: '0.88rem',
+                    fontWeight: '800',
+                    fontFamily: 'monospace',
+                    cursor: 'not-allowed'
+                  }}
                 />
               </div>
 
