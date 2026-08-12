@@ -60,7 +60,7 @@ const PurchaseRequisitionListView = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPartner, setFilterPartner] = useState('all');
   const [filterPriority, setFilterPriority] = useState('all');
-  const [filterMonth, setFilterMonth] = useState('07/2026');
+  const [filterMonth, setFilterMonth] = useState('');
 
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(15);
@@ -75,6 +75,8 @@ const PurchaseRequisitionListView = () => {
         search: searchTerm || undefined,
         status: filterStatus !== 'all' ? filterStatus : undefined,
         order_type: filterOrderType !== 'all' ? filterOrderType : undefined,
+        supplier_name: filterPartner !== 'all' ? filterPartner : undefined,
+        month: filterMonth ? filterMonth : undefined,
       };
       const [result, statsResult] = await Promise.all([
         purchasingService.getRequisitions(params).catch(() => null),
@@ -97,7 +99,7 @@ const PurchaseRequisitionListView = () => {
 
   useEffect(() => {
     fetchData();
-  }, [currentPage, itemsPerPage, searchTerm, filterStatus, filterOrderType]);
+  }, [currentPage, itemsPerPage, searchTerm, filterStatus, filterOrderType, filterPartner, filterMonth]);
 
   // Sử dụng dữ liệu thực tế 100% từ CSDL
   const rawItems = useMemo(() => {
@@ -410,6 +412,7 @@ const PurchaseRequisitionListView = () => {
                 style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', backgroundColor: '#fff', fontWeight: '600', color: '#334155', fontSize: '0.78rem' }}
               >
                 <option value="all">Tất cả trạng thái</option>
+                <option value="Đã duyệt">Đã duyệt</option>
                 <option value="Đã hoàn thành">Đã hoàn thành</option>
                 <option value="Đang sản xuất">Đang sản xuất</option>
                 <option value="Chưa duyệt">Chưa duyệt</option>
@@ -424,10 +427,7 @@ const PurchaseRequisitionListView = () => {
                 style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', backgroundColor: '#fff', fontWeight: '600', color: '#334155', fontSize: '0.78rem' }}
               >
                 <option value="all">Tất cả đối tác</option>
-                <option value="Khách hàng 1">Khách hàng 1</option>
-                <option value="Khách hàng 2">Khách hàng 2</option>
-                <option value="Khách hàng 3">Khách hàng 3</option>
-                <option value="Khách hàng 4">Khách hàng 4</option>
+                <option value="Atlas International">Atlas International (KH036)</option>
               </select>
             </div>
 
@@ -451,9 +451,13 @@ const PurchaseRequisitionListView = () => {
                 onChange={(e) => { setFilterMonth(e.target.value); setCurrentPage(1); }}
                 style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', backgroundColor: '#fff', fontWeight: '600', color: '#334155', fontSize: '0.78rem' }}
               >
-                <option value="07/2026">Tháng 07/2026</option>
-                <option value="06/2026">Tháng 06/2026</option>
                 <option value="">Tất cả thời gian</option>
+                <option value="12/2025">KHSX 12/2025</option>
+                <option value="01/2026">KHSX 01/2026</option>
+                <option value="02/2026">KHSX 02/2026</option>
+                <option value="04/2026">KHSX 04/2026</option>
+                <option value="05/2026">KHSX 05/2026</option>
+                <option value="PTDN">PTDN</option>
               </select>
             </div>
 
@@ -568,7 +572,7 @@ const PurchaseRequisitionListView = () => {
                       <td style={{ color: '#475569' }}>{row.priority || 'Bình thường'}</td>
                       <td style={{
                         fontWeight: '700',
-                        color: row.status === 'Đã hoàn thành' ? '#475569' : row.status === 'Đang sản xuất' ? '#16A34A' : '#DC2626'
+                        color: (row.status === 'Đã duyệt' || row.status === 'Đã hoàn thành') ? '#16A34A' : row.status === 'Đang sản xuất' ? '#2563EB' : '#DC2626'
                       }}>
                         {row.status || row.order_status_text || 'Chưa duyệt'}
                       </td>
@@ -656,7 +660,7 @@ const PurchaseRequisitionListView = () => {
             </table>
           </div>
 
-          {/* Footers Phân Trang Compact */}
+          {/* Footers Phân Trang Compact Chuẩn Dynamic */}
           <div className="admin-pagination-desktop desktop-only">
             <div style={{ color: '#8D6E63', fontSize: '0.78rem', fontWeight: '600' }}>
               Hiển thị <b>{startIndex}–{endIndex}</b> trên <b>{totalCount}</b> đơn hàng
@@ -667,41 +671,65 @@ const PurchaseRequisitionListView = () => {
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage(currentPage - 1)}
                 className="page-btn"
-                style={{ padding: '4px 10px', fontSize: '0.78rem' }}
+                style={{ padding: '4px 10px', fontSize: '0.78rem', cursor: currentPage === 1 ? 'not-allowed' : 'pointer' }}
               >
                 &lt; Trước
               </button>
-              {[1, 2, 3, 4].map(p => (
-                <button
-                  key={p}
-                  onClick={() => setCurrentPage(p)}
-                  className={`page-btn ${currentPage === p ? 'active' : ''}`}
-                  style={{
-                    padding: '4px 10px',
-                    backgroundColor: currentPage === p ? '#7B5233' : '#fff',
-                    color: currentPage === p ? '#fff' : '#334155',
-                    fontWeight: '700',
-                    border: '1px solid #CBD5E1',
-                    borderRadius: '5px',
-                    fontSize: '0.78rem'
-                  }}
-                >
-                  {p}
-                </button>
+              {(() => {
+                if (totalPages <= 7) {
+                  return Array.from({ length: totalPages }, (_, i) => i + 1);
+                }
+                const pages = [];
+                const delta = 2;
+                const left = currentPage - delta;
+                const right = currentPage + delta + 1;
+                let l;
+                for (let i = 1; i <= totalPages; i++) {
+                  if (i === 1 || i === totalPages || (i >= left && i < right)) {
+                    pages.push(i);
+                  }
+                }
+                const result = [];
+                for (const p of pages) {
+                  if (l) {
+                    if (p - l === 2) {
+                      result.push(l + 1);
+                    } else if (p - l !== 1) {
+                      result.push('...');
+                    }
+                  }
+                  result.push(p);
+                  l = p;
+                }
+                return result;
+              })().map((p, idx) => (
+                p === '...' ? (
+                  <span key={`dots-${idx}`} style={{ color: '#7B5233', fontWeight: '700', padding: '0 4px', fontSize: '0.78rem' }}>...</span>
+                ) : (
+                  <button
+                    key={p}
+                    onClick={() => setCurrentPage(p)}
+                    className={`page-btn ${currentPage === p ? 'active' : ''}`}
+                    style={{
+                      padding: '4px 10px',
+                      backgroundColor: currentPage === p ? '#7B5233' : '#fff',
+                      color: currentPage === p ? '#fff' : '#334155',
+                      fontWeight: '700',
+                      border: '1px solid #CBD5E1',
+                      borderRadius: '5px',
+                      fontSize: '0.78rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {p}
+                  </button>
+                )
               ))}
-              <span style={{ color: '#7B5233', fontWeight: '700', padding: '0 4px', fontSize: '0.78rem' }}>...</span>
-              <button
-                onClick={() => setCurrentPage(117)}
-                className="page-btn"
-                style={{ padding: '4px 10px', background: '#fff', color: '#334155', fontWeight: '700', border: '1px solid #CBD5E1', borderRadius: '5px', fontSize: '0.78rem' }}
-              >
-                117
-              </button>
               <button
                 disabled={currentPage === totalPages}
                 onClick={() => setCurrentPage(currentPage + 1)}
                 className="page-btn"
-                style={{ padding: '4px 10px', fontSize: '0.78rem' }}
+                style={{ padding: '4px 10px', fontSize: '0.78rem', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer' }}
               >
                 Sau &gt;
               </button>

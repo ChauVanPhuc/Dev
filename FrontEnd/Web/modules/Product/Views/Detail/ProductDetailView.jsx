@@ -890,7 +890,7 @@ const ProductDetailView = () => {
   }
 
   return (
-    <div className="mgmt-container" style={{ backgroundColor: '#FAF6F1', minHeight: '100vh', padding: '12px 16px' }}>
+    <div className="product-detail-container detail-view-container" style={{ backgroundColor: '#FAF6F1', minHeight: '100%', padding: '12px 16px 60px 16px' }}>
       <div className="mgmt-main" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
 
         {/* KHUNG 1: THÔNG TIN CHUNG (CHUẨN MOCKUP 1 - TỐI ƯU COMPACT VỀ CHIỀU CAO) */}

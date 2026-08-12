@@ -11,7 +11,9 @@ export const purchasingService = {
     if (params.warehouse_status) query.append('warehouse_status', params.warehouse_status);
     if (params.search) query.append('search', params.search);
     if (params.supplier_code) query.append('supplier_code', params.supplier_code);
+    if (params.supplier_name) query.append('supplier_name', params.supplier_name);
     if (params.order_type) query.append('order_type', params.order_type);
+    if (params.month) query.append('month', params.month);
     return await api.get(`/purchase-requisitions/?${query.toString()}`);
   },
 

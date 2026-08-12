@@ -269,10 +269,10 @@ const PurchaseRequisitionDetailView = () => {
   };
 
   return (
-    <div className="manufacture-plan-container mgmt-container" style={{
+    <div className="purchase-requisition-detail-container detail-view-container" style={{
       width: '100%', maxWidth: '100%',
-      padding: '16px 24px', backgroundColor: '#FAF6F0',
-      minHeight: '100vh', display: 'flex', flexDirection: 'column', gap: '16px',
+      padding: '16px 24px 60px 24px', backgroundColor: '#FAF6F0',
+      minHeight: '100%', display: 'flex', flexDirection: 'column', gap: '16px',
       boxSizing: 'border-box'
     }}>
       

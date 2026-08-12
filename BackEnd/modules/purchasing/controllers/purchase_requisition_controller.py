@@ -8,9 +8,11 @@ from shared.utils.timezone import get_vietnam_time
 
 def get_all(db: Session, skip: int = 0, limit: int = 50, 
             status: str = None, warehouse_status: str = None,
-            search: str = None, supplier_code: str = None, order_type: str = None):
+            search: str = None, supplier_code: str = None, 
+            supplier_name: str = None, order_type: str = None,
+            month: str = None):
     """Lấy danh sách đơn hàng với filter và search."""
-    query = db.query(PurchaseRequisition).options(defer(PurchaseRequisition.note))
+    query = db.query(PurchaseRequisition)
 
     if status:
         query = query.filter(PurchaseRequisition.status == status)
@@ -18,8 +20,12 @@ def get_all(db: Session, skip: int = 0, limit: int = 50,
         query = query.filter(PurchaseRequisition.warehouse_status == warehouse_status)
     if supplier_code:
         query = query.filter(PurchaseRequisition.supplier_code == supplier_code)
+    if supplier_name:
+        query = query.filter(PurchaseRequisition.supplier_name.ilike(f"%{supplier_name}%"))
     if order_type:
         query = query.filter(PurchaseRequisition.order_type == order_type)
+    if month:
+        query = query.filter(PurchaseRequisition.note.ilike(f"%{month}%"))
     if search:
         term = f"%{search}%"
         query = query.filter(or_(
@@ -27,6 +33,7 @@ def get_all(db: Session, skip: int = 0, limit: int = 50,
             PurchaseRequisition.supplier_name.ilike(term),
             PurchaseRequisition.creator.ilike(term),
             PurchaseRequisition.supplier_code.ilike(term),
+            PurchaseRequisition.note.ilike(term),
         ))
 
     total = query.count()
@@ -45,7 +52,7 @@ def get_all(db: Session, skip: int = 0, limit: int = 50,
             "supplier_code": req.supplier_code,
             "supplier_name": req.supplier_name,
             "total_amount": req.total_amount,
-            "order_type": req.order_type or "Đơn mua hàng",
+            "order_type": req.order_type or "Đơn bán hàng",
             "priority": req.priority or "Bình thường",
             "reviewer": req.reviewer,
             "reviewed_at": req.reviewed_at,
@@ -66,7 +73,8 @@ def get_all(db: Session, skip: int = 0, limit: int = 50,
 
 
 def get_stats(db: Session):
-    """Thống kê tổng hợp đơn hàng cho các thẻ KPI."""
+    """Thống kê tổng hợp đơn hàng thực tế cho các thẻ KPI."""
+    now = get_vietnam_time()
     total = db.query(func.count(PurchaseRequisition.id)).scalar() or 0
 
     # Thống kê theo trạng thái
@@ -74,25 +82,39 @@ def get_stats(db: Session):
         PurchaseRequisition.status, func.count(PurchaseRequisition.id)
     ).group_by(PurchaseRequisition.status).all()
 
-    # Thống kê theo tình trạng nhập kho
+    # Thống kê theo tình trạng nhập/xuất kho
     warehouse_stats = db.query(
         PurchaseRequisition.warehouse_status, func.count(PurchaseRequisition.id)
     ).group_by(PurchaseRequisition.warehouse_status).all()
 
-    # Tổng tiền
-    total_amount = db.query(func.sum(PurchaseRequisition.total_amount)).scalar() or 0
+    # Tổng tiền USD thực tế từ CSDL
+    total_amount = db.query(func.sum(PurchaseRequisition.total_amount)).scalar() or 0.0
+
+    # Số đơn hoàn thành
+    completed_count = db.query(func.count(PurchaseRequisition.id)).filter(
+        PurchaseRequisition.status == "Đã hoàn thành"
+    ).scalar() or 0
+
+    # Số đơn đang xử lý
+    processing_count = total - completed_count
+
+    # Số đơn chậm tiến độ (quá ngày giao hàng dự kiến mà chưa hoàn thành)
+    overdue_count = db.query(func.count(PurchaseRequisition.id)).filter(
+        PurchaseRequisition.est_completion_date < now,
+        PurchaseRequisition.status != "Đã hoàn thành"
+    ).scalar() or 0
 
     return {
         "total": total,
-        "total_amount": total_amount,
-        "processing": 30,
-        "processing_total": 470,
-        "completed": 30,
-        "completed_total": 500,
-        "total_value": total_amount if total_amount > 0 else 3584,
-        "total_value_max": 10200,
-        "overdue": 30,
-        "overdue_total": 500,
+        "total_amount": round(total_amount, 2),
+        "processing": processing_count,
+        "processing_total": total,
+        "completed": completed_count,
+        "completed_total": total,
+        "total_value": round(total_amount, 2),
+        "total_value_max": round(max(15000000.0, total_amount * 1.15), 2),
+        "overdue": overdue_count,
+        "overdue_total": total,
         "by_status": {s: c for s, c in status_stats if s},
         "by_warehouse": {s: c for s, c in warehouse_stats if s},
     }

@@ -381,7 +381,16 @@ const PortalLayout = () => {
     location.pathname.includes('/profile') ||
     location.pathname.includes('/sidebar') ||
     location.pathname.includes('/system-config') ||
-    /^\/admin\/screens\/[0-9]+/.test(location.pathname);
+    /^\/admin\/screens\/[0-9]+/.test(location.pathname) ||
+    /^\/admin\/purchase-requisitions\/[^\/]+/.test(location.pathname) ||
+    /^\/admin\/products\/[^\/]+/.test(location.pathname) ||
+    /^\/admin\/orders\/[^\/]+/.test(location.pathname) ||
+    /^\/admin\/plan\/[^\/]+/.test(location.pathname) ||
+    /^\/admin\/production-orders\/[^\/]+/.test(location.pathname) ||
+    /^\/admin\/quality-records\/[^\/]+/.test(location.pathname) ||
+    /^\/admin\/equipment\/detail\/[^\/]+/.test(location.pathname) ||
+    /^\/admin\/machines\/detail\/[^\/]+/.test(location.pathname) ||
+    location.search.includes('mode=');
 
   const [sidebarActive, setSidebarActive] = useState(false);
 
@@ -2141,8 +2150,12 @@ const PortalLayout = () => {
         }
         .dashboard-content.allow-y-scroll {
           overflow-y: auto !important;
+          height: calc(100vh - 60px) !important;
         }
         .dashboard-content.allow-y-scroll > div,
+        .dashboard-content.allow-y-scroll .purchase-requisition-detail-container,
+        .dashboard-content.allow-y-scroll .detail-view-container,
+        .dashboard-content.allow-y-scroll .product-detail-container,
         .dashboard-content.allow-y-scroll .guide-management-container,
         .dashboard-content.allow-y-scroll .user-create-container,
         .dashboard-content.allow-y-scroll .user-edit-container,
@@ -2150,14 +2163,14 @@ const PortalLayout = () => {
         .dashboard-content.allow-y-scroll .system-config-container {
           overflow-y: visible !important;
           height: auto !important;
-          min-height: min-content !important;
+          min-height: 100% !important;
           flex: none !important;
         }
         .dashboard-content:not(.allow-y-scroll) > div,
-        .mgmt-container,
-        .manufacture-plan-container,
-        .quality-records-container,
-        .guide-management-container {
+        .dashboard-content:not(.allow-y-scroll) > .mgmt-container,
+        .dashboard-content:not(.allow-y-scroll) > .manufacture-plan-container,
+        .dashboard-content:not(.allow-y-scroll) > .quality-records-container,
+        .dashboard-content:not(.allow-y-scroll) > .guide-management-container {
           flex: 1 !important;
           height: 100% !important;
           min-height: 0 !important;

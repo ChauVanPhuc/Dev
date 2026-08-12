@@ -25,14 +25,17 @@ def list_requisitions(
     warehouse_status: Optional[str] = None,
     search: Optional[str] = None,
     supplier_code: Optional[str] = None,
+    supplier_name: Optional[str] = None,
     order_type: Optional[str] = None,
+    month: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """[GET] Danh sách đơn hàng với filter, search và phân trang."""
     return controller.get_all(db, skip=skip, limit=limit,
                               status=status, warehouse_status=warehouse_status,
                               search=search, supplier_code=supplier_code,
-                              order_type=order_type)
+                              supplier_name=supplier_name,
+                              order_type=order_type, month=month)
 
 
 @router.get("/stats")
@@ -89,7 +92,7 @@ def delete_requisition(requisition_id: int, db: Session = Depends(get_db)):
 
 @router.post("/import-excel")
 async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    """[POST] Import đơn đặt mua từ file Excel."""
+    """[POST] Import đơn hàng từ file Excel (Hỗ trợ cả định dạng Đơn hàng ATL và biểu mẫu PO chuẩn)."""
     if not file.filename.endswith(('.xlsx', '.xls')):
         raise HTTPException(status_code=400, detail="Chỉ hỗ trợ file Excel (.xlsx, .xls)")
 
@@ -97,46 +100,33 @@ async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_d
 
     async def generate_progress():
         import json
+        from collections import OrderedDict
+        from shared.utils.timezone import get_vietnam_time
+
         try:
             wb = openpyxl.load_workbook(io.BytesIO(contents), data_only=True)
             ws = wb.active
 
-            created_count = 0
-            updated_count = 0
-            errors = []
-
-            # Tìm header row (row chứa "Mã đơn mua" hoặc "STT")
-            header_row = None
-            for i, row in enumerate(ws.iter_rows(min_row=1, max_row=10, values_only=True), 1):
-                cells = [str(c).strip() if c else "" for c in row]
-                if any("Mã đơn mua" in c or "STT" == c for c in cells):
-                    header_row = i
-                    break
-
-            if not header_row:
-                yield json.dumps({"status": "error", "message": "Không tìm thấy dòng tiêu đề trong file Excel"}) + "\n"
-                return
-
-            def safe_float(val):
+            def safe_float(val, default=0.0):
                 if val is None or val == "" or val == " ":
-                    return 0
+                    return default
                 try:
                     return float(val)
                 except (ValueError, TypeError):
-                    return 0
+                    return default
 
             def safe_datetime(val):
-                if val is None:
+                if val is None or val == "":
                     return None
                 if isinstance(val, datetime):
                     return val
-                try:
-                    return datetime.strptime(str(val).strip(), "%Y-%m-%d %H:%M:%S")
-                except Exception:
+                val_str = str(val).strip()
+                for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
                     try:
-                        return datetime.strptime(str(val).strip(), "%d/%m/%Y")
-                    except Exception:
-                        return None
+                        return datetime.strptime(val_str, fmt)
+                    except ValueError:
+                        pass
+                return None
 
             def safe_str(val):
                 if val is None:
@@ -144,31 +134,171 @@ async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_d
                 s = str(val).strip()
                 return s if s else None
 
-            # Đếm tổng số dòng
+            # Tìm header row
+            header_row = None
+            is_atl_format = False
+            for i, row in enumerate(ws.iter_rows(min_row=1, max_row=10, values_only=True), 1):
+                cells = [str(c).strip() if c else "" for c in row]
+                if any("Sô chứng từ" in c or "Số PO đối tác" in c or "Mã mặt hàng" in c for c in cells):
+                    header_row = i
+                    is_atl_format = True
+                    break
+                elif any("Mã đơn mua" in c or "STT" == c for c in cells):
+                    header_row = i
+                    is_atl_format = False
+                    break
+
+            if not header_row:
+                yield json.dumps({"status": "error", "message": "Không tìm thấy dòng tiêu đề hợp lệ trong file Excel"}) + "\n"
+                return
+
             rows_to_process = []
             for row in ws.iter_rows(min_row=header_row + 1, values_only=True):
                 if any(c is not None for c in row):
                     rows_to_process.append(row)
 
             total_rows = len(rows_to_process)
-            processed = 0
-
-            # Gửi tin nhắn khởi tạo
             yield json.dumps({"status": "processing", "processed": 0, "total": total_rows}) + "\n"
 
-            for i, row in enumerate(rows_to_process, 1):
-                row_idx = header_row + i
-                try:
-                    po_code = safe_str(row[1])  # Cột B: Mã đơn mua
+            created_count = 0
+            updated_count = 0
+
+            if is_atl_format:
+                # Định dạng Đơn hàng ATL với chi tiết mặt hàng
+                orders = OrderedDict()
+                for row in rows_to_process:
+                    doc_no = safe_str(row[0]) or safe_str(row[1])
+                    if not doc_no:
+                        continue
+                    if doc_no not in orders:
+                        orders[doc_no] = {
+                            "po_code": doc_no,
+                            "partner_po": safe_str(row[1]) or "",
+                            "cust_code": safe_str(row[2]) or "KH036",
+                            "plan_month": safe_str(row[7]) or "",
+                            "delivery_date": safe_datetime(row[8]),
+                            "currency": safe_str(row[9]) or "USD",
+                            "exchange_rate": safe_float(row[10], 26100.0),
+                            "order_date": safe_datetime(row[12]),
+                            "container_type": safe_str(row[13]) or "",
+                            "container_qty": safe_float(row[14], 1.0),
+                            "items": []
+                        }
+                    item_code = safe_str(row[3]) or ""
+                    qty = safe_float(row[4], 0.0)
+                    unit_price = safe_float(row[5], 0.0)
+                    subtotal_usd = safe_float(row[6], 0.0)
+                    subtotal_vnd = safe_float(row[11], 0.0)
+                    is_pallet = bool(row[15] and str(row[15]).strip().lower() == "true") if len(row) > 15 else False
+
+                    orders[doc_no]["items"].append({
+                        "item_code": item_code,
+                        "quantity": qty,
+                        "unit_price": unit_price,
+                        "subtotal_usd": subtotal_usd,
+                        "subtotal_vnd": subtotal_vnd,
+                        "is_pallet": is_pallet,
+                        "delivery_date": safe_datetime(row[8]),
+                    })
+
+                processed_orders = 0
+                total_orders = len(orders)
+
+                for po_code, o_data in orders.items():
+                    order_total_usd = sum(it["subtotal_usd"] for it in o_data["items"])
+                    note_parts = []
+                    if o_data["plan_month"]:
+                        note_parts.append(f"Kế hoạch: {o_data['plan_month']}")
+                    if o_data["container_type"]:
+                        cnt_str = f"{int(o_data['container_qty'])}x {o_data['container_type']}" if o_data['container_qty'] else o_data['container_type']
+                        note_parts.append(f"Cont: {cnt_str}")
+                    if o_data["exchange_rate"]:
+                        note_parts.append(f"Tỷ giá: {int(o_data['exchange_rate']):,}")
+                    note_text = " | ".join(note_parts)
+
+                    existing = db.query(PurchaseRequisition).filter(PurchaseRequisition.po_code == po_code).first()
+                    if existing:
+                        existing.creator = "Admin"
+                        existing.order_date = o_data["order_date"] or existing.order_date
+                        existing.delivery_date = o_data["delivery_date"] or existing.delivery_date
+                        existing.est_completion_date = o_data["delivery_date"] or existing.est_completion_date
+                        existing.supplier_code = o_data["cust_code"]
+                        existing.supplier_name = "Atlas International (KH036)" if o_data["cust_code"] == "KH036" else o_data["cust_code"]
+                        existing.total_amount = order_total_usd
+                        existing.order_type = "Đơn bán hàng"
+                        existing.note = note_text
+                        updated_count += 1
+                        db.query(PurchaseOrderItem).filter(PurchaseOrderItem.requisition_id == existing.id).delete()
+                        pr_id = existing.id
+                    else:
+                        new_pr = PurchaseRequisition(
+                            po_code=po_code,
+                            creator="Admin",
+                            order_date=o_data["order_date"],
+                            delivery_date=o_data["delivery_date"],
+                            est_completion_date=o_data["delivery_date"],
+                            supplier_code=o_data["cust_code"],
+                            supplier_name="Atlas International (KH036)" if o_data["cust_code"] == "KH036" else o_data["cust_code"],
+                            total_amount=order_total_usd,
+                            order_type="Đơn bán hàng",
+                            priority="Bình thường",
+                            material_type="Gỗ & Phụ kiện",
+                            status="Chưa duyệt",
+                            warehouse_status="Chưa xuất kho",
+                            note=note_text,
+                            created_at=get_vietnam_time()
+                        )
+                        db.add(new_pr)
+                        db.flush()
+                        pr_id = new_pr.id
+                        created_count += 1
+
+                    for it in o_data["items"]:
+                        poi = PurchaseOrderItem(
+                            requisition_id=pr_id,
+                            po_date=o_data["order_date"],
+                            po_code=po_code,
+                            supplier_code=o_data["cust_code"],
+                            supplier_name="Atlas International (KH036)",
+                            item_code=it["item_code"],
+                            item_name=it["item_code"],
+                            order_code=po_code,
+                            unit="Pallet" if it["is_pallet"] else "Bộ",
+                            quantity=it["quantity"],
+                            unit_price=it["unit_price"],
+                            currency="USD",
+                            subtotal_foreign=it["subtotal_usd"],
+                            grand_total_foreign=it["subtotal_usd"],
+                            subtotal_vnd=it["subtotal_vnd"],
+                            grand_total_vnd=it["subtotal_vnd"],
+                            requested_delivery_date=it["delivery_date"],
+                            content="NVL đóng gói (PALLET)" if it["is_pallet"] else None,
+                            status="Chưa duyệt",
+                            type="Đơn bán hàng",
+                            creator="Admin",
+                            created_at=get_vietnam_time()
+                        )
+                        db.add(poi)
+
+                    processed_orders += 1
+                    if processed_orders % 20 == 0 or processed_orders == total_orders:
+                        yield json.dumps({
+                            "status": "processing",
+                            "processed": processed_orders,
+                            "total": total_orders
+                        }) + "\n"
+
+            else:
+                # Biểu mẫu phẳng chuẩn
+                processed = 0
+                for i, row in enumerate(rows_to_process, 1):
+                    po_code = safe_str(row[1])
                     if not po_code:
                         processed += 1
                         continue
 
-                    # Kiểm tra đã tồn tại chưa
                     existing = db.query(PurchaseRequisition).filter(PurchaseRequisition.po_code == po_code).first()
-
                     if existing:
-                        # Cập nhật
                         existing.creator = safe_str(row[2]) or existing.creator
                         existing.order_date = safe_datetime(row[3]) or existing.order_date
                         existing.delivery_date = safe_datetime(row[4]) or existing.delivery_date
@@ -187,7 +317,6 @@ async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_d
                         existing.note = safe_str(row[17]) if len(row) > 17 else existing.note
                         updated_count += 1
                     else:
-                        # Tạo mới
                         db_obj = PurchaseRequisition(
                             po_code=po_code,
                             creator=safe_str(row[2]),
@@ -201,30 +330,28 @@ async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_d
                             supplier_code=safe_str(row[10]),
                             supplier_name=safe_str(row[11]),
                             total_amount=safe_float(row[12]),
-                            order_type=safe_str(row[13]),
+                            order_type=safe_str(row[13]) or "Đơn bán hàng",
                             status=safe_str(row[14]),
                             processing_status=safe_str(row[15]),
                             warehouse_status=safe_str(row[16]),
                             note=safe_str(row[17]) if len(row) > 17 else None,
+                            created_at=get_vietnam_time()
                         )
                         db.add(db_obj)
                         created_count += 1
 
-                except Exception as e:
-                    errors.append(f"Dòng {row_idx}: {str(e)}")
-
-                processed += 1
-                if processed % 10 == 0 or processed == total_rows:
-                    yield json.dumps({"status": "processing", "processed": processed, "total": total_rows}) + "\n"
+                    processed += 1
+                    if processed % 20 == 0 or processed == total_rows:
+                        yield json.dumps({"status": "processing", "processed": processed, "total": total_rows}) + "\n"
 
             db.commit()
             wb.close()
 
             yield json.dumps({
                 "status": "completed",
-                "processed": processed,
+                "processed": total_rows,
                 "total": total_rows,
-                "message": f"Import thành công! Tạo mới: {created_count}, Cập nhật: {updated_count}"
+                "message": f"Import thành công! Tạo mới: {created_count} đơn hàng, Cập nhật: {updated_count} đơn hàng"
             }) + "\n"
 
         except Exception as e:
