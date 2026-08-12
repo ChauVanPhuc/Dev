@@ -5,6 +5,7 @@ const ClaimCreateModal = ({
   isOpen,
   onClose,
   onSubmit,
+  categoryOptions = [],
   addDongHang,
   setAddDongHang,
   addLoaiClaim,
@@ -61,6 +62,13 @@ const ClaimCreateModal = ({
   addImageCaptions,
   disabledFieldStyle
 }) => {
+  const defaultCategoryList = [
+    'Dòng hàng APT', 'Dòng hàng ATL', 'Dòng hàng FOL', 'Dòng hàng ADV',
+    'Dòng hàng TPH', 'Dòng hàng HOR', 'Dòng hàng EYC', 'Dòng hàng COV',
+    'Dòng hàng TIN', 'Dòng hàng BEZ', 'Dòng hàng MBC'
+  ];
+  const activeCategories = (categoryOptions && categoryOptions.length > 0) ? categoryOptions : defaultCategoryList;
+
   return (
     <FormModal
       isOpen={isOpen}
@@ -83,10 +91,12 @@ const ClaimCreateModal = ({
                 onChange={(e) => setAddDongHang(e.target.value)}
                 className="add-claim-select"
               >
-                <option value="Atlas">Atlas</option>
-                <option value="Oak">Oak</option>
-                <option value="Maple">Maple</option>
-                <option value="Pine">Pine</option>
+                {activeCategories.map(opt => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+                {addDongHang && !activeCategories.includes(addDongHang) && (
+                  <option value={addDongHang}>{addDongHang}</option>
+                )}
               </select>
             </div>
             <div className="add-claim-field">

@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useNavigate } from 'react-router-dom';
 import api from '@webShared/Services/api.service';
 import { hrService } from '@modules/auth/Models/hr.service';
 import DepartmentModal from '@modules/auth/Views/Department/DepartmentModal';
 import { 
   FileText, Plus, Edit2, Trash2, Search, ArrowUp, ArrowDown, Layout, Smartphone, 
-  X, HelpCircle, Save, ChevronRight, CheckSquare, Square, RefreshCw, Layers, Briefcase, Users, Building2, Sliders
+  X, HelpCircle, Save, ChevronRight, CheckSquare, Square, RefreshCw, Layers, Briefcase, Users, Building2, Sliders,
+  Tag, Factory, Contact, ShieldCheck, Palette, ClipboardList, ExternalLink
 } from 'lucide-react';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
+import PaintColorManagementView from '@modules/Product/Views/PaintColors/PaintColorManagementView';
+import ProductDetailsManagementView from '@modules/Product/Views/Details/ProductDetailsManagementView';
 import '@styles/components.css';
 
 import * as Icons from 'lucide-react';
@@ -23,9 +26,10 @@ const DynamicIcon = ({ name, size = 16, ...props }) => {
 export default function SystemConfigView() {
   const { setCustomTitle, setCustomSubtitle } = useOutletContext();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   // LEFT MENU SELECTION STATE
-  // 'factory' | 'department' | 'position' | 'role' | 'sidebar'
+  // 'factory' | 'department' | 'position' | 'role' | 'sidebar' | 'category' | 'stage' | 'customer' | 'permission'
   const [activeTab, setActiveTab] = useState('factory');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -61,6 +65,29 @@ export default function SystemConfigView() {
   const [generalCode, setGeneralCode] = useState('');
   const [generalName, setGeneralName] = useState('');
   const [generalDesc, setGeneralDesc] = useState('');
+
+  // --- CATEGORY (Dòng hàng) FORM STATES ---
+  const [catName, setCatName] = useState('');
+  const [catDesc, setCatDesc] = useState('');
+
+  // --- STAGE (Công đoạn) FORM STATES ---
+  const [stageName, setStageName] = useState('');
+  const [stageDesc, setStageDesc] = useState('');
+
+  // --- CUSTOMER FORM STATES ---
+  const [custCode, setCustCode] = useState('');
+  const [custName, setCustName] = useState('');
+  const [custContact, setCustContact] = useState('');
+  const [custPhone, setCustPhone] = useState('');
+  const [custEmail, setCustEmail] = useState('');
+  const [custAddress, setCustAddress] = useState('');
+  const [custTax, setCustTax] = useState('');
+  const [custCountry, setCustCountry] = useState('');
+  const [custNotes, setCustNotes] = useState('');
+
+  // --- PERMISSION (Chức vụ phân quyền) FORM STATES ---
+  const [permName, setPermName] = useState('');
+  const [permDesc, setPermDesc] = useState('');
 
   // --- SIDEBAR TREE STATES ---
   const [sidebarPlatform, setSidebarPlatform] = useState('Web'); // 'Web' or 'Mobile'
@@ -104,6 +131,11 @@ export default function SystemConfigView() {
 
   // Load Data based on active Left Menu Tab
   const loadData = async () => {
+    if (activeTab === 'paint_color' || activeTab === 'product_detail') {
+      setDataList([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       if (activeTab === 'factory') {
@@ -120,6 +152,18 @@ export default function SystemConfigView() {
         setDataList(res || []);
       } else if (activeTab === 'sidebar') {
         const res = await api.get('/system/sidebar/all');
+        setDataList(res || []);
+      } else if (activeTab === 'category') {
+        const res = await api.get('/master-categories/');
+        setDataList(res || []);
+      } else if (activeTab === 'stage') {
+        const res = await api.get('/stages/');
+        setDataList(res || []);
+      } else if (activeTab === 'customer') {
+        const res = await api.get('/customers/');
+        setDataList(Array.isArray(res) ? res : (res?.items || []));
+      } else if (activeTab === 'permission') {
+        const res = await api.get('/permissions/?include_inactive=true');
         setDataList(res || []);
       }
     } catch (e) {
@@ -193,6 +237,84 @@ export default function SystemConfigView() {
             { field: 'Khóa phân quyền', value: row.permission_key || '---' },
             { field: 'Trạng thái', value: row.is_active ? 'Đang hoạt động' : 'Tạm ẩn' }
           ]);
+        }
+      } else if (mainTab === 'category') {
+        if (subTabKey === 'subtab1') {
+          if (row.products && Array.isArray(row.products)) {
+            setSubTableData(row.products);
+          } else {
+            try {
+              const res = await api.get(`/master-products/?category_id=${row.id}`);
+              setSubTableData(Array.isArray(res) ? res : (res?.items || []));
+            } catch (e) {
+              setSubTableData([]);
+            }
+          }
+        } else if (subTabKey === 'subtab2') {
+          setSubTableData([
+            { field: 'Mã định danh ID', value: row.id },
+            { field: 'Tên Dòng hàng', value: row.name },
+            { field: 'Mô tả / Diễn giải', value: row.description || '---' },
+            { field: 'Số sản phẩm liên kết', value: row.product_count ?? (row.products?.length || 0) },
+            { field: 'Trạng thái', value: row.status === 1 ? 'Hiệu lực' : 'Hết hiệu lực' },
+            { field: 'Ngày khởi tạo', value: formatDate(row.created_at) }
+          ]);
+        }
+      } else if (mainTab === 'stage') {
+        if (subTabKey === 'subtab1') {
+          if (row.permissions && Array.isArray(row.permissions)) {
+            setSubTableData(row.permissions);
+          } else {
+            try {
+              const allPerms = await api.get('/permissions/?include_inactive=true');
+              const linked = (allPerms || []).filter(p => (p.stages || []).some(s => s.id === row.id));
+              setSubTableData(linked);
+            } catch (e) {
+              setSubTableData([]);
+            }
+          }
+        } else if (subTabKey === 'subtab2') {
+          setSubTableData([
+            { field: 'Mã ID Công đoạn', value: row.id },
+            { field: 'Tên Công đoạn SX', value: row.name },
+            { field: 'Diễn giải quy trình', value: row.description || '---' },
+            { field: 'Số chức vụ phụ trách', value: row.permissions?.length || 0 }
+          ]);
+        }
+      } else if (mainTab === 'customer') {
+        setSubTableData([
+          { field: 'Mã định danh ID', value: row.id },
+          { field: 'Mã Khách hàng', value: row.code },
+          { field: 'Tên Doanh nghiệp / Khách hàng', value: row.name },
+          { field: 'Người liên hệ', value: row.contact_person || '---' },
+          { field: 'Số điện thoại', value: row.phone || '---' },
+          { field: 'Email liên hệ', value: row.email || '---' },
+          { field: 'Mã số thuế (MST)', value: row.tax_code || '---' },
+          { field: 'Địa chỉ trụ sở', value: row.address || '---' },
+          { field: 'Quốc gia', value: row.country || '---' },
+          { field: 'Ghi chú thêm', value: row.notes || '---' },
+          { field: 'Trạng thái', value: row.is_active ? 'Đang hợp tác' : 'Ngừng hợp tác' },
+          { field: 'Ngày tạo hồ sơ', value: formatDate(row.created_at) }
+        ]);
+      } else if (mainTab === 'permission') {
+        if (subTabKey === 'subtab1') {
+          if (row.stages && Array.isArray(row.stages)) {
+            setSubTableData(row.stages);
+          } else {
+            try {
+              const res = await api.get(`/permissions/${row.id}/stages`);
+              setSubTableData(res || []);
+            } catch (e) {
+              setSubTableData([]);
+            }
+          }
+        } else if (subTabKey === 'subtab2') {
+          setSubTableData(row.roles || []);
+        } else if (subTabKey === 'subtab3') {
+          let perms = {};
+          try { perms = JSON.parse(row.default_permissions || '{}'); } catch (e) {}
+          const list = Object.entries(perms).map(([key, level]) => ({ key, level }));
+          setSubTableData(list);
         }
       }
     } catch (err) {
@@ -300,6 +422,21 @@ export default function SystemConfigView() {
         return (item.name || '').toLowerCase().includes(query) ||
                (item.description || '').toLowerCase().includes(query);
       }
+      if (activeTab === 'category' || activeTab === 'stage') {
+        return (item.name || '').toLowerCase().includes(query) ||
+               (item.description || '').toLowerCase().includes(query);
+      }
+      if (activeTab === 'customer') {
+        return (item.code || '').toLowerCase().includes(query) ||
+               (item.name || '').toLowerCase().includes(query) ||
+               (item.contact_person || '').toLowerCase().includes(query) ||
+               (item.phone || '').toLowerCase().includes(query) ||
+               (item.email || '').toLowerCase().includes(query);
+      }
+      if (activeTab === 'permission') {
+        return (item.name || '').toLowerCase().includes(query) ||
+               (item.description || '').toLowerCase().includes(query);
+      }
       return false;
     });
   }, [dataList, searchQuery, activeTab, sidebarPlatform]);
@@ -325,6 +462,25 @@ export default function SystemConfigView() {
       setGeneralCode('');
       setGeneralName('');
       setGeneralDesc('');
+    } else if (activeTab === 'category') {
+      setCatName('');
+      setCatDesc('');
+    } else if (activeTab === 'stage') {
+      setStageName('');
+      setStageDesc('');
+    } else if (activeTab === 'customer') {
+      setCustCode('');
+      setCustName('');
+      setCustContact('');
+      setCustPhone('');
+      setCustEmail('');
+      setCustAddress('');
+      setCustTax('');
+      setCustCountry('Vietnam');
+      setCustNotes('');
+    } else if (activeTab === 'permission') {
+      setPermName('');
+      setPermDesc('');
     } else if (activeTab === 'role') {
       // Handled separately via DepartmentModal
     } else if (activeTab === 'sidebar') {
@@ -350,6 +506,25 @@ export default function SystemConfigView() {
       setGeneralCode(item.code || '');
       setGeneralName(item.name || '');
       setGeneralDesc(item.description || '');
+    } else if (activeTab === 'category') {
+      setCatName(item.name || '');
+      setCatDesc(item.description || '');
+    } else if (activeTab === 'stage') {
+      setStageName(item.name || '');
+      setStageDesc(item.description || '');
+    } else if (activeTab === 'customer') {
+      setCustCode(item.code || '');
+      setCustName(item.name || '');
+      setCustContact(item.contact_person || '');
+      setCustPhone(item.phone || '');
+      setCustEmail(item.email || '');
+      setCustAddress(item.address || '');
+      setCustTax(item.tax_code || '');
+      setCustCountry(item.country || '');
+      setCustNotes(item.notes || '');
+    } else if (activeTab === 'permission') {
+      setPermName(item.name || '');
+      setPermDesc(item.description || '');
     } else if (activeTab === 'role') {
       // Handled separately
     } else if (activeTab === 'sidebar') {
@@ -413,6 +588,63 @@ export default function SystemConfigView() {
           await hrService.createPosition(payload);
           toast('success', 'Thêm mới vị trí thành công!');
         }
+      } else if (activeTab === 'category') {
+        const payload = {
+          name: catName.trim(),
+          description: catDesc.trim() || null,
+          status: 1
+        };
+        if (selectedItem) {
+          await api.put(`/master-categories/${selectedItem.id}`, payload);
+          toast('success', 'Cập nhật dòng hàng thành công!');
+        } else {
+          await api.post('/master-categories/', payload);
+          toast('success', 'Thêm mới dòng hàng thành công!');
+        }
+      } else if (activeTab === 'stage') {
+        const payload = {
+          name: stageName.trim(),
+          description: stageDesc.trim() || null
+        };
+        if (selectedItem) {
+          await api.put(`/stages/${selectedItem.id}`, payload);
+          toast('success', 'Cập nhật công đoạn thành công!');
+        } else {
+          await api.post('/stages/', payload);
+          toast('success', 'Thêm mới công đoạn thành công!');
+        }
+      } else if (activeTab === 'customer') {
+        const payload = {
+          code: custCode.trim(),
+          name: custName.trim(),
+          contact_person: custContact.trim() || null,
+          phone: custPhone.trim() || null,
+          email: custEmail.trim() || null,
+          address: custAddress.trim() || null,
+          tax_code: custTax.trim() || null,
+          country: custCountry.trim() || null,
+          notes: custNotes.trim() || null,
+          is_active: 1
+        };
+        if (selectedItem) {
+          await api.put(`/customers/${selectedItem.id}`, payload);
+          toast('success', 'Cập nhật thông tin khách hàng thành công!');
+        } else {
+          await api.post('/customers/', payload);
+          toast('success', 'Thêm mới khách hàng thành công!');
+        }
+      } else if (activeTab === 'permission') {
+        const payload = {
+          name: permName.trim(),
+          description: permDesc.trim() || null
+        };
+        if (selectedItem) {
+          await api.put(`/permissions/${selectedItem.id}`, payload);
+          toast('success', 'Cập nhật chức vụ phân quyền thành công!');
+        } else {
+          await api.post('/permissions/', payload);
+          toast('success', 'Thêm mới chức vụ phân quyền thành công!');
+        }
       } else if (activeTab === 'sidebar') {
         const payload = {
           platform: sidebarPlatform,
@@ -462,6 +694,14 @@ export default function SystemConfigView() {
         await hrService.deletePosition(deletingItem.id);
       } else if (activeTab === 'role') {
         await api.delete(`/roles/${deletingItem.id}`);
+      } else if (activeTab === 'category') {
+        await api.delete(`/master-categories/${deletingItem.id}`);
+      } else if (activeTab === 'stage') {
+        await api.delete(`/stages/${deletingItem.id}`);
+      } else if (activeTab === 'customer') {
+        await api.delete(`/customers/${deletingItem.id}`);
+      } else if (activeTab === 'permission') {
+        await api.delete(`/permissions/${deletingItem.id}`);
       } else if (activeTab === 'sidebar') {
         await api.delete(`/system/sidebar/${deletingItem.id}`);
       }
@@ -790,13 +1030,16 @@ export default function SystemConfigView() {
             Thông tin cần cấu hình
           </h3>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            {/* GROUP 1: CƠ CẤU TỔ CHỨC */}
+            <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#9CA3AF', padding: '8px 10px 4px 10px', letterSpacing: '0.5px' }}>
+              CƠ CẤU TỔ CHỨC
+            </div>
             {[
               { id: 'factory', label: 'Nhà máy', icon: Building2 },
               { id: 'department', label: 'Phòng ban', icon: Users },
               { id: 'position', label: 'Vị trí', icon: Briefcase },
-              { id: 'role', label: 'Bộ phận', icon: Layers },
-              { id: 'sidebar', label: 'Phân hệ', icon: Sliders }
+              { id: 'role', label: 'Bộ phận', icon: Layers }
             ].map(tab => {
               const IconComp = tab.icon;
               const isSelected = activeTab === tab.id;
@@ -808,10 +1051,10 @@ export default function SystemConfigView() {
                     display: 'flex',
                     alignItems: 'center',
                     gap: '12px',
-                    padding: '12px 14px',
+                    padding: '10px 14px',
                     width: '100%',
                     border: 'none',
-                    borderRadius: '12px',
+                    borderRadius: '10px',
                     backgroundColor: isSelected ? '#FAF6F0' : 'transparent',
                     color: isSelected ? '#7B5233' : '#4B5563',
                     fontWeight: isSelected ? '800' : '600',
@@ -827,8 +1070,138 @@ export default function SystemConfigView() {
                     if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
                   }}
                 >
-                  <IconComp size={18} style={{ color: isSelected ? '#7B5233' : '#6B7280' }} />
-                  <span style={{ fontSize: '0.85rem' }}>{tab.label}</span>
+                  <IconComp size={17} style={{ color: isSelected ? '#7B5233' : '#6B7280' }} />
+                  <span style={{ fontSize: '0.84rem' }}>{tab.label}</span>
+                </button>
+              );
+            })}
+
+            {/* GROUP 2: HỆ THỐNG & PHÂN QUYỀN */}
+            <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#9CA3AF', padding: '12px 10px 4px 10px', letterSpacing: '0.5px', borderTop: '1px solid #F3F4F6', marginTop: '4px' }}>
+              HỆ THỐNG & PHÂN QUYỀN
+            </div>
+            {[
+              { id: 'sidebar', label: 'Cấu hình Sidebar', icon: Sliders },
+              { id: 'permission', label: 'Chức vụ & Phân quyền', icon: ShieldCheck }
+            ].map(tab => {
+              const IconComp = tab.icon;
+              const isSelected = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '10px 14px',
+                    width: '100%',
+                    border: 'none',
+                    borderRadius: '10px',
+                    backgroundColor: isSelected ? '#FAF6F0' : 'transparent',
+                    color: isSelected ? '#7B5233' : '#4B5563',
+                    fontWeight: isSelected ? '800' : '600',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    outline: 'none'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) e.currentTarget.style.backgroundColor = '#F9FAFB';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
+                  }}
+                >
+                  <IconComp size={17} style={{ color: isSelected ? '#7B5233' : '#6B7280' }} />
+                  <span style={{ fontSize: '0.84rem' }}>{tab.label}</span>
+                </button>
+              );
+            })}
+
+            {/* GROUP 3: DANH MỤC DỮ LIỆU */}
+            <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#9CA3AF', padding: '12px 10px 4px 10px', letterSpacing: '0.5px', borderTop: '1px solid #F3F4F6', marginTop: '4px' }}>
+              DANH MỤC DỮ LIỆU
+            </div>
+            {[
+              { id: 'category', label: 'Dòng hàng', icon: Tag },
+              { id: 'stage', label: 'Công đoạn SX', icon: Factory },
+              { id: 'customer', label: 'Khách hàng', icon: Contact }
+            ].map(tab => {
+              const IconComp = tab.icon;
+              const isSelected = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '10px 14px',
+                    width: '100%',
+                    border: 'none',
+                    borderRadius: '10px',
+                    backgroundColor: isSelected ? '#FAF6F0' : 'transparent',
+                    color: isSelected ? '#7B5233' : '#4B5563',
+                    fontWeight: isSelected ? '800' : '600',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    outline: 'none'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) e.currentTarget.style.backgroundColor = '#F9FAFB';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
+                  }}
+                >
+                  <IconComp size={17} style={{ color: isSelected ? '#7B5233' : '#6B7280' }} />
+                  <span style={{ fontSize: '0.84rem' }}>{tab.label}</span>
+                </button>
+              );
+            })}
+
+            {/* GROUP 4: SẢN PHẨM MẪU (CHUYÊN BIỆT) */}
+            <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#9CA3AF', padding: '12px 10px 4px 10px', letterSpacing: '0.5px', borderTop: '1px solid #F3F4F6', marginTop: '4px' }}>
+              SẢN PHẨM MẪU (CHUYÊN BIỆT)
+            </div>
+            {[
+              { id: 'paint_color', label: 'Quản lý Màu sơn', icon: Palette },
+              { id: 'product_detail', label: 'Quản lý Chi tiết SP', icon: ClipboardList }
+            ].map(tab => {
+              const IconComp = tab.icon;
+              const isSelected = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '10px 14px',
+                    width: '100%',
+                    border: 'none',
+                    borderRadius: '10px',
+                    backgroundColor: isSelected ? '#FAF6F0' : 'transparent',
+                    color: isSelected ? '#7B5233' : '#4B5563',
+                    fontWeight: isSelected ? '800' : '600',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    outline: 'none'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) e.currentTarget.style.backgroundColor = '#F9FAFB';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
+                  }}
+                >
+                  <IconComp size={17} style={{ color: isSelected ? '#7B5233' : '#6B7280' }} />
+                  <span style={{ fontSize: '0.84rem' }}>{tab.label}</span>
                 </button>
               );
             })}
@@ -844,24 +1217,33 @@ export default function SystemConfigView() {
           boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)',
           overflow: 'visible'
         }}>
-          
-          {/* Right Header & Search tool */}
-          <div style={{
-            padding: '20px',
-            borderBottom: '1px solid #F3F4F6',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            backgroundColor: '#FAF8F6',
-            gap: '16px'
-          }}>
-            <div>
-              <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#2D1A12', fontWeight: 800 }}>
-                {activeTab === 'factory' && 'Danh mục Cấu trúc nhà máy'}
+          {activeTab === 'paint_color' ? (
+            <PaintColorManagementView isEmbedded={true} />
+          ) : activeTab === 'product_detail' ? (
+            <ProductDetailsManagementView isEmbedded={true} />
+          ) : (
+            <>
+              {/* Right Header & Search tool */}
+              <div style={{
+                padding: '20px',
+                borderBottom: '1px solid #F3F4F6',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: '#FAF8F6',
+                gap: '16px'
+              }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#2D1A12', fontWeight: 800 }}>
+                    {activeTab === 'factory' && 'Danh mục Cấu trúc nhà máy'}
                 {activeTab === 'department' && 'Danh mục Phòng ban Nhân sự'}
                 {activeTab === 'position' && 'Danh mục Vị trí / Chức danh'}
                 {activeTab === 'role' && 'Danh mục Bộ phận & Phân quyền mặc định'}
-                {activeTab === 'sidebar' && 'Cấu hình Phân hệ & Cây Menu Sidebar'}
+                {activeTab === 'sidebar' && 'Cấu hình Menu Sidebar'}
+                {activeTab === 'category' && 'Danh mục Dòng hàng sản phẩm'}
+                {activeTab === 'stage' && 'Danh mục Công đoạn sản xuất'}
+                {activeTab === 'customer' && 'Danh mục Khách hàng & Đối tác'}
+                {activeTab === 'permission' && 'Danh mục Chức vụ & Phân quyền công đoạn'}
               </h3>
               <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#9CA3AF' }}>
                 {activeTab === 'factory' && 'Quản lý sơ đồ các Nhà máy, Phân xưởng và Tổ sản xuất vật lý.'}
@@ -869,6 +1251,10 @@ export default function SystemConfigView() {
                 {activeTab === 'position' && 'Thiết lập danh mục chức vụ công tác trong công ty.'}
                 {activeTab === 'role' && 'Cấu hình các bộ phận chính và nhóm phân quyền màn hình tương ứng.'}
                 {activeTab === 'sidebar' && 'Thiết lập lưu đồ menu điều hướng cho bản Web và Mobile.'}
+                {activeTab === 'category' && 'Quản lý các dòng hàng mẫu và danh mục sản phẩm của toàn hệ thống.'}
+                {activeTab === 'stage' && 'Quản lý danh sách các công đoạn sản xuất tại các nhà máy và xưởng.'}
+                {activeTab === 'customer' && 'Quản lý danh bạ khách hàng, đối tác, mã số thuế và thông tin liên hệ.'}
+                {activeTab === 'permission' && 'Thiết lập chức vụ, gán công đoạn phụ trách và quyền thao tác.'}
               </p>
             </div>
 
@@ -957,7 +1343,7 @@ export default function SystemConfigView() {
                   color: '#374151',
                   fontSize: '0.8rem'
                 }}>
-                  <div style={{ flex: 1 }}>CẤU TRÚC PHÂN HỆ MENU ({sidebarPlatform.toUpperCase()})</div>
+                  <div style={{ flex: 1 }}>CẤU TRÚC MENU SIDEBAR ({sidebarPlatform.toUpperCase()})</div>
                   <div style={{ width: '280px', textAlign: 'right' }}>THAO TÁC</div>
                 </div>
                 {filteredData.length === 0 ? (
@@ -999,6 +1385,40 @@ export default function SystemConfigView() {
                           <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Trạng thái</th>
                         </>
                       )}
+                      {activeTab === 'category' && (
+                        <>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Tên Dòng hàng</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Mô tả / Diễn giải</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'center' }}>Số SP mẫu</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Trạng thái</th>
+                        </>
+                      )}
+                      {activeTab === 'stage' && (
+                        <>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Tên Công đoạn SX</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Mô tả quy trình</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'center' }}>Chức vụ gán</th>
+                        </>
+                      )}
+                      {activeTab === 'customer' && (
+                        <>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Mã KH</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Tên Khách hàng / Doanh nghiệp</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Người liên hệ</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Điện thoại / Email</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Quốc gia</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Trạng thái</th>
+                        </>
+                      )}
+                      {activeTab === 'permission' && (
+                        <>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Tên Chức vụ</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Mô tả chức vụ</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'center' }}>Công đoạn SX</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'center' }}>Bộ phận liên kết</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Trạng thái</th>
+                        </>
+                      )}
                       <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800, width: '120px' }}>Ngày tạo</th>
                       <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800, borderTopRightRadius: '8px', borderBottomRightRadius: '8px', width: '100px', textAlign: 'center' }}>Thao tác</th>
                     </tr>
@@ -1006,7 +1426,7 @@ export default function SystemConfigView() {
                   <tbody>
                     {filteredData.length === 0 ? (
                       <tr>
-                        <td colSpan={6} style={{ padding: '30px', textAlignment: 'center', color: '#9CA3AF', fontSize: '0.85rem' }}>
+                        <td colSpan={8} style={{ padding: '30px', textAlign: 'center', color: '#9CA3AF', fontSize: '0.85rem' }}>
                           Không tìm thấy bản ghi cấu hình nào.
                         </td>
                       </tr>
@@ -1068,6 +1488,111 @@ export default function SystemConfigView() {
                                   fontSize: '0.7rem'
                                 }}>
                                   {item.is_active ? 'Đang sử dụng' : 'Dừng hoạt động'}
+                                </span>
+                              </td>
+                            </>
+                          )}
+
+                          {activeTab === 'category' && (
+                            <>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1F2937', fontWeight: 'bold' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <Tag size={15} style={{ color: '#7B5233' }} />
+                                  <span>{item.name}</span>
+                                </div>
+                              </td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#6B7280' }}>{item.description || '---'}</td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', textAlign: 'center' }}>
+                                <span style={{ backgroundColor: '#FAF6F0', color: '#7B5233', padding: '2px 8px', borderRadius: '6px', fontWeight: 'bold', fontSize: '0.75rem' }}>
+                                  {item.product_count ?? (item.products?.length || 0)} SP
+                                </span>
+                              </td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.8rem' }}>
+                                <span style={{
+                                  backgroundColor: (item.status === 1 || item.status === undefined) ? '#DCFCE7' : '#F3F4F6',
+                                  color: (item.status === 1 || item.status === undefined) ? '#15803D' : '#6B7280',
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  fontWeight: 'bold',
+                                  fontSize: '0.7rem'
+                                }}>
+                                  {(item.status === 1 || item.status === undefined) ? 'Hiệu lực' : 'Tạm dừng'}
+                                </span>
+                              </td>
+                            </>
+                          )}
+
+                          {activeTab === 'stage' && (
+                            <>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1F2937', fontWeight: 'bold' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <Factory size={15} style={{ color: '#7B5233' }} />
+                                  <span>{item.name}</span>
+                                </div>
+                              </td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#6B7280' }}>{item.description || '---'}</td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', textAlign: 'center' }}>
+                                <span style={{ backgroundColor: '#E0F2FE', color: '#0369A1', padding: '2px 8px', borderRadius: '6px', fontWeight: 'bold', fontSize: '0.75rem' }}>
+                                  {item.permissions?.length || 0} chức vụ
+                                </span>
+                              </td>
+                            </>
+                          )}
+
+                          {activeTab === 'customer' && (
+                            <>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1F2937', fontWeight: 'bold' }}>{item.code}</td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1F2937', fontWeight: 600 }}>{item.name}</td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#4B5563' }}>{item.contact_person || '---'}</td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#6B7280' }}>
+                                <div>{item.phone || '---'}</div>
+                                <div style={{ fontSize: '0.75rem', color: '#9CA3AF' }}>{item.email || ''}</div>
+                              </td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#4B5563' }}>{item.country || '---'}</td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.8rem' }}>
+                                <span style={{
+                                  backgroundColor: item.is_active ? '#DCFCE7' : '#F3F4F6',
+                                  color: item.is_active ? '#15803D' : '#6B7280',
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  fontWeight: 'bold',
+                                  fontSize: '0.7rem'
+                                }}>
+                                  {item.is_active ? 'Hợp tác' : 'Tạm dừng'}
+                                </span>
+                              </td>
+                            </>
+                          )}
+
+                          {activeTab === 'permission' && (
+                            <>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1F2937', fontWeight: 'bold' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <ShieldCheck size={15} style={{ color: '#7B5233' }} />
+                                  <span>{item.name}</span>
+                                </div>
+                              </td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#6B7280' }}>{item.description || '---'}</td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', textAlign: 'center' }}>
+                                <span style={{ backgroundColor: '#FAF6F0', color: '#7B5233', padding: '2px 8px', borderRadius: '6px', fontWeight: 'bold', fontSize: '0.75rem' }}>
+                                  {item.stages?.length || 0} công đoạn
+                                </span>
+                              </td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', textAlign: 'center' }}>
+                                <span style={{ backgroundColor: '#E0F2FE', color: '#0369A1', padding: '2px 8px', borderRadius: '6px', fontWeight: 'bold', fontSize: '0.75rem' }}>
+                                  {item.roles?.length || 0} bộ phận
+                                </span>
+                              </td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.8rem' }}>
+                                <span style={{
+                                  backgroundColor: item.is_active ? '#DCFCE7' : '#F3F4F6',
+                                  color: item.is_active ? '#15803D' : '#6B7280',
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  fontWeight: 'bold',
+                                  fontSize: '0.7rem'
+                                }}>
+                                  {item.is_active ? 'Kích hoạt' : 'Tạm khóa'}
                                 </span>
                               </td>
                             </>
@@ -1327,6 +1852,112 @@ export default function SystemConfigView() {
                       </button>
                     </>
                   )}
+
+                  {activeTab === 'category' && (
+                    <>
+                      <button
+                        onClick={() => setActiveSubTab('subtab1')}
+                        style={{
+                          padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                          fontSize: '0.82rem', fontWeight: activeSubTab === 'subtab1' ? 800 : 600,
+                          color: activeSubTab === 'subtab1' ? '#7B5233' : '#6B7280',
+                          borderBottom: activeSubTab === 'subtab1' ? '2px solid #7B5233' : '2px solid transparent'
+                        }}
+                      >
+                        Sản phẩm mẫu liên kết ({subTableData.length})
+                      </button>
+                      <button
+                        onClick={() => setActiveSubTab('subtab2')}
+                        style={{
+                          padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                          fontSize: '0.82rem', fontWeight: activeSubTab === 'subtab2' ? 800 : 600,
+                          color: activeSubTab === 'subtab2' ? '#7B5233' : '#6B7280',
+                          borderBottom: activeSubTab === 'subtab2' ? '2px solid #7B5233' : '2px solid transparent'
+                        }}
+                      >
+                        Thông tin chi tiết
+                      </button>
+                    </>
+                  )}
+
+                  {activeTab === 'stage' && (
+                    <>
+                      <button
+                        onClick={() => setActiveSubTab('subtab1')}
+                        style={{
+                          padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                          fontSize: '0.82rem', fontWeight: activeSubTab === 'subtab1' ? 800 : 600,
+                          color: activeSubTab === 'subtab1' ? '#7B5233' : '#6B7280',
+                          borderBottom: activeSubTab === 'subtab1' ? '2px solid #7B5233' : '2px solid transparent'
+                        }}
+                      >
+                        Chức vụ phụ trách ({subTableData.length})
+                      </button>
+                      <button
+                        onClick={() => setActiveSubTab('subtab2')}
+                        style={{
+                          padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                          fontSize: '0.82rem', fontWeight: activeSubTab === 'subtab2' ? 800 : 600,
+                          color: activeSubTab === 'subtab2' ? '#7B5233' : '#6B7280',
+                          borderBottom: activeSubTab === 'subtab2' ? '2px solid #7B5233' : '2px solid transparent'
+                        }}
+                      >
+                        Thông tin chi tiết
+                      </button>
+                    </>
+                  )}
+
+                  {activeTab === 'customer' && (
+                    <button
+                      onClick={() => setActiveSubTab('subtab1')}
+                      style={{
+                        padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                        fontSize: '0.82rem', fontWeight: 800,
+                        color: '#7B5233',
+                        borderBottom: '2px solid #7B5233'
+                      }}
+                    >
+                      Thông tin liên hệ & Pháp lý
+                    </button>
+                  )}
+
+                  {activeTab === 'permission' && (
+                    <>
+                      <button
+                        onClick={() => setActiveSubTab('subtab1')}
+                        style={{
+                          padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                          fontSize: '0.82rem', fontWeight: activeSubTab === 'subtab1' ? 800 : 600,
+                          color: activeSubTab === 'subtab1' ? '#7B5233' : '#6B7280',
+                          borderBottom: activeSubTab === 'subtab1' ? '2px solid #7B5233' : '2px solid transparent'
+                        }}
+                      >
+                        Công đoạn phụ trách ({subTableData.length})
+                      </button>
+                      <button
+                        onClick={() => setActiveSubTab('subtab2')}
+                        style={{
+                          padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                          fontSize: '0.82rem', fontWeight: activeSubTab === 'subtab2' ? 800 : 600,
+                          color: activeSubTab === 'subtab2' ? '#7B5233' : '#6B7280',
+                          borderBottom: activeSubTab === 'subtab2' ? '2px solid #7B5233' : '2px solid transparent'
+                        }}
+                      >
+                        Bộ phận liên kết ({subTableData.length})
+                      </button>
+                      <button
+                        onClick={() => setActiveSubTab('subtab3')}
+                        style={{
+                          padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                          fontSize: '0.82rem', fontWeight: activeSubTab === 'subtab3' ? 800 : 600,
+                          color: activeSubTab === 'subtab3' ? '#7B5233' : '#6B7280',
+                          borderBottom: activeSubTab === 'subtab3' ? '2px solid #7B5233' : '2px solid transparent'
+                        }}
+                      >
+                        Quyền mặc định
+                      </button>
+                    </>
+                  )}
                 </div>
 
                 {/* SubTable Body */}
@@ -1461,7 +2092,9 @@ export default function SystemConfigView() {
               </div>
             )}
 
-          </div>
+            </div>
+          </>
+        )}
         </div>
       </div>
 
@@ -1709,6 +2342,197 @@ export default function SystemConfigView() {
                       <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#374151' }}>
                         Kích hoạt hiển thị trên Sidebar
                       </span>
+                    </div>
+                  </>
+                )}
+
+                {/* 4. MASTER CATEGORY (DÒNG HÀNG) FIELDS */}
+                {activeTab === 'category' && (
+                  <>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>TÊN DÒNG HÀNG *</label>
+                      <input
+                        type="text"
+                        value={catName}
+                        onChange={(e) => setCatName(e.target.value)}
+                        placeholder="Ví dụ: Tủ bếp, Bàn ăn, Ghế sofa, Giường ngủ"
+                        style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                        required
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>MÔ TẢ / DIỄN GIẢI</label>
+                      <textarea
+                        value={catDesc}
+                        onChange={(e) => setCatDesc(e.target.value)}
+                        placeholder="Nhập mô tả đặc tính hoặc quy cách của dòng hàng..."
+                        rows="3"
+                        style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', resize: 'vertical' }}
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* 5. PRODUCTION STAGE (CÔNG ĐOẠN SX) FIELDS */}
+                {activeTab === 'stage' && (
+                  <>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>TÊN CÔNG ĐOẠN *</label>
+                      <input
+                        type="text"
+                        value={stageName}
+                        onChange={(e) => setStageName(e.target.value)}
+                        placeholder="Ví dụ: Sơ chế, Định hình, Sơn lót, Lắp ráp, Đóng gói"
+                        style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                        required
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>MÔ TẢ QUY TRÌNH</label>
+                      <textarea
+                        value={stageDesc}
+                        onChange={(e) => setStageDesc(e.target.value)}
+                        placeholder="Mô tả tiêu chuẩn kỹ thuật hoặc ghi chú công đoạn..."
+                        rows="3"
+                        style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', resize: 'vertical' }}
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* 6. CUSTOMER (KHÁCH HÀNG / ĐỐI TÁC) FIELDS */}
+                {activeTab === 'customer' && (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '10px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>MÃ KH *</label>
+                        <input
+                          type="text"
+                          value={custCode}
+                          onChange={(e) => setCustCode(e.target.value)}
+                          placeholder="KH001"
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                          required
+                        />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>TÊN DOANH NGHIỆP / KHÁCH HÀNG *</label>
+                        <input
+                          type="text"
+                          value={custName}
+                          onChange={(e) => setCustName(e.target.value)}
+                          placeholder="Ví dụ: Công ty TNHH Nội Thất Minh Long"
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>NGƯỜI ĐẠI DIỆN LIÊN HỆ</label>
+                        <input
+                          type="text"
+                          value={custContact}
+                          onChange={(e) => setCustContact(e.target.value)}
+                          placeholder="Họ tên người liên hệ"
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>SỐ ĐIỆN THOẠI</label>
+                        <input
+                          type="text"
+                          value={custPhone}
+                          onChange={(e) => setCustPhone(e.target.value)}
+                          placeholder="0912 345 678"
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>EMAIL</label>
+                        <input
+                          type="email"
+                          value={custEmail}
+                          onChange={(e) => setCustEmail(e.target.value)}
+                          placeholder="contact@customer.com"
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>MÃ SỐ THUẾ (MST)</label>
+                        <input
+                          type="text"
+                          value={custTax}
+                          onChange={(e) => setCustTax(e.target.value)}
+                          placeholder="0102030405"
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>ĐỊA CHỈ TRỤ SỞ</label>
+                        <input
+                          type="text"
+                          value={custAddress}
+                          onChange={(e) => setCustAddress(e.target.value)}
+                          placeholder="Địa chỉ công ty/chi nhánh..."
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>QUỐC GIA</label>
+                        <input
+                          type="text"
+                          value={custCountry}
+                          onChange={(e) => setCustCountry(e.target.value)}
+                          placeholder="Vietnam"
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>GHI CHÚ THÊM</label>
+                      <textarea
+                        value={custNotes}
+                        onChange={(e) => setCustNotes(e.target.value)}
+                        placeholder="Ghi chú về chính sách thanh toán, điều khoản hợp tác..."
+                        rows="2"
+                        style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', resize: 'vertical' }}
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* 7. PERMISSION (CHỨC VỤ / PHÂN QUYỀN) FIELDS */}
+                {activeTab === 'permission' && (
+                  <>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>TÊN CHỨC VỤ / QUYỀN HẠN *</label>
+                      <input
+                        type="text"
+                        value={permName}
+                        onChange={(e) => setPermName(e.target.value)}
+                        placeholder="Ví dụ: Quản đốc xưởng, Trưởng chuyền Sơn, QC Thành phẩm"
+                        style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                        required
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>MÔ TẢ NHIỆM VỤ & PHÂN QUYỀN</label>
+                      <textarea
+                        value={permDesc}
+                        onChange={(e) => setPermDesc(e.target.value)}
+                        placeholder="Mô tả phạm vi quyền hạn và trách nhiệm..."
+                        rows="3"
+                        style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', resize: 'vertical' }}
+                      />
                     </div>
                   </>
                 )}

@@ -39,6 +39,7 @@ class ProductDetailedCreate(BaseModel):
     name: str                      # Tên sản phẩm
     sku: Optional[str] = None      # Mã sản phẩm
     quantity: float                # Số lượng
+    factory: Optional[str] = None  # Nhà máy SX (NM1, NM2, NM3...)
     master_product_id: Optional[int] = None # ID sản phẩm mẫu (nếu có)
     bom_details: List[BOMDetailRecursiveCreate] = [] # Danh sách các thành phần cấu thành
 

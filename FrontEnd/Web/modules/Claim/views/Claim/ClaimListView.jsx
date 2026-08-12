@@ -483,6 +483,7 @@ const ClaimListView = () => {
         onClose={() => { list.setActiveDetailClaim(null); list.setExceptionNavMode(false); list.setExceptionNavClaims([]); }}
         onSubmit={list.handleSaveProcessClaim}
         title={list.processModalTitle}
+        categoryOptions={list.categoryOptions}
         modalMode={list.modalMode}
         setModalMode={list.setModalMode}
         exceptionNavMode={list.exceptionNavMode}
@@ -549,6 +550,7 @@ const ClaimListView = () => {
         isOpen={list.isAddModalOpen}
         onClose={() => list.setIsAddModalOpen(false)}
         onSubmit={list.handleSaveNewClaim}
+        categoryOptions={list.categoryOptions}
         addDongHang={list.addDongHang}
         setAddDongHang={list.setAddDongHang}
         addLoaiClaim={list.addLoaiClaim}

@@ -150,7 +150,7 @@ except Exception:
     # Ignore if constraint already exists
     pass
 
-# [MIGRATION] Seed master_categories and link master_products + production_routings by SKU prefix
+# [MIGRATION] Seed master_categories & categories and link master_products + production_routings by SKU prefix
 try:
     with engine.begin() as conn:
         # 1. Seed known categories if not exists
@@ -168,9 +168,15 @@ try:
             ('MBC', 'Dòng hàng MBC'),
         ]
         for prefix, cat_name in known_categories:
+            # Seed master_categories
             conn.execute(text(
                 "IF NOT EXISTS (SELECT 1 FROM master_categories WHERE name = :name) "
                 "INSERT INTO master_categories (name, description, status, created_at) VALUES (:name, :desc, 1, GETDATE())"
+            ), {"name": cat_name, "desc": f"Dòng hàng {prefix}"})
+            # Seed categories (Production)
+            conn.execute(text(
+                "IF NOT EXISTS (SELECT 1 FROM categories WHERE name = :name) "
+                "INSERT INTO categories (name, description) VALUES (:name, :desc)"
             ), {"name": cat_name, "desc": f"Dòng hàng {prefix}"})
 
         # 2. Link master_products to categories by SKU prefix (first 3-6 chars)
@@ -194,12 +200,6 @@ try:
                 "AND (pr.category_id IS NULL) "
                 "AND (pr.category LIKE :pattern OR pr.routing_code LIKE :code_pattern)"
             ), {"cat_name": cat_name, "pattern": f"%{prefix}%", "code_pattern": f"%{prefix}%"})
-
-        # 4. Clean up any empty categories with 0 products
-        conn.execute(text(
-            "DELETE FROM master_categories "
-            "WHERE id NOT IN (SELECT DISTINCT category_id FROM master_products WHERE category_id IS NOT NULL)"
-        ))
 except Exception as seed_err:
     print(f"[MIGRATION] Seed master_categories warning: {seed_err}")
 

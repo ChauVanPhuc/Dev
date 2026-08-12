@@ -48,6 +48,8 @@ def create_master_product(master_product: MasterProductCreate, db: Session = Dep
     """
     [POST] Khởi tạo một sản phẩm mẫu và cấu trúc BOM đi kèm.
     """
+    return master_product_controller.create_master_product(db=db, master_product=master_product)
+
 @router.post("/sync-bom-data")
 def sync_bom_data(db: Session = Depends(get_db)):
     """

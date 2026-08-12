@@ -312,13 +312,14 @@ const AddComponentModal = ({ productId, product, bomRows = [], parentId = null, 
                     onBlur={() => {
                       setTimeout(() => {
                         if (selectingLoaiRef.current) return;
-                        const exact = loaiOptions.find(o => o.value === loaiSearch);
+                        const exact = loaiOptions.find(o => o.value.toLowerCase() === loaiSearch.trim().toLowerCase() || o.label.toLowerCase() === loaiSearch.trim().toLowerCase());
                         if (exact) {
                           setSelectedLoai(exact.value);
+                          setLoaiSearch(exact.label);
                         } else {
-                          setLoaiSearch('');
-                          setSelectedLoai('');
+                          setSelectedLoai(loaiSearch);
                         }
+                        setShowLoaiMenu(false);
                       }, 150);
                     }}
                     style={whiteInputStyle}
@@ -388,18 +389,8 @@ const AddComponentModal = ({ productId, product, bomRows = [], parentId = null, 
                         setWidth(String(meta.width || '12'));
                         setHeight(String(meta.height || '15'));
                         setVolume(String(meta.volume || '5'));
-                      } else {
-                        setDetailName('');
-                        setQuantity(1);
-                        setUnit('Cái');
-                        setInputStage('Định hình');
-                        setOutputStage('Lắp ráp');
-                        setMaterial('MDF');
-                        setLength('12');
-                        setWidth('12');
-                        setHeight('15');
-                        setVolume('5');
                       }
+                      setShowNameMenu(false);
                     }, 150);
                   }}
                   style={whiteInputStyle}

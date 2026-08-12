@@ -688,10 +688,8 @@ def get_orders_by_part(
 @router.get("/parts")
 def get_parts_by_month(month: Optional[Any] = Query(None), db: Session = Depends(get_db)):
     """
-    Trả về danh sách Chi tiết sản phẩm từ:
-    1. bom_details (BOM đơn hàng) - ưu tiên lọc theo tháng kế hoạch
-    2. master_bom_details (BOM master kỹ thuật) - bổ sung chi tiết chưa có
-    Kèm input_stage và output_stage động từ master_product_details.
+    Trả về danh sách Chi tiết sản phẩm từ bom_details (BOM đơn hàng).
+    Chỉ lọc chi tiết thuộc đơn hàng thực tế, kèm input_stage và output_stage động từ master_product_details.
     """
     try:
         import re
@@ -714,13 +712,9 @@ def get_parts_by_month(month: Optional[Any] = Query(None), db: Session = Depends
         JOIN orders o ON p.order_id = o.id
         LEFT JOIN product_plans pl ON o.plan_id = pl.id
         WHERE b.name IS NOT NULL AND b.name != ''
+          AND (:month IS NULL OR pl.month = :month)
         """
-        rows = db.execute(text(sql)).fetchall()
-
-        if m_int is not None:
-            filtered_rows = [r for r in rows if r.month == m_int]
-            if filtered_rows:
-                rows = filtered_rows
+        rows = db.execute(text(sql), {"month": m_int}).fetchall()
 
         parts_map = {}
         for r in rows:
@@ -739,32 +733,7 @@ def get_parts_by_month(month: Optional[Any] = Query(None), db: Session = Depends
                 parts_map[name]["specs_map"][spec_str] = 0
             parts_map[name]["specs_map"][spec_str] += calc_target
 
-        # 2. Bổ sung chi tiết từ master_bom_details (bỏ qua nguyên vật liệu thô m3/m2/kg)
-        try:
-            master_rows = db.execute(text("""
-                SELECT name, specification, quantity, unit
-                FROM master_bom_details
-                WHERE name IS NOT NULL AND name != ''
-                  AND (unit IS NULL OR unit NOT IN ('m3', 'm2', 'kg', N'lít', 'lit', 'm'))
-            """)).fetchall()
-            for mr in master_rows:
-                name = (mr[0] or "").strip()
-                if not name:
-                    continue
-                spec_str = (mr[1] or "Tiêu chuẩn").split("-")[0].strip() or "Tiêu chuẩn"
-                qty = max(1, int(float(mr[2] or 1.0)))
-
-                if name not in parts_map:
-                    parts_map[name] = {"part_name": name, "total_qty": 0, "specs_map": {}}
-
-                parts_map[name]["total_qty"] += qty
-                if spec_str not in parts_map[name]["specs_map"]:
-                    parts_map[name]["specs_map"][spec_str] = 0
-                parts_map[name]["specs_map"][spec_str] += qty
-        except Exception as me:
-            logger.warning(f"Không thể bổ sung từ master_bom_details: {me}")
-
-        # 3. Truy vấn công đoạn giao nhận động từ DB
+        # 2. Truy vấn công đoạn giao nhận động từ DB
         stage_map = {}
         try:
             for sr in db.execute(text(

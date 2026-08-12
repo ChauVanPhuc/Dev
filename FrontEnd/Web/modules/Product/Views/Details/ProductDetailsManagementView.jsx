@@ -10,11 +10,19 @@ import '@styles/components.css';
  * View: KT03.1 - Quản lý Chi tiết (/admin/product-details)
  * Thiết kế chuẩn 100% theo trang Gốc (UserManagement / Quản lý người dùng - AD3).
  */
-const ProductDetailsManagementView = () => {
+const ProductDetailsManagementView = ({ isEmbedded = false }) => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const outletContext = useOutletContext() || {};
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = outletContext;
+
+  useEffect(() => {
+    if (!isEmbedded) {
+      if (setCustomTitle) setCustomTitle('Quản lý Chi tiết Sản phẩm');
+      if (setCustomSubtitle) setCustomSubtitle('Quản lý danh mục linh kiện, phôi, quy cách theo sản phẩm');
+      if (setCustomScreenCode) setCustomScreenCode('KT03.1');
+    }
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, isEmbedded]);
 
   // Data states
   const [items, setItems] = useState([]);
@@ -328,8 +336,8 @@ const ProductDetailsManagementView = () => {
   const totalPages = Math.ceil(total / pageSize) || 1;
 
   return (
-    <div className="mgmt-container">
-      <div className="mgmt-main">
+    <div className="mgmt-container" style={{ padding: isEmbedded ? 0 : undefined, minHeight: isEmbedded ? 'auto' : undefined, maxWidth: '100%' }}>
+      <div className="mgmt-main" style={{ boxShadow: isEmbedded ? 'none' : undefined, border: isEmbedded ? 'none' : undefined, padding: isEmbedded ? '20px' : undefined, borderRadius: isEmbedded ? '16px' : undefined }}>
 
         {/* ── PageToolbar (Chuẩn 100% theo Trang Gốc UserManagement) ── */}
         <PageToolbar

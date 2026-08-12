@@ -120,7 +120,7 @@ const ProductDetailView = () => {
   const [formData, setFormData] = useState({
     sku: '',
     category: 'Tủ quần áo',
-    line: 'Nội thất',
+    line: 'Dòng hàng APT',
     name: '',
     length: '',
     width: '',
@@ -155,7 +155,14 @@ const ProductDetailView = () => {
         }
         const dataList = Array.isArray(res) ? res : (res?.data || []);
         if (dataList.length > 0) {
-          setCategoriesOptions(dataList.map(c => typeof c === 'string' ? { name: c } : c));
+          const list = dataList.map(c => typeof c === 'string' ? { name: c } : c);
+          setCategoriesOptions(list);
+          setFormData(prev => {
+            if (!prev.line || prev.line === 'Nội thất') {
+              return { ...prev, line: list[0].name };
+            }
+            return prev;
+          });
         } else {
           setCategoriesOptions(defaultBomLines.map(name => ({ name })));
         }
@@ -568,19 +575,25 @@ const displayItems = useMemo(() => {
 
   const handleSaveInfo = async () => {
     try {
+      const parsedPrice = parseFloat(String(formData.estimatedCost || '0').replace(/\./g, '').replace(/,/g, '').replace(/[^\d.]/g, '')) || 0;
       await api.put(`/master-products/${id}`, {
         name: formData.name,
         brand_name: formData.line,
         color: formData.color,
+        price: parsedPrice,
         length: Number(formData.length) || 0,
         width: Number(formData.width) || 0,
         height: Number(formData.height) || 0,
-        specification: formData.note
-      }).catch(() => null);
+        weight: parseFloat(String(formData.weight || '0').replace(/[^\d.]/g, '')) || 0,
+        specification: formData.note,
+        description: formData.note,
+        status: formData.bomStatus
+      });
 
-      if (toast) toast('success', 'Đã lưu thông tin chi tiết sản phẩm vào cơ sở dữ liệu SQL Server!');
+      if (toast) toast('success', 'Đã lưu thông tin chi tiết sản phẩm vào cơ sở dữ liệu!');
     } catch (err) {
-      if (toast) toast('success', 'Đã lưu thông tin chi tiết sản phẩm thành công!');
+      console.error('Lỗi lưu chi tiết sản phẩm:', err);
+      if (toast) toast('error', 'Có lỗi xảy ra khi lưu thông tin sản phẩm.');
     }
   };
 

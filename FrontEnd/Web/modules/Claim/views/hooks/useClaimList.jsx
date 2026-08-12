@@ -3,7 +3,7 @@ import { useOutletContext } from 'react-router-dom';
 import { Search, Filter, Plus } from 'lucide-react';
 import { claimService } from '../../services/claim.service';
 import { normalizePenaltyValue, parseDate } from '../../utils/claimHelpers';
-import { API_ROOT } from '@webShared/Services/api.service';
+import api, { API_ROOT } from '@webShared/Services/api.service';
 import '../../styles/claim.css';
 import '@styles/components.css';
 
@@ -176,6 +176,37 @@ export const useClaimList = () => {
     fetchCatalog();
   }, []);
 
+  // Fetch Dòng hàng (Categories) dynamically from SQL Server Database (/master-categories/ or /categories)
+  const defaultCategoryList = [
+    'Dòng hàng APT', 'Dòng hàng ATL', 'Dòng hàng FOL', 'Dòng hàng ADV',
+    'Dòng hàng TPH', 'Dòng hàng HOR', 'Dòng hàng EYC', 'Dòng hàng COV',
+    'Dòng hàng TIN', 'Dòng hàng BEZ', 'Dòng hàng MBC'
+  ];
+  const [categoryOptions, setCategoryOptions] = useState(defaultCategoryList);
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        let res = await api.get('/master-categories/').catch(() => null);
+        if (!res || !Array.isArray(res) || res.length === 0) {
+          res = await api.get('/categories').catch(() => []);
+        }
+        const dataList = Array.isArray(res) ? res : (res?.data || []);
+        if (dataList.length > 0) {
+          const names = dataList.map(c => typeof c === 'string' ? c : c.name).filter(Boolean);
+          if (names.length > 0) {
+            setCategoryOptions(names);
+            setAddDongHang(prev => names.includes(prev) ? prev : names[0]);
+            setProcessDongHang(prev => names.includes(prev) ? prev : names[0]);
+          }
+        }
+      } catch (err) {
+        console.warn('Lỗi tải danh mục dòng hàng cho claims:', err);
+      }
+    };
+    fetchCategories();
+  }, []);
+
   // Fetch cabinet prices on mount
   useEffect(() => {
     const fetchPrices = async () => {
@@ -284,7 +315,7 @@ export const useClaimList = () => {
 
   // Add new claim modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [addDongHang, setAddDongHang] = useState('Atlas');
+  const [addDongHang, setAddDongHang] = useState(defaultCategoryList[0] || 'Dòng hàng APT');
   const [addLoaiClaim, setAddLoaiClaim] = useState('Khách nhắc nhở');
   const [addMaThamChieu, setAddMaThamChieu] = useState('');
   const [addTenSanPham, setAddTenSanPham] = useState('');
@@ -603,7 +634,7 @@ export const useClaimList = () => {
   };
 
   const handleOpenAddNewClaim = () => {
-    setAddDongHang('Atlas');
+    setAddDongHang(categoryOptions[0] || 'Dòng hàng APT');
     setAddLoaiClaim('Khách nhắc nhở');
     setAddMaThamChieu('Cabinet #');
     setAddTenSanPham('');
@@ -762,7 +793,7 @@ export const useClaimList = () => {
   }, [previewImage]);
 
   // Process claim modal state
-  const [processDongHang, setProcessDongHang] = useState('Atlas');
+  const [processDongHang, setProcessDongHang] = useState(defaultCategoryList[0] || 'Dòng hàng APT');
   const [processLoaiClaim, setProcessLoaiClaim] = useState('Khách nhắc nhở');
   const [processMaThamChieu, setProcessMaThamChieu] = useState('');
   const [processTenSanPham, setProcessTenSanPham] = useState('');
@@ -1185,7 +1216,7 @@ export const useClaimList = () => {
 
   useEffect(() => {
     if (activeDetailClaim) {
-      setProcessDongHang(activeDetailClaim.dong_hang || 'Atlas');
+      setProcessDongHang(activeDetailClaim.dong_hang || activeDetailClaim.customer_name || categoryOptions[0] || 'Dòng hàng APT');
       setProcessLoaiClaim(activeDetailClaim.loai_claim || 'Khách nhắc nhở');
       setProcessMaThamChieu(activeDetailClaim.claim_code || '');
       setProcessTenSanPham(activeDetailClaim.product_name || activeDetailClaim.sku || '');
@@ -2659,5 +2690,7 @@ export const useClaimList = () => {
     claimNavFooterActions,
     claimNavLeftSideAction,
     claimNavRightSideAction,
+    categoryOptions,
+    setCategoryOptions,
   };
 };

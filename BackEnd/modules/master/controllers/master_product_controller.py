@@ -19,6 +19,93 @@ from modules.master.models.technical_pending_task import TechnicalPendingTask
 from modules.master.models.master_product_detail import MasterProductDetail
 
 
+def serialize_bom_item(item):
+    if not item: return None
+    if isinstance(item, dict): return item
+    return {
+        "id": item.id,
+        "sku": item.sku,
+        "name": item.name,
+        "master_product_id": item.master_product_id,
+        "parent_id": item.parent_id,
+        "length": item.length or 0.0,
+        "width": item.width or 0.0,
+        "height": item.height or 0.0,
+        "unit": item.unit or "Cái",
+        "specification": item.specification or "",
+        "material": item.material or "",
+        "color": item.color or "",
+        "weight": item.weight or 0.0,
+        "waste_ratio": item.waste_ratio or 0.0,
+        "is_raw_material": item.is_raw_material or False,
+        "exclude_production": item.exclude_production or False,
+        "input_stage": item.input_stage,
+        "output_stage": item.output_stage,
+        "status": item.status or "Active",
+        "quantity": item.quantity or 1.0,
+        "description": item.description or "",
+        "created_at": item.created_at.isoformat() if hasattr(item, 'created_at') and item.created_at else None
+    }
+
+def serialize_drawing_item(item):
+    if not item: return None
+    if isinstance(item, dict): return item
+    return {
+        "id": item.id,
+        "master_product_id": item.master_product_id,
+        "lot_code": item.lot_code,
+        "updated_by": item.updated_by,
+        "status": item.status,
+        "change_reason": item.change_reason,
+        "approved_by": item.approved_by,
+        "note": item.note,
+        "file_url": item.file_url,
+        "created_at": item.created_at.isoformat() if hasattr(item, 'created_at') and item.created_at else None
+    }
+
+def serialize_paint_item(item):
+    if not item: return None
+    if isinstance(item, dict): return item
+    return {
+        "id": item.id,
+        "master_product_id": item.master_product_id,
+        "color_code": item.color_code,
+        "color_name": item.color_name,
+        "supplier": item.supplier,
+        "image_url": item.image_url,
+        "note": item.note,
+        "created_at": item.created_at.isoformat() if hasattr(item, 'created_at') and item.created_at else None
+    }
+
+def serialize_material_item(item):
+    if not item: return None
+    if isinstance(item, dict): return item
+    return {
+        "id": item.id,
+        "master_product_id": item.master_product_id,
+        "name": getattr(item, 'name', ''),
+        "material_code": getattr(item, 'material_code', ''),
+        "unit": getattr(item, 'unit', ''),
+        "quantity": getattr(item, 'quantity', 0.0),
+        "note": getattr(item, 'note', '')
+    }
+
+def serialize_product_detail_item(item):
+    if not item: return None
+    if isinstance(item, dict): return item
+    return {
+        "id": item.id,
+        "master_product_id": item.master_product_id,
+        "name": item.name,
+        "quantity": item.quantity,
+        "unit": item.unit,
+        "input_stage": item.input_stage,
+        "output_stage": item.output_stage,
+        "parent_name": item.parent_name,
+        "material": item.material,
+        "created_at": item.created_at.isoformat() if hasattr(item, 'created_at') and item.created_at else None
+    }
+
 def to_master_product_dict(master: MasterProduct):
     if not master:
         return None
@@ -46,11 +133,11 @@ def to_master_product_dict(master: MasterProduct):
         "image_url": master.image_url,
         "total_category_count": len(master.master_bom_details) if master.master_bom_details else 0,
         "created_at": master.created_at,
-        "master_bom_details": master.master_bom_details or [],
-        "technical_drawings": master.technical_drawings or [],
-        "paint_color_samples": master.paint_color_samples or [],
-        "materials": master.materials or [],
-        "product_details": master.product_details or []
+        "master_bom_details": [serialize_bom_item(x) for x in (master.master_bom_details or [])],
+        "technical_drawings": [serialize_drawing_item(x) for x in (master.technical_drawings or [])],
+        "paint_color_samples": [serialize_paint_item(x) for x in (master.paint_color_samples or [])],
+        "materials": [serialize_material_item(x) for x in (master.materials or [])],
+        "product_details": [serialize_product_detail_item(x) for x in (master.product_details or [])]
     }
 
 def get_master_products(db: Session, skip: int = 0, limit: int = 50, q: str = None):
@@ -70,36 +157,108 @@ def get_master_product(db: Session, master_product_id: int):
     return to_master_product_dict(master)
 
 def create_master_product(db: Session, master_product: MasterProductCreate):
-    data = master_product.model_dump(exclude={'master_bom_details'})
-    if 'sku' in data:
-        data['sku'] = clean_and_standardize_sku(data['sku'])
-    if 'name' in data:
-        data['name'] = clean_and_standardize_name(data['name'])
+    data = master_product.model_dump(exclude={'master_bom_details', 'product_details', 'paint_color_samples', 'technical_drawings', 'materials'})
+    valid_cols = {c.name for c in MasterProduct.__table__.columns}
+    product_data = {k: v for k, v in data.items() if k in valid_cols and v is not None}
+
+    if 'sku' in product_data:
+        product_data['sku'] = clean_and_standardize_sku(product_data['sku'])
+    if 'name' in product_data:
+        product_data['name'] = clean_and_standardize_name(product_data['name'])
         
-    bom_data_list = getattr(master_product, 'master_bom_details', [])
-    db_master = MasterProduct(**data)
-    db.add(db_master)
-    db.flush() 
+    bom_data_list = getattr(master_product, 'master_bom_details', []) or []
+    product_details_list = getattr(master_product, 'product_details', []) or []
+    paint_color_list = getattr(master_product, 'paint_color_samples', []) or []
 
-    def insert_bom_detail(bom_node, parent_id=None):
-        node_data = bom_node.model_dump(exclude={'children'})
-        if 'sku' in node_data:
-            node_data['sku'] = clean_and_standardize_sku(node_data['sku'])
-        if 'name' in node_data:
-            node_data['name'] = clean_and_standardize_name(node_data['name'])
-            
-        db_node = MasterBOMDetail(
-            **node_data,
-            master_product_id=db_master.id,
-            parent_id=parent_id
-        )
-        db.add(db_node)
+    # Check if SKU already exists
+    existing = db.query(MasterProduct).filter(MasterProduct.sku == product_data.get('sku')).first()
+    if existing:
+        db_master = existing
+        for k, v in product_data.items():
+            setattr(db_master, k, v)
+        db.query(MasterBOMDetail).filter(MasterBOMDetail.master_product_id == db_master.id).delete(synchronize_session=False)
+        db.query(MasterProductDetail).filter(MasterProductDetail.master_product_id == db_master.id).delete(synchronize_session=False)
+        db.query(PaintColorSample).filter(PaintColorSample.master_product_id == db_master.id).delete(synchronize_session=False)
+    else:
+        db_master = MasterProduct(**product_data)
+        db.add(db_master)
         db.flush()
-        for child_node in getattr(bom_node, 'children', []):
-            insert_bom_detail(child_node, parent_id=db_node.id)
 
-    for root_node in bom_data_list:
-        insert_bom_detail(root_node)
+    # Process BOM details (handles both flat list with tree_stt / stt and nested tree structures)
+    if bom_data_list:
+        stt_to_id = {}
+        for item in bom_data_list:
+            if hasattr(item, 'model_dump'):
+                node_dict = item.model_dump(exclude={'children'})
+            elif isinstance(item, dict):
+                node_dict = dict(item)
+            else:
+                continue
+
+            stt = node_dict.pop('tree_stt', None) or node_dict.get('stt')
+            sku = node_dict.get('sku') or node_dict.pop('component_sku', None) or node_dict.get('compCode')
+            name = node_dict.get('name') or node_dict.get('compName') or ''
+            unit = node_dict.get('unit') or 'Cái'
+            material = node_dict.get('material') or 'Gỗ / MDF'
+            spec = node_dict.get('specification') or node_dict.get('spec') or ''
+            in_stg = clean_stage_name(node_dict.get('input_stage') or node_dict.get('stageFrom'))
+            out_stg = clean_stage_name(node_dict.get('output_stage') or node_dict.get('stageTo'))
+            qty = float(node_dict.get('quantity') or 1.0)
+            desc = node_dict.get('description') or node_dict.get('note') or ''
+            
+            # Determine parent_id
+            parent_id = node_dict.get('parent_id')
+            if parent_id is None and stt:
+                stt_str = str(stt).strip()
+                if '.' in stt_str:
+                    p_stt = '.'.join(stt_str.split('.')[:-1])
+                    parent_id = stt_to_id.get(p_stt)
+
+            bom_obj = MasterBOMDetail(
+                master_product_id=db_master.id,
+                parent_id=parent_id,
+                sku=clean_and_standardize_sku(sku) if sku else f"{db_master.sku}.{stt if stt else len(stt_to_id)+1}",
+                name=clean_and_standardize_name(name) if name else 'Chi tiết mới',
+                unit=unit,
+                material=material,
+                specification=spec,
+                input_stage=in_stg,
+                output_stage=out_stg,
+                quantity=qty,
+                description=desc,
+                status="Active"
+            )
+            db.add(bom_obj)
+            db.flush()
+            if stt:
+                stt_to_id[str(stt).strip()] = bom_obj.id
+
+    # Insert product_details if present
+    for pd in product_details_list:
+        if isinstance(pd, dict) and pd.get('name'):
+            db.add(MasterProductDetail(
+                master_product_id=db_master.id,
+                name=pd.get('name'),
+                quantity=float(pd.get('quantity', 1.0)),
+                unit=pd.get('unit', 'Cái'),
+                input_stage=clean_stage_name(pd.get('input_stage')),
+                output_stage=clean_stage_name(pd.get('output_stage')),
+                parent_name=pd.get('parent_name', ''),
+                material=pd.get('material', '')
+            ))
+
+    # Insert paint_color_samples if present
+    for pc in paint_color_list:
+        if isinstance(pc, dict) and (pc.get('color_code') or pc.get('color_name')):
+            db.add(PaintColorSample(
+                master_product_id=db_master.id,
+                color_code=pc.get('color_code', ''),
+                color_name=pc.get('color_name', ''),
+                supplier=pc.get('supplier', ''),
+                image_url=pc.get('image_url', ''),
+                note=pc.get('note', '')
+            ))
+
     db.commit()
     db.refresh(db_master)
     return to_master_product_dict(db_master)

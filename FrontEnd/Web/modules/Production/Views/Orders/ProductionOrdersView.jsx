@@ -182,6 +182,78 @@ const ProductionOrdersView = () => {
     fetchStagesFromDb();
   }, []);
 
+  // Trích xuất danh sách Nhà máy DUY NHẤT từ danh sách công đoạn (ví dụ: ['NM1', 'NM2', 'NM3'])
+  const uniqueFactories = useMemo(() => {
+    const extracted = stageOptions.map(stg => {
+      const parts = stg.split(' - ');
+      return parts.length > 1 ? parts[0].trim() : '';
+    }).filter(Boolean);
+    const unique = Array.from(new Set(extracted));
+    return unique.length > 0 ? unique : ['NM1', 'NM2', 'NM3'];
+  }, [stageOptions]);
+
+  // Hàm lọc danh sách công đoạn chỉ thuộc về một Nhà máy cụ thể (ví dụ: 'NM1')
+  const getStagesForFactory = (factoryName, allStages = stageOptions) => {
+    if (!factoryName) return allStages;
+    const facClean = factoryName.trim().toUpperCase();
+    const filtered = (allStages || []).filter(stg => {
+      const upper = (stg || '').toUpperCase();
+      return upper.startsWith(facClean + ' -') || upper.startsWith(facClean + ' ') || upper.startsWith(facClean + '-');
+    });
+    return filtered.length > 0 ? filtered : allStages;
+  };
+
+  // Hàm ánh xạ / chuyển đổi công đoạn tương ứng cho Nhà máy đích
+  const mapStageToFactory = (currentStageName, targetFactory, allStages = stageOptions) => {
+    const targetStages = getStagesForFactory(targetFactory, allStages);
+    if (!currentStageName || !targetStages || targetStages.length === 0) {
+      return (targetStages && targetStages[0]) || currentStageName || '';
+    }
+
+    // Lấy phần tên lõi (bỏ tiền tố NM)
+    let coreName = currentStageName;
+    if (currentStageName.includes(' - ')) {
+      coreName = currentStageName.split(' - ').slice(1).join(' - ').trim();
+    }
+    const coreBase = coreName.replace(/\s*\d+$/, '').trim().toLowerCase();
+
+    // Tìm trong targetStages
+    const matched = targetStages.find(stg => {
+      const stgCore = stg.includes(' - ') ? stg.split(' - ').slice(1).join(' - ').toLowerCase() : stg.toLowerCase();
+      return stgCore.includes(coreBase) || coreBase.includes(stgCore.replace(/\s*\d+$/, ''));
+    });
+
+    return matched || targetStages[0];
+  };
+
+  // Xử lý đổi Nhà máy SX cho một sản phẩm (Tự động chuyển đổi công đoạn các linh kiện BOM ăn theo Nhà máy mới)
+  const handleChangeProductFactory = (pCode, newFactory) => {
+    setOrderProducts(prev => prev.map(p => {
+      if (p.productCode === pCode) {
+        return { ...p, factory: newFactory };
+      }
+      return p;
+    }));
+
+    setProductDetails(prev => {
+      const currentList = prev.filter(d => d.parentCode === pCode);
+      const listToMap = currentList.length > 0
+        ? currentList
+        : (displayedProductDetails.filter(d => d.parentCode === pCode));
+
+      const updatedDetails = listToMap.map(det => ({
+        ...det,
+        stageFrom: mapStageToFactory(det.stageFrom, newFactory, stageOptions),
+        stageTo: mapStageToFactory(det.stageTo, newFactory, stageOptions)
+      }));
+
+      const otherDetails = prev.filter(d => d.parentCode !== pCode);
+      return [...otherDetails, ...updatedDetails];
+    });
+
+    if (toast) toast('info', `Đã chuyển sản phẩm ${pCode} sang ${newFactory} và cập nhật các công đoạn BOM tương ứng.`);
+  };
+
   // --- STATE VÀ LOGIC CHO TAB QUY TRÌNH - KẾ HOẠCH (ĐỘNG THEO SẢN PHẨM & CÔNG ĐOẠN) ---
   const [activeStage, setActiveStage] = useState('Định hình');
   const mainStages = ['Tạo phôi', 'Định hình', 'Lắp ráp', 'Sơn', 'Đóng gói', 'Lưu kho'];
@@ -419,6 +491,7 @@ const ProductionOrdersView = () => {
       }));
 
       // Bảng 1: Mặt hàng trong Đơn mua hàng
+      const defaultFac = uniqueFactories[0] || 'NM1';
       const mappedProducts = itemsList.map((it, idx) => {
         const qty = Number(it.quantity) || 0;
         const spare = Math.ceil(qty * 0.05);
@@ -428,6 +501,7 @@ const ProductionOrdersView = () => {
           productCode: code,
           productName: it.item_name || 'Mặt hàng mua',
           lineType: it.type || it.content || reqObj.supplier_name || 'Nội thất',
+          factory: defaultFac,
           orderQty: qty,
           spareQty: spare,
           totalQty: qty + spare,
@@ -439,11 +513,16 @@ const ProductionOrdersView = () => {
         };
       });
 
-      // Bảng 2: Nạp linh kiện BOM gắn trực tiếp với parentCode = productCode
+      // Bảng 2: Nạp linh kiện BOM gắn trực tiếp với parentCode = productCode và khớp theo Nhà máy
       const mappedBomParts = itemsList.flatMap((it, idx) => {
         const qty = Number(it.quantity) || 0;
         const code = it.item_code || `SKU-${idx + 1}`;
-        return generateBomForProduct(code, it.item_name, qty);
+        const baseBom = generateBomForProduct(code, it.item_name, qty);
+        return baseBom.map(b => ({
+          ...b,
+          stageFrom: mapStageToFactory(b.stageFrom, defaultFac, stageOptions),
+          stageTo: mapStageToFactory(b.stageTo, defaultFac, stageOptions)
+        }));
       });
 
       setOrderProducts(mappedProducts);
@@ -484,17 +563,37 @@ const ProductionOrdersView = () => {
       let formattedProducts = [];
       let formattedBomParts = [];
 
+      // Helper trích xuất nhà máy của sản phẩm một cách chính xác
+      const extractFactory = (p) => {
+        if (p.factory) return p.factory;
+        if (p.factory_code) return p.factory_code;
+        if (p.bom_details && p.bom_details.length > 0) {
+          for (const b of p.bom_details) {
+            const stageStr = b.input_stage || b.output_stage || b.stageFrom || b.stageTo || '';
+            if (stageStr.includes(' - ')) {
+              const prefix = stageStr.split(' - ')[0].trim();
+              if (prefix.startsWith('NM')) {
+                return prefix;
+              }
+            }
+          }
+        }
+        return uniqueFactories[0] || 'NM1';
+      };
+
       if (item.products && item.products.length > 0) {
         formattedProducts = item.products.map((p, idx) => {
           const qty = Number(p.quantity || p.order_qty) || 0;
           const spare = p.spare_qty !== undefined ? Number(p.spare_qty) : Math.ceil(qty * 0.05);
           const total = p.total_qty !== undefined ? Number(p.total_qty) : (qty + spare);
           const code = p.sku || p.productCode || `SP-${idx + 1}`;
+          const prodFactory = extractFactory(p);
           return {
             id: p.id || idx + 1,
             productCode: code,
             productName: p.name || p.productName || 'Sản phẩm sản xuất',
             lineType: p.category || p.lineType || p.group_name || 'Nội thất',
+            factory: prodFactory,
             orderQty: qty,
             spareQty: spare,
             totalQty: total,
@@ -508,16 +607,26 @@ const ProductionOrdersView = () => {
 
         item.products.forEach((p, idx) => {
           const pCode = p.sku || p.productCode || `SP-${idx + 1}`;
+          const prodFactory = extractFactory(p);
           if (p.bom_details && p.bom_details.length > 0) {
             p.bom_details.forEach((b, bIdx) => {
               const delivered = Number(b.delivered || b.delivered_qty || 0);
               const planned = Number(b.planned || b.quantity || p.quantity || 0);
+              const rawFrom = b.input_stage || b.stageFrom || 'Định hình';
+              const rawTo = b.output_stage || b.stageTo || 'Lắp ráp';
+              const finalFrom = (rawFrom.startsWith(prodFactory + ' - ') || rawFrom.startsWith(prodFactory + ' '))
+                ? rawFrom
+                : mapStageToFactory(rawFrom, prodFactory, stageOptions);
+              const finalTo = (rawTo.startsWith(prodFactory + ' - ') || rawTo.startsWith(prodFactory + ' '))
+                ? rawTo
+                : mapStageToFactory(rawTo, prodFactory, stageOptions);
+
               formattedBomParts.push({
                 id: b.id || `${p.id}-${bIdx}`,
                 parentCode: pCode,
                 type: b.type || b.component_type || 'Linh kiện',
-                stageFrom: b.input_stage || b.stageFrom || 'Định hình',
-                stageTo: b.output_stage || b.stageTo || 'Lắp ráp',
+                stageFrom: finalFrom,
+                stageTo: finalTo,
                 compCode: b.sku || b.compCode || `COMP-${bIdx + 1}`,
                 compName: b.name || b.compName || 'Cụm chi tiết',
                 quantity: `${delivered}/${planned}`,
@@ -530,9 +639,13 @@ const ProductionOrdersView = () => {
               });
             });
           } else {
-            // Sinh linh kiện BOM đầy đủ 7-8 dòng cho từng sản phẩm
+            // Sinh linh kiện BOM đầy đủ 7-8 dòng cho từng sản phẩm và gắn theo factory
             const generated = generateBomForProduct(pCode, p.name, p.quantity || 50);
-            formattedBomParts.push(...generated);
+            formattedBomParts.push(...generated.map(b => ({
+              ...b,
+              stageFrom: mapStageToFactory(b.stageFrom, prodFactory, stageOptions),
+              stageTo: mapStageToFactory(b.stageTo, prodFactory, stageOptions)
+            })));
           }
         });
       }
@@ -582,26 +695,36 @@ const ProductionOrdersView = () => {
     };
 
     const productsDetails = orderProducts.map(p => {
-      const children = productDetails
-        .filter(d => d.parentCode === p.productCode)
-        .map(d => {
-          const parts = (d.quantity || '').toString().split('/');
-          const planned = parseInt(parts[parts.length - 1] || '0', 10) || Number(p.orderQty) || 1;
-          return {
-            name: d.compName || d.type || 'Chi tiết',
-            sku: d.compCode || `${p.productCode}-${d.id}`,
-            quantity: planned,
-            unit: d.unit || 'Cái',
-            specification: [d.spec, d.material].filter(Boolean).join(' - '),
-            input_stage: d.stageFrom || 'Định hình',
-            output_stage: d.stageTo || 'Lắp ráp',
-            description: d.note || '',
-            children: []
-          };
-        });
+      const targetFac = p.factory || uniqueFactories[0] || 'NM1';
+      let childrenDetails = productDetails.filter(d => d.parentCode === p.productCode);
+      if (childrenDetails.length === 0) {
+        const generated = generateBomForProduct(p.productCode, p.productName, p.orderQty || 50);
+        childrenDetails = generated.map(b => ({
+          ...b,
+          stageFrom: mapStageToFactory(b.stageFrom, targetFac, stageOptions),
+          stageTo: mapStageToFactory(b.stageTo, targetFac, stageOptions)
+        }));
+      }
+
+      const children = childrenDetails.map(d => {
+        const parts = (d.quantity || '').toString().split('/');
+        const planned = parseInt(parts[parts.length - 1] || '0', 10) || Number(p.orderQty) || 1;
+        return {
+          name: d.compName || d.type || 'Chi tiết',
+          sku: d.compCode || `${p.productCode}-${d.id}`,
+          quantity: planned,
+          unit: d.unit || 'Cái',
+          specification: [d.spec, d.material].filter(Boolean).join(' - '),
+          input_stage: d.stageFrom || 'Định hình',
+          output_stage: d.stageTo || 'Lắp ráp',
+          description: d.note || '',
+          children: []
+        };
+      });
       return {
         name: p.productName || p.productCode,
         sku: p.productCode,
+        factory: targetFac,
         quantity: Number(p.totalQty) || Number(p.orderQty) || 1,
         bom_details: children
       };
@@ -733,17 +856,36 @@ const ProductionOrdersView = () => {
     ).slice(0, 15);
   }, [purchaseRequisitions, poSearch]);
 
+  // Thông tin Sản phẩm & Nhà máy đang được chọn ở Bảng 1
+  const currentProduct = useMemo(() => {
+    return orderProducts.find(p => p.productCode === selectedProductCode) || orderProducts[0] || null;
+  }, [orderProducts, selectedProductCode]);
+
+  const currentFactory = useMemo(() => {
+    return currentProduct?.factory || uniqueFactories[0] || 'NM1';
+  }, [currentProduct, uniqueFactories]);
+
+  const currentFactoryStages = useMemo(() => {
+    return getStagesForFactory(currentFactory, stageOptions);
+  }, [currentFactory, stageOptions]);
+
   // Lọc Bảng 2 ("Chi tiết sản phẩm") theo Sản phẩm đang được chọn ở Bảng 1
   const displayedProductDetails = useMemo(() => {
     if (!selectedProductCode) return productDetails;
     const filtered = productDetails.filter(det => det.parentCode === selectedProductCode);
     if (filtered.length > 0) return filtered;
     
-    // Nếu chưa có chi tiết cho sản phẩm được chọn, sinh bộ 7-8 dòng chi tiết BOM đầy đủ
+    // Nếu chưa có chi tiết cho sản phẩm được chọn, sinh bộ 7-8 dòng chi tiết BOM đầy đủ và map theo Nhà máy
     const targetProd = orderProducts.find(p => p.productCode === selectedProductCode);
     const qtyVal = targetProd ? targetProd.orderQty : 50;
-    return generateBomForProduct(selectedProductCode, targetProd?.productName, qtyVal);
-  }, [productDetails, selectedProductCode, orderProducts]);
+    const targetFac = targetProd?.factory || currentFactory;
+    const baseBom = generateBomForProduct(selectedProductCode, targetProd?.productName, qtyVal);
+    return baseBom.map(b => ({
+      ...b,
+      stageFrom: mapStageToFactory(b.stageFrom, targetFac, stageOptions),
+      stageTo: mapStageToFactory(b.stageTo, targetFac, stageOptions)
+    }));
+  }, [productDetails, selectedProductCode, orderProducts, currentFactory, stageOptions]);
 
   // Xử lý cập nhật Công đoạn giao / nhận khi người dùng chỉnh sửa trong Bảng Chi tiết sản phẩm
   const handleUpdateDetStage = (detId, field, newValue) => {
@@ -1581,6 +1723,7 @@ const ProductionOrdersView = () => {
                             <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Mã sản phẩm</th>
                             <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Tên sản phẩm</th>
                             <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Dòng hàng</th>
+                            <th style={{ padding: '9px 10px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700', minWidth: '110px' }}>Nhà máy SX</th>
                             <th style={{ padding: '9px 10px', textAlign: 'right', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Số lượng đặt</th>
                             <th style={{ padding: '9px 10px', textAlign: 'right', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Dự phòng</th>
                             <th style={{ padding: '9px 10px', textAlign: 'right', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Tổng số lượng sản xuất</th>
@@ -1594,7 +1737,7 @@ const ProductionOrdersView = () => {
                         <tbody>
                           {orderProducts.length === 0 ? (
                             <tr>
-                              <td colSpan={12} style={{ textAlign: 'center', padding: '2.5rem', color: '#94A3B8' }}>
+                              <td colSpan={13} style={{ textAlign: 'center', padding: '2.5rem', color: '#94A3B8' }}>
                                 Chưa có mặt hàng. Nhập hoặc chọn <b>Mã đơn hàng</b> ở trên để nạp tự động từ Đơn bán hàng (/admin/purchase-requisitions).
                               </td>
                             </tr>
@@ -1618,6 +1761,27 @@ const ProductionOrdersView = () => {
                                   <td style={{ padding: '8px 10px', fontWeight: '800', color: isSelected ? '#5D3B32' : '#2D1A12' }}>{p.productCode || '---'}</td>
                                   <td style={{ padding: '8px 10px', fontWeight: '600', color: '#334155' }}>{p.productName || '---'}</td>
                                   <td style={{ padding: '8px 10px', fontWeight: '600', color: '#475569' }}>{p.lineType || '---'}</td>
+                                  <td style={{ padding: '4px 6px', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                                    <select
+                                      value={p.factory || uniqueFactories[0] || 'NM1'}
+                                      onChange={(e) => handleChangeProductFactory(p.productCode, e.target.value)}
+                                      style={{
+                                        padding: '4px 8px',
+                                        borderRadius: '6px',
+                                        border: '1.5px solid #EADCC9',
+                                        fontSize: '0.82rem',
+                                        fontWeight: '700',
+                                        color: '#5D3B32',
+                                        backgroundColor: '#FAF6F0',
+                                        outline: 'none',
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      {uniqueFactories.map(fac => (
+                                        <option key={fac} value={fac}>{fac}</option>
+                                      ))}
+                                    </select>
+                                  </td>
                                   <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '700', color: '#1F2937' }}>{p.orderQty !== undefined ? p.orderQty : 0}</td>
                                   <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '700', color: '#1F2937' }}>{p.spareQty !== undefined ? p.spareQty : 0}</td>
                                   <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '800', color: '#2D1A12' }}>{p.totalQty !== undefined ? p.totalQty : 0}</td>
@@ -1656,6 +1820,11 @@ const ProductionOrdersView = () => {
                           SKU: {selectedProductCode}
                         </span>
                       )}
+                      {currentFactory && (
+                        <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#1E3A8A', backgroundColor: '#EFF6FF', padding: '3px 10px', borderRadius: '6px', border: '1px solid #BFDBFE' }}>
+                          Nhà máy: {currentFactory}
+                        </span>
+                      )}
                     </h3>
                   </div>
 
@@ -1692,7 +1861,7 @@ const ProductionOrdersView = () => {
                               <td style={{ padding: '8px 10px', fontWeight: '600', color: '#334155' }}>{det.type || '---'}</td>
                               <td style={{ padding: '4px 6px' }}>
                                 <select
-                                  value={det.stageFrom || (stageOptions[0] || '')}
+                                  value={det.stageFrom || (currentFactoryStages[0] || stageOptions[0] || '')}
                                   onChange={(e) => handleUpdateDetStage(det.id, 'stageFrom', e.target.value)}
                                   style={{
                                     width: '100%',
@@ -1708,14 +1877,14 @@ const ProductionOrdersView = () => {
                                     cursor: 'pointer'
                                   }}
                                 >
-                                  {stageOptions.map((stg, sIdx) => (
+                                  {currentFactoryStages.map((stg, sIdx) => (
                                     <option key={sIdx} value={stg}>{stg}</option>
                                   ))}
                                 </select>
                               </td>
                               <td style={{ padding: '4px 6px' }}>
                                 <select
-                                  value={det.stageTo || (stageOptions[1] || '')}
+                                  value={det.stageTo || (currentFactoryStages[1] || currentFactoryStages[0] || stageOptions[1] || '')}
                                   onChange={(e) => handleUpdateDetStage(det.id, 'stageTo', e.target.value)}
                                   style={{
                                     width: '100%',
@@ -1731,7 +1900,7 @@ const ProductionOrdersView = () => {
                                     cursor: 'pointer'
                                   }}
                                 >
-                                  {stageOptions.map((stg, sIdx) => (
+                                  {currentFactoryStages.map((stg, sIdx) => (
                                     <option key={sIdx} value={stg}>{stg}</option>
                                   ))}
                                 </select>

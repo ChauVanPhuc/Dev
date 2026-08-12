@@ -67,7 +67,7 @@ const ProductCreateView = () => {
   const [formData, setFormData] = useState({
     sku: `SKU-${Date.now().toString().slice(-4)}`,
     category: 'Tủ quần áo',
-    line: 'Nội thất',
+    line: 'Dòng hàng APT',
     name: '',
     length: '',
     width: '',
@@ -299,7 +299,14 @@ const ProductCreateView = () => {
         }
         const dataList = Array.isArray(res) ? res : (res?.data || []);
         if (dataList.length > 0) {
-          setCategoriesOptions(dataList.map(c => typeof c === 'string' ? { name: c } : c));
+          const list = dataList.map(c => typeof c === 'string' ? { name: c } : c);
+          setCategoriesOptions(list);
+          setFormData(prev => {
+            if (!prev.line || prev.line === 'Nội thất' || !list.some(l => l.name === prev.line)) {
+              return { ...prev, line: list[0].name };
+            }
+            return prev;
+          });
         } else {
           setCategoriesOptions(defaultBomLines.map(name => ({ name })));
         }
@@ -374,9 +381,15 @@ const ProductCreateView = () => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  // Cập nhật dòng BOM
-  const updateBomRow = (id, field, value) => {
-    setBomRows(prev => prev.map(row => row.id === id ? { ...row, [field]: value } : row));
+  // Cập nhật dòng BOM (hỗ trợ cả cặp key-value đơn lẻ hoặc object nhiều trường)
+  const updateBomRow = (id, fieldOrUpdates, value) => {
+    setBomRows(prev => prev.map(row => {
+      if (row.id !== id) return row;
+      if (typeof fieldOrUpdates === 'object' && fieldOrUpdates !== null) {
+        return { ...row, ...fieldOrUpdates };
+      }
+      return { ...row, [fieldOrUpdates]: value };
+    }));
   };
 
   // Thêm dòng BOM chính (Bậc 1)
@@ -633,32 +646,39 @@ const ProductCreateView = () => {
 
     setLoading(true);
     try {
+      const matchedCategory = categoriesOptions.find(c => c.name === formData.line || c.name === formData.category);
+      const parsedPrice = parseFloat(String(formData.estimatedCost || '0').replace(/\./g, '').replace(/,/g, '').replace(/[^\d.]/g, '')) || 0;
       const payload = {
         name: formData.name,
         sku: formData.sku,
         brand_name: formData.line,
+        category_id: matchedCategory?.id || null,
+        price: parsedPrice,
         color: formData.color,
         length: parseFloat(formData.length) || 0,
         width: parseFloat(formData.width) || 0,
         height: parseFloat(formData.height) || 0,
-        weight: parseFloat(formData.weight) || 0,
+        weight: parseFloat(String(formData.weight || '0').replace(/[^\d.]/g, '')) || 0,
+        quantity: parseFloat(formData.totalComponents) || 1.0,
+        unit: 'Bộ',
         specification: formData.note,
         description: formData.note,
         status: formData.bomStatus,
         master_bom_details: bomRows
-          .filter(r => r.compName && r.compName.trim() !== '')
+          .filter(r => (r.compName && r.compName.trim() !== '') || (r.compCode && r.compCode.trim() !== ''))
           .map(r => ({
             tree_stt: r.stt,
-            component_sku: r.compCode,
-            name: r.compName,
+            sku: r.compCode || r.sku,
+            component_sku: r.compCode || r.sku,
+            name: r.compName || r.name || 'Chi tiết',
             component_type: r.type,
             quantity: parseFloat(r.quantity) || 1,
-            unit: r.unit,
-            material: r.material,
-            specification: r.spec,
+            unit: r.unit || 'Cái',
+            material: r.material || 'Gỗ / MDF',
+            specification: r.spec || '',
             input_stage: r.stageFrom,
             output_stage: r.stageTo,
-            description: r.note
+            description: r.note || ''
           })),
         product_details: detailRows,
         paint_color_samples: paintColorRows
@@ -1424,12 +1444,10 @@ const ProductCreateView = () => {
                                   if (levelDepth === 0) return;
                                   setTimeout(() => {
                                     if (selectingTypeRef.current) return;
-                                    const exact = loaiOptions.find(o => o === row.type);
+                                    const exact = loaiOptions.find(o => o.toLowerCase() === (row.type || '').trim().toLowerCase());
                                     if (exact) {
                                       updateBomRow(row.id, 'type', exact);
                                       loadSuggestionsForParent(exact);
-                                    } else {
-                                      updateBomRow(row.id, 'type', '');
                                     }
                                     setActiveTypeRow(null);
                                   }, 150);
@@ -1506,7 +1524,7 @@ const ProductCreateView = () => {
                           <td style={{ padding: '8px' }}>
                             <input
                               type="text"
-                              value={row.compCode}
+                              value={row.compCode || ''}
                               onChange={(e) => updateBomRow(row.id, 'compCode', e.target.value)}
                               placeholder="Mã TP..."
                               style={{ width: '100%', padding: '4px 6px', border: '1px solid #E5E7EB', borderRadius: '4px', fontSize: '0.8rem', fontWeight: '700' }}
@@ -1523,7 +1541,7 @@ const ProductCreateView = () => {
                                 <input
                                   id={`compname-input-${row.id}`}
                                   type="text"
-                                  value={row.compName}
+                                  value={row.compName || ''}
                                   onChange={(e) => {
                                     updateBomRow(row.id, 'compName', e.target.value);
                                     if (levelDepth > 0) setActiveCompNameRow(row.id);
@@ -1553,17 +1571,18 @@ const ProductCreateView = () => {
                                       const match = effectiveSuggestions.find(s => s.toLowerCase() === (row.compName || '').trim().toLowerCase());
                                       if (match) {
                                         const meta = detailMetaMap[match] || {};
-                                        updateBomRow(row.id, 'compName', match);
-                                        updateBomRow(row.id, 'unit', meta.unit || row.unit || 'Cái');
-                                        updateBomRow(row.id, 'material', meta.material || row.material || 'Gỗ / MDF');
-                                        updateBomRow(row.id, 'stageFrom', meta.input_stage || row.stageFrom || 'Tạo phôi');
-                                        updateBomRow(row.id, 'stageTo', meta.output_stage || row.stageTo || 'Đóng gói');
-                                        if (meta.length != null) updateBomRow(row.id, 'length', parseFloat(meta.length) || 0);
-                                        if (meta.width != null) updateBomRow(row.id, 'width', parseFloat(meta.width) || 0);
-                                        if (meta.height != null) updateBomRow(row.id, 'height', parseFloat(meta.height) || 0);
-                                        if (meta.volume != null) updateBomRow(row.id, 'volume', parseFloat(meta.volume) || 0);
-                                      } else {
-                                        updateBomRow(row.id, 'compName', '');
+                                        const updates = {
+                                          compName: match,
+                                          unit: meta.unit || row.unit || 'Cái',
+                                          material: meta.material || row.material || 'Gỗ / MDF',
+                                          stageFrom: meta.input_stage || row.stageFrom || 'Tạo phôi',
+                                          stageTo: meta.output_stage || row.stageTo || 'Đóng gói'
+                                        };
+                                        if (meta.length != null) updates.length = parseFloat(meta.length) || 0;
+                                        if (meta.width != null) updates.width = parseFloat(meta.width) || 0;
+                                        if (meta.height != null) updates.height = parseFloat(meta.height) || 0;
+                                        if (meta.volume != null) updates.volume = parseFloat(meta.volume) || 0;
+                                        updateBomRow(row.id, updates);
                                       }
                                       setActiveCompNameRow(null);
                                     }, 150);
@@ -1598,15 +1617,18 @@ const ProductCreateView = () => {
                                           onMouseDown={() => {
                                             selectingCompNameRef.current = true;
                                             const meta = detailMetaMap[item] || {};
-                                            updateBomRow(row.id, 'compName', item);
-                                            updateBomRow(row.id, 'unit', meta.unit || row.unit || 'Cái');
-                                            updateBomRow(row.id, 'material', meta.material || row.material || 'Gỗ / MDF');
-                                            updateBomRow(row.id, 'stageFrom', meta.input_stage || row.stageFrom || 'Tạo phôi');
-                                            updateBomRow(row.id, 'stageTo', meta.output_stage || row.stageTo || 'Đóng gói');
-                                            if (meta.length != null) updateBomRow(row.id, 'length', parseFloat(meta.length) || 0);
-                                            if (meta.width != null) updateBomRow(row.id, 'width', parseFloat(meta.width) || 0);
-                                            if (meta.height != null) updateBomRow(row.id, 'height', parseFloat(meta.height) || 0);
-                                            if (meta.volume != null) updateBomRow(row.id, 'volume', parseFloat(meta.volume) || 0);
+                                            const updates = {
+                                              compName: item,
+                                              unit: meta.unit || row.unit || 'Cái',
+                                              material: meta.material || row.material || 'Gỗ / MDF',
+                                              stageFrom: meta.input_stage || row.stageFrom || 'Tạo phôi',
+                                              stageTo: meta.output_stage || row.stageTo || 'Đóng gói'
+                                            };
+                                            if (meta.length != null) updates.length = parseFloat(meta.length) || 0;
+                                            if (meta.width != null) updates.width = parseFloat(meta.width) || 0;
+                                            if (meta.height != null) updates.height = parseFloat(meta.height) || 0;
+                                            if (meta.volume != null) updates.volume = parseFloat(meta.volume) || 0;
+                                            updateBomRow(row.id, updates);
                                             setActiveCompNameRow(null);
                                             setTimeout(() => { selectingCompNameRef.current = false; }, 300);
                                           }}
@@ -1631,7 +1653,7 @@ const ProductCreateView = () => {
                           <td style={{ padding: '8px' }}>
                             <input
                               type="number"
-                              value={row.quantity}
+                              value={row.quantity != null ? row.quantity : ''}
                               onChange={(e) => updateBomRow(row.id, 'quantity', e.target.value)}
                               style={{ width: '100%', padding: '4px', border: '1px solid #E5E7EB', borderRadius: '4px', textAlign: 'center', fontWeight: '700' }}
                             />
@@ -1641,7 +1663,7 @@ const ProductCreateView = () => {
                           <td style={{ padding: '8px' }}>
                             <input
                               type="text"
-                              value={row.unit}
+                              value={row.unit || ''}
                               onChange={(e) => updateBomRow(row.id, 'unit', e.target.value)}
                               style={{ width: '100%', padding: '4px', border: '1px solid #E5E7EB', borderRadius: '4px', textAlign: 'center' }}
                             />
@@ -1651,7 +1673,7 @@ const ProductCreateView = () => {
                           <td style={{ padding: '8px' }}>
                             <input
                               type="text"
-                              value={row.material}
+                              value={row.material || ''}
                               onChange={(e) => updateBomRow(row.id, 'material', e.target.value)}
                               style={{ width: '100%', padding: '4px 6px', border: '1px solid #E5E7EB', borderRadius: '4px', fontSize: '0.8rem' }}
                             />
@@ -1664,21 +1686,33 @@ const ProductCreateView = () => {
                                 type="number"
                                 placeholder="D"
                                 value={row.length || ''}
-                                onChange={(e) => updateBomRow(row.id, 'length', parseFloat(e.target.value) || 0)}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  const newSpec = [val, row.width || 0, row.height || 0].join('*');
+                                  updateBomRow(row.id, { length: val, spec: newSpec });
+                                }}
                                 style={{ width: '33%', padding: '3px', border: '1px solid #E5E7EB', textAlign: 'center', fontSize: '0.75rem' }}
                               />
                               <input
                                 type="number"
                                 placeholder="R"
                                 value={row.width || ''}
-                                onChange={(e) => updateBomRow(row.id, 'width', parseFloat(e.target.value) || 0)}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  const newSpec = [row.length || 0, val, row.height || 0].join('*');
+                                  updateBomRow(row.id, { width: val, spec: newSpec });
+                                }}
                                 style={{ width: '33%', padding: '3px', border: '1px solid #E5E7EB', textAlign: 'center', fontSize: '0.75rem' }}
                               />
                               <input
                                 type="number"
                                 placeholder="C"
                                 value={row.height || ''}
-                                onChange={(e) => updateBomRow(row.id, 'height', parseFloat(e.target.value) || 0)}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  const newSpec = [row.length || 0, row.width || 0, val].join('*');
+                                  updateBomRow(row.id, { height: val, spec: newSpec });
+                                }}
                                 style={{ width: '33%', padding: '3px', border: '1px solid #E5E7EB', textAlign: 'center', fontSize: '0.75rem' }}
                               />
                             </div>
@@ -1688,7 +1722,7 @@ const ProductCreateView = () => {
                           <td style={{ padding: '8px' }}>
                             <input
                               type="text"
-                              value={row.volume}
+                              value={row.volume != null ? row.volume : ''}
                               onChange={(e) => updateBomRow(row.id, 'volume', e.target.value)}
                               style={{ width: '100%', padding: '4px', border: '1px solid #E5E7EB', borderRadius: '4px', textAlign: 'center', color: '#6B7280' }}
                             />
@@ -1698,7 +1732,7 @@ const ProductCreateView = () => {
                           <td style={{ padding: '8px' }}>
                             <input
                               type="text"
-                              value={row.note}
+                              value={row.note || ''}
                               onChange={(e) => updateBomRow(row.id, 'note', e.target.value)}
                               style={{ width: '100%', padding: '4px 6px', border: '1px solid #E5E7EB', borderRadius: '4px', fontSize: '0.8rem' }}
                             />

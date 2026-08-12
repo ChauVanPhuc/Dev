@@ -250,10 +250,20 @@ def get_plans(
                             "description": b.description,
                             "note": b.description
                         })
+                    prod_factory = "NM1"
+                    for b in product.bom_details:
+                        stage_candidate = b.input_stage or b.output_stage or ""
+                        if " - " in stage_candidate:
+                            pref = stage_candidate.split(" - ")[0].strip()
+                            if pref.startswith("NM"):
+                                prod_factory = pref
+                                break
+
                     products.append({
                         "id": product.id,
                         "sku": product.sku,
                         "name": product.name,
+                        "factory": prod_factory,
                         "quantity": int(product.total_qty or product.quantity or 0),
                         "bom_details": boms
                     })
@@ -346,10 +356,20 @@ def get_plans(
                         "description": b.description,
                         "note": b.description
                     })
+                prod_factory = "NM1"
+                for b in product.bom_details:
+                    stage_candidate = b.input_stage or b.output_stage or ""
+                    if " - " in stage_candidate:
+                        pref = stage_candidate.split(" - ")[0].strip()
+                        if pref.startswith("NM"):
+                            prod_factory = pref
+                            break
+
                 products.append({
                     "id": product.id,
                     "sku": product.sku,
                     "name": product.name,
+                    "factory": prod_factory,
                     "quantity": int(product.total_qty or product.quantity or 0),
                     "bom_details": boms
                 })

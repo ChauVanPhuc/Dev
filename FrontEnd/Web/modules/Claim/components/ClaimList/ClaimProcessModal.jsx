@@ -6,6 +6,7 @@ const ClaimProcessModal = ({
   onClose,
   onSubmit,
   title,
+  categoryOptions = [],
   modalMode,
   setModalMode,
   exceptionNavMode,
@@ -138,10 +139,18 @@ const ClaimProcessModal = ({
                 disabled
                 style={disabledFieldStyle}
               >
-                {['Atlas', 'Oak', 'Maple', 'Pine'].map(opt => (
+                {((categoryOptions && categoryOptions.length > 0) ? categoryOptions : [
+                  'Dòng hàng APT', 'Dòng hàng ATL', 'Dòng hàng FOL', 'Dòng hàng ADV',
+                  'Dòng hàng TPH', 'Dòng hàng HOR', 'Dòng hàng EYC', 'Dòng hàng COV',
+                  'Dòng hàng TIN', 'Dòng hàng BEZ', 'Dòng hàng MBC'
+                ]).map(opt => (
                   <option key={opt} value={opt}>{opt}</option>
                 ))}
-                {processDongHang && !['Atlas', 'Oak', 'Maple', 'Pine'].includes(processDongHang) && (
+                {processDongHang && !((categoryOptions && categoryOptions.length > 0) ? categoryOptions : [
+                  'Dòng hàng APT', 'Dòng hàng ATL', 'Dòng hàng FOL', 'Dòng hàng ADV',
+                  'Dòng hàng TPH', 'Dòng hàng HOR', 'Dòng hàng EYC', 'Dòng hàng COV',
+                  'Dòng hàng TIN', 'Dòng hàng BEZ', 'Dòng hàng MBC'
+                ]).includes(processDongHang) && (
                    <option value={processDongHang}>{processDongHang}</option>
                 )}
               </select>

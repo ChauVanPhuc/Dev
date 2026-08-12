@@ -14,16 +14,13 @@ import ConfirmQtyModal from './components/ConfirmQtyModal'
 import PalletCardModal from '@modules/delivery/Views/components/PalletCardModal'
 import MessageModal from '@mobile/Shared/Views/components/feedback/MessageModal'
 import ActionConfirmModal from '@mobile/Shared/Views/components/ui/ActionConfirmModal'
-import { MOCK_PALLETS, MOCK_STAGE_OPTIONS, MOCK_PRODUCTS, ROUTES } from '../constants'
+import { ROUTES } from '../constants'
 import apiClient, { getFullImageUrl } from '@shared/services/api'
 import '../styles/production_v2.css'
 
-const palletOpts = [{ value: '', label: 'Chọn mã pallet' }, ...MOCK_PALLETS]
+const palletOpts = [{ value: '', label: 'Chọn mã pallet' }]
 
-const newItems = () => [
-  { id: 1, detail: 'Thanh A', spec: '1', qty: 0, total: 40 },
-  { id: 2, detail: 'Thanh A', spec: '2', qty: 12, total: 40 },
-]
+const newItems = () => []
 
 const generateAutoPalletCode = () => {
   const now = new Date()
@@ -77,7 +74,7 @@ const CL07_TransferCreateView = () => {
   const [planName, setPlanName] = useState('Luân chuyển sản xuất')
   const [productOptions, setProductOptions] = useState([{ value: '', label: 'Chọn chi tiết' }])
   const [stageOptions, setStageOptions] = useState(
-    [{ value: '', label: 'Chọn công đoạn' }, ...MOCK_STAGE_OPTIONS]
+    [{ value: '', label: 'Chọn công đoạn' }]
   )
   const fileRef = useRef()
   const specDropRef = useRef()
@@ -270,9 +267,7 @@ const CL07_TransferCreateView = () => {
   const selectedSpecs = items.map((it) => it.spec)
 
   const handlePalletChange = (val) => {
-    const pallet = MOCK_PALLETS.find((p) => p.value === val)
     upd('palletCode', val)
-    if (pallet) upd('totalQty', pallet.totalQty)
   }
 
   const handleToggleNoPallet = () => {
@@ -310,7 +305,6 @@ const CL07_TransferCreateView = () => {
           specification: items.length === 1 ? spec : undefined
         })
       : []
-    console.log('orders-by-part matching:', matching)
     const partProducts = matching.map((m) => ({
       order_id: m.product_sku,
       order_code: m.po_code,
@@ -319,7 +313,6 @@ const CL07_TransferCreateView = () => {
       part_qty_needed: m.part_qty_needed || m.order_qty || 0,
       delivered: 0
     }))
-    console.log('partProducts:', partProducts)
     const data = {
       id: ticketCode,
       qr_code: ticketCode,
