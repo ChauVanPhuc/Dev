@@ -155,17 +155,17 @@ try:
     with engine.begin() as conn:
         # 1. Seed known categories if not exists
         known_categories = [
-            ('APT', 'Dòng hàng APT'),
-            ('ATL', 'Dòng hàng ATL'),
-            ('FOL', 'Dòng hàng FOL'),
-            ('ADV', 'Dòng hàng ADV'),
-            ('TPH', 'Dòng hàng TPH'),
-            ('HOR', 'Dòng hàng HOR'),
-            ('EYC', 'Dòng hàng EYC'),
-            ('COV', 'Dòng hàng COV'),
-            ('TIN', 'Dòng hàng TIN'),
-            ('BEZ', 'Dòng hàng BEZ'),
-            ('MBC', 'Dòng hàng MBC'),
+            ('APT', 'APT'),
+            ('ATL', 'ATL'),
+            ('FOL', 'FOL'),
+            ('ADV', 'ADV'),
+            ('TPH', 'TPH'),
+            ('HOR', 'HOR'),
+            ('EYC', 'EYC'),
+            ('COV', 'COV'),
+            ('TIN', 'TIN'),
+            ('BEZ', 'BEZ'),
+            ('MBC', 'MBC'),
         ]
         for prefix, cat_name in known_categories:
             # Seed master_categories

@@ -4,6 +4,7 @@ import api, { getBaseURL } from '@webShared/Services/api.service';
 import { Search, Plus, FileSpreadsheet, FileText, ArrowUpDown, ChevronLeft, ChevronRight, Package, ShoppingBag } from 'lucide-react';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
 
 const ManufactureProducts = () => {
   const navigate = useNavigate();
@@ -20,6 +21,13 @@ const ManufactureProducts = () => {
   const [actionMenuId, setActionMenuId] = useState(null);
   const [filterType, setFilterType] = useState('all');
   const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'danger',
+    onConfirm: () => {}
+  });
 
   useEffect(() => {
     const handleOutsideClick = () => {
@@ -97,15 +105,24 @@ const ManufactureProducts = () => {
     return true;
   });
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Bạn có chắc chắn muốn xóa sản phẩm này?")) return;
-    try {
-      await api.delete(`/master-products/${id}`);
-      fetchProducts();
-    } catch (error) {
-      console.error("Lỗi khi xóa sản phẩm:", error);
-      toast('error', "Không thể xóa sản phẩm này. Vui lòng thử lại sau.");
-    }
+  const handleDelete = (product) => {
+    setConfirmModal({
+      visible: true,
+      title: 'Xác nhận xóa sản phẩm',
+      message: `Bạn có chắc chắn muốn xóa sản phẩm "${product.name || product.sku}" (Mã: ${product.sku || 'N/A'}) không?\nThao tác này sẽ xóa toàn bộ dữ liệu chi tiết cấu thành và không thể khôi phục.`,
+      type: 'danger',
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, visible: false }));
+        try {
+          await api.delete(`/master-products/${product.id}`);
+          toast('success', `Đã xóa sản phẩm ${product.sku || product.name} thành công!`);
+          fetchProducts();
+        } catch (error) {
+          console.error("Lỗi khi xóa sản phẩm:", error);
+          toast('error', "Không thể xóa sản phẩm này. Vui lòng thử lại sau.");
+        }
+      }
+    });
   };
 
   const purpleButtonStyle = (isActive) => ({
@@ -283,8 +300,8 @@ const ManufactureProducts = () => {
                             {product.new_name || product.name}
                           </td>
                           <td data-label="Dòng hàng">
-                            <span style={{ backgroundColor: '#f1f5f9', color: '#475569', padding: '4px 8px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: '800' }}>
-                              {product.category_name || (product.sku && product.sku.startsWith('A') ? 'A' : 'T')}
+                            <span style={{ backgroundColor: '#f1f5f9', color: '#475569', padding: '4px 8px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: '800', whiteSpace: 'nowrap' }}>
+                              {(product.category_name || '').replace(/^Dòng hàng\s*/i, '').trim() || (product.sku ? product.sku.slice(0, 3) : 'ADV')}
                             </span>
                           </td>
                           <td data-label="Mẫu sắc" style={{ fontWeight: '600', color: '#334155' }}>
@@ -299,7 +316,11 @@ const ManufactureProducts = () => {
                           <td data-label="Ghi chú" style={{ fontSize: '0.82rem', color: '#64748b', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {product.description || 'APT012'}
                           </td>
-                          <td data-label="Thao Tác" style={{ position: 'relative', textAlign: 'center', zIndex: actionMenuId === product.id ? 40 : 1 }}>
+                          <td 
+                            data-label="Thao Tác" 
+                            style={{ position: 'relative', textAlign: 'center', zIndex: actionMenuId === product.id ? 40 : 1 }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
                              <button
                                className="action-btn"
                                onClick={(e) => {
@@ -308,10 +329,15 @@ const ManufactureProducts = () => {
                                }}
                              ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
                              {actionMenuId === product.id && (
-                               <div className="action-menu" style={{ right: '50%', transform: 'translateX(50%)', top: '80%' }}>
+                               <div 
+                                 className="action-menu" 
+                                 style={{ right: '50%', transform: 'translateX(50%)', top: '80%' }}
+                                 onClick={(e) => e.stopPropagation()}
+                               >
                                  <button 
                                    className="action-menu-item" 
-                                   onClick={() => {
+                                   onClick={(e) => {
+                                     e.stopPropagation();
                                      setActionMenuId(null);
                                      navigate(`/admin/products/${product.id}`);
                                    }}
@@ -320,9 +346,10 @@ const ManufactureProducts = () => {
                                  </button>
                                  <button 
                                    className="action-menu-item danger" 
-                                   onClick={() => {
+                                   onClick={(e) => {
+                                     e.stopPropagation();
                                      setActionMenuId(null);
-                                     handleDelete(product.id);
+                                     handleDelete(product);
                                    }}
                                  >
                                    Xóa
@@ -444,6 +471,18 @@ const ManufactureProducts = () => {
               <ChevronRight size={16} />
           </button>
       </div>
+
+      {/* Modal Xác nhận Xóa Sản phẩm Chuẩn Dự Án */}
+      <BeautifulConfirmModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        type={confirmModal.type}
+        confirmText="Xác nhận xóa"
+        cancelText="Hủy bỏ"
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal(prev => ({ ...prev, visible: false }))}
+      />
     </div>
   );
 };

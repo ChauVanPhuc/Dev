@@ -58,6 +58,9 @@ class MasterProductUpdate(BaseModel):
     unit: Optional[str] = None
     specification: Optional[str] = None
     description: Optional[str] = None
+    master_bom_details: Optional[List[Any]] = None
+    product_details: Optional[List[Any]] = None
+    paint_color_samples: Optional[List[Any]] = None
 
 class MasterProductListItem(MasterProductBase):
     """

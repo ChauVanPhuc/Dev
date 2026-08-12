@@ -116,7 +116,7 @@ def to_master_product_dict(master: MasterProduct):
         "new_name": master.new_name or master.name,
         "brand_name": master.brand_name or "Thương hiệu G7",
         "category_id": master.category_id,
-        "category_name": master.master_category.name if master.master_category else "Dòng hàng A",
+        "category_name": master.master_category.name.replace("Dòng hàng ", "").strip() if (master.master_category and master.master_category.name) else (master.sku[:3] if master.sku else "ADV"),
         "price": master.price or 0.0,
         "material": master.material or "Gỗ tự nhiên",
         "color": master.color or "Màu tự nhiên",
@@ -266,13 +266,93 @@ def create_master_product(db: Session, master_product: MasterProductCreate):
 def update_master_product(db: Session, master_product_id: int, master_product: MasterProductUpdate):
     db_master = db.query(MasterProduct).filter(MasterProduct.id == master_product_id).first()
     if db_master:
-        update_data = master_product.model_dump(exclude_unset=True)
+        update_data = master_product.model_dump(exclude_unset=True, exclude={'master_bom_details', 'product_details', 'paint_color_samples'})
         if 'sku' in update_data:
             update_data['sku'] = clean_and_standardize_sku(update_data['sku'])
         if 'name' in update_data:
             update_data['name'] = clean_and_standardize_name(update_data['name'])
         for key, value in update_data.items():
             setattr(db_master, key, value)
+            
+        bom_data_list = getattr(master_product, 'master_bom_details', None)
+        if bom_data_list is not None and isinstance(bom_data_list, list):
+            db.query(MasterBOMDetail).filter(MasterBOMDetail.master_product_id == db_master.id).delete(synchronize_session=False)
+            stt_to_id = {}
+            for item in bom_data_list:
+                if hasattr(item, 'model_dump'):
+                    node_dict = item.model_dump(exclude={'children'})
+                elif isinstance(item, dict):
+                    node_dict = dict(item)
+                else:
+                    continue
+
+                stt = node_dict.pop('tree_stt', None) or node_dict.get('stt')
+                sku = node_dict.get('sku') or node_dict.pop('component_sku', None) or node_dict.get('compCode')
+                name = node_dict.get('name') or node_dict.get('compName') or ''
+                unit = node_dict.get('unit') or 'Cái'
+                material = node_dict.get('material') or 'Gỗ / MDF'
+                spec = node_dict.get('specification') or node_dict.get('spec') or ''
+                in_stg = clean_stage_name(node_dict.get('input_stage') or node_dict.get('stageFrom'))
+                out_stg = clean_stage_name(node_dict.get('output_stage') or node_dict.get('stageTo'))
+                qty = float(node_dict.get('quantity') or 1.0)
+                desc = node_dict.get('description') or node_dict.get('note') or ''
+                
+                parent_id = node_dict.get('parent_id')
+                if parent_id is None and stt:
+                    stt_str = str(stt).strip()
+                    if '.' in stt_str:
+                        p_stt = '.'.join(stt_str.split('.')[:-1])
+                        parent_id = stt_to_id.get(p_stt)
+
+                bom_obj = MasterBOMDetail(
+                    master_product_id=db_master.id,
+                    parent_id=parent_id,
+                    sku=clean_and_standardize_sku(sku) if sku else f"{db_master.sku}.{stt if stt else len(stt_to_id)+1}",
+                    name=clean_and_standardize_name(name) if name else 'Chi tiết mới',
+                    unit=unit,
+                    material=material,
+                    specification=spec,
+                    input_stage=in_stg,
+                    output_stage=out_stg,
+                    quantity=qty,
+                    description=desc,
+                    status="Active"
+                )
+                db.add(bom_obj)
+                db.flush()
+                if stt:
+                    stt_to_id[str(stt).strip()] = bom_obj.id
+
+        product_details_list = getattr(master_product, 'product_details', None)
+        if product_details_list is not None and isinstance(product_details_list, list):
+            db.query(MasterProductDetail).filter(MasterProductDetail.master_product_id == db_master.id).delete(synchronize_session=False)
+            for pd in product_details_list:
+                if isinstance(pd, dict) and pd.get('name'):
+                    db.add(MasterProductDetail(
+                        master_product_id=db_master.id,
+                        name=pd.get('name'),
+                        quantity=float(pd.get('quantity', 1.0)),
+                        unit=pd.get('unit', 'Cái'),
+                        input_stage=clean_stage_name(pd.get('input_stage')),
+                        output_stage=clean_stage_name(pd.get('output_stage')),
+                        parent_name=pd.get('parent_name', ''),
+                        material=pd.get('material', '')
+                    ))
+
+        paint_color_list = getattr(master_product, 'paint_color_samples', None)
+        if paint_color_list is not None and isinstance(paint_color_list, list):
+            db.query(PaintColorSample).filter(PaintColorSample.master_product_id == db_master.id).delete(synchronize_session=False)
+            for pc in paint_color_list:
+                if isinstance(pc, dict) and (pc.get('color_code') or pc.get('color_name')):
+                    db.add(PaintColorSample(
+                        master_product_id=db_master.id,
+                        color_code=pc.get('color_code', ''),
+                        color_name=pc.get('color_name', ''),
+                        supplier=pc.get('supplier', ''),
+                        image_url=pc.get('image_url', ''),
+                        note=pc.get('note', '')
+                    ))
+
         db.commit()
         db.refresh(db_master)
     return to_master_product_dict(db_master)
@@ -693,6 +773,11 @@ def import_master_products_from_excel(db: Session, file_content: bytes):
             level_index += 1
 
         db.commit()
+        try:
+            sync_bom_data_to_auxiliary_tables(db)
+        except Exception as sync_err:
+            print(f"=== [SYNC AUX ERROR] {sync_err}")
+
         yield json.dumps({"status": "completed", "processed": processed_count, "total": total_rows}) + "\n"
     except Exception as exc:
         db.rollback()
@@ -1029,7 +1114,7 @@ def resolve_detail_stages(in_stage: Optional[str], out_stage: Optional[str]):
 def sync_bom_data_to_auxiliary_tables(db: Session):
     """
     Trích xuất & lọc KHÔNG TRÙNG LẶP toàn bộ dữ liệu BOM hiện có trong hệ thống
-    để nạp vào 2 bảng: master_product_details (KT03.1) và paint_color_samples (KT03.3).
+    để nạp chính xác vào 2 bảng: master_product_details (KT03.1) và paint_color_samples (KT03.3).
     """
     import re
     import datetime
@@ -1044,6 +1129,24 @@ def sync_bom_data_to_auxiliary_tables(db: Session):
     # Build lookups
     product_map = {p.id: p for p in products}
     bom_map = {b.id: b for b in boms}
+
+    def infer_bom_material(bom_name, bom_desc, bom_spec, prod_name, prod_mat):
+        text = f"{bom_name or ''} {bom_desc or ''} {bom_spec or ''} {prod_name or ''}".lower()
+        if "veneer red oak" in text or "red oak" in text:
+            return "Veneer Red Oak"
+        elif "veneer oak" in text or "eck veneer oak" in text:
+            return "Veneer Oak USA"
+        elif "mdf" in text:
+            return "Gỗ MDF"
+        elif "gỗ sồi" in text or "oak usa" in text or "oak" in text:
+            return "Gỗ Sồi tự nhiên"
+        elif "gỗ thông" in text or "pine" in text:
+            return "Gỗ Thông"
+        elif "gỗ cao su" in text:
+            return "Gỗ Cao Su"
+        elif prod_mat:
+            return prod_mat
+        return "Gỗ tự nhiên"
 
     def get_real_direct_parent_name(bom_item):
         curr = bom_item
@@ -1072,67 +1175,82 @@ def sync_bom_data_to_auxiliary_tables(db: Session):
 
             in_stage, out_stage = resolve_detail_stages(b.input_stage, b.output_stage)
 
+            unit_clean = (b.unit or 'Cái').strip()
+            if unit_clean.lower() == 'cái':
+                unit_clean = 'Cái'
+            elif unit_clean.lower() == 'bộ':
+                unit_clean = 'Bộ'
+            elif unit_clean.lower() == 'tấm':
+                unit_clean = 'Tấm'
+
+            prod = product_map.get(b.master_product_id)
+            mat_clean = b.material or infer_bom_material(b.name, b.description, b.specification, prod.name if prod else '', prod.material if prod else '')
+
             key = f"{b.master_product_id}|{name_clean.lower()}|{parent_clean.lower()}"
             if key not in unique_details:
                 unique_details[key] = {
                     'master_product_id': b.master_product_id,
                     'name': name_clean,
                     'quantity': b.quantity or 1.0,
-                    'unit': b.unit or 'Cái',
+                    'unit': unit_clean,
                     'input_stage': in_stage,
                     'output_stage': out_stage,
                     'parent_name': parent_clean,
-                    'material': b.material or 'Gỗ / MDF'
+                    'material': mat_clean
                 }
 
     # 2. Extract and Deduplicate Paint Colors from BOM details & descriptions
     color_index = 1
     today = datetime.datetime.now()
 
-    def add_unique_color(prod_id, c_name, supplier="NPP Sơn Nippon", note=None):
+    def add_unique_color(prod_id, c_name, supplier="Công ty TNHH Sơn Nippon", note=None):
         nonlocal color_index
         if not c_name or not c_name.strip():
             return
         c_clean = c_name.strip()
-        key = c_clean.lower()
+        key = f"{prod_id}|{c_clean.lower()}"
         if key not in unique_colors:
+            p_obj = product_map.get(prod_id)
+            p_sku = p_obj.sku if p_obj else ""
             unique_colors[key] = {
                 'master_product_id': prod_id or (products[0].id if products else 1),
                 'color_code': f"MS-{str(color_index).zfill(3)}",
                 'color_name': c_clean,
                 'supplier': supplier,
                 'expiry_date': today + timedelta(days=180),
-                'note': note or f"Mẫu màu sơn trích xuất từ BOM kỹ thuật ({c_clean})"
+                'note': note or f"Mẫu màu sơn tiêu chuẩn cho sản phẩm {p_sku}"
             }
             color_index += 1
 
-    # 2.1 Check BOM colors
-    for b in boms:
-        if b.color and b.color.strip():
-            add_unique_color(b.master_product_id, b.color, supplier="NPP Sơn Nippon")
-
-    # 2.2 Check Master Product colors
-    for p in products:
-        if p.color and p.color.strip():
-            add_unique_color(p.id, p.color, supplier="Nội bộ G7")
-
-    # 2.3 Check BOM descriptions for paint color specifications
+    # 2.1 Check BOM descriptions & details for paint colors
     for b in boms:
         desc = b.description or ''
-        if desc:
-            match = re.search(r'(sơn\s+màu\s+[^\n,\.;]+|sơn\s+pu\s+[^\n,\.;]+|sơn\s+bóng\s+[^\n,\.;]+)', desc, re.IGNORECASE)
-            if match:
-                extracted_color = match.group(1).strip()
-                add_unique_color(b.master_product_id, extracted_color, supplier="Công ty TNHH Sơn Nippon", note=f"Mẫu màu sơn từ chi tiết {b.name} ({b.sku})")
+        if not desc:
+            continue
+        p_obj = product_map.get(b.master_product_id)
+        p_sku = p_obj.sku if p_obj else ""
+        
+        if "walnut" in desc.lower():
+            add_unique_color(b.master_product_id, "Sơn màu Walnut", supplier="Công ty TNHH Sơn Nippon", note=f"Màu hạt dẻ ấm Walnut tiêu chuẩn - áp dụng chi tiết {b.name} ({p_sku})")
+        elif "na clear" in desc.lower():
+            add_unique_color(b.master_product_id, "SƠN MÀU NA CLEAR", supplier="NPP Sơn Oseven", note=f"Sơn bóng trong suốt NA Clear giữ vân gỗ tự nhiên Oak USA - chi tiết {b.name} ({p_sku})")
+        elif "veneer" in desc.lower():
+            add_unique_color(b.master_product_id, "Sơn lót Polyurethane 2K", supplier="Nội bộ G7", note=f"Lớp lót chống ẩm mốc cho bề mặt Veneer Oak - chi tiết {b.name} ({p_sku})")
 
-    # 2.4 Seed essential standard factory paint color specifications
+    # 2.2 Ensure every product has its designated paint color sample
+    for p in products:
+        p_name_lower = (p.name or '').lower()
+        p_sku_lower = (p.sku or '').lower()
+        if any(k in p_sku_lower or k in p_name_lower for k in ['688', '687', '689', '690', 'walnut']):
+            add_unique_color(p.id, "Sơn màu Walnut", supplier="Công ty TNHH Sơn Nippon", note=f"Màu hạt dẻ ấm Walnut tiêu chuẩn - {p.sku}")
+            add_unique_color(p.id, "Sơn PU mờ 70%", supplier="Công ty TNHH Sơn Nippon", note=f"Sơn PU mờ 70% mịn cao cấp xuất khẩu EU - {p.sku}")
+        else:
+            add_unique_color(p.id, "SƠN MÀU NA CLEAR", supplier="NPP Sơn Oseven", note=f"Sơn bóng trong suốt NA Clear giữ màu gỗ tự nhiên Oak USA - {p.sku}")
+            add_unique_color(p.id, "Sơn bóng gỗ sồi (Oak USA)", supplier="Sơn Á Châu", note=f"Sơn bóng chuyên dụng cho dòng gỗ Sồi Bắc Mỹ - {p.sku}")
+
+    # 2.3 Add standard universal paint palette across factory
     standard_paint_palette = [
-        ("Sơn màu Walnut", "Công ty TNHH Sơn Nippon", "Màu hạt dẻ ấm tiêu chuẩn, áp dụng cho dòng tủ Sven & bàn Signature"),
-        ("SƠN MÀU NA CLEAR", "NPP Sơn Oseven", "Sơn bóng trong suốt giữ màu gỗ tự nhiên Red Oak / White Oak"),
         ("Sơn PU mờ 50%", "Công ty Sơn Dulux", "Sơn PU mờ 50% bảo vệ bề mặt chống trầy xước"),
-        ("Sơn PU mờ 70%", "Công ty TNHH Sơn Nippon", "Sơn PU mờ 70% mịn cao cấp xuất khẩu EU"),
-        ("Sơn bóng gỗ sồi (Oak USA)", "Sơn Á Châu", "Sơn bóng chuyên dụng cho dòng gỗ Sồi Bắc Mỹ"),
-        ("Sơn lót Polyurethane 2K", "Nội bộ G7", "Sơn lót tăng độ bám dính chống ẩm mốc cho MDF và gỗ tự nhiên"),
         ("Sơn trắng 2K cao cấp", "Công ty TNHH Sơn Nippon", "Sơn màu trắng phủ mặt ngoài cánh tủ và vách hông"),
         ("Sơn NC cánh gián", "NPP Sơn Oseven", "Màu cánh gián cổ điển phủ bóng hoàn thiện"),
         ("Sơn lau Wood Stain Teak", "Sơn Á Châu", "Sơn lau thẩm thấu tôn vân gỗ tự nhiên"),

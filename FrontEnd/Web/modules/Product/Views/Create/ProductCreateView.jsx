@@ -67,7 +67,7 @@ const ProductCreateView = () => {
   const [formData, setFormData] = useState({
     sku: `SKU-${Date.now().toString().slice(-4)}`,
     category: 'Tủ quần áo',
-    line: 'Dòng hàng APT',
+    line: 'APT',
     name: '',
     length: '',
     width: '',
@@ -270,9 +270,9 @@ const ProductCreateView = () => {
 
   // Danh mục dòng hàng mặc định từ BOM làm fallback
   const defaultBomLines = [
-    'Dòng hàng APT', 'Dòng hàng ATL', 'Dòng hàng FOL', 'Dòng hàng ADV',
-    'Dòng hàng TPH', 'Dòng hàng HOR', 'Dòng hàng EYC', 'Dòng hàng COV',
-    'Dòng hàng TIN', 'Dòng hàng BEZ', 'Dòng hàng MBC'
+    'APT', 'ATL', 'FOL', 'ADV',
+    'TPH', 'HOR', 'EYC', 'COV',
+    'TIN', 'BEZ', 'MBC'
   ];
 
   // Danh sách Công đoạn sản xuất chuẩn
@@ -299,7 +299,11 @@ const ProductCreateView = () => {
         }
         const dataList = Array.isArray(res) ? res : (res?.data || []);
         if (dataList.length > 0) {
-          const list = dataList.map(c => typeof c === 'string' ? { name: c } : c);
+          const list = dataList.map(c => {
+            const rawName = typeof c === 'string' ? c : (c.name || '');
+            const cleanName = rawName.replace(/^Dòng hàng\s*/i, '').trim();
+            return typeof c === 'string' ? { name: cleanName } : { ...c, name: cleanName };
+          });
           setCategoriesOptions(list);
           setFormData(prev => {
             if (!prev.line || prev.line === 'Nội thất' || !list.some(l => l.name === prev.line)) {
@@ -394,11 +398,14 @@ const ProductCreateView = () => {
 
   // Thêm dòng BOM chính (Bậc 1)
   const handleAddMainBomRow = () => {
-    const nextStt = String(bomRows.length + 1);
+    const rootNums = bomRows
+      .map(r => r.stt ? parseInt(r.stt.split('.')[0]) : 0)
+      .filter(n => !isNaN(n) && n > 0);
+    const nextStt = String(rootNums.length > 0 ? Math.max(...rootNums) + 1 : 1);
     const newRow = {
       id: Date.now(),
       stt: nextStt,
-      type: '',
+      type: 'Sản phẩm',
       stageFrom: 'Định hình',
       stageTo: 'Lắp ráp',
       compCode: `${formData.sku || 'SKU'}.${nextStt}`,
@@ -420,15 +427,19 @@ const ProductCreateView = () => {
 
   // Thêm chi tiết con phân cấp (Sub-component STT 1.1, 1.1.1...)
   const handleAddSubBomRow = (parentRow) => {
-    const parentStt = parentRow.stt;
-    const siblings = bomRows.filter(r => r.stt.startsWith(`${parentStt}.`) && r.stt.split('.').length === parentStt.split('.').length + 1);
-    const nextSubNum = siblings.length + 1;
+    const parentStt = parentRow.stt || '1';
+    const prefix = `${parentStt}.`;
+    const directSiblings = bomRows.filter(r => r.stt && r.stt.startsWith(prefix) && r.stt.slice(prefix.length).indexOf('.') === -1);
+    const subNums = directSiblings
+      .map(r => parseInt(r.stt.slice(prefix.length)))
+      .filter(n => !isNaN(n) && n > 0);
+    const nextSubNum = subNums.length > 0 ? Math.max(...subNums) + 1 : 1;
     const newStt = `${parentStt}.${nextSubNum}`;
 
     const newRow = {
       id: Date.now(),
       stt: newStt,
-      type: '',
+      type: parentRow.compName || 'Chi tiết',
       stageFrom: 'Tạo phôi',
       stageTo: 'Định hình',
       compCode: `${formData.sku || 'SKU'}.${newStt}`,
@@ -445,10 +456,16 @@ const ProductCreateView = () => {
       note: ''
     };
 
-    // Chèn ngay bên dưới vị trí parent
-    const parentIndex = bomRows.findIndex(r => r.id === parentRow.id);
+    let insertIndex = bomRows.findIndex(r => r.id === parentRow.id);
+    for (let i = insertIndex + 1; i < bomRows.length; i++) {
+      if (bomRows[i].stt && bomRows[i].stt.startsWith(prefix)) {
+        insertIndex = i;
+      } else {
+        break;
+      }
+    }
     const updated = [...bomRows];
-    updated.splice(parentIndex + 1, 0, newRow);
+    updated.splice(insertIndex + 1, 0, newRow);
     setBomRows(updated);
     if (toast) toast('info', `Đã thêm chi tiết cấp con (${newStt})`);
   };
@@ -810,7 +827,7 @@ const ProductCreateView = () => {
 
           {/* Hàng 1 + Hàng 2: Bố cục Khung Ảnh & Form 7 Ô Nhập */}
           <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '14px', marginBottom: '10px' }}>
-            
+
             {/* Khung Ảnh Sản Phẩm (Ảnh chính + 3 Thumbnail Phụ xếp dọc bên phải) */}
             <div style={{ display: 'flex', gap: '6px' }}>
               <input
@@ -1180,7 +1197,7 @@ const ProductCreateView = () => {
         {/* NỘI DUNG CỦA TAB BOM */}
         {activeTab === 'bom' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            
+
             {/* THANH ACTION TOOLBAR PHÍA TRÊN BẢNG BOM */}
             <div style={{
               display: 'flex',
@@ -1233,7 +1250,7 @@ const ProductCreateView = () => {
 
               {/* BÊN PHẢI: 4 Nút Nâu Đậm (#5D3B32) */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
-                
+
                 {/* NÚT CẤU HÌNH THÔNG TIN */}
                 <div style={{ position: 'relative' }}>
                   <button
@@ -1395,19 +1412,36 @@ const ProductCreateView = () => {
                   </thead>
                   <tbody>
                     {filteredBomRows.map((row, index) => {
+                      const isRootRow = (index === 0);
                       const levelDepth = row.stt ? (row.stt.split('.').length - 1) : 0;
                       const effectiveSuggestions = (row.type && suggestionsByParent[row.type]?.length > 0)
                         ? suggestionsByParent[row.type]
                         : detailSuggestions;
                       return (
-                        <tr key={row.id || index} style={{ borderBottom: '1px solid #FAF6F0', backgroundColor: index % 2 === 0 ? '#FFFFFF' : '#FFFCF9' }}>
+                        <tr key={row.id || index} style={{ borderBottom: '1px solid #FAF6F0', backgroundColor: isRootRow ? '#FDFBF7' : (index % 2 === 0 ? '#FFFFFF' : '#FFFCF9') }}>
                           {/* STT */}
                           <td style={{ padding: '8px', textAlign: 'center', fontWeight: '700', color: '#5D3B32' }}>
                             <input
                               type="text"
-                              value={row.stt}
-                              onChange={(e) => updateBomRow(row.id, 'stt', e.target.value)}
-                              style={{ width: '100%', border: 'none', background: 'transparent', textAlign: 'center', fontWeight: '800', color: '#5D3B32' }}
+                              value={row.stt || ''}
+                              readOnly={isRootRow}
+                              disabled={isRootRow}
+                              onChange={(e) => {
+                                if (isRootRow) return;
+                                const numericDotVal = e.target.value.replace(/[^0-9.]/g, '').replace(/\.{2,}/g, '.');
+                                updateBomRow(row.id, 'stt', numericDotVal);
+                              }}
+                              onKeyDown={(e) => {
+                                if (isRootRow) return;
+                                if (['Backspace', 'Tab', 'Enter', 'Escape', 'ArrowLeft', 'ArrowRight', 'Delete', 'Home', 'End'].includes(e.key) || e.ctrlKey || e.metaKey) {
+                                  return;
+                                }
+                                if (!/[0-9.]/.test(e.key)) {
+                                  e.preventDefault();
+                                }
+                              }}
+                              placeholder="1.1"
+                              style={{ width: '100%', border: 'none', background: 'transparent', textAlign: 'center', fontWeight: '800', color: '#5D3B32', cursor: isRootRow ? 'default' : 'text' }}
                             />
                           </td>
 
@@ -1418,12 +1452,15 @@ const ProductCreateView = () => {
                                 id={`loai-input-${row.id}`}
                                 type="text"
                                 value={row.type}
+                                readOnly={isRootRow}
+                                disabled={isRootRow}
                                 onChange={(e) => {
+                                  if (isRootRow) return;
                                   updateBomRow(row.id, 'type', e.target.value);
                                   if (levelDepth > 0) setActiveTypeRow(row.id);
                                 }}
                                 onFocus={() => {
-                                  if (levelDepth === 0) return;
+                                  if (isRootRow || levelDepth === 0) return;
                                   setActiveTypeRow(row.id);
                                   const el = document.getElementById(`loai-input-${row.id}`);
                                   if (el) {
@@ -1441,7 +1478,7 @@ const ProductCreateView = () => {
                                   }
                                 }}
                                 onBlur={() => {
-                                  if (levelDepth === 0) return;
+                                  if (isRootRow || levelDepth === 0) return;
                                   setTimeout(() => {
                                     if (selectingTypeRef.current) return;
                                     const exact = loaiOptions.find(o => o.toLowerCase() === (row.type || '').trim().toLowerCase());
@@ -1453,9 +1490,19 @@ const ProductCreateView = () => {
                                   }, 150);
                                 }}
                                 placeholder="Chi tiết..."
-                                style={{ width: '100%', padding: '4px 6px', border: '1px solid #E5E7EB', borderRadius: '4px', fontSize: '0.8rem' }}
+                                style={{
+                                  width: '100%',
+                                  padding: '4px 6px',
+                                  border: '1px solid #E5E7EB',
+                                  borderRadius: '4px',
+                                  fontSize: '0.8rem',
+                                  backgroundColor: isRootRow ? '#F9FAFB' : '#FFFFFF',
+                                  color: isRootRow ? '#4B5563' : '#1F2937',
+                                  fontWeight: isRootRow ? '700' : 'normal',
+                                  cursor: isRootRow ? 'not-allowed' : 'text'
+                                }}
                               />
-                              {activeTypeRow === row.id && levelDepth > 0 && (() => {
+                              {!isRootRow && activeTypeRow === row.id && levelDepth > 0 && (() => {
                                 const query = (row.type || '').toLowerCase().trim();
                                 const filtered = query
                                   ? loaiOptions.filter(o => o.toLowerCase().includes(query)).slice(0, 100)
@@ -1498,8 +1545,20 @@ const ProductCreateView = () => {
                           <td style={{ padding: '8px' }}>
                             <select
                               value={row.stageFrom || 'Tạo phôi'}
+                              disabled={isRootRow}
                               onChange={(e) => updateBomRow(row.id, 'stageFrom', e.target.value)}
-                              style={{ width: '100%', padding: '4px 6px', border: '1px solid #D1D5DB', borderRadius: '4px', fontSize: '0.8rem', backgroundColor: '#FFF', fontWeight: '600', color: '#1F2937', outline: 'none' }}
+                              style={{
+                                width: '100%',
+                                padding: '4px 6px',
+                                border: '1px solid #D1D5DB',
+                                borderRadius: '4px',
+                                fontSize: '0.8rem',
+                                backgroundColor: isRootRow ? '#F9FAFB' : '#FFF',
+                                fontWeight: '600',
+                                color: isRootRow ? '#4B5563' : '#1F2937',
+                                cursor: isRootRow ? 'not-allowed' : 'pointer',
+                                outline: 'none'
+                              }}
                             >
                               {Array.from(new Set([...defaultStageOptions, row.stageFrom].filter(Boolean))).map((stg) => (
                                 <option key={stg} value={stg}>{stg}</option>
@@ -1511,8 +1570,20 @@ const ProductCreateView = () => {
                           <td style={{ padding: '8px' }}>
                             <select
                               value={row.stageTo || 'Đóng gói'}
+                              disabled={isRootRow}
                               onChange={(e) => updateBomRow(row.id, 'stageTo', e.target.value)}
-                              style={{ width: '100%', padding: '4px 6px', border: '1px solid #D1D5DB', borderRadius: '4px', fontSize: '0.8rem', backgroundColor: '#FFF', fontWeight: '600', color: '#1F2937', outline: 'none' }}
+                              style={{
+                                width: '100%',
+                                padding: '4px 6px',
+                                border: '1px solid #D1D5DB',
+                                borderRadius: '4px',
+                                fontSize: '0.8rem',
+                                backgroundColor: isRootRow ? '#F9FAFB' : '#FFF',
+                                fontWeight: '600',
+                                color: isRootRow ? '#4B5563' : '#1F2937',
+                                cursor: isRootRow ? 'not-allowed' : 'pointer',
+                                outline: 'none'
+                              }}
                             >
                               {Array.from(new Set([...defaultStageOptions, row.stageTo].filter(Boolean))).map((stg) => (
                                 <option key={stg} value={stg}>{stg}</option>
@@ -1525,9 +1596,21 @@ const ProductCreateView = () => {
                             <input
                               type="text"
                               value={row.compCode || ''}
+                              readOnly={isRootRow}
+                              disabled={isRootRow}
                               onChange={(e) => updateBomRow(row.id, 'compCode', e.target.value)}
                               placeholder="Mã TP..."
-                              style={{ width: '100%', padding: '4px 6px', border: '1px solid #E5E7EB', borderRadius: '4px', fontSize: '0.8rem', fontWeight: '700' }}
+                              style={{
+                                width: '100%',
+                                padding: '4px 6px',
+                                border: '1px solid #E5E7EB',
+                                borderRadius: '4px',
+                                fontSize: '0.8rem',
+                                fontWeight: '700',
+                                backgroundColor: isRootRow ? '#F9FAFB' : '#FFFFFF',
+                                color: isRootRow ? '#1F2937' : '#1F2937',
+                                cursor: isRootRow ? 'not-allowed' : 'text'
+                              }}
                             />
                           </td>
 
@@ -1542,12 +1625,15 @@ const ProductCreateView = () => {
                                   id={`compname-input-${row.id}`}
                                   type="text"
                                   value={row.compName || ''}
+                                  readOnly={isRootRow}
+                                  disabled={isRootRow}
                                   onChange={(e) => {
+                                    if (isRootRow) return;
                                     updateBomRow(row.id, 'compName', e.target.value);
                                     if (levelDepth > 0) setActiveCompNameRow(row.id);
                                   }}
                                   onFocus={() => {
-                                    if (levelDepth === 0) return;
+                                    if (isRootRow || levelDepth === 0) return;
                                     setActiveCompNameRow(row.id);
                                     const el = document.getElementById(`compname-input-${row.id}`);
                                     if (el) {
@@ -1565,7 +1651,7 @@ const ProductCreateView = () => {
                                     }
                                   }}
                                   onBlur={() => {
-                                    if (levelDepth === 0) return;
+                                    if (isRootRow || levelDepth === 0) return;
                                     setTimeout(() => {
                                       if (selectingCompNameRef.current) return;
                                       const match = effectiveSuggestions.find(s => s.toLowerCase() === (row.compName || '').trim().toLowerCase());
@@ -1595,10 +1681,12 @@ const ProductCreateView = () => {
                                     borderRadius: '4px',
                                     fontSize: '0.8rem',
                                     fontWeight: levelDepth === 0 ? '700' : '400',
-                                    color: levelDepth === 0 ? '#5D3B32' : '#1F2937'
+                                    backgroundColor: isRootRow ? '#F9FAFB' : '#FFFFFF',
+                                    color: levelDepth === 0 ? '#5D3B32' : '#1F2937',
+                                    cursor: isRootRow ? 'not-allowed' : 'text'
                                   }}
                                 />
-                                {activeCompNameRow === row.id && levelDepth > 0 && (() => {
+                                {!isRootRow && activeCompNameRow === row.id && levelDepth > 0 && (() => {
                                   const query = (row.compName || '').toLowerCase().trim();
                                   const filtered = query
                                     ? effectiveSuggestions.filter(s => s.toLowerCase().includes(query)).slice(0, 100)
@@ -1654,8 +1742,20 @@ const ProductCreateView = () => {
                             <input
                               type="number"
                               value={row.quantity != null ? row.quantity : ''}
+                              readOnly={isRootRow}
+                              disabled={isRootRow}
                               onChange={(e) => updateBomRow(row.id, 'quantity', e.target.value)}
-                              style={{ width: '100%', padding: '4px', border: '1px solid #E5E7EB', borderRadius: '4px', textAlign: 'center', fontWeight: '700' }}
+                              style={{
+                                width: '100%',
+                                padding: '4px',
+                                border: '1px solid #E5E7EB',
+                                borderRadius: '4px',
+                                textAlign: 'center',
+                                fontWeight: '700',
+                                backgroundColor: isRootRow ? '#F9FAFB' : '#FFFFFF',
+                                color: isRootRow ? '#4B5563' : '#1F2937',
+                                cursor: isRootRow ? 'not-allowed' : 'text'
+                              }}
                             />
                           </td>
 
@@ -1664,8 +1764,19 @@ const ProductCreateView = () => {
                             <input
                               type="text"
                               value={row.unit || ''}
+                              readOnly={isRootRow}
+                              disabled={isRootRow}
                               onChange={(e) => updateBomRow(row.id, 'unit', e.target.value)}
-                              style={{ width: '100%', padding: '4px', border: '1px solid #E5E7EB', borderRadius: '4px', textAlign: 'center' }}
+                              style={{
+                                width: '100%',
+                                padding: '4px',
+                                border: '1px solid #E5E7EB',
+                                borderRadius: '4px',
+                                textAlign: 'center',
+                                backgroundColor: isRootRow ? '#F9FAFB' : '#FFFFFF',
+                                color: isRootRow ? '#4B5563' : '#1F2937',
+                                cursor: isRootRow ? 'not-allowed' : 'text'
+                              }}
                             />
                           </td>
 
@@ -1674,8 +1785,19 @@ const ProductCreateView = () => {
                             <input
                               type="text"
                               value={row.material || ''}
+                              readOnly={isRootRow}
+                              disabled={isRootRow}
                               onChange={(e) => updateBomRow(row.id, 'material', e.target.value)}
-                              style={{ width: '100%', padding: '4px 6px', border: '1px solid #E5E7EB', borderRadius: '4px', fontSize: '0.8rem' }}
+                              style={{
+                                width: '100%',
+                                padding: '4px 6px',
+                                border: '1px solid #E5E7EB',
+                                borderRadius: '4px',
+                                fontSize: '0.8rem',
+                                backgroundColor: isRootRow ? '#F9FAFB' : '#FFFFFF',
+                                color: isRootRow ? '#4B5563' : '#1F2937',
+                                cursor: isRootRow ? 'not-allowed' : 'text'
+                              }}
                             />
                           </td>
 
@@ -1686,34 +1808,67 @@ const ProductCreateView = () => {
                                 type="number"
                                 placeholder="D"
                                 value={row.length || ''}
+                                readOnly={isRootRow}
+                                disabled={isRootRow}
                                 onChange={(e) => {
+                                  if (isRootRow) return;
                                   const val = parseFloat(e.target.value) || 0;
                                   const newSpec = [val, row.width || 0, row.height || 0].join('*');
                                   updateBomRow(row.id, { length: val, spec: newSpec });
                                 }}
-                                style={{ width: '33%', padding: '3px', border: '1px solid #E5E7EB', textAlign: 'center', fontSize: '0.75rem' }}
+                                style={{
+                                  width: '33%',
+                                  padding: '3px',
+                                  border: '1px solid #E5E7EB',
+                                  textAlign: 'center',
+                                  fontSize: '0.75rem',
+                                  backgroundColor: isRootRow ? '#F9FAFB' : '#FFFFFF',
+                                  cursor: isRootRow ? 'not-allowed' : 'text'
+                                }}
                               />
                               <input
                                 type="number"
                                 placeholder="R"
                                 value={row.width || ''}
+                                readOnly={isRootRow}
+                                disabled={isRootRow}
                                 onChange={(e) => {
+                                  if (isRootRow) return;
                                   const val = parseFloat(e.target.value) || 0;
                                   const newSpec = [row.length || 0, val, row.height || 0].join('*');
                                   updateBomRow(row.id, { width: val, spec: newSpec });
                                 }}
-                                style={{ width: '33%', padding: '3px', border: '1px solid #E5E7EB', textAlign: 'center', fontSize: '0.75rem' }}
+                                style={{
+                                  width: '33%',
+                                  padding: '3px',
+                                  border: '1px solid #E5E7EB',
+                                  textAlign: 'center',
+                                  fontSize: '0.75rem',
+                                  backgroundColor: isRootRow ? '#F9FAFB' : '#FFFFFF',
+                                  cursor: isRootRow ? 'not-allowed' : 'text'
+                                }}
                               />
                               <input
                                 type="number"
                                 placeholder="C"
                                 value={row.height || ''}
+                                readOnly={isRootRow}
+                                disabled={isRootRow}
                                 onChange={(e) => {
+                                  if (isRootRow) return;
                                   const val = parseFloat(e.target.value) || 0;
                                   const newSpec = [row.length || 0, row.width || 0, val].join('*');
                                   updateBomRow(row.id, { height: val, spec: newSpec });
                                 }}
-                                style={{ width: '33%', padding: '3px', border: '1px solid #E5E7EB', textAlign: 'center', fontSize: '0.75rem' }}
+                                style={{
+                                  width: '33%',
+                                  padding: '3px',
+                                  border: '1px solid #E5E7EB',
+                                  textAlign: 'center',
+                                  fontSize: '0.75rem',
+                                  backgroundColor: isRootRow ? '#F9FAFB' : '#FFFFFF',
+                                  cursor: isRootRow ? 'not-allowed' : 'text'
+                                }}
                               />
                             </div>
                           </td>
@@ -1723,8 +1878,19 @@ const ProductCreateView = () => {
                             <input
                               type="text"
                               value={row.volume != null ? row.volume : ''}
+                              readOnly={isRootRow}
+                              disabled={isRootRow}
                               onChange={(e) => updateBomRow(row.id, 'volume', e.target.value)}
-                              style={{ width: '100%', padding: '4px', border: '1px solid #E5E7EB', borderRadius: '4px', textAlign: 'center', color: '#6B7280' }}
+                              style={{
+                                width: '100%',
+                                padding: '4px',
+                                border: '1px solid #E5E7EB',
+                                borderRadius: '4px',
+                                textAlign: 'center',
+                                color: '#6B7280',
+                                backgroundColor: isRootRow ? '#F9FAFB' : '#FFFFFF',
+                                cursor: isRootRow ? 'not-allowed' : 'text'
+                              }}
                             />
                           </td>
 
@@ -1733,8 +1899,18 @@ const ProductCreateView = () => {
                             <input
                               type="text"
                               value={row.note || ''}
+                              readOnly={isRootRow}
+                              disabled={isRootRow}
                               onChange={(e) => updateBomRow(row.id, 'note', e.target.value)}
-                              style={{ width: '100%', padding: '4px 6px', border: '1px solid #E5E7EB', borderRadius: '4px', fontSize: '0.8rem' }}
+                              style={{
+                                width: '100%',
+                                padding: '4px 6px',
+                                border: '1px solid #E5E7EB',
+                                borderRadius: '4px',
+                                fontSize: '0.8rem',
+                                backgroundColor: isRootRow ? '#F9FAFB' : '#FFFFFF',
+                                cursor: isRootRow ? 'not-allowed' : 'text'
+                              }}
                             />
                           </td>
 
@@ -1749,14 +1925,16 @@ const ProductCreateView = () => {
                               >
                                 <Plus size={15} />
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveBomRow(row.id)}
-                                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#EF4444', padding: '3px' }}
-                                title="Xóa dòng"
-                              >
-                                <Trash2 size={15} />
-                              </button>
+                              {!isRootRow && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveBomRow(row.id)}
+                                  style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#EF4444', padding: '3px' }}
+                                  title="Xóa dòng"
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>

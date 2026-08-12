@@ -27,17 +27,17 @@ from modules.production.models.category import Category
 from datetime import datetime
 
 CATEGORIES_DATA = [
-    {"name": "Dòng hàng APT", "prefix": "APT", "description": "Dòng hàng APT"},
-    {"name": "Dòng hàng ATL", "prefix": "ATL", "description": "Dòng hàng ATL"},
-    {"name": "Dòng hàng FOL", "prefix": "FOL", "description": "Dòng hàng FOL"},
-    {"name": "Dòng hàng ADV", "prefix": "ADV", "description": "Dòng hàng ADV"},
-    {"name": "Dòng hàng TPH", "prefix": "TPH", "description": "Dòng hàng TPH"},
-    {"name": "Dòng hàng HOR", "prefix": "HOR", "description": "Dòng hàng HOR"},
-    {"name": "Dòng hàng EYC", "prefix": "EYC", "description": "Dòng hàng EYC"},
-    {"name": "Dòng hàng COV", "prefix": "COV", "description": "Dòng hàng COV"},
-    {"name": "Dòng hàng TIN", "prefix": "TIN", "description": "Dòng hàng TIN"},
-    {"name": "Dòng hàng BEZ", "prefix": "BEZ", "description": "Dòng hàng BEZ"},
-    {"name": "Dòng hàng MBC", "prefix": "MBC", "description": "Dòng hàng MBC"},
+    {"name": "APT", "prefix": "APT", "description": "Dòng hàng APT"},
+    {"name": "ATL", "prefix": "ATL", "description": "Dòng hàng ATL"},
+    {"name": "FOL", "prefix": "FOL", "description": "Dòng hàng FOL"},
+    {"name": "ADV", "prefix": "ADV", "description": "Dòng hàng ADV"},
+    {"name": "TPH", "prefix": "TPH", "description": "Dòng hàng TPH"},
+    {"name": "HOR", "prefix": "HOR", "description": "Dòng hàng HOR"},
+    {"name": "EYC", "prefix": "EYC", "description": "Dòng hàng EYC"},
+    {"name": "COV", "prefix": "COV", "description": "Dòng hàng COV"},
+    {"name": "TIN", "prefix": "TIN", "description": "Dòng hàng TIN"},
+    {"name": "BEZ", "prefix": "BEZ", "description": "Dòng hàng BEZ"},
+    {"name": "MBC", "prefix": "MBC", "description": "Dòng hàng MBC"},
 ]
 
 def seed_categories():

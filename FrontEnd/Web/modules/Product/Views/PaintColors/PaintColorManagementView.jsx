@@ -274,8 +274,15 @@ const PaintColorManagementView = ({ isEmbedded = false }) => {
       setSyncing(true);
       const res = await api.post('/master-products/sync-bom-data');
       if (res && res.status === 'success') {
-        if (toast) toast('success', `Đã đồng bộ thành công ${res.unique_paint_colors_inserted} mẫu màu sơn từ BOM!`);
+        if (toast) toast('success', `Đã tự động đọc full BOM và đồng bộ thành công ${res.unique_paint_colors_inserted} mẫu màu sơn!`);
         fetchPaintColors();
+        // Refresh paint suggestions lookups
+        const sugRes = await api.get('/master-products/paint-color-suggestions').catch(() => null);
+        if (sugRes) {
+          setColorCodeSuggestions(sugRes.color_codes || []);
+          setColorNameSuggestions(sugRes.color_names || []);
+          setSupplierSuggestions(sugRes.suppliers || []);
+        }
       } else {
         if (toast) toast('error', res?.message || 'Không thể đồng bộ dữ liệu BOM');
       }
@@ -302,13 +309,9 @@ const PaintColorManagementView = ({ isEmbedded = false }) => {
           isFilterOpen={showFilterPanel}
           onFilterToggle={() => setShowFilterPanel(!showFilterPanel)}
           activeFiltersCount={activeFiltersCount}
-          importActions={[
-            {
-              label: syncing ? 'Đang trích xuất BOM...' : 'Đồng bộ từ BOM',
-              icon: <RefreshCw size={14} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />,
-              onClick: handleSyncBom
-            }
-          ]}
+          onSync={handleSyncBom}
+          isSyncing={syncing}
+          syncLabel="Đồng bộ từ BOM"
           onCreate={handleOpenCreate}
           createLabel="Tạo mới"
           hasWritePermission={true}

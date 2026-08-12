@@ -320,8 +320,16 @@ const ProductDetailsManagementView = ({ isEmbedded = false }) => {
       setSyncing(true);
       const res = await api.post('/master-products/sync-bom-data');
       if (res && res.status === 'success') {
-        if (toast) toast('success', `Đã đồng bộ thành công ${res.unique_product_details_inserted} chi tiết từ BOM!`);
+        if (toast) toast('success', `Đã tự động đọc full BOM và đồng bộ thành công ${res.unique_product_details_inserted} chi tiết!`);
         fetchDetails();
+        // Refresh suggestions lookups
+        const sugRes = await api.get('/master-products/detail-suggestions').catch(() => null);
+        if (sugRes) {
+          setDetailSuggestions(sugRes.detail_names || []);
+          setParentSuggestions(sugRes.parent_names || []);
+          setParentProductMap(sugRes.parent_product_map || {});
+          setDetailStageMap(sugRes.detail_stage_map || {});
+        }
       } else {
         if (toast) toast('error', res?.message || 'Không thể đồng bộ dữ liệu BOM');
       }
@@ -348,13 +356,9 @@ const ProductDetailsManagementView = ({ isEmbedded = false }) => {
           isFilterOpen={showFilterPanel}
           onFilterToggle={() => setShowFilterPanel(!showFilterPanel)}
           activeFiltersCount={activeFiltersCount}
-          importActions={[
-            {
-              label: syncing ? 'Đang trích xuất BOM...' : 'Đồng bộ từ BOM',
-              icon: <RefreshCw size={14} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />,
-              onClick: handleSyncBom
-            }
-          ]}
+          onSync={handleSyncBom}
+          isSyncing={syncing}
+          syncLabel="Đồng bộ từ BOM"
           onCreate={handleOpenCreate}
           createLabel="Tạo mới"
           hasWritePermission={true}
@@ -468,13 +472,12 @@ const ProductDetailsManagementView = ({ isEmbedded = false }) => {
                     <thead>
                       <tr>
                         <th style={{ width: '60px', textAlign: 'center' }}>STT</th>
-                        <th>SẢN PHẨM MẪU</th>
+                        <th>THÀNH PHẨM</th>
                         <th>TÊN CHI TIẾT</th>
                         <th style={{ textAlign: 'center', width: '90px' }}>SỐ LƯỢNG</th>
                         <th style={{ textAlign: 'center', width: '80px' }}>ĐƠN VỊ</th>
                         <th>CÔNG ĐOẠN GIAO</th>
                         <th>CÔNG ĐOẠN NHẬN</th>
-                        <th>THÀNH PHẨM</th>
                         <th>VẬT LIỆU</th>
                         <th style={{ textAlign: 'center', width: '100px' }}>THAO TÁC</th>
                       </tr>
@@ -485,16 +488,14 @@ const ProductDetailsManagementView = ({ isEmbedded = false }) => {
                           <td style={{ textAlign: 'center', fontWeight: '700' }}>
                             {(currentPage - 1) * pageSize + idx + 1}
                           </td>
-                          <td>
-                            <strong style={{ color: '#2D1A12' }}>{item.product_sku}</strong>
-                            <div style={{ fontSize: '0.78rem', color: '#64748B' }}>{item.product_name}</div>
+                          <td style={{ fontWeight: '600', color: '#2D1A12' }}>
+                            {item.parent_name || '---'}
                           </td>
                           <td style={{ fontWeight: '800', color: '#2D1A12' }}>{item.name}</td>
                           <td style={{ textAlign: 'center', fontWeight: '800' }}>{item.quantity}</td>
                           <td style={{ textAlign: 'center' }}>{item.unit}</td>
                           <td>{item.input_stage || '---'}</td>
                           <td>{item.output_stage || '---'}</td>
-                          <td>{item.parent_name || '---'}</td>
                           <td>{item.material || '---'}</td>
                           <td style={{ textAlign: 'center', position: 'relative' }}>
                             <button
@@ -528,7 +529,7 @@ const ProductDetailsManagementView = ({ isEmbedded = false }) => {
                       ))}
                       {items.length === 0 && (
                         <tr>
-                          <td colSpan={10} style={{ textAlign: 'center', color: '#94a3b8', padding: '3rem' }}>
+                          <td colSpan={9} style={{ textAlign: 'center', color: '#94a3b8', padding: '3rem' }}>
                             Không tìm thấy dữ liệu chi tiết nào.
                           </td>
                         </tr>

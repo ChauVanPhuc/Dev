@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Filter, Plus } from 'lucide-react';
+import { Search, Filter, Plus, RefreshCw } from 'lucide-react';
 import './PageToolbar.css';
 
 /**
@@ -25,6 +25,9 @@ import './PageToolbar.css';
  * @param {number}   activeFiltersCount - Số filter đang active (hiện badge)
  *
  * ─── Action Buttons (right side, all optional) ───
+ * @param {function} onSync             - Handler cho nút "Đồng bộ từ BOM" trực tiếp
+ * @param {boolean}  isSyncing          - Trạng thái đang đồng bộ
+ * @param {string}   syncLabel          - Label tuỳ chỉnh cho nút sync (default: "Đồng bộ từ BOM")
  * @param {Array}    extraActions       - Mảng items cho nút "Khác" dropdown: { label, icon, onClick, badge?, color?, divider? }
  * @param {Array}    importActions      - Mảng items cho nút "Nhập dữ liệu" dropdown: { label, icon, onClick }
  * @param {function} onExport           - Handler cho nút "Xuất dữ liệu"
@@ -58,6 +61,9 @@ const PageToolbar = ({
   activeFiltersCount = 0,
 
   // Action buttons
+  onSync,
+  isSyncing = false,
+  syncLabel = 'Đồng bộ từ BOM',
   extraActions = [],
   importActions = [],
   createActions = [],
@@ -181,8 +187,45 @@ const PageToolbar = ({
         )}
       </div>
 
-      {/* ═══ RIGHT SIDE: Khác + Nhập + Xuất + Tạo mới ═══ */}
+      {/* ═══ RIGHT SIDE: Đồng bộ + Khác + Nhập + Xuất + Tạo mới ═══ */}
       <div className="page-toolbar__right">
+        {/* 0. NÚT TỰ ĐỘNG ĐỒNG BỘ BOM */}
+        {onSync && (
+          <button
+            type="button"
+            className="page-toolbar__action-btn page-toolbar__sync-btn"
+            onClick={onSync}
+            disabled={isSyncing}
+            title="Tự động đồng bộ và nạp chính xác toàn bộ dữ liệu từ Master BOM"
+            style={{
+              backgroundColor: '#1E293B',
+              color: '#F8FAFC',
+              border: '1px solid #334155',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '7px',
+              padding: '0 14px',
+              height: '34px',
+              borderRadius: '8px',
+              fontWeight: '700',
+              fontSize: '0.82rem',
+              cursor: isSyncing ? 'wait' : 'pointer',
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.08)'
+            }}
+          >
+            <RefreshCw
+              size={14}
+              strokeWidth={2.5}
+              style={{
+                animation: isSyncing ? 'spin 1s linear infinite' : 'none',
+                color: isSyncing ? '#38BDF8' : '#38BDF8'
+              }}
+            />
+            <span>{isSyncing ? 'Đang đọc full BOM...' : (syncLabel || 'Đồng bộ từ BOM')}</span>
+          </button>
+        )}
+
         {/* 1. NÚT KHÁC (Dropdown) */}
         {showOtherBtn && (
           <div className="page-toolbar__dropdown-container" ref={otherDropdownRef}>
