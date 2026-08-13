@@ -23,14 +23,14 @@ class InspectionGuideSubStepOut(BaseModel):
 
 class InspectionGuideSubStepCreate(BaseModel):
     sub_step_no: int
-    title: Optional[str] = Field(None, max_length=250)
-    content: Optional[str] = Field(None, max_length=4000)
+    title: Optional[str] = Field(None, max_length=500)
+    content: Optional[str] = Field(None, max_length=50000)
 
 
 class InspectionGuideSubStepUpdate(BaseModel):
     sub_step_no: Optional[int] = None
-    title: Optional[str] = Field(None, max_length=250)
-    content: Optional[str] = Field(None, max_length=4000)
+    title: Optional[str] = Field(None, max_length=500)
+    content: Optional[str] = Field(None, max_length=50000)
 
 
 class InspectionGuideStepOut(BaseModel):
@@ -45,14 +45,14 @@ class InspectionGuideStepOut(BaseModel):
 
 class InspectionGuideStepCreate(BaseModel):
     step_no: int
-    title: str = Field(..., max_length=250)
-    content: Optional[str] = Field(None, max_length=4000)
+    title: str = Field(..., max_length=500)
+    content: Optional[str] = Field(None, max_length=50000)
 
 
 class InspectionGuideStepUpdate(BaseModel):
     step_no: Optional[int] = None
-    title: Optional[str] = Field(None, max_length=250)
-    content: Optional[str] = Field(None, max_length=4000)
+    title: Optional[str] = Field(None, max_length=500)
+    content: Optional[str] = Field(None, max_length=50000)
 
 
 class InspectionGuideAssignmentOut(BaseModel):

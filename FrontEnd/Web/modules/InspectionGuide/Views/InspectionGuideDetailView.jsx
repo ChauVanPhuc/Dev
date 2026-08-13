@@ -184,28 +184,49 @@ const InspectionGuideDetailView = () => {
     }
   };
 
+  const formatApiError = (err, fallback = 'Có lỗi xảy ra, vui lòng thử lại.') => {
+    const detail = err?.response?.data?.detail;
+    if (Array.isArray(detail)) {
+      return detail.map(d => `${(d.loc || []).join('.')}: ${d.msg || ''}`).join('\n');
+    }
+    if (typeof detail === 'string') return detail;
+    if (detail && typeof detail === 'object' && detail.message) return String(detail.message);
+    if (err?.message) return err.message;
+    return fallback;
+  };
+
   // Update current step
   const handleSaveStep = async () => {
     if (!selectedStep) return;
-    if (!stepDraft.title.trim()) {
+    const title = (stepDraft.title || '').trim();
+    const content = (stepDraft.content || '').trim();
+    if (!title) {
       if (toast) toast('warning', 'Vui lòng nhập tiêu đề bước kiểm tra.');
+      return;
+    }
+    if (title.length > 500) {
+      if (toast) toast('warning', 'Tiêu đề quá dài (tối đa 500 ký tự).');
+      return;
+    }
+    if (content.length > 50000) {
+      if (toast) toast('warning', 'Nội dung quá dài (tối đa 50000 ký tự).');
       return;
     }
     setSavingStep(true);
     try {
       await api.put(`/inspection-guides/${id}/steps/${selectedStep.id}`, {
         step_no: selectedStep.step_no,
-        title: stepDraft.title.trim(),
-        content: stepDraft.content.trim()
+        title,
+        content
       });
       if (toast) toast('success', 'Đã lưu nội dung bước kiểm tra thành công!');
       setGuide(prev => ({
         ...prev,
-        steps: prev.steps.map(s => s.id === selectedStep.id ? { ...s, title: stepDraft.title.trim(), content: stepDraft.content.trim() } : s)
+        steps: prev.steps.map(s => s.id === selectedStep.id ? { ...s, title, content } : s)
       }));
     } catch (err) {
       console.error('Lỗi lưu bước:', err);
-      if (toast) toast('error', err?.response?.data?.detail || err.message || 'Lỗi cập nhật bước.');
+      if (toast) toast('error', formatApiError(err, 'Lỗi cập nhật bước.'));
     } finally {
       setSavingStep(false);
     }
