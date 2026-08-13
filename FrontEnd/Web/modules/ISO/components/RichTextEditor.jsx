@@ -7,16 +7,109 @@ import {
 const RichTextEditor = ({ value, onChange, placeholder, style = {}, minHeight }) => {
   const editorRef = React.useRef(null);
 
+  const initialCleanedRef = React.useRef(false);
+
+  const cleanHtml = (html) => {
+    if (!html) return '';
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const allowedTags = new Set(['p','br','b','strong','i','em','u','s','strike','ul','ol','li','h1','h2','h3','h4','h5','h6','a','img','table','thead','tbody','tr','td','th','pre','blockquote','span','font','sup','sub']);
+    const allowedStyles = new Set(['color', 'background-color']);
+
+    const filterStyle = (styleStr) => {
+      if (!styleStr) return '';
+      return styleStr
+        .split(';')
+        .map(s => s.trim())
+        .filter(s => {
+          const prop = s.split(':')[0]?.trim().toLowerCase();
+          return allowedStyles.has(prop);
+        })
+        .join(';');
+    };
+
+    const cleanNode = (node) => {
+      if (node.nodeType === Node.TEXT_NODE) return node.cloneNode(false);
+      if (node.nodeType === Node.COMMENT_NODE) return null;
+      if (node.nodeType !== Node.ELEMENT_NODE) return null;
+      const tag = node.tagName.toLowerCase();
+      if (tag === 'script' || tag === 'style' || tag === 'meta' || tag === 'title' || tag === 'link' || tag === 'head') return null;
+      if (!allowedTags.has(tag)) {
+        const fragment = document.createDocumentFragment();
+        node.childNodes.forEach(child => {
+          const cleaned = cleanNode(child);
+          if (cleaned) fragment.appendChild(cleaned);
+        });
+        return fragment;
+      }
+      const el = document.createElement(tag);
+      if (tag === 'a' && node.getAttribute('href')) el.setAttribute('href', node.getAttribute('href'));
+      if ((tag === 'img' || tag === 'image') && node.getAttribute('src')) {
+        el.setAttribute('src', node.getAttribute('src'));
+        if (node.getAttribute('alt')) el.setAttribute('alt', node.getAttribute('alt'));
+      }
+      if ((tag === 'td' || tag === 'th')) {
+        const colspan = node.getAttribute('colspan');
+        const rowspan = node.getAttribute('rowspan');
+        if (colspan) el.setAttribute('colspan', colspan);
+        if (rowspan) el.setAttribute('rowspan', rowspan);
+      }
+      const style = filterStyle(node.getAttribute('style'));
+      if (style) el.setAttribute('style', style);
+      const colorAttr = node.getAttribute('color');
+      if ((tag === 'font' || tag === 'span') && colorAttr) el.setAttribute('color', colorAttr);
+      node.childNodes.forEach(child => {
+        const cleaned = cleanNode(child);
+        if (cleaned) el.appendChild(cleaned);
+      });
+      if ((tag === 'span' || tag === 'font' || tag === 'div') && !el.hasAttributes()) {
+        const fragment = document.createDocumentFragment();
+        while (el.firstChild) fragment.appendChild(el.firstChild);
+        return fragment;
+      }
+      if (el.childNodes.length === 0 && (tag === 'p' || tag === 'div')) return null;
+      return el;
+    };
+
+    const fragment = document.createDocumentFragment();
+    doc.body.childNodes.forEach(child => {
+      const cleaned = cleanNode(child);
+      if (cleaned) fragment.appendChild(cleaned);
+    });
+    const wrapper = document.createElement('div');
+    wrapper.appendChild(fragment);
+    return wrapper.innerHTML;
+  };
+
   React.useEffect(() => {
-    if (editorRef.current && editorRef.current.innerHTML !== (value || '')) {
-      editorRef.current.innerHTML = value || '';
+    if (!editorRef.current) return;
+    const desired = cleanHtml(value || '');
+    if (editorRef.current.innerHTML !== desired) {
+      editorRef.current.innerHTML = desired;
     }
-  }, [value]);
+    if (value && value !== desired && !initialCleanedRef.current) {
+      onChange(desired);
+      initialCleanedRef.current = true;
+    }
+  }, [value, onChange, cleanHtml]);
 
   const handleInput = () => {
     if (editorRef.current) {
       onChange(editorRef.current.innerHTML);
     }
+  };
+
+  const handlePaste = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const html = e.clipboardData.getData('text/html');
+    const text = e.clipboardData.getData('text/plain');
+    if (html) {
+      document.execCommand('insertHTML', false, cleanHtml(html));
+    } else if (text) {
+      document.execCommand('insertText', false, text);
+    }
+    handleInput();
   };
 
   const executeCommand = (e, command, val = null) => {
@@ -292,6 +385,7 @@ const RichTextEditor = ({ value, onChange, placeholder, style = {}, minHeight })
         ref={editorRef}
         contentEditable
         onInput={handleInput}
+        onPaste={handlePaste}
         className="rich-editor-canvas"
         style={{
           minHeight: minHeight ? (typeof minHeight === 'number' ? `${minHeight}px` : minHeight) : (style.minHeight ? (typeof style.minHeight === 'number' ? `${style.minHeight}px` : style.minHeight) : '200px'),

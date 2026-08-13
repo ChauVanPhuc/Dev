@@ -60,6 +60,84 @@ export const handlePasteCleanText = (e, onUpdate) => {
   }
 };
 
+const ALLOWED_TAGS = new Set(['p','br','b','strong','i','em','u','s','strike','ul','ol','li','h1','h2','h3','h4','h5','h6','a','img','table','thead','tbody','tr','td','th','pre','blockquote','span','font','sup','sub']);
+const ALLOWED_STYLES = new Set(['color', 'background-color']);
+
+const filterStyle = (styleStr) => {
+  if (!styleStr) return '';
+  return styleStr
+    .split(';')
+    .map(s => s.trim())
+    .filter(s => {
+      const prop = s.split(':')[0]?.trim().toLowerCase();
+      return ALLOWED_STYLES.has(prop);
+    })
+    .join(';');
+};
+
+const cleanHtml = (html) => {
+  if (!html) return '';
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+
+  const cleanNode = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) return node.cloneNode(false);
+    if (node.nodeType === Node.COMMENT_NODE) return null;
+    if (node.nodeType !== Node.ELEMENT_NODE) return null;
+
+    const tag = node.tagName.toLowerCase();
+    if (tag === 'script' || tag === 'style' || tag === 'meta' || tag === 'title' || tag === 'link' || tag === 'head') return null;
+
+    if (!ALLOWED_TAGS.has(tag)) {
+      const fragment = document.createDocumentFragment();
+      node.childNodes.forEach(child => {
+        const cleaned = cleanNode(child);
+        if (cleaned) fragment.appendChild(cleaned);
+      });
+      return fragment;
+    }
+
+    const el = document.createElement(tag);
+    if (tag === 'a' && node.getAttribute('href')) el.setAttribute('href', node.getAttribute('href'));
+    if ((tag === 'img' || tag === 'image') && node.getAttribute('src')) {
+      el.setAttribute('src', node.getAttribute('src'));
+      if (node.getAttribute('alt')) el.setAttribute('alt', node.getAttribute('alt'));
+    }
+    if ((tag === 'td' || tag === 'th')) {
+      const colspan = node.getAttribute('colspan');
+      const rowspan = node.getAttribute('rowspan');
+      if (colspan) el.setAttribute('colspan', colspan);
+      if (rowspan) el.setAttribute('rowspan', rowspan);
+    }
+    const style = filterStyle(node.getAttribute('style'));
+    if (style) el.setAttribute('style', style);
+    const colorAttr = node.getAttribute('color');
+    if ((tag === 'font' || tag === 'span') && colorAttr) el.setAttribute('color', colorAttr);
+    node.childNodes.forEach(child => {
+      const cleaned = cleanNode(child);
+      if (cleaned) el.appendChild(cleaned);
+    });
+    if ((tag === 'span' || tag === 'font' || tag === 'div') && !el.hasAttributes()) {
+      const fragment = document.createDocumentFragment();
+      while (el.firstChild) fragment.appendChild(el.firstChild);
+      return fragment;
+    }
+    if (el.childNodes.length === 0 && (tag === 'p' || tag === 'div')) return null;
+    return el;
+  };
+
+  const fragment = document.createDocumentFragment();
+  doc.body.childNodes.forEach(child => {
+    const cleaned = cleanNode(child);
+    if (cleaned) fragment.appendChild(cleaned);
+  });
+  const wrapper = document.createElement('div');
+  wrapper.appendChild(fragment);
+  return wrapper.innerHTML;
+};
+
+const isHtml = (text) => new RegExp('<\\/?(p|span|div|font|b|i|u|s|strong|em|ul|ol|li|table|tr|td|th|a|img|h[1-6]|br|hr|pre|blockquote)', 'i').test(text);
+
 /**
  * Component hiển thị văn bản định dạng phong phú:
  * - Dòng bắt đầu bằng '✓' hoặc '✔': Hiển thị dấu tick xanh và in đậm tiêu chí
@@ -68,6 +146,24 @@ export const handlePasteCleanText = (e, onUpdate) => {
  */
 export const FormattedTextView = ({ text, style = {}, className = '' }) => {
   if (!text) return null;
+
+  if (isHtml(text)) {
+    return (
+      <div
+        className={className}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '6px',
+          fontSize: '13.5px',
+          lineHeight: '1.6',
+          color: '#374151',
+          ...style
+        }}
+        dangerouslySetInnerHTML={{ __html: cleanHtml(text) }}
+      />
+    );
+  }
 
   // Làm sạch ký tự trước khi render
   const sanitizedText = cleanWordClipboardText(text);
