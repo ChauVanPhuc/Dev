@@ -6,7 +6,7 @@ class RoleMin(BaseModel):
     id: int
     name: str
     description: Optional[str] = None
-    is_active: bool = True
+    is_active: Optional[bool] = True
 
     class Config:
         from_attributes = True
@@ -18,7 +18,7 @@ class PermissionBase(BaseModel):
     """
     name: str                      # Tên quyền (ví dụ: Create_Order, Delete_User, ...)
     description: Optional[str] = None # Mô tả chi tiết về quyền này
-    is_active: bool = True         # Trạng thái hoạt động
+    is_active: Optional[bool] = True         # Trạng thái hoạt động
     default_permissions: Optional[str] = None # Quyền mặc định dạng JSON
 
 class PermissionCreate(PermissionBase):

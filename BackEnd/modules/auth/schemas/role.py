@@ -10,7 +10,7 @@ class RoleBase(BaseModel):
     """
     name: str                      # Tên vai trò (ví dụ: Admin, Manager, Worker, ...)
     description: Optional[str] = None # Mô tả chi tiết vai trò
-    is_active: bool = True         # Trạng thái hoạt động
+    is_active: Optional[bool] = True         # Trạng thái hoạt động
     default_permissions: Optional[str] = None # Quyền mặc định dạng JSON
     created_at: Optional[datetime] = None # Ngày tạo bộ phận
 

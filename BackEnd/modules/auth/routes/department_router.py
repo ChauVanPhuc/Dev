@@ -33,7 +33,7 @@ def get_departments(
     """
     [GET] Lấy danh sách Bộ Phận (từ bảng departments), hỗ trợ lọc theo Phòng Ban (role_id).
     """
-    query = db.query(Department).filter(Department.name.isnot(None))
+    query = db.query(Department).filter(Department.name.isnot(None), Department.account_id.is_(None))
     if role_id is not None:
         query = query.filter(Department.role_id == role_id)
         
