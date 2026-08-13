@@ -185,43 +185,7 @@ export const ScreenProvider = ({ children }) => {
       };
     }
 
-    // 3. Match against DEFAULT_SCREENS_REGISTRY
-    if (DEFAULT_SCREENS_REGISTRY[path]) {
-      const def = DEFAULT_SCREENS_REGISTRY[path];
-      return {
-        screenCode: def.code || '',
-        title: def.title || '',
-        subtitle: def.subtitle || '',
-        isActive: true
-      };
-    }
-
-    const defaultPaths = Object.keys(DEFAULT_SCREENS_REGISTRY);
-    let defKey = defaultPaths.find(p => normalizePathForMatching(p) === lookupPathNormalized);
-    if (!defKey) {
-      defKey = defaultPaths.find(p => {
-        const pNorm = normalizePathForMatching(p);
-        if (!pNorm.includes(':')) return false;
-        const regexPattern = '^' + pNorm.replace(/:[a-zA-Z0-9_]+/g, '[^/]+') + '$';
-        try {
-          return new RegExp(regexPattern).test(lookupPathNormalized);
-        } catch {
-          return false;
-        }
-      });
-    }
-
-    if (defKey && DEFAULT_SCREENS_REGISTRY[defKey]) {
-      const def = DEFAULT_SCREENS_REGISTRY[defKey];
-      return {
-        screenCode: def.code || '',
-        title: def.title || '',
-        subtitle: def.subtitle || '',
-        isActive: true
-      };
-    }
-
-    // Default fallback if not matched
+    // If not configured in DB, return default system values
     return {
       screenCode: '',
       title: 'Hệ thống ERP G7',
