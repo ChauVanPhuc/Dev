@@ -21,9 +21,9 @@ const PaintColorManagementView = ({ isEmbedded = false }) => {
 
   useEffect(() => {
     if (!isEmbedded) {
-      if (setCustomTitle) setCustomTitle(title || 'Quản lý Mẫu sơn');
-      if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Quản lý danh sách mẫu màu sơn theo từng sản phẩm mẫu');
-      if (setCustomScreenCode) setCustomScreenCode(screenCode || 'KT03.3');
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
     }
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, isEmbedded, title, subtitle, screenCode]);
 
@@ -574,7 +574,7 @@ const PaintColorManagementView = ({ isEmbedded = false }) => {
               borderBottom: '1px solid #EADCC9'
             }}>
               <h3 style={{ fontSize: '1.25rem', fontWeight: '900', color: '#2D1A12', margin: 0 }}>
-                {editingItem ? 'KT03.3: Chỉnh sửa mẫu màu sơn' : 'KT03.3: Thêm mẫu màu sơn'}
+                {editingItem ? 'Chỉnh sửa mẫu màu sơn' : 'Thêm mẫu màu sơn'}
               </h3>
               <button
                 type="button"

@@ -21,9 +21,9 @@ const ShipmentListView = () => {
   const [localNotification, setLocalNotification] = useState(null);
 
   useEffect(() => {
-    if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Quản lý Xuất Cont');
-    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || 'Theo dõi và quản lý các chuyến hàng xuất cont');
-    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'CL03');
+    if (typeof setCustomTitle === 'function') setCustomTitle(title);
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || '');
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || '');
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
@@ -128,10 +128,7 @@ const ShipmentListView = () => {
   }, [allShipments]);
 
   // Page title configuration
-  useEffect(() => {
-    setCustomTitle('Lịch trình xuất cont');
-    setCustomSubtitle('Quản lý xuất cont · Quản lý bốc xếp hàng & xuất khẩu container');
-  }, []);
+  
 
   // Initial fetch and search trigger
   useEffect(() => {

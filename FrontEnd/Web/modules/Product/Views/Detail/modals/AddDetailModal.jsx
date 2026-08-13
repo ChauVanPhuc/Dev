@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import api from '@webShared/Services/api.service';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const labelStyle = {
   display: 'block',
@@ -25,6 +26,7 @@ const inputBaseStyle = {
 };
 
 const AddDetailModal = ({ productId, product, bomRows = [], detailRows = [], onClose, onSuccess }) => {
+  const modalMeta = useScreenMetadataCached('/admin/product/detail/modal/add-detail');
   // Option lists từ BOM (theo STT) để chọn thành phẩm cha
   const parentOptions = [
     { id: '', name: product?.name || 'Sản phẩm', stt: '' },
@@ -135,7 +137,8 @@ const AddDetailModal = ({ productId, product, bomRows = [], detailRows = [], onC
           borderBottom: '1px solid #EADCC9'
         }}>
           <h3 style={{ fontSize: '1.38rem', fontWeight: '900', color: '#2D1A12', margin: 0 }}>
-            KT03.1: Thêm chi tiết
+            {modalMeta.screenCode ? `${modalMeta.screenCode}: ` : ''}
+            {modalMeta.title || 'Thêm chi tiết'}
           </h3>
           <button
             onClick={onClose}

@@ -45,9 +45,9 @@ const OrderShippingMonitoringView = () => {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Quản lý kinh doanh');
-    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || 'KD04: Giám sát tiến độ đơn hàng');
-    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'KD04');
+    if (typeof setCustomTitle === 'function') setCustomTitle(title);
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || '');
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || '');
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   const [data, setData] = useState([]);

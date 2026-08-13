@@ -22,9 +22,9 @@ const ProductionRoutingView = () => {
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/production-routing');
 
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle(title || 'Quy trình - kế hoạch');
-    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'SX04: Quy trình sản xuất');
-    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'SX04');
+    if (setCustomTitle) setCustomTitle(title);
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   const [activeTab, setActiveTab] = useState('routing');

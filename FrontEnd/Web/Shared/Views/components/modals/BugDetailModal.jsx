@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { X, Upload, Image as ImageIcon } from 'lucide-react';
 import { bugService } from '@modules/System/Models/bug.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const BugDetailModal = ({ 
   show, 
@@ -12,6 +13,7 @@ const BugDetailModal = ({
   itUsers = [],
   onSubmit 
 }) => {
+  const modalMeta = useScreenMetadataCached('/admin/bugs/modal');
   const { toast } = useToast();
   const [formData, setFormData] = useState({
     screen_id: '',
@@ -304,7 +306,8 @@ const BugDetailModal = ({
           zIndex: 1
         }}>
           <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '800', color: '#111827' }}>
-            🐛 Khai báo lỗi
+            {modalMeta.screenCode ? `${modalMeta.screenCode}: ` : ''}
+            {modalMeta.title || '🐛 Khai báo lỗi'}
           </h3>
           <button type="button" onClick={onClose} style={{
             background: 'none', border: 'none', cursor: 'pointer',

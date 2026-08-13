@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { X } from 'lucide-react';
 import api from '@webShared/Services/api.service';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const labelStyle = {
   display: 'block',
@@ -35,6 +36,7 @@ const greyInputStyle = {
 };
 
 const AddComponentModal = ({ productId, product, bomRows = [], parentId = null, onClose, onSuccess, mode = 'detail' }) => {
+  const modalMeta = useScreenMetadataCached('/admin/product/detail/modal/add-component');
   // Option lists
   const root = bomRows[0];
   const parentOptions = [
@@ -243,7 +245,8 @@ const AddComponentModal = ({ productId, product, bomRows = [], parentId = null, 
           borderBottom: '1px solid #EADCC9'
         }}>
           <h3 style={{ fontSize: '1.38rem', fontWeight: '900', color: '#2D1A12', margin: 0 }}>
-            KT03.2: Thêm thành phần
+            {modalMeta.screenCode ? `${modalMeta.screenCode}: ` : ''}
+            {modalMeta.title || 'Thêm thành phần'}
           </h3>
           <button
             onClick={onClose}

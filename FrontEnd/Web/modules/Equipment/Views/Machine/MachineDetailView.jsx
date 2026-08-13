@@ -88,9 +88,9 @@ const MachineDetailView = () => {
   }, [id]);
 
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle(title || 'Thông tin thiết bị máy móc');
-    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Hồ sơ chi tiết thiết bị máy móc, lịch sử bảo dưỡng và hướng dẫn vận hành chuẩn.');
-    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'MC37.5');
+    if (setCustomTitle) setCustomTitle(title);
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
   }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   if (loading) {

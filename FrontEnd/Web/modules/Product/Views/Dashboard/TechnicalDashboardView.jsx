@@ -34,9 +34,9 @@ const TechnicalDashboardView = () => {
 
   // Đồng bộ tiêu đề và mã màn hình lên Header chung (PortalLayout)
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle(title || 'Quản lý kỹ thuật');
-    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'KT01: Hiển thị danh sách các công việc tồn đọng cần xử lý');
-    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'KT01');
+    if (setCustomTitle) setCustomTitle(title);
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
   }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   useEffect(() => {

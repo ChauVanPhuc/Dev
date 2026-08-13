@@ -64,9 +64,9 @@ export default function SidebarManagementView() {
   ];
 
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle(title || 'Cấu hình Sidebar');
-    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Quản lý phân cấp menu điều hướng động của bản Web và Mobile');
-    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'AD51');
+    if (setCustomTitle) setCustomTitle(title);
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   const loadData = async () => {

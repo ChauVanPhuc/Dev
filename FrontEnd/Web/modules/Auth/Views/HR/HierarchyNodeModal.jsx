@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { hrService } from '../../Models/hr.service';
 import SelectInfoModal from './SelectInfoModal';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const HierarchyNodeModal = ({ isOpen, onClose, node, allNodes, onSave }) => {
+  const modalMeta = useScreenMetadataCached('/admin/hr/hierarchy/modal');
   const [rankLevel, setRankLevel] = useState('Cấp 1');
   const [parentId, setParentId] = useState('');
   const [description, setDescription] = useState('');
@@ -101,7 +103,8 @@ const HierarchyNodeModal = ({ isOpen, onClose, node, allNodes, onSave }) => {
             alignItems: 'center'
           }}>
             <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#2D1A12' }}>
-              {isEdit ? 'Chỉnh sửa nút sơ đồ cấp bậc' : 'Thêm nút sơ đồ cấp bậc'}
+              {modalMeta.screenCode ? `${modalMeta.screenCode}: ` : ''}
+              {modalMeta.title || (isEdit ? 'Chỉnh sửa nút sơ đồ cấp bậc' : 'Thêm nút sơ đồ cấp bậc')}
             </h2>
             <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}>
               <X size={24} />

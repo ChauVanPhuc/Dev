@@ -1,5 +1,6 @@
 import React from 'react';
 import { Plus, X, FolderOpen, Clipboard } from 'lucide-react';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const AddBugModal = ({ bugManager }) => {
   const {
@@ -26,6 +27,8 @@ const AddBugModal = ({ bugManager }) => {
     isSubmitting
   } = bugManager;
 
+  const modalMeta = useScreenMetadataCached('/admin/system/bugs/modal/add');
+
   if (!showAddModal) return null;
 
   return (
@@ -33,7 +36,9 @@ const AddBugModal = ({ bugManager }) => {
           <div className="modal-container" style={{ maxWidth: '560px', borderRadius: '12px', border: '1px solid #EADCC9' }}>
             <div className="modal-header">
               <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Plus size={18} /> Báo cáo lỗi màn hình
+                <Plus size={18} />
+                {modalMeta.screenCode ? `${modalMeta.screenCode}: ` : ''}
+                {modalMeta.title || 'Báo cáo lỗi màn hình'}
               </h3>
               <button
                 type="button"

@@ -10,9 +10,9 @@ const TechnicalStandardsView = () => {
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/technical-standards');
 
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle(title || 'Tiêu chuẩn kỹ thuật');
-    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'KT02: Quản lý tiêu chuẩn kỹ thuật & quy chuẩn gỗ');
-    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'KT02');
+    if (setCustomTitle) setCustomTitle(title);
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
   }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   return (

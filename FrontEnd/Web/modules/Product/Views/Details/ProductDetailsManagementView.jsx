@@ -21,9 +21,9 @@ const ProductDetailsManagementView = ({ isEmbedded = false }) => {
 
   useEffect(() => {
     if (!isEmbedded) {
-      if (setCustomTitle) setCustomTitle(title || 'Quản lý Chi tiết Sản phẩm');
-      if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Quản lý danh mục linh kiện, phôi, quy cách theo sản phẩm');
-      if (setCustomScreenCode) setCustomScreenCode(screenCode || 'KT03.1');
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
     }
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, isEmbedded, title, subtitle, screenCode]);
 

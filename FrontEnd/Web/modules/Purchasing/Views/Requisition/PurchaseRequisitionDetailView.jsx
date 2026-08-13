@@ -53,11 +53,11 @@ const PurchaseRequisitionDetailView = () => {
   }, [modeParam, id]);
 
   useEffect(() => {
-    if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Quản lý kinh doanh');
+    if (typeof setCustomTitle === 'function') setCustomTitle(title);
     if (typeof setCustomSubtitle === 'function') {
-      setCustomSubtitle(subtitle || (isEditing ? 'KD03.1: Chỉnh sửa đơn hàng' : 'KD03.1: Chi tiết đơn hàng'));
+      setCustomSubtitle(subtitle || (isEditing ? 'Chỉnh sửa đơn hàng' : 'Chi tiết đơn hàng'));
     }
-    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'KD03.1');
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || '');
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, isEditing, title, subtitle, screenCode]);
 
   const getLoggedInUser = () => {

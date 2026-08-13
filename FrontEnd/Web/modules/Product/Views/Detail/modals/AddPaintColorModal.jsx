@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Upload, Image as ImageIcon } from 'lucide-react';
 import api from '@webShared/Services/api.service';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const getDefaultExpiryDate = () => {
   const d = new Date();
@@ -9,6 +10,7 @@ const getDefaultExpiryDate = () => {
 };
 
 const AddPaintColorModal = ({ productId, bomRows = [], detailRows = [], onClose, onSuccess }) => {
+  const modalMeta = useScreenMetadataCached('/admin/product/detail/modal/add-paint-color');
   const [colorCode] = useState(() => `MS-${String(Math.floor(Math.random() * 800 + 100))}`);
   const [colorName, setColorName] = useState('');
   const [supplier, setSupplier] = useState('');
@@ -70,7 +72,8 @@ const AddPaintColorModal = ({ productId, bomRows = [], detailRows = [], onClose,
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
           <h3 style={{ fontSize: '1.25rem', fontWeight: '900', color: '#432818', margin: 0 }}>
-            KT03.3: Thêm mẫu màu sơn
+            {modalMeta.screenCode ? `${modalMeta.screenCode}: ` : ''}
+            {modalMeta.title || 'Thêm mẫu màu sơn'}
           </h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>
             <X size={20} />

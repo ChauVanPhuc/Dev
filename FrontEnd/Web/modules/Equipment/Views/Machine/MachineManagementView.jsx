@@ -3,7 +3,7 @@ import api, { getBaseURL } from '@webShared/Services/api.service';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import ExcelJS from 'exceljs';
 import axios from 'axios';
-import { 
+import {
   Search, Filter, Plus, Edit, FileUp, FileDown, X, Layers, Settings, Eye, CheckCircle2, AlertTriangle, Hammer
 } from 'lucide-react';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
@@ -13,9 +13,10 @@ import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const MachineManagementView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = useOutletContext();
-  
+
   // Lấy metadata từ database thay vì hardcode
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/machines');
+  const modalMeta = useScreenMetadataCached('/admin/machines/modal');
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
@@ -26,7 +27,7 @@ const MachineManagementView = () => {
       window.screenMetadataCache.delete('/admin/machines');
     }
   }, []);
-  
+
   // Data States
   const [machines, setMachines] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -116,7 +117,7 @@ const MachineManagementView = () => {
       const deptStr = m.department ? m.department.toString().toLowerCase() : '';
       const term = searchTerm.toLowerCase();
 
-      const matchesSearch = 
+      const matchesSearch =
         codeStr.includes(term) ||
         nameStr.includes(term) ||
         factoryStr.includes(term) ||
@@ -314,7 +315,7 @@ const MachineManagementView = () => {
       anchor.click();
       document.body.removeChild(anchor);
       window.URL.revokeObjectURL(url);
-      
+
       setMessage({ type: 'success', text: 'Xuất dữ liệu Excel thành công.' });
     } catch (err) {
       console.error("Lỗi khi xuất file Excel:", err);
@@ -322,15 +323,15 @@ const MachineManagementView = () => {
     }
   };
 
-  const btnStyle = { 
-    display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', 
-    backgroundColor: '#7B5233', color: '#fff', border: 'none', borderRadius: '8px', 
+  const btnStyle = {
+    display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px',
+    backgroundColor: '#7B5233', color: '#fff', border: 'none', borderRadius: '8px',
     cursor: 'pointer', fontWeight: '700', fontSize: '13px', transition: 'background 0.2s'
   };
 
   return (
     <div style={{ padding: '5px 20px 20px', fontFamily: 'Inter, sans-serif' }}>
-      
+
       {/* Toolbar */}
       <PageToolbar
         searchValue={searchTerm}
@@ -371,10 +372,10 @@ const MachineManagementView = () => {
         hasWritePermission={true}
       >
         {/* Hidden File Input for Excel Import */}
-        <input 
-          type="file" 
-          ref={fileInputRef} 
-          style={{ display: 'none' }} 
+        <input
+          type="file"
+          ref={fileInputRef}
+          style={{ display: 'none' }}
           accept=".xlsx, .xls"
           onChange={handleImportExcel}
         />
@@ -386,7 +387,7 @@ const MachineManagementView = () => {
           {/* Nhà máy */}
           <div className="filter-field-group">
             <label className="filter-field-label">Nhà máy</label>
-            <select 
+            <select
               value={selectedFactory}
               onChange={(e) => { setSelectedFactory(e.target.value); setPage(1); }}
             >
@@ -399,7 +400,7 @@ const MachineManagementView = () => {
           {/* Bộ phận */}
           <div className="filter-field-group">
             <label className="filter-field-label">Bộ phận</label>
-            <select 
+            <select
               value={selectedDepartment}
               onChange={(e) => { setSelectedDepartment(e.target.value); setPage(1); }}
             >
@@ -412,7 +413,7 @@ const MachineManagementView = () => {
           {/* Tình trạng */}
           <div className="filter-field-group">
             <label className="filter-field-label">Tình trạng</label>
-            <select 
+            <select
               value={selectedStatus}
               onChange={(e) => { setSelectedStatus(e.target.value); setPage(1); }}
             >
@@ -423,7 +424,7 @@ const MachineManagementView = () => {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-            <button 
+            <button
               onClick={() => {
                 setSelectedFactory('All');
                 setSelectedDepartment('All');
@@ -489,16 +490,16 @@ const MachineManagementView = () => {
                       </tr>
                     ) : (
                       filteredMachines.slice((page - 1) * pageSize, page * pageSize).map((m) => (
-                        <tr 
-                          key={m.id} 
+                        <tr
+                          key={m.id}
                           className="animate-card-entrance"
-                          style={{ 
-                            position: 'relative', 
-                            zIndex: actionMenuId === m.id ? 100 : 'auto' 
+                          style={{
+                            position: 'relative',
+                            zIndex: actionMenuId === m.id ? 100 : 'auto'
                           }}
                         >
                           <td>
-                            <span 
+                            <span
                               style={{ fontWeight: '800', color: '#7B5233', cursor: 'pointer', textDecoration: 'underline' }}
                               onClick={() => navigate(`/admin/machines/detail/${m.id}`)}
                             >
@@ -534,7 +535,7 @@ const MachineManagementView = () => {
                             {m.next_maintenance_date || '—'}
                           </td>
                           <td style={{ textAlign: 'center', position: 'relative', zIndex: actionMenuId === m.id ? 50 : 'auto' }}>
-                            <button 
+                            <button
                               onClick={() => setActionMenuId(actionMenuId === m.id ? null : m.id)}
                               style={{
                                 background: '#f1f5f9', border: '1px solid #cbd5e1', color: '#475569',
@@ -551,14 +552,14 @@ const MachineManagementView = () => {
                                 border: '1px solid #cbd5e1', borderRadius: '8px', zIndex: 1100,
                                 boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', padding: '5px 0', minWidth: '130px'
                               }}>
-                                <div 
+                                <div
                                   onClick={() => { setActionMenuId(null); navigate(`/admin/machines/detail/${m.id}`); }}
                                   style={{ padding: '8px 16px', fontSize: '13px', cursor: 'pointer', textAlign: 'left', fontWeight: '600', color: '#334155', display: 'flex', alignItems: 'center', gap: '8px' }}
                                   className="dropdown-hover"
                                 >
                                   Xem chi tiết
                                 </div>
-                                <div 
+                                <div
                                   onClick={() => { setActionMenuId(null); handleEditClick(m); }}
                                   style={{ padding: '8px 16px', fontSize: '13px', cursor: 'pointer', textAlign: 'left', fontWeight: '600', color: '#334155', display: 'flex', alignItems: 'center', gap: '8px' }}
                                   className="dropdown-hover"
@@ -618,7 +619,7 @@ const MachineManagementView = () => {
               {/* Pagination */}
               {filteredMachines.length > 0 && (() => {
                 const totalPages = Math.ceil(filteredMachines.length / pageSize);
-                
+
                 const getPaginationButtons = () => {
                   const buttons = [];
                   if (totalPages <= 7) {
@@ -626,12 +627,12 @@ const MachineManagementView = () => {
                   } else {
                     buttons.push(1);
                     if (page > 4) buttons.push('...');
-                    
+
                     const rangeStart = Math.max(2, page - 2);
                     const rangeEnd = Math.min(totalPages - 1, page + 2);
-                    
+
                     for (let i = rangeStart; i <= rangeEnd; i++) buttons.push(i);
-                    
+
                     if (page < totalPages - 3) buttons.push('...');
                     buttons.push(totalPages);
                   }
@@ -674,14 +675,14 @@ const MachineManagementView = () => {
                       </div>
                     </div>
                     <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-                      <button 
-                        disabled={page === 1} 
-                        onClick={() => setPage(prev => Math.max(prev - 1, 1))} 
+                      <button
+                        disabled={page === 1}
+                        onClick={() => setPage(prev => Math.max(prev - 1, 1))}
                         className="page-btn"
                       >
                         Trước
                       </button>
-                      
+
                       {buttons.map((btn, idx) => (
                         btn === '...' ? (
                           <span key={`ellipsis-${idx}`} style={{ color: '#7B5233', fontSize: '13px', padding: '0 6px', fontWeight: 'bold' }}>...</span>
@@ -696,9 +697,9 @@ const MachineManagementView = () => {
                         )
                       ))}
 
-                      <button 
-                        disabled={page >= totalPages} 
-                        onClick={() => setPage(prev => Math.min(prev + 1, totalPages))} 
+                      <button
+                        disabled={page >= totalPages}
+                        onClick={() => setPage(prev => Math.min(prev + 1, totalPages))}
                         className="page-btn"
                       >
                         Sau
@@ -726,7 +727,8 @@ const MachineManagementView = () => {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1.5px solid #F1F5F9', paddingBottom: '10px' }}>
               <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '900', color: '#7B5233' }}>
-                {editingMachine ? 'Chỉnh sửa thông tin máy' : 'Khai báo máy móc sản xuất mới'}
+                {modalMeta.screenCode ? `${modalMeta.screenCode}: ` : ''}
+                {editingMachine ? 'Chỉnh sửa thông tin máy' : (modalMeta.title || 'Khai báo máy móc sản xuất mới')}
               </h3>
               <button onClick={() => setShowAddEditModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>
                 <X size={24} />
@@ -736,12 +738,12 @@ const MachineManagementView = () => {
             <form onSubmit={handleFormSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
               <div>
                 <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Mã máy *</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   required
                   disabled={editingMachine !== null}
                   value={formData.code}
-                  onChange={(e) => setFormData({...formData, code: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, code: e.target.value })}
                   placeholder="Ví dụ: MC04748"
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', marginTop: '4px', outline: 'none' }}
                 />
@@ -749,11 +751,11 @@ const MachineManagementView = () => {
 
               <div>
                 <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Tên máy *</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   required
                   value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="Ví dụ: MÁY KHOAN 1 ĐẦU"
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', marginTop: '4px', outline: 'none' }}
                 />
@@ -761,10 +763,10 @@ const MachineManagementView = () => {
 
               <div>
                 <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Nhà máy</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={formData.factory}
-                  onChange={(e) => setFormData({...formData, factory: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, factory: e.target.value })}
                   placeholder="Ví dụ: CÔNG TY CỔ PHẦN VINA G7"
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', marginTop: '4px', outline: 'none' }}
                 />
@@ -772,10 +774,10 @@ const MachineManagementView = () => {
 
               <div>
                 <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Xưởng</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={formData.workshop}
-                  onChange={(e) => setFormData({...formData, workshop: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, workshop: e.target.value })}
                   placeholder="Ví dụ: NHÀ MÁY - 2"
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', marginTop: '4px', outline: 'none' }}
                 />
@@ -783,10 +785,10 @@ const MachineManagementView = () => {
 
               <div>
                 <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Tổ (Bộ phận phụ trách)</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={formData.department}
-                  onChange={(e) => setFormData({...formData, department: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                   placeholder="Ví dụ: ĐỊNH HÌNH"
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', marginTop: '4px', outline: 'none' }}
                 />
@@ -794,9 +796,9 @@ const MachineManagementView = () => {
 
               <div>
                 <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Tình trạng</label>
-                <select 
+                <select
                   value={formData.status}
-                  onChange={(e) => setFormData({...formData, status: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', marginTop: '4px', outline: 'none' }}
                 >
                   <option value="Hoạt động bình thường">Hoạt động bình thường</option>
@@ -808,10 +810,10 @@ const MachineManagementView = () => {
 
               <div>
                 <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Người phụ trách</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={formData.owner_name}
-                  onChange={(e) => setFormData({...formData, owner_name: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, owner_name: e.target.value })}
                   placeholder="Tên nhân viên phụ trách"
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', marginTop: '4px', outline: 'none' }}
                 />
@@ -819,10 +821,10 @@ const MachineManagementView = () => {
 
               <div>
                 <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Xuất xứ</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={formData.origin}
-                  onChange={(e) => setFormData({...formData, origin: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, origin: e.target.value })}
                   placeholder="Ví dụ: TRUNG QUỐC, NHẬT BẢN"
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', marginTop: '4px', outline: 'none' }}
                 />
@@ -830,10 +832,10 @@ const MachineManagementView = () => {
 
               <div>
                 <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Nhà cung cấp</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={formData.supplier}
-                  onChange={(e) => setFormData({...formData, supplier: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
                   placeholder="Tên nhà cung cấp máy"
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', marginTop: '4px', outline: 'none' }}
                 />
@@ -841,50 +843,50 @@ const MachineManagementView = () => {
 
               <div>
                 <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Chu kỳ bảo trì (ngày)</label>
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   value={formData.maintenance_cycle}
-                  onChange={(e) => setFormData({...formData, maintenance_cycle: parseInt(e.target.value) || 30})}
+                  onChange={(e) => setFormData({ ...formData, maintenance_cycle: parseInt(e.target.value) || 30 })}
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', marginTop: '4px', outline: 'none' }}
                 />
               </div>
 
               <div>
                 <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Ngày nhận máy (Về xưởng)</label>
-                <input 
-                  type="date" 
+                <input
+                  type="date"
                   value={formData.receive_date}
-                  onChange={(e) => setFormData({...formData, receive_date: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, receive_date: e.target.value })}
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', marginTop: '4px', outline: 'none' }}
                 />
               </div>
 
               <div>
                 <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Ngày đã bảo trì gần nhất</label>
-                <input 
-                  type="date" 
+                <input
+                  type="date"
                   value={formData.last_maintenance_date}
-                  onChange={(e) => setFormData({...formData, last_maintenance_date: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, last_maintenance_date: e.target.value })}
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', marginTop: '4px', outline: 'none' }}
                 />
               </div>
 
               <div>
                 <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Ngày bảo trì dự kiến tiếp theo</label>
-                <input 
-                  type="date" 
+                <input
+                  type="date"
                   value={formData.next_maintenance_date}
-                  onChange={(e) => setFormData({...formData, next_maintenance_date: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, next_maintenance_date: e.target.value })}
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', marginTop: '4px', outline: 'none' }}
                 />
               </div>
 
               <div>
                 <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>QR Code của máy</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={formData.qr_code}
-                  onChange={(e) => setFormData({...formData, qr_code: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, qr_code: e.target.value })}
                   placeholder="Ví dụ: MC-VINAG7-DINHHINH-75286"
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', marginTop: '4px', outline: 'none' }}
                 />
@@ -892,10 +894,10 @@ const MachineManagementView = () => {
 
               <div>
                 <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Đường dẫn ảnh máy</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={formData.images}
-                  onChange={(e) => setFormData({...formData, images: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, images: e.target.value })}
                   placeholder="URL hình ảnh sản phẩm"
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', marginTop: '4px', outline: 'none' }}
                 />
@@ -903,10 +905,10 @@ const MachineManagementView = () => {
 
               <div style={{ gridColumn: 'span 2' }}>
                 <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Mô tả công việc bảo trì / Ghi chú</label>
-                <textarea 
+                <textarea
                   rows="3"
                   value={formData.notes}
-                  onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   placeholder="Nhập ghi chú hoặc mô tả các hạng mục công việc cần bảo trì..."
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', marginTop: '4px', outline: 'none', resize: 'vertical' }}
                 />

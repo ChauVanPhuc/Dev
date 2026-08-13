@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, User } from 'lucide-react';
 import { hrService } from '../../Models/hr.service';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const EmployeeModal = ({ isOpen, onClose, employee, onSave }) => {
+  const modalMeta = useScreenMetadataCached('/admin/hr/employees/modal');
   const [employeeId, setEmployeeId] = useState('');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
@@ -138,7 +140,8 @@ const EmployeeModal = ({ isOpen, onClose, employee, onSave }) => {
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#2D1A12', margin: 0 }}>
-            NS05: Thông tin nhân sự
+            {modalMeta.screenCode ? `${modalMeta.screenCode}: ` : ''}
+            {modalMeta.title || (isEdit ? 'Chỉnh sửa thông tin nhân sự' : 'Thông tin nhân sự')}
           </h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF' }}>
             <X size={20} />

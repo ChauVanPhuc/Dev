@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { X, Shield } from 'lucide-react';
 import api from '@webShared/Services/api.service';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const PositionModal = ({ isOpen, onClose, modalMode, selectedPosition, allDepartments, onConfirm }) => {
+  const modalMeta = useScreenMetadataCached('/admin/auth/positions/modal');
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -116,7 +118,8 @@ const PositionModal = ({ isOpen, onClose, modalMode, selectedPosition, allDepart
         {/* Modal Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid #FAF0E6', backgroundColor: '#FAF6F0' }}>
           <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#2D1A12', fontWeight: '800' }}>
-            {modalMode === 'create' ? 'AD3.5.1: Tạo Chức vụ mới' : 'Chỉnh sửa Chức vụ'}
+            {modalMeta.screenCode ? `${modalMeta.screenCode}: ` : ''}
+            {modalMeta.title || (modalMode === 'create' ? 'Tạo Chức vụ mới' : 'Chỉnh sửa Chức vụ')}
           </h3>
           <button onClick={onClose} style={{ border: 'none', background: 'none', color: '#7B5233', cursor: 'pointer', display: 'flex', padding: '4px', borderRadius: '50%' }}>
             <X size={18} />

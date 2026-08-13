@@ -33,9 +33,9 @@ const ProjectProgressView = () => {
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/screens/progress');
 
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle(title || 'Tiến độ dự án');
-    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Theo dõi tiến độ phát triển và hoàn thiện hệ thống');
-    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'AD03');
+    if (setCustomTitle) setCustomTitle(title);
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   const [screens, setScreens] = useState([]);

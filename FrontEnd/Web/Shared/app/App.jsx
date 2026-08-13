@@ -97,6 +97,7 @@ const TechnicalStandards = lazy(() => import('@modules/Product/Views/Standards/T
 const MaintenanceFacility = lazy(() => import('@modules/Equipment/Views/Maintenance/MaintenanceView'));
 const ProductionDashboard = lazy(() => import('@modules/Production/Views/Dashboard/ProductionDashboardView'));
 const ProductionOrders = lazy(() => import('@modules/Production/Views/Orders/ProductionOrdersView'));
+const ProductionOrderCreate = lazy(() => import('@modules/Production/Views/Orders/ProductionOrderCreateView'));
 const ProductionSchedule = lazy(() => import('@modules/Production/Views/Schedule/ProductionScheduleView'));
 const ProductionPlans = lazy(() => import('@modules/Production/Views/Plans/ProductionPlansView'));
 const ProductionRouting = lazy(() => import('@modules/Production/Views/Routing/ProductionRoutingView'));
@@ -701,7 +702,8 @@ function App() {
                 <Route path="delivery-tracking" element={<ProtectedRoute permissionKey="delivery-tracking"><DeliveryTracking /></ProtectedRoute>} />
                 <Route path="production-dashboard" element={<ProtectedRoute permissionKey="plan"><ProductionDashboard /></ProtectedRoute>} />
                 <Route path="production-orders" element={<ProtectedRoute permissionKey="orders"><ProductionOrders /></ProtectedRoute>} />
-                <Route path="production-orders/:id" element={<ProtectedRoute permissionKey="orders"><PlanDetail /></ProtectedRoute>} />
+                <Route path="production-orders/create" element={<ProtectedRoute permissionKey="orders"><ProductionOrderCreate /></ProtectedRoute>} />
+                <Route path="production-orders/edit/:id" element={<ProtectedRoute permissionKey="orders"><ProductionOrderCreate /></ProtectedRoute>} />
                 <Route path="production-schedule" element={<ProtectedRoute permissionKey="plan"><ProductionSchedule /></ProtectedRoute>} />
                 <Route path="production-routing" element={<ProtectedRoute permissionKey="products"><ProductionRouting /></ProtectedRoute>} />
                 <Route path="technical-dashboard" element={<ProtectedRoute permissionKey="products"><TechnicalDashboard /></ProtectedRoute>} />

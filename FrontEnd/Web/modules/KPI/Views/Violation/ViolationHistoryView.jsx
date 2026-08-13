@@ -82,9 +82,9 @@ const ViolationHistoryView = () => {
   }, []);
 
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle(title || 'Lịch sử vi phạm');
-    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'HT08: Danh sách nhân sự vi phạm');
-    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'HT08');
+    if (setCustomTitle) setCustomTitle(title);
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
   }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   useEffect(() => {

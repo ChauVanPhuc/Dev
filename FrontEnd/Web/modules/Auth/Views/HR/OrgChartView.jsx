@@ -16,9 +16,9 @@ const OrgChartView = ({ diagramDropdown }) => {
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/hr/org-chart');
 
   useEffect(() => {
-    if (typeof setCustomTitle === 'function' && title) setCustomTitle(title);
-    if (typeof setCustomSubtitle === 'function' && subtitle) setCustomSubtitle(subtitle);
-    if (typeof setCustomScreenCode === 'function' && screenCode) setCustomScreenCode(screenCode);
+    if (typeof setCustomTitle === 'function') setCustomTitle(title);
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || '');
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || '');
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   const [nodes, setNodes] = useState([]);

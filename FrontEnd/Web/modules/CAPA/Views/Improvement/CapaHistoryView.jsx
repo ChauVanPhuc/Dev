@@ -97,9 +97,9 @@ const CapaHistoryView = () => {
   }, []);
 
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle(title || 'Báo cáo CAPA');
-    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'CL10.1: Quản lý Báo cáo CAPA');
-    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'CL10.1');
+    if (setCustomTitle) setCustomTitle(title);
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   useEffect(() => {

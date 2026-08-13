@@ -2,8 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { X, Shield } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import { buildPermissionGroupsFromSidebar } from '../User/utils/permissionUtils';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const DepartmentModal = ({ isOpen, onClose, modalMode, selectedDepartment, onConfirm }) => {
+  const modalMeta = useScreenMetadataCached('/admin/auth/departments/modal');
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -103,7 +105,8 @@ const DepartmentModal = ({ isOpen, onClose, modalMode, selectedDepartment, onCon
         {/* Modal Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid #FAF0E6', backgroundColor: '#FAF6F0' }}>
           <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#2D1A12', fontWeight: '800' }}>
-            {modalMode === 'create' ? 'AD3.4.1: Tạo Bộ phận mới' : 'Chỉnh sửa Bộ phận'}
+            {modalMeta.screenCode ? `${modalMeta.screenCode}: ` : ''}
+            {modalMeta.title || (modalMode === 'create' ? 'Tạo Bộ phận mới' : 'Chỉnh sửa Bộ phận')}
           </h3>
           <button onClick={onClose} style={{ border: 'none', background: 'none', color: '#7B5233', cursor: 'pointer', display: 'flex', padding: '4px', borderRadius: '50%' }}>
             <X size={18} />

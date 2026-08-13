@@ -122,9 +122,9 @@ const ProductDetailView = () => {
 
   // Đặt Tiêu đề và Subtitle chuẩn lên Thanh Nav Cố Định
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle(title || 'Quản lý sản phẩm');
-    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Chi tiết sản phẩm');
-    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'KT03');
+    if (setCustomTitle) setCustomTitle(title);
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
     if (setHeaderExtra) {
       setHeaderExtra(
         <button
@@ -2228,7 +2228,7 @@ const ProductDetailView = () => {
                     {detailRows.length === 0 ? (
                       <tr>
                         <td colSpan={9} style={{ textAlign: 'center', padding: '1.8rem', color: '#94A3B8', fontWeight: '600' }}>
-                          Chưa có chi tiết nào được thêm. Nhấn "Cấu hình thông tin" → "KT03.1: Thêm chi tiết" để tạo mới.
+                          Chưa có chi tiết nào được thêm. Nhấn "Cấu hình thông tin" → 'Thêm chi tiết" để tạo mới.
                         </td>
                       </tr>
                     ) : (
@@ -2314,7 +2314,7 @@ const ProductDetailView = () => {
                     {paintColorRows.length === 0 ? (
                       <tr>
                         <td colSpan={9} style={{ textAlign: 'center', padding: '1.8rem', color: '#94A3B8', fontWeight: '600' }}>
-                          Chưa có mẫu màu sơn nào được thêm. Nhấn "Cấu hình thông tin" → "KT03.3: Thêm mẫu màu sơn" để tạo mới.
+                          Chưa có mẫu màu sơn nào được thêm. Nhấn "Cấu hình thông tin" → 'Thêm mẫu màu sơn" để tạo mới.
                         </td>
                       </tr>
                     ) : (

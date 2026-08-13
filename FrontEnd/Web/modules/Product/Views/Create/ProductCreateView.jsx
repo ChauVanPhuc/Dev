@@ -342,9 +342,9 @@ const ProductCreateView = () => {
 
   // Thiết lập Title & Header Navigation Bar
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle(title || 'Quản lý sản phẩm');
-    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Thêm mới sản phẩm');
-    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'KT03.1');
+    if (setCustomTitle) setCustomTitle(title);
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
     if (setHeaderExtra) {
       setHeaderExtra(
         <button

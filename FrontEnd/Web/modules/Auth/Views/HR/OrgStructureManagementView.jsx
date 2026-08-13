@@ -17,9 +17,9 @@ const OrgStructureManagementView = () => {
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/hr/structures');
 
   useEffect(() => {
-    if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Quản lý cấu trúc tổ chức');
-    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || 'Thiết lập cấu trúc cây tổ chức, chức vụ và định biên nhân sự');
-    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'NS02');
+    if (typeof setCustomTitle === 'function') setCustomTitle(title);
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || '');
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || '');
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
   
   // Data States

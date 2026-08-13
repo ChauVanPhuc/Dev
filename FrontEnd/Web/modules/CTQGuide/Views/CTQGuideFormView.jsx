@@ -51,9 +51,9 @@ const CTQGuideFormView = () => {
   const [generatingCode, setGeneratingCode] = useState(false);
 
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle(title || 'Lỗi cần chú ý (CTQ)');
-    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Khởi tạo mới');
-    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'CL02.1');
+    if (setCustomTitle) setCustomTitle(title);
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
     return () => {
       if (setCustomTitle) setCustomTitle(null);
       if (setCustomSubtitle) setCustomSubtitle(null);

@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { X, Search, Plus, Trash2 } from 'lucide-react';
 import { hrService } from '../../Models/hr.service';
 import SelectInfoModal from './SelectInfoModal';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const OrgNodeModal = ({ isOpen, onClose, node, allNodes, onSave }) => {
+  const modalMeta = useScreenMetadataCached('/admin/hr/org-chart/modal');
   const [levelName, setLevelName] = useState('Cấp 1');
   const [parentId, setParentId] = useState('');
   const [note, setNote] = useState('');
@@ -170,7 +172,8 @@ const OrgNodeModal = ({ isOpen, onClose, node, allNodes, onSave }) => {
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#2D1A12', margin: 0 }}>
-            NS02: Thông tin nhân tố
+            {modalMeta.screenCode ? `${modalMeta.screenCode}: ` : ''}
+            {modalMeta.title || 'Thông tin nhân tố'}
           </h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF' }}>
             <X size={20} />

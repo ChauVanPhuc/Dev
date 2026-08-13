@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { hrService } from '../../Models/hr.service';
 import SelectInfoModal from './SelectInfoModal';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const FactoryStructureModal = ({ isOpen, onClose, structure, allStructures, onSave }) => {
+  const modalMeta = useScreenMetadataCached('/admin/hr/factory-structure/modal');
   const [structureCode, setStructureCode] = useState('');
   const [structureName, setStructureName] = useState('');
   const [structureType, setStructureType] = useState('Nhà máy');
@@ -120,7 +122,8 @@ const FactoryStructureModal = ({ isOpen, onClose, structure, allStructures, onSa
             alignItems: 'center'
           }}>
             <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#2D1A12' }}>
-              {isEdit ? 'NS03: Cấu hình nhà máy' : 'NS03: Cấu hình nhà máy'}
+              {modalMeta.screenCode ? `${modalMeta.screenCode}: ` : ''}
+              {modalMeta.title || 'Cấu hình nhà máy'}
             </h2>
             <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}>
               <X size={24} />

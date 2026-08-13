@@ -48,7 +48,7 @@ const ViolationFormView = () => {
 
   useEffect(() => {
     if (setCustomTitle) setCustomTitle(isEdit ? 'Chỉnh sửa vi phạm' : 'Thêm mới vi phạm');
-    if (setCustomSubtitle) setCustomSubtitle('HT08.1: Thông tin vi phạm');
+    if (setCustomSubtitle) setCustomSubtitle('Thông tin vi phạm');
     if (setCustomScreenCode) setCustomScreenCode('HT08.1');
   }, [isEdit, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 

@@ -16,9 +16,9 @@ const EmployeeManagementView = () => {
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/employees');
 
   useEffect(() => {
-    if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Quản lý nhân viên');
-    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || 'Danh sách nhân viên, phân quyền và hồ sơ nhân sự');
-    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'NS01');
+    if (typeof setCustomTitle === 'function') setCustomTitle(title);
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || '');
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || '');
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
   
   // Data States

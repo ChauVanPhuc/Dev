@@ -7,9 +7,9 @@ const ManufactureReceive = () => {
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/manufacture-receive');
 
   useEffect(() => {
-    if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Tiếp nhận sản xuất');
-    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || 'Tiếp nhận vật tư và thành phẩm từ nhà máy/nhà cung cấp');
-    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'SX05');
+    if (typeof setCustomTitle === 'function') setCustomTitle(title);
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || '');
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || '');
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   const stats = [

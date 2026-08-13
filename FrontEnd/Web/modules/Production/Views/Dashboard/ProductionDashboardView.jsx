@@ -11,9 +11,9 @@ const ProductionDashboardView = () => {
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/production-dashboard');
 
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle(title || 'Quản lý sản xuất');
-    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'SX00: Tổng quan phân hệ quản lý sản xuất');
-    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'SX00');
+    if (setCustomTitle) setCustomTitle(title);
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
   }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   const quickNavs = [

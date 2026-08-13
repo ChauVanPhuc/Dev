@@ -769,11 +769,11 @@ const ISOProcessEditorView = () => {
 
   useEffect(() => {
     if (isProcessMode) {
-      setCustomTitle(title || 'Quản lý quy trình');
+      setCustomTitle(title);
       setCustomSubtitle(subtitle || (isEditMode ? 'Nhân sự - Chỉnh sửa Quy trình' : 'Nhân sự - Thêm mới Quy trình'));
       setCustomScreenCode(screenCode || (isEditMode ? 'AD55' : 'AD18'));
     } else {
-      setCustomTitle(title || 'Quản lý mẫu tài liệu');
+      setCustomTitle(title);
       setCustomSubtitle(subtitle || (isEditMode ? 'Nhân sự - Chỉnh sửa Mẫu ISO' : 'Nhân sự - Thêm mới Mẫu ISO'));
       setCustomScreenCode(screenCode || (isEditMode ? 'AD17.1' : 'AD17'));
     }

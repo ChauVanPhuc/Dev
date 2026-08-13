@@ -115,9 +115,9 @@ export default function SystemConfigView() {
 
   // Set page headers
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle(title || 'Cấu hình hệ thống');
-    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Thiết lập cấu trúc cơ cấu tổ chức và phân hệ menu hệ thống ERP');
-    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'AD04');
+    if (setCustomTitle) setCustomTitle(title);
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   // Close action menu when clicking outside

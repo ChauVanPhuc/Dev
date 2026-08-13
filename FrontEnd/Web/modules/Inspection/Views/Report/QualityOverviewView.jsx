@@ -14,9 +14,9 @@ const QualityOverviewView = () => {
   const { screenCode, title, subtitle, loading: metaLoading } = useScreenMetadataCached('/admin/quality');
 
   useEffect(() => {
-    if (setCustomTitle && title) setCustomTitle(title);
-    if (setCustomSubtitle && subtitle) setCustomSubtitle(subtitle);
-    if (setCustomScreenCode && screenCode) setCustomScreenCode(screenCode);
+    if (setCustomTitle) setCustomTitle(title);
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
   }, [title, subtitle, screenCode, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   const [pendingTasks, setPendingTasks] = useState([]);

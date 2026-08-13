@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { X, FileText, FileSpreadsheet, File } from 'lucide-react';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const ScreenExportDetailModal = ({ visible, screen, onClose, onExport }) => {
+  const modalMeta = useScreenMetadataCached('/admin/system/screens/modal/export-detail');
   const [format, setFormat] = useState('pdf');
   const [templateStyle, setTemplateStyle] = useState('standard');
   const [options, setOptions] = useState({
@@ -113,7 +115,8 @@ const ScreenExportDetailModal = ({ visible, screen, onClose, onExport }) => {
           }}
         >
           <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '900', color: '#7B5233' }}>
-            📄 Xuất đặc tả chi tiết màn hình
+            {modalMeta.screenCode ? `${modalMeta.screenCode}: ` : ''}
+            {modalMeta.title || '📄 Xuất đặc tả chi tiết màn hình'}
           </h3>
           <button
             onClick={onClose}

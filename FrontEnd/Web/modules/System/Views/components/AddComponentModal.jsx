@@ -2,8 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Upload, X, FileText, Play, Type, Table2, CheckSquare, List, Layout, Menu, CreditCard, Sliders, Bell, Component } from 'lucide-react';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import api, { getBaseURL } from '@webShared/Services/api.service';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const AddComponentModal = ({ isOpen, onClose, editingComponent, onConfirm }) => {
+  const modalMeta = useScreenMetadataCached('/admin/system/screens/modal/add-component');
   const [newComponentName, setNewComponentName] = useState('');
   const [newComponentType, setNewComponentType] = useState('Button');
   const [newComponentButtonId, setNewComponentButtonId] = useState('');
@@ -158,7 +160,8 @@ const AddComponentModal = ({ isOpen, onClose, editingComponent, onConfirm }) => 
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexShrink: 0 }}>
           <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '800', color: '#111827' }}>
-            {editingComponent ? 'HD05: Chỉnh sửa thành phần' : 'HD05: Thêm thành phần'}
+            {modalMeta.screenCode ? `${modalMeta.screenCode}: ` : ''}
+            {modalMeta.title || (editingComponent ? 'Chỉnh sửa thành phần' : 'Thêm thành phần')}
           </h3>
           <button
             type="button"

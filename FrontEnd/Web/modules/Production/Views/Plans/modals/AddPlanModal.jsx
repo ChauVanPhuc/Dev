@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const AddPlanModal = ({ isOpen, onClose, onSave }) => {
+  const modalMeta = useScreenMetadataCached('/admin/production/plans/modal/add-plan');
   const [formData, setFormData] = useState({
     startDate: '2026-08-05',
     endDate: '2026-08-15',
@@ -51,8 +53,14 @@ const AddPlanModal = ({ isOpen, onClose, onSave }) => {
           justifyContent: 'space-between'
         }}>
           <div>
-            <span style={{ fontSize: '0.75rem', fontWeight: '800', background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '4px', textTransform: 'uppercase' }}>SX03.1</span>
-            <h3 style={{ margin: '4px 0 0 0', fontSize: '1.1rem', fontWeight: '800' }}>Lập Kế Hoạch Sản Xuất Mới</h3>
+            {modalMeta.screenCode && (
+              <span style={{ fontSize: '0.75rem', fontWeight: '800', background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '4px', textTransform: 'uppercase', marginRight: '8px' }}>
+                {modalMeta.screenCode}
+              </span>
+            )}
+            <h3 style={{ margin: '4px 0 0 0', fontSize: '1.1rem', fontWeight: '800', display: 'inline-block' }}>
+              {modalMeta.title || 'Lập Kế Hoạch Sản Xuất Mới'}
+            </h3>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#FFF', cursor: 'pointer' }}>
             <X size={20} />

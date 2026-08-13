@@ -20,9 +20,9 @@ const ScreenBugManagementView = () => {
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/screens/bugs');
 
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle(title || 'Danh sách lỗi hệ thống');
-    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Theo dõi và xử lý các phản hồi, sự cố giao diện');
-    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'AD04');
+    if (setCustomTitle) setCustomTitle(title);
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   const bugManager = useScreenBugManagement();

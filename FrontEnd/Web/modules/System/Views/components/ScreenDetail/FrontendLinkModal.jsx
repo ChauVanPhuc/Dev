@@ -1,5 +1,6 @@
 import React from 'react';
 import { X } from 'lucide-react';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const FrontendLinkModal = ({
   isOpen,
@@ -16,6 +17,7 @@ const FrontendLinkModal = ({
   displayInfoText,
   handleConfirmLink
 }) => {
+  const modalMeta = useScreenMetadataCached('/admin/system/screens/modal/frontend-link');
   if (!isOpen) return null;
 
   return (
@@ -41,7 +43,8 @@ const FrontendLinkModal = ({
   }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
       <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#1E293B', margin: 0 }}>
-        03.1: Chọn link dẫn Frontend
+        {modalMeta.screenCode ? `${modalMeta.screenCode}: ` : ''}
+        {modalMeta.title || 'Chọn link dẫn Frontend'}
       </h3>
       <button
         type="button"

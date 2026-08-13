@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Sliders, CheckSquare, Square, Save } from 'lucide-react';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const labelStyle = {
   display: 'block',
@@ -24,6 +25,7 @@ const inputBaseStyle = {
 };
 
 const ConfigInfoModal = ({ visibleColumns, setVisibleColumns, onClose, toast }) => {
+  const modalMeta = useScreenMetadataCached('/admin/product/detail/modal/config-info');
   const [cols, setCols] = useState(visibleColumns || {
     stt: true,
     type: true,
@@ -118,7 +120,8 @@ const ConfigInfoModal = ({ visibleColumns, setVisibleColumns, onClose, toast }) 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Sliders size={22} color="#432818" />
             <h3 style={{ fontSize: '1.35rem', fontWeight: '900', color: '#2D1A12', margin: 0 }}>
-              KT03.4: Cấu hình thông tin BOM
+              {modalMeta.screenCode ? `${modalMeta.screenCode}: ` : ''}
+              {modalMeta.title || 'Cấu hình thông tin BOM'}
             </h3>
           </div>
           <button

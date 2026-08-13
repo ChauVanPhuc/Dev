@@ -12,9 +12,9 @@ const ProductionPlansView = () => {
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/plan');
 
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle(title || 'Kế hoạch sản xuất');
-    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'SX03: Quản lý & lập kế hoạch sản xuất');
-    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'SX03');
+    if (setCustomTitle) setCustomTitle(title);
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
   }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);

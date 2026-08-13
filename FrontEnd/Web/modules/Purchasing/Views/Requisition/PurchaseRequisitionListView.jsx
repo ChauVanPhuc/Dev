@@ -33,9 +33,9 @@ const PurchaseRequisitionListView = () => {
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/purchase-requisitions');
 
   useEffect(() => {
-    if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Quản lý kinh doanh');
-    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || 'KD03: Danh sách đơn hàng');
-    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'KD03');
+    if (typeof setCustomTitle === 'function') setCustomTitle(title);
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || '');
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || '');
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   const [data, setData] = useState([]);

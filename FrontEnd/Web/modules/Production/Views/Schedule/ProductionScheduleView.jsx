@@ -10,9 +10,9 @@ const ProductionScheduleView = () => {
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/production-schedule');
 
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle(title || 'Lịch sản xuất');
-    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'SX02: Tiến độ & lịch sản xuất nhà máy/xưởng');
-    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'SX02');
+    if (setCustomTitle) setCustomTitle(title);
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
   }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   const [activeFactory, setActiveFactory] = useState('Factory1');

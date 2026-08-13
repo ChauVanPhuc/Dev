@@ -1454,8 +1454,8 @@ export const useClaimList = () => {
 
   useEffect(() => {
     // Set Header titles exactly like the top of screenshot
-    setCustomTitle('Quản lý khiếu nại');
-    setCustomSubtitle('AD2 · Tổng quan hệ thống');
+    if (title) setCustomTitle(title);
+    if (subtitle) setCustomSubtitle(subtitle);
 
     // Set top right header extra icons (? and layout grid)
     setHeaderExtra(

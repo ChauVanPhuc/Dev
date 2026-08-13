@@ -23,12 +23,13 @@ const EquipmentHandoverView = ({ id: propId, onClose, onSaved }) => {
   const isModal = onClose !== undefined;
 
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/equipment/handover');
+  const modalMeta = useScreenMetadataCached('/admin/equipment/modal');
 
   useEffect(() => {
     if (!isModal) {
-      if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Bàn giao thiết bị');
-      if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || 'Quản lý quy trình bàn giao và nghiệm thu thiết bị máy móc');
-      if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'TB05');
+      if (typeof setCustomTitle === 'function') setCustomTitle(title);
+      if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || '');
+      if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || '');
     }
   }, [isModal, setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
@@ -572,7 +573,8 @@ const EquipmentHandoverView = ({ id: propId, onClose, onSaved }) => {
           onClick={(e) => e.stopPropagation()}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}>
             <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '900', color: '#1e293b' }}>
-              {id ? 'Biên bản Bàn giao & Cập nhật thiết bị' : 'Khai báo & Bàn giao thiết bị mới'}
+              {modalMeta.screenCode ? `${modalMeta.screenCode}: ` : ''}
+              {modalMeta.title || (id ? 'Biên bản Bàn giao & Cập nhật thiết bị' : 'Khai báo & Bàn giao thiết bị mới')}
             </h3>
             <X size={22} onClick={onClose} style={{ cursor: 'pointer', color: '#94a3b8' }} />
           </div>
@@ -592,7 +594,8 @@ const EquipmentHandoverView = ({ id: propId, onClose, onSaved }) => {
       <div className="card" style={{ padding: '24px', borderRadius: '20px', backgroundColor: '#fff', border: '1px solid #e2e8f0', minHeight: '400px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}>
           <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '900', color: '#1e293b' }}>
-            {id ? 'Biên bản Bàn giao & Cập nhật thiết bị' : 'Khai báo & Bàn giao thiết bị mới'}
+            {screenCode ? `${screenCode}: ` : ''}
+            {title || (id ? 'Biên bản Bàn giao & Cập nhật thiết bị' : 'Khai báo & Bàn giao thiết bị mới')}
           </h3>
           <button onClick={() => navigate('/admin/equipment')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
             <X size={24} />

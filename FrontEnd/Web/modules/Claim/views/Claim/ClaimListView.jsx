@@ -35,9 +35,9 @@ const ClaimListView = () => {
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/claims');
 
   useEffect(() => {
-    if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Quản lý Khiếu nại (Claim)');
-    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || 'Quản lý danh sách khiếu nại, dòng hàng và tiến độ khắc phục chất lượng');
-    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'CL01');
+    if (typeof setCustomTitle === 'function') setCustomTitle(title);
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || '');
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || '');
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   return (

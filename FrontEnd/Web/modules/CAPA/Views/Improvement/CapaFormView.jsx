@@ -63,8 +63,8 @@ const CapaFormView = () => {
 
   useEffect(() => {
     if (setCustomTitle) setCustomTitle(title || (isCreate ? 'Tạo báo cáo CAPA' : `Báo cáo CAPA: ${formData.code}`));
-    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Chi tiết CAPA');
-    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'CL10.2');
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
 
     if (!isCreate) {
       fetchDetail();

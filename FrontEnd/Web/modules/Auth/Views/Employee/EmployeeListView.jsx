@@ -11,9 +11,9 @@ const EmployeeListView = () => {
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/hr/employees');
 
   useEffect(() => {
-    if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Danh sách nhân sự');
-    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || 'Quản lý thông tin hồ sơ nhân viên và hợp đồng lao động');
-    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'NS01');
+    if (typeof setCustomTitle === 'function') setCustomTitle(title);
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || '');
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || '');
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   const [employees, setEmployees] = useState([]);

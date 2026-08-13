@@ -53,9 +53,9 @@ const UserPermissionView = () => {
 
   // Cập nhật tiêu đề trang lên Layout Header động từ CSDL
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle(title || 'Phân quyền tài khoản');
-    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Thiết lập chi tiết quyền đọc, ghi, hoặc chặn hoàn toàn truy cập theo từng nhóm chức năng');
-    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'AD3');
+    if (setCustomTitle) setCustomTitle(title);
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   // Tải chi tiết người dùng và phân quyền từ backend CSDL

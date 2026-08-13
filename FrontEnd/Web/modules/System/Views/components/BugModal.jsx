@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import { bugService } from '@modules/System/Models/bug.service';
 import { getBaseURL } from '@webShared/Services/api.service';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const getLoggedInUser = () => {
   try {
@@ -32,6 +33,7 @@ const getImageUrl = (path) => {
 };
 
 const BugModal = ({ isOpen, onClose, bugModalMode, bugModalData: initialData, screen, itAccounts, onConfirm }) => {
+  const modalMeta = useScreenMetadataCached('/admin/system/bugs/modal');
   const [bugModalData, setBugModalData] = useState({
     id: '',
     componentName: 'Chung',
@@ -280,7 +282,9 @@ const BugModal = ({ isOpen, onClose, bugModalMode, bugModalData: initialData, sc
           borderBottom: '1px solid #CBD5E1'
         }}>
           <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 'bold', color: '#2D1A12' }}>
-            {bugModalMode === 'edit' ? `HD04: Chi tiết lỗi BUG-${bugModalData.id}` : `${screen?.current_code || 'AD'}: Khai báo lỗi`}
+            {bugModalMode === 'edit' 
+              ? `${modalMeta.screenCode || 'HD04'}: Chi tiết lỗi BUG-${bugModalData.id}` 
+              : `${modalMeta.screenCode || screen?.current_code || 'AD'}: ${modalMeta.title || 'Khai báo lỗi'}`}
           </h3>
           <button
             type="button"

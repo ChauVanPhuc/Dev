@@ -26,9 +26,9 @@ const PriceListView = () => {
   const [localNotification, setLocalNotification] = useState(null);
 
   useEffect(() => {
-    if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Đơn giá sản phẩm');
-    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || 'Quản lý đơn giá sản phẩm và cấu hình chi phí');
-    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'CL02');
+    if (typeof setCustomTitle === 'function') setCustomTitle(title);
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || '');
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || '');
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
@@ -770,10 +770,7 @@ const PriceListView = () => {
     setEditingCabinet(null);
   };
 
-  useEffect(() => {
-    setCustomTitle('Bảng giá tủ gỗ');
-    setCustomSubtitle('Quản lý giá tủ · Thiết lập đơn giá sản xuất & xuất khẩu');
-  }, []);
+  
 
   useEffect(() => {
     fetchPrices();

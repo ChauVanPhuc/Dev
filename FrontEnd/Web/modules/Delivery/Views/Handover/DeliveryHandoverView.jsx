@@ -7,9 +7,9 @@ const ManufactureHandover = () => {
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/manufacture-handover');
 
   useEffect(() => {
-    if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Bàn giao sản xuất');
-    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || 'Quản lý lệnh và tiến độ bàn giao sản xuất');
-    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'SX04');
+    if (typeof setCustomTitle === 'function') setCustomTitle(title);
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || '');
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || '');
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   const [actionMenuId, setActionMenuId] = useState(null);

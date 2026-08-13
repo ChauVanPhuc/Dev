@@ -16,9 +16,9 @@ const PersonnelChartView = ({ diagramDropdown }) => {
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/hr/personnel');
 
   useEffect(() => {
-    if (typeof setCustomTitle === 'function' && title) setCustomTitle(title);
-    if (typeof setCustomSubtitle === 'function' && subtitle) setCustomSubtitle(subtitle);
-    if (typeof setCustomScreenCode === 'function' && screenCode) setCustomScreenCode(screenCode);
+    if (setCustomTitle) setCustomTitle(title);
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   const [nodes, setNodes] = useState([]);

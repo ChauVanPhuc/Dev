@@ -15,9 +15,9 @@ const InspectionDetailView = () => {
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/reports/detail/:type/:id');
 
   useEffect(() => {
-    if (setCustomTitle && title) setCustomTitle(title);
-    if (setCustomSubtitle && subtitle) setCustomSubtitle(subtitle);
-    if (setCustomScreenCode && screenCode) setCustomScreenCode(screenCode);
+    if (setCustomTitle) setCustomTitle(title);
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
   }, [title, subtitle, screenCode, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   const [item, setItem] = useState(null);
