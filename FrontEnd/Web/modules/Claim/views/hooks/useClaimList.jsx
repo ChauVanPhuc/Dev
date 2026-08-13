@@ -1453,10 +1453,6 @@ export const useClaimList = () => {
   }, []);
 
   useEffect(() => {
-    // Set Header titles exactly like the top of screenshot
-    if (title) setCustomTitle(title);
-    if (subtitle) setCustomSubtitle(subtitle);
-
     // Set top right header extra icons (? and layout grid)
     setHeaderExtra(
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginRight: '10px' }}>

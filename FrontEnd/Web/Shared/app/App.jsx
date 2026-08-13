@@ -543,8 +543,8 @@ const ProtectedRoute = ({ permissionKey, children }) => {
   }
 
   // Kiểm tra nếu bị chặn rõ ràng bởi 'none'
-  const isExplicitlyNone = 
-    permission === 'none' || 
+  const isExplicitlyNone =
+    permission === 'none' ||
     (Array.isArray(permission) && (permission.includes('none') || permission.length === 0)) ||
     (typeof permission === 'string' && permission.split(',').map(s => s.trim()).includes('none'));
 
