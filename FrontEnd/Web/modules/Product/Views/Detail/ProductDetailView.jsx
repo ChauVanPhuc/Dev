@@ -43,6 +43,8 @@ const ProductDetailView = () => {
   const outletContext = useOutletContext() || {};
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = outletContext;
 
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/products/:id');
+
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('bom');
@@ -120,9 +122,9 @@ const ProductDetailView = () => {
 
   // Đặt Tiêu đề và Subtitle chuẩn lên Thanh Nav Cố Định
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle('Quản lý sản phẩm');
-    if (setCustomSubtitle) setCustomSubtitle('KT03: Chi tiết sản phẩm');
-    if (setCustomScreenCode) setCustomScreenCode('KT03');
+    if (setCustomTitle) setCustomTitle(title || 'Quản lý sản phẩm');
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Chi tiết sản phẩm');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'KT03');
     if (setHeaderExtra) {
       setHeaderExtra(
         <button
@@ -159,7 +161,7 @@ const ProductDetailView = () => {
     return () => {
       if (setHeaderExtra) setHeaderExtra(null);
     };
-  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra, navigate]);
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra, navigate, title, subtitle, screenCode]);
 
   // Form Thông tin chung
   const [formData, setFormData] = useState({

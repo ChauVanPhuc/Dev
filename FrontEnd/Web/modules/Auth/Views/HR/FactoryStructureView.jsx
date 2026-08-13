@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { Network, List, Plus, Minus, Edit2, Trash2, Building2, ChevronDown, ChevronRight } from 'lucide-react';
 import { hrService } from '../../Models/hr.service';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import FactoryStructureModal from './FactoryStructureModal';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const getLevelNumber = (code) => {
   const match = (code || '').match(/\d+/);
@@ -10,6 +12,15 @@ const getLevelNumber = (code) => {
 };
 
 const FactoryStructureView = ({ diagramDropdown }) => {
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/hr/factory');
+
+  useEffect(() => {
+    if (typeof setCustomTitle === 'function' && title) setCustomTitle(title);
+    if (typeof setCustomSubtitle === 'function' && subtitle) setCustomSubtitle(subtitle);
+    if (typeof setCustomScreenCode === 'function' && screenCode) setCustomScreenCode(screenCode);
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
+
   const [structures, setStructures] = useState([]);
   const [viewMode, setViewMode] = useState('chart');
   const [search, setSearch] = useState('');

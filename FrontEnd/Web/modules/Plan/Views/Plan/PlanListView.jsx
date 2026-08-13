@@ -21,10 +21,20 @@ import * as XLSX from 'xlsx';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { planService } from '@modules/Plan/Models/plan.service';
 import { getBaseURL } from '@webShared/Services/api.service';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const ManufacturePlan = () => {
     const navigate = useNavigate();
-    const { showModal, startGlobalUpload, activeUploads } = useOutletContext();
+    const { showModal, startGlobalUpload, activeUploads, setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+    const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/plan');
+
+    useEffect(() => {
+      if (screenCode && title) {
+        if (setCustomTitle) setCustomTitle(title);
+        if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+        if (setCustomScreenCode) setCustomScreenCode(screenCode);
+      }
+    }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
     const fileInputRef = React.useRef(null);
     const [plans, setPlans] = useState([]);
     const [loading, setLoading] = useState(true);

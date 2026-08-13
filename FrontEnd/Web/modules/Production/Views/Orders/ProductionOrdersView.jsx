@@ -47,10 +47,10 @@ const ProductionOrdersView = () => {
   // Đặt Tiêu đề, Subtitle và Nút "Quay lại" trực tiếp lên Thanh Nav Cố Định (admin-header)
   useEffect(() => {
     if (viewMode === 'create') {
-      const titleSub = isEditMode ? 'SX02.1: Chi tiết lệnh sản xuất' : 'SX02.1: Tạo lệnh sản xuất';
-      if (setCustomTitle) setCustomTitle('Lệnh sản xuất');
+      const titleSub = isEditMode ? `${screenCode || 'SX02'}.1: Chi tiết lệnh sản xuất` : `${screenCode || 'SX02'}.1: Tạo lệnh sản xuất`;
+      if (setCustomTitle) setCustomTitle(title || 'Lệnh sản xuất');
       if (setCustomSubtitle) setCustomSubtitle(titleSub);
-      if (setCustomScreenCode) setCustomScreenCode('SX02.1');
+      if (setCustomScreenCode) setCustomScreenCode(`${screenCode || 'SX02'}.1`);
       if (setHeaderExtra) {
         setHeaderExtra(
           <button
@@ -85,16 +85,16 @@ const ProductionOrdersView = () => {
         );
       }
     } else {
-      if (setCustomTitle) setCustomTitle('Lệnh sản xuất');
-      if (setCustomSubtitle) setCustomSubtitle('SX02: Danh sách lệnh sản xuất');
-      if (setCustomScreenCode) setCustomScreenCode('SX02');
+      if (setCustomTitle) setCustomTitle(title || 'Lệnh sản xuất');
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Danh sách lệnh sản xuất');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode || 'SX02');
       if (setHeaderExtra) setHeaderExtra(null);
     }
 
     return () => {
       if (setHeaderExtra) setHeaderExtra(null);
     };
-  }, [viewMode, isEditMode, setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra]);
+  }, [viewMode, isEditMode, setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra, title, subtitle, screenCode]);
 
   // State dữ liệu danh sách Lệnh sản xuất
   const [ordersList, setOrdersList] = useState([]);

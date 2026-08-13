@@ -5,10 +5,20 @@ import { Search, Plus, FileSpreadsheet, FileText, ArrowUpDown, ChevronLeft, Chev
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const ManufactureProducts = () => {
   const navigate = useNavigate();
-  const { showModal, startGlobalUpload, activeUploads } = useOutletContext();
+  const { showModal, startGlobalUpload, activeUploads, setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/products');
+
+  useEffect(() => {
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState(0);

@@ -53,7 +53,7 @@ export const useInspectionReports = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
   
   // Lấy metadata từ database thay vì hardcode
-  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/inspection-reports');
+  const { screenCode, title, subtitle } = useScreenMetadataCached(location.pathname || '/admin/reports');
   
   // Tab control: 'stage' | 'input' | 'daily' | 'process'
   const [activeTab, setActiveTab] = useState('stage');

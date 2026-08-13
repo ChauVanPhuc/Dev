@@ -10,10 +10,10 @@ import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
 const MachineDetailView = () => {
-  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
   
   // Lấy metadata từ database thay vì hardcode
-  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/machines/:id');
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/machines/detail/:id');
   const navigate = useNavigate();
   const { id } = useParams();
 
@@ -88,11 +88,9 @@ const MachineDetailView = () => {
   }, [id]);
 
   useEffect(() => {
-    if (screenCode && title) {
-      if (setCustomTitle) setCustomTitle(title);
-      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
-      if (setCustomScreenCode) setCustomScreenCode(screenCode);
-    }
+    if (setCustomTitle) setCustomTitle(title || 'Thông tin thiết bị máy móc');
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Hồ sơ chi tiết thiết bị máy móc, lịch sử bảo dưỡng và hướng dẫn vận hành chuẩn.');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'MC37.5');
   }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   if (loading) {

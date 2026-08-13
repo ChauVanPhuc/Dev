@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Edit2, Trash2, X, AlertTriangle, Palette, Image as ImageIcon, MoreVertical, ArrowLeft, RefreshCw } from 'lucide-react';
 import api from '@webShared/Services/api.service';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
@@ -16,13 +17,15 @@ const PaintColorManagementView = ({ isEmbedded = false }) => {
   const outletContext = useOutletContext() || {};
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = outletContext;
 
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/paint-colors');
+
   useEffect(() => {
     if (!isEmbedded) {
-      if (setCustomTitle) setCustomTitle('Quản lý Mẫu sơn');
-      if (setCustomSubtitle) setCustomSubtitle('Quản lý danh sách mẫu màu sơn theo từng sản phẩm mẫu');
-      if (setCustomScreenCode) setCustomScreenCode('KT03.3');
+      if (setCustomTitle) setCustomTitle(title || 'Quản lý Mẫu sơn');
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Quản lý danh sách mẫu màu sơn theo từng sản phẩm mẫu');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode || 'KT03.3');
     }
-  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, isEmbedded]);
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, isEmbedded, title, subtitle, screenCode]);
 
   // Data states
   const [items, setItems] = useState([]);
@@ -74,13 +77,6 @@ const PaintColorManagementView = ({ isEmbedded = false }) => {
     image_url: '',
     note: ''
   });
-
-  // Setup header Title
-  useEffect(() => {
-    if (setCustomTitle) setCustomTitle('Quản lý sản phẩm');
-    if (setCustomSubtitle) setCustomSubtitle('KT03.3: Quản lý Mẫu sơn');
-    if (setCustomScreenCode) setCustomScreenCode('KT03.3');
-  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   // Suggestion states for autocomplete
   const [colorCodeSuggestions, setColorCodeSuggestions] = useState([]);

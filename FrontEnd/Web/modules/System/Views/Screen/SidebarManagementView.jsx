@@ -6,6 +6,7 @@ import {
   X, HelpCircle, Save, Settings, ChevronRight, CheckSquare, Square
 } from 'lucide-react';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import * as Icons from 'lucide-react';
@@ -20,8 +21,10 @@ const DynamicIcon = ({ name, size = 16, ...props }) => {
 const DURATION = 300;
 
 export default function SidebarManagementView() {
-  const { setCustomTitle, setCustomSubtitle } = useOutletContext();
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
   const { toast } = useToast();
+
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/sidebar');
 
   const [activeTab, setActiveTab] = useState('Web'); // 'Web' or 'Mobile'
   const [menus, setMenus] = useState([]);
@@ -61,9 +64,10 @@ export default function SidebarManagementView() {
   ];
 
   useEffect(() => {
-    setCustomTitle('Cấu hình Sidebar');
-    setCustomSubtitle('Quản lý phân cấp menu điều hướng động của bản Web và Mobile');
-  }, [setCustomTitle, setCustomSubtitle]);
+    if (setCustomTitle) setCustomTitle(title || 'Cấu hình Sidebar');
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Quản lý phân cấp menu điều hướng động của bản Web và Mobile');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'AD51');
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   const loadData = async () => {
     try {

@@ -9,7 +9,7 @@ import '@styles/components.css';
 const KPIItemsView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
   const navigate = useNavigate();
-  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/kpi/items');
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/kpi/list');
   const [kpiPool, setKpiPool] = useState([]);
   
   // Search

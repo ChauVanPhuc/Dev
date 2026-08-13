@@ -82,14 +82,9 @@ const ViolationHistoryView = () => {
   }, []);
 
   useEffect(() => {
-    if (screenCode && title) {
-      if (setCustomTitle) setCustomTitle(title);
-      if (setCustomSubtitle) setCustomSubtitle(subtitle || 'HT08: Danh sách nhân sự vi phạm');
-      if (setCustomScreenCode) setCustomScreenCode(screenCode);
-    } else {
-      if (setCustomTitle) setCustomTitle('Lịch sử vi phạm');
-      if (setCustomSubtitle) setCustomSubtitle('HT08: Danh sách nhân sự vi phạm');
-    }
+    if (setCustomTitle) setCustomTitle(title || 'Lịch sử vi phạm');
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'HT08: Danh sách nhân sự vi phạm');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'HT08');
   }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   useEffect(() => {
@@ -162,7 +157,6 @@ const ViolationHistoryView = () => {
       <div className="mgmt-main">
         {/* Standard Page Toolbar */}
         <PageToolbar
-          title="Lịch sử vi phạm"
           searchValue={searchQuery}
           onSearchChange={(val) => { setSearchQuery(val); setPage(1); }}
           searchPlaceholder="Tìm mã quy tắc, tên nhân sự..."

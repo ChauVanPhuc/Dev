@@ -8,7 +8,7 @@ const SystemMonitorView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = useOutletContext();
 
   // Lấy metadata từ database thay vì hardcode
-  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/system-monitor');
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/monitor');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshInterval, setRefreshInterval] = useState(3000); // 3s default

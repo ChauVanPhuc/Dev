@@ -1,6 +1,17 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const ManufactureReceive = () => {
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/manufacture-receive');
+
+  useEffect(() => {
+    if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Tiếp nhận sản xuất');
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || 'Tiếp nhận vật tư và thành phẩm từ nhà máy/nhà cung cấp');
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'SX05');
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
+
   const stats = [
     { title: 'CHỜ TIẾP NHẬN', value: '0 Đơn', color: '#FFF3E0' },
     { title: 'ĐÃ TIẾP NHẬN', value: '0 Đơn', color: '#E8F5E9' },

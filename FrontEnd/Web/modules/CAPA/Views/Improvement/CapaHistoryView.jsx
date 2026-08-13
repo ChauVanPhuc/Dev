@@ -97,15 +97,10 @@ const CapaHistoryView = () => {
   }, []);
 
   useEffect(() => {
-    if (screenCode && title) {
-      if (setCustomTitle) setCustomTitle(title);
-      if (setCustomSubtitle) setCustomSubtitle(subtitle || 'CL10.1: Quản lý Báo cáo CAPA');
-      if (setCustomScreenCode) setCustomScreenCode(screenCode);
-    } else {
-      if (setCustomTitle) setCustomTitle('Báo cáo CAPA');
-      if (setCustomSubtitle) setCustomSubtitle('CL10.1: Quản lý Báo cáo CAPA');
-    }
-  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+    if (setCustomTitle) setCustomTitle(title || 'Báo cáo CAPA');
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'CL10.1: Quản lý Báo cáo CAPA');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'CL10.1');
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   useEffect(() => {
     fetchCapas();
@@ -179,7 +174,6 @@ const CapaHistoryView = () => {
       <div className="mgmt-main">
         {/* Standard Page Toolbar */}
         <PageToolbar
-          title="Báo cáo CAPA"
           searchValue={searchQuery}
           onSearchChange={(val) => { setSearchQuery(val); setPage(1); }}
           searchPlaceholder="Tìm mã CAPA, người xử lý, mô tả..."

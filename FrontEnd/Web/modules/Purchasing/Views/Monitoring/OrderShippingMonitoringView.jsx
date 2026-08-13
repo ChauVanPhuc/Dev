@@ -9,6 +9,7 @@ import { purchasingService } from '@modules/Purchasing/Models/purchasing.service
 import '@styles/components.css';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 // Helper format ngày hiển thị (2026-07-26T15:19:53 hoặc 2026-07-26 -> 26/07/2026)
 const formatDateDisplay = (dateStr) => {
@@ -38,14 +39,16 @@ const formatDateDisplay = (dateStr) => {
 const OrderShippingMonitoringView = () => {
   const navigate = useNavigate();
   const outletContext = useOutletContext() || {};
-  const { setCustomTitle, setCustomSubtitle, startGlobalUpload } = outletContext;
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, startGlobalUpload } = outletContext;
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/order-shipping-monitoring');
   const { toast } = useToast();
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    if (typeof setCustomTitle === 'function') setCustomTitle('Quản lý kinh doanh');
-    if (typeof setCustomSubtitle === 'function') setCustomSubtitle('KD04: Giám sát tiến độ đơn hàng');
-  }, [setCustomTitle, setCustomSubtitle]);
+    if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Quản lý kinh doanh');
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || 'KD04: Giám sát tiến độ đơn hàng');
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'KD04');
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   const [data, setData] = useState([]);
   const [total, setTotal] = useState(0);

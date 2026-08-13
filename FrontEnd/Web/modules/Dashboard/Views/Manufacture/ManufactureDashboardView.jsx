@@ -1,7 +1,19 @@
-import React from 'react';
-
+import React, { useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const ManufactureDashboard = () => {
+    const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+    const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/manufacture-dashboard');
+
+    useEffect(() => {
+        if (screenCode && title) {
+            if (setCustomTitle) setCustomTitle(title);
+            if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+            if (setCustomScreenCode) setCustomScreenCode(screenCode);
+        }
+    }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+
     const metrics = [
         { label: 'Hiệu suất dây chuyền', value: '92%', status: 'Tăng 2%', color: '#4CAF50' },
         { label: 'Sản phẩm lỗi (QC)', value: '0.5%', status: 'Giảm 0.1%', color: '#F44336' },

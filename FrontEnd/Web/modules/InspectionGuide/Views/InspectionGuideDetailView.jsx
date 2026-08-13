@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
 import {
   ArrowLeft, BookOpen, Save, Trash2, Plus, Upload, X, ChevronUp, ChevronDown,
   Layers, Image as ImageIcon, Smartphone, ShieldCheck,
@@ -11,6 +11,7 @@ import BeautifulConfirmModal from '@webShared/Views/components/feedback/Beautifu
 import GuideAssignmentTab from './components/GuideAssignmentTab';
 import RichTextEditor from '../../ISO/components/RichTextEditor';
 import { cleanWordClipboardText, handlePasteCleanText, FormattedTextView } from '@shared/utils/textFormatter';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
 const IMAGE_LIMIT = 10;
@@ -20,6 +21,16 @@ const InspectionGuideDetailView = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const fileInputRef = useRef(null);
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/inspection-guides/edit/:id');
+
+  useEffect(() => {
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   // Core Data
   const [guide, setGuide] = useState(null);

@@ -24,16 +24,16 @@ const ISOProcessEditorView = () => {
   const setCustomSubtitle = outletContext.setCustomSubtitle || (() => {});
   const setCustomScreenCode = outletContext.setCustomScreenCode || (() => {});
 
-  // Lấy metadata từ database thay vì hardcode
-  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/iso/processes/:id');
+  const location = useLocation();
+  const isProcessMode = location.pathname.includes('/iso-processes');
+  const routePath = isProcessMode ? '/admin/iso-processes/edit/:id' : '/admin/iso-documents/edit/:id';
+  const { screenCode, title, subtitle } = useScreenMetadataCached(routePath);
   const navigate = useNavigate();
   const { id } = useParams();
-  const location = useLocation();
   const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
   const fileInputRef = useRef(null);
   const [uploadLoading, setUploadLoading] = useState(false);
 
-  const isProcessMode = true;
   const backPath = isProcessMode ? '/admin/iso-processes' : '/admin/iso-documents';
   const isEditMode = id && id !== 'new';
 
@@ -769,13 +769,13 @@ const ISOProcessEditorView = () => {
 
   useEffect(() => {
     if (isProcessMode) {
-      setCustomTitle('Quản lý quy trình');
-      setCustomSubtitle(isEditMode ? 'Nhân sự - Chỉnh sửa Quy trình' : 'Nhân sự - Thêm mới Quy trình');
-      setCustomScreenCode(isEditMode ? 'AD55' : 'AD18');
+      setCustomTitle(title || 'Quản lý quy trình');
+      setCustomSubtitle(subtitle || (isEditMode ? 'Nhân sự - Chỉnh sửa Quy trình' : 'Nhân sự - Thêm mới Quy trình'));
+      setCustomScreenCode(screenCode || (isEditMode ? 'AD55' : 'AD18'));
     } else {
-      setCustomTitle('Quản lý mẫu tài liệu');
-      setCustomSubtitle(isEditMode ? 'Nhân sự - Chỉnh sửa Mẫu ISO' : 'Nhân sự - Thêm mới Mẫu ISO');
-      setCustomScreenCode(isEditMode ? 'AD17.1' : 'AD17');
+      setCustomTitle(title || 'Quản lý mẫu tài liệu');
+      setCustomSubtitle(subtitle || (isEditMode ? 'Nhân sự - Chỉnh sửa Mẫu ISO' : 'Nhân sự - Thêm mới Mẫu ISO'));
+      setCustomScreenCode(screenCode || (isEditMode ? 'AD17.1' : 'AD17'));
     }
 
     if (location.state && location.state.parsedData) {
@@ -851,7 +851,7 @@ const ISOProcessEditorView = () => {
         }));
       });
     }
-  }, [id]);
+  }, [id, isProcessMode, isEditMode, title, subtitle, screenCode]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);

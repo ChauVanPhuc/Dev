@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
 import {
   ArrowLeft, Save, Trash2, Image as ImageIcon, Upload, Eye, CheckCircle2,
   AlertTriangle, X, Sparkles, Layers, Info, Check, Search, Tag, FileText
@@ -7,6 +7,7 @@ import {
 import api, { getFullImageUrl } from '@webShared/Services/api.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
 const THEME = {
@@ -44,6 +45,16 @@ const CTQGuideDetailView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/ctq-guides/edit/:id');
+
+  useEffect(() => {
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   const [guide, setGuide] = useState(null);
   const [loading, setLoading] = useState(true);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useOutletContext } from 'react-router-dom';
 import {
   BookOpen, Plus, Search, Filter, LayoutGrid, List, Eye, Edit3, Trash2,
   CheckCircle2, XCircle, Layers, CheckSquare, Image as ImageIcon,
@@ -10,6 +10,7 @@ import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
 import GuideQuickPreviewModal from './components/GuideQuickPreviewModal';
 import { INSPECTION_TYPE_OPTIONS } from './components/GuideAssignmentTab';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
 const DOC_CONFIGS = {
@@ -61,6 +62,8 @@ const InspectionGuideManagementView = ({ docType }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+  const { screenCode, title: metaTitle, subtitle: metaSubtitle } = useScreenMetadataCached(location.pathname);
 
   // Determine current active doc type (HDKT, SOS, or CTQ) based on prop or route path
   const activeDocType = useMemo(() => {
@@ -72,6 +75,14 @@ const InspectionGuideManagementView = ({ docType }) => {
   }, [docType, location.pathname]);
 
   const config = DOC_CONFIGS[activeDocType] || DOC_CONFIGS.HDKT;
+
+  useEffect(() => {
+    if (screenCode && metaTitle) {
+      if (setCustomTitle) setCustomTitle(metaTitle);
+      if (setCustomSubtitle) setCustomSubtitle(metaSubtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, metaTitle, metaSubtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
   const HeaderIcon = config.icon;
 
   const [guides, setGuides] = useState([]);

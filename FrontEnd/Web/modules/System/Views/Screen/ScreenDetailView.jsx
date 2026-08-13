@@ -3,6 +3,7 @@ import { useParams, useLocation, useNavigate, useOutletContext } from 'react-rou
 import { X, Search, Plus, ExternalLink, AlertTriangle } from 'lucide-react';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import { useScreen } from '@shared/context/ScreenContext';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 // Import sub-components
 import ComponentTreePane from '../components/ScreenDetail/ComponentTreePane';
@@ -24,6 +25,14 @@ import './ScreenDetailView.css';
 
 const ScreenDetail = () => {
   const detail = useScreenDetail();
+  const outletContext = useOutletContext();
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/screens/:id');
+
+  React.useEffect(() => {
+    if (outletContext?.setCustomTitle && title) outletContext.setCustomTitle(title);
+    if (outletContext?.setCustomSubtitle && subtitle) outletContext.setCustomSubtitle(subtitle);
+    if (outletContext?.setCustomScreenCode && screenCode) outletContext.setCustomScreenCode(screenCode);
+  }, [screenCode, title, subtitle, outletContext]);
 
   if (detail.error) {
     return (

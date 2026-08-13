@@ -27,7 +27,7 @@ const UserEdit = ({ isProfile = false }) => {
   const setCustomScreenCode = outletContext?.setCustomScreenCode;
   
   // Lấy metadata từ database thay vì hardcode
-  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/users/:id/edit');
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/users/edit/:id');
 
   // Cập nhật tiêu đề trang lên Layout Header
   useEffect(() => {

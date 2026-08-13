@@ -22,6 +22,16 @@ const EquipmentHandoverView = ({ id: propId, onClose, onSaved }) => {
   const id = propId !== undefined ? propId : routeId;
   const isModal = onClose !== undefined;
 
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/equipment/handover');
+
+  useEffect(() => {
+    if (!isModal) {
+      if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Bàn giao thiết bị');
+      if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || 'Quản lý quy trình bàn giao và nghiệm thu thiết bị máy móc');
+      if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'TB05');
+    }
+  }, [isModal, setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
+
   const imageInputRef = useRef(null);
   const fileInputRef = useRef(null);
 

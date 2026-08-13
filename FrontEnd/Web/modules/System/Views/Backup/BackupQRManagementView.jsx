@@ -11,7 +11,7 @@ const BackupQRManagement = () => {
     const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = useOutletContext();
 
     // Lấy metadata từ database thay vì hardcode
-    const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/backup-qr');
+    const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/backup-qrs');
     const [qrCodes, setQrCodes] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');

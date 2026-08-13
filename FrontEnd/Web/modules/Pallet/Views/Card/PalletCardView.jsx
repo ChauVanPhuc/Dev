@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import deliveryService from '@modules/Delivery/Models/delivery.service';
 import { 
     Search, Filter, RefreshCw, AlertTriangle, 
@@ -8,8 +9,19 @@ import {
     User, Clipboard, Image as ImageIcon, Layers, Undo2
 } from 'lucide-react';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const ExceptionDeliveries = () => {
+    const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+    const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/exception-deliveries');
+
+    useEffect(() => {
+      if (screenCode && title) {
+        if (setCustomTitle) setCustomTitle(title);
+        if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+        if (setCustomScreenCode) setCustomScreenCode(screenCode);
+      }
+    }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
     const [deliveries, setDeliveries] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');

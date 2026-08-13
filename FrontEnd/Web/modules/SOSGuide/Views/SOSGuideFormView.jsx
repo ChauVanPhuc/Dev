@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Save, Sparkles, FileText } from 'lucide-react';
 import api from '@webShared/Services/api.service';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
 
@@ -19,6 +20,9 @@ const SOSGuideFormView = () => {
   const outletContext = useOutletContext();
   const setCustomTitle = outletContext?.setCustomTitle;
   const setCustomSubtitle = outletContext?.setCustomSubtitle;
+  const setCustomScreenCode = outletContext?.setCustomScreenCode;
+
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/sos-guides/create');
 
   const [form, setForm] = useState({
     code: '',
@@ -31,13 +35,15 @@ const SOSGuideFormView = () => {
   const [generatingCode, setGeneratingCode] = useState(false);
 
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle('Hướng dẫn thao tác (SOS)');
-    if (setCustomSubtitle) setCustomSubtitle('Khởi tạo mới');
+    if (setCustomTitle) setCustomTitle(title || 'Hướng dẫn thao tác (SOS)');
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Khởi tạo mới');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'CL04.1');
     return () => {
       if (setCustomTitle) setCustomTitle(null);
       if (setCustomSubtitle) setCustomSubtitle(null);
+      if (setCustomScreenCode) setCustomScreenCode(null);
     };
-  }, [setCustomTitle, setCustomSubtitle]);
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   // Tự động sinh mã G7.CL.SOS.xxx từ API backend
   const generateUniqueCode = async () => {

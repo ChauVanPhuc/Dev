@@ -1,10 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { Edit2, Trash2, Filter, Upload, Download, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { hrService } from '../../Models/hr.service';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import EmployeeModal from './EmployeeModal';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const EmployeeListView = () => {
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/hr/employees');
+
+  useEffect(() => {
+    if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Danh sách nhân sự');
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || 'Quản lý thông tin hồ sơ nhân viên và hợp đồng lao động');
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'NS01');
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
+
   const [employees, setEmployees] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);

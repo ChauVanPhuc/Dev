@@ -15,7 +15,7 @@ const MachineManagementView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = useOutletContext();
   
   // Lấy metadata từ database thay vì hardcode
-  const { screenCode, title, subtitle } = useScreenMetadataCached('machines');
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/machines');
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
@@ -23,7 +23,7 @@ const MachineManagementView = () => {
   useEffect(() => {
     // Clear cache để lấy data mới nhất
     if (window.screenMetadataCache) {
-      window.screenMetadataCache.delete('machines');
+      window.screenMetadataCache.delete('/admin/machines');
     }
   }, []);
   

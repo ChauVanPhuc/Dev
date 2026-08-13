@@ -10,13 +10,21 @@ import '@styles/components.css';
 import { Table } from '../../components/Table';
 import { Pagination } from '../../components/Pagination';
 import { FormModal, AlertModal } from '../../components/Modal';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 /**
  * View: Quản lý Xuất Cont (Container Shipment Management)
  */
 const ShipmentListView = () => {
-  const { setCustomTitle, setCustomSubtitle, showModal: contextShowModal } = useOutletContext();
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, showModal: contextShowModal } = useOutletContext() || {};
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/shipments');
   const [localNotification, setLocalNotification] = useState(null);
+
+  useEffect(() => {
+    if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Quản lý Xuất Cont');
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || 'Theo dõi và quản lý các chuyến hàng xuất cont');
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'CL03');
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
   const loggedInUserIsAdmin = loggedInUser.role_name === 'IT' || loggedInUser.role_name === 'BGD' || loggedInUser.username === 'admin';

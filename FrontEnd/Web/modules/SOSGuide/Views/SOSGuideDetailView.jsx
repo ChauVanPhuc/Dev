@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
 import {
   ArrowLeft, FileText, Save, Trash2, Plus, Upload, X, ChevronUp, ChevronDown,
   Layers, Image as ImageIcon, ZoomIn, CheckCircle2, ShieldCheck,
@@ -9,6 +9,7 @@ import api, { getFullImageUrl } from '@webShared/Services/api.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
 import { FormattedTextView } from '@shared/utils/textFormatter';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
 const IMAGE_LIMIT = 10;
@@ -26,6 +27,16 @@ const SOSGuideDetailView = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const fileInputRef = useRef(null);
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/sos-guides/edit/:id');
+
+  useEffect(() => {
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   // Core Data
   const [guide, setGuide] = useState(null);

@@ -14,9 +14,10 @@ import {
     Search,
     Loader2
 } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useOutletContext } from 'react-router-dom';
 import { bomService } from '@modules/Product/Models/bom.service';
 import { orderService } from '@modules/Order/Models/order.service';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 // --- SEARCHABLE SELECT COMPONENT ---
 const SearchableSelect = ({ value, onChange, placeholder }) => {
@@ -155,8 +156,19 @@ const SearchableSelect = ({ value, onChange, placeholder }) => {
 const OrderCreate = () => {
     const navigate = useNavigate();
     const { id } = useParams();
+    const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+    const routePath = id ? '/admin/orders/edit/:id' : '/admin/orders/create';
+    const { screenCode, title, subtitle } = useScreenMetadataCached(routePath);
     const [isLoading, setIsLoading] = useState(false);
     const [boms, setBoms] = useState([]);
+
+    useEffect(() => {
+      if (screenCode && title) {
+        if (setCustomTitle) setCustomTitle(title);
+        if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+        if (setCustomScreenCode) setCustomScreenCode(screenCode);
+      }
+    }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
     const [orderData, setOrderData] = useState({
         customer: '',

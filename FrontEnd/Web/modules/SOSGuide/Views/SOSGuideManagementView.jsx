@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import {
   FileText, Plus, Search, Filter, LayoutGrid, List, Eye, Edit3, Trash2,
   CheckCircle2, XCircle, Layers, Image as ImageIcon, Sparkles, RefreshCw, MoreVertical
@@ -8,6 +8,7 @@ import api from '@webShared/Services/api.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
 import SOSQuickPreviewModal from './components/SOSQuickPreviewModal';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
 const THEME = {
@@ -23,6 +24,16 @@ const THEME = {
 const SOSGuideManagementView = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/sos-guides');
+
+  useEffect(() => {
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   const [guides, setGuides] = useState([]);
   const [loading, setLoading] = useState(true);

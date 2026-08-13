@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Edit2, Trash2, X, AlertTriangle, MoreVertical, ArrowLeft, RefreshCw, ChevronDown } from 'lucide-react';
 import api from '@webShared/Services/api.service';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
@@ -16,13 +17,15 @@ const ProductDetailsManagementView = ({ isEmbedded = false }) => {
   const outletContext = useOutletContext() || {};
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = outletContext;
 
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/product-details');
+
   useEffect(() => {
     if (!isEmbedded) {
-      if (setCustomTitle) setCustomTitle('Quản lý Chi tiết Sản phẩm');
-      if (setCustomSubtitle) setCustomSubtitle('Quản lý danh mục linh kiện, phôi, quy cách theo sản phẩm');
-      if (setCustomScreenCode) setCustomScreenCode('KT03.1');
+      if (setCustomTitle) setCustomTitle(title || 'Quản lý Chi tiết Sản phẩm');
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Quản lý danh mục linh kiện, phôi, quy cách theo sản phẩm');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode || 'KT03.1');
     }
-  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, isEmbedded]);
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, isEmbedded, title, subtitle, screenCode]);
 
   // Data states
   const [items, setItems] = useState([]);
@@ -98,13 +101,6 @@ const ProductDetailsManagementView = ({ isEmbedded = false }) => {
   ];
   const materialOptions = ['Gỗ tự nhiên', 'MDF', 'Gỗ Sồi', 'Gỗ thông', 'Ván ép', 'Kim loại'];
   const unitOptions = ['Cái', 'Tấm', 'Bộ', 'm2', 'm3'];
-
-  // Setup header Title
-  useEffect(() => {
-    if (setCustomTitle) setCustomTitle('Quản lý sản phẩm');
-    if (setCustomSubtitle) setCustomSubtitle('KT03.1: Quản lý Chi tiết');
-    if (setCustomScreenCode) setCustomScreenCode('KT03.1');
-  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   // Suggestion states for autocomplete
   const [detailSuggestions, setDetailSuggestions] = useState([]);

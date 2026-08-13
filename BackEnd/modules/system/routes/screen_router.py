@@ -131,6 +131,7 @@ async def create_screen(
     db_screen = SystemScreenModel(
         platform=screen_in.platform,
         route_path=route_path,
+        backend_path=screen_in.backend_path,
         default_code=next_code,
         current_code=screen_in.current_code if (screen_in.current_code and screen_in.current_code.strip()) else next_code,
         title=screen_in.title,
@@ -139,7 +140,7 @@ async def create_screen(
         target_date=screen_in.target_date,
         is_active=True
     )
-    
+
     db.add(db_screen)
     db.commit()
     db.refresh(db_screen)
@@ -250,6 +251,7 @@ def get_screens_map(platform: Optional[str] = None, db: Session = Depends(get_db
             "id": screen.id,
             "platform": screen.platform,
             "route_path": screen.route_path,
+            "backend_path": screen.backend_path,
             "default_code": screen.default_code,
             "current_code": screen.current_code,
             "title": screen.title,

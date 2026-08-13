@@ -19,6 +19,7 @@ import {
   X
 } from 'lucide-react';
 import api from '@webShared/Services/api.service';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import AddComponentModal from '../Detail/modals/AddComponentModal';
 import AddDetailModal from '../Detail/modals/AddDetailModal';
@@ -42,6 +43,8 @@ const ProductCreateView = () => {
 
   const outletContext = useOutletContext() || {};
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = outletContext;
+
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/products/create');
 
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('bom');
@@ -339,9 +342,9 @@ const ProductCreateView = () => {
 
   // Thiết lập Title & Header Navigation Bar
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle('Quản lý sản phẩm');
-    if (setCustomSubtitle) setCustomSubtitle('KT03.Create: Thêm mới sản phẩm');
-    if (setCustomScreenCode) setCustomScreenCode('KT03.1');
+    if (setCustomTitle) setCustomTitle(title || 'Quản lý sản phẩm');
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Thêm mới sản phẩm');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'KT03.1');
     if (setHeaderExtra) {
       setHeaderExtra(
         <button
@@ -378,7 +381,7 @@ const ProductCreateView = () => {
     return () => {
       if (setHeaderExtra) setHeaderExtra(null);
     };
-  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra, navigate]);
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra, navigate, title, subtitle, screenCode]);
 
   // Cập nhật giá trị ô input Form thông tin chung
   const handleInputChange = (field, value) => {

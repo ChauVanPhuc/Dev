@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { 
   Search, 
@@ -22,6 +22,7 @@ import {
   MoreVertical
 } from 'lucide-react';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 // Import custom hook
 import { useInspectionReports, getInspectionTypeLabel } from './hooks/useInspectionReports';
@@ -31,6 +32,16 @@ import '@styles/components.css';
 const InspectionReportsView = () => {
   const reports = useInspectionReports();
   const navigate = useNavigate();
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/reports');
+
+  useEffect(() => {
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
   const {
     activeActionMenu,
     activeTab,
@@ -128,7 +139,6 @@ const InspectionReportsView = () => {
     resCell,
     root,
     s,
-    screenCode,
     selectedDaily,
     selectedExportOption,
     selectedInbound,
@@ -142,9 +152,6 @@ const InspectionReportsView = () => {
     setUnifiedLimit,
     setActiveActionMenu,
     setActiveTab,
-    setCustomScreenCode,
-    setCustomSubtitle,
-    setCustomTitle,
     setDailyEndDate,
     setDailyInspections,
     setDailyLimit,
@@ -368,6 +375,9 @@ const InspectionReportsView = () => {
 
       {/* TOOLBAR: Search & Filters */}
       <PageToolbar
+        title={title}
+        subtitle={subtitle}
+        screenCode={screenCode}
         searchValue={stageSearch}
         onSearchChange={(val) => {
           setStageSearch(val);

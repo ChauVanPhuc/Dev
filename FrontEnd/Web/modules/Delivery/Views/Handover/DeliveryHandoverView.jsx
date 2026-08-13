@@ -1,6 +1,17 @@
 import React, { useState, useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const ManufactureHandover = () => {
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/manufacture-handover');
+
+  useEffect(() => {
+    if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Bàn giao sản xuất');
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || 'Quản lý lệnh và tiến độ bàn giao sản xuất');
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'SX04');
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
+
   const [actionMenuId, setActionMenuId] = useState(null);
 
   useEffect(() => {

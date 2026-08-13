@@ -12,11 +12,12 @@ import {
     Search,
     Loader2
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { planService } from '@modules/Plan/Models/plan.service';
 import { orderService } from '@modules/Order/Models/order.service';
 import { bomService } from '@modules/Product/Models/bom.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 // --- COMPONENT TÌM KIẾM SẢN PHẨM THÔNG MINH (TRÁNH LOAD TẤT CẢ) ---
 const ProductSearchSelect = ({ value, onChange, placeholder, onOpenChange }) => {
@@ -211,8 +212,18 @@ const ProductSearchSelect = ({ value, onChange, placeholder, onOpenChange }) => 
 
 const AddProductionPlan = () => {
     const navigate = useNavigate();
+    const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+    const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/plan/create');
     const [isLoading, setIsLoading] = useState(false);
     const { toast } = useToast();
+
+    useEffect(() => {
+      if (screenCode && title) {
+        if (setCustomTitle) setCustomTitle(title);
+        if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+        if (setCustomScreenCode) setCustomScreenCode(screenCode);
+      }
+    }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
     const [currentTime, setCurrentTime] = useState(new Date());
 
     const [activeSelectId, setActiveSelectId] = useState(null);

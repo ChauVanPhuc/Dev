@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { screenService } from '@modules/System/Models/screen.service';
 import { bugService } from '@modules/System/Models/bug.service';
 import api from '@webShared/Services/api.service';
@@ -10,6 +10,7 @@ import {
 import '@styles/components.css';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '';
@@ -28,6 +29,14 @@ const formatDate = (dateStr) => {
 const ProjectProgressView = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/screens/progress');
+
+  useEffect(() => {
+    if (setCustomTitle) setCustomTitle(title || 'Tiến độ dự án');
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Theo dõi tiến độ phát triển và hoàn thiện hệ thống');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'AD03');
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   const [screens, setScreens] = useState([]);
   const [bugs, setBugs] = useState([]);

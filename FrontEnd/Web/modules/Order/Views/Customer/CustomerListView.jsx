@@ -1,18 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { 
   Users, Plus, Search, Edit2, Trash2, Phone, Mail, 
-  MapPin, Building, Globe, CheckCircle, AlertCircle, X, Save
+  MapPin, Building, Globe, CheckCircle, AlertCircle, X, Save, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { customerService } from '@modules/Order/Models/customer.service';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
 export default function CustomerListView() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/customers');
+
+  useEffect(() => {
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   const [customers, setCustomers] = useState([]);
   const [total, setTotal] = useState(0);

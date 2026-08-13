@@ -9,6 +9,7 @@ import {
   Tag, Factory, Contact, ShieldCheck, Palette, ClipboardList, ExternalLink
 } from 'lucide-react';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
 import PaintColorManagementView from '@modules/Product/Views/PaintColors/PaintColorManagementView';
 import ProductDetailsManagementView from '@modules/Product/Views/Details/ProductDetailsManagementView';
@@ -24,9 +25,11 @@ const DynamicIcon = ({ name, size = 16, ...props }) => {
 };
 
 export default function SystemConfigView() {
-  const { setCustomTitle, setCustomSubtitle } = useOutletContext();
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/system-config');
 
   // LEFT MENU SELECTION STATE
   // 'factory' | 'department' | 'position' | 'role' | 'sidebar' | 'category' | 'stage' | 'customer' | 'permission'
@@ -112,9 +115,10 @@ export default function SystemConfigView() {
 
   // Set page headers
   useEffect(() => {
-    setCustomTitle('Cấu hình hệ thống');
-    setCustomSubtitle('Thiết lập cấu trúc cơ cấu tổ chức và phân hệ menu hệ thống ERP');
-  }, [setCustomTitle, setCustomSubtitle]);
+    if (setCustomTitle) setCustomTitle(title || 'Cấu hình hệ thống');
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Thiết lập cấu trúc cơ cấu tổ chức và phân hệ menu hệ thống ERP');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'AD04');
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   // Close action menu when clicking outside
   useEffect(() => {

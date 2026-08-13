@@ -1,27 +1,22 @@
-import React, { useState } from 'react';
-
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@shared/hooks/useAuth';
-
 import loginBg from '@mobile/assets/background-1.png';
-
 import logo from '@mobile/assets/logo-no-bg.png';
-
-
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const LoginPage = () => {
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/login');
+
+  useEffect(() => {
+    document.title = title ? `${title} - SmartFlow` : 'Đăng nhập - SmartFlow';
+  }, [title]);
 
   const {
-
     username, setUsername,
-
     password, setPassword,
-
     rememberMe, setRememberMe,
-
     loading, error,
-
     handleLogin
-
   } = useAuth();
 
 

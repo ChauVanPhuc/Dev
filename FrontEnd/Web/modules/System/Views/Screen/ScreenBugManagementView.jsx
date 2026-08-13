@@ -1,11 +1,12 @@
-import React from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { useNavigate, useLocation, useOutletContext } from 'react-router-dom';
 import {
   Search, Filter, Plus, Trash2, Edit3, CheckCircle, Clock, AlertCircle,
   X, RefreshCw, Layers, ShieldAlert, Monitor, Phone, Clipboard, FolderOpen,
   MoreVertical
 } from 'lucide-react';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 // Import custom hook
 import { useScreenBugManagement, parseDescription } from './hooks/useScreenBugManagement';
@@ -15,6 +16,15 @@ import AddBugModal from './components/AddBugModal';
 import '@styles/components.css';
 
 const ScreenBugManagementView = () => {
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/screens/bugs');
+
+  useEffect(() => {
+    if (setCustomTitle) setCustomTitle(title || 'Danh sách lỗi hệ thống');
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Theo dõi và xử lý các phản hồi, sự cố giao diện');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'AD04');
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
+
   const bugManager = useScreenBugManagement();
   const {
     actionMenuId,

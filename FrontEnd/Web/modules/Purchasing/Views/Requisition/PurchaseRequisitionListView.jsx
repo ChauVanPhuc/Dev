@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { purchasingService } from '@modules/Purchasing/Models/purchasing.service';
 import '@styles/components.css';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 
@@ -25,14 +26,17 @@ const formatDateDisplay = (dateStr) => {
 const PurchaseRequisitionListView = () => {
   const navigate = useNavigate();
   const outletContext = useOutletContext() || {};
-  const { setCustomTitle, setCustomSubtitle, startGlobalUpload } = outletContext;
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, startGlobalUpload } = outletContext;
   const { toast } = useToast();
   const fileInputRef = useRef(null);
 
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/purchase-requisitions');
+
   useEffect(() => {
-    if (typeof setCustomTitle === 'function') setCustomTitle('Quản lý kinh doanh');
-    if (typeof setCustomSubtitle === 'function') setCustomSubtitle('KD03: Danh sách đơn hàng');
-  }, [setCustomTitle, setCustomSubtitle]);
+    if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Quản lý kinh doanh');
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || 'KD03: Danh sách đơn hàng');
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'KD03');
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   const [data, setData] = useState([]);
   const [total, setTotal] = useState(0);

@@ -3,6 +3,7 @@ import { useNavigate, useLocation, useSearchParams, useOutletContext } from 'rea
 import { Save, BookOpen, FileText, AlertTriangle, Sparkles } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
 const DOC_TYPE_OPTIONS = [
@@ -46,9 +47,8 @@ const InspectionGuideFormView = ({ initialDocType }) => {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
-  const outletContext = useOutletContext();
-  const setCustomTitle = outletContext?.setCustomTitle;
-  const setCustomSubtitle = outletContext?.setCustomSubtitle;
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+  const { screenCode, title: metaTitle, subtitle: metaSubtitle } = useScreenMetadataCached('/admin/inspection-guides/create');
 
   const detectedDocType = useMemo(() => {
     if (initialDocType && ['HDKT', 'SOS', 'CTQ'].includes(initialDocType)) return initialDocType;
@@ -79,13 +79,16 @@ const InspectionGuideFormView = ({ initialDocType }) => {
 
   // Set top header title if PortalLayout provides it
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle(currentOpt.label);
-    if (setCustomSubtitle) setCustomSubtitle('Khởi tạo mới');
-    return () => {
-      if (setCustomTitle) setCustomTitle(null);
-      if (setCustomSubtitle) setCustomSubtitle(null);
-    };
-  }, [currentOpt, setCustomTitle, setCustomSubtitle]);
+    if (screenCode && metaTitle) {
+      if (setCustomTitle) setCustomTitle(metaTitle);
+      if (setCustomSubtitle) setCustomSubtitle(metaSubtitle || 'Khởi tạo mới');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    } else {
+      if (setCustomTitle) setCustomTitle(currentOpt.label);
+      if (setCustomSubtitle) setCustomSubtitle('Khởi tạo mới');
+      if (setCustomScreenCode) setCustomScreenCode('HD02');
+    }
+  }, [screenCode, metaTitle, metaSubtitle, currentOpt, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   // Tự động sinh Mã tài liệu theo tiền tố của doc_type từ API backend
   const generateUniqueCode = async (docType) => {

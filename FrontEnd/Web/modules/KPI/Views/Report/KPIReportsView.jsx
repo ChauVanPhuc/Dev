@@ -12,7 +12,7 @@ const KPIReportsView = () => {
   const navigate = useNavigate();
   
   // Lấy metadata từ database thay vì hardcode
-  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/kpi/reports');
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/kpi');
   const [employees, setEmployees] = useState([]);
   const [expandedEmpId, setExpandedEmpId] = useState(null);
   const [activeTab, setActiveTab] = useState('performance'); // checklist, kpi, performance, rules, feedback

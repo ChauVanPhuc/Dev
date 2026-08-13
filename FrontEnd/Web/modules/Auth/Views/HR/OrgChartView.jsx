@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { Network, List, Plus, Minus, Edit2, Trash2, User, ChevronDown, ChevronRight } from 'lucide-react';
 import { hrService } from '../../Models/hr.service';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import OrgNodeModal from './OrgNodeModal';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const getLevelNumber = (levelName) => {
   const match = (levelName || '').match(/\d+/);
@@ -10,6 +12,15 @@ const getLevelNumber = (levelName) => {
 };
 
 const OrgChartView = ({ diagramDropdown }) => {
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/hr/org-chart');
+
+  useEffect(() => {
+    if (typeof setCustomTitle === 'function' && title) setCustomTitle(title);
+    if (typeof setCustomSubtitle === 'function' && subtitle) setCustomSubtitle(subtitle);
+    if (typeof setCustomScreenCode === 'function' && screenCode) setCustomScreenCode(screenCode);
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
+
   const [nodes, setNodes] = useState([]);
   const [viewMode, setViewMode] = useState('chart'); // 'chart' or 'table'
   const [search, setSearch] = useState('');

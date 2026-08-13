@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Save, Sparkles, AlertTriangle, Search, Check, Layers, AlertCircle, Info } from 'lucide-react';
 import api from '@webShared/Services/api.service';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
 
@@ -30,6 +31,9 @@ const CTQGuideFormView = () => {
   const outletContext = useOutletContext();
   const setCustomTitle = outletContext?.setCustomTitle;
   const setCustomSubtitle = outletContext?.setCustomSubtitle;
+  const setCustomScreenCode = outletContext?.setCustomScreenCode;
+
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/ctq-guides/create');
 
   // Form State
   const [form, setForm] = useState({
@@ -47,13 +51,15 @@ const CTQGuideFormView = () => {
   const [generatingCode, setGeneratingCode] = useState(false);
 
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle('Lỗi cần chú ý (CTQ)');
-    if (setCustomSubtitle) setCustomSubtitle('Khởi tạo mới');
+    if (setCustomTitle) setCustomTitle(title || 'Lỗi cần chú ý (CTQ)');
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Khởi tạo mới');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'CL02.1');
     return () => {
       if (setCustomTitle) setCustomTitle(null);
       if (setCustomSubtitle) setCustomSubtitle(null);
+      if (setCustomScreenCode) setCustomScreenCode(null);
     };
-  }, [setCustomTitle, setCustomSubtitle]);
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   // Dropdown Data
   const [stages, setStages] = useState([]);

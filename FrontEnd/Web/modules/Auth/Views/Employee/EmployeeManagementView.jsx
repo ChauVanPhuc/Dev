@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { 
   ChevronLeft, ChevronRight, Search, Plus, Trash2, Edit, X, Save 
 } from 'lucide-react';
@@ -6,10 +7,19 @@ import api from '@webShared/Services/api.service';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
 const EmployeeManagementView = () => {
   const { toast } = useToast();
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/employees');
+
+  useEffect(() => {
+    if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Quản lý nhân viên');
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || 'Danh sách nhân viên, phân quyền và hồ sơ nhân sự');
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'NS01');
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
   
   // Data States
   const [employees, setEmployees] = useState([]);
@@ -885,9 +895,9 @@ const EmployeeManagementView = () => {
 
       {/* Page Toolbar Component */}
       <PageToolbar 
-        title="Danh sách nhân viên" 
-        code="CL02" 
-        subtitle="Quản lý hồ sơ thông tin và chức danh chi tiết của toàn bộ nhân sự" 
+        title={title} 
+        code={screenCode} 
+        subtitle={subtitle} 
       />
 
       {/* Search and Action Toolbar */}

@@ -11,6 +11,7 @@ class SystemScreenBase(BaseModel):
     """
     platform: str
     route_path: str
+    backend_path: Optional[str] = None
     default_code: str
     current_code: str
     title: str
@@ -26,6 +27,7 @@ class SystemScreenCreate(BaseModel):
     """
     platform: str
     route_path: Optional[str] = None
+    backend_path: Optional[str] = None
     current_code: Optional[str] = None
     title: str
     subtitle: Optional[str] = None
@@ -45,6 +47,7 @@ class SystemScreenUpdate(BaseModel):
     title: Optional[str] = None
     subtitle: Optional[str] = None
     route_path: Optional[str] = None
+    backend_path: Optional[str] = None
     platform: Optional[str] = None
     is_active: Optional[bool] = None
     status: Optional[str] = None

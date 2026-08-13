@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Search, Filter, Plus } from 'lucide-react';
 import { claimService } from '../../services/claim.service';
 import { normalizePenaltyValue, parseDate } from '../../utils/claimHelpers';
 import { API_ROOT } from '@webShared/Services/api.service';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '../../styles/claim.css';
 import '@styles/components.css';
 
@@ -30,6 +31,14 @@ import { useClaimList } from '../hooks/useClaimList';
 
 const ClaimListView = () => {
   const list = useClaimList();
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/claims');
+
+  useEffect(() => {
+    if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Quản lý Khiếu nại (Claim)');
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || 'Quản lý danh sách khiếu nại, dòng hàng và tiến độ khắc phục chất lượng');
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'CL01');
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   return (
     <div className="claim-container">

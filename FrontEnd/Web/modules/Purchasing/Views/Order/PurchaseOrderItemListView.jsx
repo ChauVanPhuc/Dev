@@ -9,6 +9,7 @@ import {
 import { purchasingService } from '@modules/Purchasing/Models/purchasing.service';
 import '@styles/components.css';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const formatCurrency = (value) => {
   if (!value && value !== 0) return '---';
@@ -39,7 +40,16 @@ const getStatusDisplay = (status) => {
 
 const PurchaseOrderItemList = () => {
   const navigate = useNavigate();
-  const { startGlobalUpload } = useOutletContext() || {};
+  const { startGlobalUpload, setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/purchase-order-items');
+
+  useEffect(() => {
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
   const fileInputRef = useRef(null);
 
   const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');

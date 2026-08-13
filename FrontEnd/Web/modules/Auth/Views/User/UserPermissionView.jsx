@@ -25,7 +25,7 @@ const UserPermissionView = () => {
   const setCustomScreenCode = outletContext?.setCustomScreenCode;
   
   // Lấy metadata từ database thay vì hardcode
-  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/users/:id/permissions');
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/users/permissions/:id');
 
   const [userInfo, setUserInfo] = useState(null);
   const [screenPermissions, setScreenPermissions] = useState({});
@@ -51,12 +51,12 @@ const UserPermissionView = () => {
     return buildPermissionGroupsFromSidebar(sidebarItems, 'mobile', screens);
   }, [sidebarItems, screens]);
 
-  // Cập nhật tiêu đề trang lên Layout Header
+  // Cập nhật tiêu đề trang lên Layout Header động từ CSDL
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle('Phân quyền tài khoản');
-    if (setCustomSubtitle) setCustomSubtitle('Thiết lập chi tiết quyền đọc, ghi, hoặc chặn hoàn toàn truy cập theo từng nhóm chức năng');
-    if (setCustomScreenCode) setCustomScreenCode('AD3 - Phân quyền cho tài khoản');
-  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+    if (setCustomTitle) setCustomTitle(title || 'Phân quyền tài khoản');
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Thiết lập chi tiết quyền đọc, ghi, hoặc chặn hoàn toàn truy cập theo từng nhóm chức năng');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'AD3');
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   // Tải chi tiết người dùng và phân quyền từ backend CSDL
   useEffect(() => {

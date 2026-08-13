@@ -14,6 +14,7 @@ class SystemScreen(Base):
     id = Column(Integer, primary_key=True, index=True)
     platform = Column(NVARCHAR(20), nullable=False) # 'Web' hoac 'Mobile'
     route_path = Column(NVARCHAR(150), nullable=False) # Vi du: '/admin/users'
+    backend_path = Column(NVARCHAR(150), nullable=True) # Vi du: '/api/v1/users'
     default_code = Column(NVARCHAR(20), nullable=False) # Vi du: 'AD3'
     current_code = Column(NVARCHAR(20), nullable=False) # Vi du: 'AD3' (co the sua)
     title = Column(NVARCHAR(100), nullable=False) # Vi du: 'Quan ly nguoi dung'

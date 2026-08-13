@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { 
   ChevronLeft, ChevronRight, Search, Plus, Trash2, Edit, Save, X, 
   Settings, FolderTree, Layers, Table as TableIcon, Network, HelpCircle 
@@ -7,10 +8,19 @@ import api from '@webShared/Services/api.service';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
 const OrgStructureManagementView = () => {
   const { toast } = useToast();
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/hr/structures');
+
+  useEffect(() => {
+    if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Quản lý cấu trúc tổ chức');
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || 'Thiết lập cấu trúc cây tổ chức, chức vụ và định biên nhân sự');
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'NS02');
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
   
   // Data States
   const [nodes, setNodes] = useState([]);
@@ -951,9 +961,9 @@ const OrgStructureManagementView = () => {
 
       {/* Header toolbar component */}
       <PageToolbar 
-        title="Sơ đồ tổ chức" 
-        code="CL01" 
-        subtitle="Hiển thị các thông tin về cấu trúc nhân sự, Phân bố chốt chặn" 
+        title={title} 
+        code={screenCode} 
+        subtitle={subtitle} 
       />
 
       {/* Main search and action toolbar */}

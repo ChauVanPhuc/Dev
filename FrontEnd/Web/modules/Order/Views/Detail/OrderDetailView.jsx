@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
 import { 
   ChevronLeft, Calendar, User, FileText, Clock, CheckCircle2, 
   Package, Edit2, Trash2, Layers, AlertCircle, ShoppingBag
@@ -7,6 +7,7 @@ import {
 import { orderService } from '@modules/Order/Models/order.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
 const formatDate = (dateStr) => {
@@ -32,6 +33,16 @@ export default function OrderDetailView() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/orders/detail/:id');
+
+  useEffect(() => {
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);

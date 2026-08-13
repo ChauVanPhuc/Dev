@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { 
   Search, 
   Filter, 
@@ -23,9 +23,20 @@ import {
 import { orderService } from '@modules/Order/Models/order.service';
 import '@styles/components.css';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const Orders = () => {
     const navigate = useNavigate();
+    const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+    const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/orders');
+
+    useEffect(() => {
+      if (screenCode && title) {
+        if (setCustomTitle) setCustomTitle(title);
+        if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+        if (setCustomScreenCode) setCustomScreenCode(screenCode);
+      }
+    }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');

@@ -76,8 +76,8 @@ const getCurrentFormattedDate = () => {
 const ISODocumentListView = ({ mode = 'documents' }) => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
   
-  // Lấy metadata từ database thay vì hardcode
-  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/iso/forms');
+  const routePath = mode === 'processes' ? '/admin/iso-processes' : '/admin/iso-documents';
+  const { screenCode, title, subtitle } = useScreenMetadataCached(routePath);
   const navigate = useNavigate();
 
   const [documents, setDocuments] = useState([]);

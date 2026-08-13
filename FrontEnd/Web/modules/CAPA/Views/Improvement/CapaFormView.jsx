@@ -3,15 +3,18 @@ import { useNavigate, useParams, useOutletContext } from 'react-router-dom';
 import { ArrowLeft, Download, Plus, Trash2, Camera } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import CapaCauseModal from '@mobile/modules/capa/Views/components/CapaCauseModal';
 import CapaPreventiveModal from '@mobile/modules/capa/Views/components/CapaPreventiveModal';
 
 const CapaFormView = () => {
-  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
   const navigate = useNavigate();
   const { id } = useParams();
   const isCreate = !id || id === 'create';
   const { toast } = useToast();
+  const routePath = isCreate ? '/admin/capa/create' : '/admin/capa/edit/:id';
+  const { screenCode, title, subtitle } = useScreenMetadataCached(routePath);
 
   const [activeTab, setActiveTab] = useState('general'); // 'general' | 'plan' | 'tracking'
   const [loading, setLoading] = useState(!isCreate);
@@ -59,14 +62,14 @@ const CapaFormView = () => {
   const [editingPlanIdx, setEditingPlanIdx] = useState(null);
 
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle(isCreate ? 'Tạo báo cáo CAPA' : `Báo cáo CAPA: ${formData.code}`);
-    if (setCustomSubtitle) setCustomSubtitle('CL10.2: Chi tiết CAPA');
-    if (setCustomScreenCode) setCustomScreenCode('CL10.2');
+    if (setCustomTitle) setCustomTitle(title || (isCreate ? 'Tạo báo cáo CAPA' : `Báo cáo CAPA: ${formData.code}`));
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Chi tiết CAPA');
+    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'CL10.2');
 
     if (!isCreate) {
       fetchDetail();
     }
-  }, [id]);
+  }, [id, title, subtitle, screenCode]);
 
   const fetchDetail = async () => {
     setLoading(true);

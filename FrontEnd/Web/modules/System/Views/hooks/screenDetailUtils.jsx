@@ -1269,7 +1269,7 @@ export const parseRoutePath = (routePath, sidebarMenus = []) => {
     }
     return {
       frontendPath: longestMatch,
-      backendPath: suffix || '/'
+      backendPath: suffix || ''
     };
   }
 
@@ -1285,17 +1285,9 @@ export const parseRoutePath = (routePath, sidebarMenus = []) => {
     }
   }
 
-  const lastSlashIdx = clean.lastIndexOf('/');
-  let frontend = '';
-  let backend = clean;
-  if (lastSlashIdx !== -1 && lastSlashIdx > 0) {
-    frontend = clean.substring(0, lastSlashIdx);
-    backend = clean.substring(lastSlashIdx);
-  }
-
   return {
-    frontendPath: frontend,
-    backendPath: backend
+    frontendPath: clean,
+    backendPath: ''
   };
 };
 

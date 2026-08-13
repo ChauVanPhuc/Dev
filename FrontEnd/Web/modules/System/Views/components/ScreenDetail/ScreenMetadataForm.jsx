@@ -379,7 +379,7 @@ const ScreenMetadataForm = ({
                 </div>
 
                 <div className="form-group" style={{ margin: 0 }}>
-                  <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Đường dẫn frontend</label>
+                  <label className="required" style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Đường dẫn frontend (Điều hướng)</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '36px' }}>
                     <span style={{ fontSize: '0.8rem', color: '#64748B', fontWeight: '500', whiteSpace: 'nowrap' }}>
                       {formData.subsystem}
@@ -428,7 +428,7 @@ const ScreenMetadataForm = ({
                 </div>
 
                 <div className="form-group" style={{ margin: 0 }}>
-                  <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Đường dẫn backend</label>
+                  <label style={{ fontWeight: 'bold', color: '#64748B', fontSize: '0.76rem', display: 'block', marginBottom: '6px' }}>Đường dẫn backend (Gắn metadata)</label>
                   <input
                     type="text"
                     className="form-control"
@@ -441,7 +441,7 @@ const ScreenMetadataForm = ({
                         backend_path: newBack
                       }));
                     }}
-                    placeholder="Đường dẫn backend"
+                    placeholder="VD: /api/v1/accounts hoặc /accounts"
                     style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.8rem', height: '36px', boxSizing: 'border-box', width: '100%', color: '#111827', fontWeight: '500' }}
                   />
                 </div>

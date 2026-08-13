@@ -63,18 +63,7 @@ export const useScreenDetail = () => {
     const fPath = (formData.frontend_path || '').trim();
     const bPath = (formData.backend_path || '').trim();
 
-    let newRoutePath = '';
-    if (bPath) {
-      if (bPath.startsWith('/') && !fPath) {
-        // If no frontend path is selected, treat backend path as absolute
-        newRoutePath = bPath;
-      } else {
-        // Otherwise combine them
-        newRoutePath = combineRoutePath(fPath, bPath);
-      }
-    } else {
-      newRoutePath = fPath;
-    }
+    let newRoutePath = fPath || bPath || '';
 
     setFormData(prev => {
       if (prev.route_path === newRoutePath) return prev;
@@ -278,7 +267,8 @@ export const useScreenDetail = () => {
 
         await screenService.createScreen({
           title: data.title,
-          route_path: normalizeRoutePath(data.route_path),
+          route_path: normalizeRoutePath(data.route_path || data.frontend_path),
+          backend_path: data.backend_path ? data.backend_path.trim() : '',
           platform: data.platform,
           status: data.status || 'Mới thiết kế',
           target_date: data.target_date,
@@ -292,7 +282,8 @@ export const useScreenDetail = () => {
       } else {
         const updatePayload = {
           title: data.title,
-          route_path: normalizeRoutePath(data.route_path),
+          route_path: normalizeRoutePath(data.route_path || data.frontend_path),
+          backend_path: data.backend_path ? data.backend_path.trim() : '',
           platform: data.platform,
           status: data.status,
           target_date: data.target_date,
@@ -625,7 +616,7 @@ export const useScreenDetail = () => {
         ...prev,
         subsystem: mappedSubsystem,
         frontend_path: finalPath,
-        route_path: combineRoutePath(finalPath, prev.backend_path)
+        route_path: finalPath
       }));
     }
     setShowLinkModal(false);
@@ -979,11 +970,15 @@ export const useScreenDetail = () => {
 
       setScreen(data);
       const parsed = parseRoutePath(data.route_path || '', sidebarData || []);
+      const loadedBackendPath = (data.backend_path !== undefined && data.backend_path !== null) 
+        ? data.backend_path 
+        : (parsed.backendPath || '');
+
       setFormData({
         title: data.title || '',
         route_path: data.route_path || '',
-        frontend_path: parsed.frontendPath || '',
-        backend_path: parsed.backendPath || '',
+        frontend_path: data.route_path || parsed.frontendPath || '',
+        backend_path: loadedBackendPath,
         platform: data.platform || 'Web',
         subsystem: getSubsystem(data),
         status: data.status || 'Mới thiết kế',
@@ -1081,7 +1076,8 @@ export const useScreenDetail = () => {
       if (id === 'new') {
         const res = await screenService.createScreen({
           title: formData.title,
-          route_path: normalizeRoutePath(formData.route_path),
+          route_path: normalizeRoutePath(formData.route_path || formData.frontend_path),
+          backend_path: formData.backend_path ? formData.backend_path.trim() : '',
           platform: formData.platform || 'Web',
           status: formData.status || 'Mới thiết kế',
           target_date: targetDate,
@@ -1104,7 +1100,8 @@ export const useScreenDetail = () => {
       } else {
         const updatePayload = {
           title: formData.title,
-          route_path: normalizeRoutePath(formData.route_path),
+          route_path: normalizeRoutePath(formData.route_path || formData.frontend_path),
+          backend_path: formData.backend_path ? formData.backend_path.trim() : '',
           platform: formData.platform || 'Web',
           status: formData.status,
           target_date: targetDate,

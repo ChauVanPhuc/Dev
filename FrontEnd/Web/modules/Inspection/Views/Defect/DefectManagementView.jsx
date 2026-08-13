@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import api from '@webShared/Services/api.service';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
@@ -7,6 +8,7 @@ import {
 import { Calendar, Filter, ChevronDown, ChevronUp, BarChart3, PieChart as PieChartIcon, TrendingUp, RefreshCw, ChevronLeft, ChevronRight, Search, Edit, Trash2 } from 'lucide-react';
 import '@styles/components.css';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import ClaimListView from '@modules/Claim/views/Claim/ClaimListView';
 
 const COLORS = ['#7B5233', '#A67C52', '#D9B99B', '#F2E2CE', '#4b301e', '#8c6a51'];
@@ -412,6 +414,17 @@ const DefectAnalytics = ({ stage }) => {
  * View: Quản lý danh mục lỗi kiểm tra chất lượng (CRUD)
  */
 const DefectManagement = () => {
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/defects');
+
+  useEffect(() => {
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+
   const [viewTab, setViewTab] = useState('analytics'); // 'analytics', 'list', 'field', 'complaint', 'capa'
   const [selectedStage, setSelectedStage] = useState('');
   const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
@@ -1028,6 +1041,9 @@ const DefectManagement = () => {
               }
             `}</style>
             <PageToolbar
+              title={title}
+              subtitle={subtitle}
+              screenCode={screenCode}
               searchValue={searchQuery}
               onSearchChange={(val) => { setSearchQuery(val); setCurrentPage(1); }}
               searchPlaceholder="Tìm theo tên, mã G7, lỗi khách..."

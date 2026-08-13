@@ -1,41 +1,63 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import OrgChartView from './OrgChartView';
 import HierarchyChartView from './HierarchyChartView';
 import PersonnelChartView from './PersonnelChartView';
 import FactoryStructureView from './FactoryStructureView';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
-const HRManagementView = () => {
-  const [activeDiagram, setActiveDiagram] = useState('org-chart');
+const HRManagementView = ({ defaultDiagram = 'org-chart' }) => {
+  const [activeDiagram, setActiveDiagram] = useState(defaultDiagram);
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
 
   const diagrams = [
     { 
       id: 'org-chart', 
       label: 'Sơ đồ theo phòng ban', 
       title: 'Sơ đồ tổ chức',
+      subtitle: 'Cấu trúc phòng ban và phân cấp sơ đồ tổ chức công ty',
+      screenCode: 'NS02',
+      route: '/admin/hr/org-chart',
       component: OrgChartView 
     },
     { 
       id: 'hierarchy', 
       label: 'Sơ đồ theo cấp bậc', 
       title: 'Sơ đồ cấp bậc',
+      subtitle: 'Phân cấp cấp bậc, chức danh và vị trí trong doanh nghiệp',
+      screenCode: 'NS03',
+      route: '/admin/hr/hierarchy',
       component: HierarchyChartView 
     },
     { 
       id: 'personnel', 
       label: 'Sơ đồ theo nhân sự', 
       title: 'Sơ đồ nhân sự',
+      subtitle: 'Sơ đồ phân bổ nhân sự và số lượng lao động theo bộ phận',
+      screenCode: 'NS04',
+      route: '/admin/hr/personnel',
       component: PersonnelChartView 
     },
     { 
       id: 'factory', 
       label: 'Sơ đồ theo cấu trúc nhà máy', 
       title: 'Sơ đồ cấu trúc nhà máy',
+      subtitle: 'Sơ đồ tổ chức các phân xưởng và dây chuyền sản xuất tại nhà máy',
+      screenCode: 'NS05',
+      route: '/admin/hr/factory',
       component: FactoryStructureView 
     }
   ];
 
   const currentDiag = diagrams.find(d => d.id === activeDiagram) || diagrams[0];
   const ActiveComponent = currentDiag.component;
+  const { screenCode, title, subtitle } = useScreenMetadataCached(currentDiag.route);
+
+  useEffect(() => {
+    if (typeof setCustomTitle === 'function') setCustomTitle(title || currentDiag.title);
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || currentDiag.subtitle);
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || currentDiag.screenCode);
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode, currentDiag]);
 
   const diagramDropdown = (
     <div style={{ position: 'relative', display: 'inline-block' }}>
@@ -79,7 +101,7 @@ const HRManagementView = () => {
         {/* Header with dynamic Title and Subtitle depending on active diagram */}
         <div className="page-header" style={{ marginBottom: '0', paddingBottom: '16px', borderBottom: '2px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#2D1A12', margin: 0 }}>
-            {currentDiag.title}
+            {title || currentDiag.title}
           </h1>
         </div>
 

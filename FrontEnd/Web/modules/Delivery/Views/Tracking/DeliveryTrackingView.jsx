@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { 
     Search, Filter, Download, MoreHorizontal, 
     FileText, CheckCircle, Clock, AlertTriangle,
@@ -8,6 +9,7 @@ import {
     Undo2, Droplet, Maximize2, FileSpreadsheet, Layers, Info
 } from 'lucide-react';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 // Import custom hook
 import { useDeliveryTracking } from './hooks/useDeliveryTracking';
@@ -15,6 +17,17 @@ import { useDeliveryTracking } from './hooks/useDeliveryTracking';
 import '@styles/components.css';
 
 const DeliveryTrackingView = () => {
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/delivery-tracking');
+
+  useEffect(() => {
+    if (screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode);
+    }
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+
   const tracker = useDeliveryTracking();
   const {
     actionMenuId,
@@ -152,6 +165,9 @@ const DeliveryTrackingView = () => {
             <div className="sticky-top-zone">
                 {/* Desktop/Mobile Toolbar filters */}
                 <PageToolbar
+                    title={title}
+                    subtitle={subtitle}
+                    screenCode={screenCode}
                     searchValue={searchTerm}
                     onSearchChange={(val) => { setSearchTerm(val); setCurrentPage(1); }}
                     searchPlaceholder="Tìm kiếm phiếu, chi tiết..."

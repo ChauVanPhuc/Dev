@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { purchasingService } from '@modules/Purchasing/Models/purchasing.service';
 import api from '@webShared/Services/api.service';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 
@@ -35,9 +36,11 @@ const PurchaseRequisitionDetailView = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const outletContext = useOutletContext() || {};
-  const { setCustomTitle, setCustomSubtitle, startGlobalUpload } = outletContext;
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, startGlobalUpload } = outletContext;
   const { toast } = useToast();
   const fileInputRef = useRef(null);
+
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/purchase-requisitions/:id');
 
   // Xác định chế độ: 'view' (Xem chi tiết) hoặc 'edit' (Chỉnh sửa)
   const searchParams = new URLSearchParams(location.search);
@@ -50,11 +53,12 @@ const PurchaseRequisitionDetailView = () => {
   }, [modeParam, id]);
 
   useEffect(() => {
-    if (typeof setCustomTitle === 'function') setCustomTitle('Quản lý kinh doanh');
+    if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Quản lý kinh doanh');
     if (typeof setCustomSubtitle === 'function') {
-      setCustomSubtitle(isEditing ? 'KD03.1: Chỉnh sửa đơn hàng' : 'KD03.1: Chi tiết đơn hàng');
+      setCustomSubtitle(subtitle || (isEditing ? 'KD03.1: Chỉnh sửa đơn hàng' : 'KD03.1: Chi tiết đơn hàng'));
     }
-  }, [setCustomTitle, setCustomSubtitle, isEditing]);
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'KD03.1');
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, isEditing, title, subtitle, screenCode]);
 
   const getLoggedInUser = () => {
     try {

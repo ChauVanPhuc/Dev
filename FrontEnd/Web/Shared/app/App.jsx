@@ -11,12 +11,15 @@ const UserCreate = lazy(() => import('@modules/Auth/Views/User/UserCreateView'))
 const UserEdit = lazy(() => import('@modules/Auth/Views/User/UserEditView'));
 const UserPermissionView = lazy(() => import('@modules/Auth/Views/User/UserPermissionView'));
 const DepartmentManagement = lazy(() => import('@modules/Auth/Views/Department/DepartmentManagementView'));
+const PositionManagement = lazy(() => import('@modules/Auth/Views/User/PositionManagementView'));
 const EmployeeListView = lazy(() => import('@modules/Auth/Views/Employee/EmployeeListView'));
 const OrgChartView = lazy(() => import('@modules/Auth/Views/HR/OrgChartView'));
 const HierarchyChartView = lazy(() => import('@modules/Auth/Views/HR/HierarchyChartView'));
 const PersonnelChartView = lazy(() => import('@modules/Auth/Views/HR/PersonnelChartView'));
 const FactoryStructureView = lazy(() => import('@modules/Auth/Views/HR/FactoryStructureView'));
 const HRManagementView = lazy(() => import('@modules/Auth/Views/HR/HRManagementView'));
+const EmployeeManagementView = lazy(() => import('@modules/Auth/Views/Employee/EmployeeManagementView'));
+const OrgStructureManagementView = lazy(() => import('@modules/Auth/Views/HR/OrgStructureManagementView'));
 const HandoverList = lazy(() => import('@modules/Delivery/Views/Handover/HandoverListView'));
 const IncidentLogs = lazy(() => import('@modules/System/Views/Monitor/IncidentLogsView'));
 const InspectionReports = lazy(() => import('@modules/Inspection/Views/Report/InspectionReportsView'));
@@ -611,11 +614,21 @@ function App() {
                 <Route path="users" element={<ProtectedRoute permissionKey="users"><UserManagement /></ProtectedRoute>} />
                 <Route path="users/create" element={<ProtectedRoute permissionKey="users"><UserCreate /></ProtectedRoute>} />
                 <Route path="users/edit/:id" element={<ProtectedRoute permissionKey="users"><UserEdit /></ProtectedRoute>} />
-                <Route path="users/permissions/:id" element={<ProtectedRoute permissionKey="users"><UserEdit /></ProtectedRoute>} />
+                <Route path="users/permissions/:id" element={<ProtectedRoute permissionKey="users"><UserPermissionView /></ProtectedRoute>} />
                 <Route path="users/departments" element={<ProtectedRoute permissionKey="users"><DepartmentManagement /></ProtectedRoute>} />
+                <Route path="users/positions" element={<ProtectedRoute permissionKey="users"><PositionManagement /></ProtectedRoute>} />
                 <Route path="hr" element={<Navigate to="hr/org-chart" />} />
-                <Route path="hr/org-chart" element={<ProtectedRoute permissionKey="users"><HRManagementView /></ProtectedRoute>} />
+                <Route path="hr/org-chart" element={<ProtectedRoute permissionKey="users"><HRManagementView defaultDiagram="org-chart" /></ProtectedRoute>} />
+                <Route path="hr/hierarchy" element={<ProtectedRoute permissionKey="users"><HRManagementView defaultDiagram="hierarchy" /></ProtectedRoute>} />
+                <Route path="hr/personnel" element={<ProtectedRoute permissionKey="users"><HRManagementView defaultDiagram="personnel" /></ProtectedRoute>} />
+                <Route path="hr/factory" element={<ProtectedRoute permissionKey="users"><HRManagementView defaultDiagram="factory" /></ProtectedRoute>} />
+                <Route path="hr/structures" element={<ProtectedRoute permissionKey="users"><OrgStructureManagementView /></ProtectedRoute>} />
                 <Route path="hr/employees" element={<ProtectedRoute permissionKey="users"><EmployeeListView /></ProtectedRoute>} />
+                <Route path="employees" element={<ProtectedRoute permissionKey="users"><EmployeeManagementView /></ProtectedRoute>} />
+                <Route path="delivery-handover" element={<ProtectedRoute permissionKey="handovers"><ManufactureHandover /></ProtectedRoute>} />
+                <Route path="delivery-receive" element={<ProtectedRoute permissionKey="handovers"><ManufactureReceive /></ProtectedRoute>} />
+                <Route path="manufacture-handover" element={<ProtectedRoute permissionKey="handovers"><ManufactureHandover /></ProtectedRoute>} />
+                <Route path="manufacture-receive" element={<ProtectedRoute permissionKey="handovers"><ManufactureReceive /></ProtectedRoute>} />
                 <Route path="handovers" element={<ProtectedRoute permissionKey="handovers"><HandoverList /></ProtectedRoute>} />
                 <Route path="logs" element={<ProtectedRoute permissionKey="logs"><IncidentLogs /></ProtectedRoute>} />
                 {/* 3 Mục Tài liệu ban hành hoàn toàn riêng biệt */}

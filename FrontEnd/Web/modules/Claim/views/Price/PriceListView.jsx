@@ -13,6 +13,7 @@ import { Table } from '../../components/Table';
 import { Pagination } from '../../components/Pagination';
 import { FilterModal, FormModal, AlertModal } from '../../components/Modal';
 import { DeleteConfirmationModal } from '../../components/DeleteConfirmationModal';
+import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import {
   MOCK_CABINET_PRICES,
   getColorName,
@@ -20,13 +21,15 @@ import {
 } from './priceListUtils';
 
 const PriceListView = () => {
-  const { setCustomTitle, setCustomSubtitle, showModal: contextShowModal } = useOutletContext();
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, showModal: contextShowModal } = useOutletContext() || {};
+  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/prices');
   const [localNotification, setLocalNotification] = useState(null);
 
   useEffect(() => {
-    if (typeof setCustomTitle === 'function') setCustomTitle('Đơn giá sản phẩm');
-    if (typeof setCustomSubtitle === 'function') setCustomSubtitle('CL2 - Quản lý đơn giá sản phẩm và cấu hình chi phí');
-  }, [setCustomTitle, setCustomSubtitle]);
+    if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Đơn giá sản phẩm');
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || 'Quản lý đơn giá sản phẩm và cấu hình chi phí');
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'CL02');
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
   const loggedInUserIsAdmin = loggedInUser.role_name === 'IT' || loggedInUser.role_name === 'BGD' || loggedInUser.username === 'admin';
