@@ -60,8 +60,8 @@ export const buildPermissionGroupsFromSidebar = (sidebarItems, platform, screens
     }
       
     const mappedScreens = children.map(child => {
-      // Xác định key phân quyền
-      let key = child.permission_key;
+      // Xác định key phân quyền duy nhất cho từng màn hình
+      let key = child.route_path;
       if (!key && child.screen_id && screens.length > 0) {
         const scr = screens.find(s => s.id === child.screen_id);
         if (scr) {
@@ -69,7 +69,7 @@ export const buildPermissionGroupsFromSidebar = (sidebarItems, platform, screens
         }
       }
       if (!key) {
-        key = child.route_path || `sb_${child.id}`;
+        key = child.permission_key || `sb_${child.id}`;
       }
       
       return {

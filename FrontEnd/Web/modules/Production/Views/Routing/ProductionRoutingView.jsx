@@ -1083,7 +1083,7 @@ const ProductionRoutingView = () => {
   };
 
   return (
-    <div style={{ padding: '20px 24px', backgroundColor: '#FAF6F0', minHeight: 'calc(100vh - 110px)', fontFamily: 'Inter, sans-serif', display: 'flex', flexDirection: 'column' }}>
+    <div className="production-routing-container" style={{ padding: '20px 24px', backgroundColor: '#FAF6F0', minHeight: 'calc(100vh - 110px)', fontFamily: 'Inter, sans-serif', display: 'flex', flexDirection: 'column' }}>
 
       <div style={{
         display: 'flex',

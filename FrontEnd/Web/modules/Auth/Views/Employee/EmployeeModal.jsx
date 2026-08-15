@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { X, User } from 'lucide-react';
 import { hrService } from '../../Models/hr.service';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
@@ -25,6 +25,24 @@ const EmployeeModal = ({ isOpen, onClose, employee, onSave }) => {
 
   const isEdit = !!employee;
 
+  // Lọc bộ phận theo phòng ban được chọn
+  const filteredSections = useMemo(() => {
+    if (!departmentId) return sections;
+    return sections.filter(s => !s.role_id || String(s.role_id) === String(departmentId));
+  }, [sections, departmentId]);
+
+  // Lọc vị trí theo bộ phận và phòng ban được chọn
+  const filteredPositions = useMemo(() => {
+    if (sectionId) {
+      return positions.filter(p => !p.department_id || String(p.department_id) === String(sectionId));
+    }
+    if (departmentId) {
+      const secIdsInDept = new Set(sections.filter(s => String(s.role_id) === String(departmentId)).map(s => s.id));
+      return positions.filter(p => !p.department_id || secIdsInDept.has(p.department_id) || String(p.role_id) === String(departmentId));
+    }
+    return positions;
+  }, [positions, sectionId, departmentId, sections]);
+
   // Load select dropdown choices
   const loadDropdownChoices = async () => {
     try {
@@ -50,9 +68,9 @@ const EmployeeModal = ({ isOpen, onClose, employee, onSave }) => {
         setFullName(employee.full_name || '');
         setPhone(employee.phone || '');
         setHireDate(employee.hire_date || '');
-        setDepartmentId(employee.department_id || '');
-        setPositionId(employee.position_id || '');
-        setSectionId(employee.section_id || '');
+        setDepartmentId(employee.department_id ? String(employee.department_id) : '');
+        setPositionId(employee.position_id ? String(employee.position_id) : '');
+        setSectionId(employee.section_id ? String(employee.section_id) : '');
         setAvatarPath(employee.avatar_path || '');
       } else {
         setEmployeeId('');
@@ -295,13 +313,23 @@ const EmployeeModal = ({ isOpen, onClose, employee, onSave }) => {
             </div>
           </div>
 
-          {/* Bottom Dropdowns: Department, Position, Section */}
+          {/* Bottom Dropdowns: 3-Tier Hierarchy (Phòng ban -> Bộ phận -> Vị trí) */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginTop: '8px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#2D1A12', marginBottom: '4px' }}>Phòng ban</label>
               <select
                 value={departmentId}
-                onChange={(e) => setDepartmentId(e.target.value)}
+                onChange={(e) => {
+                  const newDeptId = e.target.value;
+                  setDepartmentId(newDeptId);
+                  if (newDeptId && sectionId) {
+                    const sec = sections.find(s => String(s.id) === String(sectionId));
+                    if (sec && sec.role_id && String(sec.role_id) !== String(newDeptId)) {
+                      setSectionId('');
+                      setPositionId('');
+                    }
+                  }
+                }}
                 style={{
                   width: '100%',
                   padding: '8px 12px',
@@ -320,32 +348,25 @@ const EmployeeModal = ({ isOpen, onClose, employee, onSave }) => {
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#2D1A12', marginBottom: '4px' }}>Vị trí</label>
-              <select
-                value={positionId}
-                onChange={(e) => setPositionId(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  border: '1.5px solid #EADCC9',
-                  borderRadius: '8px',
-                  fontSize: '0.85rem',
-                  backgroundColor: '#fff',
-                  boxSizing: 'border-box'
-                }}
-              >
-                <option value="">Chọn vị trí</option>
-                {positions.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#2D1A12', marginBottom: '4px' }}>Bộ phận</label>
               <select
                 value={sectionId}
-                onChange={(e) => setSectionId(e.target.value)}
+                onChange={(e) => {
+                  const newSecId = e.target.value;
+                  setSectionId(newSecId);
+                  if (newSecId) {
+                    const sec = sections.find(s => String(s.id) === String(newSecId));
+                    if (sec && sec.role_id) {
+                      setDepartmentId(String(sec.role_id));
+                    }
+                    if (positionId) {
+                      const pos = positions.find(p => String(p.id) === String(positionId));
+                      if (pos && pos.department_id && String(pos.department_id) !== String(newSecId)) {
+                        setPositionId('');
+                      }
+                    }
+                  }
+                }}
                 style={{
                   width: '100%',
                   padding: '8px 12px',
@@ -357,8 +378,44 @@ const EmployeeModal = ({ isOpen, onClose, employee, onSave }) => {
                 }}
               >
                 <option value="">Chọn bộ phận</option>
-                {sections.map(s => (
+                {filteredSections.map(s => (
                   <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#2D1A12', marginBottom: '4px' }}>Vị trí</label>
+              <select
+                value={positionId}
+                onChange={(e) => {
+                  const newPosId = e.target.value;
+                  setPositionId(newPosId);
+                  if (newPosId) {
+                    const pos = positions.find(p => String(p.id) === String(newPosId));
+                    if (pos) {
+                      if (pos.department_id) {
+                        setSectionId(String(pos.department_id));
+                      }
+                      if (pos.role_id) {
+                        setDepartmentId(String(pos.role_id));
+                      }
+                    }
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1.5px solid #EADCC9',
+                  borderRadius: '8px',
+                  fontSize: '0.85rem',
+                  backgroundColor: '#fff',
+                  boxSizing: 'border-box'
+                }}
+              >
+                <option value="">Chọn vị trí</option>
+                {filteredPositions.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
             </div>

@@ -63,12 +63,9 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
   }, []);
 
   const isBlocked = (item) => {
-    let key = item.permission_key;
-    if (!key) {
-      key = item.route_path || `sb_${item.id}`;
-    }
+    let key = item.route_path || item.permission_key || `sb_${item.id}`;
     if (!key) return false;
-    const perm = activePermissions[key];
+    const perm = activePermissions[key] || (item.permission_key ? activePermissions[item.permission_key] : undefined);
 
     // 1. Kiểm tra chặn rõ ràng (Explicit block)
     if (perm === 'none') return true;

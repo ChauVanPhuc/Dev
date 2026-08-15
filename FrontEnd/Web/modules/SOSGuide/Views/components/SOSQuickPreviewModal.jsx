@@ -209,6 +209,24 @@ const SOSQuickPreviewModal = ({ guide, onClose, onEdit }) => {
 
           {/* Right: Step Content & Photos */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: 24 }}>
+            {/* Guide Scope & Description Header if available */}
+            {guide.description && (
+              <div style={{
+                padding: '12px 16px',
+                borderRadius: 10,
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #E2E8F0',
+                marginBottom: 16
+              }}>
+                <div style={{ fontSize: 11.5, fontWeight: 800, color: THEME.primary, textTransform: 'uppercase', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <FileText size={14} /> Vị trí & Phạm vi áp dụng:
+                </div>
+                <div style={{ fontSize: 13.5, color: '#334155', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
+                  <FormattedTextView text={guide.description} />
+                </div>
+              </div>
+            )}
+
             {currentStep ? (
               <div>
                 <div style={{
@@ -216,12 +234,12 @@ const SOSQuickPreviewModal = ({ guide, onClose, onEdit }) => {
                   borderRadius: 10,
                   backgroundColor: THEME.bgLight,
                   border: `1px solid ${THEME.borderLight}`,
-                  marginBottom: 20
+                  marginBottom: 16
                 }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, color: THEME.primary, textTransform: 'uppercase' }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 800, color: THEME.primary, textTransform: 'uppercase' }}>
                     Nội dung thao tác Bước {currentStep.step_no || activeStepIndex + 1}
                   </div>
-                  <h3 style={{ margin: '4px 0 0 0', fontSize: '1.25rem', color: '#1E293B', fontWeight: 800 }}>
+                  <h3 style={{ margin: '4px 0 0 0', fontSize: '1.2rem', color: '#1E293B', fontWeight: 800 }}>
                     {currentStep.title || 'Chưa đặt tên bước'}
                   </h3>
                 </div>

@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, and_
 from typing import List, Optional
 import os
 import uuid
@@ -13,8 +14,10 @@ from modules.hr.schemas import hr_schemas
 from modules.hr.controllers import hr_controller
 from modules.hr.models.hr_models import (
     HREmployee, HRDepartment, HRPosition, HRSection,
-    HRHierarchyNode, HRPersonnelNode, HRFactoryStructure
+    HRHierarchyNode, HRPersonnelNode, HRFactoryStructure, HRFactoryDepartment
 )
+from modules.auth.models.associations import role_permission
+from modules.auth.models.accounts import Account
 
 router = APIRouter()
 
@@ -247,8 +250,13 @@ def update_existing_department(id: int, dept: hr_schemas.HRDepartmentCreate, db:
 # --- POSITIONS ENDPOINTS ---
 
 @router.get("/positions", response_model=List[hr_schemas.HRPositionResponse])
-def list_positions(search: Optional[str] = None, db: Session = Depends(get_db)):
-    return hr_controller.get_positions(db, search)
+def list_positions(
+    search: Optional[str] = None, 
+    department_id: Optional[int] = None,
+    role_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    return hr_controller.get_positions(db, search=search, department_id=department_id, role_id=role_id)
 
 @router.post("/positions", response_model=hr_schemas.HRPositionResponse)
 def create_position(pos: hr_schemas.HRPositionCreate, db: Session = Depends(get_db)):
@@ -274,12 +282,11 @@ def update_existing_position(id: int, pos: hr_schemas.HRPositionCreate, db: Sess
         raise HTTPException(status_code=404, detail="Không tìm thấy vị trí")
     return updated
 
-
 # --- SECTIONS ENDPOINTS ---
 
 @router.get("/sections", response_model=List[hr_schemas.HRSectionResponse])
-def list_sections(search: Optional[str] = None, db: Session = Depends(get_db)):
-    return hr_controller.get_sections(db, search)
+def list_sections(search: Optional[str] = None, role_id: Optional[int] = None, db: Session = Depends(get_db)):
+    return hr_controller.get_sections(db, search, role_id)
 
 @router.post("/sections", response_model=hr_schemas.HRSectionResponse)
 def create_section(sec: hr_schemas.HRSectionCreate, db: Session = Depends(get_db)):
@@ -450,18 +457,22 @@ def delete_factory_structure(id: int, db: Session = Depends(get_db)):
 def get_factory_departments(id: int, db: Session = Depends(get_db)):
     links = db.query(HRFactoryDepartment).filter(HRFactoryDepartment.factory_structure_id == id).all()
     dept_ids = [l.department_id for l in links]
+    struct = db.query(HRFactoryStructure).filter(HRFactoryStructure.id == id).first()
+    if struct and struct.department_id and struct.department_id not in dept_ids:
+        dept_ids.append(struct.department_id)
+        
     if not dept_ids:
         return []
     depts = db.query(HRDepartment).filter(HRDepartment.id.in_(dept_ids)).all()
     link_map = {l.department_id: l.id for l in links}
     return [
         {
-            "link_id": link_map.get(d.id),
+            "link_id": link_map.get(d.id, d.id),
             "department_id": d.id,
-            "code": d.code,
+            "code": getattr(d, 'code', None) or f"PB{d.id:02d}",
             "name": d.name,
-            "description": d.description,
-            "created_at": d.created_at
+            "description": d.description or "---",
+            "created_at": getattr(d, 'created_at', None)
         }
         for d in depts
     ]
@@ -489,10 +500,13 @@ def remove_factory_department(id: int, dept_id: int, db: Session = Depends(get_d
         HRFactoryDepartment.factory_structure_id == id,
         HRFactoryDepartment.department_id == dept_id
     ).first()
-    if not link:
-        raise HTTPException(status_code=404, detail="Không tìm thấy liên kết phòng ban")
-    db.delete(link)
-    db.commit()
+    if link:
+        db.delete(link)
+        db.commit()
+    struct = db.query(HRFactoryStructure).filter(HRFactoryStructure.id == id, HRFactoryStructure.department_id == dept_id).first()
+    if struct:
+        struct.department_id = None
+        db.commit()
     return {"message": "Đã xóa liên kết phòng ban"}
 
 @router.get("/factory-structures/{id}/children")
@@ -504,25 +518,33 @@ def get_factory_children(id: int, db: Session = Depends(get_db)):
 # 2. Department Sub-tables
 @router.get("/departments/{id}/employees")
 def get_department_employees(id: int, db: Session = Depends(get_db)):
-    employees = db.query(HREmployee).filter(HREmployee.department_id == id).all()
-    return employees
+    employees = db.query(HREmployee).filter(
+        or_(HREmployee.section_id == id, HREmployee.department_id == id)
+    ).all()
+    return [
+        {
+            "id": e.id,
+            "employee_id": e.employee_id,
+            "name": e.full_name,
+            "full_name": e.full_name,
+            "phone": e.phone or "---",
+            "hire_date": e.hire_date or "---",
+            "description": f"Mã NV: {e.employee_id} | ĐT: {e.phone or '---'}"
+        }
+        for e in employees
+    ]
 
 @router.get("/departments/{id}/positions")
 def get_department_positions(id: int, db: Session = Depends(get_db)):
-    links = db.query(HRDepartmentPosition).filter(HRDepartmentPosition.department_id == id).all()
-    pos_ids = [l.position_id for l in links]
-    if not pos_ids:
-        return []
-    positions = db.query(HRPosition).filter(HRPosition.id.in_(pos_ids)).all()
-    link_map = {l.position_id: l.id for l in links}
+    positions = db.query(HRPosition).filter(HRPosition.department_id == id).all()
     return [
         {
-            "link_id": link_map.get(p.id),
+            "link_id": p.id,
             "position_id": p.id,
-            "code": p.code,
+            "code": getattr(p, 'code', None) or f"VT{p.id:02d}",
             "name": p.name,
-            "description": p.description,
-            "created_at": p.created_at
+            "description": p.description or "---",
+            "created_at": getattr(p, 'created_at', None)
         }
         for p in positions
     ]
@@ -532,28 +554,20 @@ def add_department_position(id: int, payload: dict, db: Session = Depends(get_db
     pos_id = payload.get("position_id")
     if not pos_id:
         raise HTTPException(status_code=400, detail="Thiếu position_id")
-    existing = db.query(HRDepartmentPosition).filter(
-        HRDepartmentPosition.department_id == id,
-        HRDepartmentPosition.position_id == pos_id
-    ).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Vị trí này đã được liên kết với phòng ban!")
-    link = HRDepartmentPosition(department_id=id, position_id=pos_id)
-    db.add(link)
+    pos = db.query(HRPosition).filter(HRPosition.id == pos_id).first()
+    if not pos:
+        raise HTTPException(status_code=404, detail="Không tìm thấy vị trí")
+    pos.department_id = id
     db.commit()
-    db.refresh(link)
-    return link
+    db.refresh(pos)
+    return {"message": "Đã liên kết vị trí vào bộ phận", "position_id": pos.id}
 
 @router.delete("/departments/{id}/positions/{pos_id}")
 def remove_department_position(id: int, pos_id: int, db: Session = Depends(get_db)):
-    link = db.query(HRDepartmentPosition).filter(
-        HRDepartmentPosition.department_id == id,
-        HRDepartmentPosition.position_id == pos_id
-    ).first()
-    if not link:
-        raise HTTPException(status_code=404, detail="Không tìm thấy liên kết vị trí")
-    db.delete(link)
-    db.commit()
+    pos = db.query(HRPosition).filter(HRPosition.id == pos_id, HRPosition.department_id == id).first()
+    if pos:
+        pos.department_id = None
+        db.commit()
     return {"message": "Đã xóa liên kết vị trí"}
 
 
@@ -561,48 +575,86 @@ def remove_department_position(id: int, pos_id: int, db: Session = Depends(get_d
 @router.get("/positions/{id}/employees")
 def get_position_employees(id: int, db: Session = Depends(get_db)):
     employees = db.query(HREmployee).filter(HREmployee.position_id == id).all()
-    return employees
+    return [
+        {
+            "id": e.id,
+            "employee_id": e.employee_id,
+            "name": e.full_name,
+            "full_name": e.full_name,
+            "phone": e.phone or "---",
+            "hire_date": e.hire_date or "---",
+            "description": f"Mã NV: {e.employee_id} | ĐT: {e.phone or '---'}"
+        }
+        for e in employees
+    ]
 
 @router.get("/positions/{id}/departments")
 def get_position_departments(id: int, db: Session = Depends(get_db)):
-    links = db.query(HRDepartmentPosition).filter(HRDepartmentPosition.position_id == id).all()
-    dept_ids = [l.department_id for l in links]
-    if not dept_ids:
-        return []
-    depts = db.query(HRDepartment).filter(HRDepartment.id.in_(dept_ids)).all()
-    link_map = {l.department_id: l.id for l in links}
-    return [
-        {
-            "link_id": link_map.get(d.id),
-            "department_id": d.id,
-            "code": d.code,
-            "name": d.name,
-            "description": d.description,
-            "created_at": d.created_at
-        }
-        for d in depts
-    ]
+    res = []
+    # Direct Department (Bộ phận)
+    pos = db.query(HRPosition).filter(HRPosition.id == id).first()
+    if pos and pos.department_id:
+        sec = db.query(HRSection).filter(HRSection.id == pos.department_id).first()
+        if sec:
+            res.append({
+                "link_id": sec.id,
+                "department_id": sec.id,
+                "code": sec.code or f"BP{sec.id:02d}",
+                "name": sec.name,
+                "description": f"Bộ phận trực tiếp ({sec.code or ''})",
+                "created_at": getattr(sec, 'created_at', None)
+            })
+    # Linked Roles (Phòng ban) via role_permission
+    role_links = db.query(role_permission).filter(role_permission.c.permission_id == id).all()
+    role_ids = [r.role_id for r in role_links]
+    if role_ids:
+        roles = db.query(HRDepartment).filter(HRDepartment.id.in_(role_ids)).all()
+        for r in roles:
+            if not any(x.get("department_id") == r.id and x.get("type") == "role" for x in res):
+                res.append({
+                    "link_id": r.id,
+                    "department_id": r.id,
+                    "type": "role",
+                    "code": getattr(r, 'code', None) or f"PB{r.id:02d}",
+                    "name": r.name,
+                    "description": f"Phòng ban: {r.description or r.name}",
+                    "created_at": getattr(r, 'created_at', None)
+                })
+    return res
 
 
 # 4. Role Sub-tables
 @router.get("/roles/{id}/employees")
 def get_role_employees(id: int, db: Session = Depends(get_db)):
-    # Query accounts or hr_employees linked to role
-    from modules.auth.models.departments import Department
-    from modules.auth.models.accounts import Account
-    dept_mappings = db.query(Department).filter(Department.role_id == id).all()
+    res = []
+    seen_names = set()
+    # 1. HREmployees
+    hr_emps = db.query(HREmployee).filter(HREmployee.department_id == id).all()
+    for e in hr_emps:
+        seen_names.add(e.full_name)
+        res.append({
+            "id": e.id,
+            "employee_id": e.employee_id,
+            "name": e.full_name,
+            "full_name": e.full_name,
+            "description": f"Mã NV: {e.employee_id} | ĐT: {e.phone or '---'}",
+            "email": "---"
+        })
+    # 2. Accounts
+    dept_mappings = db.query(HRSection).filter(HRSection.role_id == id).all()
     account_ids = [d.account_id for d in dept_mappings if d.account_id]
-    if not account_ids:
-        return []
-    accounts = db.query(Account).filter(Account.id.in_(account_ids)).all()
-    return [
-        {
-            "id": acc.id,
-            "username": acc.username,
-            "full_name": acc.full_name or acc.username,
-            "email": getattr(acc, 'email', '---'),
-            "is_active": acc.is_active
-        }
-        for acc in accounts
-    ]
+    if account_ids:
+        accounts = db.query(Account).filter(Account.id.in_(account_ids)).all()
+        for acc in accounts:
+            name = acc.full_name or acc.username
+            if name not in seen_names:
+                res.append({
+                    "id": acc.id,
+                    "employee_id": acc.username,
+                    "name": name,
+                    "full_name": name,
+                    "description": f"Tài khoản: {acc.username}",
+                    "email": getattr(acc, 'email', '---')
+                })
+    return res
 

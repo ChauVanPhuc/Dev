@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { X, Shield } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, Shield, CheckCircle2, Eye, Lock } from 'lucide-react';
 import api from '@webShared/Services/api.service';
+import { buildPermissionGroupsFromSidebar } from '../User/utils/permissionUtils';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 const PositionModal = ({ isOpen, onClose, modalMode, selectedPosition, allDepartments, onConfirm }) => {
@@ -12,8 +13,17 @@ const PositionModal = ({ isOpen, onClose, modalMode, selectedPosition, allDepart
     role_ids: []
   });
   
-  const [screensList, setScreensList] = useState([]);
+  const [sidebarItems, setSidebarItems] = useState([]);
+  const [screens, setScreens] = useState([]);
   const [defaultPermissions, setDefaultPermissions] = useState({});
+
+  const dynamicWebGroups = useMemo(() => {
+    return buildPermissionGroupsFromSidebar(sidebarItems, 'web', screens);
+  }, [sidebarItems, screens]);
+
+  const dynamicMobileGroups = useMemo(() => {
+    return buildPermissionGroupsFromSidebar(sidebarItems, 'mobile', screens);
+  }, [sidebarItems, screens]);
 
   useEffect(() => {
     if (isOpen) {
@@ -30,35 +40,8 @@ const PositionModal = ({ isOpen, onClose, modalMode, selectedPosition, allDepart
             api.get('/system/sidebar/all'),
             api.get('/screens')
           ]);
-          
-          const list = [];
-          const seen = new Set();
-          
-          const addScreen = (scr) => {
-            const key = scr.permission_key || (scr.screen && scr.screen.current_code) || scr.route_path;
-            if (key && !seen.has(key)) {
-              seen.add(key);
-              list.push({ key, name: scr.title || (scr.screen && scr.screen.name) || key });
-            }
-          };
-
-          (sidebarRes || []).forEach(item => {
-            if (item.children && item.children.length > 0) {
-              item.children.forEach(child => addScreen(child));
-            } else {
-              addScreen(item);
-            }
-          });
-
-          (screensRes || []).forEach(scr => {
-            const key = scr.current_code;
-            if (key && !seen.has(key)) {
-              seen.add(key);
-              list.push({ key, name: scr.name || key });
-            }
-          });
-
-          setScreensList(list);
+          setSidebarItems(sidebarRes || []);
+          setScreens(screensRes || []);
 
           let parsed = {};
           if (modalMode === 'edit' && selectedPosition) {
@@ -70,8 +53,18 @@ const PositionModal = ({ isOpen, onClose, modalMode, selectedPosition, allDepart
           }
 
           const initialPerms = {};
-          list.forEach(scr => {
-            initialPerms[scr.key] = parsed[scr.key] || 'write';
+          const webGroups = buildPermissionGroupsFromSidebar(sidebarRes || [], 'web', screensRes || []);
+          const mobileGroups = buildPermissionGroupsFromSidebar(sidebarRes || [], 'mobile', screensRes || []);
+
+          webGroups.forEach(group => {
+            group.screens.forEach(scr => {
+              initialPerms[scr.key] = parsed[scr.key] || 'write';
+            });
+          });
+          mobileGroups.forEach(group => {
+            group.screens.forEach(scr => {
+              initialPerms[scr.key] = parsed[scr.key] || 'write';
+            });
           });
           setDefaultPermissions(initialPerms);
         } catch (err) {
@@ -99,6 +92,30 @@ const PositionModal = ({ isOpen, onClose, modalMode, selectedPosition, allDepart
     }));
   };
 
+  // Chọn nhanh cho toàn bộ màn hình trong 1 nhóm/module
+  const handleGroupPermissionChange = (screensInGroup, value) => {
+    setDefaultPermissions(prev => {
+      const next = { ...prev };
+      screensInGroup.forEach(scr => {
+        next[scr.key] = value;
+      });
+      return next;
+    });
+  };
+
+  // Chọn nhanh toàn cục cho tất cả các module
+  const handleGlobalPermissionChange = (value) => {
+    setDefaultPermissions(prev => {
+      const next = { ...prev };
+      [...dynamicWebGroups, ...dynamicMobileGroups].forEach(group => {
+        group.screens.forEach(scr => {
+          next[scr.key] = value;
+        });
+      });
+      return next;
+    });
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.name.trim()) return alert('Vui lòng nhập tên chức vụ!');
@@ -114,7 +131,7 @@ const PositionModal = ({ isOpen, onClose, modalMode, selectedPosition, allDepart
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-      <div className="card" style={{ width: '100%', maxWidth: '600px', backgroundColor: '#fff', borderRadius: '16px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+      <div className="card" style={{ width: '100%', maxWidth: '640px', backgroundColor: '#fff', borderRadius: '16px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
         {/* Modal Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid #FAF0E6', backgroundColor: '#FAF6F0' }}>
           <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#2D1A12', fontWeight: '800' }}>
@@ -193,49 +210,139 @@ const PositionModal = ({ isOpen, onClose, modalMode, selectedPosition, allDepart
 
             {/* ── Cấu hình quyền mặc định của Chức vụ ── */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
-              <label style={{ fontSize: '0.85rem', fontWeight: '700', color: '#7B5233', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Shield size={16} /> Quyền mặc định của chức vụ
-              </label>
-              <span style={{ fontSize: '0.75rem', color: '#888', fontStyle: 'italic', marginBottom: '4px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: '700', color: '#7B5233', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
+                  <Shield size={16} /> Quyền mặc định của chức vụ
+                </label>
+                
+                {/* Global Quick Action Toolbar */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '0.72rem', color: '#7B5233', fontWeight: '600' }}>Tất cả:</span>
+                  <button 
+                    type="button" 
+                    onClick={() => handleGlobalPermissionChange('write')}
+                    style={{ padding: '3px 8px', borderRadius: '6px', border: '1px solid #8ce99a', backgroundColor: '#ebfbee', color: '#2b8a3e', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
+                    title="Gán tất cả thành Có quyền ghi"
+                  >
+                    <CheckCircle2 size={12} /> Ghi
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => handleGlobalPermissionChange('read')}
+                    style={{ padding: '3px 8px', borderRadius: '6px', border: '1px solid #ffe066', backgroundColor: '#fff9db', color: '#e67700', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
+                    title="Gán tất cả thành Chỉ xem"
+                  >
+                    <Eye size={12} /> Xem
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => handleGlobalPermissionChange('none')}
+                    style={{ padding: '3px 8px', borderRadius: '6px', border: '1px solid #ffa8a8', backgroundColor: '#fff5f5', color: '#c92a2a', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
+                    title="Khóa tất cả các chức năng"
+                  >
+                    <Lock size={12} /> Khóa
+                  </button>
+                </div>
+              </div>
+
+              <span style={{ fontSize: '0.75rem', color: '#888', fontStyle: 'italic', marginBottom: '2px' }}>
                 Thiết lập quyền truy cập mặc định cho chức vụ này đối với từng chức năng.
               </span>
 
               <div style={{ 
-                maxHeight: '200px', 
+                maxHeight: '250px', 
                 overflowY: 'auto', 
                 border: '1px solid #EADCC9', 
                 borderRadius: '8px', 
-                padding: '8px 12px', 
+                padding: '10px 12px', 
                 backgroundColor: '#FAF8F6' 
               }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {screensList.map((scr) => (
-                    <div key={scr.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.82rem', color: '#444', fontWeight: '600' }}>
-                        {scr.name}
-                      </span>
-                      <select
-                        value={defaultPermissions[scr.key] || 'write'}
-                        onChange={(e) => handlePermissionChange(scr.key, e.target.value)}
-                        style={{
-                          padding: '4px 8px',
-                          borderRadius: '6px',
-                          border: '1px solid #EADCC9',
-                          fontSize: '0.8rem',
-                          fontWeight: '600',
-                          backgroundColor: '#fff',
-                          color: '#2D1A12',
-                          outline: 'none',
-                          width: '130px'
-                        }}
-                      >
-                        <option value="none">Không được phép</option>
-                        <option value="read">Chỉ xem</option>
-                        <option value="write">Có quyền ghi</option>
-                      </select>
+                {[...dynamicWebGroups, ...dynamicMobileGroups].map((group, groupIdx) => {
+                  const isMobile = group.screens[0]?.key.startsWith('mobile_');
+                  return (
+                    <div key={`${group.title}-${isMobile ? 'mobile' : 'web'}-${groupIdx}`} style={{ marginBottom: '16px' }}>
+                      {/* Group Header with Quick Select Dropdown */}
+                      <div style={{ 
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        borderBottom: '1px solid #EADCC9', 
+                        paddingBottom: '5px',
+                        marginBottom: '8px',
+                        backgroundColor: '#F5ECE1',
+                        padding: '4px 8px',
+                        borderRadius: '6px'
+                      }}>
+                        <span style={{ 
+                          fontSize: '0.82rem', 
+                          fontWeight: '800', 
+                          color: '#5C381E' 
+                        }}>
+                          {group.title} {isMobile ? '(Mobile)' : '(Web)'}
+                        </span>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <select
+                            defaultValue=""
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                handleGroupPermissionChange(group.screens, e.target.value);
+                                e.target.value = "";
+                              }
+                            }}
+                            style={{
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              border: '1px solid #C4A482',
+                              fontSize: '0.72rem',
+                              fontWeight: '700',
+                              backgroundColor: '#FFF',
+                              color: '#5C381E',
+                              cursor: 'pointer',
+                              outline: 'none',
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                            }}
+                          >
+                            <option value="" disabled>⚡ Chọn nhanh nhóm</option>
+                            <option value="write">🟢 Cả nhóm: Có quyền ghi</option>
+                            <option value="read">🟡 Cả nhóm: Chỉ xem</option>
+                            <option value="none">🔴 Cả nhóm: Không được phép</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Screen items */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingLeft: '4px', paddingRight: '4px' }}>
+                        {group.screens.map((scr) => (
+                          <div key={scr.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 0' }}>
+                            <span style={{ fontSize: '0.8rem', color: '#444', fontWeight: '600' }}>
+                              {scr.name}
+                            </span>
+                            <select
+                              value={defaultPermissions[scr.key] || 'write'}
+                              onChange={(e) => handlePermissionChange(scr.key, e.target.value)}
+                              style={{
+                                padding: '4px 8px',
+                                borderRadius: '6px',
+                                border: '1px solid #EADCC9',
+                                fontSize: '0.8rem',
+                                fontWeight: '600',
+                                backgroundColor: '#fff',
+                                color: '#2D1A12',
+                                outline: 'none',
+                                width: '130px'
+                              }}
+                            >
+                              <option value="none">Không được phép</option>
+                              <option value="read">Chỉ xem</option>
+                              <option value="write">Có quyền ghi</option>
+                            </select>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
             </div>
 

@@ -266,14 +266,14 @@ def resolve_permissions_by_params(
     for item in sidebar_items:
         if not item.parent_id:
             continue
-        # Xác định khóa phân quyền
-        key = item.permission_key
+        # Xác định khóa phân quyền duy nhất cho từng màn hình
+        key = item.route_path
         if not key and item.screen_id:
             scr = db.query(SystemScreen).filter(SystemScreen.id == item.screen_id).first()
             if scr:
                 key = scr.current_code or scr.default_code
         if not key:
-            key = item.route_path or f"sb_{item.id}"
+            key = item.permission_key or f"sb_{item.id}"
             
         # Tìm nhóm cha
         parent = next((p for p in sidebar_items if p.id == item.parent_id), None)

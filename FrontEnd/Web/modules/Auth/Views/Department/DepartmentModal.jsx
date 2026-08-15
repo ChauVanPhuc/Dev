@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Shield } from 'lucide-react';
+import { X, Shield, CheckCircle2, Eye, Lock } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import { buildPermissionGroupsFromSidebar } from '../User/utils/permissionUtils';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
@@ -89,6 +89,30 @@ const DepartmentModal = ({ isOpen, onClose, modalMode, selectedDepartment, onCon
     }));
   };
 
+  // Chọn nhanh cho toàn bộ màn hình trong 1 nhóm/module
+  const handleGroupPermissionChange = (screensInGroup, value) => {
+    setDefaultPermissions(prev => {
+      const next = { ...prev };
+      screensInGroup.forEach(scr => {
+        next[scr.key] = value;
+      });
+      return next;
+    });
+  };
+
+  // Chọn nhanh toàn cục cho tất cả các module
+  const handleGlobalPermissionChange = (value) => {
+    setDefaultPermissions(prev => {
+      const next = { ...prev };
+      [...dynamicWebGroups, ...dynamicMobileGroups].forEach(group => {
+        group.screens.forEach(scr => {
+          next[scr.key] = value;
+        });
+      });
+      return next;
+    });
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.name.trim()) return alert('Vui lòng nhập tên bộ phận!');
@@ -101,7 +125,7 @@ const DepartmentModal = ({ isOpen, onClose, modalMode, selectedDepartment, onCon
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-      <div className="card" style={{ width: '100%', maxWidth: '600px', backgroundColor: '#fff', borderRadius: '16px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+      <div className="card" style={{ width: '100%', maxWidth: '640px', backgroundColor: '#fff', borderRadius: '16px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
         {/* Modal Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid #FAF0E6', backgroundColor: '#FAF6F0' }}>
           <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#2D1A12', fontWeight: '800' }}>
@@ -158,38 +182,111 @@ const DepartmentModal = ({ isOpen, onClose, modalMode, selectedDepartment, onCon
 
             {/* ── Cấu hình quyền mặc định của Bộ phận ── */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
-              <label style={{ fontSize: '0.85rem', fontWeight: '700', color: '#7B5233', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Shield size={16} /> Quyền mặc định của bộ phận
-              </label>
-              <span style={{ fontSize: '0.75rem', color: '#888', fontStyle: 'italic', marginBottom: '4px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: '700', color: '#7B5233', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
+                  <Shield size={16} /> Quyền mặc định của bộ phận
+                </label>
+                
+                {/* Global Quick Action Toolbar */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '0.72rem', color: '#7B5233', fontWeight: '600' }}>Tất cả:</span>
+                  <button 
+                    type="button" 
+                    onClick={() => handleGlobalPermissionChange('write')}
+                    style={{ padding: '3px 8px', borderRadius: '6px', border: '1px solid #8ce99a', backgroundColor: '#ebfbee', color: '#2b8a3e', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
+                    title="Gán tất cả thành Có quyền ghi"
+                  >
+                    <CheckCircle2 size={12} /> Ghi
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => handleGlobalPermissionChange('read')}
+                    style={{ padding: '3px 8px', borderRadius: '6px', border: '1px solid #ffe066', backgroundColor: '#fff9db', color: '#e67700', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
+                    title="Gán tất cả thành Chỉ xem"
+                  >
+                    <Eye size={12} /> Xem
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => handleGlobalPermissionChange('none')}
+                    style={{ padding: '3px 8px', borderRadius: '6px', border: '1px solid #ffa8a8', backgroundColor: '#fff5f5', color: '#c92a2a', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
+                    title="Khóa tất cả các chức năng"
+                  >
+                    <Lock size={12} /> Khóa
+                  </button>
+                </div>
+              </div>
+
+              <span style={{ fontSize: '0.75rem', color: '#888', fontStyle: 'italic', marginBottom: '2px' }}>
                 Thiết lập quyền truy cập cơ sở cho bộ phận này đối với từng chức năng.
               </span>
 
               <div style={{ 
-                maxHeight: '230px', 
+                maxHeight: '250px', 
                 overflowY: 'auto', 
                 border: '1px solid #EADCC9', 
                 borderRadius: '8px', 
-                padding: '8px 12px', 
+                padding: '10px 12px', 
                 backgroundColor: '#FAF8F6' 
               }}>
                 {[...dynamicWebGroups, ...dynamicMobileGroups].map((group, groupIdx) => {
                   const isMobile = group.screens[0]?.key.startsWith('mobile_');
                   return (
-                    <div key={`${group.title}-${isMobile ? 'mobile' : 'web'}-${groupIdx}`} style={{ marginBottom: '15px' }}>
+                    <div key={`${group.title}-${isMobile ? 'mobile' : 'web'}-${groupIdx}`} style={{ marginBottom: '16px' }}>
+                      {/* Group Header with Quick Select Dropdown */}
                       <div style={{ 
-                        fontSize: '0.8rem', 
-                        fontWeight: '800', 
-                        color: '#7B5233', 
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
                         borderBottom: '1px solid #EADCC9', 
-                        paddingBottom: '4px',
-                        marginBottom: '8px'
+                        paddingBottom: '5px',
+                        marginBottom: '8px',
+                        backgroundColor: '#F5ECE1',
+                        padding: '4px 8px',
+                        borderRadius: '6px'
                       }}>
-                        {group.title} {isMobile ? '(Mobile)' : '(Web)'}
+                        <span style={{ 
+                          fontSize: '0.82rem', 
+                          fontWeight: '800', 
+                          color: '#5C381E' 
+                        }}>
+                          {group.title} {isMobile ? '(Mobile)' : '(Web)'}
+                        </span>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <select
+                            defaultValue=""
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                handleGroupPermissionChange(group.screens, e.target.value);
+                                e.target.value = "";
+                              }
+                            }}
+                            style={{
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              border: '1px solid #C4A482',
+                              fontSize: '0.72rem',
+                              fontWeight: '700',
+                              backgroundColor: '#FFF',
+                              color: '#5C381E',
+                              cursor: 'pointer',
+                              outline: 'none',
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                            }}
+                          >
+                            <option value="" disabled>⚡ Chọn nhanh nhóm</option>
+                            <option value="write">🟢 Cả nhóm: Có quyền ghi</option>
+                            <option value="read">🟡 Cả nhóm: Chỉ xem</option>
+                            <option value="none">🔴 Cả nhóm: Không được phép</option>
+                          </select>
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+
+                      {/* Screen items */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingLeft: '4px', paddingRight: '4px' }}>
                         {group.screens.map((scr) => (
-                          <div key={scr.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div key={scr.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 0' }}>
                             <span style={{ fontSize: '0.8rem', color: '#444', fontWeight: '600' }}>
                               {scr.name}
                             </span>

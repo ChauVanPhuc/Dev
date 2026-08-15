@@ -3,6 +3,9 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.mssql import NVARCHAR
 from config.database import Base
 from modules.auth.models.associations import role_permission, permission_stage
+from modules.production.models.stages import Stage
+from modules.auth.models.role import Role
+from modules.auth.models.departments import Department
 
 class Permission(Base):
     """
@@ -16,6 +19,7 @@ class Permission(Base):
     description = Column(NVARCHAR(255))         # Mô tả quyền hạn
     is_active = Column(Boolean, default=True)   # Trạng thái hoạt động
     default_permissions = Column(NVARCHAR(None), nullable=True) # Quyền mặc định của chức vụ dạng JSON string
+    department_id = Column(Integer, nullable=True) # Liên kết tới bảng departments (Bộ phận)
 
     # Quan hệ Many-to-Many tới Role (Vai trò)
     roles = relationship("Role", secondary=role_permission, back_populates="permissions")

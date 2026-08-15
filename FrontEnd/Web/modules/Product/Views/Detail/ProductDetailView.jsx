@@ -25,6 +25,7 @@ import AddComponentModal from './modals/AddComponentModal';
 import AddDetailModal from './modals/AddDetailModal';
 import AddPaintColorModal from './modals/AddPaintColorModal';
 import ConfigInfoModal from './modals/ConfigInfoModal';
+import CopyProductModal from './modals/CopyProductModal';
 import '@styles/components.css';
 
 /**
@@ -50,6 +51,7 @@ const ProductDetailView = () => {
   const [activeTab, setActiveTab] = useState('bom');
   const [searchTerm, setSearchTerm] = useState('');
   const [activeStage, setActiveStage] = useState('Định hình');
+  const [showCopyModal, setShowCopyModal] = useState(false);
   const [showAddDetailModal, setShowAddDetailModal] = useState(false);
   const [showAddComponentModal, setShowAddComponentModal] = useState(false);
   const [showAddPaintModal, setShowAddPaintModal] = useState(false);
@@ -852,6 +854,79 @@ const ProductDetailView = () => {
     }
   };
 
+  // Xử lý nạp dữ liệu từ sản phẩm mẫu khác
+  const handleApplyFromProduct = (sourceProduct, options = {}) => {
+    if (!sourceProduct) return;
+
+    // 1. Sao chép Thông tin chung & Quy cách
+    if (options.copyGeneralInfo) {
+      setFormData(prev => {
+        const nextLine = sourceProduct.brand_name || sourceProduct.category_name || prev.line;
+        const nextCat = sourceProduct.category_name || (sourceProduct.master_category && sourceProduct.master_category.name) || prev.category;
+        return {
+          ...prev,
+          line: nextLine,
+          category: nextCat,
+          length: (sourceProduct.length !== undefined && sourceProduct.length !== null) ? String(sourceProduct.length) : prev.length,
+          width: (sourceProduct.width !== undefined && sourceProduct.width !== null) ? String(sourceProduct.width) : prev.width,
+          height: (sourceProduct.height !== undefined && sourceProduct.height !== null) ? String(sourceProduct.height) : prev.height,
+          weight: sourceProduct.weight ? `${sourceProduct.weight} kg` : prev.weight,
+          color: sourceProduct.color || prev.color,
+          note: sourceProduct.specification || sourceProduct.description || prev.note,
+          bomStatus: sourceProduct.status || prev.bomStatus,
+          estimatedCost: sourceProduct.price ? Number(String(sourceProduct.price).replace(/\D/g, '')).toLocaleString('vi-VN') : prev.estimatedCost
+        };
+      });
+    }
+
+    // 2. Sao chép Cây cấu trúc BOM linh kiện
+    if (options.copyBOM && sourceProduct.master_bom_details && sourceProduct.master_bom_details.length > 0) {
+      const processed = processBackendBOM(sourceProduct.master_bom_details);
+      if (processed.length > 0) {
+        const currentSkuPrefix = formData.sku || `ADV${id}`;
+        const finalBOM = options.syncSKUPrefix
+          ? processed.map(row => ({
+              ...row,
+              compCode: row.stt === '1' ? currentSkuPrefix : `${currentSkuPrefix}.${row.stt}`
+            }))
+          : processed;
+
+        setBomRows(finalBOM);
+        setFormData(prev => ({ ...prev, totalComponents: String(finalBOM.length) }));
+      }
+    }
+
+    // 3. Sao chép Chi tiết sản phẩm (KT03.1)
+    if (options.copyDetails && Array.isArray(sourceProduct.product_details)) {
+      setDetailRows(sourceProduct.product_details.map(d => ({
+        id: d.id,
+        name: d.name,
+        quantity: d.quantity,
+        unit: d.unit || 'Cái',
+        input_stage: d.input_stage,
+        output_stage: d.output_stage,
+        parent_name: d.parent_name,
+        material: d.material
+      })));
+    }
+
+    // 4. Sao chép Mẫu màu sơn (KT03.3)
+    if (options.copyPaintColors && Array.isArray(sourceProduct.paint_color_samples)) {
+      setPaintColorRows(sourceProduct.paint_color_samples.map(p => ({
+        id: p.id,
+        color_code: p.color_code,
+        color_name: p.color_name,
+        supplier: p.supplier,
+        image_url: p.image_url,
+        note: p.note
+      })));
+    }
+
+    if (toast) {
+      toast('success', `Đã nạp thông tin từ sản phẩm "${sourceProduct.sku} - ${sourceProduct.name}" thành công!`);
+    }
+  };
+
   const filteredBomRows = useMemo(() => {
     if (!bomRows || bomRows.length === 0) return [];
     if (!searchTerm || searchTerm.trim() === '') return bomRows;
@@ -912,7 +987,7 @@ const ProductDetailView = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <button
                 type="button"
-                onClick={() => toast('info', 'Lấy thông tin từ sản phẩm khác')}
+                onClick={() => setShowCopyModal(true)}
                 style={{
                   padding: '7px 14px',
                   backgroundColor: '#EADCC9',
@@ -2574,6 +2649,14 @@ const ProductDetailView = () => {
           toast={toast}
         />
       )}
+
+      {/* COPY FROM OTHER PRODUCT MODAL */}
+      <CopyProductModal
+        isOpen={showCopyModal}
+        onClose={() => setShowCopyModal(false)}
+        onApply={handleApplyFromProduct}
+        currentSku={formData.sku}
+      />
     </div>
   );
 };

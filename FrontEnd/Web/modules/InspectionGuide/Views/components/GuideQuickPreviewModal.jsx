@@ -3,7 +3,7 @@ import { X, BookOpen, CheckSquare, Image as ImageIcon, Layers, ExternalLink } fr
 import { getFullImageUrl } from '@webShared/Services/api.service';
 import { FormattedTextView } from '@shared/utils/textFormatter';
 
-const GuideQuickPreviewModal = ({ isOpen, onClose, guide, onEdit }) => {
+const GuideQuickPreviewModal = ({ isOpen = true, onClose, guide, onEdit }) => {
   const [activeImage, setActiveImage] = useState(null);
 
   if (!isOpen || !guide) return null;

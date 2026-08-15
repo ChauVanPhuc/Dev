@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Optional
 from pydantic import BaseModel
 
@@ -28,14 +29,27 @@ class DepartmentItemCreate(BaseModel):
 @router.get("/", response_model=List[DepartmentItemResponse])
 def get_departments(
     role_id: Optional[int] = None,
+    role_name: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """
-    [GET] Lấy danh sách Bộ Phận (từ bảng departments), hỗ trợ lọc theo Phòng Ban (role_id).
+    [GET] Lấy danh sách Bộ Phận (từ bảng departments), hỗ trợ lọc theo Phòng Ban (role_id hoặc role_name).
     """
     query = db.query(Department).filter(Department.name.isnot(None), Department.account_id.is_(None))
     if role_id is not None:
         query = query.filter(Department.role_id == role_id)
+    if role_name is not None and role_name.strip():
+        search_role = role_name.strip().lower()
+        target_role = db.query(Role).filter(func.lower(Role.name) == search_role).first()
+        if target_role:
+            query = query.filter(Department.role_id == target_role.id)
+        else:
+            # Tìm gần đúng nếu không khớp chính xác
+            matching_roles = db.query(Role).filter(func.lower(Role.name).like(f"%{search_role}%")).all()
+            if matching_roles:
+                query = query.filter(Department.role_id.in_([r.id for r in matching_roles]))
+            else:
+                return []
         
     depts = query.order_by(Department.id.asc()).all()
     

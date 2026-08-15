@@ -9,11 +9,21 @@ from modules.auth.schemas.permissions import Permission as PermissionSchema, Per
 router = APIRouter()
 
 @router.get("/", response_model=List[PermissionSchema])
-def read_permissions(include_inactive: bool = False, db: Session = Depends(get_db)):
+def read_permissions(
+    include_inactive: bool = False, 
+    department_id: Optional[int] = None,
+    role_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
     """
-    [GET] Lấy danh sách tất cả các quyền hạn (Permissions) trong hệ thống.
+    [GET] Lấy danh sách tất cả các quyền hạn/vị trí (Permissions) trong hệ thống, hỗ trợ lọc theo Bộ phận và Phòng ban.
     """
-    return permission_controller.get_permissions(db, include_inactive)
+    return permission_controller.get_permissions(
+        db=db, 
+        include_inactive=include_inactive, 
+        department_id=department_id, 
+        role_id=role_id
+    )
 
 @router.post("/", response_model=PermissionSchema)
 def create_new_permission(permission_data: PermissionCreate, db: Session = Depends(get_db)):
@@ -32,15 +42,15 @@ def update_existing_permission(id: int, permission_data: PermissionUpdate, db: S
         raise HTTPException(status_code=404, detail="Quyền hạn không tồn tại")
     return updated_perm
 
-@router.delete("/{id}", response_model=PermissionSchema)
+@router.delete("/{id}")
 def delete_existing_permission(id: int, db: Session = Depends(get_db)):
     """
-    [DELETE] Dừng hoạt động (soft-delete) chức vụ/quyền hạn (Permission).
+    [DELETE] Xóa chức vụ/quyền hạn (Permission).
     """
     deleted_perm = permission_controller.delete_permission(db, id)
     if not deleted_perm:
         raise HTTPException(status_code=404, detail="Quyền hạn không tồn tại")
-    return deleted_perm
+    return {"message": "Đã xóa vị trí thành công"}
 
 @router.get("/{id}/stages", response_model=List[StageSchema])
 def read_permission_stages(id: int, db: Session = Depends(get_db)):

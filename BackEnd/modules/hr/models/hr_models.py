@@ -98,3 +98,15 @@ class HRFactoryStructure(Base):
     department_id = Column(Integer, nullable=True) # -> roles.id
     description = Column(NVARCHAR(500), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class HRFactoryDepartment(Base):
+    """
+    Bảng liên kết Nhà máy và Phòng ban (roles)
+    """
+    __tablename__ = "hr_factory_departments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    factory_structure_id = Column(Integer, nullable=False, index=True)
+    department_id = Column(Integer, nullable=False, index=True) # -> roles.id
+    created_at = Column(DateTime, default=datetime.utcnow)
+

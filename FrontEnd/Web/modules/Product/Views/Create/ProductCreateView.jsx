@@ -25,6 +25,7 @@ import AddComponentModal from '../Detail/modals/AddComponentModal';
 import AddDetailModal from '../Detail/modals/AddDetailModal';
 import AddPaintColorModal from '../Detail/modals/AddPaintColorModal';
 import ConfigInfoModal from '../Detail/modals/ConfigInfoModal';
+import CopyProductModal from '../Detail/modals/CopyProductModal';
 import '@styles/components.css';
 
 /**
@@ -52,6 +53,7 @@ const ProductCreateView = () => {
   const [activeStage, setActiveStage] = useState('Định hình');
 
   // Modals & Dropdowns State
+  const [showCopyModal, setShowCopyModal] = useState(false);
   const [showAddDetailModal, setShowAddDetailModal] = useState(false);
   const [showAddComponentModal, setShowAddComponentModal] = useState(false);
   const [showAddPaintModal, setShowAddPaintModal] = useState(false);
@@ -538,6 +540,175 @@ const ProductCreateView = () => {
     if (toast) toast('success', `Đã thêm chi tiết ${newDetail.detailName}`);
   };
 
+  // Hàm xử lý và sắp xếp cây linh kiện BOM từ Backend theo đúng phân cấp (1, 1.1, 1.1.1, 1.2, 2...)
+  const processBackendBOM = (items) => {
+    if (!items || !Array.isArray(items) || items.length === 0) return [];
+
+    // Map các node theo ID
+    const itemMap = new Map();
+    items.forEach(item => {
+      if (item && item.id != null) {
+        itemMap.set(item.id, item);
+      }
+    });
+
+    // Gom nhóm danh sách con theo parent_id
+    const childrenMap = new Map();
+    const roots = [];
+    const hasParentId = items.some(item => item && item.parent_id != null);
+
+    if (hasParentId) {
+      items.forEach(item => {
+        if (item.parent_id != null && itemMap.has(item.parent_id)) {
+          if (!childrenMap.has(item.parent_id)) {
+            childrenMap.set(item.parent_id, []);
+          }
+          childrenMap.get(item.parent_id).push(item);
+        } else {
+          roots.push(item);
+        }
+      });
+    } else {
+      items.forEach(item => roots.push(item));
+    }
+
+    let result = [];
+    const seenMap = new Map();
+
+    const addNode = (item, currentStt, parentName = '') => {
+      const codeKey = `${item.id || currentStt}-${item.component_sku || item.sku || ''}`;
+      if (!seenMap.has(codeKey)) {
+        seenMap.set(codeKey, true);
+        const spec = item.specification || item.spec || '';
+        let len = item.length || 0;
+        let wid = item.width || 0;
+        let hgt = item.height || 0;
+        if (!len && !wid && !hgt && spec) {
+          const parts = spec.split(/[*xX]/).map(p => parseFloat(p.trim()) || 0);
+          if (parts.length >= 1) len = parts[0];
+          if (parts.length >= 2) wid = parts[1];
+          if (parts.length >= 3) hgt = parts[2];
+        }
+
+        const isChild = currentStt.includes('.');
+        const rowType = item.component_type || item.type || (isChild ? (parentName || 'Chi tiết') : 'Sản phẩm');
+
+        result.push({
+          id: item.id || `bom-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          parent_id: item.parent_id || null,
+          stt: currentStt,
+          type: rowType,
+          stageFrom: item.input_stage || item.stageFrom || (isChild ? 'Tạo phôi' : 'Định hình'),
+          stageTo: item.output_stage || item.stageTo || (isChild ? 'Định hình' : 'Lắp ráp'),
+          compCode: item.component_sku || item.sku || item.compCode || `SKU.${currentStt}`,
+          compName: item.name || item.compName || 'Cụm chi tiết',
+          quantity: item.quantity !== undefined ? item.quantity : 1,
+          unit: item.unit || 'Cái',
+          material: item.material || 'Gỗ / MDF',
+          spec: spec,
+          length: len,
+          width: wid,
+          height: hgt,
+          waste_ratio: item.waste_ratio || 0,
+          volume: item.volume !== undefined ? String(item.volume) : '1',
+          note: item.description || item.note || ''
+        });
+      }
+
+      // Duyệt qua các con (từ childrenMap hoặc item.children)
+      const kids = (hasParentId && item.id != null && childrenMap.has(item.id))
+        ? childrenMap.get(item.id)
+        : (item.children && Array.isArray(item.children) ? item.children : []);
+
+      if (kids && kids.length > 0) {
+        kids.forEach((child, cIdx) => {
+          const childStt = `${currentStt}.${cIdx + 1}`;
+          addNode(child, childStt, item.name || item.compName || 'Chi tiết');
+        });
+      }
+    };
+
+    roots.forEach((rootItem, rIdx) => {
+      const rootStt = rootItem.tree_stt || rootItem.treeStt || rootItem.stt || String(rIdx + 1);
+      addNode(rootItem, rootStt, rootItem.name || rootItem.compName || 'Sản phẩm');
+    });
+
+    return result;
+  };
+
+  // Xử lý nạp dữ liệu từ sản phẩm mẫu khác
+  const handleApplyFromProduct = (sourceProduct, options = {}) => {
+    if (!sourceProduct) return;
+
+    // 1. Sao chép Thông tin chung & Quy cách
+    if (options.copyGeneralInfo) {
+      setFormData(prev => {
+        const nextLine = sourceProduct.brand_name || sourceProduct.category_name || prev.line;
+        const nextCat = sourceProduct.category_name || (sourceProduct.master_category && sourceProduct.master_category.name) || prev.category;
+        return {
+          ...prev,
+          line: nextLine,
+          category: nextCat,
+          length: (sourceProduct.length !== undefined && sourceProduct.length !== null) ? String(sourceProduct.length) : prev.length,
+          width: (sourceProduct.width !== undefined && sourceProduct.width !== null) ? String(sourceProduct.width) : prev.width,
+          height: (sourceProduct.height !== undefined && sourceProduct.height !== null) ? String(sourceProduct.height) : prev.height,
+          weight: sourceProduct.weight ? String(sourceProduct.weight) : prev.weight,
+          color: sourceProduct.color || prev.color,
+          note: sourceProduct.specification || sourceProduct.description || prev.note,
+          bomStatus: sourceProduct.status || prev.bomStatus,
+          estimatedCost: sourceProduct.price ? Number(String(sourceProduct.price).replace(/\D/g, '')).toLocaleString('vi-VN') : prev.estimatedCost
+        };
+      });
+    }
+
+    // 2. Sao chép Cây cấu trúc BOM linh kiện
+    if (options.copyBOM && sourceProduct.master_bom_details && sourceProduct.master_bom_details.length > 0) {
+      const processed = processBackendBOM(sourceProduct.master_bom_details);
+      if (processed.length > 0) {
+        const currentSkuPrefix = formData.sku || 'SKU';
+        const finalBOM = options.syncSKUPrefix
+          ? processed.map(row => ({
+              ...row,
+              compCode: row.stt === '1' ? currentSkuPrefix : `${currentSkuPrefix}.${row.stt}`
+            }))
+          : processed;
+
+        setBomRows(finalBOM);
+        setFormData(prev => ({ ...prev, totalComponents: String(finalBOM.length) }));
+      }
+    }
+
+    // 3. Sao chép Chi tiết sản phẩm (KT03.1)
+    if (options.copyDetails && Array.isArray(sourceProduct.product_details)) {
+      setDetailRows(sourceProduct.product_details.map(d => ({
+        id: d.id,
+        name: d.name,
+        quantity: d.quantity,
+        unit: d.unit || 'Cái',
+        input_stage: d.input_stage,
+        output_stage: d.output_stage,
+        parent_name: d.parent_name,
+        material: d.material
+      })));
+    }
+
+    // 4. Sao chép Mẫu màu sơn (KT03.3)
+    if (options.copyPaintColors && Array.isArray(sourceProduct.paint_color_samples)) {
+      setPaintColorRows(sourceProduct.paint_color_samples.map(p => ({
+        id: p.id,
+        color_code: p.color_code,
+        color_name: p.color_name,
+        supplier: p.supplier,
+        image_url: p.image_url,
+        note: p.note
+      })));
+    }
+
+    if (toast) {
+      toast('success', `Đã nạp thông tin từ sản phẩm "${sourceProduct.sku} - ${sourceProduct.name}" thành công!`);
+    }
+  };
+
   // Xóa dòng BOM
   const handleRemoveBomRow = (id) => {
     if (bomRows.length === 1) {
@@ -742,9 +913,7 @@ const ProductCreateView = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <button
                 type="button"
-                onClick={() => {
-                  if (toast) toast('info', 'Chức năng lấy từ sản phẩm khác đang phát triển');
-                }}
+                onClick={() => setShowCopyModal(true)}
                 style={{
                   padding: '7px 14px',
                   backgroundColor: '#EADCC9',
@@ -2137,6 +2306,14 @@ const ProductCreateView = () => {
           onSuccess={handleAddComponentSuccess}
         />
       )}
+
+      {/* COPY FROM OTHER PRODUCT MODAL */}
+      <CopyProductModal
+        isOpen={showCopyModal}
+        onClose={() => setShowCopyModal(false)}
+        onApply={handleApplyFromProduct}
+        currentSku={formData.sku}
+      />
     </div>
   );
 };

@@ -24,12 +24,16 @@ class HRPositionBase(BaseModel):
     code: Optional[str] = None
     name: str
     description: Optional[str] = None
+    department_id: Optional[int] = None
 
 class HRPositionCreate(HRPositionBase):
     pass
 
 class HRPositionResponse(HRPositionBase):
     id: int
+    department_name: Optional[str] = None
+    role_id: Optional[int] = None
+    role_name: Optional[str] = None
     created_at: Optional[datetime] = None
 
     class Config:
@@ -39,6 +43,7 @@ class HRPositionResponse(HRPositionBase):
 class HRSectionBase(BaseModel):
     code: Optional[str] = None
     name: Optional[str] = None
+    role_id: Optional[int] = None
     description: Optional[str] = None
 
 class HRSectionCreate(HRSectionBase):

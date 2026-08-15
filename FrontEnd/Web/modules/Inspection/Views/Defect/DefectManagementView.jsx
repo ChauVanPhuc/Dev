@@ -426,7 +426,8 @@ const DefectManagement = () => {
   }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   const [viewTab, setViewTab] = useState('analytics'); // 'analytics', 'list', 'field', 'complaint', 'capa'
-  const [selectedStage, setSelectedStage] = useState('');
+  const [selectedDepartment, setSelectedDepartment] = useState('');
+  const [departments, setDepartments] = useState([]);
   const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
   const [actionMenuId, setActionMenuId] = useState(null);
 
@@ -437,6 +438,39 @@ const DefectManagement = () => {
     window.addEventListener('click', handleOutsideClick);
     return () => window.removeEventListener('click', handleOutsideClick);
   }, []);
+
+  // ─── Tải danh mục Bộ phận từ hệ thống (Chỉ lấy bộ phận thuộc Phòng ban QLCL) ───
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      try {
+        const data = await api.get('/departments/?role_name=QLCL');
+        if (Array.isArray(data)) {
+          const qlclDepts = data.filter(d => 
+            (d.role_name || '').toUpperCase().includes('QLCL') ||
+            (d.role_name || '').toLowerCase().includes('chất lượng')
+          );
+          setDepartments(qlclDepts.length > 0 ? qlclDepts : data);
+        }
+      } catch (err) {
+        console.error('Lỗi khi tải danh sách bộ phận QLCL:', err);
+      }
+    };
+    fetchDepartments();
+  }, []);
+
+  // Gom nhóm các bộ phận theo Phòng ban (role_name)
+  const groupedDepartments = useMemo(() => {
+    const groups = {};
+    departments.forEach(dept => {
+      const roleName = dept.role_name || 'Bộ phận khác';
+      if (!groups[roleName]) {
+        groups[roleName] = [];
+      }
+      groups[roleName].push(dept);
+    });
+    return groups;
+  }, [departments]);
+
   // ─── Dữ liệu danh sách ──────────────────────────────────────
   const [defects, setDefects] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -460,7 +494,7 @@ const DefectManagement = () => {
   const [formData, setFormData] = useState({
     name: '',
     category: 'visual',
-    stage: [], // Thay đổi thành array
+    stage: [], // Mảng chứa danh sách tên bộ phận áp dụng
     description: '',
     needs_tracking: false, // QA tracking
     qc_tracking: false,    // QC tracking
@@ -544,7 +578,7 @@ const DefectManagement = () => {
     fetchDefects();
   }, [showInactive]);
 
-  // Bộ lọc theo Tab, Ô tìm kiếm, Công đoạn và Mức AQL
+  // Bộ lọc theo Tab, Ô tìm kiếm, Bộ phận và Mức AQL
   const filteredDefects = defects.filter(item => {
     // 1. Tìm kiếm theo tên hoặc mã lỗi G7 hoặc mã lỗi khách hàng
     const query = searchQuery.toLowerCase();
@@ -565,18 +599,18 @@ const DefectManagement = () => {
     else if (activeTab === 'material') matchesTab = item.category === 'material';
     else if (activeTab === 'tracking') matchesTab = item.needs_tracking === true;
 
-    // 3. Lọc theo Công đoạn (stage)
-    let matchesStage = true;
-    if (selectedStage) {
+    // 3. Lọc theo Bộ phận (department / stage)
+    let matchesDepartment = true;
+    if (selectedDepartment) {
       try {
         if (item.stage) {
           const parsedStages = typeof item.stage === 'string' ? JSON.parse(item.stage) : item.stage;
-          matchesStage = Array.isArray(parsedStages) && parsedStages.includes(selectedStage);
+          matchesDepartment = Array.isArray(parsedStages) && parsedStages.includes(selectedDepartment);
         } else {
-          matchesStage = false;
+          matchesDepartment = false;
         }
       } catch (e) {
-        matchesStage = item.stage && item.stage.includes(selectedStage);
+        matchesDepartment = item.stage && item.stage.includes(selectedDepartment);
       }
     }
 
@@ -586,7 +620,7 @@ const DefectManagement = () => {
       matchesAql = item.aql_class === selectedAql;
     }
 
-    return matchesSearch && matchesTab && matchesStage && matchesAql;
+    return matchesSearch && matchesTab && matchesDepartment && matchesAql;
   });
 
   // Tính toán phân trang
@@ -601,7 +635,7 @@ const DefectManagement = () => {
     setFormData({
       name: '',
       category: 'visual',
-      stage: ["NM1 - Đóng gói 1", "NM2 - Đóng gói 2", "NM3 - Đóng gói 3"], // Mặc định cho Ngoại quan (Visual / APP)
+      stage: ["Sơn - Đóng gói", "Xưởng Đóng Gói"], // Mặc định cho Ngoại quan
       description: '',
       needs_tracking: false,
       qc_tracking: false,
@@ -628,7 +662,7 @@ const DefectManagement = () => {
         }
       }
     } catch (e) {
-      console.error("Error parsing stage:", e);
+      console.error("Error parsing stage/department:", e);
       parsedStage = defect.stage ? [defect.stage] : [];
     }
 
@@ -650,20 +684,20 @@ const DefectManagement = () => {
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     if (name === 'category') {
-      let defaultStages = [];
+      let defaultDepts = [];
       if (value === 'material') {
-        defaultStages = ["NM1 - Định hình 1", "NM1 - Định hình ván 1", "NM2 - Định hình mặt tiền 2", "NM2 - Định hình tủ 2", "NM3 - Tạo phôi 3", "NM3 - Định hình 3"];
+        defaultDepts = ["Tạo phôi", "Định hình - Lắp ráp", "Xưởng Mộc"];
       } else if (value === 'structure') {
-        defaultStages = ["NM1 - Lắp ráp, chà nhám 1", "NM2 - Lắp ráp mặt tiền 2", "NM2 - Lắp ráp tủ 2", "NM3 - Lắp ráp 3"];
+        defaultDepts = ["Định hình - Lắp ráp", "Xưởng Lắp Ráp"];
       } else if (value === 'paint') {
-        defaultStages = ["NM1 - Sơn 1", "NM2 - Sơn Pallet 2", "NM2 - Sơn treo 2", "NM3 - Sơn 3"];
+        defaultDepts = ["Sơn - Đóng gói", "Xưởng Sơn"];
       } else if (value === 'visual') {
-        defaultStages = ["NM1 - Đóng gói 1", "NM2 - Đóng gói 2", "NM3 - Đóng gói 3"];
+        defaultDepts = ["Sơn - Đóng gói", "Xưởng Đóng Gói"];
       }
       setFormData(prev => ({
         ...prev,
         category: value,
-        stage: defaultStages
+        stage: defaultDepts
       }));
     } else {
       setFormData(prev => ({
@@ -677,7 +711,6 @@ const DefectManagement = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name.trim()) {
-
       showToast('Vui lòng nhập tên lỗi', 'error');
       return;
     }
@@ -754,28 +787,7 @@ const DefectManagement = () => {
     other: 'Khác',
   };
 
-
-  const FACTORY_STAGES = [
-    "NM1 - Định hình 1",
-    "NM1 - Định hình ván 1",
-    "NM1 - Lắp ráp, chà nhám 1",
-    "NM1 - Sơn 1",
-    "NM1 - Đóng gói 1",
-    "NM2 - Định hình mặt tiền 2",
-    "NM2 - Định hình tủ 2",
-    "NM2 - Lắp ráp mặt tiền 2",
-    "NM2 - Sơn Pallet 2",
-    "NM2 - Sơn treo 2",
-    "NM2 - Lắp ráp tủ 2",
-    "NM2 - Đóng gói 2",
-    "NM3 - Tạo phôi 3",
-    "NM3 - Định hình 3",
-    "NM3 - Lắp ráp 3",
-    "NM3 - Sơn 3",
-    "NM3 - Đóng gói 3"
-  ];
-
-  const renderCompactStages = (stageStr) => {
+  const renderCompactDepartments = (stageStr) => {
     try {
       if (!stageStr) return null;
       const stages = stageStr.startsWith('[') ? JSON.parse(stageStr) : [stageStr];
@@ -783,19 +795,19 @@ const DefectManagement = () => {
       
       if (stages.length <= 2) {
         return stages.map((s, idx) => (
-          <span key={idx} className="mgmt-card-chip info">
-            ⚙️ {s}
+          <span key={idx} className="mgmt-card-chip info" style={{ fontSize: '0.7rem' }}>
+            🏢 {s}
           </span>
         ));
       } else {
         return (
           <>
             {stages.slice(0, 2).map((s, idx) => (
-              <span key={idx} className="mgmt-card-chip info">
-                ⚙️ {s}
+              <span key={idx} className="mgmt-card-chip info" style={{ fontSize: '0.7rem' }}>
+                🏢 {s}
               </span>
             ))}
-            <span className="mgmt-card-chip info" style={{ backgroundColor: '#e2e8f0', color: '#475569', fontWeight: 'bold' }}>
+            <span className="mgmt-card-chip info" style={{ backgroundColor: '#e2e8f0', color: '#475569', fontWeight: 'bold', fontSize: '0.7rem' }}>
               +{stages.length - 2}
             </span>
           </>
@@ -901,6 +913,19 @@ const DefectManagement = () => {
             white-space: nowrap !important;
           }
         }
+        .modal-backdrop {
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+        }
+        .modal-content, .modal-content:hover {
+          transform: none !important;
+          animation: none !important;
+          transition: none !important;
+        }
+        .modal-footer .btn:hover {
+          transform: none !important;
+        }
       `}} />
       <div className="mgmt-main">
         {/* Toast Alert */}
@@ -958,7 +983,7 @@ const DefectManagement = () => {
         {/* ── Analytics Tab Content ── */}
         {viewTab === 'analytics' && (
           <div className="analytics-view animate-fade-in">
-            <DefectAnalytics stage={selectedStage} />
+            <DefectAnalytics stage={selectedDepartment} />
           </div>
         )}
 
@@ -1053,7 +1078,7 @@ const DefectManagement = () => {
               activeFiltersCount={
                 (activeTab !== 'all' ? 1 : 0) +
                 (selectedAql !== 'all' ? 1 : 0) +
-                (selectedStage ? 1 : 0) +
+                (selectedDepartment ? 1 : 0) +
                 (!showInactive ? 1 : 0)
               }
               importActions={[
@@ -1107,16 +1132,16 @@ const DefectManagement = () => {
                   </select>
                 </div>
 
-                {/* Lọc theo Công đoạn */}
+                {/* Lọc theo Bộ phận */}
                 <div className="filter-field-group">
-                  <label className="filter-field-label">Công đoạn</label>
+                  <label className="filter-field-label">Bộ phận</label>
                   <select 
-                    value={selectedStage} 
-                    onChange={(e) => { setSelectedStage(e.target.value); setCurrentPage(1); }}
+                    value={selectedDepartment} 
+                    onChange={(e) => { setSelectedDepartment(e.target.value); setCurrentPage(1); }}
                   >
-                    <option value="">Tất cả công đoạn</option>
-                    {FACTORY_STAGES.map(s => (
-                      <option key={s} value={s}>{s}</option>
+                    <option value="">Tất cả bộ phận</option>
+                    {departments.map(d => (
+                      <option key={d.id} value={d.name}>{d.name}</option>
                     ))}
                   </select>
                 </div>
@@ -1150,7 +1175,7 @@ const DefectManagement = () => {
                   </label>
                 </div>
 
-                {(activeTab !== 'all' || selectedAql !== 'all' || selectedStage || !showInactive || pageSize !== 15 || searchQuery) && (
+                {(activeTab !== 'all' || selectedAql !== 'all' || selectedDepartment || !showInactive || pageSize !== 15 || searchQuery) && (
                   <div className="filter-field-group">
                     <button
                       type="button"
@@ -1158,7 +1183,7 @@ const DefectManagement = () => {
                       onClick={() => {
                         setActiveTab('all');
                         setSelectedAql('all');
-                        setSelectedStage('');
+                        setSelectedDepartment('');
                         setShowInactive(true);
                         setPageSize(15);
                         setSearchQuery('');
@@ -1204,7 +1229,7 @@ const DefectManagement = () => {
                           <th>Tên lỗi / Mô tả</th>
                           <th style={{ width: '180px' }}>Phân nhóm</th>
                           <th style={{ width: '110px', textAlign: 'center' }}>Mức AQL</th>
-                          <th style={{ width: '150px' }}>Công đoạn</th>
+                          <th style={{ width: '150px' }}>Bộ phận</th>
                           <th style={{ width: '130px', textAlign: 'center' }}>Lỗi Khách</th>
                           <th style={{ width: '110px', textAlign: 'center' }}>QA Track</th>
                           <th style={{ width: '140px', textAlign: 'center' }}>Trạng thái</th>
@@ -1441,7 +1466,7 @@ const DefectManagement = () => {
                                 <span className={`category-badge ${defect.category}`} style={defect.category === 'paint' ? { backgroundColor: '#F2D2BD', color: '#7B5233', border: '1px solid #EADCC9' } : {}}>
                                   {categoryLabels[defect.category] || defect.category}
                                 </span>
-                                {renderCompactStages(defect.stage)}
+                                {renderCompactDepartments(defect.stage)}
                                 {defect.needs_tracking && (
                                   <span className="mgmt-card-chip danger" style={{ backgroundColor: '#fee2e2', color: '#ef4444', border: '1px solid #fecaca' }}>
                                     ● QA Track
@@ -1646,7 +1671,7 @@ const DefectManagement = () => {
       {/* ── MODAL: THÊM MỚI / CHỈNH SỬA ── */}
       {isFormOpen && (
         <div className="modal-backdrop">
-          <div className="modal-content card">
+          <div className="modal-content">
             <div className="modal-header">
               <h3>{editingDefect ? '✏️ Cập nhật loại lỗi' : '✨ Thêm loại lỗi mới'}</h3>
               <button className="close-btn" onClick={() => setIsFormOpen(false)}>×</button>
@@ -1700,52 +1725,84 @@ const DefectManagement = () => {
 
 
                 <div className="form-group">
-                  <label>Công đoạn phát sinh <span className="required">*</span></label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <label style={{ margin: 0 }}>Bộ phận phụ trách / phát sinh <span className="required">*</span></label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          const allNames = departments.map(d => d.name).filter(Boolean);
+                          setFormData(prev => ({ ...prev, stage: allNames }));
+                        }}
+                        style={{ fontSize: '0.75rem', color: '#7B5233', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', fontWeight: '600' }}
+                      >
+                        Chọn tất cả
+                      </button>
+                      <span style={{ color: '#ccc' }}>|</span>
+                      <button 
+                        type="button" 
+                        onClick={() => setFormData(prev => ({ ...prev, stage: [] }))}
+                        style={{ fontSize: '0.75rem', color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', fontWeight: '600' }}
+                      >
+                        Bỏ chọn
+                      </button>
+                    </div>
+                  </div>
+
                   <div style={{ 
                     display: 'grid', 
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', 
-                    gap: '10px',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', 
+                    gap: '8px',
                     padding: '12px',
                     backgroundColor: '#f8fafc',
                     borderRadius: '8px',
                     border: '1px solid #e2e8f0',
-                    maxHeight: '200px',
+                    maxHeight: '220px',
                     overflowY: 'auto'
                   }}>
-                    {FACTORY_STAGES.map((s) => (
-                      <label key={s} style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: '8px', 
-                        fontSize: '0.85rem', 
-                        cursor: 'pointer',
-                        padding: '4px',
-                        borderRadius: '4px',
-                        transition: 'background 0.2s'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={formData.stage.includes(s)}
-                          onChange={(e) => {
-                            const checked = e.target.checked;
-                            setFormData(prev => ({
-                              ...prev,
-                              stage: checked 
-                                ? [...prev.stage, s]
-                                : prev.stage.filter(item => item !== s)
-                            }));
+                    {departments.length > 0 ? (
+                      departments.map((d) => (
+                        <label 
+                          key={d.id} 
+                          style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '8px', 
+                            fontSize: '0.85rem', 
+                            cursor: 'pointer',
+                            padding: '6px 8px',
+                            borderRadius: '4px',
+                            backgroundColor: formData.stage.includes(d.name) ? '#fef3c7' : 'transparent',
+                            transition: 'background 0.2s'
                           }}
-                          style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                        />
-                        {s}
-                      </label>
-                    ))}
+                          onMouseEnter={(e) => { if (!formData.stage.includes(d.name)) e.currentTarget.style.backgroundColor = '#f1f5f9'; }}
+                          onMouseLeave={(e) => { if (!formData.stage.includes(d.name)) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={formData.stage.includes(d.name)}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setFormData(prev => ({
+                                ...prev,
+                                stage: checked 
+                                  ? [...prev.stage, d.name]
+                                  : prev.stage.filter(item => item !== d.name)
+                              }));
+                            }}
+                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                          />
+                          <span style={{ fontWeight: formData.stage.includes(d.name) ? '600' : 'normal', color: '#1e293b' }}>{d.name}</span>
+                        </label>
+                      ))
+                    ) : (
+                      <div style={{ color: '#94a3b8', fontSize: '0.85rem', textAlign: 'center', padding: '10px 0', gridColumn: '1 / -1' }}>
+                        Đang tải danh sách bộ phận...
+                      </div>
+                    )}
                   </div>
                   <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px' }}>
-                    * Có thể chọn nhiều công đoạn phát sinh lỗi này.
+                    * Chọn một hoặc nhiều bộ phận áp dụng loại lỗi này.
                   </div>
                 </div>
 
@@ -1809,7 +1866,7 @@ const DefectManagement = () => {
       {/* ── MODAL: XÁC NHẬN NGƯNG KÍCH HOẠT ── */}
       {deleteTarget && (
         <div className="modal-backdrop">
-          <div className="modal-content card" style={{ maxWidth: '450px' }}>
+          <div className="modal-content" style={{ maxWidth: '450px' }}>
             <div className="modal-header">
               <h3>⚠️ Xác nhận ngưng hoạt động</h3>
               <button className="close-btn" onClick={() => setDeleteTarget(null)}>×</button>

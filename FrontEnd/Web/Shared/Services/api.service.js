@@ -8,9 +8,6 @@ export const getBaseURL = () => {
 
   // Nếu là môi trường Cloudflare với tách biệt subdomain
   if (hostname.includes('smartflowg7.cloud')) {
-    if (hostname === 'smartflowg7.cloud') {
-      return window.location.origin;
-    }
     return 'https://api.smartflowg7.cloud';
   }
 

@@ -67,8 +67,13 @@ export const hrService = {
   },
 
   // --- POSITIONS ---
-  getPositions: async (search = '') => {
-    const url = search ? `/hr/positions?search=${encodeURIComponent(search)}` : '/hr/positions';
+  getPositions: async (search = '', departmentId = null, roleId = null) => {
+    let url = '/hr/positions';
+    const params = [];
+    if (search) params.push(`search=${encodeURIComponent(search)}`);
+    if (departmentId) params.push(`department_id=${departmentId}`);
+    if (roleId) params.push(`role_id=${roleId}`);
+    if (params.length > 0) url += `?${params.join('&')}`;
     return await api.get(url);
   },
 
@@ -85,8 +90,12 @@ export const hrService = {
   },
 
   // --- SECTIONS ---
-  getSections: async (search = '') => {
-    const url = search ? `/hr/sections?search=${encodeURIComponent(search)}` : '/hr/sections';
+  getSections: async (search = '', roleId = null) => {
+    let url = '/hr/sections';
+    const params = [];
+    if (search) params.push(`search=${encodeURIComponent(search)}`);
+    if (roleId) params.push(`role_id=${roleId}`);
+    if (params.length > 0) url += `?${params.join('&')}`;
     return await api.get(url);
   },
 

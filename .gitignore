@@ -75,10 +75,13 @@ htmlcov/
 .coverage.*
 .cache/
 
-# Large workspace files
-sql.ipynb
-
-# Local tools
+# Local tools & scratch
 tools/
+scratch/
+scratch_*.py
+audit_*.py
+*_audit*.json
+route_metadata_status.json
+
 
 

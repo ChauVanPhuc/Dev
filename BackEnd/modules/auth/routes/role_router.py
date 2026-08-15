@@ -32,15 +32,15 @@ def update_existing_role(id: int, role_data: RoleUpdate, db: Session = Depends(g
         raise HTTPException(status_code=404, detail="Vai trò không tồn tại")
     return updated_role
 
-@router.delete("/{id}", response_model=RoleSchema)
+@router.delete("/{id}")
 def delete_existing_role(id: int, db: Session = Depends(get_db)):
     """
-    [DELETE] Dừng hoạt động (soft-delete) bộ phận/vai trò (Role).
+    [DELETE] Xóa phòng ban/vai trò (Role).
     """
     deleted_role = role_controller.delete_role(db, id)
     if not deleted_role:
         raise HTTPException(status_code=404, detail="Vai trò không tồn tại")
-    return deleted_role
+    return {"message": "Đã xóa phòng ban thành công"}
 
 @router.get("/{id}/permissions", response_model=List[PermissionSchema])
 def read_role_permissions(id: int, db: Session = Depends(get_db)):

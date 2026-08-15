@@ -121,23 +121,42 @@ def create_department(db: Session, department: HRDepartmentCreate):
     return db_dept
 
 def delete_department(db: Session, dept_id: int):
-    db_dept = db.query(HRDepartment).filter(HRDepartment.id == dept_id).first()
-    if not db_dept:
-        return False
-    # Clear employee links
-    db.query(HREmployee).filter(HREmployee.department_id == dept_id).update({"department_id": None})
-    db.query(HROrgNode).filter(HROrgNode.department_id == dept_id).update({"department_id": None})
-    db.delete(db_dept)
-    db.commit()
-    return True
+    from modules.auth.controllers import role_controller
+    res = role_controller.delete_role(db, dept_id)
+    return bool(res)
 
 
 # --- POSITIONS CONTROLLER ---
-def get_positions(db: Session, search: str = None):
-    query = db.query(HRPosition)
+def get_positions(db: Session, search: str = None, department_id: int = None, role_id: int = None):
+    query = db.query(HRPosition).filter(HRPosition.is_active == True)
+    if department_id is not None:
+        query = query.filter(HRPosition.department_id == department_id)
     if search:
         query = query.filter(HRPosition.name.ilike(f"%{search}%"))
-    return query.order_by(HRPosition.name.asc()).all()
+        
+    positions = query.order_by(HRPosition.name.asc()).all()
+    
+    # Caching section and role maps
+    sec_map = {s.id: s for s in db.query(HRSection).all()}
+    role_map = {r.id: r for r in db.query(HRDepartment).all()}
+    
+    result = []
+    for p in positions:
+        p_sec = sec_map.get(p.department_id) if p.department_id else None
+        p_sec_name = p_sec.name if p_sec else None
+        p_role_id = p_sec.role_id if p_sec else None
+        p_role = role_map.get(p_role_id) if p_role_id else None
+        p_role_name = (p_role.name or p_role.description) if p_role else None
+        
+        if role_id is not None and p_role_id != role_id:
+            continue
+            
+        p.department_name = p_sec_name
+        p.role_id = p_role_id
+        p.role_name = p_role_name
+        result.append(p)
+        
+    return result
 
 def create_position(db: Session, position: HRPositionCreate):
     db_pos = HRPosition(**position.model_dump())
@@ -146,21 +165,30 @@ def create_position(db: Session, position: HRPositionCreate):
     db.refresh(db_pos)
     return db_pos
 
-def delete_position(db: Session, pos_id: int):
+def update_position(db: Session, pos_id: int, position: HRPositionCreate):
     db_pos = db.query(HRPosition).filter(HRPosition.id == pos_id).first()
     if not db_pos:
-        return False
-    # Clear employee links
-    db.query(HREmployee).filter(HREmployee.position_id == pos_id).update({"position_id": None})
-    db.query(HROrgNode).filter(HROrgNode.position_id == pos_id).update({"position_id": None})
-    db.delete(db_pos)
+        return None
+    for key, value in position.model_dump(exclude_unset=True).items():
+        setattr(db_pos, key, value)
     db.commit()
-    return True
+    db.refresh(db_pos)
+    return db_pos
+
+def delete_position(db: Session, pos_id: int):
+    from modules.auth.controllers import permission_controller
+    res = permission_controller.delete_permission(db, pos_id)
+    return bool(res)
 
 
 # --- SECTIONS CONTROLLER ---
-def get_sections(db: Session, search: str = None):
-    query = db.query(HRSection)
+def get_sections(db: Session, search: str = None, role_id: int = None):
+    query = db.query(HRSection).filter(
+        HRSection.name.isnot(None),
+        HRSection.account_id.is_(None)
+    )
+    if role_id is not None:
+        query = query.filter(HRSection.role_id == role_id)
     if search:
         query = query.filter(
             or_(
@@ -168,7 +196,7 @@ def get_sections(db: Session, search: str = None):
                 HRSection.code.ilike(f"%{search}%")
             )
         )
-    return query.order_by(HRSection.code.asc()).all()
+    return query.order_by(HRSection.id.asc()).all()
 
 def create_section(db: Session, section: HRSectionCreate):
     db_sec = HRSection(**section.model_dump())

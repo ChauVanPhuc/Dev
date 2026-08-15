@@ -1359,12 +1359,14 @@ def get_defect_glossary(
 @router.get("/defect-types", response_model=List[DefectTypeSchema])
 def get_defect_types(
     category: Optional[str] = None, 
+    department: Optional[str] = None,
+    stage: Optional[str] = None,
     include_inactive: bool = False, 
     user_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     """
-    [GET] Lấy danh sách các loại lỗi từ danh mục. Có thể lọc theo nhóm.
+    [GET] Lấy danh sách các loại lỗi từ danh mục. Có thể lọc theo nhóm hoặc bộ phận.
     Nếu truyền user_id, sẽ trả về trạng thái theo dõi cá nhân của user đó.
     """
     query = db.query(DefectType)
@@ -1373,6 +1375,10 @@ def get_defect_types(
     if category:
         query = query.filter(DefectType.category == category)
     
+    target_dept = department or stage
+    if target_dept:
+        query = query.filter(DefectType.stage.ilike(f"%{target_dept}%"))
+        
     defects = query.all()
     
     # Nếu có user_id, lấy danh sách ID lỗi mà user này đang track
@@ -1424,10 +1430,10 @@ async def import_defect_types_from_excel(
     from io import BytesIO
 
     STAGE_MAPPINGS = {
-        "MAT": ["NM1 - Định hình 1", "NM1 - Định hình ván 1", "NM2 - Định hình mặt tiền 2", "NM2 - Định hình tủ 2", "NM3 - Tạo phôi 3", "NM3 - Định hình 3"],
-        "STR": ["NM1 - Lắp ráp, chà nhám 1", "NM2 - Lắp ráp mặt tiền 2", "NM2 - Lắp ráp tủ 2", "NM3 - Lắp ráp 3"],
-        "PAI": ["NM1 - Sơn 1", "NM2 - Sơn Pallet 2", "NM2 - Sơn treo 2", "NM3 - Sơn 3"],
-        "APP": ["NM1 - Đóng gói 1", "NM2 - Đóng gói 2", "NM3 - Đóng gói 3"]
+        "MAT": ["Tạo phôi", "Định hình - Lắp ráp", "Xưởng Mộc"],
+        "STR": ["Định hình - Lắp ráp", "Xưởng Lắp Ráp"],
+        "PAI": ["Sơn - Đóng gói", "Xưởng Sơn"],
+        "APP": ["Sơn - Đóng gói", "Xưởng Đóng Gói"]
     }
     CATEGORY_MAPPINGS = {
         "MAT": "material",

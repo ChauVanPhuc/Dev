@@ -381,6 +381,8 @@ const PortalLayout = () => {
     location.pathname.includes('/profile') ||
     location.pathname.includes('/sidebar') ||
     location.pathname.includes('/system-config') ||
+    location.pathname.includes('/production-routing') ||
+    location.pathname.includes('/production-schedule') ||
     /^\/admin\/screens\/[0-9]+/.test(location.pathname) ||
     /^\/admin\/purchase-requisitions\/[^\/]+/.test(location.pathname) ||
     /^\/admin\/products\/[^\/]+/.test(location.pathname) ||
@@ -2160,7 +2162,8 @@ const PortalLayout = () => {
         .dashboard-content.allow-y-scroll .user-create-container,
         .dashboard-content.allow-y-scroll .user-edit-container,
         .dashboard-content.allow-y-scroll .sidebar-management-container,
-        .dashboard-content.allow-y-scroll .system-config-container {
+        .dashboard-content.allow-y-scroll .system-config-container,
+        .dashboard-content.allow-y-scroll .production-routing-container {
           overflow-y: visible !important;
           height: auto !important;
           min-height: 100% !important;

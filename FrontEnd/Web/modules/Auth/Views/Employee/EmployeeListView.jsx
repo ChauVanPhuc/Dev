@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Edit2, Trash2, Filter, Upload, Download, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { hrService } from '../../Models/hr.service';
@@ -34,6 +34,24 @@ const EmployeeListView = () => {
   const [selectedPos, setSelectedPos] = useState('');
   const [selectedSec, setSelectedSec] = useState('');
   const [workStatus, setWorkStatus] = useState('');
+
+  // Lọc danh sách bộ phận hiển thị ở filter bar theo phòng ban đã chọn
+  const filteredFilterSections = useMemo(() => {
+    if (!selectedDept) return sections;
+    return sections.filter(s => !s.role_id || String(s.role_id) === String(selectedDept));
+  }, [sections, selectedDept]);
+
+  // Lọc danh sách vị trí hiển thị ở filter bar theo bộ phận/phòng ban đã chọn
+  const filteredFilterPositions = useMemo(() => {
+    if (selectedSec) {
+      return positions.filter(p => !p.department_id || String(p.department_id) === String(selectedSec));
+    }
+    if (selectedDept) {
+      const secIdsInDept = new Set(sections.filter(s => String(s.role_id) === String(selectedDept)).map(s => s.id));
+      return positions.filter(p => !p.department_id || secIdsInDept.has(p.department_id) || String(p.role_id) === String(selectedDept));
+    }
+    return positions;
+  }, [positions, selectedSec, selectedDept, sections]);
 
   // Modals
   const [modalOpen, setModalOpen] = useState(false);
@@ -161,14 +179,25 @@ const EmployeeListView = () => {
         style={{ display: 'none' }}
       />
 
-      {/* Filter Bar Dropdowns */}
+      {/* Filter Bar Dropdowns (3-Tier: Phòng ban -> Bộ phận -> Vị trí) */}
       {filterOpen && (
         <div className="filter-inline-bar" style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div className="filter-field-group">
             <label className="filter-field-label">Phòng ban</label>
             <select
               value={selectedDept}
-              onChange={(e) => { setSelectedDept(e.target.value); setPage(1); }}
+              onChange={(e) => {
+                const newDept = e.target.value;
+                setSelectedDept(newDept);
+                setPage(1);
+                if (newDept && selectedSec) {
+                  const sec = sections.find(s => String(s.id) === String(selectedSec));
+                  if (sec && sec.role_id && String(sec.role_id) !== String(newDept)) {
+                    setSelectedSec('');
+                    setSelectedPos('');
+                  }
+                }
+              }}
             >
               <option value="">Tất cả phòng ban</option>
               {departments.map(d => (
@@ -178,27 +207,60 @@ const EmployeeListView = () => {
           </div>
 
           <div className="filter-field-group">
-            <label className="filter-field-label">Vị trí</label>
+            <label className="filter-field-label">Bộ phận</label>
             <select
-              value={selectedPos}
-              onChange={(e) => { setSelectedPos(e.target.value); setPage(1); }}
+              value={selectedSec}
+              onChange={(e) => {
+                const newSec = e.target.value;
+                setSelectedSec(newSec);
+                setPage(1);
+                if (newSec) {
+                  const sec = sections.find(s => String(s.id) === String(newSec));
+                  if (sec && sec.role_id) {
+                    setSelectedDept(String(sec.role_id));
+                  }
+                  if (selectedPos) {
+                    const pos = positions.find(p => String(p.id) === String(selectedPos));
+                    if (pos && pos.department_id && String(pos.department_id) !== String(newSec)) {
+                      setSelectedPos('');
+                    }
+                  }
+                }
+              }}
             >
-              <option value="">Tất cả vị trí</option>
-              {positions.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+              <option value="">Tất cả bộ phận</option>
+              {filteredFilterSections.map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.name}{s.code ? ` (${s.code})` : ''}
+                </option>
               ))}
             </select>
           </div>
 
           <div className="filter-field-group">
-            <label className="filter-field-label">Bộ phận</label>
+            <label className="filter-field-label">Vị trí</label>
             <select
-              value={selectedSec}
-              onChange={(e) => { setSelectedSec(e.target.value); setPage(1); }}
+              value={selectedPos}
+              onChange={(e) => {
+                const newPos = e.target.value;
+                setSelectedPos(newPos);
+                setPage(1);
+                if (newPos) {
+                  const pos = positions.find(p => String(p.id) === String(newPos));
+                  if (pos) {
+                    if (pos.department_id) {
+                      setSelectedSec(String(pos.department_id));
+                    }
+                    if (pos.role_id) {
+                      setSelectedDept(String(pos.role_id));
+                    }
+                  }
+                }
+              }}
             >
-              <option value="">Tất cả bộ phận</option>
-              {sections.map(s => (
-                <option key={s.id} value={s.id}>{s.name}</option>
+              <option value="">Tất cả vị trí</option>
+              {filteredFilterPositions.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
           </div>

@@ -617,56 +617,77 @@ const CTQGuideManagementView = () => {
                           {isActive ? 'Áp dụng' : 'Tạm ngưng'}
                         </span>
                       </td>
-                      <td style={{ padding: '14px 16px', textAlign: 'center', position: 'relative', zIndex: actionMenuId === g.id ? 50 : 1 }} onClick={e => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          className="action-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActionMenuId(actionMenuId === g.id ? null : g.id);
-                          }}
-                          title="Thao tác"
-                        >
-                          <MoreVertical size={16} />
-                        </button>
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewGuide(g)}
+                            style={{
+                              width: 32,
+                              height: 32,
+                              borderRadius: 8,
+                              border: `1px solid ${THEME.borderLight}`,
+                              backgroundColor: '#FFF',
+                              color: THEME.primary,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s'
+                            }}
+                            title="Xem nhanh CTQ"
+                            onMouseEnter={e => { e.currentTarget.style.backgroundColor = THEME.bgLight; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FFF'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                          >
+                            <Eye size={15} />
+                          </button>
 
-                        {actionMenuId === g.id && (
-                          <div className="action-menu" style={{ right: '50%', transform: 'translateX(50%)', top: '80%', zIndex: 100 }}>
-                            <button
-                              type="button"
-                              className="action-menu-item"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActionMenuId(null);
-                                setPreviewGuide(g);
-                              }}
-                            >
-                              Xem nhanh
-                            </button>
-                            <button
-                              type="button"
-                              className="action-menu-item"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActionMenuId(null);
-                                navigate(`/admin/ctq-guides/edit/${g.id}`);
-                              }}
-                            >
-                              Chỉnh sửa
-                            </button>
-                            <button
-                              type="button"
-                              className="action-menu-item danger"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActionMenuId(null);
-                                setDeleteTarget(g);
-                              }}
-                            >
-                              Xóa tài liệu
-                            </button>
-                          </div>
-                        )}
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/admin/ctq-guides/edit/${g.id}`)}
+                            style={{
+                              width: 32,
+                              height: 32,
+                              borderRadius: 8,
+                              border: '1px solid #CBD5E1',
+                              backgroundColor: '#FFF',
+                              color: '#334155',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s'
+                            }}
+                            title="Chỉnh sửa CTQ"
+                            onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#F1F5F9'; e.currentTarget.style.color = THEME.primary; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FFF'; e.currentTarget.style.color = '#334155'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                          >
+                            <Edit3 size={15} />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setDeleteTarget(g)}
+                            style={{
+                              width: 32,
+                              height: 32,
+                              borderRadius: 8,
+                              border: '1px solid #FEE2E2',
+                              backgroundColor: '#FFF',
+                              color: '#DC2626',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s'
+                            }}
+                            title="Xóa tài liệu CTQ"
+                            onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#FEE2E2'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FFF'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

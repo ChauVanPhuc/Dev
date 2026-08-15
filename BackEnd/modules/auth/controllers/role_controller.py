@@ -72,13 +72,42 @@ def update_role(db: Session, role_id: int, role_data: RoleUpdate):
 
 def delete_role(db: Session, role_id: int):
     """
-    Dừng sử dụng (soft delete) Vai trò.
+    Xóa hoàn toàn Phòng ban / Vai trò (Role) và dọn dẹp các liên kết liên quan.
     """
     db_role = db.query(Role).filter(Role.id == role_id).first()
     if not db_role:
         return None
         
-    db_role.is_active = False
+    try:
+        from modules.auth.models.departments import Department
+        db.query(Department).filter(Department.role_id == role_id).update({"role_id": None})
+    except Exception:
+        pass
+        
+    try:
+        from modules.auth.models.employees import Employee
+        db.query(Employee).filter(Employee.role_id == role_id).update({"role_id": None})
+    except Exception:
+        pass
+        
+    try:
+        from modules.hr.models.hr_models import HREmployee, HROrgNode, HRPersonnelNode, HRFactoryStructure
+        db.query(HREmployee).filter(HREmployee.department_id == role_id).update({"department_id": None})
+        db.query(HROrgNode).filter(HROrgNode.department_id == role_id).update({"department_id": None})
+        db.query(HRPersonnelNode).filter(HRPersonnelNode.department_id == role_id).update({"department_id": None})
+        db.query(HRFactoryStructure).filter(HRFactoryStructure.department_id == role_id).update({"department_id": None})
+    except Exception:
+        pass
+        
+    try:
+        from modules.auth.models.org_structures import OrgStructure
+        db.query(OrgStructure).filter(OrgStructure.role_id == role_id).update({"role_id": None})
+    except Exception:
+        pass
+        
+    # Clear many-to-many associations
+    db_role.permissions = []
+    
+    db.delete(db_role)
     db.commit()
-    db.refresh(db_role)
-    return db_role
+    return True

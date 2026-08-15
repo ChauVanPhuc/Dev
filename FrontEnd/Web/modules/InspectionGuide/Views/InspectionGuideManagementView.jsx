@@ -842,7 +842,7 @@ const InspectionGuideManagementView = ({ docType }) => {
                     </td>
 
                     {/* Trạng thái */}
-                    <td style={{ padding: '14px 18px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                    <td style={{ padding: '12px 16px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                       <button
                         onClick={e => handleToggleActive(g, e)}
                         style={{
@@ -870,57 +870,78 @@ const InspectionGuideManagementView = ({ docType }) => {
                       </button>
                     </td>
 
-                    {/* Thao tác */}
-                    <td style={{ padding: '14px 18px', textAlign: 'center', position: 'relative', zIndex: actionMenuId === g.id ? 50 : 1 }} onClick={e => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        className="action-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActionMenuId(actionMenuId === g.id ? null : g.id);
-                        }}
-                        title="Thao tác"
-                      >
-                        <MoreVertical size={16} />
-                      </button>
+                    {/* Thao tác trực tiếp */}
+                    <td style={{ padding: '12px 16px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                        <button
+                          type="button"
+                          onClick={(e) => handleOpenPreview(g, e)}
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 8,
+                            border: `1px solid ${config.border}`,
+                            backgroundColor: '#FFF',
+                            color: config.color,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s'
+                          }}
+                          title={`Xem trước ${config.shortLabel}`}
+                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = config.bg; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FFF'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                        >
+                          <Eye size={15} />
+                        </button>
 
-                      {actionMenuId === g.id && (
-                        <div className="action-menu" style={{ right: '50%', transform: 'translateX(50%)', top: '80%', zIndex: 100 }}>
-                          <button
-                            type="button"
-                            className="action-menu-item"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActionMenuId(null);
-                              handleOpenPreview(g, e);
-                            }}
-                          >
-                            Xem trước
-                          </button>
-                          <button
-                            type="button"
-                            className="action-menu-item"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActionMenuId(null);
-                              navigate(`/admin/inspection-guides/edit/${g.id}`);
-                            }}
-                          >
-                            Chỉnh sửa
-                          </button>
-                          <button
-                            type="button"
-                            className="action-menu-item danger"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActionMenuId(null);
-                              setDeleteTarget(g);
-                            }}
-                          >
-                            Xóa tài liệu
-                          </button>
-                        </div>
-                      )}
+                        <button
+                          type="button"
+                          onClick={() => navigate(`${config.editBasePath}/${g.id}`)}
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 8,
+                            border: '1px solid #CBD5E1',
+                            backgroundColor: '#FFF',
+                            color: '#334155',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s'
+                          }}
+                          title={`Chỉnh sửa ${config.shortLabel}`}
+                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#F1F5F9'; e.currentTarget.style.color = config.color; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FFF'; e.currentTarget.style.color = '#334155'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                        >
+                          <Edit3 size={15} />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(g)}
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 8,
+                            border: '1px solid #FEE2E2',
+                            backgroundColor: '#FFF',
+                            color: '#DC2626',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s'
+                          }}
+                          title={`Xóa tài liệu ${config.shortLabel}`}
+                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#FEE2E2'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FFF'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -1167,6 +1188,7 @@ const InspectionGuideManagementView = ({ docType }) => {
       {/* Quick Preview Modal */}
       {previewGuide && (
         <GuideQuickPreviewModal
+          isOpen={Boolean(previewGuide)}
           guide={previewGuide}
           onClose={() => setPreviewGuide(null)}
           onEdit={(id) => {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useOutletContext, useNavigate, useParams, useLocation } from 'react-router-dom';
 import {
-  Pencil, Download, Upload, Send, ArrowLeft, ChevronDown, Eye, Plus, ArrowRight
+  Pencil, Download, Upload, Send, ChevronDown, Eye, Plus, ArrowRight
 } from 'lucide-react';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
@@ -19,7 +19,7 @@ const ProductionOrderCreateView = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const outletContext = useOutletContext() || {};
-  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = outletContext;
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = outletContext;
   const { toast } = useToast();
 
   const isEditMode = Boolean(editingOrderId);
@@ -35,45 +35,7 @@ const ProductionOrderCreateView = () => {
     if (setCustomTitle) setCustomTitle(title || 'Tạo mới / Chi tiết Lệnh sản xuất');
     if (setCustomSubtitle) setCustomSubtitle(subVal);
     if (setCustomScreenCode) setCustomScreenCode(codeVal);
-
-    if (setHeaderExtra) {
-      setHeaderExtra(
-        <button
-          type="button"
-          onClick={() => navigate('/admin/production-orders')}
-          style={{
-            padding: '7px 16px',
-            backgroundColor: '#FFFFFF',
-            border: '1.5px solid #5D3B32',
-            borderRadius: '8px',
-            color: '#5D3B32',
-            fontWeight: '800',
-            fontSize: '0.85rem',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
-            transition: 'all 0.2s ease'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = '#5D3B32';
-            e.currentTarget.style.color = '#FFFFFF';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = '#FFFFFF';
-            e.currentTarget.style.color = '#5D3B32';
-          }}
-        >
-          <ArrowLeft size={16} /> Quay lại danh sách Lệnh SX
-        </button>
-      );
-    }
-
-    return () => {
-      if (setHeaderExtra) setHeaderExtra(null);
-    };
-  }, [isEditMode, screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra, navigate]);
+  }, [isEditMode, screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   const [loading, setLoading] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -417,9 +379,33 @@ const ProductionOrderCreateView = () => {
     }
   };
 
+  const handleStartDateChange = (newStartDate) => {
+    setOrderForm(prev => {
+      const updated = { ...prev, startDate: newStartDate };
+      if (prev.endDate && newStartDate && prev.endDate < newStartDate) {
+        updated.endDate = newStartDate;
+        if (toast) toast('info', 'Đã tự động điều chỉnh Ngày hoàn thành dự kiến khớp với Ngày bắt đầu.');
+      }
+      return updated;
+    });
+  };
+
+  const handleEndDateChange = (newEndDate) => {
+    if (orderForm.startDate && newEndDate && newEndDate < orderForm.startDate) {
+      if (toast) toast('warning', 'Ngày hoàn thành dự kiến không được nhỏ hơn Ngày bắt đầu!');
+      return;
+    }
+    setOrderForm(prev => ({ ...prev, endDate: newEndDate }));
+  };
+
   const handleSaveOrder = async () => {
     if (!orderForm.code && !orderForm.orderId) {
       if (toast) toast('warning', 'Vui lòng nhập Mã lệnh sản xuất hoặc Mã đơn hàng!');
+      return;
+    }
+
+    if (orderForm.startDate && orderForm.endDate && orderForm.endDate < orderForm.startDate) {
+      if (toast) toast('warning', 'Ngày hoàn thành dự kiến không được nhỏ hơn Ngày bắt đầu!');
       return;
     }
 
@@ -979,7 +965,8 @@ const ProductionOrderCreateView = () => {
                 <input
                   type="date"
                   value={orderForm.startDate}
-                  onChange={(e) => setOrderForm({ ...orderForm, startDate: e.target.value })}
+                  max={orderForm.endDate || undefined}
+                  onChange={(e) => handleStartDateChange(e.target.value)}
                   style={{
                     width: '100%',
                     padding: '8px 12px',
@@ -999,7 +986,8 @@ const ProductionOrderCreateView = () => {
                 <input
                   type="date"
                   value={orderForm.endDate}
-                  onChange={(e) => setOrderForm({ ...orderForm, endDate: e.target.value })}
+                  min={orderForm.startDate || undefined}
+                  onChange={(e) => handleEndDateChange(e.target.value)}
                   style={{
                     width: '100%',
                     padding: '8px 12px',
