@@ -237,7 +237,7 @@ const PalletCardModal = ({ isOpen, onClose, data, partProducts = [] }) => {
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 9998, backdropFilter: 'blur(3px)' }} />
 
-      <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', padding: '12px', overflowY: 'auto' }}>
+      <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', padding: '12px', overflowY: 'auto', maxHeight: '100dvh', WebkitOverflowScrolling: 'touch' }}>
         {/* Action bar */}
         <div style={{ width: '100%', maxWidth: '440px', display: 'flex', gap: '6px', marginBottom: '10px', position: 'sticky', top: 0, zIndex: 1 }}>
           <button

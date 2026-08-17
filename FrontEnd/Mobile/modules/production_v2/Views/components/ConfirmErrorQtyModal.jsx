@@ -9,12 +9,12 @@ const ConfirmErrorQtyModal = ({ open, onConfirm, onClose }) => {
 
   return (
     <div className="pv2-modal-overlay">
-      <div className="pv2-modal pv2-modal--sm">
+      <div className="pv2-modal pv2-modal--sm" style={{ maxHeight: 'calc(100dvh - 32px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div className="pv2-modal-header">
           <span className="pv2-modal-title">CL09.1: Xác nhận số lượng lỗi</span>
           <button className="pv2-modal-close" onClick={onClose}><X size={18} /></button>
         </div>
-        <div className="pv2-modal-body">
+        <div className="pv2-modal-body" style={{ overflowY: 'auto', flex: 1, WebkitOverflowScrolling: 'touch' }}>
           <div className="pv2-modal-row">
             <div className="pv2-field">
               <label>Số lượng lấy mẫu</label>

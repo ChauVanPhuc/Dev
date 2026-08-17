@@ -1110,7 +1110,7 @@ export const getSubsystem = (screen) => {
   if (path.includes('/quality-records') || path.includes('/defects') || path.includes('/claims') || path.includes('/capa')) {
     return 'Quản lý chất lượng';
   }
-  if (path.includes('/prices') || path.includes('/shipments')) {
+  if (path.includes('/prices') || path.includes('/shipments') || path.includes('/purchase-requisitions') || path.includes('/purchase-order-items') || path.includes('/customers') || path.includes('/order-shipping-monitoring')) {
     return 'Quản lý kinh doanh';
   }
   if (path.includes('/products')) {
@@ -1188,7 +1188,7 @@ export const ROUTE_SUGGESTIONS = {
     { title: 'Hồ sơ chất lượng', path: '/admin/quality-records' },
     { title: 'Danh sách lỗi', path: '/admin/defects' },
     { title: 'Claim khách hàng', path: '/admin/claims' },
-    { title: 'Quản lý CAPA', path: '/admin/feedback?type=quality' },
+    { title: 'Quản lý CAPA', path: '/admin/capa' },
     { title: 'Báo cáo kiểm tra', path: '/admin/reports' },
     { title: 'Danh sách bàn giao', path: '/admin/handovers' },
     { title: 'Điểm nóng cần chú ý', path: '/admin/hotspots' },
@@ -1200,6 +1200,7 @@ export const ROUTE_SUGGESTIONS = {
     { title: 'Thời gian xuất cont', path: '/admin/shipments' },
     { title: 'Đơn giá sản phẩm', path: '/admin/prices' },
     { title: 'Danh sách đơn hàng', path: '/admin/purchase-requisitions' },
+    { title: 'Chi tiết mặt hàng đơn mua', path: '/admin/purchase-order-items' },
     { title: 'Giám sát vận chuyển', path: '/admin/order-shipping-monitoring' }
   ],
   'Quản lý kỹ thuật': [

@@ -132,7 +132,7 @@ const CAPAListView = () => {
         showBack={false}
       />
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#faf6f1' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, backgroundColor: '#faf6f1' }}>
         
         {/* Top Control Bar: Select Month, Sort, Filter Sliders, + Thêm mới */}
         <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #e5e0d8' }}>

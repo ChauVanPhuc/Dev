@@ -138,10 +138,29 @@ const Sidebar = () => {
   const isAdmin = combinedAuthStr.includes('admin') || combinedAuthStr.includes('it') || combinedAuthStr.includes('bgd');
 
   const checkItemVisible = (item) => {
-    const key = item.permission_key;
-    if (!key) return true;
-    const userPerm = permissions?.[key];
-    return userPerm && userPerm !== 'none' && userPerm.split(',').map(p => p.trim()).includes('read');
+    if (isAdmin) return true;
+    if (!permissions || Object.keys(permissions).length === 0) return true;
+
+    const candidates = [
+      item.route_path,
+      item.route_path ? item.route_path.replace(/^\//, '') : null,
+      item.permission_key,
+      item.permission_key ? item.permission_key.replace(/^mobile_/, '') : null,
+      item.permission_key ? `/${item.permission_key.replace(/^mobile_/, '').replace(/^\//, '')}` : null
+    ].filter(Boolean);
+
+    for (const key of candidates) {
+      const userPerm = permissions[key];
+      if (userPerm !== undefined) {
+        if (userPerm === 'none' || userPerm === '') return false;
+        const actions = userPerm.split(',').map(p => p.trim());
+        if (actions.includes('read') || actions.includes('create') || actions.includes('write') || actions.includes('edit')) {
+          return true;
+        }
+        return false;
+      }
+    }
+    return true;
   };
 
   const menuItems = menuList

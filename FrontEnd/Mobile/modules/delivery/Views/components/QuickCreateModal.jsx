@@ -36,6 +36,7 @@ const QuickCreateModal = ({ onClose }) => {
           backgroundColor: '#fff',
           width: '100%',
           maxWidth: '500px',
+          maxHeight: 'calc(100dvh - 32px)',
           borderTopLeftRadius: '24px',
           borderTopRightRadius: '24px',
           padding: '24px 20px',
@@ -43,7 +44,9 @@ const QuickCreateModal = ({ onClose }) => {
           animation: 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
           display: 'flex',
           flexDirection: 'column',
-          gap: '16px'
+          gap: '16px',
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch'
         }}
       >
         <style dangerouslySetInnerHTML={{ __html: `

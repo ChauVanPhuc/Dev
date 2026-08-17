@@ -165,7 +165,7 @@ def delete_order_item(item_id: int, db: Session = Depends(get_db)):
 
 @router.post("/import-excel")
 async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    """[POST] Import chi tiết mặt hàng từ file Excel (Báo cáo đơn mua hàng xác nhận)."""
+    """[POST] Import chi tiết mặt hàng từ file Excel (Hỗ trợ đa định dạng: Đơn hàng ATL, File xuất chuẩn, Báo cáo ERP)."""
     if not file.filename.endswith(('.xlsx', '.xls')):
         raise HTTPException(status_code=400, detail="Chỉ hỗ trợ file Excel (.xlsx, .xls)")
 
@@ -173,48 +173,36 @@ async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_d
 
     async def generate_progress():
         import json
+        from datetime import date
+        from shared.utils.timezone import get_vietnam_time
+
         try:
             wb = openpyxl.load_workbook(io.BytesIO(contents), data_only=True)
             ws = wb.active
 
-            created_count = 0
-            errors = []
-
-            # Tìm header row (row chứa "Ngày PO" hoặc "Mã PO")
-            header_row = None
-            for i, row in enumerate(ws.iter_rows(min_row=1, max_row=15, values_only=True), 1):
-                cells = [str(c).strip() if c else "" for c in row]
-                if any("Ngày PO" in c or "Mã PO" in c for c in cells):
-                    header_row = i
-                    break
-
-            if not header_row:
-                yield json.dumps({"status": "error", "message": "Không tìm thấy dòng tiêu đề 'Ngày PO' trong file Excel"}) + "\n"
-                return
-
-            # Excel "Bao cao don mua hang" có header kép (row 9 + row 10), dữ liệu bắt đầu từ row sau row 10
-            data_start_row = header_row + 2  # Skip sub-header row
-
-            def safe_float(val):
+            def safe_float(val, default=0.0):
                 if val is None or val == "" or val == " ":
-                    return 0
+                    return default
                 try:
-                    return float(val)
+                    cleaned = str(val).replace(',', '').strip()
+                    return float(cleaned)
                 except (ValueError, TypeError):
-                    return 0
+                    return default
 
             def safe_datetime(val):
-                if val is None:
+                if val is None or val == "" or val == " ":
                     return None
                 if isinstance(val, datetime):
                     return val
-                try:
-                    return datetime.strptime(str(val).strip(), "%Y-%m-%d %H:%M:%S")
-                except Exception:
+                if isinstance(val, date):
+                    return datetime.combine(val, datetime.min.time())
+                val_str = str(val).strip()
+                for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d"):
                     try:
-                        return datetime.strptime(str(val).strip(), "%d/%m/%Y")
-                    except Exception:
-                        return None
+                        return datetime.strptime(val_str, fmt)
+                    except ValueError:
+                        pass
+                return None
 
             def safe_str(val):
                 if val is None:
@@ -222,124 +210,285 @@ async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_d
                 s = str(val).strip()
                 return s if s else None
 
-            # Biến theo dõi PO header hiện tại (vì detail rows có NULL ở cột header)
-            current_po_date = None
-            current_po_code = None
-            current_supplier_code = None
-            current_supplier_name = None
-            current_grand_total_vnd = None
-            current_grand_total_foreign = None
-            current_delivery_date = None
-            current_content = None
-            current_status = None
-            current_manager = None
-            current_creator = None
-            current_type = None
+            def get_cell(row_tuple, idx, default=None):
+                if row_tuple and 0 <= idx < len(row_tuple):
+                    return row_tuple[idx]
+                return default
 
-            # Đếm tổng số dòng
-            rows_to_process = []
-            for row in ws.iter_rows(min_row=data_start_row, values_only=True):
-                if any(c is not None for c in row):
-                    rows_to_process.append(row)
+            # Đọc tối đa 20 dòng đầu để phân tích cấu trúc header
+            sample_rows = list(ws.iter_rows(min_row=1, max_row=20, values_only=True))
+            header_row_idx = None
+            format_type = "generic"
 
+            for i, row in enumerate(sample_rows, 1):
+                cells_lower = [str(c).strip().lower() if c is not None else "" for c in row]
+                row_text = " ".join(cells_lower)
+                
+                # 1. Định dạng ATL
+                if "chứng từ" in row_text or "so po doi tac" in row_text or "số po đối tác" in row_text:
+                    header_row_idx = i
+                    format_type = "atl"
+                    break
+                
+                # 2. Định dạng Export chuẩn (18 cột)
+                if ("ngày po" in row_text or "ngay po" in row_text) and ("mã po" in row_text or "ma po" in row_text) and ("mã mặt hàng" in row_text or "ma mat hang" in row_text):
+                    header_row_idx = i
+                    format_type = "standard_export"
+                    break
+                
+                # 3. Định dạng ERP Báo cáo đơn mua hàng
+                if ("ngày po" in row_text or "ngay po" in row_text) and ("mã po" in row_text or "ma po" in row_text):
+                    header_row_idx = i
+                    format_type = "erp_detailed"
+                    break
+                
+                # 4. Định dạng chung có cột STT và Mã hàng/Mã MH
+                if any("mã hàng" in c or "mã sp" in c or "item code" in c for c in cells_lower):
+                    header_row_idx = i
+                    format_type = "generic"
+                    break
+
+            if not header_row_idx:
+                header_row_idx = 1
+                format_type = "generic"
+
+            # Xây dựng dynamic column mapping từ header_row
+            header_cells = [str(c).strip().lower() if c is not None else "" for c in sample_rows[header_row_idx - 1]]
+            
+            def find_col(keywords, default=None):
+                for idx, cell in enumerate(header_cells):
+                    for kw in keywords:
+                        if kw in cell:
+                            return idx
+                return default
+
+            col_po_date = find_col(["ngày po", "ngay po", "ngày đặt", "order date", "po date"])
+            col_po_code = find_col(["mã po", "ma po", "số chứng từ", "so chung tu", "số po", "mã đơn", "po no", "order code"])
+            col_supp_code = find_col(["mã ncc", "ma ncc", "mã đối tác", "mã kh", "supplier code", "cust code"])
+            col_supp_name = find_col(["tên ncc", "ten ncc", "tên đối tác", "tên khách", "supplier name", "customer"])
+            col_item_code = find_col(["mã mặt hàng", "ma mat hang", "mã hàng", "mã sp", "item code", "part no", "product code"])
+            col_item_name = find_col(["tên mặt hàng", "ten mat hang", "tên hàng", "tên sp", "item name", "description"])
+            col_order_code = find_col(["mã đơn hàng", "ma don hang", "order no"])
+            col_unit = find_col(["đvt", "dvt", "đơn vị", "unit"])
+            col_qty = find_col(["số lượng", "so luong", "qty", "quantity"])
+            col_price = find_col(["đơn giá", "don gia", "unit price", "price"])
+            col_subtotal = find_col(["thành tiền", "thanh tien", "subtotal", "amount"])
+            col_tax = find_col(["thuế", "thue", "tax"])
+            col_total_tax = find_col(["sau thuế", "sau thue", "total after tax"])
+            col_grand_total = find_col(["tổng tiền", "tong tien", "grand total", "total"])
+            col_delivery_date = find_col(["ngày giao", "ngay giao", "yêu cầu giao", "delivery date", "req date"])
+            col_status = find_col(["trạng thái", "trang thai", "status"])
+            col_creator = find_col(["người tạo", "nguoi tao", "creator", "created by"])
+
+            # Đọc các dòng dữ liệu
+            data_start_row = header_row_idx + 1
+            if format_type == "erp_detailed" and len(sample_rows) >= header_row_idx + 1:
+                next_row_text = " ".join([str(c).strip().lower() if c is not None else "" for c in sample_rows[header_row_idx]])
+                if "vnd" in next_row_text or "ngoại tệ" in next_row_text or "đvcđ" in next_row_text:
+                    data_start_row = header_row_idx + 2
+
+            all_rows = list(ws.iter_rows(min_row=data_start_row, values_only=True))
+            rows_to_process = [r for r in all_rows if any(c is not None and str(c).strip() != "" for c in r)]
             total_rows = len(rows_to_process)
-            processed = 0
 
-            # Gửi tin nhắn khởi tạo
             yield json.dumps({"status": "processing", "processed": 0, "total": total_rows}) + "\n"
+
+            created_count = 0
+            errors = []
+
+            curr_po_date = None
+            curr_po_code = None
+            curr_supp_code = None
+            curr_supp_name = None
+            curr_grand_total_vnd = 0.0
+            curr_delivery_date = None
+            curr_status = "Chưa duyệt"
+            curr_creator = "Admin"
+
+            po_req_cache = {}
 
             for i, row in enumerate(rows_to_process, 1):
                 row_idx = data_start_row + i - 1
                 try:
-                    # Cập nhật header fields nếu có giá trị (row đầu tiên của mỗi PO)
-                    if safe_str(row[1]):  # Mã PO có giá trị => đây là row header
-                        current_po_date = safe_datetime(row[0])
-                        current_po_code = safe_str(row[1])
-                        current_supplier_code = safe_str(row[2])
-                        current_supplier_name = safe_str(row[3])
-                        current_grand_total_vnd = safe_float(row[20])  # Tổng tiền VND (cột U)
-                        current_delivery_date = safe_datetime(row[28])  # Ngày yêu cầu giao (cột AC)
-                        current_content = safe_str(row[29]) if len(row) > 29 else None
-                        current_status = safe_str(row[30]) if len(row) > 30 else None
-                        current_manager = safe_str(row[31]) if len(row) > 31 else None
-                        current_creator = safe_str(row[32]) if len(row) > 32 else None
-                        current_type = safe_str(row[33]) if len(row) > 33 else None
+                    if format_type == "atl":
+                        doc_no = safe_str(get_cell(row, 0)) or safe_str(get_cell(row, 1))
+                        if doc_no:
+                            curr_po_code = doc_no
+                        if not curr_po_code:
+                            continue
 
-                    item_code = safe_str(row[4])  # Mã mặt hàng
-                    item_name = safe_str(row[5])  # Tên mặt hàng
+                        cust_code = safe_str(get_cell(row, 2)) or "KH036"
+                        curr_supp_code = cust_code
+                        curr_supp_name = "Atlas International (KH036)" if cust_code == "KH036" else cust_code
+                        curr_po_date = safe_datetime(get_cell(row, 12))
+                        curr_delivery_date = safe_datetime(get_cell(row, 8))
 
-                    if not item_code and not item_name:
-                        processed += 1
-                        continue
+                        item_code = safe_str(get_cell(row, 3))
+                        if not item_code:
+                            continue
 
-                    # Tìm requisition_id từ po_code
-                    requisition_id = None
-                    if current_po_code:
-                        req = db.query(PurchaseRequisition).filter(
-                            PurchaseRequisition.po_code == current_po_code
-                        ).first()
-                        if req:
-                            requisition_id = req.id
+                        qty = safe_float(get_cell(row, 4))
+                        unit_price = safe_float(get_cell(row, 5))
+                        subtotal_usd = safe_float(get_cell(row, 6))
+                        subtotal_vnd = safe_float(get_cell(row, 11))
+                        is_pallet_cell = get_cell(row, 15)
+                        is_pallet = bool(is_pallet_cell and str(is_pallet_cell).strip().lower() == "true")
+                        unit = "Pallet" if is_pallet else "Bộ"
 
-                    db_obj = PurchaseOrderItem(
-                        requisition_id=requisition_id,
-                        po_date=current_po_date,
-                        po_code=current_po_code,
-                        supplier_code=current_supplier_code,
-                        supplier_name=current_supplier_name,
-                        item_code=item_code,
-                        item_name=item_name,
-                        order_code=safe_str(row[6]),
-                        unit=safe_str(row[7]),
-                        converted_unit=safe_str(row[8]),
-                        quantity=safe_float(row[9]),
-                        converted_quantity=safe_float(row[10]),
-                        unit_price=safe_float(row[11]),
-                        converted_unit_price=safe_float(row[12]),
-                        currency=safe_str(row[13]),
-                        subtotal_vnd=safe_float(row[14]),
-                        tax_vnd=safe_float(row[15]),
-                        total_after_tax_vnd=safe_float(row[16]),
-                        shipping_fee_vnd=safe_float(row[17]),
-                        other_costs_vnd=safe_float(row[18]),
-                        discount_vnd=safe_float(row[19]),
-                        grand_total_vnd=safe_float(row[20]) if safe_str(row[1]) else 0,
-                        subtotal_foreign=safe_float(row[21]),
-                        tax_foreign=safe_float(row[22]),
-                        total_after_tax_foreign=safe_float(row[23]),
-                        shipping_fee_foreign=safe_float(row[24]) if len(row) > 24 else 0,
-                        other_costs_foreign=safe_float(row[25]) if len(row) > 25 else 0,
-                        discount_foreign=safe_float(row[26]) if len(row) > 26 else 0,
-                        grand_total_foreign=safe_float(row[27]) if len(row) > 27 else 0,
-                        requested_delivery_date=current_delivery_date,
-                        content=current_content if safe_str(row[1]) else None,
-                        status=current_status if safe_str(row[1]) else current_status,
-                        manager=current_manager if safe_str(row[1]) else None,
-                        creator=current_creator if safe_str(row[1]) else None,
-                        type=current_type if safe_str(row[1]) else None,
-                    )
-                    db.add(db_obj)
+                        db_item = PurchaseOrderItem(
+                            po_date=curr_po_date,
+                            po_code=curr_po_code,
+                            supplier_code=curr_supp_code,
+                            supplier_name=curr_supp_name,
+                            item_code=item_code,
+                            item_name=item_code,
+                            order_code=curr_po_code,
+                            unit=unit,
+                            quantity=qty,
+                            unit_price=unit_price,
+                            currency="USD",
+                            subtotal_foreign=subtotal_usd,
+                            grand_total_foreign=subtotal_usd,
+                            subtotal_vnd=subtotal_vnd,
+                            grand_total_vnd=subtotal_vnd,
+                            requested_delivery_date=curr_delivery_date,
+                            content="NVL đóng gói (PALLET)" if is_pallet else None,
+                            status="Chưa duyệt",
+                            type="Đơn bán hàng",
+                            creator="Admin",
+                            created_at=get_vietnam_time()
+                        )
+
+                    elif format_type == "standard_export":
+                        po_code_val = safe_str(get_cell(row, 2))
+                        if po_code_val:
+                            curr_po_code = po_code_val
+                            curr_po_date = safe_datetime(get_cell(row, 1))
+                            curr_supp_code = safe_str(get_cell(row, 3))
+                            curr_supp_name = safe_str(get_cell(row, 4))
+                            curr_grand_total_vnd = safe_float(get_cell(row, 14))
+                            curr_delivery_date = safe_datetime(get_cell(row, 15))
+                            curr_status = safe_str(get_cell(row, 16)) or "Chưa duyệt"
+                            curr_creator = safe_str(get_cell(row, 17)) or "Admin"
+
+                        item_code = safe_str(get_cell(row, 5))
+                        item_name = safe_str(get_cell(row, 6))
+                        if not item_code and not item_name:
+                            continue
+
+                        db_item = PurchaseOrderItem(
+                            po_date=curr_po_date,
+                            po_code=curr_po_code,
+                            supplier_code=curr_supp_code,
+                            supplier_name=curr_supp_name,
+                            item_code=item_code or item_name,
+                            item_name=item_name or item_code,
+                            order_code=safe_str(get_cell(row, 7)) or curr_po_code,
+                            unit=safe_str(get_cell(row, 8)),
+                            quantity=safe_float(get_cell(row, 9)),
+                            unit_price=safe_float(get_cell(row, 10)),
+                            currency="VND",
+                            subtotal_vnd=safe_float(get_cell(row, 11)),
+                            tax_vnd=safe_float(get_cell(row, 12)),
+                            total_after_tax_vnd=safe_float(get_cell(row, 13)),
+                            grand_total_vnd=curr_grand_total_vnd or safe_float(get_cell(row, 14)),
+                            requested_delivery_date=curr_delivery_date or safe_datetime(get_cell(row, 15)),
+                            status=curr_status,
+                            creator=curr_creator,
+                            type="Đơn mua hàng",
+                            created_at=get_vietnam_time()
+                        )
+
+                    else:
+                        po_code_val = safe_str(get_cell(row, col_po_code)) if col_po_code is not None else None
+                        if po_code_val:
+                            curr_po_code = po_code_val
+                            if col_po_date is not None: curr_po_date = safe_datetime(get_cell(row, col_po_date))
+                            if col_supp_code is not None: curr_supp_code = safe_str(get_cell(row, col_supp_code))
+                            if col_supp_name is not None: curr_supp_name = safe_str(get_cell(row, col_supp_name))
+                            if col_delivery_date is not None: curr_delivery_date = safe_datetime(get_cell(row, col_delivery_date))
+                            if col_grand_total is not None: curr_grand_total_vnd = safe_float(get_cell(row, col_grand_total))
+                            if col_status is not None: curr_status = safe_str(get_cell(row, col_status)) or curr_status
+                            if col_creator is not None: curr_creator = safe_str(get_cell(row, col_creator)) or curr_creator
+
+                        item_code = safe_str(get_cell(row, col_item_code)) if col_item_code is not None else None
+                        item_name = safe_str(get_cell(row, col_item_name)) if col_item_name is not None else None
+
+                        if not item_code and not item_name:
+                            continue
+
+                        qty = safe_float(get_cell(row, col_qty)) if col_qty is not None else 0.0
+                        price = safe_float(get_cell(row, col_price)) if col_price is not None else 0.0
+                        subtotal = safe_float(get_cell(row, col_subtotal)) if col_subtotal is not None else (qty * price)
+
+                        db_item = PurchaseOrderItem(
+                            po_date=curr_po_date,
+                            po_code=curr_po_code,
+                            supplier_code=curr_supp_code,
+                            supplier_name=curr_supp_name,
+                            item_code=item_code or item_name,
+                            item_name=item_name or item_code,
+                            order_code=safe_str(get_cell(row, col_order_code)) if col_order_code is not None else curr_po_code,
+                            unit=safe_str(get_cell(row, col_unit)) if col_unit is not None else None,
+                            quantity=qty,
+                            unit_price=price,
+                            currency="VND",
+                            subtotal_vnd=subtotal,
+                            tax_vnd=safe_float(get_cell(row, col_tax)) if col_tax is not None else 0.0,
+                            total_after_tax_vnd=safe_float(get_cell(row, col_total_tax)) if col_total_tax is not None else subtotal,
+                            grand_total_vnd=curr_grand_total_vnd or subtotal,
+                            requested_delivery_date=curr_delivery_date,
+                            status=curr_status or "Chưa duyệt",
+                            creator=curr_creator or "Admin",
+                            type="Đơn mua hàng",
+                            created_at=get_vietnam_time()
+                        )
+
+                    # Đồng bộ hoặc liên kết với PurchaseRequisition
+                    if curr_po_code:
+                        if curr_po_code not in po_req_cache:
+                            req = db.query(PurchaseRequisition).filter(
+                                PurchaseRequisition.po_code == curr_po_code
+                            ).first()
+                            if not req:
+                                req = PurchaseRequisition(
+                                    po_code=curr_po_code,
+                                    creator=curr_creator or "Admin",
+                                    order_date=curr_po_date,
+                                    delivery_date=curr_delivery_date,
+                                    supplier_code=curr_supp_code,
+                                    supplier_name=curr_supp_name,
+                                    order_type="Đơn bán hàng" if format_type == "atl" else "Đơn mua hàng",
+                                    status="Chưa duyệt",
+                                    warehouse_status="Chưa xuất kho",
+                                    created_at=get_vietnam_time()
+                                )
+                                db.add(req)
+                                db.flush()
+                            po_req_cache[curr_po_code] = req.id
+
+                        db_item.requisition_id = po_req_cache.get(curr_po_code)
+
+                    db.add(db_item)
                     created_count += 1
 
-                    # Flush every 500 records to avoid memory issues
-                    if created_count % 500 == 0:
+                    if created_count % 300 == 0:
                         db.flush()
 
                 except Exception as e:
                     errors.append(f"Dòng {row_idx}: {str(e)}")
 
-                processed += 1
-                if processed % 100 == 0 or processed == total_rows:
-                    yield json.dumps({"status": "processing", "processed": processed, "total": total_rows}) + "\n"
+                if i % 50 == 0 or i == total_rows:
+                    yield json.dumps({"status": "processing", "processed": i, "total": total_rows}) + "\n"
 
             db.commit()
             wb.close()
 
             yield json.dumps({
                 "status": "completed",
-                "processed": processed,
+                "processed": total_rows,
                 "total": total_rows,
-                "message": f"Import thành công! Tạo mới: {created_count} mặt hàng"
+                "message": f"Import thành công! Đã nạp {created_count} mặt hàng vào hệ thống."
             }) + "\n"
 
         except Exception as e:

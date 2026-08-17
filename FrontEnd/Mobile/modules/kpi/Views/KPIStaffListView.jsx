@@ -122,7 +122,7 @@ const KPIStaffList = () => {
     <Layout>
       <PageHeader title="G7 - Smart Flow" subTitle="MB8.2 | Đánh giá nhân sự" />
       
-      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', flex: 1, backgroundColor: 'var(--bg-cream)' }}>
+      <div style={{ flex: 1, minHeight: 0, padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', WebkitOverflowScrolling: 'touch', backgroundColor: 'var(--bg-cream)' }}>
         
         {/* Statistics Cards */}
         <div id="kpi-staff-stats" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>

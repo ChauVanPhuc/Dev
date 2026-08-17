@@ -281,12 +281,7 @@ const DeliveryHistory = () => {
       <PageHeader title="G7 - Smart Flow" subTitle="MB16 | Lịch sử bàn giao" />
 
       <div style={{
-        padding: '0 16px 100px',
-        maxWidth: '500px',
-        margin: '0 auto',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px'
+        flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, width: '100%', padding: '0 16px 100px', maxWidth: '500px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '12px'
       }}>
 
         {/* ② Toolbar: Chọn PO + Sort + Filter */}

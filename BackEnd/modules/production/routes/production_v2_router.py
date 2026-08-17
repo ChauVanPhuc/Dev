@@ -584,7 +584,7 @@ def get_order_bom(po_code: str, stage: Optional[str] = Query(None), db: Session 
     try:
         order = db.query(Order).options(joinedload(Order.products)).filter(Order.order_code == po_code).first()
         if not order:
-            raise HTTPException(status_code=404, detail="PO not found")
+            raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng (PO)")
 
         product_ids = [p.id for p in order.products]
         boms = db.query(BOMDetail).filter(BOMDetail.product_id.in_(product_ids)).all() if product_ids else []

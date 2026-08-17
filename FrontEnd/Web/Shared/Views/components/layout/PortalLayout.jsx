@@ -372,28 +372,6 @@ const PortalLayout = () => {
   const location = useLocation();
   const { getScreenInfo } = useScreen();
   const isAdmin = location.pathname.startsWith('/admin');
-  const isFormOrEditView =
-    location.pathname.includes('/edit') ||
-    location.pathname.includes('/create') ||
-    location.pathname.includes('/new') ||
-    location.pathname.includes('/permission') ||
-    location.pathname.includes('/detail') ||
-    location.pathname.includes('/profile') ||
-    location.pathname.includes('/sidebar') ||
-    location.pathname.includes('/system-config') ||
-    location.pathname.includes('/production-routing') ||
-    location.pathname.includes('/production-schedule') ||
-    /^\/admin\/screens\/[0-9]+/.test(location.pathname) ||
-    /^\/admin\/purchase-requisitions\/[^\/]+/.test(location.pathname) ||
-    /^\/admin\/products\/[^\/]+/.test(location.pathname) ||
-    /^\/admin\/orders\/[^\/]+/.test(location.pathname) ||
-    /^\/admin\/plan\/[^\/]+/.test(location.pathname) ||
-    /^\/admin\/production-orders\/[^\/]+/.test(location.pathname) ||
-    /^\/admin\/quality-records\/[^\/]+/.test(location.pathname) ||
-    /^\/admin\/equipment\/detail\/[^\/]+/.test(location.pathname) ||
-    /^\/admin\/machines\/detail\/[^\/]+/.test(location.pathname) ||
-    location.search.includes('mode=');
-
   const [sidebarActive, setSidebarActive] = useState(false);
 
   const handleBackClick = () => {
@@ -1557,7 +1535,7 @@ const PortalLayout = () => {
         </header>
 
         {/* Core dynamic content template */}
-        <div className={`dashboard-content ${isFormOrEditView ? 'allow-y-scroll' : ''}`}>
+        <div className="dashboard-content allow-y-scroll">
           <Outlet context={outletContext} />
         </div>
       </div>
@@ -1714,9 +1692,9 @@ const PortalLayout = () => {
               gap: '20px',
               padding: '20px',
               backgroundColor: '#FFFFFF',
-              height: '450px',
+              height: 'auto',
               maxHeight: 'calc(85vh - 160px)',
-              overflow: 'hidden'
+              overflowY: 'auto'
             }}>
               {claimSuccessSummary.claimsCount === 0 && (
                 <div style={{
@@ -2145,7 +2123,8 @@ const PortalLayout = () => {
           flex: 1;
           min-height: 0;
           height: calc(100vh - 60px);
-          overflow-y: hidden;
+          overflow-y: auto !important;
+          overflow-x: auto;
           background-color: #F8FAFC;
           display: flex;
           flex-direction: column;
@@ -2154,40 +2133,31 @@ const PortalLayout = () => {
           overflow-y: auto !important;
           height: calc(100vh - 60px) !important;
         }
-        .dashboard-content.allow-y-scroll > div,
-        .dashboard-content.allow-y-scroll .purchase-requisition-detail-container,
-        .dashboard-content.allow-y-scroll .detail-view-container,
-        .dashboard-content.allow-y-scroll .product-detail-container,
-        .dashboard-content.allow-y-scroll .guide-management-container,
-        .dashboard-content.allow-y-scroll .user-create-container,
-        .dashboard-content.allow-y-scroll .user-edit-container,
-        .dashboard-content.allow-y-scroll .sidebar-management-container,
-        .dashboard-content.allow-y-scroll .system-config-container,
-        .dashboard-content.allow-y-scroll .production-routing-container {
+        .dashboard-content > div,
+        .dashboard-content .purchase-requisition-detail-container,
+        .dashboard-content .detail-view-container,
+        .dashboard-content .product-detail-container,
+        .dashboard-content .guide-management-container,
+        .dashboard-content .user-create-container,
+        .dashboard-content .user-edit-container,
+        .dashboard-content .sidebar-management-container,
+        .dashboard-content .system-config-container,
+        .dashboard-content .production-routing-container,
+        .dashboard-content .mgmt-container,
+        .dashboard-content .manufacture-plan-container,
+        .dashboard-content .quality-records-container {
           overflow-y: visible !important;
           height: auto !important;
           min-height: 100% !important;
-          flex: none !important;
-        }
-        .dashboard-content:not(.allow-y-scroll) > div,
-        .dashboard-content:not(.allow-y-scroll) > .mgmt-container,
-        .dashboard-content:not(.allow-y-scroll) > .manufacture-plan-container,
-        .dashboard-content:not(.allow-y-scroll) > .quality-records-container,
-        .dashboard-content:not(.allow-y-scroll) > .guide-management-container {
-          flex: 1 !important;
-          height: 100% !important;
-          min-height: 0 !important;
-          display: flex !important;
-          flex-direction: column !important;
-          overflow: hidden !important;
+          flex: 1 0 auto !important;
         }
         .mgmt-main {
-          flex: 1 !important;
+          flex: 1 0 auto !important;
           display: flex !important;
           flex-direction: column !important;
-          min-height: 0 !important;
-          height: 100% !important;
-          overflow: hidden !important;
+          min-height: 100% !important;
+          height: auto !important;
+          overflow: visible !important;
         }
         .main-tabs,
         .defect-mgmt-tabs,
@@ -2196,7 +2166,7 @@ const PortalLayout = () => {
         }
         .analytics-view,
         .list-view {
-          flex: 1 !important;
+          flex: 1 0 auto !important;
           min-height: 0 !important;
           overflow-y: auto !important;
           display: flex !important;
@@ -2204,10 +2174,10 @@ const PortalLayout = () => {
         }
         .admin-list-layout,
         .defect-list-layout {
-          flex: 1 !important;
-          height: 100% !important;
-          min-height: 0 !important;
-          overflow: hidden !important;
+          flex: 1 0 auto !important;
+          height: auto !important;
+          min-height: 100% !important;
+          overflow: visible !important;
         }
         .sidebar-backdrop {
           position: fixed;

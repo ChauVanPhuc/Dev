@@ -245,7 +245,7 @@ const KPITracking = () => {
     <Layout>
       <PageHeader title="G7 - Smart Flow" subTitle="MB8 | Theo dõi KPI" />
 
-      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto', flex: 1 }}>
+      <div style={{ flex: 1, minHeight: 0, padding: '16px', display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
         
         {/* KPI Dashboard Cards */}
         <div id="kpi-stats-cards" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>

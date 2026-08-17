@@ -40,8 +40,8 @@ const UserPermissionView = () => {
   
   const [sidebarItems, setSidebarItems] = useState([]);
   const [screens, setScreens] = useState([]);
-  // Lưu trữ phân quyền resolved ban đầu từ API để so sánh khi save
-  const initialResolvedPerms = React.useRef({});
+  // Lưu trữ phân quyền mặc định cơ sở (baseline role defaults) để so sánh diff khi save
+  const initialBaselineDefaults = React.useRef({});
 
   const dynamicWebGroups = useMemo(() => {
     return buildPermissionGroupsFromSidebar(sidebarItems, 'web', screens);
@@ -90,9 +90,33 @@ const UserPermissionView = () => {
             initialPerms[scr.key] = parseDbPermission(dbPerms[scr.key] || 'none');
           });
         });
-        // Lưu bản gốc resolved để so sánh khi save (chỉ lưu diff)
-        initialResolvedPerms.current = JSON.parse(JSON.stringify(initialPerms));
         setScreenPermissions(initialPerms);
+
+        // Fetch baseline defaults
+        try {
+          const queryParams = [];
+          if (userRes.role_id) queryParams.push(`role_id=${userRes.role_id}`);
+          if (userRes.permission_id) queryParams.push(`permission_id=${userRes.permission_id}`);
+          if (userRes.permission_level) queryParams.push(`permission_level=${encodeURIComponent(userRes.permission_level)}`);
+          const defRes = await api.get(`/accounts/permissions/default?${queryParams.join('&')}`);
+          const defaultDbPerms = defRes.permissions || {};
+          
+          const parsedDefaults = {};
+          webGroups.forEach(group => {
+            group.screens.forEach(scr => {
+              parsedDefaults[scr.key] = parseDbPermission(defaultDbPerms[scr.key] || 'none');
+            });
+          });
+          mobileGroups.forEach(group => {
+            group.screens.forEach(scr => {
+              parsedDefaults[scr.key] = parseDbPermission(defaultDbPerms[scr.key] || 'none');
+            });
+          });
+          initialBaselineDefaults.current = parsedDefaults;
+        } catch (e) {
+          console.error('Lỗi khi tải baseline defaults:', e);
+          initialBaselineDefaults.current = {};
+        }
       } catch (err) {
         console.error('Lỗi khi tải thông tin phân quyền:', err);
         setError('Không thể kết nối với máy chủ để tải thông tin phân quyền.');
@@ -166,17 +190,23 @@ const UserPermissionView = () => {
     setSuccess(false);
 
     try {
-      // Chỉ lưu những key mà user đã thực sự thay đổi so với resolved mặc định
+      // Chỉ lưu những key mà user đã thực sự thay đổi so với quyền mặc định baseline của vai trò/chức vụ
       const permissionsToSave = {};
-      const initialPerms = initialResolvedPerms.current || {};
-      Object.keys(screenPermissions).forEach(key => {
+      const defaults = initialBaselineDefaults.current || {};
+      
+      const allScreenKeys = new Set();
+      dynamicWebGroups.forEach(g => g.screens.forEach(s => allScreenKeys.add(s.key)));
+      dynamicMobileGroups.forEach(g => g.screens.forEach(s => allScreenKeys.add(s.key)));
+      Object.keys(screenPermissions).forEach(k => allScreenKeys.add(k));
+
+      allScreenKeys.forEach(key => {
         const currentPerms = screenPermissions[key] || [];
-        const initialPermsForKey = initialPerms[key] || [];
+        const defaultPerms = defaults[key] || [];
         
         const currentSorted = [...currentPerms].sort().join(',');
-        const initialSorted = [...initialPermsForKey].sort().join(',');
+        const defaultSorted = [...defaultPerms].sort().join(',');
         
-        if (currentSorted !== initialSorted) {
+        if (currentSorted !== defaultSorted) {
           permissionsToSave[key] = currentPerms.includes('none') || currentPerms.length === 0 
             ? 'none' 
             : currentPerms.join(',');
@@ -595,7 +625,7 @@ const UserPermissionView = () => {
                         </div>
                       ) : (
                         <div className="group-blocked-message">
-                          🚫 Nhóm này đang bị chặn truy cập. Chọn "Cho phép" ở trên để bắt đầu phân quyền chi tiết.
+                          Nhóm này đang bị chặn truy cập. Chọn "Cho phép" ở trên để bắt đầu phân quyền chi tiết.
                         </div>
                       )}
                     </div>

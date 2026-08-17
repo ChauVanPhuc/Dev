@@ -32,13 +32,17 @@ const BeautifulModal = ({ visible, onClose, title, message, type = 'info' }) => 
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 9999,
-      animation: 'fadeIn 0.3s ease-out'
+      animation: 'fadeIn 0.3s ease-out',
+      overflowY: 'auto',
+      padding: '16px'
     }}>
       <div style={{
         backgroundColor: 'white',
         borderRadius: '24px',
         width: '100%',
         maxWidth: '450px',
+        maxHeight: 'calc(100vh - 32px)',
+        overflowY: 'auto',
         padding: '32px',
         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
         position: 'relative',

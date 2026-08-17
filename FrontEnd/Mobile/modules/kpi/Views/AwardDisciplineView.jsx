@@ -262,7 +262,7 @@ const AwardDiscipline = () => {
           onBackClick={() => { setShowAddModal(false); resetForm(); }}
         />
 
-        <div style={{ padding: '12px 14px 100px 14px', display: 'flex', flexDirection: 'column', gap: '14px', boxSizing: 'border-box' }}>
+        <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, padding: '12px 14px 100px 14px', display: 'flex', flexDirection: 'column', gap: '14px', boxSizing: 'border-box' }}>
           <div style={{ backgroundColor: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '14px', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
             
             {/* Tên nhân sự + Thời gian ghi nhận */}

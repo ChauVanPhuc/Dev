@@ -58,6 +58,9 @@ const CapaCauseModal = ({ isOpen, onClose, onConfirm, initialData = null }) => {
         borderRadius: '16px',
         width: '100%',
         maxWidth: '420px',
+        maxHeight: 'calc(100dvh - 32px)',
+        display: 'flex',
+        flexDirection: 'column',
         boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
         border: '1px solid #e2e8f0',
         overflow: 'hidden',
@@ -95,7 +98,7 @@ const CapaCauseModal = ({ isOpen, onClose, onConfirm, initialData = null }) => {
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <form onSubmit={handleSubmit} style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto', flex: 1, WebkitOverflowScrolling: 'touch' }}>
           
           {/* Nguyên nhân trực tiếp */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>

@@ -143,12 +143,16 @@ const EmployeeModal = ({ isOpen, onClose, employee, onSave }) => {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex: 2000
+      zIndex: 2000,
+      overflowY: 'auto',
+      padding: '16px'
     }}>
       <div style={{
         backgroundColor: '#fff',
         borderRadius: '12px',
         width: '640px',
+        maxHeight: 'calc(100vh - 32px)',
+        overflowY: 'auto',
         boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
         padding: '24px',
         display: 'flex',

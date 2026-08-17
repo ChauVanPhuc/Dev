@@ -172,7 +172,7 @@ const ProductionOrdersView = () => {
     <Layout>
       <PageHeader title="Thông tin sản xuất" subTitle="CL02: Lệnh sản xuất" />
 
-      <div style={{ backgroundColor: '#faf6f1', paddingBottom: '56px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, backgroundColor: '#faf6f1', paddingBottom: '56px' }}>
         
         {/* Sticky Toolbar + Tabs (below PageHeader) */}
         <div style={{ position: 'sticky', top: `${headerHeight}px`, zIndex: 8, backgroundColor: '#faf6f1', borderBottom: '1px solid #e2e8f0' }}>

@@ -1017,7 +1017,7 @@ const FirstArticleInspectionView = () => {
 
   return (
     <Layout>
-      <div style={{ backgroundColor: '#FAF6F0', minHeight: '100vh', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      <div style={{ backgroundColor: '#FAF6F0', flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
         <PageHeader title="G7 - Smart Flow" subTitle={effectiveViewOnly ? "MB30 | Kết quả kiểm tra mẫu" : "MB30 | Kiểm tra mẫu đầu tiên"} />
 
         <div style={{ padding: '16px', paddingBottom: '90px', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>

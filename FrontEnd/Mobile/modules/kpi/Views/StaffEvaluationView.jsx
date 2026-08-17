@@ -143,7 +143,7 @@ const StaffEvaluation = () => {
     <Layout>
       <PageHeader title="G7 - Smart Flow" subTitle="MB8.1 | Đánh giá nhân sự" />
 
-      <div style={{ padding: '0px', backgroundColor: 'var(--bg-cream)', flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, padding: '0px', backgroundColor: 'var(--bg-cream)', display: 'flex', flexDirection: 'column' }}>
         
         <div style={{ padding: '16px 16px 100px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           

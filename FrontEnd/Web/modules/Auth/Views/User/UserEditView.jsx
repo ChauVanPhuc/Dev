@@ -14,6 +14,7 @@ import {
   permissionLevels
 } from './components/UserScreenConfig';
 import { buildPermissionGroupsFromSidebar, getGroupIcon } from './utils/permissionUtils';
+import PositionMultiSelect from './components/PositionMultiSelect';
 
 const UserEdit = ({ isProfile = false }) => {
   const { id: paramId } = useParams();
@@ -56,6 +57,7 @@ const UserEdit = ({ isProfile = false }) => {
     role_id: '',
     department_id: '',
     permission_id: '',
+    permission_ids: [],
     factory_id: '',
     factory_name: '',
     stage_ids: [],
@@ -67,8 +69,8 @@ const UserEdit = ({ isProfile = false }) => {
   const [screenPermissions, setScreenPermissions] = useState({});
   const [sidebarItems, setSidebarItems] = useState([]);
   const [screens, setScreens] = useState([]);
-  // Lưu trữ phân quyền resolved ban đầu từ API để so sánh khi save
-  const initialResolvedPerms = React.useRef({});
+  // Lưu trữ phân quyền mặc định cơ sở (baseline role defaults) để so sánh diff khi save
+  const initialBaselineDefaults = React.useRef({});
 
   const dynamicWebGroups = useMemo(() => {
     return buildPermissionGroupsFromSidebar(sidebarItems, 'web', screens);
@@ -211,6 +213,10 @@ const UserEdit = ({ isProfile = false }) => {
         setSidebarItems(sidebarRes || []);
         setScreens(screensRes || []);
 
+        const permIds = (userData.permission_ids && userData.permission_ids.length > 0)
+          ? userData.permission_ids.map(Number)
+          : (userData.permission_id ? [Number(userData.permission_id)] : []);
+
         setFormData({
           employee_id: userData.employee_id || '',
           full_name: userData.full_name || '',
@@ -223,6 +229,7 @@ const UserEdit = ({ isProfile = false }) => {
           role_id: userData.role_id || '',
           department_id: userData.department_id || '',
           permission_id: userData.permission_id || '',
+          permission_ids: permIds,
           factory_id: userData.factory_id || '',
           factory_name: userData.factory_name || '',
           stage_ids: userData.stage_ids || [],
@@ -235,6 +242,7 @@ const UserEdit = ({ isProfile = false }) => {
         const webGroups = buildPermissionGroupsFromSidebar(sidebarRes || [], 'web', screensRes || []);
         const mobileGroups = buildPermissionGroupsFromSidebar(sidebarRes || [], 'mobile', screensRes || []);
 
+        // 1. Lưu quyền resolved thực tế vào state cho form UI
         const initialPerms = {};
         webGroups.forEach(group => {
           group.screens.forEach(scr => {
@@ -246,9 +254,37 @@ const UserEdit = ({ isProfile = false }) => {
             initialPerms[scr.key] = parseDbPermission(dbPerms[scr.key] || 'none');
           });
         });
-        // Lưu bản gốc resolved để so sánh khi save (chỉ lưu diff)
-        initialResolvedPerms.current = JSON.parse(JSON.stringify(initialPerms));
         setScreenPermissions(initialPerms);
+
+        // 2. Tải quyền mặc định baseline (vai trò/chức vụ) để so sánh tính toán override khi save
+        try {
+          const queryParams = [];
+          if (userData.role_id) queryParams.push(`role_id=${userData.role_id}`);
+          if (permIds.length > 0) {
+            queryParams.push(`permission_ids=${permIds.join(',')}`);
+          } else if (userData.permission_id) {
+            queryParams.push(`permission_id=${userData.permission_id}`);
+          }
+          if (userData.permission_level) queryParams.push(`permission_level=${encodeURIComponent(userData.permission_level)}`);
+          const defRes = await api.get(`/accounts/permissions/default?${queryParams.join('&')}`);
+          const defaultDbPerms = defRes.permissions || {};
+          
+          const parsedDefaults = {};
+          webGroups.forEach(group => {
+            group.screens.forEach(scr => {
+              parsedDefaults[scr.key] = parseDbPermission(defaultDbPerms[scr.key] || 'none');
+            });
+          });
+          mobileGroups.forEach(group => {
+            group.screens.forEach(scr => {
+              parsedDefaults[scr.key] = parseDbPermission(defaultDbPerms[scr.key] || 'none');
+            });
+          });
+          initialBaselineDefaults.current = parsedDefaults;
+        } catch (e) {
+          console.error('Lỗi khi tải quyền mặc định baseline:', e);
+          initialBaselineDefaults.current = {};
+        }
 
       } catch (err) {
         console.error('Lỗi khi tải thông tin tài khoản và phân quyền:', err);
@@ -284,12 +320,16 @@ const UserEdit = ({ isProfile = false }) => {
     }
   }, [formData.role_id]);
 
-  // 4. Khi Permission thay đổi -> Lấy danh sách Stages tương ứng (có fallback tự động)
+  // 4. Khi Permission(s) thay đổi -> Lấy danh sách Stages tương ứng (có fallback tự động)
   useEffect(() => {
-    if (formData.permission_id) {
+    const selectedPerms = permissions.filter(p => (formData.permission_ids || []).map(Number).includes(Number(p.id)) || Number(p.id) === Number(formData.permission_id));
+    const hasWorker = selectedPerms.some(p => p.name === 'NV SX' || p.name === 'NV QC');
+    const primaryId = formData.permission_ids?.[0] || formData.permission_id;
+
+    if (primaryId && (hasWorker || selectedPerms.length > 0)) {
       const fetchStages = async () => {
         try {
-          let data = await api.get(`/permissions/${formData.permission_id}/stages`);
+          let data = await api.get(`/permissions/${primaryId}/stages`).catch(() => []);
           if (!data || data.length === 0) {
             data = await api.get('/stages/');
           }
@@ -306,7 +346,7 @@ const UserEdit = ({ isProfile = false }) => {
     } else {
       setStages([]);
     }
-  }, [formData.permission_id]);
+  }, [formData.permission_ids, formData.permission_id, permissions]);
 
   // Mở rộng các nhóm accordion tự động khi tìm kiếm
   useEffect(() => {
@@ -438,7 +478,8 @@ const UserEdit = ({ isProfile = false }) => {
           email: prev.email || employee.email || '',
           username: generatedUser,
           role_id: employee.role_id ? String(employee.role_id) : prev.role_id,
-          permission_id: employee.permission_id ? String(employee.permission_id) : prev.permission_id
+          permission_id: employee.permission_id ? String(employee.permission_id) : prev.permission_id,
+          permission_ids: employee.permission_id ? [Number(employee.permission_id)] : prev.permission_ids
         };
       });
       setIsDirty(true);
@@ -488,6 +529,41 @@ const UserEdit = ({ isProfile = false }) => {
         ...prev,
         [screenKey]: newPerms
       };
+    });
+    setIsDirty(true);
+  };
+
+  // Chọn nhanh cho toàn bộ màn hình trong Tab hiện tại (Web hoặc Mobile)
+  const handleGlobalTabPermissionChange = (value) => {
+    const activeGroups = activeTab === 'mobile' ? dynamicMobileGroups : dynamicWebGroups;
+    setScreenPermissions(prev => {
+      const next = { ...prev };
+      const actions = value === 'all' 
+        ? ['read', 'create', 'edit', 'delete', 'approve', 'export_import']
+        : (value === 'read' ? ['read'] : ['none']);
+      
+      activeGroups.forEach(group => {
+        group.screens.forEach(scr => {
+          next[scr.key] = [...actions];
+        });
+      });
+      return next;
+    });
+    setIsDirty(true);
+  };
+
+  // Chọn nhanh cho toàn bộ màn hình trong 1 nhóm cụ thể
+  const handleGroupPermissionChange = (screensInGroup, value) => {
+    setScreenPermissions(prev => {
+      const next = { ...prev };
+      const actions = value === 'all' 
+        ? ['read', 'create', 'edit', 'delete', 'approve', 'export_import']
+        : (value === 'read' ? ['read'] : ['none']);
+        
+      screensInGroup.forEach(scr => {
+        next[scr.key] = [...actions];
+      });
+      return next;
     });
     setIsDirty(true);
   };
@@ -554,7 +630,7 @@ const UserEdit = ({ isProfile = false }) => {
         localStorage.setItem('smartflow_active_permissions', JSON.stringify(activePermsToStore));
       }
       
-      setIsDirty(true);
+      setIsDirty(false);
       alert('Khôi phục phân quyền mặc định thành công!');
     } catch (err) {
       console.error('Lỗi khi khôi phục quyền mặc định:', err);
@@ -639,6 +715,63 @@ const UserEdit = ({ isProfile = false }) => {
       
       return next;
     });
+    setIsDirty(true);
+  };
+
+  const renderHeaderButton = ({ label, isChecked, onClick }) => {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={isProfile}
+        title={`Bật/Tắt toàn bộ cột "${label}" trong nhóm này`}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '5px',
+          height: '28px',
+          borderRadius: '5px',
+          border: isChecked ? '1.5px solid #10B981' : '1px solid #D1D5DB',
+          backgroundColor: isChecked ? '#EBFDF5' : '#FFFFFF',
+          color: isChecked ? '#047857' : '#4B5563',
+          fontSize: '0.72rem',
+          fontWeight: '700',
+          cursor: isProfile ? 'default' : 'pointer',
+          transition: 'all 0.15s ease',
+          userSelect: 'none',
+          width: '95px',
+          boxSizing: 'border-box',
+          outline: 'none',
+          boxShadow: isChecked ? '0 1px 2px rgba(16, 185, 129, 0.2)' : 'none'
+        }}
+      >
+        <span style={{
+          width: '10px',
+          height: '10px',
+          borderRadius: '2px',
+          border: isChecked ? '1.5px solid #10B981' : '1px solid #9CA3AF',
+          backgroundColor: isChecked ? '#10B981' : 'transparent',
+          position: 'relative',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0
+        }}>
+          {isChecked && (
+            <span style={{
+              width: '2.5px',
+              height: '5px',
+              border: 'solid white',
+              borderWidth: '0 1.5px 1.5px 0',
+              transform: 'rotate(45deg)',
+              marginBottom: '1px'
+            }} />
+          )}
+        </span>
+        {label}
+      </button>
+    );
   };
 
   const renderPermissionButton = ({ label, isChecked, onClick, isDisabled = false }) => {
@@ -663,7 +796,7 @@ const UserEdit = ({ isProfile = false }) => {
             boxSizing: 'border-box'
           }}
         >
-          <span>🚫</span> {label}
+          {label}
         </div>
       );
     }
@@ -737,8 +870,11 @@ const UserEdit = ({ isProfile = false }) => {
     setSuccess(false);
     
     try {
-      const selectedPerm = permissions.find(p => p.id === parseInt(formData.permission_id));
-      const isProductionOrQC = selectedPerm && (selectedPerm.name === 'NV SX' || selectedPerm.name === 'NV QC');
+      const pIds = (formData.permission_ids || []).map(id => parseInt(id, 10)).filter(id => !isNaN(id));
+      const primaryPermId = pIds.length > 0 ? pIds[0] : (formData.permission_id ? parseInt(formData.permission_id, 10) : null);
+      
+      const selectedPerms = permissions.filter(p => pIds.includes(p.id) || p.id === primaryPermId);
+      const isProductionOrQC = selectedPerms.some(p => p.name === 'NV SX' || p.name === 'NV QC');
 
       // 1. Cập nhật thông tin tài khoản cơ bản (PUT)
       const baseUpdateData = {
@@ -751,7 +887,8 @@ const UserEdit = ({ isProfile = false }) => {
         is_mobile_allowed: formData.is_mobile_allowed,
         role_id: formData.role_id ? parseInt(formData.role_id, 10) : null,
         department_id: formData.department_id ? parseInt(formData.department_id, 10) : null,
-        permission_id: formData.permission_id ? parseInt(formData.permission_id, 10) : null,
+        permission_id: primaryPermId,
+        permission_ids: pIds.length > 0 ? pIds : (primaryPermId ? [primaryPermId] : []),
         factory_id: formData.factory_id ? parseInt(formData.factory_id, 10) : null,
         factory_name: formData.factory_name || null,
         permission_level: isProductionOrQC ? null : (formData.permission_level || null)
@@ -785,7 +922,8 @@ const UserEdit = ({ isProfile = false }) => {
         const syncPayload = {
           role_id: formData.role_id ? parseInt(formData.role_id, 10) : null,
           department_id: formData.department_id ? parseInt(formData.department_id, 10) : null,
-          permission_id: formData.permission_id ? parseInt(formData.permission_id, 10) : null,
+          permission_id: primaryPermId,
+          permission_ids: pIds.length > 0 ? pIds : (primaryPermId ? [primaryPermId] : []),
           factory_id: formData.factory_id ? parseInt(formData.factory_id, 10) : null,
           factory_name: formData.factory_name || null,
           stage_ids: isProductionOrQC && formData.stage_ids && formData.stage_ids.length > 0 
@@ -796,19 +934,25 @@ const UserEdit = ({ isProfile = false }) => {
         await api.post(`/accounts/${id}/sync-departments/`, syncPayload);
 
 
-        // Chỉ lưu những key mà user đã thực sự thay đổi so với resolved mặc định
-        // Tránh lưu lại toàn bộ resolved permissions (gây vòng lặp reset)
+        // Chỉ lưu những key mà user đã thực sự thay đổi so với quyền mặc định baseline của vai trò/chức vụ
+        // Đảm bảo không bị mất quyền Mobile khi lưu Web hoặc ngược lại
         const permissionsToSave = {};
-        const initialPerms = initialResolvedPerms.current || {};
-        Object.keys(screenPermissions).forEach(key => {
+        const defaults = initialBaselineDefaults.current || {};
+        
+        const allScreenKeys = new Set();
+        dynamicWebGroups.forEach(g => g.screens.forEach(s => allScreenKeys.add(s.key)));
+        dynamicMobileGroups.forEach(g => g.screens.forEach(s => allScreenKeys.add(s.key)));
+        Object.keys(screenPermissions).forEach(k => allScreenKeys.add(k));
+
+        allScreenKeys.forEach(key => {
           const currentPerms = screenPermissions[key] || [];
-          const initialPermsForKey = initialPerms[key] || [];
+          const defaultPerms = defaults[key] || [];
           
-          // So sánh: nếu quyền hiện tại khác quyền resolved ban đầu → là override
+          // So sánh: nếu quyền hiện tại khác quyền mặc định baseline → là override cần lưu
           const currentSorted = [...currentPerms].sort().join(',');
-          const initialSorted = [...initialPermsForKey].sort().join(',');
+          const defaultSorted = [...defaultPerms].sort().join(',');
           
-          if (currentSorted !== initialSorted) {
+          if (currentSorted !== defaultSorted) {
             permissionsToSave[key] = currentPerms.includes('none') || currentPerms.length === 0 
               ? 'none' 
               : currentPerms.join(',');
@@ -1039,7 +1183,7 @@ const UserEdit = ({ isProfile = false }) => {
                       <input 
                         type="text" 
                         name="employee_id" 
-                        placeholder="VD: 1245" 
+                        placeholder="Ví dụ: NV0123" 
                         value={formData.employee_id}
                         onChange={handleChange}
                         onBlur={handleAutoSync}
@@ -1070,7 +1214,7 @@ const UserEdit = ({ isProfile = false }) => {
                     <input 
                       type="text" 
                       name="full_name" 
-                      placeholder="VD: Nguyễn Văn A" 
+                      placeholder="Ví dụ: Nguyễn Văn A" 
                       value={formData.full_name}
                       onChange={handleChange}
                       required
@@ -1082,7 +1226,7 @@ const UserEdit = ({ isProfile = false }) => {
                     <input 
                       type="text" 
                       name="phone" 
-                      placeholder="VD: 0987654321" 
+                      placeholder="Ví dụ: 0987 654 321" 
                       value={formData.phone}
                       onChange={handleChange}
                     />
@@ -1101,7 +1245,7 @@ const UserEdit = ({ isProfile = false }) => {
                   </div>
 
                   <div className="form-group">
-                    <label>Password</label>
+                    <label>Mật khẩu</label>
                     <input 
                       type="password" 
                       name="password" 
@@ -1118,7 +1262,7 @@ const UserEdit = ({ isProfile = false }) => {
                     <input 
                       type="email" 
                       name="email" 
-                      placeholder="VD: anv01@mail.com" 
+                      placeholder="Ví dụ: anv01@smartflow.com" 
                       value={formData.email}
                       onChange={handleChange}
                     />
@@ -1193,19 +1337,21 @@ const UserEdit = ({ isProfile = false }) => {
                     {/* 3. Vị Trí / Chức Vụ */}
                     <div className={`form-group ${(!formData.role_id || isProfile) ? 'disabled' : ''}`}>
                       <label>3. Vị Trí / Chức Vụ <span className="required" style={{ color: '#E11D48' }}>*</span></label>
-                      <select 
-                        name="permission_id" 
-                        value={formData.permission_id} 
-                        onChange={handleChange} 
+                      <PositionMultiSelect 
+                        positions={permissions}
+                        selectedIds={formData.permission_ids}
                         disabled={isProfile || !formData.role_id}
-                        className={(isProfile || !formData.role_id) ? "select-disabled" : ""}
-                        required
-                      >
-                        <option value="">-- Chọn Vị Trí / Chức Vụ --</option>
-                        {permissions.map(p => (
-                          <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
-                      </select>
+                        required={true}
+                        placeholder="-- Chọn các Vị Trí --"
+                        onChange={(newIds) => {
+                          setFormData(prev => ({
+                            ...prev,
+                            permission_ids: newIds,
+                            permission_id: newIds.length > 0 ? String(newIds[0]) : ''
+                          }));
+                          setIsDirty(true);
+                        }}
+                      />
                       {!formData.role_id && <small className="hint">Hãy chọn Phòng Ban trước</small>}
                     </div>
 
@@ -1237,15 +1383,14 @@ const UserEdit = ({ isProfile = false }) => {
                   </div>
 
                   {/* PHÂN QUYỀN CHI TIẾT: CÔNG ĐOẠN PHỤ TRÁCH */}
-                  {formData.permission_id && (
-                    (() => {
-                      const selectedPerm = permissions.find(p => p.id === parseInt(formData.permission_id));
-                      const isProductionOrQC = selectedPerm && (selectedPerm.name === 'NV SX' || selectedPerm.name === 'NV QC');
+                  {(() => {
+                    const selectedPerms = permissions.filter(p => (formData.permission_ids || []).map(Number).includes(Number(p.id)) || Number(p.id) === Number(formData.permission_id));
+                    const isProductionOrQC = selectedPerms.some(p => p.name === 'NV SX' || p.name === 'NV QC');
 
-                      if (isProductionOrQC) {
-                        return (
-                          <div style={{ borderTop: '1.5px solid #F5EDE4', paddingTop: '20px', marginTop: '10px' }}>
-                            <div className={`form-group full-width-span ${(stages.length === 0 || isProfile) ? 'disabled' : ''}`}>
+                    if (isProductionOrQC) {
+                      return (
+                        <div style={{ borderTop: '1.5px solid #F5EDE4', paddingTop: '20px', marginTop: '10px' }}>
+                          <div className={`form-group full-width-span ${(stages.length === 0 || isProfile) ? 'disabled' : ''}`}>
                               {stages.length === 0 ? (
                                 <>
                                   <label>Phạm vi phụ trách (Công đoạn sản xuất)</label>
@@ -1337,8 +1482,7 @@ const UserEdit = ({ isProfile = false }) => {
                         );
                       }
                       return null;
-                    })()
-                  )}
+                    })()}
                 </div>
               </div>
             </div>
@@ -1395,11 +1539,6 @@ const UserEdit = ({ isProfile = false }) => {
                   outline: 'none'
                 }}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                  <line x1="8" y1="21" x2="16" y2="21" />
-                  <line x1="12" y1="17" x2="12" y2="21" />
-                </svg>
                 Phân quyền Web
               </button>
               <button
@@ -1422,12 +1561,98 @@ const UserEdit = ({ isProfile = false }) => {
                   outline: 'none'
                 }}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
-                  <line x1="12" y1="18" x2="12.01" y2="18" />
-                </svg>
                 Phân quyền Mobile
               </button>
+            </div>
+
+            {/* Quick Action Toolbar for current tab */}
+            <div className="tab-quick-toolbar" style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '12px 18px',
+              backgroundColor: '#FAF6F0',
+              borderRadius: '10px',
+              border: '1.5px solid #EADCC9',
+              marginBottom: '18px',
+              boxShadow: '0 1px 3px rgba(123, 82, 51, 0.05)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '0.88rem', fontWeight: '800', color: '#7B5233' }}>
+                  Chọn nhanh cho toàn bộ màn hình {activeTab === 'mobile' ? 'Mobile' : 'Web'}:
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => handleGlobalTabPermissionChange('all')}
+                  className="quick-action-tab-btn"
+                  title="Cấp full toàn bộ quyền cho tất cả màn hình trong tab này"
+                  disabled={isProfile}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: '6px',
+                    border: '1.5px solid #10B981',
+                    backgroundColor: '#EBFDF5',
+                    color: '#047857',
+                    fontSize: '0.8rem',
+                    fontWeight: '700',
+                    cursor: isProfile ? 'default' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  Tất cả (Full quyền)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleGlobalTabPermissionChange('read')}
+                  className="quick-action-tab-btn"
+                  title="Chỉ cho phép xem cho tất cả màn hình trong tab này"
+                  disabled={isProfile}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: '6px',
+                    border: '1.5px solid #3B82F6',
+                    backgroundColor: '#EFF6FF',
+                    color: '#1D4ED8',
+                    fontSize: '0.8rem',
+                    fontWeight: '700',
+                    cursor: isProfile ? 'default' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  Chỉ xem
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleGlobalTabPermissionChange('none')}
+                  className="quick-action-tab-btn"
+                  title="Chặn tất cả màn hình trong tab này"
+                  disabled={isProfile}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: '6px',
+                    border: '1.5px solid #EF4444',
+                    backgroundColor: '#FEF2F2',
+                    color: '#B91C1C',
+                    fontSize: '0.8rem',
+                    fontWeight: '700',
+                    cursor: isProfile ? 'default' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  Chặn tất cả (Khóa)
+                </button>
+              </div>
             </div>
 
             <div className="accordion-list">
@@ -1490,28 +1715,75 @@ const UserEdit = ({ isProfile = false }) => {
                           <h4 className="group-title">{group.title}</h4>
                         </div>
 
-                        {/* Cho phép / Không cho phép Radio toggles */}
-                        <div className="group-allow-toggle" onClick={(e) => e.stopPropagation()}>
-                          <label className={`radio-label ${isAllowed ? 'active' : ''}`}>
-                            <input 
-                              type="radio" 
-                              name={`group-allow-${activeTab}-${groupIdx}`} 
-                              checked={isAllowed} 
-                              onChange={() => handleGroupToggle(groupIdx, true, isMobileTab)}
-                            />
-                            <span className="radio-custom"></span>
-                            Cho phép
-                          </label>
-                          <label className={`radio-label ${!isAllowed ? 'active-blocked' : ''}`}>
-                            <input 
-                              type="radio" 
-                              name={`group-allow-${activeTab}-${groupIdx}`} 
-                              checked={!isAllowed} 
-                              onChange={() => handleGroupToggle(groupIdx, false, isMobileTab)}
-                            />
-                            <span className="radio-custom"></span>
-                            Không cho phép
-                          </label>
+                        {/* Group quick actions & Cho phép / Không cho phép */}
+                        <div className="group-header-right-actions" style={{ display: 'flex', alignItems: 'center', gap: '14px' }} onClick={(e) => e.stopPropagation()}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleGroupPermissionChange(group.screens, 'all')}
+                              title="Cấp full quyền cho tất cả màn hình thuộc nhóm này"
+                              disabled={isProfile}
+                              style={{
+                                padding: '4px 10px',
+                                borderRadius: '5px',
+                                border: '1px solid #10B981',
+                                backgroundColor: '#EBFDF5',
+                                color: '#047857',
+                                fontSize: '0.72rem',
+                                fontWeight: '700',
+                                cursor: isProfile ? 'default' : 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              Full nhóm
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleGroupPermissionChange(group.screens, 'read')}
+                              title="Chỉ xem cho tất cả màn hình thuộc nhóm này"
+                              disabled={isProfile}
+                              style={{
+                                padding: '4px 10px',
+                                borderRadius: '5px',
+                                border: '1px solid #3B82F6',
+                                backgroundColor: '#EFF6FF',
+                                color: '#1D4ED8',
+                                fontSize: '0.72rem',
+                                fontWeight: '700',
+                                cursor: isProfile ? 'default' : 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              Xem nhóm
+                            </button>
+                          </div>
+
+                          <div className="group-allow-toggle">
+                            <label className={`radio-label ${isAllowed ? 'active' : ''}`}>
+                              <input 
+                                type="radio" 
+                                name={`group-allow-${activeTab}-${groupIdx}`} 
+                                checked={isAllowed} 
+                                onChange={() => handleGroupToggle(groupIdx, true, isMobileTab)}
+                              />
+                              <span className="radio-custom"></span>
+                              Cho phép
+                            </label>
+                            <label className={`radio-label ${!isAllowed ? 'active-blocked' : ''}`}>
+                              <input 
+                                type="radio" 
+                                name={`group-allow-${activeTab}-${groupIdx}`} 
+                                checked={!isAllowed} 
+                                onChange={() => handleGroupToggle(groupIdx, false, isMobileTab)}
+                              />
+                              <span className="radio-custom"></span>
+                              Không cho phép
+                            </label>
+                          </div>
                         </div>
                       </div>
 
@@ -1520,6 +1792,39 @@ const UserEdit = ({ isProfile = false }) => {
                         <div className="accordion-body">
                           {isAllowed ? (
                             <div className="accordion-body-list">
+                              {/* Header Cột trong nhóm */}
+                              <div className="permission-group-table-header" style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                padding: '10px 16px',
+                                backgroundColor: '#F8F4EE',
+                                borderBottom: '1.5px solid #EADCC9',
+                                fontWeight: '700',
+                                fontSize: '0.78rem',
+                                color: '#7B5233'
+                              }}>
+                                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span>DANH SÁCH MÀN HÌNH / CHỨC NĂNG</span>
+                                  <span style={{ fontSize: '0.7rem', color: '#8C7B70', fontWeight: '500' }}>({screensInGroup.length} màn hình)</span>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 95px)', gap: '8px' }}>
+                                  {renderHeaderButton({
+                                    label: 'Tất cả',
+                                    isChecked: isHeaderChecked(screensInGroup, 'all'),
+                                    onClick: () => handleHeaderToggle(screensInGroup, 'all')
+                                  })}
+                                  {permissionLevels.map((lvl) => (
+                                    <React.Fragment key={lvl.key}>
+                                      {renderHeaderButton({
+                                        label: lvl.label,
+                                        isChecked: isHeaderChecked(screensInGroup, lvl.key),
+                                        onClick: () => handleHeaderToggle(screensInGroup, lvl.key)
+                                      })}
+                                    </React.Fragment>
+                                  ))}
+                                </div>
+                              </div>
 
                               {screensInGroup.map((screen, sIdx) => {
                                 const isRowAll = isRowAllChecked(screen.key);
@@ -1567,7 +1872,7 @@ const UserEdit = ({ isProfile = false }) => {
                             </div>
                           ) : (
                             <div className="group-blocked-message">
-                              🚫 Nhóm này đang bị chặn truy cập. Chọn "Cho phép" ở trên để bắt đầu phân quyền chi tiết.
+                              Nhóm này đang bị chặn truy cập. Chọn "Cho phép" ở trên để bắt đầu phân quyền chi tiết.
                             </div>
                           )}
                         </div>

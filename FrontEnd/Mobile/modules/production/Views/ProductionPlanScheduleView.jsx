@@ -49,7 +49,7 @@ const ProductionPlanScheduleView = () => {
     <Layout>
       <PageHeader title="Thông tin sản xuất" subTitle="CL04: Kế hoạch sản xuất" />
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#faf6f1', paddingBottom: '80px' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, backgroundColor: '#faf6f1', paddingBottom: '80px' }}>
         
         {/* Filter Toolbar Grid (2 Rows) */}
         <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px', backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0' }}>

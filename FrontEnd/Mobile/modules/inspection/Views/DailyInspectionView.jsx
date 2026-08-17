@@ -414,7 +414,7 @@ const DailyInspection = () => {
 
   return (
     <Layout>
-      <div style={{ backgroundColor: '#f8f4f0', minHeight: '100vh', paddingBottom: '100px' }}>
+      <div style={{ backgroundColor: '#f8f4f0', flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, paddingBottom: '100px' }}>
         <PageHeader title="G7 - Smart Flow" subTitle="MB5 | Phiếu kiểm tra thường ngày" />
 
         <div style={{ padding: '12px 16px' }}>

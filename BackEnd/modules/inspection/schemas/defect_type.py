@@ -32,6 +32,7 @@ class DefectTypeBase(BaseModel):
     is_active: bool = True
     code: Optional[str] = None
     aql_class: Optional[str] = None
+    images: Optional[str] = None
 
 class DefectTypeCreate(DefectTypeBase):
     pass
@@ -40,6 +41,12 @@ class DefectType(DefectTypeBase):
     id: int
     is_tracked_by_me: bool = False # Personalized QC tracking status
     client_defects: List[ClientDefect] = []
+    monthly_count: Optional[int] = 0
+    monthly_rate: Optional[float] = 0.0 # % tỷ lệ lỗi trong tháng (trên tổng SP kiểm tra)
+    monthly_defect_share: Optional[float] = 0.0 # % tỷ trọng trong tổng số lỗi tháng này
+    all_time_count: Optional[int] = 0
+    all_time_rate: Optional[float] = 0.0 # % tỷ lệ lỗi toàn thời gian (trên tổng SP kiểm tra)
+    all_time_defect_share: Optional[float] = 0.0 # % tỷ trọng trong tổng số lỗi all-time
 
     class Config:
         from_attributes = True

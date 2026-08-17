@@ -494,7 +494,7 @@ const CAPADetailView = () => {
         onBackClick={() => navigate('/mobile/capa/list')}
       />
 
-      <div style={{ padding: '12px 14px 120px 14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, padding: '12px 14px 120px 14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
 
         {/* Title Header Card & Export Button */}
         <div style={{

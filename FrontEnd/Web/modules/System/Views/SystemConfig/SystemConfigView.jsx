@@ -6,7 +6,7 @@ import DepartmentModal from '@modules/auth/Views/Department/DepartmentModal';
 import { 
   FileText, Plus, Edit2, Trash2, Search, ArrowUp, ArrowDown, Layout, Smartphone, 
   X, HelpCircle, Save, ChevronRight, CheckSquare, Square, RefreshCw, Layers, Briefcase, Users, Building2, Sliders,
-  Tag, Factory, Contact, ShieldCheck, Palette, ClipboardList, ExternalLink
+  Tag, Factory, Contact, ShieldCheck, Palette, ClipboardList, ExternalLink, AlertOctagon
 } from 'lucide-react';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
@@ -74,6 +74,14 @@ export default function SystemConfigView() {
   // --- CATEGORY (Dòng hàng) FORM STATES ---
   const [catName, setCatName] = useState('');
   const [catDesc, setCatDesc] = useState('');
+
+  // --- DEFECT CATEGORY (Phân nhóm lỗi QC) FORM STATES ---
+  const [defectCatCode, setDefectCatCode] = useState('');
+  const [defectCatName, setDefectCatName] = useState('');
+  const [defectCatPrefix, setDefectCatPrefix] = useState('');
+  const [defectCatDesc, setDefectCatDesc] = useState('');
+  const [defectCatOrder, setDefectCatOrder] = useState(0);
+  const [defectCatIsActive, setDefectCatIsActive] = useState(true);
 
   // --- STAGE (Công đoạn) FORM STATES ---
   const [stageName, setStageName] = useState('');
@@ -170,6 +178,9 @@ export default function SystemConfigView() {
       } else if (activeTab === 'category') {
         const res = await api.get('/master-categories/');
         setDataList(res || []);
+      } else if (activeTab === 'defect_category') {
+        const catRes = await api.get('/inspections/defect-categories?include_inactive=true');
+        setDataList(Array.isArray(catRes) ? catRes : (catRes?.data || []));
       } else if (activeTab === 'stage') {
         const res = await api.get('/stages/');
         setDataList(res || []);
@@ -276,6 +287,27 @@ export default function SystemConfigView() {
             { field: 'Số sản phẩm liên kết', value: row.product_count ?? (row.products?.length || 0) },
             { field: 'Trạng thái', value: row.status === 1 ? 'Hiệu lực' : 'Hết hiệu lực' },
             { field: 'Ngày khởi tạo', value: formatDate(row.created_at) }
+          ]);
+        }
+      } else if (mainTab === 'defect_category') {
+        if (subTabKey === 'subtab1') {
+          try {
+            const allDefects = await api.get('/inspections/defect-types?include_inactive=true');
+            const linked = (allDefects || []).filter(d => (d.category || '').toLowerCase() === (row.code || '').toLowerCase());
+            setSubTableData(linked);
+          } catch (e) {
+            setSubTableData([]);
+          }
+        } else if (subTabKey === 'subtab2') {
+          setSubTableData([
+            { field: 'Mã phân nhóm (Key)', value: row.code },
+            { field: 'Tên phân nhóm QC', value: row.name },
+            { field: 'Tiền tố sinh mã G7', value: row.prefix },
+            { field: 'Số loại lỗi đang sử dụng', value: `${row.defect_count || 0} loại lỗi` },
+            { field: 'Mô tả / Tiêu chuẩn', value: row.description || '---' },
+            { field: 'Thứ tự ưu tiên', value: row.order_index ?? 0 },
+            { field: 'Trạng thái', value: row.is_active ? 'Đang sử dụng' : 'Dừng hoạt động' },
+            { field: 'Ngày tạo', value: formatDate(row.created_at) }
           ]);
         }
       } else if (mainTab === 'stage') {
@@ -461,6 +493,12 @@ export default function SystemConfigView() {
         return (item.name || '').toLowerCase().includes(query) ||
                (item.description || '').toLowerCase().includes(query);
       }
+      if (activeTab === 'defect_category') {
+        return (item.name || '').toLowerCase().includes(query) ||
+               (item.code || '').toLowerCase().includes(query) ||
+               (item.prefix || '').toLowerCase().includes(query) ||
+               (item.description || '').toLowerCase().includes(query);
+      }
       return false;
     });
   }, [dataList, searchQuery, activeTab, sidebarPlatform]);
@@ -494,6 +532,13 @@ export default function SystemConfigView() {
     } else if (activeTab === 'category') {
       setCatName('');
       setCatDesc('');
+    } else if (activeTab === 'defect_category') {
+      setDefectCatCode('');
+      setDefectCatName('');
+      setDefectCatPrefix('');
+      setDefectCatDesc('');
+      setDefectCatOrder(dataList.length + 1);
+      setDefectCatIsActive(true);
     } else if (activeTab === 'stage') {
       setStageName('');
       setStageDesc('');
@@ -552,6 +597,13 @@ export default function SystemConfigView() {
     } else if (activeTab === 'category') {
       setCatName(item.name || '');
       setCatDesc(item.description || '');
+    } else if (activeTab === 'defect_category') {
+      setDefectCatCode(item.code || '');
+      setDefectCatName(item.name || '');
+      setDefectCatPrefix(item.prefix || '');
+      setDefectCatDesc(item.description || '');
+      setDefectCatOrder(item.order_index ?? 0);
+      setDefectCatIsActive(item.is_active !== false);
     } else if (activeTab === 'stage') {
       setStageName(item.name || '');
       setStageDesc(item.description || '');
@@ -670,6 +722,22 @@ export default function SystemConfigView() {
           await api.post('/master-categories/', payload);
           toast('success', 'Thêm mới dòng hàng thành công!');
         }
+      } else if (activeTab === 'defect_category') {
+        const payload = {
+          code: defectCatCode.trim().toLowerCase(),
+          name: defectCatName.trim(),
+          prefix: defectCatPrefix.trim().toUpperCase(),
+          description: defectCatDesc.trim() || null,
+          order_index: parseInt(defectCatOrder) || 0,
+          is_active: defectCatIsActive
+        };
+        if (selectedItem) {
+          await api.put(`/inspections/defect-categories/${selectedItem.id}`, payload);
+          toast('success', 'Cập nhật phân nhóm lỗi QC thành công!');
+        } else {
+          await api.post('/inspections/defect-categories', payload);
+          toast('success', 'Thêm mới phân nhóm lỗi QC thành công!');
+        }
       } else if (activeTab === 'stage') {
         const payload = {
           name: stageName.trim(),
@@ -768,6 +836,8 @@ export default function SystemConfigView() {
         await api.delete(`/roles/${deletingItem.id}`);
       } else if (activeTab === 'category') {
         await api.delete(`/master-categories/${deletingItem.id}`);
+      } else if (activeTab === 'defect_category') {
+        await api.delete(`/inspections/defect-categories/${deletingItem.id}`);
       } else if (activeTab === 'stage') {
         await api.delete(`/stages/${deletingItem.id}`);
       } else if (activeTab === 'customer') {
@@ -1197,6 +1267,7 @@ export default function SystemConfigView() {
             {[
               { id: 'category', label: 'Dòng hàng', icon: Tag },
               { id: 'stage', label: 'Công đoạn SX', icon: Factory },
+              { id: 'defect_category', label: 'Phân nhóm lỗi QC', icon: AlertOctagon },
               { id: 'customer', label: 'Khách hàng', icon: Contact }
             ].map(tab => {
               const IconComp = tab.icon;
@@ -1471,6 +1542,15 @@ export default function SystemConfigView() {
                           <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Trạng thái</th>
                         </>
                       )}
+                      {activeTab === 'defect_category' && (
+                        <>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Mã phân nhóm</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Tên Phân nhóm QC</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'center' }}>Tiền tố mã G7</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'center' }}>Số loại lỗi</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Trạng thái</th>
+                        </>
+                      )}
                       {activeTab === 'stage' && (
                         <>
                           <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Tên Công đoạn SX</th>
@@ -1602,6 +1682,35 @@ export default function SystemConfigView() {
                                   fontSize: '0.7rem'
                                 }}>
                                   {(item.status === 1 || item.status === undefined) ? 'Hiệu lực' : 'Tạm dừng'}
+                                </span>
+                              </td>
+                            </>
+                          )}
+
+                          {activeTab === 'defect_category' && (
+                            <>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1F2937', fontWeight: 'bold', fontFamily: 'monospace' }}>{item.code}</td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1F2937', fontWeight: 700 }}>{item.name}</td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', textAlign: 'center' }}>
+                                <span style={{ backgroundColor: '#FAF6F0', color: '#7B5233', border: '1px solid #EADCC9', padding: '3px 10px', borderRadius: '6px', fontWeight: 800, fontSize: '0.75rem', fontFamily: 'monospace' }}>
+                                  {item.prefix}-xxx
+                                </span>
+                              </td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', textAlign: 'center' }}>
+                                <span style={{ backgroundColor: item.defect_count > 0 ? '#E0F2FE' : '#F3F4F6', color: item.defect_count > 0 ? '#0369A1' : '#6B7280', padding: '2px 8px', borderRadius: '6px', fontWeight: 'bold', fontSize: '0.75rem' }}>
+                                  {item.defect_count || 0} loại lỗi
+                                </span>
+                              </td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.8rem' }}>
+                                <span style={{
+                                  backgroundColor: item.is_active ? '#DCFCE7' : '#F3F4F6',
+                                  color: item.is_active ? '#15803D' : '#6B7280',
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  fontWeight: 'bold',
+                                  fontSize: '0.7rem'
+                                }}>
+                                  {item.is_active ? 'Đang sử dụng' : 'Dừng hoạt động'}
                                 </span>
                               </td>
                             </>
@@ -1973,6 +2082,33 @@ export default function SystemConfigView() {
                     </>
                   )}
 
+                  {activeTab === 'defect_category' && (
+                    <>
+                      <button
+                        onClick={() => setActiveSubTab('subtab1')}
+                        style={{
+                          padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                          fontSize: '0.82rem', fontWeight: activeSubTab === 'subtab1' ? 800 : 600,
+                          color: activeSubTab === 'subtab1' ? '#7B5233' : '#6B7280',
+                          borderBottom: activeSubTab === 'subtab1' ? '2px solid #7B5233' : '2px solid transparent'
+                        }}
+                      >
+                        Các loại lỗi thuộc nhóm ({subTableData.length})
+                      </button>
+                      <button
+                        onClick={() => setActiveSubTab('subtab2')}
+                        style={{
+                          padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                          fontSize: '0.82rem', fontWeight: activeSubTab === 'subtab2' ? 800 : 600,
+                          color: activeSubTab === 'subtab2' ? '#7B5233' : '#6B7280',
+                          borderBottom: activeSubTab === 'subtab2' ? '2px solid #7B5233' : '2px solid transparent'
+                        }}
+                      >
+                        Thông tin chi tiết
+                      </button>
+                    </>
+                  )}
+
                   {activeTab === 'stage' && (
                     <>
                       <button
@@ -2212,7 +2348,29 @@ export default function SystemConfigView() {
               backgroundColor: '#FAF8F6'
             }}>
               <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#2D1A12' }}>
-                {selectedItem ? 'Chỉnh sửa bản ghi cấu hình' : 'Thêm mới cấu hình'}
+                {selectedItem ? (
+                  activeTab === 'factory' ? 'Chỉnh sửa Cấu trúc Nhà máy / Xưởng' :
+                  activeTab === 'department' ? 'Chỉnh sửa Bộ phận' :
+                  activeTab === 'position' ? 'Chỉnh sửa Vị trí / Chức vụ' :
+                  activeTab === 'permission' ? 'Chỉnh sửa Vị trí & Phân quyền' :
+                  activeTab === 'category' ? 'Chỉnh sửa Dòng hàng' :
+                  activeTab === 'defect_category' ? 'Chỉnh sửa Phân nhóm Lỗi QC' :
+                  activeTab === 'stage' ? 'Chỉnh sửa Công đoạn Sản xuất' :
+                  activeTab === 'customer' ? 'Chỉnh sửa Khách hàng' :
+                  activeTab === 'sidebar' ? 'Chỉnh sửa Menu Sidebar' :
+                  'Chỉnh sửa bản ghi cấu hình'
+                ) : (
+                  activeTab === 'factory' ? 'Thêm mới Cấu trúc Nhà máy / Xưởng' :
+                  activeTab === 'department' ? 'Thêm mới Bộ phận' :
+                  activeTab === 'position' ? 'Thêm mới Vị trí / Chức vụ' :
+                  activeTab === 'permission' ? 'Thêm mới Vị trí & Phân quyền' :
+                  activeTab === 'category' ? 'Thêm mới Dòng hàng' :
+                  activeTab === 'defect_category' ? 'Thêm mới Phân nhóm Lỗi QC' :
+                  activeTab === 'stage' ? 'Thêm mới Công đoạn Sản xuất' :
+                  activeTab === 'customer' ? 'Thêm mới Khách hàng' :
+                  activeTab === 'sidebar' ? 'Thêm mới Menu Sidebar' :
+                  'Thêm mới cấu hình'
+                )}
               </h3>
               <button onClick={() => setIsModalOpen(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#9CA3AF' }}>
                 <X size={18} />
@@ -2232,7 +2390,7 @@ export default function SystemConfigView() {
                         type="text"
                         value={factoryCode}
                         onChange={(e) => setFactoryCode(e.target.value)}
-                        placeholder="Ví dụ: NM1, PX_SON, TO_QC"
+                        placeholder="Ví dụ: NM1, PX_SON, TO_RAP, KHO_GO..."
                         disabled={selectedItem !== null}
                         style={{
                           padding: '8px 12px',
@@ -2248,12 +2406,12 @@ export default function SystemConfigView() {
                     </div>
                     
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>TÊN CẤU TRÚC VẬT LÝ *</label>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>TÊN NHÀ MÁY / PHÂN XƯỞNG / TỔ *</label>
                       <input
                         type="text"
                         value={factoryName}
                         onChange={(e) => setFactoryName(e.target.value)}
-                        placeholder="Ví dụ: Nhà máy gỗ tự nhiên 1"
+                        placeholder="Ví dụ: Nhà máy 1, Phân xưởng Sơn, Tổ Lắp ráp 2..."
                         style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
                         required
                       />
@@ -2270,17 +2428,18 @@ export default function SystemConfigView() {
                         <option value="Nhà máy">Nhà máy (Factory)</option>
                         <option value="Phân xưởng">Phân xưởng (Workshop)</option>
                         <option value="Tổ sản xuất">Tổ sản xuất (Section)</option>
+                        <option value="Kho bãi">Kho bãi (Warehouse)</option>
                       </select>
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>THUỘC CẤU TRÚC CHA (NẾU CÓ)</label>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>THUỘC CẤU TRÚC CẤP TRÊN (NẾU CÓ)</label>
                       <select
                         value={factoryParentId}
                         onChange={(e) => setFactoryParentId(e.target.value)}
                         style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', backgroundColor: '#FFFFFF' }}
                       >
-                        <option value="">-- Cấp cao nhất --</option>
+                        <option value="">-- Cấp cao nhất (Toàn nhà máy / Không trực thuộc) --</option>
                         {dataList
                           .filter(x => !selectedItem || x.id !== selectedItem.id) // Avoid self nested
                           .map(x => (
@@ -2294,7 +2453,7 @@ export default function SystemConfigView() {
                       <textarea
                         value={factoryDesc}
                         onChange={(e) => setFactoryDesc(e.target.value)}
-                        placeholder="Nêu mô tả sơ bộ..."
+                        placeholder="Mô tả chức năng, quy mô hoặc ghi chú về khu vực này..."
                         rows="3"
                         style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', resize: 'vertical' }}
                       />
@@ -2311,19 +2470,21 @@ export default function SystemConfigView() {
                         type="text"
                         value={generalCode}
                         onChange={(e) => setGeneralCode(e.target.value)}
-                        placeholder="Ví dụ: HCNS, KHO, GD, TBP"
+                        placeholder={activeTab === 'department' ? 'Ví dụ: BP_QC, BP_KT, BP_SX, TO_RAP...' : 'Ví dụ: TP_QC, KCS_SON, TO_TRUONG, THU_KHO...'}
                         style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
                         required
                       />
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>TÊN DANH MỤC *</label>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>
+                        {activeTab === 'department' ? 'TÊN BỘ PHẬN *' : 'TÊN VỊ TRÍ / CHỨC VỤ *'}
+                      </label>
                       <input
                         type="text"
                         value={generalName}
                         onChange={(e) => setGeneralName(e.target.value)}
-                        placeholder={activeTab === 'department' ? 'Ví dụ: Phòng Kỹ Thuật' : 'Ví dụ: Quản Đốc'}
+                        placeholder={activeTab === 'department' ? 'Ví dụ: Bộ phận QC, Bộ phận Thiết kế, Tổ Lắp ráp...' : 'Ví dụ: Trưởng phòng QC, KCS Xưởng Sơn, Tổ trưởng Lắp ráp...'}
                         style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
                         required
                       />
@@ -2331,14 +2492,14 @@ export default function SystemConfigView() {
 
                     {activeTab === 'department' && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>PHÒNG BAN *</label>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>THUỘC PHÒNG BAN *</label>
                         <select
                           value={deptRoleId}
                           onChange={(e) => setDeptRoleId(e.target.value)}
                           style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', backgroundColor: '#FFFFFF' }}
                           required
                         >
-                          <option value="">-- Chọn Phòng Ban --</option>
+                          <option value="">-- Chọn Phòng Ban trực thuộc --</option>
                           {roleOptions.map(role => (
                             <option key={role.id} value={role.id}>{role.name}</option>
                           ))}
@@ -2348,11 +2509,11 @@ export default function SystemConfigView() {
 
                     {activeTab === 'position' && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>DIỄN GIẢI CHI TIẾT</label>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>MÔ TẢ NHIỆM VỤ & TRÁCH NHIỆM</label>
                         <textarea
                           value={generalDesc}
                           onChange={(e) => setGeneralDesc(e.target.value)}
-                          placeholder="Nhập mô tả cho danh mục..."
+                          placeholder="Mô tả nhiệm vụ, trách nhiệm công việc chính của vị trí..."
                           rows="3"
                           style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', resize: 'vertical' }}
                         />
@@ -2478,6 +2639,85 @@ export default function SystemConfigView() {
                         value={catDesc}
                         onChange={(e) => setCatDesc(e.target.value)}
                         placeholder="Nhập mô tả đặc tính hoặc quy cách của dòng hàng..."
+                        rows="3"
+                        style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', resize: 'vertical' }}
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* 4.1 DEFECT CATEGORY (PHÂN NHÓM LỖI QC) FIELDS */}
+                {activeTab === 'defect_category' && (
+                  <>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>TÊN PHÂN NHÓM LỖI QC *</label>
+                      <input
+                        type="text"
+                        value={defectCatName}
+                        onChange={(e) => setDefectCatName(e.target.value)}
+                        placeholder="Ví dụ: Ngoại quan (Visual), Sơn & Bề mặt (Paint), Kết cấu (Structure)..."
+                        style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                        required
+                      />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>MÃ ĐỊNH DANH (KEY) *</label>
+                        <input
+                          type="text"
+                          value={defectCatCode}
+                          onChange={(e) => setDefectCatCode(e.target.value.toLowerCase())}
+                          placeholder="Ví dụ: visual, paint, structure, material, other"
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                          required
+                        />
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>TIỀN TỐ MÃ LỖI G7 (PREFIX) *</label>
+                        <input
+                          type="text"
+                          value={defectCatPrefix}
+                          onChange={(e) => setDefectCatPrefix(e.target.value.toUpperCase())}
+                          placeholder="Ví dụ: APP, PAI, STR, MAT, OTH"
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>THỨ TỰ ƯU TIÊN</label>
+                        <input
+                          type="number"
+                          value={defectCatOrder}
+                          onChange={(e) => setDefectCatOrder(parseInt(e.target.value) || 0)}
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', justifyContent: 'center', paddingTop: '16px' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem' }}>
+                          <input
+                            type="checkbox"
+                            checked={defectCatIsActive}
+                            onChange={(e) => setDefectCatIsActive(e.target.checked)}
+                            style={{ width: '16px', height: '16px', accentColor: '#7B5233' }}
+                          />
+                          <span style={{ fontWeight: 700, color: defectCatIsActive ? '#15803D' : '#6B7280' }}>
+                            {defectCatIsActive ? 'Kích hoạt phân nhóm này' : 'Dừng hoạt động'}
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>MÔ TẢ / TIÊU CHUẨN GHI NHẬN</label>
+                      <textarea
+                        value={defectCatDesc}
+                        onChange={(e) => setDefectCatDesc(e.target.value)}
+                        placeholder="Mô tả phạm vi áp dụng hoặc tiêu chí phân loại lỗi..."
                         rows="3"
                         style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', resize: 'vertical' }}
                       />
@@ -2643,7 +2883,7 @@ export default function SystemConfigView() {
                           }}
                           style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', backgroundColor: '#FFFFFF' }}
                         >
-                          <option value="">-- Toàn công ty / Không gán --</option>
+                          <option value="">-- Tất cả phòng ban / Dùng chung --</option>
                           {roleOptions.map(r => (
                             <option key={r.id} value={r.id}>{r.name || r.description}</option>
                           ))}
@@ -2666,7 +2906,7 @@ export default function SystemConfigView() {
                           }}
                           style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', backgroundColor: '#FFFFFF' }}
                         >
-                          <option value="">-- Dùng chung trong phòng / Không gán --</option>
+                          <option value="">-- Tất cả bộ phận / Dùng chung --</option>
                           {deptOptions
                             .filter(d => !permRoleId || String(d.role_id) === String(permRoleId))
                             .map(d => (
@@ -2684,14 +2924,14 @@ export default function SystemConfigView() {
                         type="text"
                         value={permName}
                         onChange={(e) => setPermName(e.target.value)}
-                        placeholder="Ví dụ: Frontend Dev, KCS Xưởng Sơn, Trưởng phòng Kế toán..."
+                        placeholder="Ví dụ: KCS Xưởng Sơn, Trưởng phòng QC, Tổ trưởng Lắp ráp, Thủ kho..."
                         style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
                         required
                       />
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>MÔ TẢ NHIỆM VỤ & PHÂN QUYỀN</label>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>MÔ TẢ NHIỆM VỤ & TRÁCH NHIỆM</label>
                       <textarea
                         value={permDesc}
                         onChange={(e) => setPermDesc(e.target.value)}

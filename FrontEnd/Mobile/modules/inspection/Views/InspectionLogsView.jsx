@@ -113,7 +113,7 @@ const InspectionLogs = () => {
 
   return (
     <Layout>
-      <div style={{ backgroundColor: '#f8f4f0', minHeight: '100vh', paddingBottom: '30px', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ backgroundColor: '#f8f4f0', flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, paddingBottom: '30px', display: 'flex', flexDirection: 'column' }}>
         <PageHeader title="G7 - Smart Flow" subTitle="MB7 | Nhật ký kiểm tra" />
 
         <div style={{ padding: '16px' }}>

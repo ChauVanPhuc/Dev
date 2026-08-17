@@ -126,7 +126,7 @@ const Login = () => {
   }
 
   return (
-    <div className="login-container">
+    <div className="login-container" style={{ flex: 1, height: '100dvh', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
       <div className="login-image-side">
         <img
           src={background}

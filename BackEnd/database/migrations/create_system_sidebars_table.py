@@ -111,7 +111,7 @@ def upgrade():
                     {"title": "Hồ sơ chất lượng", "route_path": "/admin/quality-records", "icon": "Folder", "sort_order": 1, "permission_key": None},
                     {"title": "Danh sách lỗi", "route_path": "/admin/defects", "icon": "Slash", "sort_order": 2, "permission_key": None},
                     {"title": "Claim khách hàng", "route_path": "/admin/claims", "icon": "MessageCircle", "sort_order": 3, "permission_key": None},
-                    {"title": "Quản lý CAPA", "route_path": "/admin/feedback?type=quality", "icon": "CheckCircle", "sort_order": 4, "permission_key": None},
+                    {"title": "Quản lý CAPA", "route_path": "/admin/capa", "icon": "CheckCircle", "sort_order": 4, "permission_key": "capa"},
                     {"title": "Báo cáo kiểm tra", "route_path": "/admin/reports", "icon": "Clipboard", "sort_order": 5, "permission_key": None},
                     {"title": "Danh sách bàn giao", "route_path": "/admin/handovers", "icon": "List", "sort_order": 6, "permission_key": None},
                     {"title": "Điểm nóng cần chú ý", "route_path": "/admin/hotspots", "icon": "MapPin", "sort_order": 7, "permission_key": None},

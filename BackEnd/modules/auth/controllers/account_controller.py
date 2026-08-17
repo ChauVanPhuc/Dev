@@ -84,6 +84,7 @@ def get_accounts(db: Session, skip: int = 0, limit: int = 10, search: str = None
         role_ids = []
         role_names = []
         stage_names = []
+        permission_ids = []
         permission_names = []
         
         for dept in depts:
@@ -94,6 +95,8 @@ def get_accounts(db: Session, skip: int = 0, limit: int = 10, search: str = None
                 if val and val not in role_names:
                     role_names.append(val)
             if dept.permission_id:
+                if dept.permission_id not in permission_ids:
+                    permission_ids.append(dept.permission_id)
                 val = perms_cache.get(dept.permission_id)
                 if val and val not in permission_names:
                     permission_names.append(val)
@@ -115,11 +118,15 @@ def get_accounts(db: Session, skip: int = 0, limit: int = 10, search: str = None
             
         # Resolve permission (Vị trí)
         acc_perm_id = getattr(account, 'permission_id', None)
-        if acc_perm_id:
-            acc_dict["permission_id"] = acc_perm_id
-            acc_dict["permission_name"] = perms_cache.get(acc_perm_id) or (", ".join(permission_names) if permission_names else None)
-        else:
-            acc_dict["permission_name"] = ", ".join(permission_names) if permission_names else None
+        if acc_perm_id and acc_perm_id not in permission_ids:
+            permission_ids.append(acc_perm_id)
+            val = perms_cache.get(acc_perm_id)
+            if val and val not in permission_names:
+                permission_names.insert(0, val)
+
+        acc_dict["permission_id"] = acc_perm_id or (permission_ids[0] if permission_ids else None)
+        acc_dict["permission_ids"] = permission_ids
+        acc_dict["permission_name"] = ", ".join(permission_names) if permission_names else None
             
         # Resolve factory (Nhà máy)
         acc_dict["factory_id"] = getattr(account, 'factory_id', None)
@@ -164,6 +171,10 @@ def create_account(db: Session, account: AccountCreate):
     """
     hashed_password = get_password_hash(account.password)
     
+    primary_perm_id = account.permission_id
+    if not primary_perm_id and account.permission_ids:
+        primary_perm_id = account.permission_ids[0]
+
     # 1. Tạo bản ghi Account trong Database
     db_account = Account(
         username=account.username,
@@ -177,7 +188,7 @@ def create_account(db: Session, account: AccountCreate):
         permission_level=account.permission_level,
         is_mobile_allowed=getattr(account, 'is_mobile_allowed', True) if getattr(account, 'is_mobile_allowed', True) is not None else True,
         department_id=account.department_id,
-        permission_id=account.permission_id,
+        permission_id=primary_perm_id,
         factory_id=account.factory_id,
         factory_name=account.factory_name,
         created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -185,24 +196,19 @@ def create_account(db: Session, account: AccountCreate):
     db.add(db_account)
     db.flush() # Lưu tạm để lấy auto-increment ID cho bước tiếp theo
     
-    # 2. Tạo bản ghi Department để lưu trữ Role và Stage phụ trách
-    if account.stage_ids:
-        for s_id in account.stage_ids:
+    # 2. Tạo các bản ghi Department để lưu trữ Role, Permission(s) và Stage phụ trách
+    perm_list = account.permission_ids if account.permission_ids else ([account.permission_id] if account.permission_id else [None])
+    stage_list = account.stage_ids if account.stage_ids else ([account.stage_id] if account.stage_id else [None])
+
+    for p_id in perm_list:
+        for s_id in stage_list:
             db_dept = Department(
                 account_id=db_account.id,
                 role_id=account.role_id,
-                permission_id=account.permission_id,
+                permission_id=p_id,
                 stage_id=s_id
             )
             db.add(db_dept)
-    else:
-        db_dept = Department(
-            account_id=db_account.id,
-            role_id=account.role_id,
-            permission_id=account.permission_id,
-            stage_id=account.stage_id
-        )
-        db.add(db_dept)
     
     # Xác nhận Transaction
     db.commit()
@@ -246,11 +252,13 @@ def resolve_permissions_by_params(
     permission_id: Optional[int],
     permission_level: Optional[str],
     username: Optional[str],
-    db: Session
+    db: Session,
+    permission_ids: Optional[Union[list, str]] = None
 ) -> dict:
     """
-    Phân giải quyền mặc định dựa trên Role ID, Permission ID, và Cấp bậc (permission_level).
+    Phân giải quyền mặc định dựa trên Role ID, danh sách Permission ID (Vị Trí), và Cấp bậc (permission_level).
     Không áp dụng ghi đè cá nhân. Trả về dict dạng {screen_key: list_of_actions}.
+    Khi có nhiều Vị Trí, hệ thống sẽ hợp nhất (union) và lấy mức quyền cao nhất cho từng màn hình.
     """
     import json
     from modules.system.models.system_sidebar import SystemSidebar
@@ -264,8 +272,6 @@ def resolve_permissions_by_params(
     # Xây dựng danh sách ALL_SCREENS và mapping sang thông tin cha
     all_screens_dict = {}
     for item in sidebar_items:
-        if not item.parent_id:
-            continue
         # Xác định khóa phân quyền duy nhất cho từng màn hình
         key = item.route_path
         if not key and item.screen_id:
@@ -276,37 +282,35 @@ def resolve_permissions_by_params(
             key = item.permission_key or f"sb_{item.id}"
             
         # Tìm nhóm cha
-        parent = next((p for p in sidebar_items if p.id == item.parent_id), None)
-        parent_title = parent.title if parent else ""
+        parent_title = ""
+        if item.parent_id:
+            parent = next((p for p in sidebar_items if p.id == item.parent_id), None)
+            parent_title = parent.title if parent else ""
+        else:
+            parent_title = item.title or ""
         
         all_screens_dict[key] = parent_title
         
     ALL_SCREENS = list(all_screens_dict.keys())
-    
-    # 2. Quyền mặc định hệ thống ban đầu (Default deny)
-    resolved_perms = {screen: "none" for screen in ALL_SCREENS}
     
     # Root admin luôn có toàn bộ quyền cao nhất
     if username == "admin":
         resolved_actions = {screen: ["read", "create", "edit", "delete", "approve", "export_import"] for screen in ALL_SCREENS}
         return resolved_actions
     
+    # Chuẩn hóa danh sách permission_ids
+    p_id_list = []
+    if permission_ids:
+        if isinstance(permission_ids, (list, tuple, set)):
+            p_id_list = [int(p) for p in permission_ids if p is not None]
+        elif isinstance(permission_ids, str):
+            p_id_list = [int(x.strip()) for x in permission_ids.split(",") if x.strip().isdigit()]
+    if permission_id and permission_id not in p_id_list:
+        p_id_list.append(int(permission_id))
+
     role_name = None
     role_default_perms = {}
-    permission_name = None
-    permission_default_perms = {}
     
-    # Lấy tên và quyền mặc định của Chức vụ (Permission)
-    if permission_id:
-        perm = db.query(Permission).filter(Permission.id == permission_id).first()
-        if perm:
-            permission_name = perm.name
-            if perm.default_permissions:
-                try:
-                    permission_default_perms = json.loads(perm.default_permissions)
-                except Exception:
-                    permission_default_perms = {}
-                    
     # Lấy tên và quyền mặc định của Bộ phận (Role)
     if role_id:
         role = db.query(Role).filter(Role.id == role_id).first()
@@ -317,77 +321,109 @@ def resolve_permissions_by_params(
                     role_default_perms = json.loads(role.default_permissions)
                 except Exception:
                     role_default_perms = {}
+
+    # Lấy danh sách các Permission objects
+    perm_objs = []
+    if p_id_list:
+        perm_objs = db.query(Permission).filter(Permission.id.in_(p_id_list)).all()
+    elif permission_id:
+        p_single = db.query(Permission).filter(Permission.id == permission_id).first()
+        if p_single:
+            perm_objs = [p_single]
+
+    # Phân cấp thứ tự các quyền
+    levels_hierarchy = ["none", "read", "create", "edit", "delete", "approve", "export_import"]
     
-    # Kiểm tra nếu là Khối Công nhân trực tiếp (NV SX, NV QC)
-    if permission_name in ("NV SX", "NV QC"):
-        # Kế thừa trực tiếp từ Chức vụ (permissions.default_permissions)
-        for screen in ALL_SCREENS:
-            val = permission_default_perms.get(screen, "none")
-            if val == "write":
-                resolved_perms[screen] = "export_import"
-            else:
-                resolved_perms[screen] = val
+    base_map = {
+        "none": "none",
+        "read": "read",
+        "write": "export_import",
+        "export_import": "export_import",
+    }
+    
+    cap_map = {
+        "Không được phép": "none",
+        "Chỉ xem": "read",
+        "Thêm": "create",
+        "Sửa": "edit",
+        "Xóa": "delete",
+        "Duyệt": "approve",
+        "Xuất nhập file": "export_import"
+    }
+
+    # Tính toán allowed_screens cho khối Văn phòng / Quản lý theo Role
+    allowed_screens = []
+    if role_name in ("IT", "BGD"):
+        allowed_screens = ALL_SCREENS
     else:
-        # Khối Văn phòng / Quản lý
-        allowed_screens = []
+        # Lọc dựa trên nhóm menu cha trong Sidebar DB
+        sx_parent_groups = {"Quản lý sản xuất", "KPI", "Quản lý KPI", "Thông tin sản xuất", "Báo cáo công việc", "Hồ sơ ISO", "Quy trình nghiệp vụ", "Kế hoạch & Sản xuất"}
+        qlcl_parent_groups = {"Quản lý chất lượng", "KPI", "Quản lý KPI", "Phiếu kiểm tra", "Báo cáo CAPA", "Tạo CTQ, SOS", "Cảnh báo lỗi", "Góp ý", "QC & Chất lượng"}
+        
+        target_groups = sx_parent_groups if role_name == "Sx" else (qlcl_parent_groups if role_name == "QLCL" else set())
+        
+        for screen, parent_title in all_screens_dict.items():
+            if parent_title in target_groups:
+                allowed_screens.append(screen)
+        
+    level = permission_level
+    if not level:
         if role_name in ("IT", "BGD"):
-            allowed_screens = ALL_SCREENS
+            level = "Xuất nhập file"
         else:
-            # Lọc dựa trên nhóm menu cha trong Sidebar DB
-            sx_parent_groups = {"Quản lý sản xuất", "KPI", "Quản lý KPI", "Thông tin sản xuất", "Báo cáo công việc", "Hồ sơ ISO", "Quy trình nghiệp vụ", "Kế hoạch & Sản xuất"}
-            qlcl_parent_groups = {"Quản lý chất lượng", "KPI", "Quản lý KPI", "Phiếu kiểm tra", "Báo cáo CAPA", "Tạo CTQ, SOS", "Cảnh báo lỗi", "Góp ý", "QC & Chất lượng"}
-            
-            target_groups = sx_parent_groups if role_name == "Sx" else (qlcl_parent_groups if role_name == "QLCL" else set())
-            
-            for screen, parent_title in all_screens_dict.items():
-                if parent_title in target_groups:
-                    allowed_screens.append(screen)
-            
-        level = permission_level
-        if not level:
-            if role_name in ("IT", "BGD"):
-                level = "Xuất nhập file"
-            else:
-                level = "Không được phép"
-        
-        # Phân cấp thứ tự các quyền
-        levels_hierarchy = ["none", "read", "create", "edit", "delete", "approve", "export_import"]
-        
-        base_map = {
-            "none": "none",
-            "read": "read",
-            "write": "export_import",
-            "export_import": "export_import",
-        }
-        
-        cap_map = {
-            "Không được phép": "none",
-            "Chỉ xem": "read",
-            "Thêm": "create",
-            "Sửa": "edit",
-            "Xóa": "delete",
-            "Duyệt": "approve",
-            "Xuất nhập file": "export_import"
-        }
-        
-        norm_cap = cap_map.get(level, "none")
-        try:
-            idx_cap = levels_hierarchy.index(norm_cap)
-        except ValueError:
-            idx_cap = 0
-        
-        # Áp dụng quyền mặc định của chức vụ và lọc giới hạn qua permission_level
+            level = "Không được phép"
+    
+    norm_cap = cap_map.get(level, "none")
+    try:
+        idx_cap = levels_hierarchy.index(norm_cap)
+    except ValueError:
+        idx_cap = 0
+
+    # Khởi tạo ma trận quyền cao nhất cho từng màn hình
+    screen_max_indices = {screen: 0 for screen in ALL_SCREENS}
+
+    if not perm_objs:
+        # Nếu chưa chọn Vị trí nào, áp dụng mặc định theo Cấp bậc & Bộ phận
         for screen in allowed_screens:
-            base_val = permission_default_perms.get(screen, "write")
-            norm_base = base_map.get(base_val, "none")
-            try:
-                idx_base = levels_hierarchy.index(norm_base)
-            except ValueError:
-                idx_base = 0
+            screen_max_indices[screen] = idx_cap
+    else:
+        # Lặp qua từng Vị trí được gán và hợp nhất quyền (Union / Max)
+        for perm in perm_objs:
+            perm_default_perms = {}
+            if perm.default_permissions:
+                try:
+                    perm_default_perms = json.loads(perm.default_permissions)
+                except Exception:
+                    perm_default_perms = {}
             
-            # Quyền thực tế sau khi áp dụng cấp bậc giới hạn (min)
-            resolved_idx = min(idx_base, idx_cap)
-            resolved_perms[screen] = levels_hierarchy[resolved_idx]
+            is_worker = perm.name in ("NV SX", "NV QC")
+            
+            if is_worker:
+                # Kế thừa trực tiếp từ Chức vụ công nhân
+                for screen in ALL_SCREENS:
+                    val = perm_default_perms.get(screen, "none")
+                    norm_val = "export_import" if val == "write" else val
+                    try:
+                        p_idx = levels_hierarchy.index(norm_val)
+                    except ValueError:
+                        p_idx = 0
+                    if p_idx > screen_max_indices[screen]:
+                        screen_max_indices[screen] = p_idx
+            else:
+                # Khối văn phòng / quản lý
+                for screen in allowed_screens:
+                    base_val = perm_default_perms.get(screen, "write")
+                    norm_base = base_map.get(base_val, "none")
+                    try:
+                        idx_base = levels_hierarchy.index(norm_base)
+                    except ValueError:
+                        idx_base = 0
+                    
+                    resolved_idx = min(idx_base, idx_cap)
+                    if resolved_idx > screen_max_indices[screen]:
+                        screen_max_indices[screen] = resolved_idx
+
+    resolved_perms = {screen: levels_hierarchy[screen_max_indices[screen]] for screen in ALL_SCREENS}
 
     legacy_rank_map = {
         "none": [],
@@ -410,6 +446,7 @@ def resolve_permissions_by_params(
 def resolve_user_permissions(user, db: Session) -> dict:
     """
     Phân giải quyền thực tế của User cho từng màn hình từ Sidebar DB:
+    - Hợp nhất tất cả các Vị Trí (Chức vụ) mà user nắm giữ từ bảng Department junction.
     - IT/BGD: Toàn bộ màn hình hệ thống.
     - Sx: Chỉ các màn hình thuộc Module sản xuất và KPI. Các màn hình khác là 'none'.
     - QLCL: Chỉ các màn hình thuộc Module chất lượng và KPI. Các màn hình khác là 'none'.
@@ -423,17 +460,27 @@ def resolve_user_permissions(user, db: Session) -> dict:
     """
     import json
     
-    # Lấy thông tin Department (Bộ phận & Chức vụ) của User
-    dept = db.query(Department).filter(Department.account_id == user.id).first()
-    role_id = dept.role_id if dept else None
-    permission_id = dept.permission_id if dept else None
+    # Lấy thông tin Department (Bộ phận & các Chức vụ) của User
+    depts = db.query(Department).filter(Department.account_id == user.id).all()
+    role_id = getattr(user, 'role_id', None)
+    permission_ids = []
+    
+    for dept in depts:
+        if dept.role_id and not role_id:
+            role_id = dept.role_id
+        if dept.permission_id and dept.permission_id not in permission_ids:
+            permission_ids.append(dept.permission_id)
+            
+    if getattr(user, 'permission_id', None) and user.permission_id not in permission_ids:
+        permission_ids.append(user.permission_id)
     
     resolved_actions = resolve_permissions_by_params(
         role_id=role_id,
-        permission_id=permission_id,
+        permission_id=permission_ids[0] if permission_ids else None,
         permission_level=user.permission_level,
         username=user.username,
-        db=db
+        db=db,
+        permission_ids=permission_ids
     )
     
     # 4. Ghi đè cá nhân (ACL Overrides) - có độ ưu tiên cao nhất
@@ -451,30 +498,29 @@ def resolve_user_permissions(user, db: Session) -> dict:
                 "write": ["read", "create", "edit", "delete", "approve", "export_import"],
             }
             for screen, val in overrides.items():
-                if screen in resolved_actions:
-                    # Phân tích giá trị ghi đè
-                    actions = []
-                    if isinstance(val, list):
-                        actions = val
-                    elif isinstance(val, str):
-                        if "," in val:
-                            actions = [a.strip() for a in val.split(",") if a.strip()]
-                        else:
-                            actions = legacy_rank_map.get(val, [])
-                    
-                    # Chuẩn hóa 'write' thành 'export_import' và lọc hành động hợp lệ
-                    valid_actions = ["read", "create", "edit", "delete", "approve", "export_import"]
-                    normalized_actions = []
-                    for act in actions:
-                        norm = "export_import" if act == "write" else act
-                        if norm in valid_actions:
-                            normalized_actions.append(norm)
-                            
-                    # Nếu ghi đè trống hoặc là ['none'], coi như chặn hoàn toàn
-                    if not normalized_actions or "none" in actions:
-                        resolved_actions[screen] = []
+                # Phân tích giá trị ghi đè
+                actions = []
+                if isinstance(val, list):
+                    actions = val
+                elif isinstance(val, str):
+                    if "," in val:
+                        actions = [a.strip() for a in val.split(",") if a.strip()]
                     else:
-                        resolved_actions[screen] = normalized_actions
+                        actions = legacy_rank_map.get(val, [])
+                
+                # Chuẩn hóa 'write' thành 'export_import' và lọc hành động hợp lệ
+                valid_actions = ["read", "create", "edit", "delete", "approve", "export_import"]
+                normalized_actions = []
+                for act in actions:
+                    norm = "export_import" if act == "write" else act
+                    if norm in valid_actions:
+                        normalized_actions.append(norm)
+                        
+                # Nếu ghi đè trống hoặc là ['none'], coi như chặn hoàn toàn
+                if not normalized_actions or "none" in actions:
+                    resolved_actions[screen] = []
+                else:
+                    resolved_actions[screen] = normalized_actions
         except Exception:
             pass
             

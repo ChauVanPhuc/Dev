@@ -422,10 +422,10 @@ def serve_claim_imports(sub_path: str):
     
     # Security check to prevent directory traversal
     if not abs_file_path.startswith(abs_imports_dir):
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=403, detail="Không có quyền truy cập")
         
     if not os.path.exists(abs_file_path) or not os.path.isfile(abs_file_path):
-        raise HTTPException(status_code=404, detail="File not found")
+        raise HTTPException(status_code=404, detail="Không tìm thấy tập tin")
         
     return FileResponse(abs_file_path)
 

@@ -90,7 +90,7 @@ const ProductionTransferHistoryView = () => {
     <Layout>
       <PageHeader title="Thông tin sản xuất" subTitle="CL05: Lịch sử luân chuyển" />
 
-      <div style={{ backgroundColor: '#faf6f1', paddingBottom: '56px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, backgroundColor: '#faf6f1', paddingBottom: '56px' }}>
         
         {/* Sticky Filter Container matching Mockup Image 1 (below PageHeader) */}
         <div style={{ position: 'sticky', top: `${headerHeight}px`, zIndex: 8, backgroundColor: '#faf6f1', borderBottom: '1px solid #e2e8f0' }}>

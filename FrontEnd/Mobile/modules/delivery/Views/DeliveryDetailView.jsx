@@ -136,12 +136,7 @@ const DeliveryDetailView = () => {
       <PageHeader title={`BG-${String(detail.id).padStart(2, '0')}`} subTitle="MB17 | Chi tiết bàn giao" showBack={true} />
 
       <div style={{
-        padding: '0 16px 100px',
-        maxWidth: '500px',
-        margin: '0 auto',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px'
+        flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, width: '100%', padding: '0 16px 100px', maxWidth: '500px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '12px'
       }}>
         {/* Status Banner */}
         <div style={{

@@ -242,39 +242,7 @@ const ProjectProgressView = () => {
   };
 
   return (
-    <>
-      <style dangerouslySetInnerHTML={{
-        __html: `
-        /* Force page wrapper to be full viewport height and disable page scroll */
-        .admin-layout:has(.project-progress-container) {
-          height: 100vh !important;
-          overflow: hidden !important;
-        }
-
-        .admin-main:has(.project-progress-container) {
-          height: 100vh !important;
-          overflow: hidden !important;
-          max-width: none !important;
-        }
-
-        .dashboard-content:has(.project-progress-container) {
-          height: calc(100vh - 60px) !important;
-          overflow: hidden !important;
-          display: flex !important;
-          flex-direction: column !important;
-          padding: 8px 12px !important;
-          box-sizing: border-box !important;
-        }
-
-        .admin-main:has(.project-progress-container) .admin-header {
-          padding: 6px 12px !important;
-          max-width: 100% !important;
-          width: 100% !important;
-          box-sizing: border-box !important;
-        }
-      `}} />
-
-      <div className="mgmt-container project-progress-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '8px', maxWidth: '100%', margin: '0', width: '100%', height: '100%', minHeight: 0, overflow: 'hidden' }}>
+    <div className="mgmt-container project-progress-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '8px', maxWidth: '100%', margin: '0', width: '100%', minHeight: '100%' }}>
 
         {/* KPI Dashboard Overview Card - Span 100% width at top */}
         <div style={{
@@ -654,7 +622,6 @@ const ProjectProgressView = () => {
           )}
         </div>
       </div>
-    </>
   );
 };
 

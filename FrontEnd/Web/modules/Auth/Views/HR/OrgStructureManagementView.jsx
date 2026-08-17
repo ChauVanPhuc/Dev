@@ -1097,7 +1097,7 @@ const OrgStructureManagementView = () => {
                   <input 
                     type="text" 
                     name="name" 
-                    placeholder="VD: Giám đốc chất lượng"
+                    placeholder="Ví dụ: Giám đốc chất lượng"
                     value={formData.name} 
                     onChange={handleInputChange} 
                   />

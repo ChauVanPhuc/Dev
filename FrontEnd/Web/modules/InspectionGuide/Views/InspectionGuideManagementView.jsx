@@ -3,7 +3,8 @@ import { useNavigate, useLocation, useOutletContext } from 'react-router-dom';
 import {
   BookOpen, Plus, Search, Filter, LayoutGrid, List, Eye, Edit3, Trash2,
   CheckCircle2, XCircle, Layers, CheckSquare, Image as ImageIcon,
-  Tag, RefreshCw, Sparkles, ShieldCheck, FileText, AlertTriangle, MoreVertical
+  Tag, RefreshCw, Sparkles, ShieldCheck, FileText, AlertTriangle, MoreVertical,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
@@ -181,6 +182,10 @@ const InspectionGuideManagementView = ({ docType }) => {
     }
   };
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
   // Filtered list
   const filteredGuides = useMemo(() => {
     return guides.filter(g => {
@@ -198,6 +203,24 @@ const InspectionGuideManagementView = ({ docType }) => {
       return matchesSearch && matchesStatus && matchesType;
     });
   }, [guides, search, statusFilter, typeFilter]);
+
+  // Reset page on filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter, typeFilter, activeDocType]);
+
+  const totalPages = Math.ceil(filteredGuides.length / pageSize) || 1;
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(Math.max(1, totalPages));
+    }
+  }, [totalPages, currentPage]);
+
+  const paginatedGuides = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredGuides.slice(start, start + pageSize);
+  }, [filteredGuides, currentPage, pageSize]);
 
   // Statistics calculation for activeDocType
   const stats = useMemo(() => {
@@ -560,6 +583,30 @@ const InspectionGuideManagementView = ({ docType }) => {
             </select>
           </div>
 
+          {/* Page Size filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#64748B' }}>Hiển thị:</span>
+            <select
+              value={pageSize}
+              onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid #D1D5DB',
+                backgroundColor: '#FFF',
+                fontSize: 13,
+                fontWeight: 600,
+                color: '#374151',
+                cursor: 'pointer'
+              }}
+            >
+              <option value={10}>10 dòng</option>
+              <option value={15}>15 dòng</option>
+              <option value={25}>25 dòng</option>
+              <option value={50}>50 dòng</option>
+            </select>
+          </div>
+
           {/* View Mode Toggle Button */}
           <div style={{
             display: 'flex',
@@ -691,7 +738,7 @@ const InspectionGuideManagementView = ({ docType }) => {
               </tr>
             </thead>
             <tbody>
-              {filteredGuides.map((g, idx) => {
+              {paginatedGuides.map((g, idx) => {
                 const stepsCount = g.steps?.length ?? g.steps_count ?? 0;
                 const subStepsCount = (g.steps || []).reduce((acc, s) => acc + (s.sub_steps?.length || 0), 0);
                 const imagesCount = (g.steps || []).reduce((acc, s) => acc + (s.images?.length || 0), 0);
@@ -870,77 +917,58 @@ const InspectionGuideManagementView = ({ docType }) => {
                       </button>
                     </td>
 
-                    {/* Thao tác trực tiếp */}
-                    <td style={{ padding: '12px 16px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                    {/* Thao tác (...) */}
+                    <td style={{ padding: '12px 16px', textAlign: 'center', position: 'relative', zIndex: actionMenuId === g.id ? 40 : 1 }} onClick={e => e.stopPropagation()}>
+                      <div style={{ display: 'flex', justifyContent: 'center', position: 'relative' }}>
                         <button
                           type="button"
-                          onClick={(e) => handleOpenPreview(g, e)}
-                          style={{
-                            width: 32,
-                            height: 32,
-                            borderRadius: 8,
-                            border: `1px solid ${config.border}`,
-                            backgroundColor: '#FFF',
-                            color: config.color,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: 'pointer',
-                            transition: 'all 0.15s'
+                          className="action-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActionMenuId(actionMenuId === g.id ? null : g.id);
                           }}
-                          title={`Xem trước ${config.shortLabel}`}
-                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = config.bg; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FFF'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                          title="Thao tác"
                         >
-                          <Eye size={15} />
+                          <MoreVertical size={16} style={{ pointerEvents: 'none' }} />
                         </button>
 
-                        <button
-                          type="button"
-                          onClick={() => navigate(`${config.editBasePath}/${g.id}`)}
-                          style={{
-                            width: 32,
-                            height: 32,
-                            borderRadius: 8,
-                            border: '1px solid #CBD5E1',
-                            backgroundColor: '#FFF',
-                            color: '#334155',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: 'pointer',
-                            transition: 'all 0.15s'
-                          }}
-                          title={`Chỉnh sửa ${config.shortLabel}`}
-                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#F1F5F9'; e.currentTarget.style.color = config.color; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FFF'; e.currentTarget.style.color = '#334155'; e.currentTarget.style.transform = 'translateY(0)'; }}
-                        >
-                          <Edit3 size={15} />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setDeleteTarget(g)}
-                          style={{
-                            width: 32,
-                            height: 32,
-                            borderRadius: 8,
-                            border: '1px solid #FEE2E2',
-                            backgroundColor: '#FFF',
-                            color: '#DC2626',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: 'pointer',
-                            transition: 'all 0.15s'
-                          }}
-                          title={`Xóa tài liệu ${config.shortLabel}`}
-                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#FEE2E2'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FFF'; e.currentTarget.style.transform = 'translateY(0)'; }}
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                        {actionMenuId === g.id && (
+                          <div className="action-menu" style={{ right: 0, top: '100%' }}>
+                            <button
+                              type="button"
+                              className="action-menu-item"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActionMenuId(null);
+                                handleOpenPreview(g, e);
+                              }}
+                            >
+                              Xem chi tiết
+                            </button>
+                            <button
+                              type="button"
+                              className="action-menu-item"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActionMenuId(null);
+                                navigate(`${config.editBasePath}/${g.id}`);
+                              }}
+                            >
+                              Chỉnh sửa
+                            </button>
+                            <button
+                              type="button"
+                              className="action-menu-item danger"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActionMenuId(null);
+                                setDeleteTarget(g);
+                              }}
+                            >
+                              Xóa tài liệu
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -961,7 +989,7 @@ const InspectionGuideManagementView = ({ docType }) => {
           padding: '4px 2px 20px 2px',
           alignContent: 'start'
         }}>
-          {filteredGuides.map(g => {
+          {paginatedGuides.map(g => {
             const stepsCount = g.steps?.length ?? g.steps_count ?? 0;
             const subStepsCount = (g.steps || []).reduce((acc, s) => acc + (s.sub_steps?.length || 0), 0);
             const imagesCount = (g.steps || []).reduce((acc, s) => acc + (s.images?.length || 0), 0);
@@ -1171,6 +1199,93 @@ const InspectionGuideManagementView = ({ docType }) => {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Phân trang - Desktop */}
+      {filteredGuides.length > 0 && (
+        <div className="admin-pagination-desktop desktop-only" style={{ borderRadius: viewMode === 'table' ? '0 0 12px 12px' : '12px', marginTop: viewMode === 'table' ? 0 : 12 }}>
+          <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
+            Hiển thị <b>{(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, filteredGuides.length)}</b> trên <b>{filteredGuides.length}</b> kết quả
+          </div>
+
+          {totalPages > 1 && (
+            <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+              <button
+                type="button"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                className="page-btn"
+                title="Trang trước"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              {(() => {
+                const pages = [];
+                const delta = 2;
+                for (let i = 1; i <= totalPages; i++) {
+                  if (i === 1 || i === totalPages || (i >= currentPage - delta && i <= currentPage + delta)) {
+                    pages.push(i);
+                  } else if (pages[pages.length - 1] !== '...') {
+                    pages.push('...');
+                  }
+                }
+                return pages.map((p, idx) => {
+                  if (p === '...') {
+                    return (
+                      <span key={`ell-${idx}`} style={{ padding: '0 4px', color: '#8D6E63', fontWeight: '700' }}>
+                        ...
+                      </span>
+                    );
+                  }
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      className={`page-btn ${currentPage === p ? 'active' : ''}`}
+                      onClick={() => setCurrentPage(p)}
+                    >
+                      {p}
+                    </button>
+                  );
+                });
+              })()}
+              <button
+                type="button"
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                className="page-btn"
+                title="Trang sau"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Phân trang - Mobile Sticky */}
+      {totalPages > 1 && (
+        <div className="pagination-mobile-sticky mobile-only">
+          <button
+            type="button"
+            className="page-btn"
+            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1}
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <span style={{ fontWeight: '700', fontSize: '0.9rem', color: '#7B5233' }}>
+            Trang {currentPage} / {totalPages || 1}
+          </span>
+          <button
+            type="button"
+            className="page-btn"
+            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+            disabled={currentPage >= totalPages || totalPages <= 1}
+          >
+            <ChevronRight size={16} />
+          </button>
         </div>
       )}
 

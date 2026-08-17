@@ -94,7 +94,7 @@ def create_department(
 def update_department(id: int, dept_data: DepartmentItemCreate, db: Session = Depends(get_db)):
     dept = db.query(Department).filter(Department.id == id).first()
     if not dept:
-        raise HTTPException(status_code=404, detail="Department not found")
+        raise HTTPException(status_code=404, detail="Không tìm thấy bộ phận")
 
     dept.name = dept_data.name
     dept.code = dept_data.code
@@ -115,8 +115,8 @@ def update_department(id: int, dept_data: DepartmentItemCreate, db: Session = De
 def delete_department(id: int, db: Session = Depends(get_db)):
     dept = db.query(Department).filter(Department.id == id).first()
     if not dept:
-        raise HTTPException(status_code=404, detail="Department not found")
+        raise HTTPException(status_code=404, detail="Không tìm thấy bộ phận")
 
     db.delete(dept)
     db.commit()
-    return {"message": "Department deleted successfully"}
+    return {"message": "Xóa bộ phận thành công"}

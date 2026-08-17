@@ -184,6 +184,7 @@ const PlanDetailsModal = ({ isOpen, onClose, planId }) => {
 
           maxWidth: '468px',
 
+          maxHeight: 'calc(100dvh - 32px)',
           height: '80vh',
 
           background: '#f8fafc',

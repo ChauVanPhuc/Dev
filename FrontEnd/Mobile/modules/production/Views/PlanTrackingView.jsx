@@ -556,6 +556,7 @@ const PlanTracking = ({ defaultTab = 'progress' }) => {
 
   return (
     <Layout>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0 }}>
       <style>{`@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }`}</style>
 
       {toast && <Toast key={toast.key} message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
@@ -1139,6 +1140,7 @@ const PlanTracking = ({ defaultTab = 'progress' }) => {
       {/* SELECTION MODALS */}
       <SelectionModal isOpen={filterModal} onClose={() => setFilterModal(false)} title="Lọc trạng thái" options={[{ label: 'Tất cả', value: 'ALL' }, { label: 'Chờ làm (0%)', value: 'PENDING' }, { label: 'Đang làm (1-99%)', value: 'DOING' }, { label: 'Hoàn thành (100%)', value: 'DONE' }]} value={statusFilter} onChange={handleStatusChange} />
       <SelectionModal isOpen={sortModal} onClose={() => setSortModal(false)} title="Sắp xếp theo" options={[{ label: 'Tên đơn (A-Z)', value: 'NAME_ASC' }, { label: 'Tên đơn (Z-A)', value: 'NAME_DESC' }, { label: 'Tiến độ giảm dần', value: 'PROGRESS_DESC' }, { label: 'Tiến độ tăng dần', value: 'PROGRESS_ASC' }]} value={sortOrder} onChange={handleSortChange} />
+    </div>
     </Layout>
   )
 }

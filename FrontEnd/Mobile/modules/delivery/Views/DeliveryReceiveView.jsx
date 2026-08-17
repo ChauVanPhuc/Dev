@@ -625,7 +625,7 @@ const DeliveryReceive = () => {
 
   return (
     <Layout>
-      <div style={{ width: '100%', maxWidth: '100%', overflow: 'hidden', boxSizing: 'border-box' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '100%', overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, boxSizing: 'border-box' }}>
         <PageHeader title="G7 - Smart Flow" subTitle="MB2.2 | Thông tin kiểm tra" />
         <div id="receive-tabs" style={{ backgroundColor: 'var(--bg-cream)', padding: '5px 12px 10px 12px', width: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
           <Tabs

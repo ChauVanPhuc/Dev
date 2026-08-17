@@ -91,16 +91,40 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
       return (location.pathname + location.search) === item.route_path;
     }
 
-    // 1. Exact match
+    // 1. Exact match with pathname (when item has no query)
     if (location.pathname === item.route_path) {
+      // If current URL has a query string, verify whether another item matches the query exactly
+      if (location.search) {
+        let hasExactMatchWithQuery = false;
+        for (const group of menuList) {
+          const children = getGroupChildren(group);
+          for (const child of children) {
+            if (child.route_path === (location.pathname + location.search)) {
+              hasExactMatchWithQuery = true;
+              break;
+            }
+            if (child.children) {
+              for (const sub of child.children) {
+                if (sub.route_path === (location.pathname + location.search)) {
+                  hasExactMatchWithQuery = true;
+                  break;
+                }
+              }
+            }
+          }
+          if (hasExactMatchWithQuery) break;
+        }
+        if (hasExactMatchWithQuery) return false;
+      }
       return true;
     }
 
-    // 2. Prefix match
-    if (item.route_path !== '/admin/dashboard' &&
+    // 2. Prefix match for nested child views (e.g. /admin/capa/create matches /admin/capa)
+    if (
+      item.route_path !== '/admin/dashboard' &&
       item.route_path !== '/admin/manufacture-dashboard' &&
-      (location.pathname.startsWith(item.route_path + '/') || location.pathname.startsWith(item.route_path + '?'))) {
-
+      location.pathname.startsWith(item.route_path + '/')
+    ) {
       // Check if there is another item in the sidebar that matches the pathname exactly
       let hasExactMatchSibling = false;
       for (const group of menuList) {
@@ -153,58 +177,61 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     }
     const children = getGroupChildren(group);
     return children.some(child => {
-      if (checkIsActive(child)) return true;
       if (child.children && child.children.length > 0) {
         return child.children.some(sub => checkIsActive(sub));
       }
-      return false;
+      return checkIsActive(child);
     });
   };
 
   React.useEffect(() => {
     if (menuList.length === 0) return;
 
-    let activeGroupId = null;
+    let targetGroupId = null;
     const newSubGroups = {};
 
-    // 1. Kiểm tra xem nhóm đang mở ĐÃ chứa trang con active này chưa
-    for (const groupIdStr in expandedGroups) {
-      if (expandedGroups[groupIdStr]) {
-        const groupId = parseInt(groupIdStr);
-        const group = menuList.find(g => g.id === groupId);
-        if (group && hasActiveChild(group)) {
-          activeGroupId = groupId;
-          break;
+    // 1. Kiểm tra xem nhóm ĐANG MỞ có chứa trang active này không
+    setExpandedGroups(prev => {
+      for (const groupIdStr in prev) {
+        if (prev[groupIdStr]) {
+          const groupId = parseInt(groupIdStr);
+          const group = menuList.find(g => g.id === groupId);
+          if (group && hasActiveChild(group)) {
+            targetGroupId = groupId;
+            break;
+          }
         }
       }
-    }
 
-    // 2. Nếu chưa nhóm nào mở chứa route active này, tìm nhóm ĐẦU TIÊN chứa nó
-    if (activeGroupId === null) {
-      for (const group of menuList) {
-        if (hasActiveChild(group)) {
-          activeGroupId = group.id;
-          break;
+      // 2. Nếu nhóm đang mở không chứa route active, tìm nhóm đầu tiên chứa route active
+      if (targetGroupId === null) {
+        for (const group of menuList) {
+          if (hasActiveChild(group)) {
+            targetGroupId = group.id;
+            break;
+          }
         }
       }
-    }
 
-    // 3. Auto expand sub-group if sub-child is active
+      // 3. Nếu tìm thấy nhóm active, chỉ mở nhóm đó
+      if (targetGroupId !== null) {
+        return { [targetGroupId]: true };
+      }
+      return prev;
+    });
+
+    // 4. Auto expand sub-group if any sub-child is active
     for (const group of menuList) {
       const children = getGroupChildren(group);
       for (const child of children) {
         if (child.children && child.children.length > 0) {
-          if (child.children.some(sub => checkIsActive(sub)) || checkIsActive(child)) {
+          if (child.children.some(sub => checkIsActive(sub))) {
             newSubGroups[child.id] = true;
           }
         }
       }
     }
 
-    // 4. Nếu tìm thấy nhóm phù hợp -> CHỈ MỞ nhóm đó (Accordion style)
-    if (activeGroupId !== null) {
-      setExpandedGroups({ [activeGroupId]: true });
-    }
     if (Object.keys(newSubGroups).length > 0) {
       setExpandedSubGroups(prev => ({ ...prev, ...newSubGroups }));
     }
@@ -239,7 +266,7 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
             color: isActive ? '#5D3B32' : '#4B5563',
             backgroundColor: isActive ? '#FAF6F0' : 'transparent',
             fontWeight: isActive ? '800' : '600',
-            transition: 'all 0.3s ease',
+            transition: 'background-color 0.15s ease, color 0.15s ease',
             borderRadius: '12px',
             outline: 'none',
             marginBottom: '4px'
@@ -389,7 +416,7 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
                         borderRadius: '12px',
                         cursor: 'pointer',
                         textAlign: 'left',
-                        transition: 'all 0.3s ease',
+                        transition: 'background-color 0.15s ease, color 0.15s ease',
                         outline: 'none',
                         marginBottom: '4px'
                       }}
@@ -417,7 +444,7 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
                         {item.children.map(child => {
                           if (child.children && child.children.length > 0) {
                             const isSubExpanded = !!expandedSubGroups[child.id];
-                            const isAnySubActive = child.children.some(sub => checkIsActive(sub)) || checkIsActive(child);
+                            const isAnySubActive = child.children.some(sub => checkIsActive(sub));
 
                             return (
                               <li key={child.id} className="nav-item" style={{ marginBottom: '2px' }}>
@@ -433,7 +460,7 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
                                     backgroundColor: isAnySubActive ? '#FAF6F0' : 'transparent',
                                     fontWeight: isAnySubActive ? '800' : '600',
                                     fontSize: '0.85rem',
-                                    transition: 'all 0.2s ease',
+                                    transition: 'background-color 0.15s ease, color 0.15s ease',
                                     borderRadius: '8px',
                                     cursor: 'pointer',
                                     userSelect: 'none'
@@ -477,7 +504,7 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
                                               backgroundColor: isSubActive ? '#F5EFE9' : 'transparent',
                                               fontWeight: isSubActive ? '800' : '500',
                                               fontSize: '0.82rem',
-                                              transition: 'all 0.2s ease',
+                                              transition: 'background-color 0.15s ease, color 0.15s ease',
                                               borderRadius: '6px',
                                               borderLeft: isSubActive ? '3px solid #7B5233' : '3px solid transparent'
                                             }}
@@ -515,7 +542,7 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
                                   backgroundColor: isChildActive ? '#FAF6F0' : 'transparent',
                                   fontWeight: isChildActive ? '800' : '500',
                                   fontSize: '0.85rem',
-                                  transition: 'all 0.2s ease',
+                                  transition: 'background-color 0.15s ease, color 0.15s ease',
                                   borderRadius: '8px',
                                   outline: 'none'
                                 }}

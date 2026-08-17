@@ -14,7 +14,8 @@ class AccountBase(BaseModel):
     is_mobile_allowed: bool = True          # Quyền truy cập ứng dụng Mobile
     role_id: Union[int, None] = None        # ID Phòng Ban (Role)
     department_id: Union[int, None] = None  # ID Bộ Phận (Department)
-    permission_id: Union[int, None] = None  # ID Vị Trí (Permission)
+    permission_id: Union[int, None] = None  # ID Vị Trí (Permission - Legacy)
+    permission_ids: Union[List[int], None] = None # Danh sách ID các Vị Trí
     factory_id: Union[int, None] = None     # ID Nhà Máy (Factory)
     factory_name: Union[str, None] = None   # Tên Nhà Máy
 
@@ -32,6 +33,7 @@ class AccountCreate(AccountBase):
     role_id: Union[int, None] = None        # ID Phòng Ban (Role)
     department_id: Union[int, None] = None  # ID Bộ Phận (Department)
     permission_id: Union[int, None] = None  # ID Vị Trí (Permission)
+    permission_ids: Union[List[int], None] = None # Danh sách ID các Vị Trí
     factory_id: Union[int, None] = None     # ID Nhà Máy (Factory)
     factory_name: Union[str, None] = None   # Tên Nhà Máy
     stage_id: Union[int, None] = None       # ID công đoạn (Stage) phụ trách
@@ -56,6 +58,7 @@ class AccountUpdate(BaseModel):
     role_id: Union[int, None] = None
     department_id: Union[int, None] = None
     permission_id: Union[int, None] = None
+    permission_ids: Union[List[int], None] = None
     factory_id: Union[int, None] = None
     factory_name: Union[str, None] = None
     stage_id: Union[int, None] = None
@@ -91,6 +94,7 @@ class AccountInfo(AccountBase):
     department_id: Union[int, None] = None
     department_name: Union[str, None] = None # Tên Bộ Phận (Department)
     permission_id: Union[int, None] = None
+    permission_ids: Union[List[int], None] = None
     permission_name: Union[str, None] = None # Tên Vị Trí (Chức vụ)
     factory_id: Union[int, None] = None
     factory_name: Union[str, None] = None # Tên Nhà Máy

@@ -22,7 +22,7 @@ const FeedbackView = () => {
 
   return (
     <Layout>
-      <div style={{ backgroundColor: 'var(--bg-cream)', minHeight: '100vh', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '100px' }}>
+      <div style={{ backgroundColor: 'var(--bg-cream)', flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '100px' }}>
         <PageHeader title="G7 - Smart Flow" subTitle="MB19 | Góp ý cải tiến" />
 
         <form onSubmit={handleSubmit} style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '20px', border: '1px solid #e8e1d5', display: 'flex', flexDirection: 'column', gap: '16px' }}>

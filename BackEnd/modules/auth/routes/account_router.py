@@ -241,18 +241,21 @@ def get_user_detail(account_id: int, db: Session = Depends(get_db)):
     # Lấy thông tin phân quyền từ bảng Department (junction)
     depts = db.query(Department).filter(Department.account_id == account_id).all()
     
-    role_id = None
-    permission_id = None
+    role_id = getattr(db_account, 'role_id', None)
+    permission_ids = []
     stage_ids = []
     
     for dept in depts:
         if dept.role_id and not role_id:
             role_id = dept.role_id
-        if dept.permission_id and not permission_id:
-            permission_id = dept.permission_id
+        if dept.permission_id and dept.permission_id not in permission_ids:
+            permission_ids.append(dept.permission_id)
         if dept.stage_id and dept.stage_id not in stage_ids:
             stage_ids.append(dept.stage_id)
             
+    if getattr(db_account, 'permission_id', None) and db_account.permission_id not in permission_ids:
+        permission_ids.append(db_account.permission_id)
+
     return {
         "id": db_account.id,
         "username": db_account.username,
@@ -264,9 +267,10 @@ def get_user_detail(account_id: int, db: Session = Depends(get_db)):
         "is_active": db_account.is_active,
         "is_mobile_allowed": getattr(db_account, 'is_mobile_allowed', True) if getattr(db_account, 'is_mobile_allowed', True) is not None else True,
         "created_at": db_account.created_at,
-        "role_id": role_id or getattr(db_account, 'role_id', None),
+        "role_id": role_id,
         "department_id": getattr(db_account, 'department_id', None),
-        "permission_id": getattr(db_account, 'permission_id', None) or permission_id,
+        "permission_id": getattr(db_account, 'permission_id', None) or (permission_ids[0] if permission_ids else None),
+        "permission_ids": permission_ids,
         "factory_id": getattr(db_account, 'factory_id', None),
         "factory_name": getattr(db_account, 'factory_name', None),
         "stage_ids": stage_ids,
@@ -301,7 +305,9 @@ def sync_account_departments(account_id: int, payload: dict, db: Session = Depen
     if db_account:
         if "department_id" in payload:
             db_account.department_id = payload.get("department_id")
-        if "permission_id" in payload:
+        if "permission_ids" in payload and payload.get("permission_ids"):
+            db_account.permission_id = payload.get("permission_ids")[0]
+        elif "permission_id" in payload:
             db_account.permission_id = payload.get("permission_id")
         if "factory_id" in payload:
             db_account.factory_id = payload.get("factory_id")
@@ -313,26 +319,32 @@ def sync_account_departments(account_id: int, payload: dict, db: Session = Depen
     
     role_id = payload.get("role_id")
     permission_id = payload.get("permission_id")
+    raw_p_ids = payload.get("permission_ids")
+    if raw_p_ids and isinstance(raw_p_ids, list):
+        permission_ids = raw_p_ids
+    elif permission_id:
+        permission_ids = [permission_id]
+    else:
+        permission_ids = [None]
+
+    raw_s_ids = payload.get("stage_ids")
     stage_id = payload.get("stage_id")
-    stage_ids = payload.get("stage_ids")
+    if raw_s_ids and isinstance(raw_s_ids, list):
+        stage_ids = raw_s_ids
+    elif stage_id:
+        stage_ids = [stage_id]
+    else:
+        stage_ids = [None]
     
-    if stage_ids:
+    for p_id in permission_ids:
         for s_id in stage_ids:
             db_dept = Department(
                 account_id=account_id,
                 role_id=role_id,
-                permission_id=permission_id,
+                permission_id=p_id,
                 stage_id=s_id
             )
             db.add(db_dept)
-    else:
-        db_dept = Department(
-            account_id=account_id,
-            role_id=role_id,
-            permission_id=permission_id,
-            stage_id=stage_id
-        )
-        db.add(db_dept)
         
     db.commit()
     return {"message": "Đồng bộ quyền hạn phòng ban thành công"}
@@ -358,6 +370,7 @@ def delete_user(account_id: int, db: Session = Depends(get_db)):
 def get_default_permissions(
     role_id: Optional[int] = None,
     permission_id: Optional[int] = None,
+    permission_ids: Optional[str] = None,
     permission_level: Optional[str] = None,
     username: Optional[str] = None,
     db: Session = Depends(get_db)
@@ -365,13 +378,22 @@ def get_default_permissions(
     """
     [GET] Lấy phân quyền mặc định của bộ phận/chức vụ/cấp bậc trước khi tạo tài khoản.
     """
-    from typing import Optional
+    p_ids = []
+    if permission_ids:
+        try:
+            p_ids = [int(x.strip()) for x in str(permission_ids).split(",") if x.strip().isdigit()]
+        except Exception:
+            p_ids = []
+    elif permission_id:
+        p_ids = [permission_id]
+
     resolved_actions = account_controller.resolve_permissions_by_params(
         role_id=role_id,
         permission_id=permission_id,
         permission_level=permission_level,
         username=username,
-        db=db
+        db=db,
+        permission_ids=p_ids
     )
     permissions = {}
     for screen, actions in resolved_actions.items():

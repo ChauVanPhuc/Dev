@@ -654,7 +654,7 @@ const DeliveryCreate = () => {
     <Layout>
       <PageHeader title="G7 - Smart Flow" subTitle={isEditMode ? `MB2.1 | Chỉnh sửa phiếu DLV-${editDeliveryId}` : 'MB2.1 | Tạo phiếu giao'} />
 
-      <div style={{ padding: '0px', backgroundColor: 'var(--bg-cream)', flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, padding: '0px', backgroundColor: 'var(--bg-cream)', display: 'flex', flexDirection: 'column' }}>
 
         <div id="delivery-create-tabs" style={{ backgroundColor: 'var(--bg-cream)', padding: '0 16px', paddingTop: '10px' }}>
           <Tabs

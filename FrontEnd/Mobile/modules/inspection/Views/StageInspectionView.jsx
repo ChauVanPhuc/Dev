@@ -1003,7 +1003,14 @@ const StageInspection = () => {
     } catch (err) {
       console.error("Lỗi khi lưu:", err);
       const serverMsg = err.response?.data?.detail;
-      const errMsg = serverMsg ? (typeof serverMsg === 'string' ? serverMsg : JSON.stringify(serverMsg)) : (err.message || 'Có lỗi xảy ra khi lưu phiếu kiểm tra!');
+      let errMsg = 'Có lỗi xảy ra khi lưu phiếu kiểm tra!';
+      if (typeof serverMsg === 'string') {
+        errMsg = serverMsg;
+      } else if (Array.isArray(serverMsg)) {
+        errMsg = serverMsg.map(d => d.msg || JSON.stringify(d)).join(', ');
+      } else if (err.message) {
+        errMsg = err.message;
+      }
       setMessageConfig({ type: 'error', title: 'Lỗi', message: errMsg });
       setIsMessageOpen(true);
     } finally {
@@ -1030,7 +1037,7 @@ const StageInspection = () => {
 
   return (
     <Layout>
-      <div style={{ backgroundColor: 'var(--bg-cream)', minHeight: '100vh', paddingBottom: '100px', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ backgroundColor: 'var(--bg-cream)', flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, paddingBottom: '100px', display: 'flex', flexDirection: 'column' }}>
         <PageHeader title="G7 - Smart Flow" subTitle="MB6 | Kiểm tra nhập kho" />
 
         {selectedItem ? (

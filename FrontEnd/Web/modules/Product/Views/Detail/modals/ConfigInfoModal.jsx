@@ -98,15 +98,17 @@ const ConfigInfoModal = ({ visibleColumns, setVisibleColumns, onClose, toast }) 
       backdropFilter: 'blur(3px)',
       zIndex: 2000,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: '20px',
+      padding: '16px',
+      overflowY: 'auto'
     }}>
       <div style={{
         backgroundColor: '#FFFFFF',
         borderRadius: '16px',
         width: '100%',
         maxWidth: '620px',
+        maxHeight: 'calc(100vh - 32px)',
+        overflowY: 'auto',
         boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)',
-        overflow: 'hidden',
         border: '1.5px solid #EADCC9'
       }}>
         {/* Header */}

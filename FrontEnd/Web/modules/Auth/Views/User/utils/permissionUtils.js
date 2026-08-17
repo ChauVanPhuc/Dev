@@ -48,7 +48,7 @@ export const buildPermissionGroupsFromSidebar = (sidebarItems, platform, screens
   return roots.map((root) => {
     // Ưu tiên lấy children đã load sẵn từ API (tree structure),
     // fallback sang tìm kiếm trong flat array nếu không có
-    let children;
+    let children = [];
     if (root.children && Array.isArray(root.children) && root.children.length > 0) {
       children = root.children
         .filter(item => item.is_active)
@@ -58,8 +58,14 @@ export const buildPermissionGroupsFromSidebar = (sidebarItems, platform, screens
         .filter(item => item.parent_id === root.id && item.is_active)
         .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     }
+
+    // Nếu không có children nhưng bản thân root có route_path thì chính nó là màn hình đơn
+    let itemsToMap = children;
+    if (children.length === 0 && root.route_path && root.is_active !== false) {
+      itemsToMap = [root];
+    }
       
-    const mappedScreens = children.map(child => {
+    const mappedScreens = itemsToMap.map(child => {
       // Xác định key phân quyền duy nhất cho từng màn hình
       let key = child.route_path;
       if (!key && child.screen_id && screens.length > 0) {
@@ -82,7 +88,8 @@ export const buildPermissionGroupsFromSidebar = (sidebarItems, platform, screens
     return {
       title: root.title,
       screens: mappedScreens,
-      id: root.id
+      id: root.id,
+      platform: platform === 'web' ? 'Web' : 'Mobile'
     };
-  }).filter(group => group.screens.length > 0); // Lọc bỏ các nhóm rỗng không có menu con
+  }).filter(group => group.screens.length > 0); // Lọc bỏ các nhóm rỗng không có màn hình
 };

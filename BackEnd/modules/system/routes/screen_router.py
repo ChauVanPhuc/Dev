@@ -269,7 +269,7 @@ def get_screen_detail(screen_id: int, db: Session = Depends(get_db)):
     if not db_screen:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, 
-            detail="Khong tim thay thong tin man hinh"
+            detail="Không tìm thấy thông tin màn hình"
         )
     return db_screen
 
@@ -286,7 +286,7 @@ async def update_screen(
     if not db_screen:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, 
-            detail="Khong tim thay thong tin man hinh can cap nhat"
+            detail="Không tìm thấy thông tin màn hình cần cập nhật"
         )
         
     update_data = screen_in.model_dump(exclude_unset=True)
@@ -356,7 +356,7 @@ async def reset_screen_code(screen_id: int, db: Session = Depends(get_db)):
     if not db_screen:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, 
-            detail="Khong tim thay thong tin man hinh"
+            detail="Không tìm thấy thông tin màn hình"
         )
         
     db_screen.current_code = db_screen.default_code

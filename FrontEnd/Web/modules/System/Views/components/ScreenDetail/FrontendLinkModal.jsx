@@ -31,12 +31,16 @@ const FrontendLinkModal = ({
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  zIndex: 9999
+  zIndex: 9999,
+  overflowY: 'auto',
+  padding: '16px'
 }}>
   <div style={{
     backgroundColor: '#fff',
     borderRadius: '12px',
     width: '480px',
+    maxHeight: 'calc(100vh - 32px)',
+    overflowY: 'auto',
     padding: '24px',
     boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
     fontFamily: 'Inter, sans-serif'

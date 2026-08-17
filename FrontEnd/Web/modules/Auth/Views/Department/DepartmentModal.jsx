@@ -113,6 +113,22 @@ const DepartmentModal = ({ isOpen, onClose, modalMode, selectedDepartment, onCon
     });
   };
 
+  const [activeTab, setActiveTab] = useState('web');
+
+  // Chọn nhanh cho tất cả màn hình trong Tab hiện tại
+  const handleCurrentTabPermissionChange = (value) => {
+    const targetGroups = activeTab === 'web' ? dynamicWebGroups : dynamicMobileGroups;
+    setDefaultPermissions(prev => {
+      const next = { ...prev };
+      targetGroups.forEach(group => {
+        group.screens.forEach(scr => {
+          next[scr.key] = value;
+        });
+      });
+      return next;
+    });
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.name.trim()) return alert('Vui lòng nhập tên bộ phận!');
@@ -123,6 +139,8 @@ const DepartmentModal = ({ isOpen, onClose, modalMode, selectedDepartment, onCon
     });
   };
 
+  const currentGroups = activeTab === 'web' ? dynamicWebGroups : dynamicMobileGroups;
+
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
       <div className="card" style={{ width: '100%', maxWidth: '640px', backgroundColor: '#fff', borderRadius: '16px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
@@ -130,7 +148,7 @@ const DepartmentModal = ({ isOpen, onClose, modalMode, selectedDepartment, onCon
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid #FAF0E6', backgroundColor: '#FAF6F0' }}>
           <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#2D1A12', fontWeight: '800' }}>
             {modalMeta.screenCode ? `${modalMeta.screenCode}: ` : ''}
-            {modalMeta.title || (modalMode === 'create' ? 'Tạo Bộ phận mới' : 'Chỉnh sửa Bộ phận')}
+            {modalMeta.title || (modalMode === 'create' ? 'Tạo Phòng Ban mới' : 'Chỉnh sửa Phòng Ban')}
           </h3>
           <button onClick={onClose} style={{ border: 'none', background: 'none', color: '#7B5233', cursor: 'pointer', display: 'flex', padding: '4px', borderRadius: '50%' }}>
             <X size={18} />
@@ -142,13 +160,13 @@ const DepartmentModal = ({ isOpen, onClose, modalMode, selectedDepartment, onCon
           <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '15px', flex: 1, overflowY: 'auto' }}>
             
             <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-              <label style={{ fontSize: '0.85rem', fontWeight: '700', color: '#7B5233' }}>Tên bộ phận *</label>
+              <label style={{ fontSize: '0.85rem', fontWeight: '700', color: '#7B5233' }}>Tên phòng ban *</label>
               <input 
                 type="text" 
                 name="name" 
                 value={formData.name} 
                 onChange={handleInputChange} 
-                placeholder="VD: QC, Sản xuất, IT, BGD..."
+                placeholder="Ví dụ: Ban Giám Đốc, Quản Lý Chất Lượng (QA/QC), Kỹ Thuật, Sản Xuất..."
                 style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #EADCC9', outline: 'none', fontSize: '0.9rem' }}
                 required
               />
@@ -160,7 +178,7 @@ const DepartmentModal = ({ isOpen, onClose, modalMode, selectedDepartment, onCon
                 name="description" 
                 value={formData.description} 
                 onChange={handleInputChange} 
-                placeholder="Nhập mô tả bộ phận..."
+                placeholder="Nhập mô tả chức năng, phạm vi hoạt động của phòng ban..."
                 rows="2"
                 style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #EADCC9', outline: 'none', fontSize: '0.9rem', resize: 'vertical', fontFamily: 'inherit' }}
               />
@@ -173,26 +191,31 @@ const DepartmentModal = ({ isOpen, onClose, modalMode, selectedDepartment, onCon
                   id="is_active_checkbox"
                   name="is_active" 
                   checked={formData.is_active} 
-                  onChange={handleInputChange}
+                  onChange={handleInputChange} 
                   style={{ width: '16px', height: '16px', accentColor: '#7B5233' }}
                 />
-                <label htmlFor="is_active_checkbox" style={{ fontSize: '0.9rem', fontWeight: '700', color: '#7B5233', cursor: 'pointer' }}>Đang sử dụng (Kích hoạt bộ phận này)</label>
+                <label htmlFor="is_active_checkbox" style={{ fontSize: '0.9rem', fontWeight: '700', color: '#7B5233', cursor: 'pointer' }}>Đang sử dụng (Kích hoạt phòng ban này)</label>
               </div>
             )}
 
-            {/* ── Cấu hình quyền mặc định của Bộ phận ── */}
+            {/* ── Cấu hình quyền mặc định của Phòng Ban ── */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                <label style={{ fontSize: '0.85rem', fontWeight: '700', color: '#7B5233', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
-                  <Shield size={16} /> Quyền mặc định của bộ phận
-                </label>
+                <div>
+                  <label style={{ fontSize: '0.9rem', fontWeight: '800', color: '#5C381E', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
+                    <Shield size={16} /> Quyền mặc định của phòng ban
+                  </label>
+                  <span style={{ fontSize: '0.75rem', color: '#888', fontStyle: 'italic' }}>
+                    Thiết lập quyền truy cập cơ sở cho phòng ban này đối với từng chức năng.
+                  </span>
+                </div>
                 
                 {/* Global Quick Action Toolbar */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span style={{ fontSize: '0.72rem', color: '#7B5233', fontWeight: '600' }}>Tất cả:</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#7B5233', fontWeight: '700' }}>Tất cả ({activeTab === 'web' ? 'Web' : 'Mobile'}):</span>
                   <button 
                     type="button" 
-                    onClick={() => handleGlobalPermissionChange('write')}
+                    onClick={() => handleCurrentTabPermissionChange('write')}
                     style={{ padding: '3px 8px', borderRadius: '6px', border: '1px solid #8ce99a', backgroundColor: '#ebfbee', color: '#2b8a3e', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
                     title="Gán tất cả thành Có quyền ghi"
                   >
@@ -200,7 +223,7 @@ const DepartmentModal = ({ isOpen, onClose, modalMode, selectedDepartment, onCon
                   </button>
                   <button 
                     type="button" 
-                    onClick={() => handleGlobalPermissionChange('read')}
+                    onClick={() => handleCurrentTabPermissionChange('read')}
                     style={{ padding: '3px 8px', borderRadius: '6px', border: '1px solid #ffe066', backgroundColor: '#fff9db', color: '#e67700', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
                     title="Gán tất cả thành Chỉ xem"
                   >
@@ -208,7 +231,7 @@ const DepartmentModal = ({ isOpen, onClose, modalMode, selectedDepartment, onCon
                   </button>
                   <button 
                     type="button" 
-                    onClick={() => handleGlobalPermissionChange('none')}
+                    onClick={() => handleCurrentTabPermissionChange('none')}
                     style={{ padding: '3px 8px', borderRadius: '6px', border: '1px solid #ffa8a8', backgroundColor: '#fff5f5', color: '#c92a2a', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
                     title="Khóa tất cả các chức năng"
                   >
@@ -217,22 +240,87 @@ const DepartmentModal = ({ isOpen, onClose, modalMode, selectedDepartment, onCon
                 </div>
               </div>
 
-              <span style={{ fontSize: '0.75rem', color: '#888', fontStyle: 'italic', marginBottom: '2px' }}>
-                Thiết lập quyền truy cập cơ sở cho bộ phận này đối với từng chức năng.
-              </span>
+              {/* Platform Switcher Tabs */}
+              <div style={{ display: 'flex', gap: '6px', borderBottom: '2px solid #7B5233', paddingBottom: '0px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('web')}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px 8px 0 0',
+                    border: '1px solid ' + (activeTab === 'web' ? '#7B5233' : '#EADCC9'),
+                    borderBottom: activeTab === 'web' ? '2px solid #FAF8F6' : '1px solid #EADCC9',
+                    backgroundColor: activeTab === 'web' ? '#7B5233' : '#F5ECE1',
+                    color: activeTab === 'web' ? '#FFF' : '#7B5233',
+                    fontWeight: '700',
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    marginBottom: activeTab === 'web' ? '-2px' : '0px',
+                    zIndex: activeTab === 'web' ? 2 : 1,
+                    transition: 'all 0.15s ease-in-out'
+                  }}
+                >
+                  💻 Giao diện Web
+                  <span style={{ 
+                    backgroundColor: activeTab === 'web' ? 'rgba(255,255,255,0.25)' : '#E4D3BF', 
+                    color: activeTab === 'web' ? '#FFF' : '#5C381E',
+                    padding: '1px 7px', 
+                    borderRadius: '10px', 
+                    fontSize: '0.72rem',
+                    fontWeight: '800'
+                  }}>
+                    {dynamicWebGroups.length}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('mobile')}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px 8px 0 0',
+                    border: '1px solid ' + (activeTab === 'mobile' ? '#7B5233' : '#EADCC9'),
+                    borderBottom: activeTab === 'mobile' ? '2px solid #FAF8F6' : '1px solid #EADCC9',
+                    backgroundColor: activeTab === 'mobile' ? '#7B5233' : '#F5ECE1',
+                    color: activeTab === 'mobile' ? '#FFF' : '#7B5233',
+                    fontWeight: '700',
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    marginBottom: activeTab === 'mobile' ? '-2px' : '0px',
+                    zIndex: activeTab === 'mobile' ? 2 : 1,
+                    transition: 'all 0.15s ease-in-out'
+                  }}
+                >
+                  📱 Ứng dụng Mobile
+                  <span style={{ 
+                    backgroundColor: activeTab === 'mobile' ? 'rgba(255,255,255,0.25)' : '#E4D3BF', 
+                    color: activeTab === 'mobile' ? '#FFF' : '#5C381E',
+                    padding: '1px 7px', 
+                    borderRadius: '10px', 
+                    fontSize: '0.72rem',
+                    fontWeight: '800'
+                  }}>
+                    {dynamicMobileGroups.length}
+                  </span>
+                </button>
+              </div>
 
               <div style={{ 
-                maxHeight: '250px', 
+                maxHeight: '260px', 
                 overflowY: 'auto', 
                 border: '1px solid #EADCC9', 
-                borderRadius: '8px', 
-                padding: '10px 12px', 
+                borderRadius: '0 8px 8px 8px', 
+                padding: '12px 14px', 
                 backgroundColor: '#FAF8F6' 
               }}>
-                {[...dynamicWebGroups, ...dynamicMobileGroups].map((group, groupIdx) => {
-                  const isMobile = group.screens[0]?.key.startsWith('mobile_');
+                {currentGroups.map((group, groupIdx) => {
                   return (
-                    <div key={`${group.title}-${isMobile ? 'mobile' : 'web'}-${groupIdx}`} style={{ marginBottom: '16px' }}>
+                    <div key={`${group.title}-${group.platform || activeTab}-${groupIdx}`} style={{ marginBottom: '16px' }}>
                       {/* Group Header with Quick Select Dropdown */}
                       <div style={{ 
                         display: 'flex',
@@ -242,15 +330,15 @@ const DepartmentModal = ({ isOpen, onClose, modalMode, selectedDepartment, onCon
                         paddingBottom: '5px',
                         marginBottom: '8px',
                         backgroundColor: '#F5ECE1',
-                        padding: '4px 8px',
+                        padding: '6px 10px',
                         borderRadius: '6px'
                       }}>
                         <span style={{ 
-                          fontSize: '0.82rem', 
+                          fontSize: '0.84rem', 
                           fontWeight: '800', 
                           color: '#5C381E' 
                         }}>
-                          {group.title} {isMobile ? '(Mobile)' : '(Web)'}
+                          {group.title}
                         </span>
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

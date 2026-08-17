@@ -109,7 +109,7 @@ const CAPAReport = () => {
     <Layout>
       <PageHeader title="G7 - Smart Flow" subTitle="MH14 | Đánh giá CAPA" />
 
-      <div style={{ padding: '0px', backgroundColor: 'var(--bg-cream)', flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: '0px', backgroundColor: 'var(--bg-cream)', flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0 }}>
         
         {/* Main scrollable body */}
         <div style={{ padding: '16px 16px 80px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>

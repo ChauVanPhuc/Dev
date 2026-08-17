@@ -126,7 +126,7 @@ def export_screen_detail_service(
     # 1. Tim man hinh
     screen = db.query(SystemScreenModel).filter(SystemScreenModel.id == screen_id).first()
     if not screen:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Khong tim thay man hinh")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy màn hình")
     
     # 2. Thu thap du lieu
     screen_data = collect_screen_data(screen, options)
@@ -165,7 +165,7 @@ def export_screen_detail_service(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Loi xu ly template: {str(e)}"
+            detail=f"Lỗi xử lý template: {str(e)}"
         )
     
     # 6. Xac dinh content type

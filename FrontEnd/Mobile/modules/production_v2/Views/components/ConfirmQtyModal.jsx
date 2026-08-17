@@ -29,12 +29,12 @@ const ConfirmQtyModal = ({ open, items, onConfirm, onClose }) => {
 
   return (
     <div className="pv2-modal-overlay">
-      <div className="pv2-modal" style={{ maxWidth: 460, width: '94%', margin: '0 auto', boxSizing: 'border-box' }}>
+      <div className="pv2-modal" style={{ maxWidth: 460, width: '94%', margin: '0 auto', boxSizing: 'border-box', maxHeight: 'calc(100dvh - 32px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div className="pv2-modal-header">
           <span className="pv2-modal-title">CL07.1: Xác nhận số lượng giao</span>
           <button type="button" className="pv2-modal-close" onClick={onClose}><X size={18} /></button>
         </div>
-        <div className="pv2-modal-body" style={{ padding: '12px 10px', boxSizing: 'border-box', overflowX: 'hidden' }}>
+        <div className="pv2-modal-body" style={{ padding: '12px 10px', boxSizing: 'border-box', overflowX: 'hidden', overflowY: 'auto', flex: 1, WebkitOverflowScrolling: 'touch' }}>
           <div className="pv2-table-wrap" style={{ width: '100%', boxSizing: 'border-box' }}>
             <table className="pv2-table" style={{ width: '100%', tableLayout: 'fixed' }}>
               <colgroup>

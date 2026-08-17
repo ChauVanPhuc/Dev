@@ -99,6 +99,13 @@ try:
 except Exception:
     pass
 
+# [MIGRATION] Check/Create defect_categories table & seed
+try:
+    from database.migrations.create_defect_categories_table import migrate_and_seed_defect_categories
+    migrate_and_seed_defect_categories()
+except Exception:
+    pass
+
 # [MIGRATION] Add workshop column to machines table
 from sqlalchemy import text
 try:
@@ -347,6 +354,8 @@ async def check_write_permissions(request: Request, call_next):
                     from config.settings import settings
                     from config.database import SessionLocal
                     from modules.auth.models.accounts import Account as AccountModel
+                    from modules.auth.models.department import Department as DepartmentModel
+                    from modules.auth.models.roles import Role as RoleModel
                     from modules.auth.controllers.account_controller import resolve_user_permissions
                     import json
 
@@ -358,124 +367,200 @@ async def check_write_permissions(request: Request, call_next):
                         try:
                             user = db.query(AccountModel).filter(AccountModel.username == username).first()
                             if user:
-                                # Determine the screen key based on path
-                                screen_key = None
-                                PATH_TO_SCREEN_KEY = [
-                                    # --- Mobile-specific routes (must be BEFORE generic /api/v1/inspections) ---
-                                    ("/api/v1/inspections/stage", "mobile_inspection-stage"),
-                                    ("/api/v1/inspections/upload-ocr", "mobile_inspection-stage"),
-                                    ("/api/v1/inspections/defect-types", "mobile_inspection-stage"),
-                                    ("/api/v1/inspections/daily", "mobile_inspection-daily"),
-                                    ("/api/v1/inspections/by-plan", "mobile_inspection-stage"),
-                                    ("/api/v1/inspections/upload", "mobile_inspection-stage"),
-                                    # --- Web routes ---
-                                    ("/api/v1/deliveries/backup-qrs", "backup-qrs"),
-                                    ("/api/v1/claims/cabinet-prices", "prices"),
-                                    ("/api/v1/claims/shipments", "shipments"),
-                                    ("/api/v1/claims/claims", "claim"),
-                                    ("/api/v1/inspections", "reports"),
-                                    ("/api/v1/products", "products"),
-                                    ("/api/v1/equipments", "equipment"),
-                                    ("/api/v1/kpis", "kpi"),
-                                    ("/api/v1/awards-discipline", "kpi"),
-                                    ("/api/v1/staff-evaluations", "kpi"),
-                                    ("/api/v1/accounts", "users"),
-                                    ("/accounts", "users"),
-                                    ("/api/v1/roles", "users"),
-                                    ("/api/v1/permissions", "users"),
-                                    ("/api/v1/screens", "screens"),
-                                    ("/api/v1/screen-bugs", "bugs"),
-                                    ("/api/v1/capas", "feedback"),
-                                    ("/api/v1/pallet-cards", "exception-deliveries"),
-                                    ("/api/v1/plans", "plan"),
-                                    ("/api/v1/production-plans", "plan"),
-                                    ("/api/v1/deliveries", "delivery-tracking"),
-                                    ("/api/v1/qc", "defects"),
-                                    ("/api/v1/system/incidents", "logs"),
-                                    ("/api/v1/system/logs", "logs"),
-                                    ("/api/v1/system/data-packages", "data"),
-                                    ("/api/v1/system/backup", "data"),
-                                    ("/api/v1/system/monitor", "monitor"),
-                                    ("/api/v1/purchase-requisitions", "purchase-requisitions"),
-                                    ("/api/v1/purchase-order-items", "purchase-order-items"),
-                                ]
-                                for prefix, key in PATH_TO_SCREEN_KEY:
-                                    if path.startswith(prefix):
-                                        screen_key = key
-                                        break
+                                # Determine candidate permission keys based on path
+                                candidate_keys = []
                                 
-                                # Override base inspections write actions to use mobile_inspection-stage screen permission
-                                if path.startswith("/api/v1/inspections"):
-                                    if path in ("/api/v1/inspections", "/api/v1/inspections/"):
-                                        if request.method in ("POST", "PUT", "PATCH", "DELETE"):
-                                            screen_key = "mobile_input-inspection"
-                                    elif screen_key == "reports":
-                                        if request.method in ("POST", "PUT", "PATCH", "DELETE"):
-                                            screen_key = "mobile_inspection-stage"
-                                
-                                # Override deliveries actions to use mobile screen permissions
-                                if path.startswith("/api/v1/deliveries"):
-                                    if path.endswith("/confirm"):
-                                        screen_key = "mobile_delivery-receive"
-                                    else:
-                                        screen_key = "mobile_delivery-create"
-                                
-                                # Override QC actions to use mobile screen permissions
-                                if path.startswith("/api/v1/qc"):
-                                    screen_key = "mobile_inspection-stage"
-                                
-                                if screen_key:
-                                    # Phân giải quyền thực tế của User cho screen này
+                                # 1. Inspections / QC
+                                if path.startswith("/api/v1/inspections/stage"):
+                                    candidate_keys = [
+                                        "/inspection-stage", "inspection-stage",
+                                        "/inspection-stage-moisture", "/inspection-stage-process",
+                                        "/inspection-first-article", "/inspection-stage-adhesion",
+                                        "/input-inspection", "reports", "/admin/reports",
+                                        "defects", "/admin/defects", "mobile_inspection-stage"
+                                    ]
+                                elif path.startswith("/api/v1/inspections/daily"):
+                                    candidate_keys = [
+                                        "/inspection-daily", "inspection-daily",
+                                        "/inspection-daily-shaping", "/inspection-daily-assembly",
+                                        "/inspection-daily-painting", "/inspection-daily-packaging",
+                                        "defects", "/admin/defects", "reports", "/admin/reports",
+                                        "mobile_inspection-daily"
+                                    ]
+                                elif path.startswith("/api/v1/inspections/upload") or path.startswith("/api/v1/inspections/upload-ocr"):
+                                    candidate_keys = [
+                                        "/inspection-stage", "/inspection-daily", "/inspection-first-article",
+                                        "reports", "/admin/reports", "defects", "/admin/defects"
+                                    ]
+                                elif path.startswith("/api/v1/inspections/defect-types"):
+                                    candidate_keys = [
+                                        "/inspection-stage", "/inspection-daily", "defects", "/admin/defects"
+                                    ]
+                                elif path.startswith("/api/v1/inspections"):
+                                    candidate_keys = [
+                                        "/inspection-stage", "/input-inspection", "/production_v2/inspection",
+                                        "/admin/reports", "reports", "/admin/defects", "defects"
+                                    ]
+                                elif path.startswith("/api/v1/qc"):
+                                    candidate_keys = [
+                                        "/inspection-stage", "/inspection-daily", "/admin/defects",
+                                        "defects", "/admin/reports", "reports"
+                                    ]
+                                    
+                                # 2. Deliveries
+                                elif path.startswith("/api/v1/deliveries/confirm") or path.startswith("/api/v1/deliveries/receive"):
+                                    candidate_keys = [
+                                        "/delivery-receive", "/delivery-info", "/delivery-history",
+                                        "/admin/delivery-tracking", "delivery-tracking", "mobile_delivery-receive"
+                                    ]
+                                elif path.startswith("/api/v1/deliveries/backup-qrs"):
+                                    candidate_keys = [
+                                        "/admin/backup-qrs", "backup-qrs", "/delivery-info"
+                                    ]
+                                elif path.startswith("/api/v1/deliveries"):
+                                    candidate_keys = [
+                                        "/delivery-create", "/delivery-info", "/delivery-history",
+                                        "/admin/delivery-tracking", "delivery-tracking",
+                                        "/production_v2/transfer", "mobile_delivery-create"
+                                    ]
+                                elif path.startswith("/api/v1/pallet-cards"):
+                                    candidate_keys = [
+                                        "/admin/exception-deliveries", "exception-deliveries", "/delivery-info"
+                                    ]
+                                    
+                                # 3. Production & Plans
+                                elif path.startswith("/api/v1/plans") or path.startswith("/api/v1/production-plans"):
+                                    candidate_keys = [
+                                        "/plan", "/admin/plan", "plan", "/production/plans",
+                                        "/production/orders", "/admin/production-orders"
+                                    ]
+                                elif path.startswith("/api/v1/production-orders"):
+                                    candidate_keys = [
+                                        "/production/orders", "/admin/production-orders",
+                                        "/production/plans", "/admin/plan", "plan"
+                                    ]
+                                elif path.startswith("/api/v1/production-routings"):
+                                    candidate_keys = ["/admin/production-routing", "production-routing"]
+                                elif path.startswith("/api/v1/products"):
+                                    candidate_keys = ["/admin/products", "products"]
+                                    
+                                # 4. KPI & HR
+                                elif path.startswith("/api/v1/kpis") or path.startswith("/api/v1/kpi"):
+                                    candidate_keys = [
+                                        "/kpi", "/kpi-staff", "/admin/kpi", "kpi",
+                                        "/admin/kpi/checklist", "/admin/kpi/list", "/admin/kpi/rules", "/admin/kpi/feedback"
+                                    ]
+                                elif path.startswith("/api/v1/awards-discipline"):
+                                    candidate_keys = ["/awards", "/kpi", "/admin/kpi", "kpi"]
+                                elif path.startswith("/api/v1/staff-evaluations"):
+                                    candidate_keys = ["/kpi-staff", "/staff-evaluation", "/kpi", "/admin/kpi", "kpi"]
+                                elif path.startswith("/api/v1/hr"):
+                                    candidate_keys = ["/admin/hr/employees", "/admin/hr/org-chart", "users", "/admin/users"]
+                                    
+                                # 5. Capa, Feedback, Claims, Quick Report
+                                elif path.startswith("/api/v1/capas"):
+                                    candidate_keys = [
+                                        "/capa-list", "/capa-report", "/capa-detail",
+                                        "/admin/capa", "capa", "feedback", "/admin/feedback"
+                                    ]
+                                elif path.startswith("/api/v1/quick-report"):
+                                    candidate_keys = [
+                                        "/quick-report-create", "/quick-report-list", "/ctq-sos",
+                                        "/warnings", "/feedback", "/reports", "/admin/reports"
+                                    ]
+                                elif path.startswith("/api/v1/claims/cabinet-prices"):
+                                    candidate_keys = ["/admin/prices", "prices"]
+                                elif path.startswith("/api/v1/claims/shipments"):
+                                    candidate_keys = ["/admin/shipments", "shipments"]
+                                elif path.startswith("/api/v1/claims"):
+                                    candidate_keys = ["/admin/claims", "claim"]
+                                    
+                                # 6. Purchasing
+                                elif path.startswith("/api/v1/purchase-requisitions") or path.startswith("/api/v1/purchase-order-items"):
+                                    candidate_keys = [
+                                        "/admin/purchase-requisitions", "purchase-requisitions",
+                                        "/inspection-stage", "/plan"
+                                    ]
+                                    
+                                # 7. Equipments & Machinery
+                                elif path.startswith("/api/v1/equipments"):
+                                    candidate_keys = ["/admin/equipment", "equipment", "/equipment-list"]
+                                elif path.startswith("/api/v1/machines"):
+                                    candidate_keys = ["/admin/machines", "machines", "/equipment-list"]
+                                    
+                                # 8. System, Auth, Accounts
+                                elif path.startswith("/api/v1/accounts") or path.startswith("/accounts") or path.startswith("/api/v1/roles") or path.startswith("/api/v1/permissions"):
+                                    candidate_keys = ["/admin/users", "users"]
+                                elif path.startswith("/api/v1/screens") or path.startswith("/api/v1/screen-bugs"):
+                                    candidate_keys = ["/admin/screens", "/admin/screens/bugs", "screens", "bugs"]
+                                elif path.startswith("/api/v1/system/incidents") or path.startswith("/api/v1/system/logs"):
+                                    candidate_keys = ["/admin/logs", "logs", "/logs"]
+                                elif path.startswith("/api/v1/system/data-packages") or path.startswith("/api/v1/system/backup"):
+                                    candidate_keys = ["/admin/data", "data"]
+                                elif path.startswith("/api/v1/system/monitor"):
+                                    candidate_keys = ["/admin/monitor", "monitor"]
+
+                                if candidate_keys:
+                                    # Phân giải quyền thực tế của User
                                     resolved_perms = resolve_user_permissions(user, db)
                                     
-                                    keys_to_check = [screen_key]
-                                    if screen_key == "mobile_inspection-stage":
-                                        keys_to_check.extend([
-                                            "mobile_inspection-first-article",
-                                            "mobile_inspection-stage-moisture",
-                                            "mobile_inspection-stage-process",
-                                            "mobile_inspection-stage-adhesion",
-                                            "defects"
-                                        ])
-                                    elif screen_key == "mobile_input-inspection":
-                                        keys_to_check.extend(["reports"])
-                                    elif screen_key in ("mobile_delivery-create", "mobile_delivery-receive"):
-                                        keys_to_check = ["mobile_delivery-create", "mobile_delivery-receive", "delivery-tracking"]
-                                    
-                                    # Admin và Toàn quyền hệ thống luôn có full quyền
-                                    if user.username == "admin" or getattr(user, "permission_level", "") == "Toàn quyền hệ thống":
-                                        allowed_actions_list = ["read", "create", "edit", "delete", "approve", "export_import"]
-                                    else:
-                                        allowed_actions_list = []
-                                        for key in keys_to_check:
-                                            perm_val = resolved_perms.get(key, [])
-                                            if isinstance(perm_val, list):
-                                                if perm_val:
-                                                    allowed_actions_list = perm_val
-                                                    break
-                                            elif isinstance(perm_val, str) and perm_val != "none":
-                                                if "," in perm_val:
-                                                    allowed_actions_list = [a.strip() for a in perm_val.split(",") if a.strip()]
-                                                else:
-                                                    legacy_rank_map = {
-                                                        "none": [],
-                                                        "read": ["read"],
-                                                        "create": ["read", "create", "export_import"],
-                                                        "edit": ["read", "create", "edit", "export_import"],
-                                                        "delete": ["read", "create", "edit", "delete", "export_import"],
-                                                        "approve": ["read", "create", "edit", "delete", "approve", "export_import"],
-                                                        "export_import": ["read", "create", "edit", "delete", "approve", "export_import"],
-                                                        "write": ["read", "create", "edit", "delete", "approve", "export_import"],
-                                                    }
-                                                    allowed_actions_list = legacy_rank_map.get(perm_val, [])
-                                                break
+                                    # Lấy thông tin Role của user
+                                    dept = db.query(DepartmentModel).filter(DepartmentModel.account_id == user.id).first()
+                                    role_name = ""
+                                    if dept and dept.role_id:
+                                        role_obj = db.query(RoleModel).filter(RoleModel.id == dept.role_id).first()
+                                        if role_obj:
+                                            role_name = role_obj.name or ""
 
-                                    if screen_key in ("purchase-requisitions", "purchase-order-items", "order-shipping-monitoring") and not allowed_actions_list:
-                                        allowed_actions_list = ["read", "create", "edit", "delete", "approve", "export_import"]
+                                    # Root Admin, Toàn quyền hệ thống hoặc IT/BGD luôn có full quyền
+                                    if (
+                                        user.username == "admin"
+                                        or getattr(user, "permission_level", "") == "Toàn quyền hệ thống"
+                                        or role_name in ("IT", "BGD")
+                                    ):
+                                        allowed_actions_set = {"read", "create", "edit", "delete", "approve", "export_import"}
+                                    else:
+                                        legacy_rank_map = {
+                                            "none": [],
+                                            "read": ["read"],
+                                            "create": ["read", "create", "export_import"],
+                                            "edit": ["read", "create", "edit", "export_import"],
+                                            "delete": ["read", "create", "edit", "delete", "export_import"],
+                                            "approve": ["read", "create", "edit", "delete", "approve", "export_import"],
+                                            "export_import": ["read", "create", "edit", "delete", "approve", "export_import"],
+                                            "write": ["read", "create", "edit", "delete", "approve", "export_import"],
+                                        }
+                                        allowed_actions_set = set()
+                                        for raw_key in candidate_keys:
+                                            variations = [
+                                                raw_key,
+                                                f"/{raw_key.lstrip('/')}",
+                                                raw_key.lstrip('/'),
+                                                f"mobile_{raw_key.lstrip('/')}",
+                                                f"/admin/{raw_key.lstrip('/')}",
+                                                f"/admin/{raw_key.replace('mobile_', '').lstrip('/')}"
+                                            ]
+                                            for key in variations:
+                                                if key in resolved_perms:
+                                                    perm_val = resolved_perms[key]
+                                                    if isinstance(perm_val, list):
+                                                        allowed_actions_set.update(perm_val)
+                                                    elif isinstance(perm_val, str) and perm_val != "none":
+                                                        if "," in perm_val:
+                                                            allowed_actions_set.update(a.strip() for a in perm_val.split(",") if a.strip())
+                                                        else:
+                                                            allowed_actions_set.update(legacy_rank_map.get(perm_val, []))
+
+                                    # Nếu endpoint cho phép bypass mặc định nếu chưa cấu hình
+                                    if any(p in path for p in ("purchase-requisitions", "purchase-order-items", "order-shipping-monitoring")) and not allowed_actions_set:
+                                        allowed_actions_set = {"read", "create", "edit", "delete", "approve", "export_import"}
 
                                     # Xác định hành động được yêu cầu
                                     path_lower = path.lower()
-                                    if any(kw in path_lower for kw in ("export", "import", "upload", "download")):
+                                    if any(kw in path_lower for kw in ("upload-ocr", "upload")):
+                                        # Tải ảnh kiểm tra mẫu / OCR trong quy trình kiểm tra được phép với quyền create hoặc edit hoặc export_import
+                                        required_action = "create"
+                                    elif any(kw in path_lower for kw in ("export", "import", "download")):
                                         required_action = "export_import"
                                     elif any(kw in path_lower for kw in ("approve", "confirm", "accept", "reject", "verify")):
                                         required_action = "approve"
@@ -486,18 +571,18 @@ async def check_write_permissions(request: Request, call_next):
                                     elif request.method == "DELETE":
                                         required_action = "delete"
                                     else:
-                                        required_action = "view"
+                                        required_action = "read"
 
                                     # Kiểm tra quyền hạn
-                                    if required_action not in allowed_actions_list:
+                                    if required_action not in allowed_actions_set:
                                         from fastapi.responses import JSONResponse
-                                        # Dịch tên quyền sang tiếng Việt để hiển thị thông báo
                                         action_names_vi = {
                                             "create": "Thêm mới",
                                             "edit": "Chỉnh sửa",
                                             "delete": "Xóa",
                                             "approve": "Phê duyệt",
                                             "export_import": "Xuất nhập file",
+                                            "read": "Xem",
                                             "view": "Xem"
                                         }
                                         act_vi = action_names_vi.get(required_action, required_action)
@@ -662,9 +747,9 @@ def test_direct_endpoint():
                 )
                 response_text = direct_res.text
             else:
-                err_msg = "Gemini client is None"
+                err_msg = "Client Gemini chưa được khởi tạo"
         except Exception as api_err:
-            err_msg = f"Gemini API call failed: {str(api_err)}"
+            err_msg = f"Gọi Gemini API thất bại: {str(api_err)}"
             
         return {
             "status": "ok",

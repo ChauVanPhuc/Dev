@@ -178,6 +178,7 @@ const QualityInspectionDetail = () => {
 
     return (
         <Layout>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0 }}>
             <div style={{ position: 'sticky', top: 0, zIndex: 100, backgroundColor: 'var(--bg-cream)' }}>
                 <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid #e2e8f0' }}>
                    <div onClick={() => navigate(-1)} style={{ cursor: 'pointer' }}><ArrowLeft size={24} color="#334155" /></div>
@@ -291,7 +292,8 @@ const QualityInspectionDetail = () => {
                     Hủy
                 </button>
             </div>
-        </Layout>
+        </div>
+    </Layout>
     )
 }
 

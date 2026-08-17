@@ -557,7 +557,7 @@ const StageMoistureView = () => {
 
   return (
     <Layout>
-      <div style={{ backgroundColor: '#FAF6F0', minHeight: '100vh', paddingBottom: '100px', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ backgroundColor: '#FAF6F0', flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, paddingBottom: '100px', display: 'flex', flexDirection: 'column' }}>
         <PageHeader title="G7 - Smart Flow" subTitle="Phiếu kiểm tra theo công đoạn" />
 
         <div style={{ padding: '16px', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>

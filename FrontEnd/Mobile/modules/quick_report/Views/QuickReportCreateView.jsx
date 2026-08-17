@@ -180,7 +180,7 @@ const QuickReportCreateView = () => {
     <Layout>
       <PageHeader title="Lập báo cáo" subTitle="CL11: Tạo báo cáo nhanh" />
 
-      <div style={{ padding: '14px 14px 110px 14px', display: 'flex', flexDirection: 'column', gap: '14px', boxSizing: 'border-box' }}>
+      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, padding: '14px 14px 110px 14px', display: 'flex', flexDirection: 'column', gap: '14px', boxSizing: 'border-box' }}>
         
         {/* Card Header Title */}
         <h2 style={{

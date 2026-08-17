@@ -7,31 +7,31 @@ export const INSPECTION_TYPE_OPTIONS = [
   {
     value: 'first_sample',
     label: 'Kiểm tra mẫu lần đầu',
-    desc: 'Phiếu kiểm tra sản phẩm mẫu đầu chuyền trước khi sản xuất (/production_v2/inspection)',
+    desc: 'Phiếu kiểm tra sản phẩm mẫu đầu chuyền trước khi bắt đầu sản xuất',
     badge: 'Mẫu lần đầu'
   },
   {
     value: 're_inspect',
     label: 'Kiểm tra lại',
-    desc: 'Phiếu tái kiểm tra các lô sản phẩm khắc phục/xử lý lại (/production_v2/inspection)',
+    desc: 'Phiếu tái kiểm tra các lô sản phẩm đã qua khắc phục / xử lý lại',
     badge: 'Kiểm tra lại'
   },
   {
     value: 'parameter',
     label: 'Kiểm tra thông số',
-    desc: 'Phiếu đo đạc và kiểm tra các thông số kỹ thuật (độ ẩm, nhiệt độ...) (/production_v2/inspection)',
+    desc: 'Phiếu đo đạc và kiểm tra thông số kỹ thuật (độ ẩm, nhiệt độ...)',
     badge: 'Thông số'
   },
   {
     value: 'process',
     label: 'Kiểm tra quy trình',
-    desc: 'Phiếu kiểm soát tuân thủ quy trình công đoạn sản xuất (/production_v2/inspection)',
+    desc: 'Phiếu kiểm soát tuân thủ quy trình và thao tác công đoạn',
     badge: 'Quy trình'
   },
   {
     value: 'qa',
     label: 'Vấn đáp',
-    desc: 'Phiếu vấn đáp và đánh giá kiến thức nghiệp vụ QA/QC (/production_v2/inspection)',
+    desc: 'Phiếu vấn đáp và đánh giá kiến thức nghiệp vụ QA/QC',
     badge: 'Vấn đáp'
   },
   {
@@ -43,7 +43,7 @@ export const INSPECTION_TYPE_OPTIONS = [
   {
     value: 'packaging_inspection',
     label: 'Sau đóng gói (OQC)',
-    desc: 'Kiểm tra bao bì đóng gói, tem nhãn trước khi xuất xưởng',
+    desc: 'Kiểm tra bao bì đóng gói, tem nhãn thành phẩm trước khi xuất xưởng',
     badge: 'OQC Đóng gói'
   }
 ];
@@ -271,156 +271,193 @@ const GuideAssignmentTab = ({ guideId, initialAssignments = [], onSaved }) => {
               <div
                 key={item.id || idx}
                 style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'minmax(240px, 1.4fr) minmax(180px, 1fr) minmax(180px, 1fr) 120px 48px',
-                  gap: 12,
-                  alignItems: 'center',
-                  padding: 14,
                   backgroundColor: '#FAF8F6',
                   borderRadius: 12,
                   border: '1px solid #EADCC9',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 10,
                   transition: 'border-color 0.2s'
                 }}
               >
-                {/* Field 1: Loại phiếu kiểm tra */}
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#7B5233', textTransform: 'uppercase', marginBottom: 4 }}>
-                    Loại phiếu kiểm tra *
-                  </label>
-                  <select
-                    value={item.inspection_type || ''}
-                    onChange={e => handleChange(idx, 'inspection_type', e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: 8,
-                      border: '1px solid #D1D5DB',
-                      backgroundColor: '#FFF',
-                      fontSize: 13.5,
-                      fontWeight: 600,
-                      color: '#2D1A12'
-                    }}
-                  >
-                    {INSPECTION_TYPE_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                  {selectedOpt && (
-                    <div style={{ fontSize: 11, color: '#64748B', marginTop: 3 }}>
-                      {selectedOpt.desc}
-                    </div>
-                  )}
-                </div>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(220px, 1.4fr) minmax(180px, 1fr) minmax(180px, 1fr) 110px 40px',
+                  gap: 12,
+                  alignItems: 'end'
+                }}>
+                  {/* Field 1: Loại phiếu kiểm tra */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#7B5233', textTransform: 'uppercase', marginBottom: 6 }}>
+                      Loại phiếu kiểm tra *
+                    </label>
+                    <select
+                      value={item.inspection_type || ''}
+                      onChange={e => handleChange(idx, 'inspection_type', e.target.value)}
+                      title={selectedOpt?.desc || ''}
+                      style={{
+                        width: '100%',
+                        height: 38,
+                        padding: '8px 12px',
+                        borderRadius: 8,
+                        border: '1px solid #D1D5DB',
+                        backgroundColor: '#FFF',
+                        fontSize: 13.5,
+                        fontWeight: 600,
+                        color: '#2D1A12',
+                        boxSizing: 'border-box'
+                      }}
+                    >
+                      {INSPECTION_TYPE_OPTIONS.map(opt => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                {/* Field 2: Công đoạn áp dụng (Tùy chọn) */}
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 4 }}>
-                    Công đoạn áp dụng
-                  </label>
-                  <select
-                    value={item.stage_id || ''}
-                    onChange={e => handleChange(idx, 'stage_id', e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: 8,
-                      border: '1px solid #D1D5DB',
-                      backgroundColor: '#FFF',
-                      fontSize: 13,
-                      color: '#374151'
-                    }}
-                  >
-                    <option value="">Tất cả công đoạn</option>
-                    {stages.map(stg => (
-                      <option key={stg.id} value={stg.id}>
-                        {stg.name || stg.stage_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                  {/* Field 2: Công đoạn áp dụng */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 6 }}>
+                      Công đoạn áp dụng
+                    </label>
+                    <select
+                      value={item.stage_id || ''}
+                      onChange={e => handleChange(idx, 'stage_id', e.target.value)}
+                      style={{
+                        width: '100%',
+                        height: 38,
+                        padding: '8px 12px',
+                        borderRadius: 8,
+                        border: '1px solid #D1D5DB',
+                        backgroundColor: '#FFF',
+                        fontSize: 13,
+                        color: '#374151',
+                        boxSizing: 'border-box'
+                      }}
+                    >
+                      <option value="">Tất cả công đoạn</option>
+                      {stages.map(stg => (
+                        <option key={stg.id} value={stg.id}>
+                          {stg.name || stg.stage_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                {/* Field 3: Sản phẩm áp dụng (Tùy chọn) */}
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 4 }}>
-                    Sản phẩm áp dụng
-                  </label>
-                  <select
-                    value={item.product_id || ''}
-                    onChange={e => handleChange(idx, 'product_id', e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: 8,
-                      border: '1px solid #D1D5DB',
-                      backgroundColor: '#FFF',
-                      fontSize: 13,
-                      color: '#374151'
-                    }}
-                  >
-                    <option value="">Tất cả sản phẩm</option>
-                    {products.map(prod => (
-                      <option key={prod.id} value={prod.id}>
-                        {prod.code ? `[${prod.code}] ` : ''}{prod.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                  {/* Field 3: Sản phẩm áp dụng */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 6 }}>
+                      Sản phẩm áp dụng
+                    </label>
+                    <select
+                      value={item.product_id || ''}
+                      onChange={e => handleChange(idx, 'product_id', e.target.value)}
+                      style={{
+                        width: '100%',
+                        height: 38,
+                        padding: '8px 12px',
+                        borderRadius: 8,
+                        border: '1px solid #D1D5DB',
+                        backgroundColor: '#FFF',
+                        fontSize: 13,
+                        color: '#374151',
+                        boxSizing: 'border-box'
+                      }}
+                    >
+                      <option value="">Tất cả sản phẩm</option>
+                      {products.map(prod => (
+                        <option key={prod.id} value={prod.id}>
+                          {prod.code ? `[${prod.code}] ` : ''}{prod.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                {/* Field 4: Trạng thái */}
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 4 }}>
-                    Trạng thái
-                  </label>
-                  <label style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    cursor: 'pointer',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: item.is_active !== false ? '#065F46' : '#991B1B',
-                    padding: '6px 8px',
-                    backgroundColor: item.is_active !== false ? '#D1FAE5' : '#FEE2E2',
-                    borderRadius: 6,
-                    width: 'fit-content'
-                  }}>
-                    <input
-                      type="checkbox"
-                      checked={item.is_active !== false}
-                      onChange={e => handleChange(idx, 'is_active', e.target.checked)}
-                      style={{ accentColor: '#059669' }}
-                    />
-                    {item.is_active !== false ? 'Bật' : 'Tắt'}
-                  </label>
-                </div>
-
-                {/* Field 5: Xóa */}
-                <div style={{ display: 'flex', justifyContent: 'center' }}>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveAssignment(idx)}
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 8,
-                      border: '1px solid #FEE2E2',
-                      backgroundColor: '#FFF',
-                      color: '#DC2626',
-                      cursor: 'pointer',
+                  {/* Field 4: Trạng thái */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 6 }}>
+                      Trạng thái
+                    </label>
+                    <label style={{
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      transition: 'all 0.2s'
-                    }}
-                    title="Xóa liên kết này"
-                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#DC2626'; e.currentTarget.style.color = '#FFF'; }}
-                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FFF'; e.currentTarget.style.color = '#DC2626'; }}
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                      gap: 6,
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: item.is_active !== false ? '#065F46' : '#991B1B',
+                      padding: '6px 10px',
+                      height: 38,
+                      boxSizing: 'border-box',
+                      backgroundColor: item.is_active !== false ? '#D1FAE5' : '#FEE2E2',
+                      borderRadius: 8,
+                      width: '100%'
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={item.is_active !== false}
+                        onChange={e => handleChange(idx, 'is_active', e.target.checked)}
+                        style={{ accentColor: '#059669' }}
+                      />
+                      {item.is_active !== false ? 'Bật' : 'Tắt'}
+                    </label>
+                  </div>
+
+                  {/* Field 5: Xóa */}
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveAssignment(idx)}
+                      style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 8,
+                        border: '1px solid #FEE2E2',
+                        backgroundColor: '#FFF',
+                        color: '#DC2626',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.2s',
+                        boxSizing: 'border-box'
+                      }}
+                      title="Xóa liên kết này"
+                      onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#DC2626'; e.currentTarget.style.color = '#FFF'; }}
+                      onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FFF'; e.currentTarget.style.color = '#DC2626'; }}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
+
+                {/* Description helper footer */}
+                {selectedOpt?.desc && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    paddingTop: 8,
+                    borderTop: '1px dashed #E2D9CF',
+                    fontSize: 12,
+                    color: '#64748B'
+                  }}>
+                    <span style={{
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                      backgroundColor: '#EADCC9',
+                      color: '#5D3B32',
+                      fontWeight: 700,
+                      fontSize: 11
+                    }}>
+                      Mục đích
+                    </span>
+                    <span>{selectedOpt.desc}</span>
+                  </div>
+                )}
               </div>
             );
           })}

@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import {
   AlertTriangle, Plus, Search, Filter, LayoutGrid, List, Eye, Edit3, Trash2,
-  CheckCircle2, XCircle, Layers, Image as ImageIcon, Sparkles, RefreshCw, Tag, MoreVertical
+  CheckCircle2, XCircle, Layers, Image as ImageIcon, Sparkles, RefreshCw, Tag, MoreVertical,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
@@ -62,6 +63,10 @@ const CTQGuideManagementView = () => {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [actionMenuId, setActionMenuId] = useState(null);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -135,25 +140,45 @@ const CTQGuideManagementView = () => {
   }, [guides, stages]);
 
   // Filtered List
-  const filteredGuides = guides.filter(g => {
-    const { stage, cleanDesc } = parseStageAndDesc(g.description);
+  const filteredGuides = useMemo(() => {
+    return guides.filter(g => {
+      const { stage, cleanDesc } = parseStageAndDesc(g.description);
 
-    const matchSearch =
-      (g.name || '').toLowerCase().includes(search.toLowerCase()) ||
-      (g.code || '').toLowerCase().includes(search.toLowerCase()) ||
-      (g.description || '').toLowerCase().includes(search.toLowerCase()) ||
-      stage.toLowerCase().includes(search.toLowerCase());
+      const matchSearch =
+        (g.name || '').toLowerCase().includes(search.toLowerCase()) ||
+        (g.code || '').toLowerCase().includes(search.toLowerCase()) ||
+        (g.description || '').toLowerCase().includes(search.toLowerCase()) ||
+        stage.toLowerCase().includes(search.toLowerCase());
 
-    const matchStage =
-      stageFilter === 'all' ? true : stage.toLowerCase() === stageFilter.toLowerCase();
+      const matchStage =
+        stageFilter === 'all' ? true : stage.toLowerCase() === stageFilter.toLowerCase();
 
-    const matchStatus =
-      statusFilter === 'all' ? true :
-      statusFilter === 'active' ? g.is_active !== false :
-      g.is_active === false;
+      const matchStatus =
+        statusFilter === 'all' ? true :
+          statusFilter === 'active' ? g.is_active !== false :
+            g.is_active === false;
 
-    return matchSearch && matchStage && matchStatus;
-  });
+      return matchSearch && matchStage && matchStatus;
+    });
+  }, [guides, search, stageFilter, statusFilter]);
+
+  // Reset pagination on filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, stageFilter, statusFilter]);
+
+  const totalPages = Math.ceil(filteredGuides.length / pageSize) || 1;
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(Math.max(1, totalPages));
+    }
+  }, [totalPages, currentPage]);
+
+  const paginatedGuides = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredGuides.slice(start, start + pageSize);
+  }, [filteredGuides, currentPage, pageSize]);
 
   // Calculate Metrics
   const totalGuides = guides.length;
@@ -410,12 +435,34 @@ const CTQGuideManagementView = () => {
               fontSize: 13.5,
               fontWeight: 600,
               color: '#334155',
-              backgroundColor: '#FFF'
+              backgroundColor: '#FFF',
+              cursor: 'pointer'
             }}
           >
             <option value="all">Tất cả trạng thái</option>
             <option value="active">Đang áp dụng</option>
             <option value="inactive">Tạm ngưng</option>
+          </select>
+
+          {/* Page Size Filter */}
+          <select
+            value={pageSize}
+            onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+            style={{
+              padding: '9px 12px',
+              borderRadius: 8,
+              border: '1px solid #CBD5E1',
+              fontSize: 13.5,
+              fontWeight: 600,
+              color: '#334155',
+              backgroundColor: '#FFF',
+              cursor: 'pointer'
+            }}
+          >
+            <option value={10}>10 dòng / trang</option>
+            <option value={15}>15 dòng / trang</option>
+            <option value={25}>25 dòng / trang</option>
+            <option value={50}>50 dòng / trang</option>
           </select>
         </div>
 
@@ -524,7 +571,7 @@ const CTQGuideManagementView = () => {
                   </td>
                 </tr>
               ) : (
-                filteredGuides.map((g, idx) => {
+                paginatedGuides.map((g, idx) => {
                   const imgCount = (g.steps || []).reduce((sum, s) => sum + (s.images?.length || 0), 0);
                   const isActive = g.is_active !== false;
                   const { stage, cleanDesc } = parseStageAndDesc(g.description);
@@ -545,7 +592,9 @@ const CTQGuideManagementView = () => {
                         if (actionMenuId !== g.id) e.currentTarget.style.backgroundColor = 'transparent';
                       }}
                     >
-                      <td style={{ padding: '14px 16px', color: '#94A3B8', fontWeight: 600 }}>{idx + 1}</td>
+                      <td style={{ padding: '14px 16px', color: '#94A3B8', fontWeight: 600 }}>
+                        {(currentPage - 1) * pageSize + idx + 1}
+                      </td>
                       <td style={{ padding: '14px 16px' }}>
                         <span style={{
                           padding: '4px 10px',
@@ -617,76 +666,58 @@ const CTQGuideManagementView = () => {
                           {isActive ? 'Áp dụng' : 'Tạm ngưng'}
                         </span>
                       </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                      {/* Thao tác (...) */}
+                      <td style={{ padding: '12px 16px', textAlign: 'center', position: 'relative', zIndex: actionMenuId === g.id ? 40 : 1 }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', justifyContent: 'center', position: 'relative' }}>
                           <button
                             type="button"
-                            onClick={() => setPreviewGuide(g)}
-                            style={{
-                              width: 32,
-                              height: 32,
-                              borderRadius: 8,
-                              border: `1px solid ${THEME.borderLight}`,
-                              backgroundColor: '#FFF',
-                              color: THEME.primary,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              cursor: 'pointer',
-                              transition: 'all 0.15s'
+                            className="action-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActionMenuId(actionMenuId === g.id ? null : g.id);
                             }}
-                            title="Xem nhanh CTQ"
-                            onMouseEnter={e => { e.currentTarget.style.backgroundColor = THEME.bgLight; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FFF'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                            title="Thao tác"
                           >
-                            <Eye size={15} />
+                            <MoreVertical size={16} style={{ pointerEvents: 'none' }} />
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/admin/ctq-guides/edit/${g.id}`)}
-                            style={{
-                              width: 32,
-                              height: 32,
-                              borderRadius: 8,
-                              border: '1px solid #CBD5E1',
-                              backgroundColor: '#FFF',
-                              color: '#334155',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              cursor: 'pointer',
-                              transition: 'all 0.15s'
-                            }}
-                            title="Chỉnh sửa CTQ"
-                            onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#F1F5F9'; e.currentTarget.style.color = THEME.primary; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FFF'; e.currentTarget.style.color = '#334155'; e.currentTarget.style.transform = 'translateY(0)'; }}
-                          >
-                            <Edit3 size={15} />
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setDeleteTarget(g)}
-                            style={{
-                              width: 32,
-                              height: 32,
-                              borderRadius: 8,
-                              border: '1px solid #FEE2E2',
-                              backgroundColor: '#FFF',
-                              color: '#DC2626',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              cursor: 'pointer',
-                              transition: 'all 0.15s'
-                            }}
-                            title="Xóa tài liệu CTQ"
-                            onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#FEE2E2'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FFF'; e.currentTarget.style.transform = 'translateY(0)'; }}
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                          {actionMenuId === g.id && (
+                            <div className="action-menu" style={{ right: 0, top: '100%' }}>
+                              <button
+                                type="button"
+                                className="action-menu-item"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActionMenuId(null);
+                                  setPreviewGuide(g);
+                                }}
+                              >
+                                Xem nhanh CTQ
+                              </button>
+                              <button
+                                type="button"
+                                className="action-menu-item"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActionMenuId(null);
+                                  navigate(`/admin/ctq-guides/edit/${g.id}`);
+                                }}
+                              >
+                                Chỉnh sửa CTQ
+                              </button>
+                              <button
+                                type="button"
+                                className="action-menu-item danger"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActionMenuId(null);
+                                  setDeleteTarget(g);
+                                }}
+                              >
+                                Xóa tài liệu
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -708,7 +739,7 @@ const CTQGuideManagementView = () => {
           padding: '4px 2px 20px 2px',
           alignContent: 'start'
         }}>
-          {filteredGuides.map(g => {
+          {paginatedGuides.map(g => {
             const { stage, cleanDesc } = parseStageAndDesc(g.description);
             return (
               <div
@@ -818,6 +849,93 @@ const CTQGuideManagementView = () => {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Phân trang - Desktop */}
+      {filteredGuides.length > 0 && (
+        <div className="admin-pagination-desktop desktop-only" style={{ borderRadius: viewMode === 'table' ? '0 0 12px 12px' : '12px', marginTop: viewMode === 'table' ? 0 : 12 }}>
+          <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
+            Hiển thị <b>{(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, filteredGuides.length)}</b> trên <b>{filteredGuides.length}</b> kết quả
+          </div>
+
+          {totalPages > 1 && (
+            <div className="pagination-controls" style={{ display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+              <button
+                type="button"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                className="page-btn"
+                title="Trang trước"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              {(() => {
+                const pages = [];
+                const delta = 2;
+                for (let i = 1; i <= totalPages; i++) {
+                  if (i === 1 || i === totalPages || (i >= currentPage - delta && i <= currentPage + delta)) {
+                    pages.push(i);
+                  } else if (pages[pages.length - 1] !== '...') {
+                    pages.push('...');
+                  }
+                }
+                return pages.map((p, idx) => {
+                  if (p === '...') {
+                    return (
+                      <span key={`ell-${idx}`} style={{ padding: '0 4px', color: '#8D6E63', fontWeight: '700' }}>
+                        ...
+                      </span>
+                    );
+                  }
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      className={`page-btn ${currentPage === p ? 'active' : ''}`}
+                      onClick={() => setCurrentPage(p)}
+                    >
+                      {p}
+                    </button>
+                  );
+                });
+              })()}
+              <button
+                type="button"
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                className="page-btn"
+                title="Trang sau"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Phân trang - Mobile Sticky */}
+      {totalPages > 1 && (
+        <div className="pagination-mobile-sticky mobile-only">
+          <button
+            type="button"
+            className="page-btn"
+            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1}
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <span style={{ fontWeight: '700', fontSize: '0.9rem', color: '#7B5233' }}>
+            Trang {currentPage} / {totalPages || 1}
+          </span>
+          <button
+            type="button"
+            className="page-btn"
+            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+            disabled={currentPage >= totalPages || totalPages <= 1}
+          >
+            <ChevronRight size={16} />
+          </button>
         </div>
       )}
 

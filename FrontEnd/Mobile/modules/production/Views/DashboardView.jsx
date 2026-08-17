@@ -18,7 +18,7 @@ const DashboardView = () => {
 
   return (
     <Layout>
-      <div style={{ backgroundColor: 'var(--bg-cream)', minHeight: '100vh', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '100px' }}>
+      <div style={{ backgroundColor: 'var(--bg-cream)', flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '100px' }}>
         <PageHeader title="G7 - Smart Flow" subTitle="MB18 | Trang chủ" />
 
         {/* Welcome Card */}

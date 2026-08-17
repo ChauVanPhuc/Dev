@@ -51,6 +51,9 @@ const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, 
         position: 'relative',
         animation: 'modalFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
         boxSizing: 'border-box',
+        maxHeight: 'calc(100dvh - 32px)',
+        display: 'flex',
+        flexDirection: 'column',
         overflow: 'hidden'
       }}>
         <style dangerouslySetInnerHTML={{ __html: `
@@ -94,7 +97,7 @@ const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, 
         </div>
 
         {/* Form Content */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%', boxSizing: 'border-box' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%', boxSizing: 'border-box', overflowY: 'auto', flex: 1, WebkitOverflowScrolling: 'touch' }}>
           
           {/* Row 1: PO (minmax) + Kết quả (minmax) */}
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: '12px', alignItems: 'flex-start' }}>

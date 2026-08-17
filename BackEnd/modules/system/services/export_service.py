@@ -82,7 +82,7 @@ def export_screen_component_file(
     # 1. Tim man hinh va component
     screen = db.query(SystemScreenModel).filter(SystemScreenModel.id == screen_id).first()
     if not screen:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Khong tim thay man hinh")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy màn hình")
 
     component = None
     for comp in screen.components or []:
@@ -94,7 +94,7 @@ def export_screen_component_file(
     if not component:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Khong tim thay component voi button_id={button_id}"
+            detail=f"Không tìm thấy component với button_id={button_id}"
         )
 
     tech = _parse_technical_details(component.technical_details)
@@ -104,7 +104,7 @@ def export_screen_component_file(
     if not sample_url:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Component chua co file mau de xuat"
+            detail="Component chưa có file mẫu để xuất"
         )
 
     try:
@@ -113,7 +113,7 @@ def export_screen_component_file(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     if not os.path.exists(physical_path):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Khong tim thay file mau tren he thong")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy file mẫu trên hệ thống")
 
     # 3. Xac dinh che do xuat
     export_mode = (mode or tech.get("export_mode") or "list").lower()
@@ -141,14 +141,14 @@ def export_screen_component_file(
     if not isinstance(data, list):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Du lieu xuat phai la mot object hoac mang object"
+            detail="Dữ liệu xuất phải là một đối tượng hoặc danh sách đối tượng"
         )
 
     # 6. Fill template
     try:
         file_bytes = fill_template(physical_path, export_mode, data, merged_context)
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Loi xu ly file mau: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Lỗi xử lý file mẫu: {str(e)}")
 
     # 7. Dinh dang response
     ext = os.path.splitext(physical_path)[1].lower()

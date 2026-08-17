@@ -34,14 +34,17 @@ const AddPlanModal = ({ isOpen, onClose, onSave }) => {
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 1000,
-      backdropFilter: 'blur(3px)'
+      backdropFilter: 'blur(3px)',
+      overflowY: 'auto',
+      padding: '16px'
     }}>
       <div style={{
         backgroundColor: '#FFFFFF',
         borderRadius: '16px',
         width: '560px',
         maxWidth: '92%',
-        overflow: 'hidden',
+        maxHeight: 'calc(100vh - 32px)',
+        overflowY: 'auto',
         boxShadow: '0 20px 40px rgba(0,0,0,0.25)'
       }}>
         <div style={{

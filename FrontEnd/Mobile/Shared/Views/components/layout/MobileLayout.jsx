@@ -28,7 +28,7 @@ const Layout = ({ children }) => {
 
   const { user, setActiveStage, logout } = useAuthStore()
 
-  
+
 
   const userRoleStr = (user?.role_name || user?.role_description || '').toLowerCase();
   const userPermStr = (user?.permission_name || user?.permission_description || '').toLowerCase();

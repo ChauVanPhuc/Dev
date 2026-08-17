@@ -1,17 +1,21 @@
 import os
 import uuid
 import datetime
+import json
+from collections import defaultdict
 from typing import List, Optional
 import app.models
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Body, Request, Query
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, and_, or_, Date, cast
+from sqlalchemy import func, and_, or_, Date, cast, case
 from config.database import get_db
 from modules.inspection.models.input_inspection import InputInspection
 from modules.inspection.schemas.input_inspection import InputInspection as InspectionSchema, InputInspectionRead
 from modules.inspection.models.defect_type import DefectType, ClientDefect, DefectGlossary
+from modules.inspection.models.defect_category import DefectCategory
 from modules.inspection.models.user_defect_tracking import UserDefectTracking
 from modules.inspection.schemas.defect_type import DefectType as DefectTypeSchema, DefectTypeCreate, ClientDefect as ClientDefectSchema
+from modules.inspection.schemas.defect_category import DefectCategoryCreate, DefectCategoryUpdate, DefectCategoryResponse
 from modules.inspection.schemas.daily_inspection import (
     DailyInspectionRecordCreate, 
     DailyInspectionRecordRead,
@@ -136,7 +140,37 @@ def sync_defects_to_daily_inspection(stage_name: str, defects_list: list, inspec
         return
     
     today = datetime.date.today()
-    total_added_defects = sum(int(d.get('quantity', 1)) for d in defects_list if isinstance(d, dict) and d.get('defect_id'))
+    
+    def extract_defect_info(d):
+        if not isinstance(d, dict):
+            return None, 0
+        raw_id = d.get('defect_id') or d.get('defectId') or d.get('id')
+        qty = d.get('quantity', 1)
+        try:
+            qty = int(qty)
+        except (ValueError, TypeError):
+            qty = 1
+        
+        defect_id = None
+        if raw_id:
+            try:
+                defect_id = int(raw_id)
+            except (ValueError, TypeError):
+                pass
+        
+        if not defect_id:
+            # Tìm theo defect_name hoặc name hoặc code
+            d_name = (d.get('defect_name') or d.get('name') or '').strip()
+            if d_name:
+                found_d = db.query(DefectType.id).filter(DefectType.name.ilike(d_name)).first()
+                if found_d:
+                    defect_id = found_d[0]
+                    
+        return defect_id, qty
+
+    extracted = [extract_defect_info(d) for d in (defects_list or [])]
+    valid_defects = [(did, q) for did, q in extracted if did and q > 0]
+    total_added_defects = sum(q for did, q in valid_defects)
     
     if total_added_defects <= 0 and inspected_qty <= 0:
         return
@@ -180,21 +214,7 @@ def sync_defects_to_daily_inspection(stage_name: str, defects_list: list, inspec
             daily_rec.defect_rate = round((daily_rec.total_defects / daily_rec.total_products) * 100, 2)
 
     # 2. Đồng bộ các lỗi chi tiết vào DailyInspectionDefect
-    for d in defects_list:
-        if not isinstance(d, dict):
-            continue
-        raw_defect_id = d.get('defect_id')
-        if not raw_defect_id:
-            continue
-        try:
-            defect_id = int(raw_defect_id)
-        except (ValueError, TypeError):
-            continue
-        
-        qty = int(d.get('quantity', 1))
-        if qty <= 0:
-            continue
-        
+    for defect_id, qty in valid_defects:
         defect_item = db.query(DailyInspectionDefect).filter(
             DailyInspectionDefect.record_id == daily_rec.id,
             DailyInspectionDefect.defect_id == defect_id
@@ -212,47 +232,83 @@ def sync_defects_to_daily_inspection(stage_name: str, defects_list: list, inspec
 
 @router.post("/stage", response_model=StageInspectionRead)
 async def create_stage_inspection(
-    inspection_type: str = Form(...),
-    batch_no: Optional[str] = Form(None),
-    product_sku: Optional[str] = Form(None),
-    specification: Optional[str] = Form(None),
-    inspector_name: Optional[str] = Form(None),
-    conclusion: str = Form("pass"),
-    notes: Optional[str] = Form(None),
-    data_json: Optional[str] = Form(None),
-    files: List[UploadFile] = File([]),
+    request: Request,
     db: Session = Depends(get_db)
 ):
     """
-    [POST] Lưu kết quả kiểm tra theo công đoạn (Stage Inspection) hỗ trợ upload ảnh trực tiếp & đồng bộ lỗi.
+    [POST] Lưu kết quả kiểm tra theo công đoạn (Stage Inspection) hỗ trợ cả JSON payload và Form-data/upload file trực tiếp.
     """
     import json
-    try:
-        # Xử lý lưu ảnh tải lên trực tiếp (tối đa 3 ảnh)
-        image_paths = []
+    content_type = request.headers.get("content-type", "")
+    
+    inspection_type = None
+    batch_no = None
+    product_sku = None
+    specification = None
+    inspector_name = None
+    conclusion = "pass"
+    notes = None
+    data_json = None
+    images_json = None
+    image_paths = []
+    
+    if "application/json" in content_type:
+        body = await request.json()
+        inspection_type = body.get("inspection_type") or "nhap-kho"
+        batch_no = body.get("batch_no")
+        product_sku = body.get("product_sku")
+        specification = body.get("specification")
+        inspector_name = body.get("inspector_name")
+        conclusion = body.get("conclusion") or "pass"
+        notes = body.get("notes")
+        data_json = body.get("data_json")
+        images_json = body.get("images_json")
+        if isinstance(data_json, (dict, list)):
+            data_json = json.dumps(data_json)
+        if isinstance(images_json, (dict, list)):
+            images_json = json.dumps(images_json)
+    else:
+        form = await request.form()
+        inspection_type = form.get("inspection_type") or "nhap-kho"
+        batch_no = form.get("batch_no")
+        product_sku = form.get("product_sku")
+        specification = form.get("specification")
+        inspector_name = form.get("inspector_name")
+        conclusion = form.get("conclusion") or "pass"
+        notes = form.get("notes")
+        data_json = form.get("data_json")
+        images_json = form.get("images_json")
+        
+        # Xử lý files tải lên nếu có
+        files = form.getlist("files")
         for file in files[:3]:
-            ext = os.path.splitext(file.filename)[1]
-            filename = f"{uuid.uuid4()}{ext}"
-            filepath = os.path.join(UPLOAD_DIR, filename)
-            with open(filepath, "wb") as buffer:
-                buffer.write(await file.read())
-            image_paths.append(f"/static/uploads/inspections/{filename}")
+            if hasattr(file, 'filename') and file.filename:
+                ext = os.path.splitext(file.filename)[1]
+                filename = f"{uuid.uuid4()}{ext}"
+                filepath = os.path.join(UPLOAD_DIR, filename)
+                with open(filepath, "wb") as buffer:
+                    buffer.write(await file.read())
+                image_paths.append(f"/static/uploads/inspections/{filename}")
+                
+        if image_paths and not images_json:
+            images_json = json.dumps({"Ảnh kiểm tra mẫu": image_paths})
 
-        final_inspector_name = inspector_name
-        if not final_inspector_name or not final_inspector_name.strip():
-            if data_json:
-                try:
-                    p = json.loads(data_json) if isinstance(data_json, str) else data_json
-                    if isinstance(p, dict):
-                        final_inspector_name = p.get('inspector_name') or p.get('created_by')
-                except Exception:
-                    pass
-        if not final_inspector_name or not final_inspector_name.strip():
-            default_acc = db.query(Account.full_name).filter(Account.is_active == True).first()
-            final_inspector_name = default_acc[0] if default_acc else "QC Hệ thống"
+    final_inspector_name = inspector_name
+    if not final_inspector_name or not str(final_inspector_name).strip():
+        if data_json:
+            try:
+                p = json.loads(data_json) if isinstance(data_json, str) else data_json
+                if isinstance(p, dict):
+                    final_inspector_name = p.get('inspector_name') or p.get('created_by')
+            except Exception:
+                pass
+    if not final_inspector_name or not str(final_inspector_name).strip():
+        default_acc = db.query(Account.full_name).filter(Account.is_active == True).first()
+        final_inspector_name = default_acc[0] if default_acc else "QC Hệ thống"
 
+    try:
         new_record = StageInspection(
-            inspection_type = inspection_type,
+            inspection_type = str(inspection_type),
             batch_no        = batch_no,
             product_sku     = product_sku,
             specification   = specification,
@@ -263,11 +319,11 @@ async def create_stage_inspection(
             image_path_1    = image_paths[0] if len(image_paths) > 0 else None,
             image_path_2    = image_paths[1] if len(image_paths) > 1 else None,
             image_path_3    = image_paths[2] if len(image_paths) > 2 else None,
-            images_json     = json.dumps({"Ảnh kiểm tra mẫu": image_paths}) if image_paths else None
+            images_json     = images_json
         )
         db.add(new_record)
         
-        # Đồng bộ lỗi nếu có defects trong data_json hoặc tự nhận diện theo công đoạn
+        # Đồng bộ lỗi nếu có defects trong data_json
         if data_json:
             try:
                 parsed_data = json.loads(data_json) if isinstance(data_json, str) else data_json
@@ -276,6 +332,8 @@ async def create_stage_inspection(
                     if not stage_name:
                         stage_map = {
                             'do-am': 'Phôi gỗ',
+                            'nhap-kho': 'Phôi gỗ',
+                            'dau-vao': 'Phôi gỗ',
                             'kich-thuoc': 'Định hình',
                             'ngoai-quan': 'Lắp ráp',
                             'chuc-nang': 'Thành phẩm',
@@ -285,7 +343,7 @@ async def create_stage_inspection(
                         stage_name = stage_map.get(inspection_type, 'Phôi gỗ')
 
                     defects_list = parsed_data.get('defects', [])
-                    inspected_qty = parsed_data.get('inspected_qty') or parsed_data.get('total_qty', 0)
+                    inspected_qty = parsed_data.get('total_qty') or parsed_data.get('sample_qty') or parsed_data.get('inspected_qty', 0)
 
                     if stage_name and (isinstance(defects_list, list) and len(defects_list) > 0 or inspected_qty > 0):
                         sync_defects_to_daily_inspection(stage_name, defects_list, final_inspector_name, db, inspected_qty=inspected_qty)
@@ -353,6 +411,33 @@ def do_update_stage(id: int, data: StageInspectionCreate, db: Session):
         record.images_json     = data.images_json
         record.updated_at      = datetime.datetime.now()
         
+        # Đồng bộ lỗi nếu có defects trong data_json
+        if data.data_json:
+            try:
+                parsed_data = json.loads(data.data_json) if isinstance(data.data_json, str) else data.data_json
+                if isinstance(parsed_data, dict):
+                    stage_name = parsed_data.get('stage')
+                    if not stage_name:
+                        stage_map = {
+                            'do-am': 'Phôi gỗ',
+                            'nhap-kho': 'Phôi gỗ',
+                            'dau-vao': 'Phôi gỗ',
+                            'kich-thuoc': 'Định hình',
+                            'ngoai-quan': 'Lắp ráp',
+                            'chuc-nang': 'Thành phẩm',
+                            'bam-dinh': 'Sơn',
+                            'quy-trinh': 'Sản xuất'
+                        }
+                        stage_name = stage_map.get(data.inspection_type, 'Phôi gỗ')
+
+                    defects_list = parsed_data.get('defects', [])
+                    inspected_qty = parsed_data.get('total_qty') or parsed_data.get('sample_qty') or parsed_data.get('inspected_qty', 0)
+
+                    if stage_name and (isinstance(defects_list, list) and len(defects_list) > 0 or inspected_qty > 0):
+                        sync_defects_to_daily_inspection(stage_name, defects_list, record.inspector_name, db, inspected_qty=inspected_qty)
+            except Exception as sync_err:
+                print(f"[STAGE UPDATE SYNC ERROR] {sync_err}")
+                
         db.commit()
         db.refresh(record)
         return record
@@ -841,6 +926,7 @@ async def upload_inspection_images(
     [POST] Tải danh sách ảnh lên máy chủ và trả về danh sách đường dẫn.
     """
     try:
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
         image_paths = []
         for file in files:
             ext = os.path.splitext(file.filename)[1]
@@ -1366,7 +1452,7 @@ def get_defect_types(
     db: Session = Depends(get_db)
 ):
     """
-    [GET] Lấy danh sách các loại lỗi từ danh mục. Có thể lọc theo nhóm hoặc bộ phận.
+    [GET] Lấy danh sách các loại lỗi từ danh mục kèm thống kê tỷ lệ lỗi (% tháng hiện tại & % all-time).
     Nếu truyền user_id, sẽ trả về trạng thái theo dõi cá nhân của user đó.
     """
     query = db.query(DefectType)
@@ -1390,17 +1476,371 @@ def get_defect_types(
             .all()
         ]
     
-    # Gán trạng thái is_tracked_by_me cho từng bản ghi
+    # ── TÍNH TOÁN THỐNG KÊ LỖI (THÁNG HIỆN TẠI & TOÀN THỜI GIAN) ──
+    today = datetime.date.today()
+    first_day_this_month = today.replace(day=1)
+    if today.month == 12:
+        first_day_next_month = datetime.date(today.year + 1, 1, 1)
+    else:
+        first_day_next_month = datetime.date(today.year, today.month + 1, 1)
+
+    # Dictionary tổng hợp theo defect_id: { defect_id: { "month_qty": 0, "all_qty": 0 } }
+    stats_map = defaultdict(lambda: {"month_qty": 0, "all_qty": 0})
+
+    # 1. Thống kê từ DailyInspectionRecord & DailyInspectionDefect
+    daily_stats = db.query(
+        DailyInspectionDefect.defect_id,
+        func.sum(
+            case(
+                (
+                    and_(
+                        DailyInspectionRecord.inspection_date >= first_day_this_month,
+                        DailyInspectionRecord.inspection_date < first_day_next_month
+                    ),
+                    DailyInspectionDefect.quantity
+                ),
+                else_=0
+            )
+        ).label("month_qty"),
+        func.sum(DailyInspectionDefect.quantity).label("all_qty")
+    ).join(DailyInspectionRecord, DailyInspectionRecord.id == DailyInspectionDefect.record_id)\
+     .group_by(DailyInspectionDefect.defect_id)\
+     .all()
+
+    for row in daily_stats:
+        if row.defect_id:
+            stats_map[row.defect_id]["month_qty"] += int(row.month_qty or 0)
+            stats_map[row.defect_id]["all_qty"] += int(row.all_qty or 0)
+
+    month_products = db.query(func.sum(DailyInspectionRecord.total_products))\
+        .filter(
+            DailyInspectionRecord.inspection_date >= first_day_this_month,
+            DailyInspectionRecord.inspection_date < first_day_next_month
+        ).scalar() or 0
+
+    all_products = db.query(func.sum(DailyInspectionRecord.total_products)).scalar() or 0
+
+    # 2. Thống kê bổ sung từ StageInspection (Kiểm tra công đoạn, nhập kho...)
+    name_to_id = {}
+    code_to_id = {}
+    all_defect_objs = db.query(DefectType.id, DefectType.name, DefectType.code).all()
+    id_set = set()
+    for row_id, row_name, row_code in all_defect_objs:
+        id_set.add(row_id)
+        if row_name:
+            name_to_id[row_name.lower().strip()] = row_id
+        if row_code:
+            code_to_id[row_code.lower().strip()] = row_id
+
+    stage_records = db.query(StageInspection).all()
+    for s_rec in stage_records:
+        rec_dt = s_rec.inspection_date or s_rec.created_at
+        rec_date = rec_dt.date() if rec_dt else today
+        is_this_month = (first_day_this_month <= rec_date < first_day_next_month)
+
+        if not s_rec.data_json:
+            continue
+        try:
+            p_data = json.loads(s_rec.data_json) if isinstance(s_rec.data_json, str) else s_rec.data_json
+            if not isinstance(p_data, dict):
+                continue
+
+            p_qty = p_data.get('total_qty') or p_data.get('sample_qty') or p_data.get('inspected_qty') or 0
+            try:
+                p_qty = int(p_qty)
+            except (ValueError, TypeError):
+                p_qty = 0
+
+            all_products += p_qty
+            if is_this_month:
+                month_products += p_qty
+
+            defects_list = p_data.get('defects') or []
+            if isinstance(defects_list, list):
+                for df in defects_list:
+                    if not isinstance(df, dict):
+                        continue
+                    
+                    raw_id = df.get('defect_id') or df.get('defectId') or df.get('id')
+                    target_id = None
+                    if raw_id:
+                        try:
+                            int_id = int(raw_id)
+                            if int_id in id_set:
+                                target_id = int_id
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    if not target_id:
+                        df_name = (df.get('defect_name') or df.get('name') or '').lower().strip()
+                        if df_name in name_to_id:
+                            target_id = name_to_id[df_name]
+                        elif df.get('code') and df.get('code').lower().strip() in code_to_id:
+                            target_id = code_to_id[df.get('code').lower().strip()]
+
+                    if target_id:
+                        qty = df.get('quantity', 1)
+                        try:
+                            qty = int(qty)
+                        except (ValueError, TypeError):
+                            qty = 1
+                        if qty > 0:
+                            stats_map[target_id]["all_qty"] += qty
+                            if is_this_month:
+                                stats_map[target_id]["month_qty"] += qty
+        except Exception:
+            continue
+
+    # Tổng số lượng lỗi toàn hệ thống trong tháng và all-time
+    month_defects_total = sum(v["month_qty"] for v in stats_map.values())
+    all_defects_total = sum(v["all_qty"] for v in stats_map.values())
+
+    # Gán trạng thái và số liệu thống kê cho từng bản ghi
     for d in defects:
         d.is_tracked_by_me = d.id in tracked_defect_ids
+        stat = stats_map.get(d.id, {"month_qty": 0, "all_qty": 0})
+        m_qty = stat["month_qty"]
+        a_qty = stat["all_qty"]
+        
+        # Tỷ lệ % trên tổng số lượng lỗi phát sinh (Tháng / All)
+        d.monthly_count = m_qty
+        d.monthly_rate = round((m_qty / month_defects_total * 100), 1) if month_defects_total > 0 else 0.0
+        d.monthly_defect_share = d.monthly_rate
+        
+        d.all_time_count = a_qty
+        d.all_time_rate = round((a_qty / all_defects_total * 100), 1) if all_defects_total > 0 else 0.0
+        d.all_time_defect_share = d.all_time_rate
         
     return defects
+
+# ────────────────────────────────────────────────────────────
+# DANH MỤC PHÂN NHÓM LỖI QC (DEFECT CATEGORIES)
+# ────────────────────────────────────────────────────────────
+
+@router.get("/defect-categories")
+def get_defect_categories(
+    include_inactive: bool = Query(default=True),
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy danh sách phân nhóm lỗi QC (Defect Categories) kèm số lượng loại lỗi đang gán.
+    """
+    query = db.query(DefectCategory)
+    if not include_inactive:
+        query = query.filter(DefectCategory.is_active == True)
+    categories = query.order_by(DefectCategory.order_index, DefectCategory.id).all()
+    
+    # Đếm số lượng loại lỗi thuộc từng phân nhóm
+    result = []
+    for cat in categories:
+        cnt = db.query(func.count(DefectType.id)).filter(
+            func.lower(DefectType.category) == func.lower(cat.code)
+        ).scalar() or 0
+        result.append({
+            "id": cat.id,
+            "code": cat.code,
+            "name": cat.name,
+            "prefix": cat.prefix,
+            "default_departments": cat.default_departments,
+            "description": cat.description,
+            "color": cat.color,
+            "order_index": cat.order_index or 0,
+            "is_active": cat.is_active,
+            "defect_count": cnt,
+            "created_at": cat.created_at,
+            "updated_at": cat.updated_at
+        })
+    return result
+
+@router.post("/defect-categories")
+def create_defect_category(
+    data: DefectCategoryCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    [POST] Tạo mới một phân nhóm lỗi QC.
+    """
+    code_val = (data.code or "").strip().lower()
+    if not code_val:
+        raise HTTPException(status_code=400, detail="Mã phân nhóm không được để trống!")
+    
+    prefix_val = (data.prefix or "").strip().upper()
+    if not prefix_val:
+        raise HTTPException(status_code=400, detail="Tiền tố mã lỗi (Prefix) không được để trống!")
+        
+    existing_code = db.query(DefectCategory).filter(func.lower(DefectCategory.code) == code_val).first()
+    if existing_code:
+        raise HTTPException(status_code=400, detail=f"Mã phân nhóm '{code_val}' đã tồn tại trong hệ thống!")
+        
+    new_cat = DefectCategory(
+        code=code_val,
+        name=data.name.strip(),
+        prefix=prefix_val,
+        default_departments=data.default_departments,
+        description=data.description,
+        color=data.color,
+        order_index=data.order_index or 0,
+        is_active=data.is_active if data.is_active is not None else True
+    )
+    db.add(new_cat)
+    db.commit()
+    db.refresh(new_cat)
+    return new_cat
+
+@router.put("/defect-categories/{category_id}")
+def update_defect_category(
+    category_id: int,
+    data: DefectCategoryUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    [PUT] Cập nhật thông tin phân nhóm lỗi QC.
+    """
+    cat = db.query(DefectCategory).filter(DefectCategory.id == category_id).first()
+    if not cat:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phân nhóm lỗi!")
+        
+    old_code = cat.code
+    
+    if data.code is not None:
+        new_code = data.code.strip().lower()
+        if new_code != old_code:
+            existing = db.query(DefectCategory).filter(
+                func.lower(DefectCategory.code) == new_code,
+                DefectCategory.id != category_id
+            ).first()
+            if existing:
+                raise HTTPException(status_code=400, detail=f"Mã phân nhóm '{new_code}' đã tồn tại!")
+            cat.code = new_code
+            # Tự động cập nhật các defect_types đang tham chiếu mã cũ
+            db.query(DefectType).filter(
+                func.lower(DefectType.category) == func.lower(old_code)
+            ).update({"category": new_code}, synchronize_session=False)
+
+    if data.name is not None:
+        cat.name = data.name.strip()
+    if data.prefix is not None:
+        cat.prefix = data.prefix.strip().upper()
+    if data.default_departments is not None:
+        cat.default_departments = data.default_departments
+    if data.description is not None:
+        cat.description = data.description
+    if data.color is not None:
+        cat.color = data.color
+    if data.order_index is not None:
+        cat.order_index = data.order_index
+    if data.is_active is not None:
+        cat.is_active = data.is_active
+        
+    db.commit()
+    db.refresh(cat)
+    return cat
+
+@router.delete("/defect-categories/{category_id}")
+def delete_defect_category(
+    category_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    [DELETE] Xóa phân nhóm lỗi QC. Nếu đang có loại lỗi thuộc nhóm này, chặn xóa để bảo đảm toàn vẹn dữ liệu.
+    """
+    cat = db.query(DefectCategory).filter(DefectCategory.id == category_id).first()
+    if not cat:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phân nhóm lỗi!")
+        
+    in_use_count = db.query(func.count(DefectType.id)).filter(
+        func.lower(DefectType.category) == func.lower(cat.code)
+    ).scalar() or 0
+    
+    if in_use_count > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Không thể xóa: đang có {in_use_count} loại lỗi thuộc phân nhóm '{cat.name}'. Vui lòng chuyển các loại lỗi sang nhóm khác hoặc chuyển trạng thái ngưng dùng!"
+        )
+        
+    db.delete(cat)
+    db.commit()
+    return {"message": f"Đã xóa phân nhóm '{cat.name}' thành công"}
+
+def generate_unique_defect_code(category: str, db: Session) -> str:
+    """
+    Sinh mã lỗi G7 tự động theo phân nhóm, đọc tiền tố từ bảng defect_categories động trong database.
+    Đảm bảo 100% không trùng lặp trong DB.
+    """
+    import re
+    # Tra cứu prefix từ bảng defect_categories trong database
+    cat_code = (category or "").lower().strip()
+    cat_row = db.query(DefectCategory).filter(
+        func.lower(DefectCategory.code) == cat_code
+    ).first()
+    
+    if cat_row and cat_row.prefix:
+        prefix = cat_row.prefix.strip().upper()
+    else:
+        # Fallback maps
+        fallback_map = {
+            "visual": "APP",
+            "structure": "STR",
+            "material": "MAT",
+            "paint": "PAI",
+            "other": "OTH"
+        }
+        prefix = fallback_map.get(cat_code, (cat_code[:3] if cat_code else "OTH").upper())
+    
+    # Lấy tất cả mã lỗi hiện có trong bảng defect_types
+    existing_records = db.query(DefectType.code).filter(DefectType.code.isnot(None)).all()
+    all_codes = set(r[0].strip().upper() for r in existing_records if r[0])
+    
+    # Tìm số thứ tự cao nhất của prefix này
+    max_num = 0
+    pattern = re.compile(rf"^{re.escape(prefix)}[-_]?(\d+)$", re.IGNORECASE)
+    for c in all_codes:
+        m = pattern.match(c)
+        if m:
+            try:
+                num = int(m.group(1))
+                if num > max_num:
+                    max_num = num
+            except ValueError:
+                pass
+                
+    # Sinh mã tiếp theo và kiểm tra vòng lặp để đảm bảo 100% không trùng
+    next_num = max_num + 1
+    while True:
+        candidate_code = f"{prefix}-{next_num:03d}"
+        if candidate_code.upper() not in all_codes:
+            return candidate_code
+        next_num += 1
+
+@router.get("/defect-types/generate-code")
+def get_generated_defect_code(
+    category: str = Query(default="visual"),
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Tự động sinh mã lỗi G7 không trùng lặp theo phân nhóm QC (động từ DB).
+    """
+    code = generate_unique_defect_code(category, db)
+    return {"code": code, "category": category}
+
 
 @router.post("/defect-types", response_model=DefectTypeSchema)
 def create_defect_type(data: DefectTypeCreate, db: Session = Depends(get_db)):
     """
     [POST] Tạo mới một loại lỗi.
     """
+    code_val = (data.code or "").strip()
+    if not code_val:
+        code_val = generate_unique_defect_code(data.category, db)
+    else:
+        # Kiểm tra trùng lặp mã lỗi trong DB
+        existing = db.query(DefectType).filter(func.lower(DefectType.code) == code_val.lower()).first()
+        if existing:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Mã lỗi '{code_val}' đã tồn tại trong hệ thống (Tên: {existing.name}). Vui lòng chọn mã khác!"
+            )
+
     defect = DefectType(
         name=data.name,
         category=data.category,
@@ -1409,8 +1849,9 @@ def create_defect_type(data: DefectTypeCreate, db: Session = Depends(get_db)):
         needs_tracking=data.needs_tracking,
         qc_tracking=data.qc_tracking,
         is_active=data.is_active,
-        code=data.code,
-        aql_class=data.aql_class
+        code=code_val,
+        aql_class=data.aql_class,
+        images=data.images
     )
     db.add(defect)
     db.commit()
@@ -1545,6 +1986,19 @@ def update_defect_type(defect_id: int, data: DefectTypeCreate, db: Session = Dep
     if not defect:
         raise HTTPException(status_code=404, detail="Không tìm thấy loại lỗi")
     
+    code_val = (data.code or "").strip()
+    if code_val:
+        # Kiểm tra trùng lặp với bản ghi khác
+        existing = db.query(DefectType).filter(
+            func.lower(DefectType.code) == code_val.lower(),
+            DefectType.id != defect_id
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Mã lỗi '{code_val}' đã được sử dụng cho loại lỗi khác ({existing.name})!"
+            )
+    
     defect.name = data.name
     defect.category = data.category
     defect.stage = data.stage
@@ -1552,8 +2006,9 @@ def update_defect_type(defect_id: int, data: DefectTypeCreate, db: Session = Dep
     defect.needs_tracking = data.needs_tracking
     defect.qc_tracking = data.qc_tracking
     defect.is_active = data.is_active
-    defect.code = data.code
+    defect.code = code_val or None
     defect.aql_class = data.aql_class
+    defect.images = data.images
     
     db.commit()
     db.refresh(defect)

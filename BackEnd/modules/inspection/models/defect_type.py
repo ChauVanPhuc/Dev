@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, Boolean, ForeignKey
 from sqlalchemy.dialects.mssql import NVARCHAR
 from sqlalchemy.orm import relationship
 from config.database import Base
+from modules.inspection.models.defect_category import DefectCategory
 
 class DefectType(Base):
     """
@@ -21,6 +22,7 @@ class DefectType(Base):
     # Cột bổ sung cho danh mục lỗi G7
     code = Column(NVARCHAR(50), nullable=True, unique=True, index=True) # Mã lỗi G7 (Ví dụ: MAT-01, STR-01)
     aql_class = Column(NVARCHAR(50), nullable=True)                     # Phân loại AQL (Critical, Major, Minor)
+    images = Column(NVARCHAR(None), nullable=True)                      # JSON list chứa URL tối đa 5 ảnh minh họa
 
     # Mối quan hệ tới lỗi của khách hàng
     client_defects = relationship("ClientDefect", back_populates="g7_defect", cascade="all, delete-orphan")

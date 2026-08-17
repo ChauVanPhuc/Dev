@@ -66,7 +66,7 @@ const ProductionDashboardView = () => {
     <Layout>
       <PageHeader title="Trang chủ" subTitle="CL1: Thông tin cần chú ý" />
 
-      <div style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '14px', boxSizing: 'border-box' }}>
+      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, padding: '14px', display: 'flex', flexDirection: 'column', gap: '14px', boxSizing: 'border-box' }}>
         
         {/* Card 1: Hiển thị thông báo mới */}
         <div style={{

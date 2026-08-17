@@ -118,7 +118,7 @@ const QuickReportListView = () => {
     <Layout>
       <PageHeader title="Lập báo cáo" subTitle="CL12: Lịch sử báo cáo" />
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#faf6f1', paddingBottom: '80px' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, backgroundColor: '#faf6f1', paddingBottom: '80px' }}>
         
         {/* Toolbar */}
         <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #e5e0d8' }}>

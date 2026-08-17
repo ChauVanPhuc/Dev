@@ -1050,7 +1050,7 @@ const EmployeeManagementView = () => {
                     <input 
                       type="text" 
                       name="employee_id" 
-                      placeholder="VD: SF01"
+                      placeholder="Ví dụ: SF01"
                       value={formData.employee_id} 
                       onChange={handleInputChange}
                       style={{ flex: 1 }}
@@ -1071,7 +1071,7 @@ const EmployeeManagementView = () => {
                   <input 
                     type="text" 
                     name="full_name" 
-                    placeholder="VD: Nguyễn Văn A"
+                    placeholder="Ví dụ: Nguyễn Văn A"
                     value={formData.full_name} 
                     onChange={handleInputChange} 
                   />
@@ -1082,7 +1082,7 @@ const EmployeeManagementView = () => {
                   <input 
                     type="text" 
                     name="phone" 
-                    placeholder="VD: 0987654321"
+                    placeholder="Ví dụ: 0987 654 321"
                     value={formData.phone} 
                     onChange={handleInputChange} 
                   />
@@ -1093,7 +1093,7 @@ const EmployeeManagementView = () => {
                   <input 
                     type="email" 
                     name="email" 
-                    placeholder="VD: nv.a@smartflow.vn"
+                    placeholder="Ví dụ: nv.a@smartflow.vn"
                     value={formData.email} 
                     onChange={handleInputChange} 
                   />
