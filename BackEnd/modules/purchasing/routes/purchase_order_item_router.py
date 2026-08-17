@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import func, case
 from typing import Optional
 from config.database import get_db
 from modules.purchasing.controllers import purchase_order_item_controller as controller
@@ -480,6 +481,19 @@ async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_d
 
                 if i % 50 == 0 or i == total_rows:
                     yield json.dumps({"status": "processing", "processed": i, "total": total_rows}) + "\n"
+
+            # Đồng bộ tổng giá trị đơn hàng cho các PurchaseRequisition
+            for req_id in po_req_cache.values():
+                req_obj = db.query(PurchaseRequisition).filter(PurchaseRequisition.id == req_id).first()
+                if req_obj:
+                    sum_val = db.query(func.sum(
+                        case(
+                            (PurchaseOrderItem.subtotal_foreign > 0, PurchaseOrderItem.subtotal_foreign),
+                            else_=PurchaseOrderItem.subtotal_vnd
+                        )
+                    )).filter(PurchaseOrderItem.requisition_id == req_id).scalar()
+                    if sum_val and sum_val > 0:
+                        req_obj.total_amount = float(sum_val)
 
             db.commit()
             wb.close()

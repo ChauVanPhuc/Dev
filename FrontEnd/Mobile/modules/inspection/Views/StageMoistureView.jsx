@@ -1011,9 +1011,9 @@ const StageMoistureView = () => {
                         else if (sizeTab === 'width') setSizeWidth(val);
                         else if (sizeTab === 'length') setSizeLength(val);
                       }}
-                      disabled={isOcrProcessing || !allowManualInput}
+                      disabled={isOcrProcessing}
                       placeholder={isOcrProcessing ? "Đang đọc..." : "Nhập số..."}
-                      style={{ flex: 1, padding: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '15px', textAlign: 'center', fontWeight: 'bold', color: '#5d3b32', backgroundColor: (isOcrProcessing || !allowManualInput) ? '#f1f5f9' : '#fff' }}
+                      style={{ flex: 1, padding: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '15px', textAlign: 'center', fontWeight: 'bold', color: '#5d3b32', backgroundColor: isOcrProcessing ? '#f1f5f9' : '#fff' }}
                     />
                     <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#5d3b32' }}>mm</span>
                   </div>
@@ -1041,9 +1041,9 @@ const StageMoistureView = () => {
                       type="text"
                       value={singleValue}
                       onChange={(e) => setSingleValue(e.target.value)}
-                      disabled={isOcrProcessing || !allowManualInput}
-                      placeholder={isOcrProcessing ? "Đang đọc..." : (allowManualInput ? "Nhập..." : "Chụp ảnh để đo")}
-                      style={{ flex: 1, padding: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '16px', textAlign: 'center', fontWeight: 'bold', color: '#10b981', backgroundColor: (isOcrProcessing || !allowManualInput) ? '#f1f5f9' : '#fff' }}
+                      disabled={isOcrProcessing}
+                      placeholder={isOcrProcessing ? "Đang đọc..." : "Nhập..."}
+                      style={{ flex: 1, padding: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '16px', textAlign: 'center', fontWeight: 'bold', color: '#10b981', backgroundColor: isOcrProcessing ? '#f1f5f9' : '#fff' }}
                     />
                     <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#10b981' }}>%</span>
                   </div>

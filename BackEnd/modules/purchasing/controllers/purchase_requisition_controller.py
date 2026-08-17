@@ -43,6 +43,23 @@ def get_all(db: Session, skip: int = 0, limit: int = 50,
     # Thêm thông tin đầy đủ cho mỗi requisition
     result = []
     for req in items:
+        items_data = []
+        if req.items:
+            for it in req.items:
+                items_data.append({
+                    "id": it.id,
+                    "item_code": it.item_code,
+                    "item_name": it.item_name,
+                    "order_code": it.order_code,
+                    "unit": it.unit,
+                    "quantity": it.quantity,
+                    "unit_price": it.unit_price,
+                    "subtotal_vnd": it.subtotal_vnd,
+                    "subtotal_foreign": it.subtotal_foreign,
+                    "currency": it.currency,
+                    "requested_delivery_date": it.requested_delivery_date,
+                    "status": it.status,
+                })
         data = {
             "id": req.id,
             "po_code": req.po_code,
@@ -64,7 +81,8 @@ def get_all(db: Session, skip: int = 0, limit: int = 50,
             "processing_status": req.processing_status,
             "warehouse_status": req.warehouse_status,
             "inspector": req.inspector,
-            "item_count": len(req.items) if req.items else 0,
+            "items": items_data,
+            "item_count": len(items_data),
             "note": req.note,
         }
         result.append(data)
@@ -118,6 +136,34 @@ def get_stats(db: Session):
         "by_status": {s: c for s, c in status_stats if s},
         "by_warehouse": {s: c for s, c in warehouse_stats if s},
     }
+
+
+def get_all_po_codes(db: Session, search: str = None):
+    """Lấy danh sách tất cả các mã PO duy nhất phục vụ dropdown và tìm kiếm nhanh."""
+    q_req = db.query(PurchaseRequisition.po_code, PurchaseRequisition.supplier_name).filter(
+        PurchaseRequisition.po_code.isnot(None),
+        PurchaseRequisition.po_code != ""
+    )
+    if search:
+        term = f"%{search}%"
+        q_req = q_req.filter(or_(
+            PurchaseRequisition.po_code.ilike(term),
+            PurchaseRequisition.supplier_name.ilike(term)
+        ))
+
+    q_poi = db.query(PurchaseOrderItem.po_code, PurchaseOrderItem.supplier_name).filter(
+        PurchaseOrderItem.po_code.isnot(None),
+        PurchaseOrderItem.po_code != ""
+    )
+    if search:
+        term = f"%{search}%"
+        q_poi = q_poi.filter(or_(
+            PurchaseOrderItem.po_code.ilike(term),
+            PurchaseOrderItem.supplier_name.ilike(term)
+        ))
+
+    combined = q_req.union(q_poi).order_by(PurchaseRequisition.po_code.asc()).limit(3000).all()
+    return [{"po_code": r[0], "supplier_name": r[1] or ""} for r in combined if r[0]]
 
 
 def get_by_id(db: Session, requisition_id: int):

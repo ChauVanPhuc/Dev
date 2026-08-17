@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import {
   Search, FileDown, FileUp, Eye, Trash2, Edit3,
-  ChevronRight, ChevronLeft, CheckCircle, Clock, AlertCircle,
+  ChevronRight, ChevronLeft, ChevronDown, CheckCircle, Clock, AlertCircle,
   Package, Layers, X, Grid, MoreHorizontal, Plus
 } from 'lucide-react';
 import { purchasingService } from '@modules/Purchasing/Models/purchasing.service';
@@ -27,21 +27,24 @@ const PurchaseRequisitionListView = () => {
   const navigate = useNavigate();
   const outletContext = useOutletContext() || {};
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, startGlobalUpload } = outletContext;
-  const { toast } = useToast();
+  const { toast } = useToast() || {};
   const fileInputRef = useRef(null);
 
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/purchase-requisitions');
 
   useEffect(() => {
-    if (typeof setCustomTitle === 'function') setCustomTitle(title);
-    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || '');
-    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || '');
+    if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Danh sách đơn hàng');
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || 'Quản lý đơn đặt mua & chi tiết mặt hàng');
+    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || 'KD03');
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   const [data, setData] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [statsData, setStatsData] = useState(null);
+
+  // Expanded PO rows state
+  const [expandedRows, setExpandedRows] = useState({});
 
   // Active Action Menu Dropdown ID State
   const [actionMenuId, setActionMenuId] = useState(null);
@@ -57,7 +60,7 @@ const PurchaseRequisitionListView = () => {
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
-  // States cho 2 Bộ Lọc (Sort & Filter)
+  // States cho Bộ Lọc (Sort & Filter)
   const [searchTerm, setSearchTerm] = useState('');
   const [sortValue, setSortValue] = useState('time_desc');
   const [filterOrderType, setFilterOrderType] = useState('all');
@@ -95,7 +98,7 @@ const PurchaseRequisitionListView = () => {
         setStatsData(statsResult);
       }
     } catch (error) {
-      console.error('Lỗi tải danh sách yêu cầu mua hàng:', error);
+      console.error('Lỗi tải danh sách đơn hàng:', error);
     } finally {
       setLoading(false);
     }
@@ -107,36 +110,42 @@ const PurchaseRequisitionListView = () => {
 
   // Sử dụng dữ liệu thực tế 100% từ CSDL
   const rawItems = useMemo(() => {
-    return data || [];
+    return Array.isArray(data) ? data : [];
   }, [data]);
 
-  // Áp dụng Logic Sắp Xếp & Lọc Dữ Liệu Thực Tế
+  // Áp dụng Logic Sắp Xếp & Lọc Dữ Liệu
   const displayItems = useMemo(() => {
     let filtered = [...rawItems];
 
-    if (searchTerm.trim()) {
+    if (searchTerm && searchTerm.trim()) {
       const term = searchTerm.toLowerCase().trim();
       filtered = filtered.filter(item => 
-        (item.order_code && item.order_code.toLowerCase().includes(term)) ||
-        (item.creator && item.creator.toLowerCase().includes(term)) ||
-        (item.partner && item.partner.toLowerCase().includes(term))
+        (item.po_code && String(item.po_code).toLowerCase().includes(term)) ||
+        (item.creator && String(item.creator).toLowerCase().includes(term)) ||
+        (item.supplier_name && String(item.supplier_name).toLowerCase().includes(term)) ||
+        (item.supplier_code && String(item.supplier_code).toLowerCase().includes(term)) ||
+        (item.note && String(item.note).toLowerCase().includes(term)) ||
+        (Array.isArray(item.items) && item.items.some(it => 
+          (it.item_code && String(it.item_code).toLowerCase().includes(term)) ||
+          (it.item_name && String(it.item_name).toLowerCase().includes(term))
+        ))
       );
     }
 
     if (filterStatus !== 'all') {
-      filtered = filtered.filter(item => item.order_status_text === filterStatus);
+      filtered = filtered.filter(item => item.status === filterStatus);
     }
     if (filterPartner !== 'all') {
-      filtered = filtered.filter(item => item.partner === filterPartner);
+      filtered = filtered.filter(item => (item.supplier_name || '').includes(filterPartner));
     }
     if (filterPriority !== 'all') {
       filtered = filtered.filter(item => item.priority === filterPriority);
     }
 
     if (sortValue === 'code_asc') {
-      filtered.sort((a, b) => (a.order_code || '').localeCompare(b.order_code || ''));
+      filtered.sort((a, b) => String(a.po_code || '').localeCompare(String(b.po_code || '')));
     } else if (sortValue === 'code_desc') {
-      filtered.sort((a, b) => (b.order_code || '').localeCompare(a.order_code || ''));
+      filtered.sort((a, b) => String(b.po_code || '').localeCompare(String(a.po_code || '')));
     } else if (sortValue === 'time_asc') {
       filtered.sort((a, b) => (a.id || 0) - (b.id || 0));
     } else if (sortValue === 'time_desc') {
@@ -148,20 +157,20 @@ const PurchaseRequisitionListView = () => {
 
   // ── LOGIC CHUẨN: TÍNH THỐNG KÊ TOÀN BỘ CƠ SỞ DỮ LIỆU (GLOBAL STATS OVERALL DB) ──
   const computedKPI = useMemo(() => {
-    const processing = statsData?.processing ?? statsData?.processing_count ?? 30;
-    const processingTotal = statsData?.processing_total ?? 470;
+    const processing = Number(statsData?.processing ?? statsData?.processing_count ?? 0);
+    const processingTotal = Number(statsData?.processing_total ?? (total || 1));
     const processingPct = Math.min(100, Math.round((processing / (processingTotal || 1)) * 100));
 
-    const completed = statsData?.completed ?? statsData?.completed_count ?? 30;
-    const completedTotal = statsData?.completed_total ?? 500;
+    const completed = Number(statsData?.completed ?? statsData?.completed_count ?? 0);
+    const completedTotal = Number(statsData?.completed_total ?? (total || 1));
     const completedPct = Math.min(100, Math.round((completed / (completedTotal || 1)) * 100));
 
-    const totalValue = statsData?.total_value ?? statsData?.total_amount ?? 3584;
-    const totalValueMax = statsData?.total_value_max ?? statsData?.target_value ?? 10200;
+    const totalValue = Number(statsData?.total_value ?? statsData?.total_amount ?? 0);
+    const totalValueMax = Number(statsData?.total_value_max ?? statsData?.target_value ?? Math.max(1000000, totalValue * 1.2));
     const totalValuePct = Math.min(100, Math.round((totalValue / (totalValueMax || 1)) * 100));
 
-    const overdue = statsData?.overdue ?? statsData?.overdue_count ?? 30;
-    const overdueTotal = statsData?.overdue_total ?? 500;
+    const overdue = Number(statsData?.overdue ?? statsData?.overdue_count ?? 0);
+    const overdueTotal = Number(statsData?.overdue_total ?? (total || 1));
     const overduePct = Math.min(100, Math.round((overdue / (overdueTotal || 1)) * 100));
 
     return {
@@ -170,50 +179,189 @@ const PurchaseRequisitionListView = () => {
       totalValue, totalValueMax, totalValuePct,
       overdue, overdueTotal, overduePct
     };
-  }, [statsData]);
+  }, [statsData, total]);
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;
+    if (filterOrderType !== 'all') count++;
     if (filterStatus !== 'all') count++;
     if (filterPartner !== 'all') count++;
     if (filterPriority !== 'all') count++;
     if (filterMonth) count++;
     if (itemsPerPage !== 15) count++;
     return count;
-  }, [filterStatus, filterPartner, filterPriority, filterMonth, itemsPerPage]);
+  }, [filterOrderType, filterStatus, filterPartner, filterPriority, filterMonth, itemsPerPage]);
 
-  const totalCount = total || displayItems.length || 1752;
+  const totalCount = total || displayItems.length || 0;
   const totalPages = Math.ceil(totalCount / itemsPerPage) || 1;
-  const startIndex = (currentPage - 1) * itemsPerPage + 1;
-  const endIndex = Math.min(currentPage * itemsPerPage, totalCount);
+  const startIndex = totalCount > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0;
 
+  // Toggle row expand
+  const toggleRowExpand = (rowId) => {
+    setExpandedRows(prev => ({
+      ...prev,
+      [rowId]: !prev[rowId]
+    }));
+  };
+
+  const isAllExpanded = displayItems.length > 0 && displayItems.every(r => expandedRows[r.id]);
+
+  const toggleExpandAll = () => {
+    if (isAllExpanded) {
+      setExpandedRows({});
+    } else {
+      const next = {};
+      displayItems.forEach(r => { next[r.id] = true; });
+      setExpandedRows(next);
+    }
+  };
+
+  // NẠP DỮ LIỆU EXCEL QUA PURCHASE ORDER ITEMS ENGINE
   const handleImport = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
       if (startGlobalUpload) {
-        await startGlobalUpload(file, '/purchase-requisitions/import-excel', fetchData);
+        await startGlobalUpload(file, '/purchase-order-items/import-excel', () => {
+          fetchData();
+        });
       } else {
-        await purchasingService.importRequisitionsExcel(file);
-        if (toast) toast('success', 'Import Excel thành công!');
+        await purchasingService.importOrderItemsExcel(file);
+        if (typeof toast === 'function') toast('success', 'Import dữ liệu đơn hàng thành công!');
         fetchData();
       }
     } catch (error) {
-      if (toast) toast('error', 'Lỗi import Excel!');
+      if (typeof toast === 'function') toast('error', 'Lỗi import Excel: ' + (error?.response?.data?.detail || error.message));
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
-  const handleExport = () => {
+  const handleExportRequisitions = () => {
     purchasingService.exportRequisitionsExcel({
       status: filterStatus !== 'all' ? filterStatus : undefined,
       search: searchTerm || undefined,
     });
   };
 
+  const handleExportItems = () => {
+    purchasingService.exportOrderItemsExcel({
+      status: filterStatus !== 'all' ? filterStatus : undefined,
+      search: searchTerm || undefined,
+    });
+  };
+
   return (
-    <div className="manufacture-plan-container mgmt-container" style={{ width: '100%', maxWidth: '100%' }}>
+    <div className="manufacture-plan-container mgmt-container pr-unified-container" style={{ width: '100%', maxWidth: '100%' }}>
+
+      {/* Dynamic CSS override for Super Compact Table & Clean ERP View with Full Scroll Support */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media (min-width: 769px) {
+          .pr-unified-container {
+            height: calc(100vh - 68px) !important;
+            max-height: calc(100vh - 68px) !important;
+            min-height: 0 !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 4px !important;
+          }
+          .pr-unified-container .sticky-top-zone {
+            flex-shrink: 0 !important;
+            flex-grow: 0 !important;
+            margin-bottom: 0 !important;
+          }
+          .pr-unified-container .admin-list-layout {
+            flex: 1 1 0% !important;
+            height: 100% !important;
+            min-height: 0 !important;
+            max-height: 100% !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          .pr-unified-container .admin-table-card {
+            flex: 1 1 0% !important;
+            height: 100% !important;
+            min-height: 0 !important;
+            max-height: 100% !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+            margin: 0 !important;
+            border-radius: 8px !important;
+          }
+          .pr-unified-container .admin-table-scroll {
+            flex: 1 1 0% !important;
+            height: 100% !important;
+            min-height: 0 !important;
+            overflow-x: auto !important;
+            overflow-y: auto !important;
+            display: block !important;
+            position: relative !important;
+            -webkit-overflow-scrolling: touch !important;
+          }
+          .pr-unified-container .admin-pagination-desktop {
+            flex-shrink: 0 !important;
+            flex-grow: 0 !important;
+            height: 38px !important;
+            min-height: 38px !important;
+            max-height: 38px !important;
+            padding: 0 12px !important;
+            margin-top: auto !important;
+            background: #FFFFFF !important;
+            border-top: 1px solid #EADCC9 !important;
+            z-index: 15 !important;
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+          }
+        }
+
+        /* Custom Scrollbar */
+        .pr-unified-container .admin-table-scroll::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        .pr-unified-container .admin-table-scroll::-webkit-scrollbar-track {
+          background: #FAF6F0;
+          border-radius: 4px;
+        }
+        .pr-unified-container .admin-table-scroll::-webkit-scrollbar-thumb {
+          background: #D7C4B2;
+          border-radius: 4px;
+        }
+        .pr-unified-container .admin-table-scroll::-webkit-scrollbar-thumb:hover {
+          background: #A67C52;
+        }
+
+        /* Sticky Table Header */
+        .pr-compact-table table.data-table thead tr th {
+          padding: 6px 8px !important;
+          font-size: 0.73rem !important;
+          white-space: nowrap !important;
+          line-height: 1.15 !important;
+          height: 32px !important;
+          letter-spacing: -0.2px;
+          background-color: #FAF6F0 !important;
+          color: #7B5233 !important;
+          position: sticky !important;
+          top: 0 !important;
+          z-index: 20 !important;
+          border-bottom: 1px solid #EADCC9 !important;
+          box-shadow: 0 1px 0 #EADCC9 !important;
+        }
+        .pr-compact-table table.data-table tbody tr td {
+          padding: 4px 8px !important;
+          font-size: 0.76rem !important;
+          white-space: nowrap !important;
+          line-height: 1.15 !important;
+          height: 28px !important;
+          vertical-align: middle !important;
+        }
+      `}} />
 
       {/* ── STICKY TOP ZONE ── */}
       <div className="sticky-top-zone" style={{ width: '100%' }}>
@@ -282,8 +430,8 @@ const PurchaseRequisitionListView = () => {
             <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: '700' }}>Tổng giá trị đơn hàng</div>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '2px 0' }}>
               <div>
-                <span style={{ fontSize: '1.4rem', fontWeight: '900', color: '#1E293B' }}>{computedKPI.totalValue.toLocaleString()}</span>
-                <span style={{ fontSize: '0.8rem', color: '#94A3B8', fontWeight: '600', marginLeft: '4px' }}>/{computedKPI.totalValueMax.toLocaleString()}</span>
+                <span style={{ fontSize: '1.4rem', fontWeight: '900', color: '#1E293B' }}>{(computedKPI.totalValue || 0).toLocaleString()}</span>
+                <span style={{ fontSize: '0.8rem', color: '#94A3B8', fontWeight: '600', marginLeft: '4px' }}>/{(computedKPI.totalValueMax || 0).toLocaleString()}</span>
               </div>
               <span style={{ fontSize: '1rem', fontWeight: '900', color: '#1E293B' }}>$</span>
             </div>
@@ -324,7 +472,7 @@ const PurchaseRequisitionListView = () => {
           <PageToolbar
             searchValue={searchTerm}
             onSearchChange={(val) => { setSearchTerm(val); setCurrentPage(1); }}
-            searchPlaceholder="Mã phiếu, tên phiếu"
+            searchPlaceholder="Tìm kiếm mã đơn, nhà cung cấp, mã mặt hàng, người tạo..."
             showSort={true}
             sortOptions={[
               { value: 'time_desc', label: 'Mới nhất' },
@@ -340,20 +488,26 @@ const PurchaseRequisitionListView = () => {
             activeFiltersCount={activeFiltersCount}
             importActions={[
               {
-                label: 'Nhập dữ liệu',
+                label: 'Nhập dữ liệu Excel',
                 icon: <FileUp size={14} />,
                 onClick: () => (fileInputRef.current || document.getElementById('pr-excel-file-input'))?.click()
               }
             ]}
-            onExport={handleExport}
+            onExport={handleExportRequisitions}
+            exportLabel="Xuất đơn hàng"
             onCreate={() => navigate('/admin/purchase-requisitions/create?mode=edit')}
             createLabel="Thêm tài liệu"
             hasWritePermission={true}
             extraActions={[
               {
-                label: 'Khác',
-                icon: <Grid size={14} />,
-                onClick: () => {}
+                label: 'Xuất chi tiết mặt hàng (Excel)',
+                icon: <FileDown size={14} />,
+                onClick: handleExportItems
+              },
+              {
+                label: isAllExpanded ? 'Thu gọn tất cả chi tiết' : 'Mở rộng tất cả chi tiết',
+                icon: <Layers size={14} />,
+                onClick: toggleExpandAll
               }
             ]}
           />
@@ -503,34 +657,47 @@ const PurchaseRequisitionListView = () => {
         )}
       </div>
 
-      {/* ── BẢNG DỮ LIỆU SIÊU TINH GỌN (THAO TÁC NÚT BẤM MỞ DROPDOWN XEM CHI TIẾT & CHỈNH SỬA - KHÔNG ICON - KHÔNG NÚT XÓA) ── */}
+      {/* ── BẢNG DỮ LIỆU HỢP NHẤT: ĐƠN HÀNG TÍCH HỢP XEM NHANH CHI TIẾT MẶT HÀNG ── */}
       <div className="admin-list-layout pr-compact-table" style={{ width: '100%' }}>
         <div className="mgmt-table card admin-table-card" style={{ width: '100%' }}>
           <div className="table-responsive desktop-only admin-table-scroll">
-            <table className="data-table">
+            <table className="data-table" style={{ minWidth: '1350px', width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  <th style={{ textAlign: 'center', width: '40px' }}>STT</th>
-                  <th>Mã đơn</th>
-                  <th>Loại</th>
-                  <th>Ưu tiên</th>
-                  <th>Trạng thái</th>
-                  <th style={{ maxWidth: '180px', width: '160px' }}>Đối tác</th>
-                  <th>Ngày HT dự kiến</th>
-                  <th>Ngày HT thực tế</th>
-                  <th>Ngày tạo</th>
-                  <th>Người tạo</th>
-                  <th>Ngày duyệt</th>
-                  <th>Người duyệt</th>
-                  <th style={{ textAlign: 'right' }}>Tổng giá trị</th>
-                  <th>Ghi chú</th>
-                  <th style={{ textAlign: 'center', width: '65px' }}>Thao tác</th>
+                  <th style={{ textAlign: 'center', width: '36px', minWidth: '36px' }}>
+                    <button
+                      type="button"
+                      onClick={toggleExpandAll}
+                      style={{
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        color: '#7B5233', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        padding: 0
+                      }}
+                      title={isAllExpanded ? "Thu gọn tất cả" : "Mở rộng tất cả chi tiết"}
+                    >
+                      {isAllExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                    </button>
+                  </th>
+                  <th style={{ textAlign: 'center', width: '38px', minWidth: '38px' }}>STT</th>
+                  <th style={{ minWidth: '110px' }}>Mã đơn (PO)</th>
+                  <th style={{ minWidth: '95px' }}>Loại</th>
+                  <th style={{ minWidth: '85px' }}>Ưu tiên</th>
+                  <th style={{ minWidth: '95px' }}>Trạng thái</th>
+                  <th style={{ minWidth: '160px', maxWidth: '220px' }}>Đối tác</th>
+                  <th style={{ textAlign: 'center', minWidth: '95px' }}>Ngày tạo</th>
+                  <th style={{ minWidth: '100px' }}>Người tạo</th>
+                  <th style={{ textAlign: 'center', minWidth: '95px' }}>Ngày duyệt</th>
+                  <th style={{ minWidth: '100px' }}>Người duyệt</th>
+                  <th style={{ textAlign: 'right', minWidth: '115px' }}>Tổng giá trị</th>
+                  <th style={{ textAlign: 'center', minWidth: '90px' }}>Chi tiết MH</th>
+                  <th style={{ minWidth: '140px' }}>Ghi chú</th>
+                  <th style={{ textAlign: 'center', minWidth: '65px', width: '65px' }}>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={15} style={{ padding: '2rem', textAlign: 'center', color: '#94A3B8' }}>Đang tải dữ liệu đơn hàng...</td>
+                    <td colSpan={15} style={{ padding: '2rem', textAlign: 'center', color: '#94A3B8' }}>Đang tải dữ liệu đơn hàng & chi tiết mặt hàng...</td>
                   </tr>
                 ) : displayItems.length === 0 ? (
                   <tr>
@@ -539,97 +706,279 @@ const PurchaseRequisitionListView = () => {
                 ) : displayItems.map((row, idx) => {
                   const rowId = row.id || idx + 1;
                   const isMenuOpen = actionMenuId === rowId;
+                  const isExpanded = !!expandedRows[rowId];
                   const partnerName = row.supplier_name || row.partner || '---';
+                  const itemCount = row.item_count || (Array.isArray(row.items) ? row.items.length : 0);
+
                   return (
-                    <tr key={rowId}>
-                      <td style={{ textAlign: 'center', fontWeight: '600', color: '#475569' }}>{String(startIndex + idx).padStart(2, '0')}</td>
-                      <td style={{ fontWeight: '800', color: '#2D1A12' }}>{row.po_code || row.order_code || '---'}</td>
-                      <td style={{ color: '#475569' }}>{row.order_type || 'Đơn mua hàng'}</td>
-                      <td style={{ color: '#475569' }}>{row.priority || 'Bình thường'}</td>
-                      <td style={{
-                        fontWeight: '700',
-                        color: (row.status === 'Đã duyệt' || row.status === 'Đã hoàn thành') ? '#16A34A' : row.status === 'Đang sản xuất' ? '#2563EB' : '#DC2626'
-                      }}>
-                        {row.status || row.order_status_text || 'Chưa duyệt'}
-                      </td>
-                      <td
-                        style={{
-                          color: '#2D1A12',
-                          fontWeight: '600',
-                          maxWidth: '180px',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
+                    <React.Fragment key={rowId}>
+                      <tr 
+                        style={{ 
+                          backgroundColor: isExpanded ? '#FAF6F0' : 'transparent',
+                          transition: 'background-color 0.15s ease'
                         }}
-                        title={partnerName}
                       >
-                        {partnerName}
-                      </td>
-                      <td style={{ color: '#64748B' }}>{formatDateDisplay(row.est_completion_date || row.est_date)}</td>
-                      <td style={{ color: '#64748B' }}>{formatDateDisplay(row.real_completion_date || row.real_date)}</td>
-                      <td style={{ color: '#64748B' }}>{formatDateDisplay(row.order_date || row.created_at || row.create_date)}</td>
-                      <td style={{ color: '#475569' }}>{row.creator || '---'}</td>
-                      <td style={{ color: '#64748B' }}>{formatDateDisplay(row.approval_date || row.approve_date)}</td>
-                      <td style={{ color: '#475569' }}>{row.approver || '---'}</td>
-                      <td style={{ textAlign: 'right', fontWeight: '700', color: '#2D1A12' }}>
-                        {typeof row.total_amount === 'number' ? `$${row.total_amount.toLocaleString()}` : (row.total_amount || '$0')}
-                      </td>
-                      <td style={{ color: '#64748B' }}>{row.note || ''}</td>
-                      <td className="pr-action-cell" style={{ textAlign: 'center', position: 'relative', zIndex: isMenuOpen ? 50 : 1 }}>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActionMenuId(isMenuOpen ? null : rowId);
-                          }}
+                        {/* Nút Toggle Expand Sub-table */}
+                        <td style={{ textAlign: 'center', padding: '4px' }}>
+                          <button
+                            type="button"
+                            onClick={() => toggleRowExpand(rowId)}
+                            style={{
+                              background: isExpanded ? '#7B5233' : '#F1E9DF',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              color: isExpanded ? '#FFFFFF' : '#7B5233',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '20px',
+                              height: '20px',
+                              padding: 0,
+                              transition: 'all 0.15s ease'
+                            }}
+                            title={isExpanded ? "Thu gọn mặt hàng" : "Xem chi tiết mặt hàng"}
+                          >
+                            {isExpanded ? <ChevronDown size={13} strokeWidth={2.5} /> : <ChevronRight size={13} strokeWidth={2.5} />}
+                          </button>
+                        </td>
+
+                        <td style={{ textAlign: 'center', fontWeight: '600', color: '#475569' }}>
+                          {String(startIndex + idx).padStart(2, '0')}
+                        </td>
+                        
+                        <td style={{ fontWeight: '800', color: '#2D1A12' }}>
+                          <span 
+                            onClick={() => toggleRowExpand(rowId)} 
+                            style={{ cursor: 'pointer' }}
+                            title="Bấm để xem chi tiết mặt hàng"
+                          >
+                            {row.po_code || row.order_code || '---'}
+                          </span>
+                        </td>
+
+                        <td style={{ color: '#475569' }}>{row.order_type || 'Đơn mua hàng'}</td>
+                        <td style={{ color: '#475569' }}>{row.priority || 'Bình thường'}</td>
+                        
+                        <td style={{
+                          fontWeight: '700',
+                          color: (row.status === 'Đã duyệt' || row.status === 'Đã hoàn thành') ? '#16A34A' : row.status === 'Đang sản xuất' ? '#2563EB' : '#DC2626'
+                        }}>
+                          {row.status || row.order_status_text || 'Chưa duyệt'}
+                        </td>
+
+                        <td
                           style={{
-                            background: isMenuOpen ? '#FAF6F0' : 'none',
-                            border: isMenuOpen ? '1px solid #7B5233' : 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            color: isMenuOpen ? '#7B5233' : '#64748B',
-                            padding: '3px 6px',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
+                            color: '#2D1A12',
+                            fontWeight: '600',
+                            maxWidth: '180px',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
                           }}
-                          title="Thao tác"
+                          title={partnerName}
                         >
-                          <MoreHorizontal size={16} />
-                        </button>
+                          {partnerName}
+                        </td>
 
-                        {/* POPUP ACTION MENU KHÔNG CÓ ICON - KHÔNG CÓ NÚT XÓA */}
-                        {isMenuOpen && (
-                          <div className="action-menu" style={{ right: '0', top: '100%', minWidth: '120px', padding: '4px 0', boxShadow: '0 6px 16px rgba(123, 82, 51, 0.12)' }}>
-                            <button
-                              type="button"
-                              className="action-menu-item"
-                              style={{ display: 'block', width: '100%', fontSize: '0.8rem', fontWeight: '600', padding: '8px 14px', textAlign: 'left', color: '#334155' }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActionMenuId(null);
-                                navigate(`/admin/purchase-requisitions/${rowId}?mode=view`);
-                              }}
-                            >
-                              Xem chi tiết
-                            </button>
+                        <td style={{ textAlign: 'center', color: '#64748B' }}>{formatDateDisplay(row.order_date || row.created_at || row.create_date)}</td>
+                        <td style={{ color: '#475569' }}>{row.creator || '---'}</td>
+                        <td style={{ textAlign: 'center', color: '#64748B' }}>{formatDateDisplay(row.approval_date || row.approve_date)}</td>
+                        <td style={{ color: '#475569' }}>{row.approver || '---'}</td>
+                        
+                        <td style={{ textAlign: 'right', fontWeight: '700', color: '#2D1A12' }}>
+                          {typeof row.total_amount === 'number' ? `$${row.total_amount.toLocaleString()}` : (row.total_amount || '$0')}
+                        </td>
 
-                            <button
-                              type="button"
-                              className="action-menu-item"
-                              style={{ display: 'block', width: '100%', fontSize: '0.8rem', fontWeight: '600', padding: '8px 14px', textAlign: 'left', color: '#16A34A', borderTop: '1px solid #FAF6F0' }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActionMenuId(null);
-                                navigate(`/admin/purchase-requisitions/${rowId}?mode=edit`);
-                              }}
-                            >
-                              Chỉnh sửa
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
+                        {/* Badge Số lượng mặt hàng */}
+                        <td style={{ textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => toggleRowExpand(rowId)}
+                            style={{
+                              border: '1px solid #EADCC9',
+                              backgroundColor: isExpanded ? '#7B5233' : '#FAF6F0',
+                              color: isExpanded ? '#FFFFFF' : '#7B5233',
+                              fontSize: '0.72rem',
+                              fontWeight: '700',
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                            title="Xem chi tiết các mặt hàng của đơn này"
+                          >
+                            <Layers size={11} />
+                            <span>{itemCount} MH</span>
+                          </button>
+                        </td>
+
+                        <td style={{ color: '#64748B' }}>{row.note || ''}</td>
+                        
+                        <td className="pr-action-cell" style={{ textAlign: 'center', position: 'relative', zIndex: isMenuOpen ? 50 : 1 }}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActionMenuId(isMenuOpen ? null : rowId);
+                            }}
+                            style={{
+                              background: isMenuOpen ? '#FAF6F0' : 'none',
+                              border: isMenuOpen ? '1px solid #7B5233' : 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              color: isMenuOpen ? '#7B5233' : '#64748B',
+                              padding: '3px 6px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                            title="Thao tác"
+                          >
+                            <MoreHorizontal size={16} />
+                          </button>
+
+                          {/* POPUP ACTION MENU */}
+                          {isMenuOpen && (
+                            <div className="action-menu" style={{ right: '0', top: '100%', minWidth: '130px', padding: '4px 0', boxShadow: '0 6px 16px rgba(123, 82, 51, 0.12)' }}>
+                              <button
+                                type="button"
+                                className="action-menu-item"
+                                style={{ display: 'block', width: '100%', fontSize: '0.8rem', fontWeight: '600', padding: '8px 14px', textAlign: 'left', color: '#334155' }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActionMenuId(null);
+                                  navigate(`/admin/purchase-requisitions/${rowId}?mode=view`);
+                                }}
+                              >
+                                Xem chi tiết
+                              </button>
+
+                              <button
+                                type="button"
+                                className="action-menu-item"
+                                style={{ display: 'block', width: '100%', fontSize: '0.8rem', fontWeight: '600', padding: '8px 14px', textAlign: 'left', color: '#7B5233', borderTop: '1px solid #FAF6F0' }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActionMenuId(null);
+                                  toggleRowExpand(rowId);
+                                }}
+                              >
+                                {isExpanded ? 'Ẩn mặt hàng' : 'Xem mặt hàng'}
+                              </button>
+
+                              <button
+                                type="button"
+                                className="action-menu-item"
+                                style={{ display: 'block', width: '100%', fontSize: '0.8rem', fontWeight: '600', padding: '8px 14px', textAlign: 'left', color: '#16A34A', borderTop: '1px solid #FAF6F0' }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActionMenuId(null);
+                                  navigate(`/admin/purchase-requisitions/${rowId}?mode=edit`);
+                                }}
+                              >
+                                Chỉnh sửa
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+
+                      {/* ── EXPANDED SUB-TABLE: CHI TIẾT CÁC MẶT HÀNG TRONG ĐƠN HÀNG ── */}
+                      {isExpanded && (
+                        <tr className="pr-expanded-subrow" style={{ backgroundColor: '#FAF8F6' }}>
+                          <td colSpan={15} style={{ padding: '8px 14px 14px 14px', borderBottom: '2px solid #EADCC9' }}>
+                            <div style={{
+                              backgroundColor: '#FFFFFF',
+                              border: '1px solid #EADCC9',
+                              borderRadius: '6px',
+                              overflow: 'hidden',
+                              boxShadow: '0 1px 4px rgba(0,0,0,0.03)'
+                            }}>
+                              <div style={{
+                                padding: '7px 12px',
+                                backgroundColor: '#FAF6F0',
+                                borderBottom: '1px solid #EADCC9',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center'
+                              }}>
+                                <div style={{ fontSize: '0.78rem', fontWeight: '800', color: '#7B5233', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <Layers size={14} />
+                                  <span>Danh sách mặt hàng đơn <strong style={{ color: '#2D1A12' }}>{row.po_code}</strong> ({itemCount} mặt hàng)</span>
+                                </div>
+                                <span style={{ fontSize: '0.72rem', color: '#8D6E63', fontWeight: '600' }}>
+                                  Đối tác: {partnerName}
+                                </span>
+                              </div>
+                              
+                              {(!Array.isArray(row.items) || row.items.length === 0) ? (
+                                <div style={{ padding: '12px', textAlign: 'center', color: '#94A3B8', fontSize: '0.75rem' }}>
+                                  Chưa có chi tiết mặt hàng cho đơn này.
+                                </div>
+                              ) : (
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                                  <thead>
+                                    <tr style={{ backgroundColor: '#F8FAFC', color: '#475569', fontWeight: '700', borderBottom: '1px solid #E2E8F0' }}>
+                                      <th style={{ padding: '6px 10px', textAlign: 'center', width: '35px' }}>#</th>
+                                      <th style={{ padding: '6px 10px', textAlign: 'left' }}>Mã mặt hàng</th>
+                                      <th style={{ padding: '6px 10px', textAlign: 'left' }}>Tên mặt hàng / Mô tả</th>
+                                      <th style={{ padding: '6px 10px', textAlign: 'left' }}>Mã đơn hàng</th>
+                                      <th style={{ padding: '6px 10px', textAlign: 'center' }}>ĐVT</th>
+                                      <th style={{ padding: '6px 10px', textAlign: 'right' }}>Số lượng</th>
+                                      <th style={{ padding: '6px 10px', textAlign: 'right' }}>Đơn giá</th>
+                                      <th style={{ padding: '6px 10px', textAlign: 'right' }}>Thành tiền</th>
+                                      <th style={{ padding: '6px 10px', textAlign: 'center' }}>Ngày giao yêu cầu</th>
+                                      <th style={{ padding: '6px 10px', textAlign: 'center' }}>Trạng thái</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {row.items.map((it, itIdx) => (
+                                      <tr key={it.id || itIdx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: itIdx % 2 === 0 ? '#FFFFFF' : '#FDFDFD' }}>
+                                        <td style={{ padding: '6px 10px', textAlign: 'center', color: '#94A3B8', fontWeight: '600' }}>{itIdx + 1}</td>
+                                        <td style={{ padding: '6px 10px', fontWeight: '700', color: '#2D1A12' }}>{it.item_code || '---'}</td>
+                                        <td style={{ padding: '6px 10px', color: '#334155' }}>{it.item_name || it.item_code || '---'}</td>
+                                        <td style={{ padding: '6px 10px', color: '#64748B' }}>{it.order_code || row.po_code || '---'}</td>
+                                        <td style={{ padding: '6px 10px', textAlign: 'center', color: '#64748B' }}>{it.unit || 'Bộ'}</td>
+                                        <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '700', color: '#2D1A12' }}>
+                                          {typeof it.quantity === 'number' ? it.quantity.toLocaleString() : (it.quantity || 0)}
+                                        </td>
+                                        <td style={{ padding: '6px 10px', textAlign: 'right', color: '#475569' }}>
+                                          {it.currency === 'USD' || it.subtotal_foreign ? `$${(Number(it.unit_price) || 0).toLocaleString()}` : `${(Number(it.unit_price) || 0).toLocaleString()}đ`}
+                                        </td>
+                                        <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '700', color: '#7B5233' }}>
+                                          {it.currency === 'USD' || it.subtotal_foreign 
+                                            ? `$${(Number(it.subtotal_foreign) || (Number(it.quantity || 0) * Number(it.unit_price || 0)) || 0).toLocaleString()}`
+                                            : `${(Number(it.subtotal_vnd) || (Number(it.quantity || 0) * Number(it.unit_price || 0)) || 0).toLocaleString()}đ`
+                                          }
+                                        </td>
+                                        <td style={{ padding: '6px 10px', textAlign: 'center', color: '#64748B' }}>
+                                          {formatDateDisplay(it.requested_delivery_date || row.delivery_date)}
+                                        </td>
+                                        <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                                          <span style={{
+                                            fontSize: '0.7rem',
+                                            fontWeight: '700',
+                                            padding: '2px 6px',
+                                            borderRadius: '4px',
+                                            backgroundColor: (it.status === 'Đã duyệt' || it.status === 'Đã hoàn thành') ? '#ECFDF5' : '#FFFBEB',
+                                            color: (it.status === 'Đã duyệt' || it.status === 'Đã hoàn thành') ? '#16A34A' : '#D97706'
+                                          }}>
+                                            {it.status || 'Chưa duyệt'}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>

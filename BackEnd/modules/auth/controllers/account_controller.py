@@ -187,6 +187,7 @@ def create_account(db: Session, account: AccountCreate):
         status=getattr(account, 'status', None) or "Đang sử dụng",
         permission_level=account.permission_level,
         is_mobile_allowed=getattr(account, 'is_mobile_allowed', True) if getattr(account, 'is_mobile_allowed', True) is not None else True,
+        is_web_allowed=getattr(account, 'is_web_allowed', True) if getattr(account, 'is_web_allowed', True) is not None else True,
         department_id=account.department_id,
         permission_id=primary_perm_id,
         factory_id=account.factory_id,

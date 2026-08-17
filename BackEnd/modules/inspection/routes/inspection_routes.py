@@ -343,7 +343,7 @@ async def create_stage_inspection(
                         stage_name = stage_map.get(inspection_type, 'Phôi gỗ')
 
                     defects_list = parsed_data.get('defects', [])
-                    inspected_qty = parsed_data.get('total_qty') or parsed_data.get('sample_qty') or parsed_data.get('inspected_qty', 0)
+                    inspected_qty = parsed_data.get('sample_qty') or parsed_data.get('inspected_qty') or (len(parsed_data.get('samples', [])) if isinstance(parsed_data.get('samples'), list) and len(parsed_data.get('samples')) > 0 else 0) or parsed_data.get('total_qty', 0)
 
                     if stage_name and (isinstance(defects_list, list) and len(defects_list) > 0 or inspected_qty > 0):
                         sync_defects_to_daily_inspection(stage_name, defects_list, final_inspector_name, db, inspected_qty=inspected_qty)
@@ -431,7 +431,7 @@ def do_update_stage(id: int, data: StageInspectionCreate, db: Session):
                         stage_name = stage_map.get(data.inspection_type, 'Phôi gỗ')
 
                     defects_list = parsed_data.get('defects', [])
-                    inspected_qty = parsed_data.get('total_qty') or parsed_data.get('sample_qty') or parsed_data.get('inspected_qty', 0)
+                    inspected_qty = parsed_data.get('sample_qty') or parsed_data.get('inspected_qty') or (len(parsed_data.get('samples', [])) if isinstance(parsed_data.get('samples'), list) and len(parsed_data.get('samples')) > 0 else 0) or parsed_data.get('total_qty', 0)
 
                     if stage_name and (isinstance(defects_list, list) and len(defects_list) > 0 or inspected_qty > 0):
                         sync_defects_to_daily_inspection(stage_name, defects_list, record.inspector_name, db, inspected_qty=inspected_qty)

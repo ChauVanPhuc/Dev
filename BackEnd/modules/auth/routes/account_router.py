@@ -136,32 +136,74 @@ def login_for_access_token(db: Session = Depends(get_db), form_data: OAuth2Passw
     # Lấy thông tin ngữ cảnh nghiệp vụ (Role/Permission/Stage) từ bảng Department
     depts = db.query(Department).filter(Department.account_id == user.id).all()
     
+    role_id = getattr(user, 'role_id', None)
     role_name = None
     role_description = None
-    permission_name = None
-    permission_description = None
+    role_ids = []
+    role_names = []
+    
+    permission_ids = []
+    permission_names = []
+    permission_descriptions = []
+    permissions_list = []
+    
+    stage_ids = []
     stage_names = []
     stage_descriptions = []
+    stages_list = []
 
     for dept in depts:
-        if dept.role_id and not role_name:
-            role = db.query(Role).filter(Role.id == dept.role_id).first()
-            if role:
-                role_name = role.name
-                role_description = role.description
-        if dept.permission_id and not permission_name:
-            perm = db.query(Permission).filter(Permission.id == dept.permission_id).first()
-            if perm:
-                permission_name = perm.name
-                permission_description = perm.description
+        if dept.role_id:
+            if dept.role_id not in role_ids:
+                role_ids.append(dept.role_id)
+            if not role_name:
+                role = db.query(Role).filter(Role.id == dept.role_id).first()
+                if role:
+                    role_name = role.name
+                    role_description = role.description
+                    role_names.append(role.name)
+        if dept.permission_id:
+            if dept.permission_id not in permission_ids:
+                permission_ids.append(dept.permission_id)
+                perm = db.query(Permission).filter(Permission.id == dept.permission_id).first()
+                if perm:
+                    permission_names.append(perm.name)
+                    permission_descriptions.append(perm.description or perm.name)
+                    permissions_list.append({
+                        "id": perm.id,
+                        "name": perm.name,
+                        "description": perm.description or perm.name
+                    })
         if dept.stage_id:
-            stage = db.query(Stage).filter(Stage.id == dept.stage_id).first()
-            if stage and stage.name not in stage_names:
-                stage_names.append(stage.name)
-                stage_descriptions.append(stage.description or stage.name)
+            if dept.stage_id not in stage_ids:
+                stage_ids.append(dept.stage_id)
+                stage = db.query(Stage).filter(Stage.id == dept.stage_id).first()
+                if stage:
+                    stage_names.append(stage.name)
+                    stage_descriptions.append(stage.description or stage.name)
+                    stages_list.append({
+                        "id": stage.id,
+                        "name": stage.name,
+                        "description": stage.description or stage.name
+                    })
 
-    stage_name = " | ".join(stage_names) if stage_names else None
-    stage_description = " | ".join(stage_descriptions) if stage_descriptions else None
+    if not role_name and role_id:
+        role = db.query(Role).filter(Role.id == role_id).first()
+        if role:
+            role_name = role.name
+            role_description = role.description
+
+    if getattr(user, 'permission_id', None) and user.permission_id not in permission_ids:
+        permission_ids.insert(0, user.permission_id)
+        perm = db.query(Permission).filter(Permission.id == user.permission_id).first()
+        if perm:
+            permission_names.insert(0, perm.name)
+            permission_descriptions.insert(0, perm.description or perm.name)
+            permissions_list.insert(0, {
+                "id": perm.id,
+                "name": perm.name,
+                "description": perm.description or perm.name
+            })
 
     # Resolve department name and factory
     department_id = getattr(user, 'department_id', None)
@@ -173,6 +215,16 @@ def login_for_access_token(db: Session = Depends(get_db), form_data: OAuth2Passw
 
     factory_id = getattr(user, 'factory_id', None)
     factory_name = getattr(user, 'factory_name', None)
+    if factory_id and not factory_name:
+        try:
+            from modules.hr.models.hr_models import HRFactoryStructure
+            fac_obj = db.query(HRFactoryStructure).filter(HRFactoryStructure.id == factory_id).first()
+            if fac_obj:
+                factory_name = fac_obj.structure_name or fac_obj.name or fac_obj.structure_code
+            else:
+                factory_name = f"Nhà Máy {factory_id}"
+        except Exception:
+            factory_name = f"Nhà Máy {factory_id}"
 
     import json
     resolved_perms = account_controller.resolve_user_permissions(user, db)
@@ -185,22 +237,30 @@ def login_for_access_token(db: Session = Depends(get_db), form_data: OAuth2Passw
         "email": getattr(user, 'email', '') or '',
         "phone": getattr(user, 'phone', '') or '',
         "employee_id": getattr(user, 'employee_id', None) or '',
-        "role_id": role.id if ('role' in locals() and role) else None,
+        "status": getattr(user, 'status', 'Đang sử dụng') or 'Đang sử dụng',
+        "role_id": role_id or (role_ids[0] if role_ids else None),
         "role_name": role_name or '',
         "role_description": role_description or role_name or '',
         "department_id": department_id,
         "department_name": department_name or '',
-        "permission_id": perm.id if ('perm' in locals() and perm) else getattr(user, 'permission_id', None),
-        "permission_name": permission_name or '',
-        "permission_description": permission_description or permission_name or '',
+        "permission_id": permission_ids[0] if permission_ids else getattr(user, 'permission_id', None),
+        "permission_ids": permission_ids,
+        "permission_name": ", ".join(permission_names) if permission_names else '',
+        "permission_description": ", ".join(permission_descriptions) if permission_descriptions else '',
+        "permissions_list": permissions_list,
         "factory_id": factory_id,
         "factory_name": factory_name or '',
-        "stage_name": stage_name or '',
-        "stage_description": stage_description or stage_name or '',
+        "stage_id": stage_ids[0] if stage_ids else None,
+        "stage_ids": stage_ids,
+        "stage_name": " | ".join(stage_names) if stage_names else '',
+        "stage_description": " | ".join(stage_descriptions) if stage_descriptions else '',
+        "stage_names": stage_names,
+        "stages_list": stages_list,
         "id": user.id,
         "screen_permissions": json.dumps(resolved_perms),
         "permission_level": getattr(user, 'permission_level', '') or '',
-        "is_mobile_allowed": getattr(user, 'is_mobile_allowed', True) if getattr(user, 'is_mobile_allowed', True) is not None else True
+        "is_mobile_allowed": getattr(user, 'is_mobile_allowed', True) if getattr(user, 'is_mobile_allowed', True) is not None else True,
+        "is_web_allowed": getattr(user, 'is_web_allowed', True) if getattr(user, 'is_web_allowed', True) is not None else True
     }
 
 @router.get("/stages")
@@ -229,6 +289,17 @@ def register_user(account: AccountCreate, db: Session = Depends(get_db)):
             
     return account_controller.create_account(db=db, account=account)
 
+@router.get("/by-username/{username}")
+def get_user_by_username(username: str, db: Session = Depends(get_db)):
+    """
+    [GET] Lấy chi tiết tài khoản theo username.
+    """
+    from sqlalchemy import func
+    db_account = db.query(AccountModel).filter(func.lower(AccountModel.username) == username.lower()).first()
+    if not db_account:
+        raise HTTPException(status_code=404, detail="Tài khoản không tồn tại")
+    return get_user_detail(db_account.id, db)
+
 @router.get("/{account_id}")
 def get_user_detail(account_id: int, db: Session = Depends(get_db)):
     """
@@ -242,19 +313,83 @@ def get_user_detail(account_id: int, db: Session = Depends(get_db)):
     depts = db.query(Department).filter(Department.account_id == account_id).all()
     
     role_id = getattr(db_account, 'role_id', None)
+    role_name = None
+    role_description = None
+    
     permission_ids = []
+    permission_names = []
+    permission_descriptions = []
+    permissions_list = []
+    
     stage_ids = []
+    stage_names = []
+    stage_descriptions = []
+    stages_list = []
     
     for dept in depts:
         if dept.role_id and not role_id:
             role_id = dept.role_id
         if dept.permission_id and dept.permission_id not in permission_ids:
             permission_ids.append(dept.permission_id)
+            perm = db.query(Permission).filter(Permission.id == dept.permission_id).first()
+            if perm:
+                permission_names.append(perm.name)
+                permission_descriptions.append(perm.description or perm.name)
+                permissions_list.append({
+                    "id": perm.id,
+                    "name": perm.name,
+                    "description": perm.description or perm.name
+                })
         if dept.stage_id and dept.stage_id not in stage_ids:
             stage_ids.append(dept.stage_id)
+            stage = db.query(Stage).filter(Stage.id == dept.stage_id).first()
+            if stage:
+                stage_names.append(stage.name)
+                stage_descriptions.append(stage.description or stage.name)
+                stages_list.append({
+                    "id": stage.id,
+                    "name": stage.name,
+                    "description": stage.description or stage.name
+                })
             
+    if role_id:
+        role = db.query(Role).filter(Role.id == role_id).first()
+        if role:
+            role_name = role.name
+            role_description = role.description
+
     if getattr(db_account, 'permission_id', None) and db_account.permission_id not in permission_ids:
-        permission_ids.append(db_account.permission_id)
+        permission_ids.insert(0, db_account.permission_id)
+        perm = db.query(Permission).filter(Permission.id == db_account.permission_id).first()
+        if perm:
+            permission_names.insert(0, perm.name)
+            permission_descriptions.insert(0, perm.description or perm.name)
+            permissions_list.insert(0, {
+                "id": perm.id,
+                "name": perm.name,
+                "description": perm.description or perm.name
+            })
+
+    # Resolve department name
+    department_id = getattr(db_account, 'department_id', None)
+    department_name = None
+    if department_id:
+        dept_obj = db.query(Department).filter(Department.id == department_id).first()
+        if dept_obj:
+            department_name = dept_obj.name
+
+    factory_id = getattr(db_account, 'factory_id', None)
+    factory_name = getattr(db_account, 'factory_name', None)
+    if factory_id and not factory_name:
+        try:
+            from modules.hr.models.hr_models import HRFactoryStructure
+            fac_obj = db.query(HRFactoryStructure).filter(HRFactoryStructure.id == factory_id).first()
+            if fac_obj:
+                factory_name = fac_obj.structure_name or fac_obj.name or fac_obj.structure_code
+            else:
+                factory_name = f"Nhà Máy {factory_id}"
+        except Exception:
+            factory_name = f"Nhà Máy {factory_id}"
 
     return {
         "id": db_account.id,
@@ -266,14 +401,26 @@ def get_user_detail(account_id: int, db: Session = Depends(get_db)):
         "status": db_account.status,
         "is_active": db_account.is_active,
         "is_mobile_allowed": getattr(db_account, 'is_mobile_allowed', True) if getattr(db_account, 'is_mobile_allowed', True) is not None else True,
+        "is_web_allowed": getattr(db_account, 'is_web_allowed', True) if getattr(db_account, 'is_web_allowed', True) is not None else True,
         "created_at": db_account.created_at,
         "role_id": role_id,
-        "department_id": getattr(db_account, 'department_id', None),
+        "role_name": role_name,
+        "role_description": role_description,
+        "department_id": department_id,
+        "department_name": department_name,
         "permission_id": getattr(db_account, 'permission_id', None) or (permission_ids[0] if permission_ids else None),
         "permission_ids": permission_ids,
-        "factory_id": getattr(db_account, 'factory_id', None),
-        "factory_name": getattr(db_account, 'factory_name', None),
+        "permission_name": ", ".join(permission_names) if permission_names else '',
+        "permission_description": ", ".join(permission_descriptions) if permission_descriptions else '',
+        "permissions_list": permissions_list,
+        "factory_id": factory_id,
+        "factory_name": factory_name,
+        "stage_id": stage_ids[0] if stage_ids else None,
         "stage_ids": stage_ids,
+        "stage_name": " | ".join(stage_names) if stage_names else '',
+        "stage_description": " | ".join(stage_descriptions) if stage_descriptions else '',
+        "stage_names": stage_names,
+        "stages_list": stages_list,
         "screen_permissions": db_account.screen_permissions,
         "permission_level": db_account.permission_level
     }

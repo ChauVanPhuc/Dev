@@ -487,6 +487,11 @@ const ProtectedRoute = ({ permissionKey, children }) => {
 
   const user = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
 
+  // Chặn người dùng nếu bị tắt quyền truy cập Web
+  if (user.is_web_allowed === false) {
+    return <AccessDenied />;
+  }
+
   // Chặn hoàn toàn tài khoản công nhân truy cập bất kỳ route Web nào
   if (user.permission_name === 'NV SX' || user.permission_name === 'NV QC') {
     return <AccessDenied />;
@@ -724,7 +729,7 @@ function App() {
                 <Route path="exception-deliveries" element={<ProtectedRoute permissionKey="exception-deliveries"><ExceptionDeliveries /></ProtectedRoute>} />
                 <Route path="purchase-requisitions" element={<ProtectedRoute permissionKey="purchase-requisitions"><PurchaseRequisitionList /></ProtectedRoute>} />
                 <Route path="purchase-requisitions/:id" element={<ProtectedRoute permissionKey="purchase-requisitions"><PurchaseRequisitionDetail /></ProtectedRoute>} />
-                <Route path="purchase-order-items" element={<ProtectedRoute permissionKey="purchase-order-items"><PurchaseOrderItemList /></ProtectedRoute>} />
+                <Route path="purchase-order-items" element={<Navigate to="/admin/purchase-requisitions" replace />} />
                 <Route path="order-shipping-monitoring" element={<ProtectedRoute permissionKey="order-shipping-monitoring"><OrderShippingMonitoring /></ProtectedRoute>} />
               </Route>
 

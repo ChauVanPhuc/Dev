@@ -54,6 +54,7 @@ const UserEdit = ({ isProfile = false }) => {
     password: '', 
     status: 'Đang sử dụng',
     is_mobile_allowed: true,
+    is_web_allowed: true,
     role_id: '',
     department_id: '',
     permission_id: '',
@@ -226,6 +227,7 @@ const UserEdit = ({ isProfile = false }) => {
           password: '', 
           status: userData.status || 'Đang sử dụng',
           is_mobile_allowed: userData.is_mobile_allowed !== undefined ? userData.is_mobile_allowed : true,
+          is_web_allowed: userData.is_web_allowed !== undefined ? userData.is_web_allowed : true,
           role_id: userData.role_id || '',
           department_id: userData.department_id || '',
           permission_id: userData.permission_id || '',
@@ -454,6 +456,14 @@ const UserEdit = ({ isProfile = false }) => {
     setFormData(prev => ({
       ...prev,
       is_mobile_allowed: !prev.is_mobile_allowed
+    }));
+    setIsDirty(true);
+  };
+
+  const toggleWebAccess = () => {
+    setFormData(prev => ({
+      ...prev,
+      is_web_allowed: !prev.is_web_allowed
     }));
     setIsDirty(true);
   };
@@ -885,6 +895,7 @@ const UserEdit = ({ isProfile = false }) => {
         status: formData.status,
         is_active: formData.status === 'Đang sử dụng',
         is_mobile_allowed: formData.is_mobile_allowed,
+        is_web_allowed: formData.is_web_allowed,
         role_id: formData.role_id ? parseInt(formData.role_id, 10) : null,
         department_id: formData.department_id ? parseInt(formData.department_id, 10) : null,
         permission_id: primaryPermId,
@@ -1130,6 +1141,18 @@ const UserEdit = ({ isProfile = false }) => {
                     <span className="status-indicator-dot"></span>
                     {formData.status === 'Đang sử dụng' ? 'Kích hoạt' : 'Tạm dừng hoạt động'}
                   </button>
+
+                  {!isProfile && (
+                    <button 
+                      type="button" 
+                      className={`btn-action-custom btn-status ${formData.is_web_allowed ? 'active' : 'suspended'}`}
+                      onClick={toggleWebAccess}
+                      style={{ marginTop: '8px', backgroundColor: formData.is_web_allowed ? '#F0FDF4' : '#FEF2F2', color: formData.is_web_allowed ? '#15803D' : '#DC2626', borderColor: formData.is_web_allowed ? '#BBF7D0' : '#FCA5A5' }}
+                    >
+                      <span className="status-indicator-dot" style={{ backgroundColor: formData.is_web_allowed ? '#16A34A' : '#DC2626' }}></span>
+                      {formData.is_web_allowed ? 'Cho phép vào Web' : 'Chặn vào Web'}
+                    </button>
+                  )}
 
                   {!isProfile && (
                     <button 

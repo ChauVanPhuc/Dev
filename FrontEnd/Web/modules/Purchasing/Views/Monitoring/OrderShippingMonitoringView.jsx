@@ -199,10 +199,91 @@ const OrderShippingMonitoringView = () => {
   };
 
   return (
-    <div className="manufacture-plan-container mgmt-container" style={{ width: '100%', maxWidth: '100%' }}>
+    <div className="manufacture-plan-container mgmt-container pr-unified-container" style={{ width: '100%', maxWidth: '100%' }}>
       
       {/* Dynamic CSS override for Super Compact Table & Ultra Clean 1-Page View */}
       <style dangerouslySetInnerHTML={{ __html: `
+        @media (min-width: 769px) {
+          .pr-unified-container {
+            height: calc(100vh - 68px) !important;
+            max-height: calc(100vh - 68px) !important;
+            min-height: 0 !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 4px !important;
+          }
+          .pr-unified-container .sticky-top-zone {
+            flex-shrink: 0 !important;
+            flex-grow: 0 !important;
+            margin-bottom: 0 !important;
+          }
+          .pr-unified-container .admin-list-layout {
+            flex: 1 1 0% !important;
+            height: 100% !important;
+            min-height: 0 !important;
+            max-height: 100% !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          .pr-unified-container .admin-table-card {
+            flex: 1 1 0% !important;
+            height: 100% !important;
+            min-height: 0 !important;
+            max-height: 100% !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+            margin: 0 !important;
+            border-radius: 8px !important;
+          }
+          .pr-unified-container .admin-table-scroll {
+            flex: 1 1 0% !important;
+            height: 100% !important;
+            min-height: 0 !important;
+            overflow-x: auto !important;
+            overflow-y: auto !important;
+            display: block !important;
+            position: relative !important;
+            -webkit-overflow-scrolling: touch !important;
+          }
+          .pr-unified-container .admin-pagination-desktop {
+            flex-shrink: 0 !important;
+            flex-grow: 0 !important;
+            height: 38px !important;
+            min-height: 38px !important;
+            max-height: 38px !important;
+            padding: 0 12px !important;
+            margin-top: auto !important;
+            background: #FFFFFF !important;
+            border-top: 1px solid #EADCC9 !important;
+            z-index: 15 !important;
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+          }
+        }
+
+        /* Custom Scrollbar */
+        .pr-unified-container .admin-table-scroll::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        .pr-unified-container .admin-table-scroll::-webkit-scrollbar-track {
+          background: #FAF6F0;
+          border-radius: 4px;
+        }
+        .pr-unified-container .admin-table-scroll::-webkit-scrollbar-thumb {
+          background: #D7C4B2;
+          border-radius: 4px;
+        }
+        .pr-unified-container .admin-table-scroll::-webkit-scrollbar-thumb:hover {
+          background: #A67C52;
+        }
+
         .pr-compact-table table.data-table thead tr th {
           padding: 6px 8px !important;
           font-size: 0.73rem !important;
@@ -210,6 +291,13 @@ const OrderShippingMonitoringView = () => {
           line-height: 1.15 !important;
           height: 32px !important;
           letter-spacing: -0.2px;
+          background-color: #FAF6F0 !important;
+          color: #7B5233 !important;
+          position: sticky !important;
+          top: 0 !important;
+          z-index: 20 !important;
+          border-bottom: 1px solid #EADCC9 !important;
+          box-shadow: 0 1px 0 #EADCC9 !important;
         }
         .pr-compact-table table.data-table tbody tr td {
           padding: 4px 8px !important;
@@ -218,14 +306,6 @@ const OrderShippingMonitoringView = () => {
           line-height: 1.15 !important;
           height: 28px !important;
           vertical-align: middle !important;
-        }
-        .pr-compact-table .admin-table-card {
-          margin-bottom: 0 !important;
-        }
-        .pr-compact-table .admin-pagination-desktop {
-          height: 38px !important;
-          min-height: 38px !important;
-          padding: 0 12px !important;
         }
       `}} />
 

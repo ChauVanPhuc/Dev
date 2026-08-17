@@ -369,11 +369,24 @@ const InspectionDetailPopup = ({ item, onClose }) => {
                     paddingBottom: idx < extra.defects.length - 1 ? '12px' : '0' 
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        <span style={{ fontSize: '0.9rem', fontWeight: '800', color: '#1e293b' }}>
-                          {def.defect_name || `Lỗi #${def.defectId}`}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.9rem', fontWeight: '800', color: '#1e293b' }}>
+                            {def.defect_name || (def.code ? `[${def.code}]` : '') || `Lỗi #${def.defectId}`}
+                          </span>
+                          {def.isCTQ ? (
+                            <span style={{ backgroundColor: '#fee2e2', color: '#b91c1c', border: '1px solid #f87171', padding: '1px 6px', borderRadius: '10px', fontSize: '9px', fontWeight: '800', boxShadow: '0 1px 2px rgba(185, 28, 28, 0.15)' }}>
+                              CTQ
+                            </span>
+                          ) : (def.isQA || def.needs_tracking || def.qc_tracking || def.is_tracked_by_me) ? (
+                            <span style={{ backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fdba74', padding: '1px 6px', borderRadius: '10px', fontSize: '9px', fontWeight: '700' }}>
+                              QA Track
+                            </span>
+                          ) : null}
+                        </div>
+                        <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '600' }}>
+                          Số lượng: <span style={{ fontWeight: '800', color: '#1e293b' }}>{def.quantity || 1} / {extra.sample_qty || samplesList.length || 1} mẫu</span>
                         </span>
-                        <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '600' }}>Số lượng: <span style={{ fontWeight: '800', color: '#1e293b' }}>{def.quantity || 1}</span></span>
                       </div>
                       <span style={{ 
                         fontSize: '0.65rem', fontWeight: '800', padding: '4px 8px', borderRadius: '6px',

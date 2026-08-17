@@ -27,12 +27,32 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # ----------------------------------------------------------------------
-# 0.5 API: Lấy danh sách tất cả công đoạn từ bảng Stage
+# 0.5 API: Lấy danh sách tất cả công đoạn từ bảng Stage / BOM
 # ----------------------------------------------------------------------
 @router.get("/stages", response_model=List[dict])
 def read_stages_v2(db: Session = Depends(get_db)):
-    """[GET] Lấy toàn bộ công đoạn từ bảng Stage."""
-    return [{"id": s.id, "name": s.name, "description": s.description} for s in db.query(Stage).all()]
+    """[GET] Lấy toàn bộ công đoạn tiêu chuẩn từ BOM: Tạo Phôi, Định Hình, Lắp Ráp, Sơn, Đóng Gói, Lưu Kho."""
+    STANDARD_STAGES = [
+        {"id": 1, "name": "Tạo Phôi", "description": "Công đoạn Tạo Phôi"},
+        {"id": 2, "name": "Định Hình", "description": "Công đoạn Định Hình"},
+        {"id": 3, "name": "Lắp Ráp", "description": "Công đoạn Lắp Ráp"},
+        {"id": 4, "name": "Sơn", "description": "Công đoạn Sơn"},
+        {"id": 5, "name": "Đóng Gói", "description": "Công đoạn Đóng Gói"},
+        {"id": 6, "name": "Lưu Kho", "description": "Công đoạn Lưu Kho"},
+    ]
+    try:
+        db_stages = db.query(Stage).all()
+        if db_stages:
+            names_seen = {s["name"].lower() for s in STANDARD_STAGES}
+            extra = []
+            for s in db_stages:
+                if s.name and s.name.lower() not in names_seen:
+                    extra.append({"id": s.id, "name": s.name, "description": s.description or s.name})
+                    names_seen.add(s.name.lower())
+            return STANDARD_STAGES + extra
+        return STANDARD_STAGES
+    except Exception:
+        return STANDARD_STAGES
 
 # ----------------------------------------------------------------------
 # 0. API: Lấy danh sách Tháng có kế hoạch sản xuất từ CSDL
@@ -591,31 +611,73 @@ def get_order_bom(po_code: str, stage: Optional[str] = Query(None), db: Session 
 
         # Lọc theo công đoạn giao (input_stage) nếu có stage
         if stage and stage.strip() and stage.strip().upper() not in ["ALL", "TẤT CẢ", "TẤT CẢ CÔNG ĐOẠN", ""]:
-            selected_stage_norm = " ".join(stage.strip().lower().replace("-", " - ").split())
-            
+            import re
+            def clean_st(s: str) -> str:
+                if not s:
+                    return ""
+                v = s.lower().strip()
+                v = re.sub(r'^nm\d+\s*[-–—]\s*', '', v)
+                v = re.sub(r'\s+\d+$', '', v)
+                return " ".join(v.split())
+
+            selected_clean = clean_st(stage)
+
             def is_matching_stage(bom_item) -> bool:
                 if not bom_item.input_stage:
-                    return False
-                item_stage_norm = " ".join(bom_item.input_stage.strip().lower().replace("-", " - ").split())
-                return item_stage_norm == selected_stage_norm
+                    return True
+                item_clean = clean_st(bom_item.input_stage)
+                if not selected_clean or selected_clean in ["all", "chung", "tất cả"]:
+                    return True
+                if item_clean in ["all", "chung", "tất cả"]:
+                    return True
+                if selected_clean in item_clean or item_clean in selected_clean:
+                    return True
+                if selected_clean == "tạo phôi" and ("phôi" in item_clean or "cắt" in item_clean):
+                    return True
+                if selected_clean == "định hình" and ("định hình" in item_clean or "dinh hinh" in item_clean):
+                    return True
+                if selected_clean == "lắp ráp" and ("lắp ráp" in item_clean or "lap rap" in item_clean or "chà nhám" in item_clean):
+                    return True
+                if selected_clean == "sơn" and ("sơn" in item_clean or "son" in item_clean):
+                    return True
+                if selected_clean == "đóng gói" and ("đóng gói" in item_clean or "dong goi" in item_clean or "bao bì" in item_clean):
+                    return True
+                if selected_clean == "lưu kho" and ("kho" in item_clean or "lưu kho" in item_clean or "container" in item_clean or "load cont" in item_clean):
+                    return True
+                return False
 
-            boms = [b for b in boms if is_matching_stage(b)]
+            filtered_boms = [b for b in boms if is_matching_stage(b)]
+            if filtered_boms:
+                boms = filtered_boms
 
         parts_map = {}
-        for p in order.products:
-            prod_q = float(p.order_qty or p.quantity or 1.0)
-            for b in [b for b in boms if b.product_id == p.id]:
-                qty = max(1, int(prod_q * float(b.quantity or 1.0)))
-                name = b.name or b.sku or "Chi tiết"
-                spec = b.specification or "Không quy cách"
+        if boms:
+            for p in order.products:
+                prod_q = float(p.order_qty or p.quantity or 1.0)
+                for b in [b for b in boms if b.product_id == p.id]:
+                    qty = max(1, int(prod_q * float(b.quantity or 1.0)))
+                    name = b.name or b.sku or "Chi tiết"
+                    spec = b.specification or "Tiêu chuẩn"
 
-                if name not in parts_map:
-                    parts_map[name] = {"part_name": name, "total_qty": 0, "specs_map": {}}
+                    if name not in parts_map:
+                        parts_map[name] = {"part_name": name, "total_qty": 0, "specs_map": {}}
 
-                parts_map[name]["total_qty"] += qty
-                if spec not in parts_map[name]["specs_map"]:
-                    parts_map[name]["specs_map"][spec] = 0
-                parts_map[name]["specs_map"][spec] += qty
+                    parts_map[name]["total_qty"] += qty
+                    if spec not in parts_map[name]["specs_map"]:
+                        parts_map[name]["specs_map"][spec] = 0
+                    parts_map[name]["specs_map"][spec] += qty
+
+        # Fallback to products if order has no BOM entries
+        if not parts_map and order.products:
+            for p in order.products:
+                name = p.sku or p.name or f"Sản phẩm {p.id}"
+                qty = int(p.order_qty or p.quantity or 1)
+                spec = "Tiêu chuẩn"
+                parts_map[name] = {
+                    "part_name": name,
+                    "total_qty": qty,
+                    "specs_map": {spec: qty}
+                }
 
         return [
             {

@@ -180,10 +180,16 @@ const StageInspection = () => {
   const [isOcrProcessing, setIsOcrProcessing] = useState(false);
   const [allowManualInput, setAllowManualInput] = useState(false);
 
+  // Item Inspection Photos (Max 5 photos)
+  const [itemImages, setItemImages] = useState([]);
+  const [isUploadingItemImage, setIsUploadingItemImage] = useState(false);
+  const itemImageInputRef = useRef(null);
+
   const modalFileInputRef = useRef(null);
 
   // Defect tracking states
-  const [defectTypes, setDefectTypes] = useState([]);
+  const [defectCatalog, setDefectCatalog] = useState([]);
+  const [ctqGuides, setCtqGuides] = useState([]);
   const [activeDefects, setActiveDefects] = useState([{ defectId: '', quantity: 1, isHeavy: true, images: [] }]);
   const [activeDefectIndex, setActiveDefectIndex] = useState(null);
   const [activeDefectPhotoIndex, setActiveDefectPhotoIndex] = useState(null);
@@ -218,9 +224,14 @@ const StageInspection = () => {
 
     const fetchPOs = async () => {
       try {
-        const res = await apiClient.get('purchase-requisitions/?limit=200');
-        if (res.data && Array.isArray(res.data.items)) {
-          setOrders(res.data.items);
+        const res = await apiClient.get('purchase-requisitions/all-po-codes');
+        if (Array.isArray(res.data) && res.data.length > 0) {
+          setOrders(res.data);
+        } else {
+          const fallbackRes = await apiClient.get('purchase-requisitions/?limit=500');
+          if (fallbackRes.data && Array.isArray(fallbackRes.data.items)) {
+            setOrders(fallbackRes.data.items);
+          }
         }
       } catch (err) {
         console.error("Lỗi khi tải PO:", err);
@@ -233,11 +244,11 @@ const StageInspection = () => {
         const url = user?.id ? `/inspections/defect-types?user_id=${user.id}` : '/inspections/defect-types';
         const res = await apiClient.get(url);
         if (Array.isArray(res.data)) {
-          setDefectTypes(res.data);
+          setDefectCatalog(res.data);
         }
       } catch (err) {
         console.error("Lỗi khi tải danh mục lỗi, sử dụng dữ liệu mặc định:", err);
-        setDefectTypes([
+        setDefectCatalog([
           { id: 101, name: 'Bề mặt xước', category: 'visual', needs_tracking: true, is_active: true },
           { id: 102, name: 'Lệch màu', category: 'visual', needs_tracking: true, is_active: true },
           { id: 103, name: 'Bọt khí', category: 'visual', needs_tracking: false, is_active: true },
@@ -252,7 +263,108 @@ const StageInspection = () => {
       }
     };
     fetchDefectTypes();
+
+    const fetchCTQ = async () => {
+      try {
+        const res = await apiClient.get('/inspection-guides?doc_type=CTQ&limit=500');
+        const data = res?.data !== undefined ? res.data : res;
+        const list = Array.isArray(data) ? data : (data?.items || []);
+        setCtqGuides(list);
+      } catch (err) {
+        console.warn("Lỗi khi tải CTQ guides:", err);
+      }
+    };
+    fetchCTQ();
   }, [user]);
+
+  // Combined & prioritized defect types: CTQ -> QA Track -> Catalog defects
+  const defectTypes = useMemo(() => {
+    const list = [];
+    const seenCodes = new Set();
+    const seenNames = new Set();
+
+    const ctqList = Array.isArray(ctqGuides) ? ctqGuides : [];
+    const catList = Array.isArray(defectCatalog) ? defectCatalog : [];
+
+    // 1. Nạp CTQ guides trước
+    ctqList.forEach((ctq) => {
+      let code = ctq.code || '';
+      let name = ctq.name || '';
+      const codeMatch = ctq.name?.match(/^\[([A-Za-z0-9_-]+)\]\s*(.*)$/);
+      if (codeMatch) {
+        code = codeMatch[1];
+        name = codeMatch[2];
+      }
+
+      const item = {
+        id: `ctq_${ctq.id}`,
+        ctq_id: ctq.id,
+        code: code,
+        name: name,
+        label: code ? `[${code}] ${name}` : name,
+        category: 'CTQ',
+        description: ctq.description,
+        needs_tracking: true,
+        isQA: true,
+        isCTQ: true,
+        source: 'CTQ',
+      };
+
+      if (code) seenCodes.add(code.toLowerCase().trim());
+      if (name) seenNames.add(name.toLowerCase().trim());
+      list.push(item);
+    });
+
+    // 2. Nạp danh mục lỗi từ defectCatalog
+    catList.forEach((d) => {
+      const dCode = (d.code || '').toLowerCase().trim();
+      const dName = (d.name || '').toLowerCase().trim();
+
+      if ((dCode && seenCodes.has(dCode)) || (dName && seenNames.has(dName))) {
+        const existing = list.find(
+          (item) =>
+            (dCode && item.code?.toLowerCase().trim() === dCode) ||
+            (dName && item.name?.toLowerCase().trim() === dName)
+        );
+        if (existing) {
+          existing.defect_type_id = d.id;
+          if (!existing.category || existing.category === 'CTQ') {
+            existing.category = d.category || 'CTQ';
+          }
+          if (d.needs_tracking) existing.needs_tracking = true;
+          if (d.qc_tracking) existing.qc_tracking = true;
+          if (d.is_tracked_by_me) existing.is_tracked_by_me = true;
+        }
+        return;
+      }
+
+      list.push({
+        id: d.id,
+        code: d.code,
+        name: d.name,
+        label: d.code ? `[${d.code}] ${d.name}` : d.name,
+        category: d.category,
+        stage: d.stage,
+        description: d.description,
+        needs_tracking: Boolean(d.needs_tracking),
+        qc_tracking: Boolean(d.qc_tracking),
+        is_tracked_by_me: Boolean(d.is_tracked_by_me),
+        isQA: Boolean(d.needs_tracking || d.qc_tracking || d.is_tracked_by_me),
+        isCTQ: false,
+        source: 'catalog',
+      });
+    });
+
+    // 3. Sắp xếp ưu tiên: Rank 2 (CTQ) -> Rank 1 (QA Track) -> Rank 0 (Lỗi thông thường)
+    const sorted = [...list].sort((a, b) => {
+      const aRank = a.isCTQ ? 2 : (a.needs_tracking || a.qc_tracking || a.is_tracked_by_me || a.isQA ? 1 : 0);
+      const bRank = b.isCTQ ? 2 : (b.needs_tracking || b.qc_tracking || b.is_tracked_by_me || b.isQA ? 1 : 0);
+      if (aRank !== bRank) return bRank - aRank;
+      return (a.code || a.name || '').localeCompare(b.code || b.name || '');
+    });
+
+    return sorted;
+  }, [defectCatalog, ctqGuides]);
 
   const filteredHistory = useMemo(() => {
     return historyList.filter(item => item.inspection_type === 'nhap-kho' || item.inspection_type === 'dau-vao').slice(0, 3);
@@ -524,11 +636,25 @@ const StageInspection = () => {
       setItemConclusion(draft.conclusion);
       setItemAction(draft.action || 'luu-kho');
       setActiveDefects(draft.defects && draft.defects.length > 0 ? draft.defects : [{ defectId: '', quantity: 1, isHeavy: true, images: [] }]);
+      setItemImages(draft.images || []);
     } else if (existing) {
       let extra = {};
       try {
         extra = typeof existing.data_json === 'string' ? JSON.parse(existing.data_json) : (existing.data_json || {});
       } catch (e) { }
+
+      let existingImages = [];
+      if (extra.images && Array.isArray(extra.images)) {
+        existingImages = extra.images;
+      } else if (existing.images_json) {
+        try {
+          const parsedImgs = typeof existing.images_json === 'string' ? JSON.parse(existing.images_json) : existing.images_json;
+          if (Array.isArray(parsedImgs)) existingImages = parsedImgs;
+          else if (parsedImgs && typeof parsedImgs === 'object') {
+            existingImages = Object.values(parsedImgs).flat().filter(Boolean);
+          }
+        } catch (e) { }
+      }
 
       const savedSamples = extra.samples || [];
       const initialSamples = savedSamples.length > 0 ? savedSamples : initializeDefaultSamples(Math.min(3, maxQty));
@@ -542,6 +668,7 @@ const StageInspection = () => {
       setItemConclusion(existing.conclusion || 'pass');
       setItemAction(extra.action || 'luu-kho');
       setActiveDefects(extra.defects && extra.defects.length > 0 ? extra.defects : [{ defectId: '', quantity: 1, isHeavy: true, images: [] }]);
+      setItemImages(existingImages.slice(0, 5));
     } else {
       const defaultQty = Math.min(3, maxQty);
       setSampleQty(defaultQty);
@@ -551,6 +678,7 @@ const StageInspection = () => {
       setItemConclusion('pass');
       setItemAction('luu-kho');
       setActiveDefects([{ defectId: '', quantity: 1, isHeavy: true, images: [] }]);
+      setItemImages([]);
     }
   };
 
@@ -560,20 +688,11 @@ const StageInspection = () => {
       if (sample.visual === 'fail') hasFail = true;
       if (!isWood && sample.function === 'fail') hasFail = true;
     }
-    const hasDefect = currentDefects.some(d => d.defectId && d.quantity > 0);
-    if (hasDefect) {
-      hasFail = true;
-    }
-
-    if (hasFail) {
+    const hasHeavyDefect = currentDefects.some(d => d.defectId && d.quantity > 0 && d.isHeavy);
+    if (hasHeavyDefect || hasFail) {
       setItemConclusion('fail');
       if (itemAction === 'luu-kho') {
         setItemAction('tra-ve');
-      }
-    } else {
-      setItemConclusion('pass');
-      if (itemAction === 'tra-ve' || itemAction === 'cach-ly') {
-        setItemAction('luu-kho');
       }
     }
   };
@@ -609,8 +728,8 @@ const StageInspection = () => {
       const isHeavy = selectedDefect ? (selectedDefect.aql_class === 'Major' || selectedDefect.aql_class === 'Critical') : true;
       next[index] = { ...next[index], defectId: value, isHeavy };
     } else if (field === 'quantity') {
-      const maxVal = sampleQty;
-      const cappedVal = Math.max(0, Math.min(value, maxVal));
+      const maxVal = sampleQty || 1;
+      const cappedVal = Math.max(0, Math.min(Number(value) || 0, maxVal));
       next[index] = { ...next[index], quantity: cappedVal };
     } else {
       next[index] = { ...next[index], [field]: value };
@@ -658,6 +777,11 @@ const StageInspection = () => {
         return prev.slice(0, cappedQty);
       }
     });
+    // Ensure all defect quantities are clamped to new sample quantity
+    setActiveDefects(prev => prev.map(d => ({
+      ...d,
+      quantity: Math.max(1, Math.min(d.quantity || 1, cappedQty))
+    })));
   };
 
   const handleOpenPhotoModal = (idx, type) => {
@@ -810,6 +934,36 @@ const StageInspection = () => {
     }
   };
 
+  const onItemImageChange = async (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    if (itemImages.length >= 5) {
+      alert("Đã đạt giới hạn tối đa 5 ảnh kiểm tra!");
+      return;
+    }
+
+    setIsUploadingItemImage(true);
+    try {
+      const uploadFormData = new FormData();
+      uploadFormData.append('files', files[0]);
+
+      const res = await apiClient.post('inspections/upload', uploadFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      if (res.data && res.data.paths && res.data.paths.length > 0) {
+        const newPath = res.data.paths[0];
+        setItemImages(prev => [...prev, newPath].slice(0, 5));
+      }
+    } catch (err) {
+      console.error("Lỗi tải ảnh kiểm tra:", err);
+      alert("Không thể tải ảnh lên máy chủ. Vui lòng thử lại!");
+    } finally {
+      setIsUploadingItemImage(false);
+      e.target.value = '';
+    }
+  };
+
   const handleConfirmModalValues = () => {
     let finalValues = [];
 
@@ -914,26 +1068,35 @@ const StageInspection = () => {
       return idx < samples.length - 1 || isMeasured;
     });
 
+    const finalSampleQty = Math.max(cleanedSamples.length, sampleQty || 1);
+
     const defectsWithNames = activeDefects
       .filter(d => d.defectId)
       .map(d => {
-        const found = defectTypes.find(t => t.id.toString() === d.defectId.toString());
+        const found = defectTypes.find(t => String(t.id) === String(d.defectId) || String(t.value) === String(d.defectId));
         return {
           ...d,
-          defect_name: found ? found.name : `Lỗi #${d.defectId}`
+          quantity: Math.max(1, Math.min(Number(d.quantity) || 1, finalSampleQty)),
+          defect_name: found ? found.name : `Lỗi #${d.defectId}`,
+          code: found?.code || '',
+          category: found?.category || '',
+          isQA: Boolean(found?.isQA || found?.needs_tracking || found?.qc_tracking || found?.is_tracked_by_me),
+          needs_tracking: Boolean(found?.needs_tracking || found?.isQA),
+          isCTQ: Boolean(found?.isCTQ),
         };
       });
 
     setInspectedDrafts(prev => ({
       ...prev,
       [selectedItem.item_code.toLowerCase()]: {
-        sampleQty: cleanedSamples.length,
+        sampleQty: finalSampleQty,
         samples: cleanedSamples,
         isWood,
         conclusion: itemConclusion, // Save the actual selected/computed conclusion state directly
         notes: itemNotes,
         action: itemAction,
-        defects: defectsWithNames
+        defects: defectsWithNames,
+        images: itemImages
       }
     }));
     setSelectedItem(null);
@@ -955,6 +1118,11 @@ const StageInspection = () => {
         const item = poItems.find(i => i.item_code && i.item_code.toLowerCase() === itemCode.toLowerCase());
 
         const allImages = [];
+        if (draft.images && Array.isArray(draft.images)) {
+          draft.images.forEach(img => {
+            if (img) allImages.push(img);
+          });
+        }
         draft.samples.forEach(s => {
           if (s.dimensions?.photo) allImages.push(s.dimensions.photo);
           if (s.moisture?.photo) allImages.push(s.moisture.photo);
@@ -983,10 +1151,12 @@ const StageInspection = () => {
             product_name: item?.item_name || '',
             total_qty: item?.quantity || 0,
             sample_qty: draft.sampleQty,
+            inspected_qty: draft.sampleQty,
             is_wood: draft.isWood,
             action: draft.action,
             samples: draft.samples,
-            defects: draft.defects
+            defects: draft.defects,
+            images: draft.images || []
           }),
           images_json: JSON.stringify({ "Ảnh kiểm tra": allImages })
         };
@@ -1044,8 +1214,20 @@ const StageInspection = () => {
           // Screen 2/3: Sample check form
           <div style={{ padding: '16px', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-            {/* Khối 1: Thông tin sản phẩm */}
-            <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '16px', border: '1px solid #e8e1d5' }}>
+            {/* Khung bo viền ngoài bao bọc các card kiểm tra */}
+            <div style={{
+              backgroundColor: '#fbf9f6',
+              borderRadius: '20px',
+              border: '1.5px solid #d7ccc8',
+              padding: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '14px',
+              boxShadow: '0 2px 8px rgba(75, 48, 30, 0.05)'
+            }}>
+
+              {/* Khối 1: Thông tin sản phẩm */}
+              <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '16px', border: '1px solid #e8e1d5', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
               <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
                 <div style={{ flex: 1 }}>
                   <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Mã SP</label>
@@ -1125,7 +1307,7 @@ const StageInspection = () => {
             </div>
 
             {/* Khối 2: Bảng mẫu kiểm tra */}
-            <div style={{ backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #e8e1d5', overflow: 'visible' }}>
+            <div style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #e8e1d5', overflow: 'visible', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
               <div
                 onClick={() => setIsTableExpanded(!isTableExpanded)}
                 style={{
@@ -1140,7 +1322,7 @@ const StageInspection = () => {
                   position: 'sticky',
                   top: 0,
                   zIndex: 10,
-                  borderRadius: isTableExpanded ? '16px 16px 0 0' : '16px'
+                  borderRadius: isTableExpanded ? '14px 14px 0 0' : '14px'
                 }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1251,7 +1433,7 @@ const StageInspection = () => {
             </div>
 
             {/* Khối 4: Kết quả kiểm tra, Hành động & Ghi chú */}
-            <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '16px', border: '1px solid #e8e1d5', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '16px', border: '1px solid #e8e1d5', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
               <div>
                 <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#4b301e', display: 'block', marginBottom: '6px' }}>Kết quả kiểm tra:</label>
                 <div style={{ display: 'flex', backgroundColor: '#f1f5f9', padding: '3px', borderRadius: '8px', gap: '3px' }}>
@@ -1262,9 +1444,6 @@ const StageInspection = () => {
                       <div
                         key={res}
                         onClick={() => {
-                          if (res === 'pass') {
-                            setActiveDefects([{ defectId: '', quantity: 1, isHeavy: true, images: [] }]);
-                          }
                           setItemConclusion(res);
                           setItemAction(res === 'pass' ? 'luu-kho' : 'tra-ve');
                         }}
@@ -1348,257 +1527,413 @@ const StageInspection = () => {
                   }}
                 />
               </div>
+
+              {/* Hình ảnh kiểm tra (Tối đa 5 ảnh) */}
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#4b301e', display: 'block', marginBottom: '8px' }}>
+                  Ảnh kiểm tra sản phẩm ({itemImages.length}/5 ảnh)
+                </label>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  {itemImages.map((imgPath, imgIdx) => {
+                    const fullUrl = imgPath.startsWith('blob:') || imgPath.startsWith('http')
+                      ? imgPath
+                      : `${apiClient.defaults.baseURL.split('/api/v1')[0]}${imgPath}`;
+                    return (
+                      <div
+                        key={imgIdx}
+                        style={{
+                          width: '68px',
+                          height: '68px',
+                          borderRadius: '10px',
+                          border: '1px solid #cbd5e1',
+                          backgroundColor: '#f8fafc',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.06)',
+                          flexShrink: 0
+                        }}
+                      >
+                        <img src={fullUrl} alt={`qc-${imgIdx}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setItemImages(prev => prev.filter((_, idx) => idx !== imgIdx));
+                          }}
+                          style={{
+                            position: 'absolute',
+                            top: '3px',
+                            right: '3px',
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '50%',
+                            backgroundColor: 'rgba(0,0,0,0.65)',
+                            border: 'none',
+                            color: '#fff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    );
+                  })}
+
+                  {itemImages.length < 5 && (
+                    <button
+                      type="button"
+                      onClick={() => itemImageInputRef.current && itemImageInputRef.current.click()}
+                      disabled={isUploadingItemImage}
+                      style={{
+                        width: '68px',
+                        height: '68px',
+                        borderRadius: '10px',
+                        border: '1.5px dashed #5d3b32',
+                        backgroundColor: '#faf6f0',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '4px',
+                        cursor: isUploadingItemImage ? 'not-allowed' : 'pointer',
+                        color: '#5d3b32',
+                        fontSize: '10px',
+                        fontWeight: 'bold',
+                        flexShrink: 0
+                      }}
+                    >
+                      {isUploadingItemImage ? (
+                        <span style={{ fontSize: '9px', color: '#5d3b32' }}>Đang tải...</span>
+                      ) : (
+                        <>
+                          <Camera size={20} color="#5d3b32" />
+                          <span>+ Thêm ảnh</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
 
-            {/* Khối 3: Phân hệ Ghi nhận lỗi phát hiện */}
-            {itemConclusion === 'fail' && (
-              <div style={{ backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #e8e1d5', overflow: 'visible' }}>
-                <div
-                  onClick={() => setIsDefectsExpanded(!isDefectsExpanded)}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '12px 16px',
-                    backgroundColor: '#f8f5f0',
-                    borderBottom: isDefectsExpanded ? '1px solid #e8e1d5' : 'none',
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                    position: 'sticky',
-                    top: 0,
-                    zIndex: 10,
-                    borderRadius: isDefectsExpanded ? '16px 16px 0 0' : '16px'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: '800', color: '#4b301e' }}>Lỗi phát hiện ({activeDefects.length} lỗi)</span>
-                    {activeDefects.length >= 2 && isDefectsExpanded && (
-                      <span style={{ fontSize: '10px', color: '#8d6e63', backgroundColor: '#efebe9', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>Đang mở</span>
-                    )}
-                  </div>
-                  {isDefectsExpanded ? <ChevronUp size={16} color="#7c6d5e" /> : <ChevronDown size={16} color="#7c6d5e" />}
+            {/* Khối 3: Phân hệ Ghi nhận lỗi phát hiện (Luôn khả dụng dù Đạt hay Không đạt) */}
+            <div style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #e8e1d5', overflow: 'visible', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+              <div
+                onClick={() => setIsDefectsExpanded(!isDefectsExpanded)}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '12px 16px',
+                  backgroundColor: '#f8f5f0',
+                  borderBottom: isDefectsExpanded ? '1px solid #e8e1d5' : 'none',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 10,
+                  borderRadius: isDefectsExpanded ? '14px 14px 0 0' : '14px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '800', color: '#4b301e' }}>
+                    Lỗi phát hiện ({activeDefects.filter(d => d.defectId).length || activeDefects.length} lỗi)
+                  </span>
+                  {activeDefects.length >= 2 && isDefectsExpanded && (
+                    <span style={{ fontSize: '10px', color: '#8d6e63', backgroundColor: '#efebe9', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>Đang mở</span>
+                  )}
                 </div>
+                {isDefectsExpanded ? <ChevronUp size={16} color="#7c6d5e" /> : <ChevronDown size={16} color="#7c6d5e" />}
+              </div>
 
-                {isDefectsExpanded && (
-                  <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                    {activeDefects.map((defect, defectIdx) => {
-                      const foundDefect = defectTypes.find(t => String(t.id) === String(defect.defectId));
-                      const defectName = foundDefect ? (foundDefect.code ? `[${foundDefect.code}] ${foundDefect.name}` : foundDefect.name) : '';
-                      const isExpanded = defect.isExpanded !== false;
+              {isDefectsExpanded && (
+                <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {activeDefects.map((defect, defectIdx) => {
+                    const foundDefect = defectTypes.find(t => String(t.id) === String(defect.defectId));
+                    const defectName = foundDefect ? (foundDefect.code ? `[${foundDefect.code}] ${foundDefect.name}` : foundDefect.name) : '';
+                    const isExpanded = defect.isExpanded !== false;
 
-                      return (
-                        <div key={defectIdx} style={{ display: 'flex', flexDirection: 'column', gap: '10px', border: '1px solid #cbd5e1', borderRadius: '12px', padding: '12px', backgroundColor: '#fff', marginBottom: '8px' }}>
+                    return (
+                      <div key={defectIdx} style={{ display: 'flex', flexDirection: 'column', gap: '10px', border: '1px solid #cbd5e1', borderRadius: '12px', padding: '12px', backgroundColor: '#fff', marginBottom: '8px' }}>
 
-                          {/* Header của từng lỗi */}
-                          <div
-                            onClick={() => toggleDefectExpanded(defectIdx)}
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              cursor: 'pointer',
-                              userSelect: 'none'
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
-                              <span style={{ fontSize: '12px', fontWeight: '800', color: '#4b301e', whiteSpace: 'nowrap' }}>Lỗi #{defectIdx + 1}:</span>
-                              <span style={{
-                                fontSize: '12px',
-                                fontWeight: 'bold',
-                                color: defect.defectId ? '#2d1d12' : '#94a3b8',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                                flex: 1
-                              }}>
-                                {defectName || 'Chưa chọn loại lỗi'}
-                                {defect.defectId && ` (SL: ${defect.quantity || 1})`}
+                        {/* Header của từng lỗi */}
+                        <div
+                          onClick={() => toggleDefectExpanded(defectIdx)}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            cursor: 'pointer',
+                            userSelect: 'none'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
+                            <span style={{ fontSize: '12px', fontWeight: '800', color: '#4b301e', whiteSpace: 'nowrap' }}>Lỗi #{defectIdx + 1}:</span>
+                            <span style={{
+                              fontSize: '12px',
+                              fontWeight: 'bold',
+                              color: defect.defectId ? '#2d1d12' : '#94a3b8',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              flex: 1
+                            }}>
+                              {defectName || 'Chưa chọn loại lỗi'}
+                              {defect.defectId && ` (SL: ${defect.quantity || 1})`}
+                            </span>
+                            {foundDefect?.isCTQ ? (
+                              <span
+                                style={{
+                                  backgroundColor: '#fee2e2',
+                                  color: '#b91c1c',
+                                  border: '1px solid #f87171',
+                                  padding: '2px 7px',
+                                  borderRadius: '10px',
+                                  fontSize: '9px',
+                                  fontWeight: 800,
+                                  letterSpacing: '0.3px',
+                                  boxShadow: '0 1px 2px rgba(185, 28, 28, 0.15)',
+                                  flexShrink: 0
+                                }}
+                              >
+                                CTQ
                               </span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }} onClick={(e) => e.stopPropagation()}>
-                              {activeDefects.length > 1 && (
-                                <button
-                                  onClick={() => handleRemoveDefect(defectIdx)}
-                                  style={{ width: '28px', height: '28px', borderRadius: '6px', border: '1px solid #fecaca', backgroundColor: '#fef2f2', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                                >
-                                  <X size={14} />
-                                </button>
-                              )}
-                              <div onClick={() => toggleDefectExpanded(defectIdx)} style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', padding: '2px' }}>
-                                {isExpanded ? <ChevronUp size={16} color="#7c6d5e" /> : <ChevronDown size={16} color="#7c6d5e" />}
-                              </div>
+                            ) : (foundDefect?.isQA || foundDefect?.needs_tracking || foundDefect?.qc_tracking || foundDefect?.is_tracked_by_me) ? (
+                              <span
+                                style={{
+                                  backgroundColor: '#fff7ed',
+                                  color: '#c2410c',
+                                  border: '1px solid #fdba74',
+                                  padding: '2px 7px',
+                                  borderRadius: '10px',
+                                  fontSize: '9px',
+                                  fontWeight: 700,
+                                  letterSpacing: '0.3px',
+                                  flexShrink: 0
+                                }}
+                              >
+                                QA Track
+                              </span>
+                            ) : null}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }} onClick={(e) => e.stopPropagation()}>
+                            {activeDefects.length > 1 && (
+                              <button
+                                onClick={() => handleRemoveDefect(defectIdx)}
+                                style={{ width: '28px', height: '28px', borderRadius: '6px', border: '1px solid #fecaca', backgroundColor: '#fef2f2', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                              >
+                                <X size={14} />
+                              </button>
+                            )}
+                            <div onClick={() => toggleDefectExpanded(defectIdx)} style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', padding: '2px' }}>
+                              {isExpanded ? <ChevronUp size={16} color="#7c6d5e" /> : <ChevronDown size={16} color="#7c6d5e" />}
                             </div>
                           </div>
-
-                          {/* Body của lỗi (chỉ hiện khi isExpanded true) */}
-                          {isExpanded && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderTop: '1px dashed #cbd5e1', paddingTop: '10px', marginTop: '4px' }}>
-
-                              {/* Dòng 1: Dropdown chọn lỗi */}
-                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                <div style={{ flex: 1 }}>
-                                  <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Tên lỗi phát hiện</label>
-                                  <SearchableSelect
-                                    value={defect.defectId}
-                                    onChange={(e) => handleUpdateDefect(defectIdx, 'defectId', e.target.value)}
-                                    placeholder="-- Gõ để tìm kiếm lỗi --"
-                                    options={defectTypes
-                                      .filter(t => {
-                                        const isAlreadySelected = activeDefects.some((d, idx) => idx !== defectIdx && String(d.defectId) === String(t.id));
-                                        return !isAlreadySelected;
-                                      })
-                                      .map(t => ({
-                                        label: `${t.name} (${t.code || 'N/A'})`,
-                                        value: String(t.id)
-                                      }))
-                                    }
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Dòng 2: Số lượng lỗi, Toggle lỗi nặng/lỗi nhẹ */}
-                              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                                <div style={{ flex: 1 }}>
-                                  <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Số lượng</label>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%' }}>
-                                    <button
-                                      onClick={() => handleUpdateDefect(defectIdx, 'quantity', Math.max(1, (defect.quantity || 1) - 1))}
-                                      style={{ width: '32px', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}
-                                    >
-                                      -
-                                    </button>
-                                    <input
-                                      type="number"
-                                      value={defect.quantity === 0 ? '' : (defect.quantity || 1)}
-                                      onChange={(e) => {
-                                        const val = e.target.value.replace(/[-+eE]/g, '');
-                                        if (val === '') {
-                                          handleUpdateDefect(defectIdx, 'quantity', 0);
-                                          return;
-                                        }
-                                        const num = parseInt(val, 10);
-                                        if (!isNaN(num)) {
-                                          handleUpdateDefect(defectIdx, 'quantity', num);
-                                        }
-                                      }}
-                                      onKeyDown={(e) => {
-                                        if (e.key === '-' || e.key === '+' || e.key === 'e' || e.key === 'E') {
-                                          e.preventDefault();
-                                        }
-                                      }}
-                                      onPaste={(e) => {
-                                        const pasteData = e.clipboardData.getData('text');
-                                        if (pasteData.includes('-') || pasteData.includes('+') || pasteData.includes('e') || pasteData.includes('E')) {
-                                          e.preventDefault();
-                                        }
-                                      }}
-                                      onBlur={() => {
-                                        if ((defect.quantity || 0) < 1) {
-                                          handleUpdateDefect(defectIdx, 'quantity', 1);
-                                        }
-                                      }}
-                                      style={{
-                                        flex: 1,
-                                        width: '0px',
-                                        height: '32px',
-                                        border: '1px solid #cbd5e1',
-                                        borderRadius: '6px',
-                                        textAlign: 'center',
-                                        fontWeight: '800',
-                                        fontSize: '14px',
-                                        backgroundColor: '#fff',
-                                        outline: 'none',
-                                        boxSizing: 'border-box'
-                                      }}
-                                    />
-                                    <button
-                                      onClick={() => handleUpdateDefect(defectIdx, 'quantity', (defect.quantity || 1) + 1)}
-                                      style={{ width: '32px', height: '32px', borderRadius: '6px', border: 'none', backgroundColor: '#5d3b32', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}
-                                    >
-                                      +
-                                    </button>
-                                  </div>
-                                </div>
-
-                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                                  <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Mức độ lỗi</label>
-                                  {!defect.defectId ? (
-                                    <div style={{
-                                      display: 'flex', alignItems: 'center', justifyContent: 'center', height: '32px',
-                                      borderRadius: '8px', fontSize: '12px', fontWeight: '800',
-                                      backgroundColor: '#f1f5f9', color: '#94a3b8', border: '1px solid #cbd5e1', textAlign: 'center'
-                                    }}>
-                                      Chọn lỗi...
-                                    </div>
-                                  ) : (
-                                    <div style={{
-                                      display: 'flex', alignItems: 'center', justifyContent: 'center', height: '32px',
-                                      borderRadius: '8px', fontSize: '12px', fontWeight: '800',
-                                      backgroundColor: defect.isHeavy ? '#fee2e2' : '#f0fdf4',
-                                      color: defect.isHeavy ? '#ef4444' : '#166534',
-                                      border: `1px solid ${defect.isHeavy ? '#fecaca' : '#bbf7d0'}`,
-                                      textAlign: 'center'
-                                    }}>
-                                      {defect.isHeavy ? 'Lỗi nặng' : 'Lỗi nhẹ'}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Dòng 3: Camera đính kèm ảnh (tối đa 3 ảnh lỗi) */}
-                              <div>
-                                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '6px' }}>Ảnh lỗi (tối đa 3 ảnh)</label>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                  {[0, 1, 2].map((imgIdx) => {
-                                    const imgPath = defect.images ? defect.images[imgIdx] : null;
-                                    const fullUrl = imgPath ? `${apiClient.defaults.baseURL.split('/api/v1')[0]}${imgPath}` : null;
-                                    return (
-                                      <div
-                                        key={imgIdx}
-                                        style={{ width: '60px', height: '60px', borderRadius: '8px', border: '1px dashed #cbd5e1', backgroundColor: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden', cursor: 'pointer' }}
-                                        onClick={() => !imgPath && handleTriggerDefectCamera(defectIdx, imgIdx)}
-                                      >
-                                        {fullUrl ? (
-                                          <>
-                                            <img src={fullUrl} alt="defect" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                            <button
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleRemoveDefectPhoto(defectIdx, imgIdx);
-                                              }}
-                                              style={{ position: 'absolute', top: '2px', right: '2px', width: '16px', height: '16px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.6)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '10px' }}
-                                            >
-                                              <X size={10} />
-                                            </button>
-                                          </>
-                                        ) : (
-                                          <Camera size={18} color="#94a3b8" />
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-
-                            </div>
-                          )}
-
                         </div>
-                      );
-                    })}
 
-                    <button
-                      onClick={handleAddDefect}
-                      style={{ width: '100%', border: '1px dashed #5d3b32', borderRadius: '8px', padding: '10px', backgroundColor: '#faf6f0', color: '#5d3b32', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer', marginTop: '4px' }}
-                    >
-                      <Plus size={16} /> + Thêm lỗi khác
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+                        {/* Body của lỗi (chỉ hiện khi isExpanded true) */}
+                        {isExpanded && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderTop: '1px dashed #cbd5e1', paddingTop: '10px', marginTop: '4px' }}>
+
+                            {/* Dòng 1: Dropdown chọn lỗi */}
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                              <div style={{ flex: 1 }}>
+                                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>Tên lỗi phát hiện</label>
+                                <SearchableSelect
+                                  value={defect.defectId}
+                                  onChange={(e) => handleUpdateDefect(defectIdx, 'defectId', e.target.value)}
+                                  placeholder="-- Gõ để tìm kiếm lỗi --"
+                                  options={defectTypes
+                                    .filter(t => {
+                                      const isAlreadySelected = activeDefects.some((d, idx) => idx !== defectIdx && String(d.defectId) === String(t.id));
+                                      return !isAlreadySelected;
+                                    })
+                                    .map(t => ({
+                                      value: String(t.id),
+                                      id: t.id,
+                                      code: t.code,
+                                      name: t.name,
+                                      label: t.code ? `[${t.code}] ${t.name}` : t.name,
+                                      isQA: Boolean(t.needs_tracking || t.qc_tracking || t.is_tracked_by_me || t.isQA),
+                                      isCTQ: Boolean(t.isCTQ),
+                                      category: t.category
+                                    }))
+                                  }
+                                />
+                              </div>
+                            </div>
+
+                            {/* Dòng 2: Số lượng lỗi, Toggle lỗi nặng/lỗi nhẹ */}
+                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                              <div style={{ flex: 1 }}>
+                                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>
+                                  Số lượng (Tối đa {sampleQty})
+                                </label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%' }}>
+                                  <button
+                                    onClick={() => handleUpdateDefect(defectIdx, 'quantity', Math.max(1, (defect.quantity || 1) - 1))}
+                                    style={{ width: '32px', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}
+                                  >
+                                    -
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max={sampleQty}
+                                    value={defect.quantity === 0 ? '' : Math.min(defect.quantity || 1, sampleQty)}
+                                    onChange={(e) => {
+                                      const val = e.target.value.replace(/[-+eE]/g, '');
+                                      if (val === '') {
+                                        handleUpdateDefect(defectIdx, 'quantity', 0);
+                                        return;
+                                      }
+                                      const num = parseInt(val, 10);
+                                      if (!isNaN(num)) {
+                                        handleUpdateDefect(defectIdx, 'quantity', Math.min(num, sampleQty));
+                                      }
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === '-' || e.key === '+' || e.key === 'e' || e.key === 'E') {
+                                        e.preventDefault();
+                                      }
+                                    }}
+                                    onPaste={(e) => {
+                                      const pasteData = e.clipboardData.getData('text');
+                                      if (pasteData.includes('-') || pasteData.includes('+') || pasteData.includes('e') || pasteData.includes('E')) {
+                                        e.preventDefault();
+                                      }
+                                    }}
+                                    onBlur={() => {
+                                      if ((defect.quantity || 0) < 1) {
+                                        handleUpdateDefect(defectIdx, 'quantity', 1);
+                                      } else if ((defect.quantity || 0) > sampleQty) {
+                                        handleUpdateDefect(defectIdx, 'quantity', sampleQty);
+                                      }
+                                    }}
+                                    style={{
+                                      flex: 1,
+                                      width: '0px',
+                                      height: '32px',
+                                      border: '1px solid #cbd5e1',
+                                      borderRadius: '6px',
+                                      textAlign: 'center',
+                                      fontWeight: '800',
+                                      fontSize: '14px',
+                                      backgroundColor: '#fff',
+                                      outline: 'none',
+                                      boxSizing: 'border-box'
+                                    }}
+                                  />
+                                  <button
+                                    onClick={() => handleUpdateDefect(defectIdx, 'quantity', Math.min(sampleQty, (defect.quantity || 1) + 1))}
+                                    disabled={(defect.quantity || 1) >= sampleQty}
+                                    style={{
+                                      width: '32px',
+                                      height: '32px',
+                                      borderRadius: '6px',
+                                      border: 'none',
+                                      backgroundColor: (defect.quantity || 1) >= sampleQty ? '#cbd5e1' : '#5d3b32',
+                                      color: '#fff',
+                                      fontWeight: 'bold',
+                                      fontSize: '16px',
+                                      cursor: (defect.quantity || 1) >= sampleQty ? 'not-allowed' : 'pointer'
+                                    }}
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '4px' }}>
+                                  Mức độ lỗi <span style={{ fontSize: '9px', fontWeight: 'normal', color: '#94a3b8' }}>(Nhấn đổi)</span>
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateDefect(defectIdx, 'isHeavy', !defect.isHeavy)}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    height: '32px',
+                                    borderRadius: '8px',
+                                    fontSize: '12px',
+                                    fontWeight: '800',
+                                    backgroundColor: defect.isHeavy ? '#fee2e2' : '#f0fdf4',
+                                    color: defect.isHeavy ? '#ef4444' : '#166534',
+                                    border: `1px solid ${defect.isHeavy ? '#fecaca' : '#bbf7d0'}`,
+                                    textAlign: 'center',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s ease',
+                                    outline: 'none'
+                                  }}
+                                >
+                                  {defect.isHeavy ? 'Lỗi nặng' : 'Lỗi nhẹ'}
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Dòng 3: Camera đính kèm ảnh (tối đa 5 ảnh lỗi) */}
+                            <div>
+                              <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c6d5e', display: 'block', marginBottom: '6px' }}>
+                                Ảnh lỗi ({defect.images?.length || 0}/5 ảnh)
+                              </label>
+                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {[0, 1, 2, 3, 4].map((imgIdx) => {
+                                  const imgPath = defect.images ? defect.images[imgIdx] : null;
+                                  const fullUrl = imgPath ? (imgPath.startsWith('blob:') || imgPath.startsWith('http') ? imgPath : `${apiClient.defaults.baseURL.split('/api/v1')[0]}${imgPath}`) : null;
+                                  return (
+                                    <div
+                                      key={imgIdx}
+                                      style={{ width: '56px', height: '56px', borderRadius: '8px', border: '1px dashed #cbd5e1', backgroundColor: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden', cursor: 'pointer' }}
+                                      onClick={() => !imgPath && handleTriggerDefectCamera(defectIdx, imgIdx)}
+                                    >
+                                      {fullUrl ? (
+                                        <>
+                                          <img src={fullUrl} alt="defect" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleRemoveDefectPhoto(defectIdx, imgIdx);
+                                            }}
+                                            style={{ position: 'absolute', top: '2px', right: '2px', width: '16px', height: '16px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.6)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '10px' }}
+                                          >
+                                            <X size={10} />
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <Camera size={18} color="#94a3b8" />
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                          </div>
+                        )}
+
+                      </div>
+                    );
+                  })}
+
+                  <button
+                    onClick={handleAddDefect}
+                    style={{ width: '100%', border: '1px dashed #5d3b32', borderRadius: '8px', padding: '10px', backgroundColor: '#faf6f0', color: '#5d3b32', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer', marginTop: '4px' }}
+                  >
+                    <Plus size={16} /> + Thêm lỗi khác
+                  </button>
+                </div>
+              )}
+            </div>
+
+            </div>
 
             <input type="file" ref={modalFileInputRef} style={{ display: 'none' }} accept="image/*" capture="environment" onChange={onModalFileChange} />
+            <input type="file" ref={itemImageInputRef} style={{ display: 'none' }} accept="image/*" capture="environment" onChange={onItemImageChange} />
 
             {/* Khối 5: Nút Xác nhận và Hủy (nằm trong flow cuộn) */}
             <div style={{ padding: '8px 0 24px', display: 'flex', gap: '12px', zIndex: 100 }}>
@@ -1619,7 +1954,7 @@ const StageInspection = () => {
                     <button onClick={() => setActiveModalType(null)} style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer' }}><X size={18} color="#94a3b8" /></button>
                   </div>
 
-                  <span style={{ fontSize: '12px', color: '#7c6d5e', textAlign: 'center', marginTop: '-4px' }}>Vui lòng xác nhận thông số sau khi chụp ảnh!</span>
+                  <span style={{ fontSize: '12px', color: '#7c6d5e', textAlign: 'center', marginTop: '-4px' }}>Nhập thông số trực tiếp hoặc chụp ảnh để AI đọc!</span>
 
                   {/* Khu vực Camera chụp ảnh ở giữa: 1 ô duy nhất */}
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', padding: '10px 0' }}>
@@ -1683,9 +2018,9 @@ const StageInspection = () => {
                               e.preventDefault();
                             }
                           }}
-                          disabled={isOcrProcessing || !allowManualInput}
-                          placeholder={isOcrProcessing ? "Đang đọc..." : (allowManualInput ? "Nhập..." : "Chụp ảnh để đo")}
-                          style={{ width: '100px', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '16px', textAlign: 'center', fontWeight: 'bold', color: '#ef4444', backgroundColor: (isOcrProcessing || !allowManualInput) ? '#f1f5f9' : '#fff' }}
+                          disabled={isOcrProcessing}
+                          placeholder={isOcrProcessing ? "Đang đọc..." : "Nhập..."}
+                          style={{ width: '100px', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '16px', textAlign: 'center', fontWeight: 'bold', color: '#ef4444', backgroundColor: isOcrProcessing ? '#f1f5f9' : '#fff' }}
                         />
                         <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#7c6d5e' }}>mm</span>
                       </div>
@@ -1727,9 +2062,9 @@ const StageInspection = () => {
                               e.preventDefault();
                             }
                           }}
-                          disabled={isOcrProcessing || !allowManualInput}
-                          placeholder={isOcrProcessing ? "Đang đọc..." : (allowManualInput ? "Nhập..." : "Chụp ảnh để đo")}
-                          style={{ width: '90px', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '16px', textAlign: 'center', fontWeight: 'bold', color: '#10b981', backgroundColor: (isOcrProcessing || !allowManualInput) ? '#f1f5f9' : '#fff' }}
+                          disabled={isOcrProcessing}
+                          placeholder={isOcrProcessing ? "Đang đọc..." : "Nhập..."}
+                          style={{ width: '90px', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '16px', textAlign: 'center', fontWeight: 'bold', color: '#10b981', backgroundColor: isOcrProcessing ? '#f1f5f9' : '#fff' }}
                         />
                         <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#10b981' }}>%</span>
                       </div>
@@ -1775,8 +2110,24 @@ const StageInspection = () => {
               <SearchableSelect
                 label="PO"
                 value={poSearchTerm}
-                placeholder="Gõ để tìm kiếm..."
-                options={orders.map(o => ({ label: o.po_code, value: o.po_code }))}
+                placeholder="Gõ hoặc chọn mã PO..."
+                options={orders.map(o => ({ 
+                  label: o.supplier_name ? `${o.po_code} - ${o.supplier_name}` : o.po_code, 
+                  value: o.po_code 
+                }))}
+                onSearch={async (term) => {
+                  if (!term || term.trim().length < 2) return;
+                  try {
+                    const res = await apiClient.get(`purchase-requisitions/all-po-codes?search=${encodeURIComponent(term.trim())}`);
+                    if (Array.isArray(res.data) && res.data.length > 0) {
+                      setOrders(prev => {
+                        const existingCodes = new Set(prev.map(o => o.po_code));
+                        const newItems = res.data.filter(d => !existingCodes.has(d.po_code));
+                        return [...prev, ...newItems];
+                      });
+                    }
+                  } catch (e) {}
+                }}
                 onChange={(e) => {
                   const code = e.target.value;
                   setPoSearchTerm(code);
@@ -1864,7 +2215,32 @@ const StageInspection = () => {
                       return (
                         <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                           <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 'bold', color: '#4b301e' }}>{item.item_name}</td>
-                          <td style={{ padding: '12px 8px', fontSize: '12px', color: '#7c6d5e', textAlign: 'center' }}>{formatDisplayQty(item)}</td>
+                          <td style={{ padding: '12px 8px', fontSize: '12px', color: '#7c6d5e', textAlign: 'center' }}>
+                            <div>{formatDisplayQty(item)}</div>
+                            {(() => {
+                              const draft = item.item_code ? inspectedDrafts[item.item_code.toLowerCase()] : null;
+                              if (draft) {
+                                const totalDefects = (draft.defects || []).reduce((sum, d) => sum + (Number(d.quantity) || 0), 0);
+                                return (
+                                  <div style={{ fontSize: '10px', color: totalDefects > 0 ? '#ef4444' : '#10b981', fontWeight: '700', marginTop: '2px' }}>
+                                    {totalDefects > 0 ? `Lỗi: ${totalDefects}/${draft.sampleQty}` : `Mẫu: ${draft.sampleQty}`}
+                                  </div>
+                                );
+                              }
+                              if (existing) {
+                                const defectCount = (extra.defects || []).reduce((sum, d) => sum + (Number(d.quantity) || 0), 0);
+                                const sQty = extra.sample_qty || (extra.samples ? extra.samples.length : 0);
+                                if (sQty > 0) {
+                                  return (
+                                    <div style={{ fontSize: '10px', color: defectCount > 0 ? '#ef4444' : '#10b981', fontWeight: '700', marginTop: '2px' }}>
+                                      {defectCount > 0 ? `Lỗi: ${defectCount}/${sQty}` : `Mẫu: ${sQty}`}
+                                    </div>
+                                  );
+                                }
+                              }
+                              return null;
+                            })()}
+                          </td>
                           <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                             {status ? (
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>

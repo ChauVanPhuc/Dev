@@ -19,6 +19,13 @@ export const useAuth = () => {
     try {
       const response = await authService.login(username, password);
       
+      // Chặn tài khoản bị vô hiệu hóa quyền truy cập Web
+      if (response.is_web_allowed === false) {
+        setError('Tài khoản của bạn chưa được cấp quyền truy cập Web. Vui lòng liên hệ Quản trị viên.');
+        setLoading(false);
+        return;
+      }
+
       // Chặn tài khoản công nhân đăng nhập vào Web
       if (response.permission_name === 'NV SX' || response.permission_name === 'NV QC') {
         setError('Tài khoản của bạn (Công nhân) không có quyền truy cập ứng dụng Web. Vui lòng đăng nhập trên thiết bị di động.');

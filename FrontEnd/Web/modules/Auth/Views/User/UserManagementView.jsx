@@ -370,7 +370,7 @@ const UserManagement = () => {
       // Headers
       const headers1 = [
         "STT", "Mã NV", "Họ và tên", "Username", "Số điện thoại", 
-        "Phòng ban", "Bộ phận", "Vị trí", "Nhà máy", "Quyền hạn / Công đoạn", "Truy cập Mobile", "Trạng thái"
+        "Phòng ban", "Bộ phận", "Vị trí", "Nhà máy", "Quyền hạn / Công đoạn", "Truy cập Web", "Truy cập Mobile", "Trạng thái"
       ];
       ws1.addRow([]);
       ws1.getRow(2).height = 10;
@@ -402,6 +402,7 @@ const UserManagement = () => {
           user.permission_name || "-",
           user.factory_name || "-",
           user.permission_level ? user.permission_level : (user.stage_name || "-"),
+          user.is_web_allowed !== false ? "Cho phép" : "Chặn",
           user.is_mobile_allowed !== false ? "Cho phép" : "Chặn",
           user.status || ""
         ];
@@ -451,6 +452,7 @@ const UserManagement = () => {
         { width: 18 },  // Vị trí
         { width: 16 },  // Nhà máy
         { width: 28 },  // Quyền hạn / công đoạn
+        { width: 16 },  // Web
         { width: 16 },  // Mobile
         { width: 18 }   // Trạng thái
       ];
@@ -858,6 +860,7 @@ const UserManagement = () => {
                             <th onClick={() => handleSort('phone')} style={{ cursor: 'pointer' }}>
                               Số ĐT <SortIcon column="phone" />
                             </th>
+                            <th>Truy cập Web</th>
                             <th>Truy cập Mobile</th>
                             <th onClick={() => handleSort('status')} style={{ cursor: 'pointer' }}>
                               Trạng thái <SortIcon column="status" />
@@ -897,6 +900,23 @@ const UserManagement = () => {
                               <td>{user.permission_level ? <span style={{ fontWeight: '500', color: '#7B5233' }}>{user.permission_level}</span> : renderStages(user.stage_name)}</td>
                               <td>{user.username}</td>
                               <td>{user.phone || '-'}</td>
+                              <td>
+                                <span 
+                                  style={{
+                                    display: 'inline-block',
+                                    padding: '3px 10px',
+                                    borderRadius: '12px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: '700',
+                                    backgroundColor: user.is_web_allowed !== false ? '#F0FDF4' : '#FEF2F2',
+                                    color: user.is_web_allowed !== false ? '#15803D' : '#DC2626',
+                                    border: `1px solid ${user.is_web_allowed !== false ? '#BBF7D0' : '#FCA5A5'}`,
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  {user.is_web_allowed !== false ? 'Cho phép' : 'Chặn'}
+                                </span>
+                              </td>
                               <td>
                                 <span 
                                   style={{
@@ -1000,7 +1020,7 @@ const UserManagement = () => {
                       ))}
                       {users.length === 0 && !loading && (
                         <tr>
-                          <td colSpan={viewMode === 'account_info' ? (hasWritePermission ? 9 : 8) : (hasWritePermission ? 3 + currentGroups.length + 1 : 3 + currentGroups.length)} style={{ textAlign: 'center', color: '#94a3b8', padding: '3rem' }}>
+                          <td colSpan={viewMode === 'account_info' ? (hasWritePermission ? 13 : 12) : (hasWritePermission ? 3 + currentGroups.length + 1 : 3 + currentGroups.length)} style={{ textAlign: 'center', color: '#94a3b8', padding: '3rem' }}>
                             Không tìm thấy dữ liệu
                           </td>
                         </tr>

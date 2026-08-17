@@ -59,14 +59,21 @@ const UserCreate = () => {
     stage_ids: [], // danh sách ID công đoạn được chọn
     permission_level: '', // Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
     is_mobile_allowed: true, // Quyền truy cập ứng dụng Mobile
+    is_web_allowed: true, // Quyền truy cập ứng dụng Web
     status: 'Đang sử dụng'
   });
-
 
   const toggleMobileAccess = () => {
     setFormData(prev => ({
       ...prev,
       is_mobile_allowed: !prev.is_mobile_allowed
+    }));
+  };
+
+  const toggleWebAccess = () => {
+    setFormData(prev => ({
+      ...prev,
+      is_web_allowed: !prev.is_web_allowed
     }));
   };
 
@@ -796,7 +803,8 @@ const UserCreate = () => {
         email: (formData.email && formData.email.trim()) ? formData.email.trim() : null,
         phone: (formData.phone && formData.phone.trim()) ? formData.phone.trim() : null,
         is_active: formData.status === 'Đang sử dụng',
-        is_mobile_allowed: formData.is_mobile_allowed
+        is_mobile_allowed: formData.is_mobile_allowed,
+        is_web_allowed: formData.is_web_allowed
       };
 
       if (!dataToSend.phone) delete dataToSend.phone;
@@ -966,6 +974,16 @@ const UserCreate = () => {
                   >
                     <span className="status-indicator-dot"></span>
                     {formData.status === 'Đang sử dụng' ? 'Kích hoạt' : 'Tạm dừng hoạt động'}
+                  </button>
+
+                  <button 
+                    type="button" 
+                    className={`btn-action-custom btn-status ${formData.is_web_allowed ? 'active' : 'suspended'}`}
+                    onClick={toggleWebAccess}
+                    style={{ marginTop: '8px', backgroundColor: formData.is_web_allowed ? '#F0FDF4' : '#FEF2F2', color: formData.is_web_allowed ? '#15803D' : '#DC2626', borderColor: formData.is_web_allowed ? '#BBF7D0' : '#FCA5A5' }}
+                  >
+                    <span className="status-indicator-dot" style={{ backgroundColor: formData.is_web_allowed ? '#16A34A' : '#DC2626' }}></span>
+                    {formData.is_web_allowed ? 'Cho phép vào Web' : 'Chặn vào Web'}
                   </button>
 
                   <button 

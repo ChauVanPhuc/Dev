@@ -63,6 +63,15 @@ def get_shipping_monitoring(
     )
 
 
+@router.get("/all-po-codes")
+def get_all_po_codes(
+    search: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """[GET] Lấy danh sách tất cả mã PO duy nhất phục vụ dropdown tìm kiếm nhanh."""
+    return controller.get_all_po_codes(db, search=search)
+
+
 @router.get("/{requisition_id}", response_model=PurchaseRequisitionResponse)
 def get_requisition(requisition_id: int, db: Session = Depends(get_db)):
     """[GET] Chi tiết 1 đơn đặt mua kèm danh sách mặt hàng."""

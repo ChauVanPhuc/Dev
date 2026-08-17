@@ -375,16 +375,27 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
                 if (isBlocked(item)) return null;
                 return item;
               } else {
-                let visibleChildren = item.children.filter(child => !isBlocked(child));
+                let rawChildren = item.children || [];
 
                 // Yêu cầu: "Quản lý sản xuất" chỉ hiển thị 3 mục: Lệnh sản xuất, Quy trình - kế hoạch, Danh sách bàn giao. Các mục khác tạm ẩn.
                 if (item.title === 'Quản lý sản xuất') {
-                  visibleChildren = [
+                  rawChildren = [
                     { id: 21, parent_id: 19, title: 'Lệnh sản xuất', route_path: '/admin/production-orders', icon: 'Handshake' },
                     { id: 24, parent_id: 19, title: 'Quy trình - kế hoạch', route_path: '/admin/production-routing', icon: 'Handshake' },
                     { id: 25, parent_id: 19, title: 'Danh sách bàn giao', route_path: '/admin/delivery-tracking', icon: 'Handshake' }
                   ];
                 }
+
+                // Lọc các item con và sub-item con theo quyền
+                const visibleChildren = rawChildren.map(child => {
+                  if (child.children && child.children.length > 0) {
+                    const validSubs = child.children.filter(sub => !isBlocked(sub));
+                    if (validSubs.length === 0) return null;
+                    return { ...child, children: validSubs };
+                  }
+                  if (isBlocked(child)) return null;
+                  return child;
+                }).filter(Boolean);
 
                 if (visibleChildren.length === 0) return null;
                 return { ...item, children: visibleChildren };

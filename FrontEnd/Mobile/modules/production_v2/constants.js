@@ -103,20 +103,42 @@ export const MOCK_FACTORIES = [
   { value: 'vanity02', label: 'Vanity 02' },
 ]
 
+export const STANDARD_BOM_STAGES = [
+  'Tạo Phôi',
+  'Định Hình',
+  'Lắp Ráp',
+  'Sơn',
+  'Đóng Gói',
+  'Lưu Kho',
+]
+
+export const BOM_STAGE_OPTIONS = [
+  { value: '', label: 'Chọn công đoạn' },
+  { value: 'Tạo Phôi', label: 'Tạo Phôi' },
+  { value: 'Định Hình', label: 'Định Hình' },
+  { value: 'Lắp Ráp', label: 'Lắp Ráp' },
+  { value: 'Sơn', label: 'Sơn' },
+  { value: 'Đóng Gói', label: 'Đóng Gói' },
+  { value: 'Lưu Kho', label: 'Lưu Kho' },
+]
+
 export const MOCK_STAGES = [
   { value: '', label: 'Tất cả công đoạn' },
-  { value: 'dinh_hinh', label: 'Định hình' },
-  { value: 'lap_rap_1', label: 'Lắp ráp 1' },
-  { value: 'lap_rap_2', label: 'Lắp ráp 2' },
-  { value: 'dong_goi', label: 'Đóng gói' },
-  { value: 'kiem_tra', label: 'Kiểm tra' },
+  { value: 'Tạo Phôi', label: 'Tạo Phôi' },
+  { value: 'Định Hình', label: 'Định Hình' },
+  { value: 'Lắp Ráp', label: 'Lắp Ráp' },
+  { value: 'Sơn', label: 'Sơn' },
+  { value: 'Đóng Gói', label: 'Đóng Gói' },
+  { value: 'Lưu Kho', label: 'Lưu Kho' },
 ]
 
 export const MOCK_STAGE_OPTIONS = [
-  { value: 'dinh_hinh', label: 'Định hình' },
-  { value: 'lap_rap_1', label: 'Lắp ráp 1' },
-  { value: 'lap_rap_2', label: 'Lắp ráp 2' },
-  { value: 'dong_goi', label: 'Đóng gói' },
+  { value: 'Tạo Phôi', label: 'Tạo Phôi' },
+  { value: 'Định Hình', label: 'Định Hình' },
+  { value: 'Lắp Ráp', label: 'Lắp Ráp' },
+  { value: 'Sơn', label: 'Sơn' },
+  { value: 'Đóng Gói', label: 'Đóng Gói' },
+  { value: 'Lưu Kho', label: 'Lưu Kho' },
 ]
 
 export const MOCK_PALLETS = [

@@ -15,7 +15,7 @@ import ConfirmModal from '@mobile/Shared/Views/components/feedback/ConfirmModal'
 import {
   INSPECT_MODE_OPTIONS, INSPECT_MODES, MOCK_PARAMETER_OPTIONS,
   MOCK_PROCESS_OPTIONS, MOCK_AREA_OPTIONS, MOCK_STAFF_OPTIONS,
-  ROUTES,
+  ROUTES, STANDARD_BOM_STAGES, BOM_STAGE_OPTIONS,
 } from '../constants'
 import { stageService } from '../services/stageService'
 import { orderService } from '../services/orderService'
@@ -148,7 +148,7 @@ const CL09_InspectionCreateView = () => {
   const [answers, setAnswers] = useState(['', '', ''])
   const [showAnswers, setShowAnswers] = useState([false, false, false])
   const [qaResult, setQaResult] = useState('pass')
-  const [stageOptions, setStageOptions] = useState([{ value: '', label: 'Chọn công đoạn' }])
+  const [stageOptions, setStageOptions] = useState(BOM_STAGE_OPTIONS)
   const [processOptions, setProcessOptions] = useState([{ value: '', label: 'Chọn quy trình' }])
   const [poOptions, setPoOptions] = useState([{ value: '', label: 'Chọn PO' }])
   const [productOptions, setProductOptions] = useState([{ value: '', label: 'Chọn sản phẩm' }])
@@ -350,11 +350,17 @@ const CL09_InspectionCreateView = () => {
     stageService.getAll()
       .then((data) => {
         setStagesList(data || [])
-        const opts = (data || []).map((s) => ({ value: s.name, label: s.name }))
-        setStageOptions([{ value: '', label: 'Chọn công đoạn' }, ...opts])
+        const rawOpts = (data || []).map((s) => ({ value: s.name, label: s.name }))
+        const finalOpts = [...BOM_STAGE_OPTIONS]
+        rawOpts.forEach((ro) => {
+          if (ro.value && !finalOpts.some((fo) => fo.value?.toLowerCase() === ro.value.toLowerCase())) {
+            finalOpts.push(ro)
+          }
+        })
+        setStageOptions(finalOpts)
       })
       .catch(() => {
-        setStageOptions([{ value: '', label: 'Chọn công đoạn' }])
+        setStageOptions(BOM_STAGE_OPTIONS)
       })
 
     orderService.getAll()

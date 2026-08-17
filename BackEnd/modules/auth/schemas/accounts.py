@@ -12,6 +12,7 @@ class AccountBase(BaseModel):
     email: Union[EmailStr, str, None] = None # Địa chỉ Email
     is_active: bool = True                 # Trạng thái tài khoản (Đang hoạt động hay không)
     is_mobile_allowed: bool = True          # Quyền truy cập ứng dụng Mobile
+    is_web_allowed: bool = True             # Quyền truy cập ứng dụng Web
     role_id: Union[int, None] = None        # ID Phòng Ban (Role)
     department_id: Union[int, None] = None  # ID Bộ Phận (Department)
     permission_id: Union[int, None] = None  # ID Vị Trí (Permission - Legacy)
@@ -65,6 +66,7 @@ class AccountUpdate(BaseModel):
     stage_ids: Union[List[int], None] = None
     permission_level: Union[str, None] = None # Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
     is_mobile_allowed: Union[bool, None] = None # Quyền truy cập ứng dụng Mobile
+    is_web_allowed: Union[bool, None] = None # Quyền truy cập ứng dụng Web
 
 class Account(AccountBase):
     """
@@ -142,6 +144,7 @@ class Token(BaseModel):
     screen_permissions: Union[str, None] = None
     permission_level: Union[str, None] = None # Quyền hạn: Công Nhân, Nhân Viên, Quản Lý, Trưởng Phòng
     is_mobile_allowed: Union[bool, None] = True # Quyền truy cập ứng dụng Mobile
+    is_web_allowed: Union[bool, None] = True # Quyền truy cập ứng dụng Web
 
 
 class TokenData(BaseModel):

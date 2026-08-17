@@ -15,6 +15,7 @@ from database.migrations.add_reporter_to_screen_bugs import run_migration as run
 from database.migrations.add_inspection_confirmation import run_migration as run_inspection_confirmation_migration
 from database.migrations.add_inspection_guide_sidebar import add_inspection_guide_sidebar as run_inspection_guide_sidebar_migration
 from database.migrations.add_is_mobile_allowed_to_accounts import run_migration as run_is_mobile_allowed_migration
+from database.migrations.add_is_web_allowed_to_accounts import run_migration as run_is_web_allowed_migration
 from database.migrations.add_order_columns_to_purchase_requisitions import run_migration as run_purchase_requisition_columns_migration
 from database.migrations.add_account_department_permission_factory import run_migration as run_account_dept_perm_factory_migration
 from database.migrations.add_department_columns import run_migration as run_department_columns_migration
@@ -191,6 +192,7 @@ if __name__ == "__main__":
         run_inspection_guide_sidebar_migration()
         run_inspection_confirmation_migration()
         run_is_mobile_allowed_migration()
+        run_is_web_allowed_migration()
         run_purchase_requisition_columns_migration()
         run_account_dept_perm_factory_migration()
         run_department_columns_migration()
