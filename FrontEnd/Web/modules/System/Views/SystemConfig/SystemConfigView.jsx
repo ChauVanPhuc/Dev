@@ -84,7 +84,10 @@ export default function SystemConfigView() {
   const [defectCatIsActive, setDefectCatIsActive] = useState(true);
 
   // --- STAGE (Công đoạn) FORM STATES ---
+  const [stageCode, setStageCode] = useState('');
   const [stageName, setStageName] = useState('');
+  const [stageSequence, setStageSequence] = useState(0);
+  const [stageIsActive, setStageIsActive] = useState(true);
   const [stageDesc, setStageDesc] = useState('');
 
   // --- CUSTOMER FORM STATES ---
@@ -478,8 +481,13 @@ export default function SystemConfigView() {
         return (item.name || '').toLowerCase().includes(query) ||
                (item.description || '').toLowerCase().includes(query);
       }
-      if (activeTab === 'category' || activeTab === 'stage') {
+      if (activeTab === 'category') {
         return (item.name || '').toLowerCase().includes(query) ||
+               (item.description || '').toLowerCase().includes(query);
+      }
+      if (activeTab === 'stage') {
+        return (item.name || '').toLowerCase().includes(query) ||
+               (item.code || '').toLowerCase().includes(query) ||
                (item.description || '').toLowerCase().includes(query);
       }
       if (activeTab === 'customer') {
@@ -540,7 +548,13 @@ export default function SystemConfigView() {
       setDefectCatOrder(dataList.length + 1);
       setDefectCatIsActive(true);
     } else if (activeTab === 'stage') {
+      const maxSeq = (dataList || []).reduce((max, item) => Math.max(max, item.sequence || 0), 0);
+      const nextSeq = maxSeq + 1;
+      const autoCode = `CD${String((dataList || []).length + 1).padStart(2, '0')}`;
+      setStageCode(autoCode);
       setStageName('');
+      setStageSequence(nextSeq);
+      setStageIsActive(true);
       setStageDesc('');
     } else if (activeTab === 'customer') {
       setCustCode('');
@@ -605,7 +619,10 @@ export default function SystemConfigView() {
       setDefectCatOrder(item.order_index ?? 0);
       setDefectCatIsActive(item.is_active !== false);
     } else if (activeTab === 'stage') {
+      setStageCode(item.code || '');
       setStageName(item.name || '');
+      setStageSequence(item.sequence ?? 0);
+      setStageIsActive(item.is_active !== false);
       setStageDesc(item.description || '');
     } else if (activeTab === 'customer') {
       setCustCode(item.code || '');
@@ -740,7 +757,10 @@ export default function SystemConfigView() {
         }
       } else if (activeTab === 'stage') {
         const payload = {
+          code: stageCode.trim() || null,
           name: stageName.trim(),
+          sequence: parseInt(stageSequence) || 0,
+          is_active: stageIsActive,
           description: stageDesc.trim() || null
         };
         if (selectedItem) {
@@ -1553,9 +1573,11 @@ export default function SystemConfigView() {
                       )}
                       {activeTab === 'stage' && (
                         <>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Mã CĐ</th>
                           <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Tên Công đoạn SX</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'center' }}>Thứ tự</th>
                           <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Mô tả quy trình</th>
-                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'center' }}>Chức vụ gán</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Trạng thái</th>
                         </>
                       )}
                       {activeTab === 'customer' && (
@@ -1718,16 +1740,29 @@ export default function SystemConfigView() {
 
                           {activeTab === 'stage' && (
                             <>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#7B5233', fontWeight: 'bold' }}>
+                                {item.code || '---'}
+                              </td>
                               <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1F2937', fontWeight: 'bold' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                   <Factory size={15} style={{ color: '#7B5233' }} />
                                   <span>{item.name}</span>
                                 </div>
                               </td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', textAlign: 'center', fontWeight: 'bold', color: '#4B5563' }}>
+                                {item.sequence ?? 0}
+                              </td>
                               <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#6B7280' }}>{item.description || '---'}</td>
-                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', textAlign: 'center' }}>
-                                <span style={{ backgroundColor: '#E0F2FE', color: '#0369A1', padding: '2px 8px', borderRadius: '6px', fontWeight: 'bold', fontSize: '0.75rem' }}>
-                                  {item.permissions?.length || 0} chức vụ
+                              <td style={{ padding: '12px 16px', fontSize: '0.8rem' }}>
+                                <span style={{
+                                  backgroundColor: item.is_active ? '#DCFCE7' : '#F3F4F6',
+                                  color: item.is_active ? '#15803D' : '#6B7280',
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  fontWeight: 'bold',
+                                  fontSize: '0.7rem'
+                                }}>
+                                  {item.is_active ? 'Đang sử dụng' : 'Tạm dừng'}
                                 </span>
                               </td>
                             </>
@@ -2728,17 +2763,42 @@ export default function SystemConfigView() {
                 {/* 5. PRODUCTION STAGE (CÔNG ĐOẠN SX) FIELDS */}
                 {activeTab === 'stage' && (
                   <>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>TÊN CÔNG ĐOẠN *</label>
-                      <input
-                        type="text"
-                        value={stageName}
-                        onChange={(e) => setStageName(e.target.value)}
-                        placeholder="Ví dụ: Sơ chế, Định hình, Sơn lót, Lắp ráp, Đóng gói"
-                        style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
-                        required
-                      />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr', gap: '10px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>MÃ CĐ (TỰ SINH)</label>
+                        <input
+                          type="text"
+                          value={stageCode}
+                          onChange={(e) => setStageCode(e.target.value)}
+                          placeholder="Tự sinh (VD: CD01)"
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', backgroundColor: '#F9FAFB' }}
+                          title="Hệ thống tự sinh mã công đoạn, bạn có thể chỉnh sửa lại nếu cần"
+                        />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>TÊN CÔNG ĐOẠN *</label>
+                        <input
+                          type="text"
+                          value={stageName}
+                          onChange={(e) => setStageName(e.target.value)}
+                          placeholder="Ví dụ: Tạo phôi, Định hình, Sơn lót, Lắp ráp"
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                          required
+                        />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>THỨ TỰ (TỰ SINH)</label>
+                        <input
+                          type="number"
+                          value={stageSequence}
+                          onChange={(e) => setStageSequence(e.target.value)}
+                          placeholder="Tự tăng"
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', backgroundColor: '#F9FAFB' }}
+                          title="Thứ tự tự động bằng số lượng công đoạn hiện tại + 1"
+                        />
+                      </div>
                     </div>
+
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                       <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>MÔ TẢ QUY TRÌNH</label>
                       <textarea
@@ -2748,6 +2808,20 @@ export default function SystemConfigView() {
                         rows="3"
                         style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', resize: 'vertical' }}
                       />
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '4px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem' }}>
+                        <input
+                          type="checkbox"
+                          checked={stageIsActive}
+                          onChange={(e) => setStageIsActive(e.target.checked)}
+                          style={{ width: '16px', height: '16px', accentColor: '#7B5233' }}
+                        />
+                        <span style={{ fontWeight: 700, color: stageIsActive ? '#15803D' : '#6B7280' }}>
+                          {stageIsActive ? 'Kích hoạt công đoạn này' : 'Tạm dừng hoạt động'}
+                        </span>
+                      </label>
                     </div>
                   </>
                 )}

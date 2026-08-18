@@ -464,14 +464,11 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     stageService.getAll()
       .then((data) => {
         setStagesList(data || [])
-        const rawOpts = (data || []).map((s) => ({ value: s.name, label: s.name }))
-        const finalOpts = [...BOM_STAGE_OPTIONS]
-        rawOpts.forEach((ro) => {
-          if (ro.value && !finalOpts.some((fo) => fo.value?.toLowerCase() === ro.value.toLowerCase())) {
-            finalOpts.push(ro)
-          }
-        })
-        setStageOptions(finalOpts)
+        const dynamicOpts = (data || []).map((s) => ({
+          value: s.name,
+          label: s.name
+        }))
+        setStageOptions([{ value: '', label: 'Chọn công đoạn' }, ...dynamicOpts])
       })
       .catch(() => {
         setStageOptions(BOM_STAGE_OPTIONS)
