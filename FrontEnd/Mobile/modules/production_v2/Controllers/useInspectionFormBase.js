@@ -376,14 +376,16 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
   // Tự động hiện sẵn các lỗi QA Track / QC Track / CTQ theo công đoạn hiện tại vào danh sách ghi nhận lỗi
   useEffect(() => {
     if (readOnly || !isNew) return
+    if (!defectOptions || defectOptions.length === 0) return
 
-    const trackedOpts = (defectOptions || []).filter(
+    const trackedOpts = defectOptions.filter(
       (opt) => opt.isQA || opt.isCTQ || opt.needs_tracking || opt.qc_tracking || opt.is_tracked_by_me
     )
+    if (trackedOpts.length === 0) return
 
     setErrors((prevErrors) => {
-      // Giữ lại các dòng người dùng ĐÃ nhập số lượng > 0 hoặc dòng tự gõ lỗi thủ công
-      const userEditedRows = (prevErrors || []).filter(
+      // Giữ lại các dòng người dùng đã nhập số lượng > 0 hoặc dòng tự gõ lỗi thủ công
+      const userEditedRows = prevErrors.filter(
         (e) => Number(e.qty) > 0 || (!e.defectId && e.name && e.name.trim() !== '')
       )
 
@@ -392,6 +394,8 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
         defectId: opt.id || opt.value,
         code: opt.code || '',
         name: opt.name,
+        isQA: Boolean(opt.isQA || opt.needs_tracking || opt.qc_tracking || opt.is_tracked_by_me),
+        isCTQ: Boolean(opt.isCTQ),
         qty: 0,
       }))
 
@@ -403,7 +407,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
         return [...autoRows, ...extraUserRows]
       }
 
-      return autoRows.length > 0 ? autoRows : [{ id: 1, name: '', qty: 0 }]
+      return autoRows
     })
   }, [defectOptions, readOnly, isNew])
 

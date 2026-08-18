@@ -153,6 +153,11 @@ const ErrorTrendRow = ({
     onChange && onChange({ ...row, defectId: null, code: '', name: row.name || '' })
   }
 
+  const displayCode = currentSelectedOpt?.code || row.code || ''
+  const displayName = currentSelectedOpt?.name || row.name || ''
+  const isCTQ = Boolean(currentSelectedOpt?.isCTQ || row.isCTQ)
+  const isQA = Boolean(currentSelectedOpt?.isQA || row.isQA || displayCode || (row.id && String(row.id).startsWith('auto_tracked')))
+
   return (
     <div
       className="pv2-error-row"
@@ -182,13 +187,28 @@ const ErrorTrendRow = ({
             fontWeight: 500,
           }}
         >
-          <span>{row.code ? `[${row.code}] ${row.name}` : row.name}</span>
-          {currentSelectedOpt?.isQA && (
+          <span>{displayCode ? `[${displayCode}] ${displayName}` : displayName}</span>
+          {isCTQ ? (
             <span
               style={{
                 backgroundColor: '#fee2e2',
-                color: '#dc2626',
-                border: '1px solid #fca5a5',
+                color: '#b91c1c',
+                border: '1px solid #f87171',
+                padding: '2px 8px',
+                borderRadius: 12,
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: '0.4px',
+              }}
+            >
+              CTQ
+            </span>
+          ) : isQA ? (
+            <span
+              style={{
+                backgroundColor: '#fff7ed',
+                color: '#c2410c',
+                border: '1px solid #fdba74',
                 padding: '2px 8px',
                 borderRadius: 12,
                 fontSize: 10,
@@ -198,46 +218,7 @@ const ErrorTrendRow = ({
             >
               QA Track
             </span>
-          )}
-        </div>
-      ) : isCustomMode ? (
-        <div style={{ flex: 1, display: 'flex', gap: 6 }}>
-          <input
-            type="text"
-            className="pv2-input pv2-error-name"
-            placeholder="Nhập tên lỗi khác..."
-            value={row.name}
-            onChange={(e) => onChange && onChange({ ...row, name: e.target.value, code: '', defectId: null })}
-            style={{
-              flex: 1,
-              height: 38,
-              borderRadius: 8,
-              borderColor: '#cbd5e1',
-              padding: '0 12px',
-              fontSize: 13,
-            }}
-          />
-          {defectOptions && defectOptions.length > 0 && (
-            <button
-              type="button"
-              className="pv2-btn-secondary"
-              onClick={() => setIsCustomMode(false)}
-              style={{
-                height: 38,
-                padding: '0 10px',
-                fontSize: 12,
-                whiteSpace: 'nowrap',
-                borderRadius: 8,
-                backgroundColor: '#f1f5f9',
-                color: '#475569',
-                border: '1px solid #cbd5e1',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              Danh mục
-            </button>
-          )}
+          ) : null}
         </div>
       ) : (
         <div style={{ flex: 1, position: 'relative' }}>
@@ -247,7 +228,7 @@ const ErrorTrendRow = ({
             style={{
               height: 38,
               backgroundColor: '#ffffff',
-              border: `1.5px solid ${isOpen ? '#7B5233' : currentSelectedOpt?.isQA ? '#fca5a5' : '#cbd5e1'}`,
+              border: `1.5px solid ${isOpen ? '#7B5233' : isCTQ ? '#f87171' : isQA ? '#fca5a5' : '#cbd5e1'}`,
               borderRadius: 8,
               padding: '0 10px 0 12px',
               display: 'flex',
@@ -260,7 +241,7 @@ const ErrorTrendRow = ({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', flex: 1 }}>
-              {currentSelectedOpt ? (
+              {displayName ? (
                 <span
                   style={{
                     fontSize: 13,
@@ -271,13 +252,11 @@ const ErrorTrendRow = ({
                     textOverflow: 'ellipsis',
                   }}
                 >
-                  {currentSelectedOpt.code ? (
-                    <strong style={{ color: '#4B301E', marginRight: 4 }}>[{currentSelectedOpt.code}]</strong>
+                  {displayCode ? (
+                    <strong style={{ color: '#4B301E', marginRight: 4 }}>[{displayCode}]</strong>
                   ) : null}
-                  {currentSelectedOpt.name}
+                  {displayName}
                 </span>
-              ) : row.name ? (
-                <span style={{ fontSize: 13, fontWeight: 500, color: '#334155' }}>{row.name}</span>
               ) : (
                 <span style={{ fontSize: 13, color: '#94a3b8' }}>-- Chọn loại lỗi từ danh mục --</span>
               )}
@@ -285,7 +264,7 @@ const ErrorTrendRow = ({
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
               {/* Badge CTQ hoặc QA Track NẰM BÊN PHẢI */}
-              {currentSelectedOpt?.isCTQ ? (
+              {isCTQ ? (
                 <span
                   style={{
                     backgroundColor: '#fee2e2',
@@ -301,7 +280,7 @@ const ErrorTrendRow = ({
                 >
                   CTQ
                 </span>
-              ) : currentSelectedOpt?.isQA ? (
+              ) : isQA ? (
                 <span
                   style={{
                     backgroundColor: '#fff7ed',
