@@ -114,21 +114,67 @@ const ProductionOrderCreateView = () => {
     return filtered.length > 0 ? filtered : allStages;
   };
 
-  const mapStageToFactory = (currentStageName, targetFactory, allStages = stageOptions) => {
+  const mapStageToFactory = (currentStageName, targetFactory, allStages = stageOptions, isOutputStage = false, oppositeStage = '') => {
     const targetStages = getStagesForFactory(targetFactory, allStages);
-    if (!currentStageName || !targetStages || targetStages.length === 0) {
-      return (targetStages && targetStages[0]) || currentStageName || '';
+    if (!targetStages || targetStages.length === 0) return currentStageName || '';
+
+    if (!currentStageName) {
+      if (isOutputStage) {
+        if (oppositeStage) {
+          const oppIdx = targetStages.findIndex(s => s === oppositeStage);
+          if (oppIdx >= 0 && oppIdx + 1 < targetStages.length) {
+            return targetStages[oppIdx + 1];
+          }
+        }
+        return targetStages[Math.min(1, targetStages.length - 1)];
+      }
+      return targetStages[0];
     }
+
     let coreName = currentStageName;
     if (currentStageName.includes(' - ')) {
       coreName = currentStageName.split(' - ').slice(1).join(' - ').trim();
     }
     const coreBase = coreName.replace(/\s*\d+$/, '').trim().toLowerCase();
-    const matched = targetStages.find(stg => {
+
+    let matched = targetStages.find(stg => {
       const stgCore = stg.includes(' - ') ? stg.split(' - ').slice(1).join(' - ').toLowerCase() : stg.toLowerCase();
-      return stgCore.includes(coreBase) || coreBase.includes(stgCore.replace(/\s*\d+$/, ''));
+      const cleanStg = stgCore.replace(/\s*\d+$/, '');
+      return stgCore.includes(coreBase) || (cleanStg.length >= 3 && coreBase.includes(cleanStg));
     });
-    return matched || targetStages[0];
+
+    if (!matched) {
+      if (coreBase.includes('phôi') || coreBase.includes('cắt') || coreBase.includes('xẻ')) {
+        matched = targetStages.find(s => s.toLowerCase().includes('phôi')) || targetStages[0];
+      } else if (coreBase.includes('định hình') || coreBase.includes('mộng') || coreBase.includes('tiện') || coreBase.includes('cnc') || coreBase.includes('chỉ') || coreBase.includes('khoan')) {
+        matched = targetStages.find(s => s.toLowerCase().includes('định hình')) || targetStages[Math.min(1, targetStages.length - 1)];
+      } else if (coreBase.includes('lắp') || coreBase.includes('khung') || coreBase.includes('nhám')) {
+        matched = targetStages.find(s => s.toLowerCase().includes('lắp')) || targetStages[Math.min(2, targetStages.length - 1)];
+      } else if (coreBase.includes('sơn') || coreBase.includes('bọc') || coreBase.includes('pu')) {
+        matched = targetStages.find(s => s.toLowerCase().includes('sơn')) || targetStages[Math.min(3, targetStages.length - 1)];
+      } else if (coreBase.includes('gói') || coreBase.includes('đóng') || coreBase.includes('qc') || coreBase.includes('hậu') || coreBase.includes('đế')) {
+        matched = targetStages.find(s => s.toLowerCase().includes('đóng gói') || s.toLowerCase().includes('gói')) || targetStages[targetStages.length - 1];
+      } else {
+        matched = isOutputStage ? targetStages[Math.min(1, targetStages.length - 1)] : targetStages[0];
+      }
+    }
+
+    if (isOutputStage && oppositeStage && matched === oppositeStage) {
+      const oppIdx = targetStages.findIndex(s => s === oppositeStage);
+      if (oppIdx >= 0 && oppIdx + 1 < targetStages.length) {
+        matched = targetStages[oppIdx + 1];
+      } else if (oppIdx > 0) {
+        matched = targetStages[oppIdx - 1];
+      }
+    }
+
+    return matched;
+  };
+
+  const mapStagePairToFactory = (fromName, toName, targetFactory, allStages = stageOptions) => {
+    const sFrom = mapStageToFactory(fromName, targetFactory, allStages, false, '');
+    const sTo = mapStageToFactory(toName, targetFactory, allStages, true, sFrom);
+    return { stageFrom: sFrom, stageTo: sTo };
   };
 
   const handleChangeProductFactory = (pCode, newFactory) => {
@@ -142,11 +188,10 @@ const ProductionOrderCreateView = () => {
     setProductDetails(prev => {
       const currentList = prev.filter(d => d.parentCode === pCode);
       const listToMap = currentList.length > 0 ? currentList : (displayedProductDetails.filter(d => d.parentCode === pCode));
-      const updatedDetails = listToMap.map(det => ({
-        ...det,
-        stageFrom: mapStageToFactory(det.stageFrom, newFactory, stageOptions),
-        stageTo: mapStageToFactory(det.stageTo, newFactory, stageOptions)
-      }));
+      const updatedDetails = listToMap.map(det => {
+        const pair = mapStagePairToFactory(det.stageFrom, det.stageTo, newFactory, stageOptions);
+        return { ...det, ...pair };
+      });
       const otherDetails = prev.filter(d => d.parentCode !== pCode);
       return [...otherDetails, ...updatedDetails];
     });
@@ -200,44 +245,130 @@ const ProductionOrderCreateView = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const generateBomForProduct = (pCode, pName = '', qtyVal = 50) => {
+  // Hàm xử lý và sắp xếp cây linh kiện BOM theo đúng phân cấp (1.1, 1.2, 1.1.1, 1.2.1...)
+  const processBackendBOM = (items, parentCode = '', pIndex = 1) => {
+    if (!items || !Array.isArray(items) || items.length === 0) return [];
+
+    const itemMap = new Map();
+    items.forEach(item => {
+      if (item && item.id != null) {
+        itemMap.set(item.id, item);
+      }
+    });
+
+    const childrenMap = new Map();
+    const roots = [];
+    const hasParentId = items.some(item => item && item.parent_id != null);
+
+    if (hasParentId) {
+      items.forEach(item => {
+        if (item.parent_id != null && itemMap.has(item.parent_id)) {
+          if (!childrenMap.has(item.parent_id)) {
+            childrenMap.set(item.parent_id, []);
+          }
+          childrenMap.get(item.parent_id).push(item);
+        } else {
+          roots.push(item);
+        }
+      });
+    } else {
+      items.forEach(item => roots.push(item));
+    }
+
+    let result = [];
+    const seenMap = new Map();
+
+    const addNode = (item, currentStt, pCode = parentCode) => {
+      const codeKey = `${item.id || currentStt}-${item.compCode || item.component_sku || item.sku || ''}`;
+      if (!seenMap.has(codeKey)) {
+        seenMap.set(codeKey, true);
+
+        const isChild = currentStt.includes('.');
+        const rowType = item.type || item.component_type || (isChild ? 'Chi tiết' : 'Sản phẩm');
+
+        const rawFrom = item.stageFrom || item.input_stage || 'Tạo phôi';
+        const rawTo = item.stageTo || item.output_stage || 'Định hình';
+        const pair = mapStagePairToFactory(rawFrom, rawTo, item.factory || 'NM1', stageOptions);
+
+        result.push({
+          id: item.id || `bom-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          parentCode: item.parentCode || pCode,
+          parent_id: item.parent_id || null,
+          stt: item.stt || item.tree_stt || currentStt,
+          type: rowType,
+          stageFrom: pair.stageFrom,
+          stageTo: pair.stageTo,
+          compCode: item.compCode || item.component_sku || item.sku || `SKU.${currentStt}`,
+          compName: item.compName || item.name || 'Linh kiện',
+          quantity: item.quantity !== undefined ? item.quantity : '1',
+          unit: item.unit || 'Cái',
+          material: item.material || 'Gỗ / MDF',
+          spec: item.spec || item.specification || '',
+          volume: item.volume !== undefined ? item.volume : 1,
+          note: item.note || item.description || '',
+          status: item.status || 'Chờ sản xuất'
+        });
+      }
+
+      const kids = (hasParentId && item.id != null && childrenMap.has(item.id))
+        ? childrenMap.get(item.id)
+        : (item.children && Array.isArray(item.children) ? item.children : []);
+
+      if (kids && kids.length > 0) {
+        kids.forEach((child, cIdx) => {
+          const childStt = `${currentStt}.${cIdx + 1}`;
+          addNode(child, childStt, pCode);
+        });
+      }
+    };
+
+    roots.forEach((rootItem, rIdx) => {
+      const rootStt = rootItem.stt || rootItem.tree_stt || `${pIndex}.${rIdx + 1}`;
+      addNode(rootItem, rootStt, parentCode || rootItem.parentCode || '');
+    });
+
+    return result;
+  };
+
+  const generateBomForProduct = (pCode, pName = '', qtyVal = 50, pIndex = 1) => {
     const codeUpper = (pCode || '').toUpperCase();
     const nameUpper = (pName || '').toUpperCase();
     const displayName = pName || pCode || 'Sản phẩm';
+    const prefix = `${pIndex}.`;
 
     if (codeUpper.includes('TABLE') || nameUpper.includes('TABLE') || nameUpper.includes('BÀN') || nameUpper.includes('DESK')) {
       return [
-        { id: `${pCode}-1`, parentCode: pCode, type: 'Mặt bàn', stageFrom: 'Định hình', stageTo: 'Sơn PU', compCode: `${pCode}-MAT`, compName: `Mặt bàn gỗ sồi ${displayName}`, quantity: `0/${qtyVal}`, unit: 'Tấm', material: 'Gỗ Sồi (Oak)', spec: '25*900*1500', volume: 3.2, note: '', status: 'Chờ sản xuất' },
-        { id: `${pCode}-2`, parentCode: pCode, type: 'Chân bàn', stageFrom: 'Tiện gỗ', stageTo: 'Lắp ráp', compCode: `${pCode}-CHAN`, compName: `Chân bàn vót nhọn ${displayName}`, quantity: `0/${qtyVal * 4}`, unit: 'Cái', material: 'Gỗ Sồi (Oak)', spec: '60*60*720', volume: 2.1, note: '', status: 'Chờ sản xuất' },
-        { id: `${pCode}-3`, parentCode: pCode, type: 'Diềm bàn', stageFrom: 'Cắt mộng', stageTo: 'Lắp ráp', compCode: `${pCode}-DIEM`, compName: `Diềm khung bàn ${displayName}`, quantity: `0/${qtyVal * 2}`, unit: 'Thanh', material: 'Gỗ Sồi (Oak)', spec: '25*70*1400', volume: 1.1, note: '', status: 'Chờ sản xuất' },
-        { id: `${pCode}-4`, parentCode: pCode, type: 'Giằng ngang', stageFrom: 'Cắt mộng', stageTo: 'Lắp ráp', compCode: `${pCode}-GIANG`, compName: `Thanh giằng chịu lực ${displayName}`, quantity: `0/${qtyVal * 2}`, unit: 'Thanh', material: 'Gỗ Sồi (Oak)', spec: '25*70*800', volume: 0.8, note: '', status: 'Chờ sản xuất' },
-        { id: `${pCode}-5`, parentCode: pCode, type: 'Ke liên kết', stageFrom: 'Lắp phụ kiện', stageTo: 'Đóng gói', compCode: `${pCode}-KE`, compName: `Bộ ke kim loại liên kết chân`, quantity: `0/${qtyVal * 4}`, unit: 'Bộ', material: 'Thép 3mm', spec: '50*50*50', volume: 0.2, note: '', status: 'Chờ sản xuất' },
-        { id: `${pCode}-6`, parentCode: pCode, type: 'Nẹp viền', stageFrom: 'Dán nẹp', stageTo: 'Hoàn thiện', compCode: `${pCode}-NEP`, compName: `Nẹp viền mặt bàn gỗ tự nhiên`, quantity: `0/${qtyVal}`, unit: 'Bộ', material: 'Gỗ Sồi (Oak)', spec: '10*25*4800', volume: 0.4, note: '', status: 'Chờ sản xuất' },
-        { id: `${pCode}-7`, parentCode: pCode, type: 'Đế đinh chân', stageFrom: 'Lắp đóng gói', stageTo: 'Đóng gói', compCode: `${pCode}-DE`, compName: `Đế cao su tăng chỉnh chân bàn`, quantity: `0/${qtyVal * 4}`, unit: 'Cái', material: 'Cao su + Thép', spec: 'M8*30', volume: 0.1, note: '', status: 'Chờ sản xuất' }
+        { id: `${pCode}-1`, stt: `${prefix}1`, parentCode: pCode, type: 'Mặt bàn', stageFrom: 'Định hình', stageTo: 'Sơn PU', compCode: `${pCode}-MAT`, compName: `Mặt bàn gỗ sồi ${displayName}`, quantity: `0/${qtyVal}`, unit: 'Tấm', material: 'Gỗ Sồi (Oak)', spec: '25*900*1500', volume: 3.2, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-2`, stt: `${prefix}2`, parentCode: pCode, type: 'Chân bàn', stageFrom: 'Tiện gỗ', stageTo: 'Lắp ráp', compCode: `${pCode}-CHAN`, compName: `Chân bàn vót nhọn ${displayName}`, quantity: `0/${qtyVal * 4}`, unit: 'Cái', material: 'Gỗ Sồi (Oak)', spec: '60*60*720', volume: 2.1, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-3`, stt: `${prefix}3`, parentCode: pCode, type: 'Diềm bàn', stageFrom: 'Cắt mộng', stageTo: 'Lắp ráp', compCode: `${pCode}-DIEM`, compName: `Diềm khung bàn ${displayName}`, quantity: `0/${qtyVal * 2}`, unit: 'Thanh', material: 'Gỗ Sồi (Oak)', spec: '25*70*1400', volume: 1.1, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-4`, stt: `${prefix}4`, parentCode: pCode, type: 'Giằng ngang', stageFrom: 'Cắt mộng', stageTo: 'Lắp ráp', compCode: `${pCode}-GIANG`, compName: `Thanh giằng chịu lực ${displayName}`, quantity: `0/${qtyVal * 2}`, unit: 'Thanh', material: 'Gỗ Sồi (Oak)', spec: '25*70*800', volume: 0.8, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-5`, stt: `${prefix}5`, parentCode: pCode, type: 'Ke liên kết', stageFrom: 'Lắp phụ kiện', stageTo: 'Đóng gói', compCode: `${pCode}-KE`, compName: `Bộ ke kim loại liên kết chân`, quantity: `0/${qtyVal * 4}`, unit: 'Bộ', material: 'Thép 3mm', spec: '50*50*50', volume: 0.2, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-6`, stt: `${prefix}6`, parentCode: pCode, type: 'Nẹp viền', stageFrom: 'Dán nẹp', stageTo: 'Hoàn thiện', compCode: `${pCode}-NEP`, compName: `Nẹp viền mặt bàn gỗ tự nhiên`, quantity: `0/${qtyVal}`, unit: 'Bộ', material: 'Gỗ Sồi (Oak)', spec: '10*25*4800', volume: 0.4, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-7`, stt: `${prefix}7`, parentCode: pCode, type: 'Đế đinh chân', stageFrom: 'Lắp đóng gói', stageTo: 'Đóng gói', compCode: `${pCode}-DE`, compName: `Đế cao su tăng chỉnh chân bàn`, quantity: `0/${qtyVal * 4}`, unit: 'Cái', material: 'Cao su + Thép', spec: 'M8*30', volume: 0.1, note: '', status: 'Chờ sản xuất' }
       ];
     }
 
     if (codeUpper.includes('CHAIR') || nameUpper.includes('CHAIR') || nameUpper.includes('GHẾ') || nameUpper.includes('STOOL') || nameUpper.includes('BENCH')) {
       return [
-        { id: `${pCode}-1`, parentCode: pCode, type: 'Nan tựa', stageFrom: 'Uốn cong', stageTo: 'Lắp ráp', compCode: `${pCode}-TUA-01`, compName: `Nan tựa lưng uốn cong ${displayName}`, quantity: `0/${qtyVal * 3}`, unit: 'Nan', material: 'Gỗ Tần Bì (Ash)', spec: '12*40*450', volume: 0.5, note: '', status: 'Chờ sản xuất' },
-        { id: `${pCode}-2`, parentCode: pCode, type: 'Khung tựa', stageFrom: 'Định hình', stageTo: 'Lắp ráp', compCode: `${pCode}-TUA-02`, compName: `Khung viền tựa lưng ${displayName}`, quantity: `0/${qtyVal}`, unit: 'Bộ', material: 'Gỗ Tần Bì (Ash)', spec: '25*45*500', volume: 0.8, note: '', status: 'Chờ sản xuất' },
-        { id: `${pCode}-3`, parentCode: pCode, type: 'Mặt nệm', stageFrom: 'Định hình', stageTo: 'Bọc đệm', compCode: `${pCode}-MAT-01`, compName: `Mặt đệm mút bọc da PU ${displayName}`, quantity: `0/${qtyVal}`, unit: 'Cái', material: 'Mút K43 + Da PU', spec: '50*420*420', volume: 1.2, note: '', status: 'Chờ sản xuất' },
-        { id: `${pCode}-4`, parentCode: pCode, type: 'Chân trước', stageFrom: 'Định hình', stageTo: 'Chà nhám', compCode: `${pCode}-CHF-01`, compName: `Chân ghế trước vót nhọn ${displayName}`, quantity: `0/${qtyVal * 2}`, unit: 'Cái', material: 'Gỗ Tần Bì (Ash)', spec: '40*40*450', volume: 0.8, note: '', status: 'Chờ sản xuất' },
-        { id: `${pCode}-5`, parentCode: pCode, type: 'Chân sau', stageFrom: 'Định hình', stageTo: 'Chà nhám', compCode: `${pCode}-CHS-01`, compName: `Chân ghế sau uốn cong ${displayName}`, quantity: `0/${qtyVal * 2}`, unit: 'Cái', material: 'Gỗ Tần Bì (Ash)', spec: '40*50*850', volume: 1.4, note: '', status: 'Chờ sản xuất' },
-        { id: `${pCode}-6`, parentCode: pCode, type: 'Giằng dọc', stageFrom: 'Cắt mộng', stageTo: 'Lắp khung', compCode: `${pCode}-GIANG-01`, compName: `Thanh giằng dọc chịu lực ${displayName}`, quantity: `0/${qtyVal * 2}`, unit: 'Thanh', material: 'Gỗ Tần Bì (Ash)', spec: '25*30*400', volume: 0.4, note: '', status: 'Chờ sản xuất' },
-        { id: `${pCode}-7`, parentCode: pCode, type: 'Giằng ngang', stageFrom: 'Cắt mộng', stageTo: 'Lắp khung', compCode: `${pCode}-GIANG-02`, compName: `Thanh giằng ngang liên kết ${displayName}`, quantity: `0/${qtyVal * 2}`, unit: 'Thanh', material: 'Gỗ Tần Bì (Ash)', spec: '25*30*380', volume: 0.4, note: '', status: 'Chờ sản xuất' }
+        { id: `${pCode}-1`, stt: `${prefix}1`, parentCode: pCode, type: 'Nan tựa', stageFrom: 'Uốn cong', stageTo: 'Lắp ráp', compCode: `${pCode}-TUA-01`, compName: `Nan tựa lưng uốn cong ${displayName}`, quantity: `0/${qtyVal * 3}`, unit: 'Nan', material: 'Gỗ Tần Bì (Ash)', spec: '12*40*450', volume: 0.5, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-2`, stt: `${prefix}2`, parentCode: pCode, type: 'Khung tựa', stageFrom: 'Định hình', stageTo: 'Lắp ráp', compCode: `${pCode}-TUA-02`, compName: `Khung viền tựa lưng ${displayName}`, quantity: `0/${qtyVal}`, unit: 'Bộ', material: 'Gỗ Tần Bì (Ash)', spec: '25*45*500', volume: 0.8, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-3`, stt: `${prefix}3`, parentCode: pCode, type: 'Mặt nệm', stageFrom: 'Định hình', stageTo: 'Bọc đệm', compCode: `${pCode}-MAT-01`, compName: `Mặt đệm mút bọc da PU ${displayName}`, quantity: `0/${qtyVal}`, unit: 'Cái', material: 'Mút K43 + Da PU', spec: '50*420*420', volume: 1.2, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-4`, stt: `${prefix}4`, parentCode: pCode, type: 'Chân trước', stageFrom: 'Định hình', stageTo: 'Chà nhám', compCode: `${pCode}-CHF-01`, compName: `Chân ghế trước vót nhọn ${displayName}`, quantity: `0/${qtyVal * 2}`, unit: 'Cái', material: 'Gỗ Tần Bì (Ash)', spec: '40*40*450', volume: 0.8, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-5`, stt: `${prefix}5`, parentCode: pCode, type: 'Chân sau', stageFrom: 'Định hình', stageTo: 'Chà nhám', compCode: `${pCode}-CHS-01`, compName: `Chân ghế sau uốn cong ${displayName}`, quantity: `0/${qtyVal * 2}`, unit: 'Cái', material: 'Gỗ Tần Bì (Ash)', spec: '40*50*850', volume: 1.4, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-6`, stt: `${prefix}6`, parentCode: pCode, type: 'Giằng dọc', stageFrom: 'Cắt mộng', stageTo: 'Lắp khung', compCode: `${pCode}-GIANG-01`, compName: `Thanh giằng dọc chịu lực ${displayName}`, quantity: `0/${qtyVal * 2}`, unit: 'Thanh', material: 'Gỗ Tần Bì (Ash)', spec: '25*30*400', volume: 0.4, note: '', status: 'Chờ sản xuất' },
+        { id: `${pCode}-7`, stt: `${prefix}7`, parentCode: pCode, type: 'Giằng ngang', stageFrom: 'Cắt mộng', stageTo: 'Lắp khung', compCode: `${pCode}-GIANG-02`, compName: `Thanh giằng ngang liên kết ${displayName}`, quantity: `0/${qtyVal * 2}`, unit: 'Thanh', material: 'Gỗ Tần Bì (Ash)', spec: '25*30*380', volume: 0.4, note: '', status: 'Chờ sản xuất' }
       ];
     }
 
     return [
-      { id: `${pCode}-1`, parentCode: pCode, type: 'Mặt tủ', stageFrom: 'Định hình', stageTo: 'Sơn PU', compCode: `${pCode}-MAT-01`, compName: `Mặt gỗ sồi tự nhiên ${displayName}`, quantity: `0/${qtyVal}`, unit: 'Tấm', material: 'Gỗ Sồi (Oak)', spec: '18*450*1200', volume: 2.5, note: '', status: 'Chờ sản xuất' },
-      { id: `${pCode}-2`, parentCode: pCode, type: 'Cánh tủ', stageFrom: 'Cắt CNC', stageTo: 'Lắp ráp', compCode: `${pCode}-CANH-01`, compName: `Cánh tủ ván soi chỉ nghệ thuật ${displayName}`, quantity: `0/${qtyVal}`, unit: 'Cái', material: 'MDF Chống ẩm', spec: '15*380*650', volume: 1.8, note: '', status: 'Chờ sản xuất' },
-      { id: `${pCode}-3`, parentCode: pCode, type: 'Chân tủ', stageFrom: 'Tiện gỗ', stageTo: 'Lắp ráp', compCode: `${pCode}-CHAN-01`, compName: `Cụm chân gỗ tròn vót nhọn ${displayName}`, quantity: `0/${qtyVal * 4}`, unit: 'Cái', material: 'Gỗ Cao su', spec: '50*50*150', volume: 0.6, note: '', status: 'Chờ sản xuất' },
-      { id: `${pCode}-4`, parentCode: pCode, type: 'Vách hông trái', stageFrom: 'Định hình', stageTo: 'Khoan cam', compCode: `${pCode}-HONG-01`, compName: `Tấm vách hông bên trái ${displayName}`, quantity: `0/${qtyVal}`, unit: 'Tấm', material: 'MDF Kháng ẩm 17mm', spec: '17*400*750', volume: 1.05, note: '', status: 'Chờ sản xuất' },
-      { id: `${pCode}-5`, parentCode: pCode, type: 'Vách hông phải', stageFrom: 'Định hình', stageTo: 'Khoan cam', compCode: `${pCode}-HONG-02`, compName: `Tấm vách hông bên phải ${displayName}`, quantity: `0/${qtyVal}`, unit: 'Tấm', material: 'MDF Kháng ẩm 17mm', spec: '17*400*750', volume: 1.05, note: '', status: 'Chờ sản xuất' },
-      { id: `${pCode}-6`, parentCode: pCode, type: 'Tấm đáy tủ', stageFrom: 'Cắt ván', stageTo: 'Khoan lỗ', compCode: `${pCode}-DAY-01`, compName: `Tấm ván đáy tủ liên kết ${displayName}`, quantity: `0/${qtyVal}`, unit: 'Tấm', material: 'MDF Kháng ẩm 17mm', spec: '17*450*1160', volume: 1.6, note: '', status: 'Chờ sản xuất' },
-      { id: `${pCode}-7`, parentCode: pCode, type: 'Khung đố nóc', stageFrom: 'Chạy chỉ', stageTo: 'Lắp ráp', compCode: `${pCode}-DO-01`, compName: `Thanh đố ngang nóc chịu lực ${displayName}`, quantity: `0/${qtyVal * 2}`, unit: 'Thanh', material: 'Gỗ Sồi (Oak)', spec: '25*50*1160', volume: 0.7, note: '', status: 'Chờ sản xuất' },
-      { id: `${pCode}-8`, parentCode: pCode, type: 'Tấm hậu tủ', stageFrom: 'Cắt ván', stageTo: 'Đóng hậu', compCode: `${pCode}-HAU-01`, compName: `Tấm hậu tủ phủ Melamine ${displayName}`, quantity: `0/${qtyVal}`, unit: 'Tấm', material: 'Plywood 5mm', spec: '5*700*1160', volume: 0.9, note: '', status: 'Chờ sản xuất' }
+      { id: `${pCode}-1`, stt: `${prefix}1`, parentCode: pCode, type: 'Mặt tủ', stageFrom: 'Định hình', stageTo: 'Sơn PU', compCode: `${pCode}-MAT-01`, compName: `Mặt gỗ sồi tự nhiên ${displayName}`, quantity: `0/${qtyVal}`, unit: 'Tấm', material: 'Gỗ Sồi (Oak)', spec: '18*450*1200', volume: 2.5, note: '', status: 'Chờ sản xuất' },
+      { id: `${pCode}-2`, stt: `${prefix}2`, parentCode: pCode, type: 'Cánh tủ', stageFrom: 'Cắt CNC', stageTo: 'Lắp ráp', compCode: `${pCode}-CANH-01`, compName: `Cánh tủ ván soi chỉ nghệ thuật ${displayName}`, quantity: `0/${qtyVal}`, unit: 'Cái', material: 'MDF Chống ẩm', spec: '15*380*650', volume: 1.8, note: '', status: 'Chờ sản xuất' },
+      { id: `${pCode}-3`, stt: `${prefix}3`, parentCode: pCode, type: 'Chân tủ', stageFrom: 'Tiện gỗ', stageTo: 'Lắp ráp', compCode: `${pCode}-CHAN-01`, compName: `Cụm chân gỗ tròn vót nhọn ${displayName}`, quantity: `0/${qtyVal * 4}`, unit: 'Cái', material: 'Gỗ Cao su', spec: '50*50*150', volume: 0.6, note: '', status: 'Chờ sản xuất' },
+      { id: `${pCode}-4`, stt: `${prefix}4`, parentCode: pCode, type: 'Vách hông trái', stageFrom: 'Định hình', stageTo: 'Khoan cam', compCode: `${pCode}-HONG-01`, compName: `Tấm vách hông bên trái ${displayName}`, quantity: `0/${qtyVal}`, unit: 'Tấm', material: 'MDF Kháng ẩm 17mm', spec: '17*400*750', volume: 1.05, note: '', status: 'Chờ sản xuất' },
+      { id: `${pCode}-5`, stt: `${prefix}5`, parentCode: pCode, type: 'Vách hông phải', stageFrom: 'Định hình', stageTo: 'Khoan cam', compCode: `${pCode}-HONG-02`, compName: `Tấm vách hông bên phải ${displayName}`, quantity: `0/${qtyVal}`, unit: 'Tấm', material: 'MDF Kháng ẩm 17mm', spec: '17*400*750', volume: 1.05, note: '', status: 'Chờ sản xuất' },
+      { id: `${pCode}-6`, stt: `${prefix}6`, parentCode: pCode, type: 'Tấm đáy tủ', stageFrom: 'Cắt ván', stageTo: 'Khoan lỗ', compCode: `${pCode}-DAY-01`, compName: `Tấm ván đáy tủ liên kết ${displayName}`, quantity: `0/${qtyVal}`, unit: 'Tấm', material: 'MDF Kháng ẩm 17mm', spec: '17*450*1160', volume: 1.6, note: '', status: 'Chờ sản xuất' },
+      { id: `${pCode}-7`, stt: `${prefix}7`, parentCode: pCode, type: 'Khung đố nóc', stageFrom: 'Chạy chỉ', stageTo: 'Lắp ráp', compCode: `${pCode}-DO-01`, compName: `Thanh đố ngang nóc chịu lực ${displayName}`, quantity: `0/${qtyVal * 2}`, unit: 'Thanh', material: 'Gỗ Sồi (Oak)', spec: '25*50*1160', volume: 0.7, note: '', status: 'Chờ sản xuất' },
+      { id: `${pCode}-8`, stt: `${prefix}8`, parentCode: pCode, type: 'Tấm hậu tủ', stageFrom: 'Cắt ván', stageTo: 'Đóng hậu', compCode: `${pCode}-HAU-01`, compName: `Tấm hậu tủ phủ Melamine ${displayName}`, quantity: `0/${qtyVal}`, unit: 'Tấm', material: 'Plywood 5mm', spec: '5*700*1160', volume: 0.9, note: '', status: 'Chờ sản xuất' }
     ];
   };
 
@@ -257,11 +388,11 @@ const ProductionOrderCreateView = () => {
 
         if (item) {
           setOrderForm({
-            code: item.code || item.orderNo || '',
-            orderId: item.orderNo || item.code || '',
-            priority: item.priority || 'Bình thường',
-            startDate: toISODate(item.startDate) || new Date().toISOString().split('T')[0],
-            endDate: toISODate(item.endDate) || '',
+            code: item.code || item.orderNo || item.order_code || '',
+            orderId: item.orderNo || item.code || item.order_code || '',
+            priority: item.priority || (item.is_priority ? 'Cao' : 'Bình thường'),
+            startDate: toISODate(item.startDate || item.create_date) || new Date().toISOString().split('T')[0],
+            endDate: toISODate(item.endDate || item.estimated_date) || '',
             status: item.status || 'Đang sản xuất'
           });
 
@@ -289,7 +420,17 @@ const ProductionOrderCreateView = () => {
               };
             });
 
+            const allBomDetails = item.products.flatMap((p, pIdx) => {
+              const pCode = p.sku || p.productCode || `SP-${pIdx + 1}`;
+              const bomItems = p.bom_details || p.master_bom_details || p.bom || [];
+              if (Array.isArray(bomItems) && bomItems.length > 0) {
+                return processBackendBOM(bomItems, pCode, pIdx + 1);
+              }
+              return generateBomForProduct(pCode, p.name || p.productName, p.quantity || 50, pIdx + 1);
+            });
+
             setOrderProducts(formattedProducts);
+            setProductDetails(allBomDetails);
             if (formattedProducts.length > 0) {
               setSelectedProductCode(formattedProducts[0].productCode);
             }
@@ -355,12 +496,11 @@ const ProductionOrderCreateView = () => {
       const mappedBomParts = itemsList.flatMap((it, idx) => {
         const qty = Number(it.quantity) || 0;
         const code = it.item_code || `SKU-${idx + 1}`;
-        const baseBom = generateBomForProduct(code, it.item_name, qty);
-        return baseBom.map(b => ({
-          ...b,
-          stageFrom: mapStageToFactory(b.stageFrom, defaultFac, stageOptions),
-          stageTo: mapStageToFactory(b.stageTo, defaultFac, stageOptions)
-        }));
+        const baseBom = generateBomForProduct(code, it.item_name, qty, idx + 1);
+        return baseBom.map(b => {
+          const pair = mapStagePairToFactory(b.stageFrom, b.stageTo, defaultFac, stageOptions);
+          return { ...b, ...pair };
+        });
       });
 
       setOrderProducts(mappedProducts);
@@ -420,11 +560,10 @@ const ProductionOrderCreateView = () => {
       let childrenDetails = productDetails.filter(d => d.parentCode === p.productCode);
       if (childrenDetails.length === 0) {
         const generated = generateBomForProduct(p.productCode, p.productName, p.orderQty || 50);
-        childrenDetails = generated.map(b => ({
-          ...b,
-          stageFrom: mapStageToFactory(b.stageFrom, targetFac, stageOptions),
-          stageTo: mapStageToFactory(b.stageTo, targetFac, stageOptions)
-        }));
+        childrenDetails = generated.map(b => {
+          const pair = mapStagePairToFactory(b.stageFrom, b.stageTo, targetFac, stageOptions);
+          return { ...b, ...pair };
+        });
       }
 
       const children = childrenDetails.map(d => {
@@ -497,8 +636,16 @@ const ProductionOrderCreateView = () => {
         status: statusToPlanStatus[orderForm.status] ?? 1
       };
 
-      const planRes = await planService.createPlan(planPayload).catch(() => null);
-      const planId = planRes && (planRes.id || planRes.plan_id);
+      let planRes = await planService.createPlan(planPayload).catch(() => null);
+      let planId = planRes && (planRes.id || planRes.plan_id);
+      if (!planId) {
+        const plansRes = await planService.getPlans().catch(() => null);
+        if (plansRes && Array.isArray(plansRes) && plansRes.length > 0) {
+          planId = plansRes[0].id;
+        } else if (plansRes && plansRes.items && plansRes.items.length > 0) {
+          planId = plansRes.items[0].id;
+        }
+      }
       if (!planId) {
         setLoading(false);
         if (toast) toast('error', 'Không thể tạo kế hoạch sản xuất!');
@@ -568,14 +715,15 @@ const ProductionOrderCreateView = () => {
     if (filtered.length > 0) return filtered;
     
     const targetProd = orderProducts.find(p => p.productCode === selectedProductCode);
+    const prodIndex = orderProducts.findIndex(p => p.productCode === selectedProductCode);
+    const pIdx = prodIndex >= 0 ? prodIndex + 1 : 1;
     const qtyVal = targetProd ? targetProd.orderQty : 50;
     const targetFac = targetProd?.factory || currentFactory;
-    const baseBom = generateBomForProduct(selectedProductCode, targetProd?.productName, qtyVal);
-    return baseBom.map(b => ({
-      ...b,
-      stageFrom: mapStageToFactory(b.stageFrom, targetFac, stageOptions),
-      stageTo: mapStageToFactory(b.stageTo, targetFac, stageOptions)
-    }));
+    const baseBom = generateBomForProduct(selectedProductCode, targetProd?.productName, qtyVal, pIdx);
+    return baseBom.map(b => {
+      const pair = mapStagePairToFactory(b.stageFrom, b.stageTo, targetFac, stageOptions);
+      return { ...b, ...pair };
+    });
   }, [productDetails, selectedProductCode, orderProducts, currentFactory, stageOptions]);
 
   const handleUpdateDetStage = (detId, field, newValue) => {
@@ -1195,8 +1343,8 @@ const ProductionOrderCreateView = () => {
                         </tr>
                       ) : (
                         displayedProductDetails.map((det, idx) => (
-                          <tr key={det.id || idx} style={{ borderBottom: '1px solid #EADCC9', backgroundColor: idx % 2 === 1 ? '#FAF8F6' : '#FFFFFF' }}>
-                            <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '600' }}>{idx + 1}</td>
+                          <tr key={det.id ? `${selectedProductCode}-${det.id}-${idx}` : `row-${idx}`} style={{ borderBottom: '1px solid #EADCC9', backgroundColor: idx % 2 === 1 ? '#FAF8F6' : '#FFFFFF' }}>
+                            <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '600' }}>{det.stt || det.tree_stt || `${(orderProducts.findIndex(p => p.productCode === selectedProductCode) >= 0 ? orderProducts.findIndex(p => p.productCode === selectedProductCode) + 1 : 1)}.${idx + 1}`}</td>
                             <td style={{ padding: '8px 10px', fontWeight: '700', color: '#5D3B32' }}>{det.type}</td>
                             <td style={{ padding: '8px 10px' }}>
                               <select
@@ -1215,9 +1363,11 @@ const ProductionOrderCreateView = () => {
                                 onChange={(e) => handleUpdateDetStage(det.id, 'stageTo', e.target.value)}
                                 style={{ padding: '3px 6px', border: '1px solid #EADCC9', borderRadius: '4px', fontSize: '0.8rem' }}
                               >
-                                {currentFactoryStages.map(stg => (
-                                  <option key={`to-${stg}`} value={stg}>{stg}</option>
-                                ))}
+                                {currentFactoryStages
+                                  .filter(stg => stg !== det.stageFrom)
+                                  .map(stg => (
+                                    <option key={`to-${stg}`} value={stg}>{stg}</option>
+                                  ))}
                               </select>
                             </td>
                             <td style={{ padding: '8px 10px', fontWeight: '800', color: '#2D1A12' }}>{det.compCode}</td>
@@ -1363,8 +1513,8 @@ const ProductionOrderCreateView = () => {
                         </tr>
                       ) : (
                         combinedScheduleRows.map((r, idx) => (
-                          <tr key={r.id || idx} style={{ borderBottom: '1px solid #EADCC9', backgroundColor: idx % 2 === 1 ? '#FAF6F0' : '#FFFFFF' }}>
-                            <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '600', color: '#475569' }}>{idx + 1}</td>
+                          <tr key={r.id ? `${r.compCode || 'sched'}-${r.id}-${idx}` : `sched-${idx}`} style={{ borderBottom: '1px solid #EADCC9', backgroundColor: idx % 2 === 1 ? '#FAF6F0' : '#FFFFFF' }}>
+                            <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '600', color: '#475569' }}>{r.stt || r.tree_stt || `${(orderProducts.findIndex(p => p.productCode === selectedProductCode) >= 0 ? orderProducts.findIndex(p => p.productCode === selectedProductCode) + 1 : 1)}.${idx + 1}`}</td>
                             <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>{r.startDate || '---'}</td>
                             <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>{r.endDate || '---'}</td>
                             <td style={{ padding: '8px 10px', fontWeight: '600', color: '#334155' }}>{r.team || '---'}</td>

@@ -573,25 +573,42 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     const activeStage = stage || paramStage
     orderService.getBom(activePo, activeStage)
       .then((data) => {
-        setBomData(data || [])
-        const opts = (data || []).map((p) => ({ value: p.part_name, label: p.part_name }))
-        setProductOptions([{ value: '', label: 'Chọn sản phẩm' }, ...opts])
-        if (isNew && data && data.length > 0) {
-          const firstPart = data[0]
-          setProduct((prev) => prev || firstPart.part_name)
-          setParamProduct((prev) => prev || firstPart.part_name)
-          const firstSpecs = firstPart.specs || []
+        const bomList = data || []
+        setBomData(bomList)
+        const opts = bomList.map((p) => ({ value: p.part_name, label: p.part_name }))
+        
+        if (bomList.length === 0) {
+          setProductOptions([{ value: '', label: 'Không có chi tiết cho công đoạn này' }])
+        } else {
+          setProductOptions([{ value: '', label: 'Chọn sản phẩm' }, ...opts])
+        }
+
+        if (isNew && bomList.length > 0) {
+          const currentProd = product || paramProduct
+          const matchedPart = bomList.find((p) => p.part_name === currentProd) || bomList[0]
+          
+          setProduct(matchedPart.part_name)
+          setParamProduct(matchedPart.part_name)
+          
+          const firstSpecs = matchedPart.specs || []
           const specOpts = firstSpecs.map((s) => ({ value: compactSpec(s.specification), label: compactSpec(s.specification) }))
           setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...specOpts])
           if (firstSpecs.length > 0) {
             setSpec(compactSpec(firstSpecs[0].specification))
+          } else {
+            setSpec('')
           }
-          if (firstPart.total_qty) {
-            setRequiredQty(String(firstPart.total_qty))
-            const calcSample = Math.max(1, Math.ceil(Number(firstPart.total_qty) * 0.05))
-            setSampleQty((prev) => prev || String(calcSample))
+          if (matchedPart.total_qty) {
+            setRequiredQty(String(matchedPart.total_qty))
+            const calcSample = Math.max(1, Math.ceil(Number(matchedPart.total_qty) * 0.05))
+            setSampleQty(String(calcSample))
+            setParamSample(String(calcSample))
+          } else {
+            setRequiredQty('')
           }
         } else if (isNew) {
+          setProduct('')
+          setParamProduct('')
           setSpec('')
           setSpecOptions([{ value: '', label: 'Chọn quy cách' }])
           setRequiredQty('')

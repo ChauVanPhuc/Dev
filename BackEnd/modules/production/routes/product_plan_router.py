@@ -1486,6 +1486,10 @@ def get_plan_detail(
 def create_plan(plan_data: ProductPlanCreate, db: Session = Depends(get_db)):
     try:
         plan_code = plan_data.code or f"KHSX_{datetime.now().strftime('%m%Y_%H%M%S')}"
+        existing = db.query(ProductPlan).filter(ProductPlan.code == plan_code).first()
+        if existing:
+            return existing
+
         plan_month = plan_data.month
         plan_year = plan_data.year
         if (plan_month is None or plan_year is None) and plan_data.estimated_date:

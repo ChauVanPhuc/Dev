@@ -572,13 +572,8 @@ def get_order_bom(
 
             selected_clean = clean_st(stage)
 
-            def is_matching_stage(bom_item) -> bool:
-                if not bom_item.input_stage:
-                    return True
-                item_clean = clean_st(bom_item.input_stage)
-                if not selected_clean or selected_clean in ["all", "chung", "tất cả"]:
-                    return True
-                if item_clean in ["all", "chung", "tất cả"]:
+            def check_single_stage(item_clean: str) -> bool:
+                if not item_clean or item_clean in ["all", "chung", "tất cả"]:
                     return True
                 if selected_clean in item_clean or item_clean in selected_clean:
                     return True
@@ -596,9 +591,18 @@ def get_order_bom(
                     return True
                 return False
 
-            filtered_boms = [b for b in boms if is_matching_stage(b)]
-            if filtered_boms:
-                boms = filtered_boms
+            def is_matching_stage(bom_item) -> bool:
+                in_st = clean_st(bom_item.input_stage)
+                out_st = clean_st(bom_item.output_stage)
+                if not in_st and not out_st:
+                    return True
+                return check_single_stage(in_st) or check_single_stage(out_st)
+
+            matched_boms = [b for b in boms if is_matching_stage(b)]
+            if matched_boms:
+                boms = matched_boms
+            else:
+                boms = []
 
         parts_map = {}
         if boms and order:
