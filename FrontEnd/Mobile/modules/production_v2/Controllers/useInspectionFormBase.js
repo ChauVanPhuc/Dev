@@ -113,6 +113,8 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
   const [result, setResult] = useState('pass')
   const [product, setProduct] = useState('')
   const [spec, setSpec] = useState('')
+  const [selectedProducts, setSelectedProducts] = useState([])
+  const [selectedSpecs, setSelectedSpecs] = useState([])
   const [sampleQty, setSampleQty] = useState('')
   const [errorQty, setErrorQty] = useState('')
   const [note, setNote] = useState('')
@@ -475,16 +477,6 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
         setStageOptions(BOM_STAGE_OPTIONS)
       })
 
-    orderService.getAll()
-      .then((res) => {
-        const orders = res.orders || []
-        const opts = orders.map((o) => ({ value: o.po_code, label: o.po_code }))
-        setPoOptions([{ value: '', label: 'Chọn PO' }, ...opts])
-      })
-      .catch(() => {
-        setPoOptions([{ value: '', label: 'Chọn PO' }])
-      })
-
     inspectionService.getProcessGuides()
       .then((data) => {
         const opts = (data || []).map((g) => ({
@@ -507,6 +499,30 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
         .catch(() => { })
     }
   }, [isNew])
+
+  useEffect(() => {
+    const activeStage = stage || paramStage
+    if (activeStage === 'Đầu vào') {
+      orderService.getPurchaseOrders()
+        .then((poCodes) => {
+          const opts = poCodes.map((code) => ({ value: code, label: code }))
+          setPoOptions([{ value: '', label: 'Chọn PO' }, ...opts])
+        })
+        .catch(() => {
+          setPoOptions([{ value: '', label: 'Chọn PO' }])
+        })
+    } else {
+      orderService.getAll()
+        .then((res) => {
+          const orders = res.orders || []
+          const opts = orders.map((o) => ({ value: o.po_code, label: o.po_code }))
+          setPoOptions([{ value: '', label: 'Chọn PO' }, ...opts])
+        })
+        .catch(() => {
+          setPoOptions([{ value: '', label: 'Chọn PO' }])
+        })
+    }
+  }, [stage, paramStage])
 
   // Nạp dữ liệu phiếu kiểm tra khi xem chi tiết
   useEffect(() => {
@@ -749,6 +765,46 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
       setSpec('')
       setRequiredQty('')
     }
+  }
+
+  const handleMultiProductChange = (partNamesArray) => {
+    if (readOnly) return
+    setIsDirty(true)
+    setSelectedProducts(partNamesArray)
+    const combinedStr = partNamesArray.join(', ')
+    setProduct(combinedStr)
+    setParamProduct(combinedStr)
+
+    const selectedParts = bomData.filter((p) => partNamesArray.includes(p.part_name))
+    let allSpecs = []
+    let totalQtySum = 0
+
+    selectedParts.forEach((part) => {
+      if (Array.isArray(part.specs)) {
+        allSpecs.push(...part.specs)
+      }
+      if (part.total_qty) {
+        totalQtySum += Number(part.total_qty)
+      }
+    })
+
+    const specOpts = allSpecs.map((s) => ({ value: compactSpec(s.specification), label: compactSpec(s.specification) }))
+    const uniqueSpecOpts = Array.from(new Set(specOpts.map((s) => s.value))).map((val) => ({ value: val, label: val }))
+    setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...uniqueSpecOpts])
+
+    if (totalQtySum > 0) {
+      setRequiredQty(String(totalQtySum))
+      const calcSample = Math.max(1, Math.ceil(totalQtySum * 0.05))
+      setSampleQty(String(calcSample))
+    }
+  }
+
+  const handleMultiSpecChange = (specArray) => {
+    if (readOnly) return
+    setIsDirty(true)
+    setSelectedSpecs(specArray)
+    const combinedStr = specArray.join(', ')
+    setSpec(combinedStr)
   }
 
   const handleLoadLastResult = async () => {
@@ -1146,6 +1202,13 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     fileRef,
     isFailedResult,
     handleStepResultChange,
+    isIncomingStage: stage === 'Đầu vào' || paramStage === 'Đầu vào',
+    selectedProducts,
+    setSelectedProducts,
+    selectedSpecs,
+    setSelectedSpecs,
+    handleMultiProductChange,
+    handleMultiSpecChange,
     handleProductChange,
     handleLoadLastResult,
     handleImagePick,

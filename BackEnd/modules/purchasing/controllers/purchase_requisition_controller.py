@@ -138,18 +138,24 @@ def get_stats(db: Session):
     }
 
 
-def get_all_po_codes(db: Session, search: str = None):
+def get_all_po_codes(db: Session, search: str = None, order_type: str = None):
     """Lấy danh sách tất cả các mã PO duy nhất phục vụ dropdown và tìm kiếm nhanh."""
     q_req = db.query(PurchaseRequisition.po_code, PurchaseRequisition.supplier_name).filter(
         PurchaseRequisition.po_code.isnot(None),
         PurchaseRequisition.po_code != ""
     )
+    if order_type:
+        q_req = q_req.filter(PurchaseRequisition.order_type == order_type)
     if search:
         term = f"%{search}%"
         q_req = q_req.filter(or_(
             PurchaseRequisition.po_code.ilike(term),
             PurchaseRequisition.supplier_name.ilike(term)
         ))
+
+    if order_type:
+        results = q_req.order_by(PurchaseRequisition.po_code.asc()).limit(3000).all()
+        return [{"po_code": r[0], "supplier_name": r[1] or ""} for r in results if r[0]]
 
     q_poi = db.query(PurchaseOrderItem.po_code, PurchaseOrderItem.supplier_name).filter(
         PurchaseOrderItem.po_code.isnot(None),

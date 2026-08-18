@@ -1,4 +1,5 @@
 import CustomSelect from '@mobile/Shared/Views/components/form/CustomSelect'
+import FormMultiSearchSelect from '@mobile/Shared/Views/components/form/FormMultiSearchSelect'
 import InspectionStepsTable from './InspectionStepsTable'
 import ErrorTrendRow from './ErrorTrendRow'
 import { INSPECT_MODES } from '../../constants'
@@ -40,6 +41,11 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
     updateError,
     removeErrorRow,
     addErrorRow,
+    isIncomingStage,
+    selectedProducts,
+    selectedSpecs,
+    handleMultiProductChange,
+    handleMultiSpecChange,
   } = formState
 
   const isReInspect = mode === INSPECT_MODES.RE_INSPECT
@@ -75,23 +81,44 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
       <div className="pv2-field-row pv2-field-row--2col">
         <div className="pv2-field">
           <label>Sản phẩm <span className="pv2-req">*</span></label>
-          <CustomSelect
-            value={product}
-            options={productOptions}
-            onChange={handleProductChange}
-            disabled={readOnly || isReInspect}
-            placeholder="—"
-          />
+          {isIncomingStage ? (
+            <FormMultiSearchSelect
+              values={selectedProducts}
+              options={productOptions.filter((o) => Boolean(o.value))}
+              onChange={handleMultiProductChange}
+              placeholder="Chọn sản phẩm..."
+              required
+              disabled={readOnly || isReInspect}
+            />
+          ) : (
+            <CustomSelect
+              value={product}
+              options={productOptions}
+              onChange={handleProductChange}
+              disabled={readOnly || isReInspect}
+              placeholder="—"
+            />
+          )}
         </div>
         <div className="pv2-field">
           <label>Quy cách</label>
-          <CustomSelect
-            value={spec}
-            options={specOptions}
-            onChange={setSpec}
-            disabled={readOnly || isReInspect}
-            placeholder="—"
-          />
+          {isIncomingStage ? (
+            <FormMultiSearchSelect
+              values={selectedSpecs}
+              options={specOptions.filter((o) => Boolean(o.value))}
+              onChange={handleMultiSpecChange}
+              placeholder="Chọn quy cách..."
+              disabled={readOnly || isReInspect}
+            />
+          ) : (
+            <CustomSelect
+              value={spec}
+              options={specOptions}
+              onChange={setSpec}
+              disabled={readOnly || isReInspect}
+              placeholder="—"
+            />
+          )}
         </div>
       </div>
 

@@ -633,6 +633,26 @@ def get_order_bom(
                     "specs_map": {spec: qty}
                 }
 
+        # Fallback to PurchaseRequisition items if order not found in Order table
+        if not parts_map and not order:
+            from modules.purchasing.models.purchase_requisition import PurchaseRequisition
+            pr = db.query(PurchaseRequisition).options(joinedload(PurchaseRequisition.items)).filter(
+                or_(
+                    PurchaseRequisition.po_code == clean_po,
+                    PurchaseRequisition.po_code.ilike(f"%{clean_po}%")
+                )
+            ).first()
+            if pr and pr.items:
+                for item in pr.items:
+                    name = item.item_name or item.item_code or "Mặt hàng"
+                    qty = int(item.quantity or 1)
+                    content_str = (item.content or "").strip()
+                    spec = content_str if content_str else "Tiêu chuẩn"
+                    if name not in parts_map:
+                        parts_map[name] = {"part_name": name, "total_qty": 0, "specs_map": {}}
+                    parts_map[name]["total_qty"] += qty
+                    parts_map[name]["specs_map"][spec] = parts_map[name]["specs_map"].get(spec, 0) + qty
+
 
         return [
             {

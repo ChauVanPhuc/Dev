@@ -112,6 +112,7 @@ export const MOCK_FACTORIES = [
 ]
 
 export const STANDARD_BOM_STAGES = [
+  'Đầu vào',
   'Tạo Phôi',
   'Định Hình',
   'Lắp Ráp',
@@ -122,6 +123,7 @@ export const STANDARD_BOM_STAGES = [
 
 export const BOM_STAGE_OPTIONS = [
   { value: '', label: 'Chọn công đoạn' },
+  { value: 'Đầu vào', label: 'Đầu vào' },
   { value: 'Tạo Phôi', label: 'Tạo Phôi' },
   { value: 'Định Hình', label: 'Định Hình' },
   { value: 'Lắp Ráp', label: 'Lắp Ráp' },
@@ -132,6 +134,7 @@ export const BOM_STAGE_OPTIONS = [
 
 export const MOCK_STAGES = [
   { value: '', label: 'Tất cả công đoạn' },
+  { value: 'Đầu vào', label: 'Đầu vào' },
   { value: 'Tạo Phôi', label: 'Tạo Phôi' },
   { value: 'Định Hình', label: 'Định Hình' },
   { value: 'Lắp Ráp', label: 'Lắp Ráp' },
@@ -141,6 +144,7 @@ export const MOCK_STAGES = [
 ]
 
 export const MOCK_STAGE_OPTIONS = [
+  { value: 'Đầu vào', label: 'Đầu vào' },
   { value: 'Tạo Phôi', label: 'Tạo Phôi' },
   { value: 'Định Hình', label: 'Định Hình' },
   { value: 'Lắp Ráp', label: 'Lắp Ráp' },

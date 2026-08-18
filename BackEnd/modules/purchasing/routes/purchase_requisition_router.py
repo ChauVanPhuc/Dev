@@ -66,10 +66,11 @@ def get_shipping_monitoring(
 @router.get("/all-po-codes")
 def get_all_po_codes(
     search: Optional[str] = None,
+    order_type: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """[GET] Lấy danh sách tất cả mã PO duy nhất phục vụ dropdown tìm kiếm nhanh."""
-    return controller.get_all_po_codes(db, search=search)
+    return controller.get_all_po_codes(db, search=search, order_type=order_type)
 
 
 @router.get("/{requisition_id}", response_model=PurchaseRequisitionResponse)

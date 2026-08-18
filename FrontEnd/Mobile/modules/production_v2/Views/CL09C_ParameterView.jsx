@@ -1,4 +1,5 @@
 import CustomSelect from '@mobile/Shared/Views/components/form/CustomSelect'
+import FormMultiSearchSelect from '@mobile/Shared/Views/components/form/FormMultiSearchSelect'
 import { useInspectionFormBase } from '../Controllers/useInspectionFormBase'
 import InspectionFormShell from './components/InspectionFormShell'
 import InspectionStepsTable from './components/InspectionStepsTable'
@@ -47,6 +48,9 @@ const CL09C_ParameterView = () => {
     updateError,
     removeErrorRow,
     addErrorRow,
+    isIncomingStage,
+    selectedProducts,
+    handleMultiProductChange,
   } = formState
 
   return (
@@ -90,12 +94,23 @@ const CL09C_ParameterView = () => {
             </div>
             <div className="pv2-field">
               <label>Sản phẩm <span className="pv2-req">*</span></label>
-              <CustomSelect
-                value={paramProduct}
-                options={productOptions}
-                onChange={handleParamProductChange}
-                disabled={readOnly}
-              />
+              {isIncomingStage ? (
+                <FormMultiSearchSelect
+                  values={selectedProducts}
+                  options={productOptions.filter((o) => Boolean(o.value))}
+                  onChange={handleMultiProductChange}
+                  placeholder="Chọn sản phẩm..."
+                  required
+                  disabled={readOnly}
+                />
+              ) : (
+                <CustomSelect
+                  value={paramProduct}
+                  options={productOptions}
+                  onChange={handleParamProductChange}
+                  disabled={readOnly}
+                />
+              )}
             </div>
           </div>
 
