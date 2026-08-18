@@ -189,21 +189,33 @@ const PurchaseRequisitionDetailView = () => {
     }
   }, [bomSearch, isBomModalOpen]);
 
-  // Chọn 1 sản phẩm từ BOM cho vào danh sách đơn hàng
+  // Chọn 1 sản phẩm từ BOM cho vào danh sách đơn hàng (Giữ Modal mở để chọn tiếp, không cho chọn trùng)
   const handleSelectBomProduct = (product) => {
+    const pCode = product.sku || product.product_code || `BOM.${product.id}`;
+    const pName = product.name || product.product_name || 'Sản phẩm BOM';
+    
+    const isAlready = items.some(it => 
+      (it.code && pCode && it.code.toLowerCase() === pCode.toLowerCase()) || 
+      (it.name && pName && it.name.toLowerCase() === pName.toLowerCase())
+    );
+
+    if (isAlready) {
+      if (toast) toast('warning', `Sản phẩm "${pName}" đã có trong đơn hàng!`);
+      return;
+    }
+
     const itemPrice = product.price && Number(product.price) > 0 ? Number(product.price) : 100;
     const newItem = {
       id: Date.now(),
-      code: product.sku || product.product_code || `BOM.${product.id}`,
-      name: product.name || product.product_name || 'Sản phẩm BOM',
+      code: pCode,
+      name: pName,
       quantity: 1,
       unit: product.unit || 'bộ',
       price: itemPrice,
       total: itemPrice
     };
     setItems(prev => [...prev, newItem]);
-    if (toast) toast('success', `Đã chọn sản phẩm BOM: ${newItem.name}`);
-    setIsBomModalOpen(false);
+    if (toast) toast('success', `Đã thêm sản phẩm BOM: ${newItem.name}`);
   };
 
   // Tính tổng giá trị đơn hàng dựa trên items
@@ -769,7 +781,7 @@ const PurchaseRequisitionDetailView = () => {
           padding: '20px'
         }}>
           <div style={{
-            backgroundColor: '#fff', borderRadius: '16px', width: '100%', maxWidth: '800px',
+            backgroundColor: '#fff', borderRadius: '16px', width: '92vw', maxWidth: '1150px',
             maxHeight: '85vh', display: 'flex', flexDirection: 'column',
             boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)',
             overflow: 'hidden'
@@ -837,31 +849,51 @@ const PurchaseRequisitionDetailView = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {bomProducts.map((p, idx) => (
-                        <tr key={p.id || idx}>
-                          <td style={{ textAlign: 'center', fontWeight: '600', color: '#64748B' }}>{idx + 1}</td>
-                          <td style={{ fontWeight: '800', color: '#2D1A12' }}>{p.sku || p.product_code || `BOM.${p.id}`}</td>
-                          <td style={{ fontWeight: '600', color: '#1E293B' }}>{p.name || p.product_name}</td>
-                          <td style={{ color: '#64748B' }}>{p.unit || 'Bộ'}</td>
-                          <td style={{ textAlign: 'right', fontWeight: '700', color: '#2D1A12' }}>
-                            ${(p.price || 0).toLocaleString()}
-                          </td>
-                          <td style={{ textAlign: 'center' }}>
-                            <button
-                              type="button"
-                              onClick={() => handleSelectBomProduct(p)}
-                              style={{
-                                backgroundColor: '#7B5233', color: '#fff', border: 'none',
-                                padding: '5px 14px', borderRadius: '6px', fontSize: '0.8rem',
-                                fontWeight: '700', cursor: 'pointer',
-                                boxShadow: '0 1px 2px rgba(123, 82, 51, 0.2)'
-                              }}
-                            >
-                              Chọn
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      {bomProducts.map((p, idx) => {
+                        const pCode = p.sku || p.product_code || `BOM.${p.id}`;
+                        const pName = p.name || p.product_name;
+                        const isSelected = items.some(it => 
+                          (it.code && pCode && it.code.toLowerCase() === pCode.toLowerCase()) || 
+                          (it.name && pName && it.name.toLowerCase() === pName.toLowerCase())
+                        );
+
+                        return (
+                          <tr key={p.id || idx} style={{ backgroundColor: isSelected ? '#F8FAFC' : 'transparent' }}>
+                            <td style={{ textAlign: 'center', fontWeight: '600', color: '#64748B' }}>{idx + 1}</td>
+                            <td style={{ fontWeight: '800', color: isSelected ? '#94A3B8' : '#2D1A12' }}>{pCode}</td>
+                            <td style={{ fontWeight: '600', color: isSelected ? '#64748B' : '#1E293B' }}>{pName}</td>
+                            <td style={{ color: '#64748B' }}>{p.unit || 'Bộ'}</td>
+                            <td style={{ textAlign: 'right', fontWeight: '700', color: isSelected ? '#94A3B8' : '#2D1A12' }}>
+                              ${(p.price || 0).toLocaleString()}
+                            </td>
+                            <td style={{ textAlign: 'center' }}>
+                              {isSelected ? (
+                                <span style={{
+                                  display: 'inline-block',
+                                  backgroundColor: '#E2E8F0', color: '#64748B',
+                                  padding: '4px 10px', borderRadius: '6px', fontSize: '0.78rem',
+                                  fontWeight: '700', cursor: 'not-allowed'
+                                }}>
+                                  ✓ Đã chọn
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSelectBomProduct(p)}
+                                  style={{
+                                    backgroundColor: '#7B5233', color: '#fff', border: 'none',
+                                    padding: '5px 14px', borderRadius: '6px', fontSize: '0.8rem',
+                                    fontWeight: '700', cursor: 'pointer',
+                                    boxShadow: '0 1px 2px rgba(123, 82, 51, 0.2)'
+                                  }}
+                                >
+                                  Chọn
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

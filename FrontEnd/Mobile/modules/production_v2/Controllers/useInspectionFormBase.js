@@ -217,12 +217,33 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
         if (origin.product) {
           setProduct(origin.product)
           setParamProduct(origin.product)
+          const prodArr = origin.product.split(', ').map(s => s.trim()).filter(Boolean)
+          setSelectedProducts(prodArr)
+          setProductOptions((prev) => {
+            const next = [...prev]
+            prodArr.forEach((p) => {
+              if (!next.some((o) => o.value === p)) next.push({ value: p, label: p })
+            })
+            return next
+          })
         }
-        if (origin.spec) setSpec(origin.spec)
-        if (origin.requiredQty) setRequiredQty(origin.requiredQty)
+        if (origin.spec) {
+          const cSpec = compactSpec(origin.spec)
+          setSpec(cSpec)
+          const specArr = cSpec.split(', ').map(s => s.trim()).filter(Boolean)
+          setSelectedSpecs(specArr)
+          setSpecOptions((prev) => {
+            const next = [...prev]
+            specArr.forEach((s) => {
+              if (!next.some((o) => o.value === s)) next.push({ value: s, label: s })
+            })
+            return next
+          })
+        }
+        if (origin.requiredQty) setRequiredQty(String(origin.requiredQty))
         if (origin.sampleQty) {
-          setSampleQty(origin.sampleQty)
-          setParamSample(origin.sampleQty)
+          setSampleQty(String(origin.sampleQty))
+          setParamSample(String(origin.sampleQty))
         }
       }
     } catch (e) {
@@ -530,10 +551,17 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
       if (poVal) setPo(poVal)
 
       const prodVal = ticket.product || ticket.product_name || ticket.detail_name || ''
-      if (prodVal) setProduct(prodVal)
+      if (prodVal) {
+        setProduct(prodVal)
+        setSelectedProducts(prodVal.split(', ').map(s => s.trim()).filter(Boolean))
+      }
 
       const specVal = ticket.spec || ticket.specification || ''
-      if (specVal) setSpec(compactSpec(specVal))
+      if (specVal) {
+        const cSpec = compactSpec(specVal)
+        setSpec(cSpec)
+        setSelectedSpecs(cSpec.split(', ').map(s => s.trim()).filter(Boolean))
+      }
 
       const sampleVal = ticket.sampleQty ?? ticket.sample_qty ?? ''
       if (sampleVal !== '') setSampleQty(String(sampleVal))
@@ -627,32 +655,71 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
         }
 
         if (isNew && bomList.length > 0) {
-          const currentProd = product || paramProduct
-          const matchedPart = bomList.find((p) => p.part_name === currentProd) || bomList[0]
+          const currentProdStr = product || paramProduct
+          const currentProdArray = currentProdStr ? currentProdStr.split(', ').map(s => s.trim()).filter(Boolean) : []
           
-          setProduct(matchedPart.part_name)
-          setParamProduct(matchedPart.part_name)
-          
-          const firstSpecs = matchedPart.specs || []
-          const specOpts = firstSpecs.map((s) => ({ value: compactSpec(s.specification), label: compactSpec(s.specification) }))
-          setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...specOpts])
-          if (firstSpecs.length > 0) {
-            setSpec(compactSpec(firstSpecs[0].specification))
-          } else {
-            setSpec('')
+          let matchedParts = []
+          if (currentProdArray.length > 0) {
+            matchedParts = bomList.filter(p => currentProdArray.includes(p.part_name))
           }
-          if (matchedPart.total_qty) {
-            setRequiredQty(String(matchedPart.total_qty))
-            const calcSample = Math.max(1, Math.ceil(Number(matchedPart.total_qty) * 0.05))
-            setSampleQty(String(calcSample))
-            setParamSample(String(calcSample))
+
+          if (matchedParts.length > 0) {
+            const partNames = matchedParts.map(p => p.part_name)
+            const combinedName = partNames.join(', ')
+            setProduct(combinedName)
+            setParamProduct(combinedName)
+            setSelectedProducts(partNames)
+            
+            let allSpecs = []
+            let totalQtySum = 0
+            matchedParts.forEach(part => {
+              if (Array.isArray(part.specs)) allSpecs.push(...part.specs)
+              if (part.total_qty) totalQtySum += Number(part.total_qty)
+            })
+            
+            const specOpts = allSpecs.map((s) => ({ value: compactSpec(s.specification), label: compactSpec(s.specification) }))
+            const uniqueSpecOpts = Array.from(new Set(specOpts.map((s) => s.value))).map((val) => ({ value: val, label: val }))
+            setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...uniqueSpecOpts])
+            
+            if (totalQtySum > 0) {
+              setRequiredQty(String(totalQtySum))
+              const calcSample = Math.max(1, Math.ceil(totalQtySum * 0.05))
+              setSampleQty(String(calcSample))
+              setParamSample(String(calcSample))
+            }
           } else {
-            setRequiredQty('')
+            const matchedPart = bomList[0]
+            const pName = matchedPart.part_name
+            setProduct(pName)
+            setParamProduct(pName)
+            setSelectedProducts([pName])
+            
+            const firstSpecs = matchedPart.specs || []
+            const specOpts = firstSpecs.map((s) => ({ value: compactSpec(s.specification), label: compactSpec(s.specification) }))
+            setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...specOpts])
+            if (firstSpecs.length > 0) {
+              const sVal = compactSpec(firstSpecs[0].specification)
+              setSpec(sVal)
+              setSelectedSpecs([sVal])
+            } else {
+              setSpec('')
+              setSelectedSpecs([])
+            }
+            if (matchedPart.total_qty) {
+              setRequiredQty(String(matchedPart.total_qty))
+              const calcSample = Math.max(1, Math.ceil(Number(matchedPart.total_qty) * 0.05))
+              setSampleQty(String(calcSample))
+              setParamSample(String(calcSample))
+            } else {
+              setRequiredQty('')
+            }
           }
         } else if (isNew) {
           setProduct('')
           setParamProduct('')
           setSpec('')
+          setSelectedProducts([])
+          setSelectedSpecs([])
           setSpecOptions([{ value: '', label: 'Chọn quy cách' }])
           setRequiredQty('')
         }
