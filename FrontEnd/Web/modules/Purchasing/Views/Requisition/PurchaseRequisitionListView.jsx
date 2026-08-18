@@ -68,6 +68,7 @@ const PurchaseRequisitionListView = () => {
   const [filterPartner, setFilterPartner] = useState('all');
   const [filterPriority, setFilterPriority] = useState('all');
   const [filterMonth, setFilterMonth] = useState('');
+  const [importOrderType, setImportOrderType] = useState('Đơn mua hàng');
 
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(15);
@@ -132,6 +133,9 @@ const PurchaseRequisitionListView = () => {
       );
     }
 
+    if (filterOrderType !== 'all') {
+      filtered = filtered.filter(item => (item.order_type || 'Đơn mua hàng') === filterOrderType);
+    }
     if (filterStatus !== 'all') {
       filtered = filtered.filter(item => item.status === filterStatus);
     }
@@ -153,7 +157,7 @@ const PurchaseRequisitionListView = () => {
     }
 
     return filtered;
-  }, [rawItems, searchTerm, sortValue, filterStatus, filterPartner, filterPriority]);
+  }, [rawItems, searchTerm, sortValue, filterOrderType, filterStatus, filterPartner, filterPriority]);
 
   // ── LOGIC CHUẨN: TÍNH THỐNG KÊ TOÀN BỘ CƠ SỞ DỮ LIỆU (GLOBAL STATS OVERALL DB) ──
   const computedKPI = useMemo(() => {
@@ -216,18 +220,29 @@ const PurchaseRequisitionListView = () => {
     }
   };
 
-  // NẠP DỮ LIỆU EXCEL QUA PURCHASE ORDER ITEMS ENGINE
+  const handleTriggerImport = (type) => {
+    setImportOrderType(type);
+    const input = fileInputRef.current || document.getElementById('pr-excel-file-input');
+    if (input) {
+      input.value = '';
+      input.click();
+    }
+  };
+
+  // NẠP DỮ LIỆU EXCEL (TỰ ĐỘNG GÁN LOẠI ĐƠN MUA HÀNG / ĐƠN BÁN HÀNG)
   const handleImport = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const targetType = importOrderType || 'Đơn mua hàng';
+    const endpoint = `/purchase-requisitions/import-excel?order_type=${encodeURIComponent(targetType)}`;
     try {
       if (startGlobalUpload) {
-        await startGlobalUpload(file, '/purchase-order-items/import-excel', () => {
+        await startGlobalUpload(file, endpoint, () => {
           fetchData();
         });
       } else {
-        await purchasingService.importOrderItemsExcel(file);
-        if (typeof toast === 'function') toast('success', 'Import dữ liệu đơn hàng thành công!');
+        await purchasingService.importRequisitionsExcel(file);
+        if (typeof toast === 'function') toast('success', `Import dữ liệu ${targetType} thành công!`);
         fetchData();
       }
     } catch (error) {
@@ -488,9 +503,14 @@ const PurchaseRequisitionListView = () => {
             activeFiltersCount={activeFiltersCount}
             importActions={[
               {
-                label: 'Nhập dữ liệu Excel',
+                label: 'Nhập đơn Mua hàng',
                 icon: <FileUp size={14} />,
-                onClick: () => (fileInputRef.current || document.getElementById('pr-excel-file-input'))?.click()
+                onClick: () => handleTriggerImport('Đơn mua hàng')
+              },
+              {
+                label: 'Nhập đơn Bán hàng',
+                icon: <FileUp size={14} />,
+                onClick: () => handleTriggerImport('Đơn bán hàng')
               }
             ]}
             onExport={handleExportRequisitions}
@@ -686,22 +706,19 @@ const PurchaseRequisitionListView = () => {
                   <th style={{ minWidth: '160px', maxWidth: '220px' }}>Đối tác</th>
                   <th style={{ textAlign: 'center', minWidth: '95px' }}>Ngày tạo</th>
                   <th style={{ minWidth: '100px' }}>Người tạo</th>
-                  <th style={{ textAlign: 'center', minWidth: '95px' }}>Ngày duyệt</th>
-                  <th style={{ minWidth: '100px' }}>Người duyệt</th>
                   <th style={{ textAlign: 'right', minWidth: '115px' }}>Tổng giá trị</th>
                   <th style={{ textAlign: 'center', minWidth: '90px' }}>Chi tiết MH</th>
-                  <th style={{ minWidth: '140px' }}>Ghi chú</th>
                   <th style={{ textAlign: 'center', minWidth: '65px', width: '65px' }}>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={15} style={{ padding: '2rem', textAlign: 'center', color: '#94A3B8' }}>Đang tải dữ liệu đơn hàng & chi tiết mặt hàng...</td>
+                    <td colSpan={12} style={{ padding: '2rem', textAlign: 'center', color: '#94A3B8' }}>Đang tải dữ liệu đơn hàng & chi tiết mặt hàng...</td>
                   </tr>
                 ) : displayItems.length === 0 ? (
                   <tr>
-                    <td colSpan={15} style={{ padding: '2rem', textAlign: 'center', color: '#94A3B8' }}>Không tìm thấy đơn hàng nào phù hợp với bộ lọc.</td>
+                    <td colSpan={12} style={{ padding: '2rem', textAlign: 'center', color: '#94A3B8' }}>Không tìm thấy đơn hàng nào phù hợp với bộ lọc.</td>
                   </tr>
                 ) : displayItems.map((row, idx) => {
                   const rowId = row.id || idx + 1;
@@ -757,7 +774,37 @@ const PurchaseRequisitionListView = () => {
                           </span>
                         </td>
 
-                        <td style={{ color: '#475569' }}>{row.order_type || 'Đơn mua hàng'}</td>
+                        <td>
+                          {(row.order_type === 'Đơn bán hàng' || (row.order_type && row.order_type.includes('bán'))) ? (
+                            <span style={{
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              fontSize: '0.72rem',
+                              fontWeight: '700',
+                              backgroundColor: '#EEF2FF',
+                              color: '#4F46E5',
+                              border: '1px solid #C7D2FE',
+                              display: 'inline-block',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              Đơn bán hàng
+                            </span>
+                          ) : (
+                            <span style={{
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              fontSize: '0.72rem',
+                              fontWeight: '700',
+                              backgroundColor: '#ECFDF5',
+                              color: '#059669',
+                              border: '1px solid #A7F3D0',
+                              display: 'inline-block',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              Đơn mua hàng
+                            </span>
+                          )}
+                        </td>
                         <td style={{ color: '#475569' }}>{row.priority || 'Bình thường'}</td>
                         
                         <td style={{
@@ -783,8 +830,6 @@ const PurchaseRequisitionListView = () => {
 
                         <td style={{ textAlign: 'center', color: '#64748B' }}>{formatDateDisplay(row.order_date || row.created_at || row.create_date)}</td>
                         <td style={{ color: '#475569' }}>{row.creator || '---'}</td>
-                        <td style={{ textAlign: 'center', color: '#64748B' }}>{formatDateDisplay(row.approval_date || row.approve_date)}</td>
-                        <td style={{ color: '#475569' }}>{row.approver || '---'}</td>
                         
                         <td style={{ textAlign: 'right', fontWeight: '700', color: '#2D1A12' }}>
                           {typeof row.total_amount === 'number' ? `$${row.total_amount.toLocaleString()}` : (row.total_amount || '$0')}
@@ -814,8 +859,6 @@ const PurchaseRequisitionListView = () => {
                             <span>{itemCount} MH</span>
                           </button>
                         </td>
-
-                        <td style={{ color: '#64748B' }}>{row.note || ''}</td>
                         
                         <td className="pr-action-cell" style={{ textAlign: 'center', position: 'relative', zIndex: isMenuOpen ? 50 : 1 }}>
                           <button
@@ -889,7 +932,7 @@ const PurchaseRequisitionListView = () => {
                       {/* ── EXPANDED SUB-TABLE: CHI TIẾT CÁC MẶT HÀNG TRONG ĐƠN HÀNG ── */}
                       {isExpanded && (
                         <tr className="pr-expanded-subrow" style={{ backgroundColor: '#FAF8F6' }}>
-                          <td colSpan={15} style={{ padding: '8px 14px 14px 14px', borderBottom: '2px solid #EADCC9' }}>
+                          <td colSpan={12} style={{ padding: '8px 14px 14px 14px', borderBottom: '2px solid #EADCC9' }}>
                             <div style={{
                               backgroundColor: '#FFFFFF',
                               border: '1px solid #EADCC9',

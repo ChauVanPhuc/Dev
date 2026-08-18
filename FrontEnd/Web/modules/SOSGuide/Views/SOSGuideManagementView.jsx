@@ -22,15 +22,23 @@ const THEME = {
   pageBg: '#FAF8F6'
 };
 
+const stripHtml = (html) => {
+  if (!html) return '';
+  const tmp = document.createElement('DIV');
+  tmp.innerHTML = html;
+  return (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
+};
+
 // Helper làm sạch và format chuỗi mô tả/phạm vi áp dụng
 const formatScopeText = (text) => {
   if (!text) return '—';
-  return text
+  const clean = stripHtml(text);
+  return clean
     .replace(/\[\s*\]/g, ' • ')
     .replace(/[\r\n]+/g, ' ')
     .replace(/\s+/g, ' ')
     .replace(/^•\s*/, '')
-    .trim();
+    .trim() || '—';
 };
 
 const SOSGuideManagementView = () => {

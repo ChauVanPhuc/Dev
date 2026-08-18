@@ -4,6 +4,7 @@ import { Save, Sparkles, FileText } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+import RichTextEditor from '../../ISO/components/RichTextEditor';
 import '@styles/components.css';
 
 const THEME = {
@@ -74,6 +75,13 @@ const SOSGuideFormView = () => {
     }));
   };
 
+  const stripHtml = (html) => {
+    if (!html) return '';
+    const tmp = document.createElement('DIV');
+    tmp.innerHTML = html;
+    return (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.code.trim() || !form.name.trim()) {
@@ -83,11 +91,12 @@ const SOSGuideFormView = () => {
 
     setSaving(true);
     try {
+      const cleanDesc = form.description ? stripHtml(form.description).slice(0, 500) : '';
       const created = await api.post('/inspection-guides', {
         code: form.code.trim().toUpperCase(),
         name: form.name.trim(),
         doc_type: 'SOS',
-        description: form.description?.trim() || null
+        description: cleanDesc || null
       });
 
       if (toast) toast('success', `Đã khởi tạo SOS "${form.code}" thành công! Đang chuyển sang trang thiết lập bước thao tác...`);
@@ -115,7 +124,7 @@ const SOSGuideFormView = () => {
         overflowY: 'auto'
       }}
     >
-      <div style={{ width: '100%', maxWidth: 760, margin: '0 auto' }}>
+      <div style={{ width: '100%', maxWidth: 840, margin: '0 auto' }}>
         {/* Card Form */}
         <div style={{
           backgroundColor: '#FFFFFF',
@@ -236,30 +245,16 @@ const SOSGuideFormView = () => {
               />
             </div>
 
-            {/* Field 3: Vị trí & Phạm vi áp dụng */}
+            {/* Field 3: Nội dung hướng dẫn thao tác chi tiết & Lưu ý an toàn */}
             <div style={{ marginBottom: 20 }}>
               <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, color: '#64748B', fontSize: 13, textTransform: 'uppercase' }}>
-                Vị trí & Phạm vi áp dụng
+                Nội dung hướng dẫn thao tác chi tiết & Lưu ý an toàn
               </label>
-              <textarea
-                name="description"
+              <RichTextEditor
                 value={form.description}
-                onChange={handleChange}
-                rows={3}
-                maxLength={1000}
-                placeholder="VD: Áp dụng tại Công đoạn Tinh Chế - Chuyền 2, Nhà máy Amanda..."
-                style={{
-                  width: '100%',
-                  padding: '12px 14px',
-                  borderRadius: 10,
-                  border: '1.5px solid #CBD5E1',
-                  fontSize: 14,
-                  lineHeight: '1.5',
-                  color: '#334155',
-                  backgroundColor: '#FFF'
-                }}
-                onFocus={e => { e.currentTarget.style.borderColor = THEME.primary; }}
-                onBlur={e => { e.currentTarget.style.borderColor = '#CBD5E1'; }}
+                onChange={val => setForm(prev => ({ ...prev, description: val }))}
+                placeholder="Mô tả chi tiết các thao tác của công nhân, tư thế làm việc, thông số máy, điểm an toàn lao động..."
+                style={{ minHeight: 220 }}
               />
             </div>
 

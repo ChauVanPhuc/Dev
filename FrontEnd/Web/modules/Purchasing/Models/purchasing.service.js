@@ -50,10 +50,11 @@ export const purchasingService = {
     return await api.delete(`/purchase-requisitions/${id}`);
   },
 
-  importRequisitionsExcel: async (file) => {
+  importRequisitionsExcel: async (file, orderType = null) => {
     const formData = new FormData();
     formData.append('file', file);
-    return await api.post('/purchase-requisitions/import-excel', formData, {
+    const query = orderType ? `?order_type=${encodeURIComponent(orderType)}` : '';
+    return await api.post(`/purchase-requisitions/import-excel${query}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   },
@@ -104,10 +105,11 @@ export const purchasingService = {
     return await api.delete(`/purchase-order-items/${id}`);
   },
 
-  importOrderItemsExcel: async (file) => {
+  importOrderItemsExcel: async (file, orderType = null) => {
     const formData = new FormData();
     formData.append('file', file);
-    return await api.post('/purchase-order-items/import-excel', formData, {
+    const query = orderType ? `?order_type=${encodeURIComponent(orderType)}` : '';
+    return await api.post(`/purchase-order-items/import-excel${query}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   },

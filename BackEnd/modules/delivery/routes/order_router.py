@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from sqlalchemy import text
+from sqlalchemy import text, or_
 from config.database import get_db
 from modules.delivery.schemas.order import OrderCreate, OrderUpdate, OrderResponse, OrderSimpleResponse
 from modules.delivery.controllers import order_controller
@@ -220,12 +220,25 @@ def read_orders_simple(skip: int = 0, limit: int = 500, db: Session = Depends(ge
         
     return [{"id": o.id, "order_code": o.order_code} for o in orders]
 
-@router.get("/by-code/{order_code}/products")
-def read_order_products_by_code(order_code: str, db: Session = Depends(get_db)):
+@router.get("/by-code/products")
+@router.get("/by-code/{order_code:path}/products")
+def read_order_products_by_code(
+    order_code: Optional[str] = None,
+    code: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
     """
     [GET] Lấy danh sách sản phẩm (items + products) của một PO theo mã.
     """
-    order = db.query(Order).filter(Order.order_code == order_code).first()
+    target_code = (order_code or code or "").strip()
+    order = db.query(Order).filter(
+        or_(
+            Order.order_code == target_code,
+            Order.order_code.ilike(f"%{target_code}%")
+        )
+    ).first()
+    if not order and target_code.isdigit():
+        order = db.query(Order).filter(Order.id == int(target_code)).first()
     if not order:
         raise HTTPException(status_code=404, detail="Không tìm thấy PO")
     
@@ -264,12 +277,25 @@ def read_order_products_by_code(order_code: str, db: Session = Depends(get_db)):
     
     return {"items": item_list, "products": product_list}
 
-@router.get("/code/{order_code}", response_model=OrderResponse)
-def read_order_by_code(order_code: str, db: Session = Depends(get_db)):
+@router.get("/code/detail", response_model=OrderResponse)
+@router.get("/code/{order_code:path}", response_model=OrderResponse)
+def read_order_by_code(
+    order_code: Optional[str] = None,
+    code: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
     """
     [GET] Lấy thông tin chi tiết của một đơn hàng theo mã hiệu (order_code).
     """
-    db_order = db.query(Order).filter(Order.order_code == order_code).first()
+    target_code = (order_code or code or "").strip()
+    db_order = db.query(Order).filter(
+        or_(
+            Order.order_code == target_code,
+            Order.order_code.ilike(f"%{target_code}%")
+        )
+    ).first()
+    if not db_order and target_code.isdigit():
+        db_order = db.query(Order).filter(Order.id == int(target_code)).first()
     if not db_order:
         raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
     return db_order

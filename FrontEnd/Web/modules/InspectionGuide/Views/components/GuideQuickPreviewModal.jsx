@@ -3,6 +3,13 @@ import { X, BookOpen, CheckSquare, Image as ImageIcon, Layers, ExternalLink } fr
 import { getFullImageUrl } from '@webShared/Services/api.service';
 import { FormattedTextView } from '@shared/utils/textFormatter';
 
+const stripHtml = (html) => {
+  if (!html) return '';
+  const tmp = document.createElement('DIV');
+  tmp.innerHTML = html;
+  return (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
+};
+
 const GuideQuickPreviewModal = ({ isOpen = true, onClose, guide, onEdit }) => {
   const [activeImage, setActiveImage] = useState(null);
 
@@ -188,7 +195,7 @@ const GuideQuickPreviewModal = ({ isOpen = true, onClose, guide, onEdit }) => {
           </div>
           {guide.description && (
             <div style={{ width: '100%', marginTop: 4, color: '#4B5563', fontStyle: 'italic', fontSize: 13.5 }}>
-              "{guide.description}"
+              "{stripHtml(guide.description)}"
             </div>
           )}
         </div>

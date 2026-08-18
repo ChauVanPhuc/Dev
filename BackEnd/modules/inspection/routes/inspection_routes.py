@@ -614,42 +614,263 @@ def get_inspections_list(
     }
 
 
+@router.get("/pallets")
+@router.get("/pallets/")
+def get_inspected_pallets_list(
+    limit: int = Query(200, ge=1),
+    search: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy danh sách các mã Pallet đã được kiểm tra trên hệ thống.
+    Phục vụ dropdown chọn mã Pallet khi thực hiện Kiểm tra lại (RE_INSPECT).
+    """
+    import json
+    records = db.query(StageInspection).filter(
+        StageInspection.data_json.ilike('%"palletCode"%')
+    ).order_by(StageInspection.id.desc()).limit(1000).all()
+
+    pallets_map = {}
+    for r in records:
+        if not r.data_json:
+            continue
+        try:
+            pj = json.loads(r.data_json) if isinstance(r.data_json, str) else r.data_json
+            if not isinstance(pj, dict):
+                continue
+            p_code = pj.get("palletCode")
+            if not p_code or not str(p_code).strip():
+                continue
+            clean_code = str(p_code).strip().upper()
+            
+            if clean_code not in pallets_map:
+                pallets_map[clean_code] = {
+                    "palletCode": clean_code,
+                    "po": r.batch_no or pj.get("po") or "",
+                    "product": r.product_sku or pj.get("product") or "",
+                    "spec": r.specification or pj.get("spec") or "",
+                    "stage": pj.get("stage") or r.inspection_type or "",
+                    "conclusion": r.conclusion or pj.get("result") or "pass",
+                    "sampleQty": pj.get("sampleQty") or 0,
+                    "errorQty": pj.get("errorQty") or 0,
+                    "inspectionCount": 1,
+                    "lastInspectionId": r.id,
+                    "lastInspectionCode": f"KT{r.id:03d}",
+                    "lastInspectionAt": r.created_at.strftime("%H:%M | %d/%m/%Y") if r.created_at else "",
+                    "label": f"{clean_code} - {r.product_sku or pj.get('product') or ''} - {r.batch_no or ''}".strip(' -')
+                }
+            else:
+                pallets_map[clean_code]["inspectionCount"] += 1
+        except Exception:
+            pass
+
+    results = list(pallets_map.values())
+    if search and search.strip():
+        st = search.strip().lower()
+        results = [
+            p for p in results
+            if st in p["palletCode"].lower() or st in p["po"].lower() or st in p["product"].lower() or st in p["stage"].lower()
+        ]
+    return results[:limit]
+
+
+@router.get("/pallet/{pallet_code}")
+@router.get("/pallet/{pallet_code}/")
+def get_pallet_inspection_details(
+    pallet_code: str,
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy chi tiết thông tin và toàn bộ lịch sử kiểm tra của 1 mã Pallet.
+    Tự động nạp vào form khi chọn/nhập Mã Pallet ở chế độ Kiểm tra lại.
+    """
+    import json
+    clean_code = pallet_code.strip()
+    records = db.query(StageInspection).filter(
+        StageInspection.data_json.ilike(f'%"{clean_code}"%')
+    ).order_by(StageInspection.id.desc()).all()
+
+    if not records:
+        # Fallback tìm từ bảng pallet_cards
+        from modules.delivery.models.pallet_card import PalletCard as PalletCardModel
+        card = db.query(PalletCardModel).filter(PalletCardModel.pallet_code == clean_code).first()
+        if card:
+            return {
+                "palletCode": clean_code,
+                "po": card.po_code or "",
+                "product": card.product_name or "",
+                "spec": card.specification or "",
+                "stage": "Tạo phôi",
+                "requiredQty": card.total_quantity or "",
+                "sampleQty": card.total_quantity or "",
+                "errorQty": 0,
+                "conclusion": "pass",
+                "inspectionCount": 0,
+                "history": [],
+                "last_inspection": None
+            }
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy dữ liệu kiểm tra cho mã pallet {clean_code}")
+
+    history = []
+    first_record = records[0]
+    first_parsed = {}
+    if first_record.data_json:
+        try:
+            first_parsed = json.loads(first_record.data_json) if isinstance(first_record.data_json, str) else first_record.data_json
+        except Exception:
+            pass
+
+    for r in records:
+        pj = {}
+        if r.data_json:
+            try:
+                pj = json.loads(r.data_json) if isinstance(r.data_json, str) else r.data_json
+            except Exception:
+                pass
+        
+        img_list = []
+        if r.images_json:
+            try:
+                ij = json.loads(r.images_json) if isinstance(r.images_json, str) else r.images_json
+                if isinstance(ij, dict):
+                    img_list = ij.get("images") or ij.get("Ảnh kiểm tra mẫu") or []
+                elif isinstance(ij, list):
+                    img_list = ij
+            except Exception:
+                pass
+        if not img_list:
+            img_list = [img for img in [r.image_path_1, r.image_path_2, r.image_path_3] if img]
+
+        history.append({
+            "id": r.id,
+            "code": f"KT{r.id:03d}",
+            "mode": r.inspection_type,
+            "conclusion": r.conclusion or pj.get("result") or "pass",
+            "sampleQty": pj.get("sampleQty") or 0,
+            "errorQty": pj.get("errorQty") or 0,
+            "errors": pj.get("errors") or pj.get("defects") or [],
+            "notes": r.notes or pj.get("notes") or pj.get("note") or "",
+            "images": img_list,
+            "steps": pj.get("steps", []),
+            "inspector_name": r.inspector_name or pj.get("created_by") or "QC",
+            "created_at": r.created_at.strftime("%H:%M | %d/%m/%Y") if r.created_at else ""
+        })
+
+    last_ins = history[0] if history else None
+
+    first_images = (first_parsed.get("images") if isinstance(first_parsed.get("images"), list) else None) or (last_ins.get("images") if last_ins else [])
+    first_errors = (first_parsed.get("errors") if isinstance(first_parsed.get("errors"), list) else None) or (first_parsed.get("defects") if isinstance(first_parsed.get("defects"), list) else None) or (last_ins.get("errors") if last_ins else [])
+    first_notes = first_record.notes or first_parsed.get("notes") or first_parsed.get("note") or (last_ins.get("notes") if last_ins else "")
+
+    for h in history:
+        if not first_errors and h.get("errors"):
+            first_errors = h.get("errors")
+        if not first_images and h.get("images"):
+            first_images = h.get("images")
+        if not first_notes and h.get("notes"):
+            first_notes = h.get("notes")
+
+    return {
+        "palletCode": clean_code,
+        "po": first_record.batch_no or first_parsed.get("po") or "",
+        "product": first_record.product_sku or first_parsed.get("product") or "",
+        "spec": first_record.specification or first_parsed.get("spec") or "",
+        "stage": first_parsed.get("stage") or first_record.inspection_type or "",
+        "requiredQty": first_parsed.get("requiredQty") or "",
+        "sampleQty": first_parsed.get("sampleQty") or "",
+        "errorQty": first_parsed.get("errorQty") or (len(first_errors) if first_errors else 0),
+        "conclusion": first_record.conclusion or "pass",
+        "notes": first_notes,
+        "steps": first_parsed.get("steps") or [],
+        "errors": first_errors,
+        "images": first_images,
+        "inspectionCount": len(records),
+        "last_inspection": last_ins,
+        "history": history
+    }
+
+
 @router.get("/last-result")
 @router.get("/last-result/")
 def get_last_inspection_result(
+    pallet_code: Optional[str] = Query(None),
     mode: Optional[str] = Query(None),
     product: Optional[str] = Query(None),
     po: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """
-    [GET] Lấy kết quả kiểm tra gần nhất theo mode, product, po.
+    [GET] Lấy kết quả kiểm tra gần nhất theo mã pallet, mode, product, po.
     """
     import json
     query = db.query(StageInspection)
-    if mode:
-        query = query.filter(StageInspection.inspection_type == mode)
-    if po:
-        query = query.filter(StageInspection.batch_no == po)
-    if product:
-        query = query.filter(StageInspection.product_sku == product)
+    if pallet_code and str(pallet_code).strip():
+        clean_code = str(pallet_code).strip()
+        query = query.filter(StageInspection.data_json.ilike(f'%"{clean_code}"%'))
+    else:
+        if mode:
+            query = query.filter(StageInspection.inspection_type == mode)
+        if po:
+            query = query.filter(StageInspection.batch_no == po)
+        if product:
+            query = query.filter(StageInspection.product_sku == product)
+
     last_rec = query.order_by(StageInspection.id.desc()).first()
     if last_rec:
         sample_qty = 0
         error_qty = 0
+        errors_list = []
+        stage_name = ""
+        req_qty = ""
+        steps_list = []
+        pallet_c = pallet_code or ""
         if last_rec.data_json:
             try:
                 pj = json.loads(last_rec.data_json) if isinstance(last_rec.data_json, str) else last_rec.data_json
                 sample_qty = pj.get("sampleQty", 0)
                 error_qty = pj.get("errorQty", 0)
+                errors_list = pj.get("errors", [])
+                stage_name = pj.get("stage", "")
+                req_qty = pj.get("requiredQty", "")
+                steps_list = pj.get("steps", [])
+                if not pallet_c:
+                    pallet_c = pj.get("palletCode", "")
             except Exception:
                 pass
+
+        img_list = []
+        if last_rec.images_json:
+            try:
+                ij = json.loads(last_rec.images_json) if isinstance(last_rec.images_json, str) else last_rec.images_json
+                if isinstance(ij, dict):
+                    img_list = ij.get("images") or ij.get("Ảnh kiểm tra mẫu") or []
+                elif isinstance(ij, list):
+                    img_list = ij
+            except Exception:
+                pass
+        if not img_list:
+            img_list = [img for img in [last_rec.image_path_1, last_rec.image_path_2, last_rec.image_path_3] if img]
+
         return {
+            "id": last_rec.id,
+            "code": f"KT{last_rec.id:03d}",
+            "palletCode": pallet_c,
+            "po": last_rec.batch_no or "",
+            "product": last_rec.product_sku or "",
+            "spec": last_rec.specification or "",
+            "stage": stage_name or last_rec.inspection_type,
             "sampleQty": sample_qty,
             "errorQty": error_qty,
-            "result": last_rec.conclusion or "pass"
+            "requiredQty": req_qty,
+            "result": last_rec.conclusion or "pass",
+            "errors": errors_list,
+            "steps": steps_list,
+            "notes": last_rec.notes or "",
+            "images": img_list,
+            "inspector_name": last_rec.inspector_name or "",
+            "created_at": last_rec.created_at.strftime("%H:%M | %d/%m/%Y") if last_rec.created_at else ""
         }
-    return {"sampleQty": 0, "errorQty": 0, "result": "pass"}
+    return {"sampleQty": 0, "errorQty": 0, "result": "pass", "errors": [], "images": []}
 
 
 @router.get("/generate-pallet-code")
@@ -737,6 +958,12 @@ async def create_inspection(
         images = body.get("images") or []
         creator = body.get("creator") or "QC Hệ thống"
 
+        # Tự động sinh mã Pallet nếu tạo Kiểm tra mẫu lần đầu mà chưa có mã pallet
+        pallet_code_val = body.get("palletCode")
+        if mode in ["first_sample", "input"] and (not pallet_code_val or not str(pallet_code_val).strip()):
+            gen_res = generate_unique_pallet_code("DA", db)
+            pallet_code_val = gen_res.get("palletCode")
+
         img1 = images[0] if len(images) > 0 else None
         img2 = images[1] if len(images) > 1 else None
         img3 = images[2] if len(images) > 2 else None
@@ -751,7 +978,7 @@ async def create_inspection(
             "sampleQty": sample_qty,
             "errorQty": error_qty,
             "errors": errors,
-            "palletCode": body.get("palletCode"),
+            "palletCode": pallet_code_val,
             "subLot": body.get("subLot"),
             "humidity": body.get("humidity"),
             "machine": body.get("machine"),
@@ -836,6 +1063,7 @@ async def create_inspection(
             "spec": spec,
             "sampleQty": sample_qty,
             "errorQty": error_qty,
+            "palletCode": pallet_code_val,
             "note": note,
             "images": images,
             "status": "pending",

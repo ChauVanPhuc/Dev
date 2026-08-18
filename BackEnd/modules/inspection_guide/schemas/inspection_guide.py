@@ -78,7 +78,7 @@ class InspectionGuideBase(BaseModel):
     code: str = Field(..., max_length=50)
     name: str = Field(..., max_length=250)
     doc_type: Optional[str] = Field("HDKT", max_length=50)
-    description: Optional[str] = Field(None, max_length=1000)
+    description: Optional[str] = Field(None, max_length=50000)
     is_active: Optional[bool] = True
 
 
@@ -89,7 +89,7 @@ class InspectionGuideCreate(InspectionGuideBase):
 class InspectionGuideUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=250)
     doc_type: Optional[str] = Field(None, max_length=50)
-    description: Optional[str] = Field(None, max_length=1000)
+    description: Optional[str] = Field(None, max_length=50000)
     is_active: Optional[bool] = None
 
 

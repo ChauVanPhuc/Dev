@@ -13,9 +13,15 @@ const ProductionOrderDetailView = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
 
-  const currentPo = poCode || 'APT007';
+  const [currentPo, setCurrentPo] = useState(poCode || '');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (poCode) {
+      setCurrentPo(poCode);
+    }
+  }, [poCode]);
 
   // Filter & Sort state
   const [showFilter, setShowFilter] = useState(false);
@@ -28,8 +34,21 @@ const ProductionOrderDetailView = () => {
     const fetchDetail = async () => {
       setLoading(true);
       try {
-        const resp = await apiClient.get(`/production-v2/orders/${encodeURIComponent(currentPo)}/detail`);
-        setData(resp.data || resp);
+        let poToFetch = currentPo;
+        if (!poToFetch) {
+          const ordResp = await apiClient.get('/production-v2/orders');
+          const orders = ordResp.data?.orders || ordResp.orders || [];
+          if (orders.length > 0) {
+            poToFetch = orders[0].po_code;
+            setCurrentPo(poToFetch);
+          }
+        }
+        if (poToFetch) {
+          const resp = await apiClient.get(`/production-v2/orders/${encodeURIComponent(poToFetch)}/detail`);
+          setData(resp.data || resp);
+        } else {
+          setData({ po_code: '', all_pos: [], stages: [] });
+        }
       } catch (err) {
         console.error('Lỗi khi tải chi tiết Lệnh sản xuất:', err);
       } finally {

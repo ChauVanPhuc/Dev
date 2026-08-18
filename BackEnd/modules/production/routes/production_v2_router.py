@@ -19,6 +19,9 @@ from modules.notification.models.notifications import Notification as Notificati
 from modules.kpi.models.kpi import KPI
 from modules.inspection.models.daily_inspection import DailyInspectionRecord, DailyInspectionDefect
 from modules.inspection.models.defect_type import DefectType
+from modules.inspection.models.stage_inspection import StageInspection
+from modules.delivery.models.pallet_card import PalletCard
+from modules.purchasing.models.purchase_requisition import PurchaseRequisition
 from modules.production.models.bom_detail import BOMDetail
 from modules.production.models.stages import Stage
 
@@ -204,11 +207,16 @@ def get_production_orders(
         db_orders = query.all()
 
         orders_list = []
+        seen_pos = set()
+
         if db_orders:
             for idx, o in enumerate(db_orders):
-                po_code = o.order_code or f"APT {o.id:03d}"
+                po_code = (o.order_code or o.partner_po or o.production_code or f"PO-{o.id}").strip()
+                if not po_code or po_code in seen_pos:
+                    continue
+                seen_pos.add(po_code)
                 
-                # Map Factory & Category: Vanity 1 = NM1, Vanity 2 = NM2, Furniture = NM3
+                # Map Factory & Category
                 cat_type = "Vanity 1" if idx % 3 == 0 else ("Vanity 2" if idx % 3 == 1 else "Furniture")
                 factory_code = "NM1" if cat_type == "Vanity 1" else ("NM2" if cat_type == "Vanity 2" else "NM3")
 
@@ -227,10 +235,9 @@ def get_production_orders(
 
                 if o.products:
                     for p_idx, p in enumerate(o.products, 1):
-                        ord_qty = int(p.order_qty or p.quantity or 12)
+                        ord_qty = int(p.order_qty or p.quantity or 1)
                         part_title = p.sku or p.name or f"SKU-{p.id}"
 
-                        # Calculate actual handoff quantity from real deliveries table
                         matching_deliveries = [
                             d for d in deliveries_query 
                             if (
@@ -243,7 +250,6 @@ def get_production_orders(
                         if matching_deliveries:
                             prod_qty = sum(int(d.quantity_received or d.quantity_total or 0) for d in matching_deliveries)
                         else:
-                            # If no handoff tickets exist yet, actual production quantity is 0!
                             prod_qty = 0
 
                         prod_qty = min(ord_qty, prod_qty)
@@ -262,12 +268,6 @@ def get_production_orders(
                             "status": status,
                             "status_color": status_color
                         })
-                else:
-                    items = [
-                        {"stt": "01", "product_name": "48S", "progress": 0, "quantity_str": "0/12", "status": "Chưa SX", "status_color": "#dc2626"}
-                    ]
-                    total_ord_qty = 12
-                    total_prod_qty = 0
 
                 overall_progress = int((total_prod_qty / total_ord_qty) * 100) if total_ord_qty > 0 else 0
                 progress_color = "#16a34a" if overall_progress >= 50 else ("#dc2626" if overall_progress > 0 else "#cbd5e1")
@@ -280,53 +280,6 @@ def get_production_orders(
                     "factory_code": factory_code,
                     "items": items
                 })
-
-        # Fallback list if DB orders table is empty
-        if not orders_list:
-            orders_list = [
-                {
-                    "po_code": "APT 007",
-                    "overall_progress": 80,
-                    "progress_color": "#16a34a",
-                    "category": "Vanity 1",
-                    "factory_code": "NM1",
-                    "items": [
-                        {"stt": "01", "product_name": "48S", "progress": 0, "quantity_str": "0/12", "status": "Chưa SX", "status_color": "#dc2626"},
-                        {"stt": "02", "product_name": "48SS", "progress": 15, "quantity_str": "3/168", "status": "Đang SX", "status_color": "#16a34a"},
-                        {"stt": "03", "product_name": "45A", "progress": 110, "quantity_str": "12/12", "status": "Hoàn thành", "status_color": "#1e293b"}
-                    ]
-                },
-                {
-                    "po_code": "APT 008",
-                    "overall_progress": 0,
-                    "progress_color": "#cbd5e1",
-                    "category": "Vanity 2",
-                    "factory_code": "NM2",
-                    "items": [
-                        {"stt": "01", "product_name": "T060D", "progress": 0, "quantity_str": "0/50", "status": "Chưa SX", "status_color": "#dc2626"}
-                    ]
-                },
-                {
-                    "po_code": "APT 010",
-                    "overall_progress": 80,
-                    "progress_color": "#dc2626",
-                    "category": "Furniture",
-                    "factory_code": "NM3",
-                    "items": [
-                        {"stt": "01", "product_name": "F500", "progress": 80, "quantity_str": "80/100", "status": "Đang SX", "status_color": "#16a34a"}
-                    ]
-                },
-                {
-                    "po_code": "APT 011",
-                    "overall_progress": 80,
-                    "progress_color": "#16a34a",
-                    "category": "Vanity 1",
-                    "factory_code": "NM1",
-                    "items": [
-                        {"stt": "01", "product_name": "V100", "progress": 80, "quantity_str": "40/50", "status": "Đang SX", "status_color": "#16a34a"}
-                    ]
-                }
-            ]
 
         # 3. Apply Factory Permission Enforcement for Restricted Users (QC / Workers)
         if not is_full_access and factory_clean:
@@ -364,17 +317,33 @@ def get_production_orders(
 # ----------------------------------------------------------------------
 # 3. CL03: Chi tiết lệnh sản xuất theo Công đoạn từ CSDL THỰC
 # ----------------------------------------------------------------------
-@router.get("/orders/{po_code}/detail")
-def get_production_order_detail(po_code: str, db: Session = Depends(get_db)):
+@router.get("/orders/detail")
+@router.get("/orders/{po_code:path}/detail")
+def get_production_order_detail(po_code: Optional[str] = None, po: Optional[str] = Query(None), db: Session = Depends(get_db)):
     """
     TRUY VẤN CSDL THỰC: Trả về chi tiết PO và danh sách sản phẩm/linh kiện thực tế theo mã po_code
     """
     try:
+        clean_po = (po_code or po or "").strip()
         # Query order from DB by order_code
-        db_order = db.query(Order).options(joinedload(Order.products)).filter(Order.order_code == po_code).first()
+        db_order = None
+        if clean_po:
+            db_order = db.query(Order).options(joinedload(Order.products)).filter(
+                or_(
+                    Order.order_code == clean_po,
+                    Order.partner_po == clean_po,
+                    Order.production_code == clean_po,
+                    Order.order_code == f"LSX-{clean_po}",
+                    Order.order_code.ilike(f"%{clean_po}%"),
+                    Order.partner_po.ilike(f"%{clean_po}%")
+                )
+            ).first()
+            if not db_order and clean_po.isdigit():
+                db_order = db.query(Order).options(joinedload(Order.products)).filter(Order.id == int(clean_po)).first()
+
         if not db_order:
-            # Fallback search by partial match or ID
-            db_order = db.query(Order).options(joinedload(Order.products)).filter(Order.id == 1).first()
+            # Fallback search latest order
+            db_order = db.query(Order).options(joinedload(Order.products)).order_by(Order.id.desc()).first()
 
         # Query all PO codes for dynamic dropdown prioritizing POs with BOM details
         bom_orders_query = db.query(Order.order_code).join(Product, Product.order_id == Order.id).join(BOMDetail, BOMDetail.product_id == Product.id).distinct()
@@ -536,54 +505,15 @@ def get_production_order_detail(po_code: str, db: Session = Depends(get_db)):
                     "details": details
                 })
         else:
-            # Fallback stages if order has no products or delivery handoffs in DB
             stages = [
                 {
-                    "stage_id": "dinh_hinh",
-                    "stage_name": "Định hình",
+                    "stage_id": st_id,
+                    "stage_name": st_name,
                     "progress": 0,
                     "progress_color": "#cbd5e1",
-                    "details": [
-                        {"stt": "01", "part_name": f"SKU-{po_code}-A", "quantity_str": "0/12", "progress": 0, "area": "NM1", "status": "Chưa SX", "status_color": "#dc2626"},
-                        {"stt": "02", "part_name": f"SKU-{po_code}-B", "quantity_str": "0/100", "progress": 0, "area": "NM1", "status": "Chưa SX", "status_color": "#dc2626"}
-                    ]
-                },
-                {
-                    "stage_id": "lap_rap",
-                    "stage_name": "Lắp ráp",
-                    "progress": 0,
-                    "progress_color": "#cbd5e1",
-                    "details": [
-                        {"stt": "01", "part_name": f"Khung {po_code}", "quantity_str": "0/10", "progress": 0, "area": "NM1", "status": "Chưa SX", "status_color": "#dc2626"}
-                    ]
-                },
-                {
-                    "stage_id": "son",
-                    "stage_name": "Sơn",
-                    "progress": 7,
-                    "progress_color": "#dc2626",
-                    "details": [
-                        {"stt": "01", "part_name": f"Mặt hông {po_code}", "quantity_str": "2/30", "progress": 7, "area": "NM1", "status": "Đang SX", "status_color": "#16a34a"}
-                    ]
-                },
-                {
-                    "stage_id": "dong_goi",
-                    "stage_name": "Đóng gói",
-                    "progress": 0,
-                    "progress_color": "#cbd5e1",
-                    "details": [
-                        {"stt": "01", "part_name": f"Thùng carton {po_code}", "quantity_str": "0/12", "progress": 0, "area": "NM1", "status": "Chưa SX", "status_color": "#dc2626"}
-                    ]
-                },
-                {
-                    "stage_id": "load_cont",
-                    "stage_name": "Load cont",
-                    "progress": 0,
-                    "progress_color": "#cbd5e1",
-                    "details": [
-                        {"stt": "01", "part_name": f"Container {po_code}", "quantity_str": "0/1", "progress": 0, "area": "Kho", "status": "Chưa SX", "status_color": "#dc2626"}
-                    ]
+                    "details": []
                 }
+                for st_id, st_name in stage_names
             ]
 
         return {
@@ -598,15 +528,35 @@ def get_production_order_detail(po_code: str, db: Session = Depends(get_db)):
 # ----------------------------------------------------------------------
 # 3.5: Lấy danh sách chi tiết BOM theo PO
 # ----------------------------------------------------------------------
-@router.get("/orders/{po_code}/bom")
-def get_order_bom(po_code: str, stage: Optional[str] = Query(None), db: Session = Depends(get_db)):
+@router.get("/orders/bom")
+@router.get("/orders/{po_code:path}/bom")
+def get_order_bom(
+    po_code: Optional[str] = None,
+    po: Optional[str] = Query(None),
+    stage: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
     """TRUY VẤN CSDL THỰC: Trả về danh sách chi tiết (part_name), quy cách (specification) và tổng số lượng của từng chi tiết trong PO."""
     try:
-        order = db.query(Order).options(joinedload(Order.products)).filter(Order.order_code == po_code).first()
-        if not order:
-            raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng (PO)")
+        clean_po = (po_code or po or "").strip()
+        if not clean_po:
+            return []
 
-        product_ids = [p.id for p in order.products]
+        order = db.query(Order).options(joinedload(Order.products)).filter(
+            or_(
+                Order.order_code == clean_po,
+                Order.partner_po == clean_po,
+                Order.production_code == clean_po,
+                Order.order_code == f"LSX-{clean_po}",
+                Order.order_code.ilike(f"%{clean_po}%"),
+                Order.partner_po.ilike(f"%{clean_po}%")
+            )
+        ).first()
+
+        if not order and clean_po.isdigit():
+            order = db.query(Order).options(joinedload(Order.products)).filter(Order.id == int(clean_po)).first()
+
+        product_ids = [p.id for p in order.products] if (order and order.products) else []
         boms = db.query(BOMDetail).filter(BOMDetail.product_id.in_(product_ids)).all() if product_ids else []
 
         # Lọc theo công đoạn giao (input_stage) nếu có stage
@@ -651,7 +601,7 @@ def get_order_bom(po_code: str, stage: Optional[str] = Query(None), db: Session 
                 boms = filtered_boms
 
         parts_map = {}
-        if boms:
+        if boms and order:
             for p in order.products:
                 prod_q = float(p.order_qty or p.quantity or 1.0)
                 for b in [b for b in boms if b.product_id == p.id]:
@@ -668,7 +618,7 @@ def get_order_bom(po_code: str, stage: Optional[str] = Query(None), db: Session 
                     parts_map[name]["specs_map"][spec] += qty
 
         # Fallback to products if order has no BOM entries
-        if not parts_map and order.products:
+        if not parts_map and order and order.products:
             for p in order.products:
                 name = p.sku or p.name or f"Sản phẩm {p.id}"
                 qty = int(p.order_qty or p.quantity or 1)
@@ -678,6 +628,7 @@ def get_order_bom(po_code: str, stage: Optional[str] = Query(None), db: Session 
                     "total_qty": qty,
                     "specs_map": {spec: qty}
                 }
+
 
         return [
             {

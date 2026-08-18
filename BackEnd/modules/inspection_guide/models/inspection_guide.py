@@ -16,7 +16,7 @@ class InspectionGuide(Base):
     code = Column(NVARCHAR(50), unique=True, index=True, nullable=False)
     name = Column(NVARCHAR(250), nullable=False)
     doc_type = Column(NVARCHAR(50), default="HDKT", nullable=False) # 'HDKT' (Hướng dẫn kiểm tra), 'SOS' (Hướng dẫn thao tác), 'CTQ' (Lỗi cần chú ý)
-    description = Column(NVARCHAR(1000), nullable=True)
+    description = Column(NVARCHAR(None), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     created_by = Column(Integer, ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=func.now(), nullable=False)

@@ -4,6 +4,7 @@ import { Save, BookOpen, FileText, AlertTriangle, Sparkles } from 'lucide-react'
 import api from '@webShared/Services/api.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
+import RichTextEditor from '../../ISO/components/RichTextEditor';
 import '@styles/components.css';
 
 const DOC_TYPE_OPTIONS = [
@@ -128,6 +129,13 @@ const InspectionGuideFormView = ({ initialDocType }) => {
     }));
   };
 
+  const stripHtml = (html) => {
+    if (!html) return '';
+    const tmp = document.createElement('DIV');
+    tmp.innerHTML = html;
+    return (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.code.trim() || !form.name.trim()) {
@@ -137,11 +145,12 @@ const InspectionGuideFormView = ({ initialDocType }) => {
 
     setSaving(true);
     try {
+      const cleanDesc = form.description ? stripHtml(form.description).slice(0, 500) : '';
       const created = await api.post('/inspection-guides', {
         code: form.code.trim().toUpperCase(),
         name: form.name.trim(),
         doc_type: form.doc_type,
-        description: form.description?.trim() || null
+        description: cleanDesc || null
       });
 
       const opt = DOC_TYPE_OPTIONS.find(o => o.key === form.doc_type) || DOC_TYPE_OPTIONS[0];
@@ -177,7 +186,7 @@ const InspectionGuideFormView = ({ initialDocType }) => {
         overflowY: 'auto'
       }}
     >
-      <div style={{ width: '100%', maxWidth: 760, margin: '0 auto' }}>
+      <div style={{ width: '100%', maxWidth: 840, margin: '0 auto' }}>
         <div style={{
           backgroundColor: '#FFFFFF',
           borderRadius: 20,
@@ -302,34 +311,24 @@ const InspectionGuideFormView = ({ initialDocType }) => {
               />
             </div>
 
-            {/* Field 3: Mô tả chi tiết / Phạm vi áp dụng */}
+            {/* Field 3: Nội dung hướng dẫn kiểm tra chi tiết & Lưu ý an toàn */}
             <div style={{ marginBottom: 20 }}>
               <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, color: '#64748B', fontSize: 13, textTransform: 'uppercase' }}>
-                Mô tả chi tiết / Vị trí & Phạm vi áp dụng
+                {form.doc_type === 'SOS'
+                  ? 'Nội dung hướng dẫn thao tác chi tiết & Lưu ý an toàn'
+                  : form.doc_type === 'CTQ'
+                  ? 'Nội dung hướng dẫn chú ý chi tiết & Lưu ý an toàn'
+                  : 'Nội dung hướng dẫn kiểm tra chi tiết & Lưu ý an toàn'}
               </label>
-              <textarea
-                name="description"
+              <RichTextEditor
                 value={form.description}
-                onChange={handleChange}
-                rows={3}
-                maxLength={1000}
+                onChange={val => setForm(prev => ({ ...prev, description: val }))}
                 placeholder={
                   form.doc_type === 'SOS'
-                    ? "VD: Áp dụng tại Công đoạn Tinh Chế - Chuyền 2. Dành cho công nhân bậc 2 trở lên. Yêu cầu đeo kính bảo hộ và găng tay chống cắt..."
-                    : "Nhập phạm vi áp dụng, thiết bị cần chuẩn bị, hoặc lưu ý an toàn lao động..."
+                    ? "Mô tả chi tiết các thao tác của công nhân, tư thế làm việc, thông số máy, điểm an toàn lao động..."
+                    : "Nhập hướng dẫn thao tác tổng quan, phương pháp đo đạc hoặc tiêu chuẩn chất lượng (hỗ trợ soạn thảo văn bản, bảng biểu, danh sách, màu sắc)..."
                 }
-                style={{
-                  width: '100%',
-                  padding: '12px 14px',
-                  borderRadius: 10,
-                  border: '1px solid #D1D5DB',
-                  fontSize: 14,
-                  lineHeight: '1.5',
-                  color: '#374151',
-                  backgroundColor: '#FAF8F6'
-                }}
-                onFocus={e => { e.currentTarget.style.borderColor = currentOpt.color; e.currentTarget.style.backgroundColor = '#FFF'; }}
-                onBlur={e => { e.currentTarget.style.borderColor = '#D1D5DB'; e.currentTarget.style.backgroundColor = '#FAF8F6'; }}
+                style={{ minHeight: 220 }}
               />
             </div>
 

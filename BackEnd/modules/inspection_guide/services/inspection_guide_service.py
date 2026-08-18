@@ -307,7 +307,7 @@ def get_mobile_guide(db: Session, inspection_type: str, product_id: Optional[int
     alias_map = {
         'first_sample': ['first_sample', 'mau-dau-tien', 'mau_dau_tien'],
         'mau-dau-tien': ['first_sample', 'mau-dau-tien', 'mau_dau_tien'],
-        're_inspect': ['re_inspect', 're-inspect', 'kiem_tra_lai'],
+        're_inspect': ['re_inspect', 're-inspect', 'kiem_tra_lai', 'first_sample', 'mau-dau-tien', 'mau_dau_tien'],
         'parameter': ['parameter', 'thong_so', 'do-am', 'bam-dinh'],
         'process': ['process', 'quy-trinh', 'quy_trinh'],
         'qa': ['qa', 'van_dap'],

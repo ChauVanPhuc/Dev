@@ -173,14 +173,27 @@ const PurchaseOrderItemList = () => {
     return Object.values(groups);
   }, [data]);
 
+  const [importOrderType, setImportOrderType] = useState('Đơn mua hàng');
+
+  const handleTriggerImport = (type) => {
+    setImportOrderType(type);
+    const input = fileInputRef.current || document.getElementById('poi-excel-upload');
+    if (input) {
+      input.value = '';
+      input.click();
+    }
+  };
+
   const handleImport = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const targetType = importOrderType || 'Đơn mua hàng';
+    const endpoint = `/purchase-order-items/import-excel?order_type=${encodeURIComponent(targetType)}`;
     try {
       if (startGlobalUpload) {
         await startGlobalUpload(
           file,
-          '/purchase-order-items/import-excel',
+          endpoint,
           () => {
             fetchData();
             fetchStats();
@@ -189,7 +202,7 @@ const PurchaseOrderItemList = () => {
       } else {
         setImportLoading(true);
         const result = await purchasingService.importOrderItemsExcel(file);
-        showNotification(result.message || 'Import thành công!');
+        showNotification(result.message || `Import ${targetType} thành công!`);
         fetchData();
         fetchStats();
       }
@@ -313,9 +326,14 @@ const PurchaseOrderItemList = () => {
           activeFiltersCount={(filterStatus !== 'all' ? 1 : 0) + (filterPOCode ? 1 : 0) + (filterSupplier ? 1 : 0)}
           importActions={[
             {
-              label: 'Nhập Excel',
+              label: 'Nhập đơn Mua hàng',
               icon: <FileUp size={14} />,
-              onClick: () => (fileInputRef.current || document.getElementById('poi-excel-upload'))?.click()
+              onClick: () => handleTriggerImport('Đơn mua hàng')
+            },
+            {
+              label: 'Nhập đơn Bán hàng',
+              icon: <FileUp size={14} />,
+              onClick: () => handleTriggerImport('Đơn bán hàng')
             }
           ]}
           onExport={handleExport}

@@ -59,6 +59,13 @@ const DOC_CONFIGS = {
   }
 };
 
+const stripHtml = (html) => {
+  if (!html) return '';
+  const tmp = document.createElement('DIV');
+  tmp.innerHTML = html;
+  return (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
+};
+
 const InspectionGuideManagementView = ({ docType }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -794,7 +801,7 @@ const InspectionGuideManagementView = ({ docType }) => {
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap'
                         }}>
-                          {g.description}
+                          {stripHtml(g.description)}
                         </div>
                       )}
                     </td>
@@ -1077,7 +1084,7 @@ const InspectionGuideManagementView = ({ docType }) => {
                       WebkitBoxOrient: 'vertical',
                       overflow: 'hidden'
                     }}>
-                      {g.description}
+                      {stripHtml(g.description)}
                     </p>
                   )}
 

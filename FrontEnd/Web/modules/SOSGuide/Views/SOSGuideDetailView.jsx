@@ -61,6 +61,13 @@ const SOSGuideDetailView = () => {
 
   const selectedStep = (guide?.steps || []).find(s => s.id === selectedStepId) || null;
 
+  const stripHtml = (html) => {
+    if (!html) return '';
+    const tmp = document.createElement('DIV');
+    tmp.innerHTML = html;
+    return (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
+  };
+
   const fetchGuide = async (preferredStepId = null) => {
     setLoading(true);
     try {
@@ -68,7 +75,7 @@ const SOSGuideDetailView = () => {
       setGuide(res);
       setMetaForm({
         name: res.name || '',
-        description: res.description || '',
+        description: stripHtml(res.description || ''),
         is_active: res.is_active !== false
       });
 
@@ -107,16 +114,17 @@ const SOSGuideDetailView = () => {
     if (e) e.preventDefault();
     setSavingMeta(true);
     try {
+      const cleanDesc = stripHtml(metaForm.description || '').trim() || null;
       await api.put(`/inspection-guides/${id}`, {
         name: metaForm.name,
-        description: metaForm.description,
+        description: cleanDesc,
         doc_type: 'SOS',
         is_active: metaForm.is_active
       });
       setGuide(prev => ({
         ...prev,
         name: metaForm.name,
-        description: metaForm.description,
+        description: cleanDesc,
         is_active: metaForm.is_active
       }));
       if (toast) toast('success', 'Đã lưu thông tin Hướng dẫn thao tác (SOS)!');

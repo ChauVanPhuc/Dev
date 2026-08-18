@@ -287,4 +287,14 @@ const renderLineWithBoldLabels = (text) => {
   return <span>{text}</span>;
 };
 
+/**
+ * Loại bỏ tất cả thẻ HTML và chuẩn hóa khoảng trắng để hiển thị text tóm tắt thuần túy
+ */
+export const stripHtml = (html) => {
+  if (!html || typeof html !== 'string') return html || '';
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  return (doc.body.textContent || doc.body.innerText || '').replace(/\s+/g, ' ').trim();
+};
+
 export default FormattedTextView;

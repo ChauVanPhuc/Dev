@@ -29,16 +29,23 @@ const DEFAULT_STAGES = [
   "Kiểm tra đầu vào (IQC)"
 ];
 
+const stripHtml = (html) => {
+  if (!html) return '';
+  const tmp = document.createElement('DIV');
+  tmp.innerHTML = html;
+  return (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
+};
+
 const parseStageAndDesc = (description) => {
   if (!description) return { stage: '', cleanDesc: '' };
-  const match = description.match(/^\[Công đoạn:\s*([^\]]+)\]\s*(.*)$/i);
+  const match = description.match(/^\[Công đoạn:\s*([^\]]+)\]\s*(.*)$/is);
   if (match) {
     return {
       stage: match[1].trim(),
-      cleanDesc: match[2].trim()
+      cleanDesc: stripHtml(match[2].trim())
     };
   }
-  return { stage: '', cleanDesc: description };
+  return { stage: '', cleanDesc: stripHtml(description) };
 };
 
 const CTQGuideDetailView = () => {
