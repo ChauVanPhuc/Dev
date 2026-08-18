@@ -10,7 +10,14 @@ import {
   FileText
 } from 'lucide-react'
 import { getFullImageUrl } from '@shared/services/api'
-import { FormattedTextView } from '@shared/utils/textFormatter'
+import { FormattedTextView, stripHtml } from '@shared/utils/textFormatter'
+
+const cleanTextSummary = (str) => {
+  if (str === null || str === undefined) return ''
+  const strVal = String(str)
+  const cleaned = stripHtml(strVal)
+  return String(cleaned).replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim()
+}
 
 const InspectionStepsTable = ({ steps = [], onStepChange, sampleQty, disabled = false, mode = '', processSelected = '' }) => {
   const [selectedStepModal, setSelectedStepModal] = useState(null)
@@ -70,13 +77,13 @@ const InspectionStepsTable = ({ steps = [], onStepChange, sampleQty, disabled = 
       {/* 5-Column SOP Table: Super Compact */}
       <div className="pv2-sop-table-wrap">
         <table className="pv2-table pv2-table--sop-grid">
-          <thead>
+          <thead style={{ backgroundColor: '#6c3314', color: '#ffffff' }}>
             <tr>
-              <th style={{ width: '42px', textAlign: 'center' }}>Bước</th>
-              <th style={{ width: '38%', textAlign: 'left' }}>Mô tả</th>
-              <th style={{ textAlign: 'left' }}>Tiêu chuẩn</th>
-              <th style={{ width: '36px', textAlign: 'center' }}>SL</th>
-              <th style={{ width: '78px', textAlign: 'center' }}>Kết quả</th>
+              <th style={{ width: '42px', textAlign: 'center', color: '#ffffff' }}>Bước</th>
+              <th style={{ width: '38%', textAlign: 'left', color: '#ffffff' }}>Mô tả</th>
+              <th style={{ textAlign: 'left', color: '#ffffff' }}>Tiêu chuẩn</th>
+              <th style={{ width: '36px', textAlign: 'center', color: '#ffffff' }}>SL</th>
+              <th style={{ width: '78px', textAlign: 'center', color: '#ffffff' }}>Kết quả</th>
             </tr>
           </thead>
           <tbody>
@@ -86,16 +93,20 @@ const InspectionStepsTable = ({ steps = [], onStepChange, sampleQty, disabled = 
               const stepResult = step.result || 'pass'
               const displayQty = step.qty || sampleQty || 1
 
-              // Tên bước ngắn gọn
-              const stepTitle = step.title || `Bước ${step.step_no || idx + 1}`
+              // Tên bước ngắn gọn (làm sạch HTML)
+              const rawTitle = step.title || `Bước ${step.step_no || idx + 1}`
+              const stepTitle = cleanTextSummary(rawTitle) || `Bước ${idx + 1}`
 
-              // Tiêu chuẩn tóm tắt
+              // Tiêu chuẩn tóm tắt (làm sạch HTML)
               let shortStandard = ''
               if (hasSubSteps) {
                 shortStandard = `${step.sub_steps.length} tiêu chuẩn con`
-              } else if (step.standard || step.content) {
-                const text = (step.standard || step.content).trim()
-                shortStandard = text.length > 30 ? text.substring(0, 30) + '...' : text
+              } else {
+                const rawText = step.standard || step.content || step.description || ''
+                const cleanText = cleanTextSummary(rawText)
+                if (cleanText) {
+                  shortStandard = cleanText.length > 38 ? cleanText.substring(0, 38) + '...' : cleanText
+                }
               }
 
               return (
@@ -180,7 +191,7 @@ const InspectionStepsTable = ({ steps = [], onStepChange, sampleQty, disabled = 
                   Bước {selectedStepModal.step_no || selectedStepModal.idx + 1}
                 </span>
                 <h3 className="pv2-sop-modal-title">
-                  {selectedStepModal.title || `Bước ${selectedStepModal.idx + 1}`}
+                  {cleanTextSummary(selectedStepModal.title || '').replace(/^Bước\s*\d+\s*[:\-]\s*/i, '') || `Chi tiết bước ${selectedStepModal.idx + 1}`}
                 </h3>
               </div>
               <button
@@ -277,12 +288,12 @@ const InspectionStepsTable = ({ steps = [], onStepChange, sampleQty, disabled = 
                 {selectedStepModal.result === 'fail' ? (
                   <>
                     <XCircle size={15} />
-                    <span>Không đạt (Chạm để đổi sang Đạt)</span>
+                    <span>Trạng thái: Không đạt</span>
                   </>
                 ) : (
                   <>
                     <CheckCircle2 size={15} />
-                    <span>Đạt (Chạm để đổi sang Không đạt)</span>
+                    <span>Trạng thái: Đạt</span>
                   </>
                 )}
               </button>

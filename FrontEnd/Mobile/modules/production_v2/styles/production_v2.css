@@ -663,7 +663,7 @@
 
 .pv2-sop-step-num-text {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   color: #2d1a12;
 }
 
@@ -680,7 +680,7 @@
   font-weight: 700;
   color: #2d1a12;
   font-size: 12.5px;
-  line-height: 1.3;
+  line-height: 1.35;
 }
 
 .pv2-sop-view-detail-hint {
@@ -709,11 +709,13 @@
 
 .pv2-sop-standard-preview {
   font-size: 11.5px;
-  color: #4b5563;
+  color: #475569;
+  line-height: 1.4;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  word-break: break-word;
 }
 
 .pv2-sop-img-badge {
@@ -866,15 +868,21 @@
 .pv2-sop-modal-body {
   padding: 14px;
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .pv2-sop-modal-sec {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .pv2-sop-modal-sec-title {
@@ -891,6 +899,32 @@
   border: 1px solid #e7e5e4;
   border-radius: 8px;
   padding: 10px 12px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.pv2-sop-modal-sec-box *,
+.pv2-sop-modal-substep-body * {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  overflow-wrap: break-word !important;
+  word-break: break-word !important;
+}
+
+.pv2-sop-modal-sec-box p,
+.pv2-sop-modal-substep-body p {
+  margin: 0 0 6px 0;
+  line-height: 1.5;
+  color: #334155;
+  font-size: 12.5px;
+}
+
+.pv2-sop-modal-sec-box p:last-child,
+.pv2-sop-modal-substep-body p:last-child {
+  margin-bottom: 0;
 }
 
 .pv2-modal-lines {

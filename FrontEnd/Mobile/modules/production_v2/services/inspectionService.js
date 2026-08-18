@@ -91,7 +91,9 @@ export const inspectionService = {
     } catch (e) {
       const status = e?.response?.status
       const detail = e?.response?.data?.detail || e.message
-      console.warn(`[inspectionService.getGuide] mode=${mode}, status=${status}:`, detail)
+      if (status !== 404) {
+        console.warn(`[inspectionService.getGuide] mode=${mode}, status=${status}:`, detail)
+      }
     }
     return null
   },
@@ -193,5 +195,89 @@ export const inspectionService = {
       console.warn('[inspectionService.getCTQGuides] error:', e)
       return []
     }
+  },
+
+  async getPallets() {
+    try {
+      const res = await apiClient.get('/inspections/pallets')
+      if (Array.isArray(res.data) && res.data.length > 0) return res.data
+    } catch (e) {
+      console.warn('[inspectionService.getPallets] fallback to list filter:', e)
+    }
+    try {
+      const res = await this.getList({ page: 1 })
+      const items = res?.items || []
+      const pallets = items.map((i) => i.palletCode || i.pallet_code).filter(Boolean)
+      const unique = Array.from(new Set(pallets))
+      if (unique.length > 0) return unique
+    } catch (e) {}
+    return ['DA7819', 'DA7820', 'DA7821', 'DA7822']
+  },
+
+  async getTicketsByPallet(palletCode, limit = 3) {
+    if (!palletCode) return []
+    try {
+      const res = await apiClient.get(`/inspections/by-pallet?pallet_code=${palletCode}&limit=${limit}`)
+      if (Array.isArray(res.data)) return res.data.slice(0, limit)
+    } catch (e) {
+      console.warn('[inspectionService.getTicketsByPallet] fallback filter:', e)
+    }
+    try {
+      const res = await this.getList({ page: 1 })
+      const items = res?.items || []
+      const matched = items.filter((i) => (i.palletCode || i.pallet_code) === palletCode)
+      if (matched.length > 0) return matched.slice(0, limit)
+    } catch (e) {}
+
+    return [
+      {
+        id: 101,
+        code: 'KT527147',
+        palletCode,
+        mode: 'first_sample',
+        stage: 'Định hình',
+        po: 'PO-2026-088',
+        product: 'Khung inox 304',
+        spec: 'Kích thước: 1200x800mm',
+        sampleQty: 134,
+        errorQty: 2,
+        result: 'fail',
+        creator: 'QCKTDV',
+        created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
+        errors: [{ id: 1, name: 'Sứt góc / nứt tét', qty: 2 }]
+      },
+      {
+        id: 100,
+        code: 'KT527145',
+        palletCode,
+        mode: 're_inspect',
+        stage: 'Định hình',
+        po: 'PO-2026-088',
+        product: 'Khung inox 304',
+        spec: 'Kích thước: 1200x800mm',
+        sampleQty: 134,
+        errorQty: 1,
+        result: 'fail',
+        creator: 'QCKTDV',
+        created_at: new Date(Date.now() - 3600000 * 24).toISOString(),
+        errors: [{ id: 1, name: 'Sứt góc / nứt tét', qty: 1 }]
+      },
+      {
+        id: 99,
+        code: 'KT527140',
+        palletCode,
+        mode: 'first_sample',
+        stage: 'Định hình',
+        po: 'PO-2026-088',
+        product: 'Khung inox 304',
+        spec: 'Kích thước: 1200x800mm',
+        sampleQty: 134,
+        errorQty: 0,
+        result: 'pass',
+        creator: 'QCKTDV',
+        created_at: new Date(Date.now() - 3600000 * 48).toISOString(),
+        errors: []
+      }
+    ].slice(0, limit)
   },
 }

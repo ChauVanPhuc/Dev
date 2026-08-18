@@ -143,6 +143,7 @@ const ErrorTrendRow = ({
           defectId: opt.id || opt.value,
           code: opt.code || '',
           name: opt.name,
+          qty: row.qty && row.qty > 0 ? row.qty : 1,
         })
     }
   }
@@ -540,12 +541,12 @@ const ErrorTrendRow = ({
               width: 32,
               height: '100%',
               border: 'none',
-              backgroundColor: '#f1f5f9',
+              backgroundColor: '#4a240e',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              color: '#475569',
+              color: '#ffffff',
             }}
           >
             <Plus size={14} />

@@ -49,7 +49,11 @@ import PackagingInspectionView from '@modules/inspection/Views/PackagingInspecti
 import CL06_TransferListView from '@modules/production_v2/Views/CL06_TransferListView'
 import CL07_TransferCreateView from '@modules/production_v2/Views/CL07_TransferCreateView'
 import CL08_InspectionListView from '@modules/production_v2/Views/CL08_InspectionListView'
-import CL09_InspectionCreateView from '@modules/production_v2/Views/CL09_InspectionCreateView'
+import CL09A_FirstSampleView from '@modules/production_v2/Views/CL09A_FirstSampleView'
+import CL09B_ReInspectView from '@modules/production_v2/Views/CL09B_ReInspectView'
+import CL09C_ParameterView from '@modules/production_v2/Views/CL09C_ParameterView'
+import CL09D_ProcessView from '@modules/production_v2/Views/CL09D_ProcessView'
+import CL09E_QAView from '@modules/production_v2/Views/CL09E_QAView'
 
 /**
  * Component xử lý nút Back vật lý của Android
@@ -145,8 +149,18 @@ function App() {
             <Route path="/production_v2/transfer" element={<CL07_TransferCreateView />} />
             <Route path="/production_v2/transfer/:id" element={<CL07_TransferCreateView />} />
             <Route path="/production_v2/inspection-list" element={<CL08_InspectionListView />} />
-            <Route path="/production_v2/inspection" element={<CL09_InspectionCreateView />} />
-            <Route path="/production_v2/inspection/:id" element={<CL09_InspectionCreateView />} />
+            <Route path="/production_v2/inspection/first-sample" element={<CL09A_FirstSampleView />} />
+            <Route path="/production_v2/inspection/first-sample/:id" element={<CL09A_FirstSampleView />} />
+            <Route path="/production_v2/inspection/re-inspect" element={<CL09B_ReInspectView />} />
+            <Route path="/production_v2/inspection/re-inspect/:id" element={<CL09B_ReInspectView />} />
+            <Route path="/production_v2/inspection/parameter" element={<CL09C_ParameterView />} />
+            <Route path="/production_v2/inspection/parameter/:id" element={<CL09C_ParameterView />} />
+            <Route path="/production_v2/inspection/process" element={<CL09D_ProcessView />} />
+            <Route path="/production_v2/inspection/process/:id" element={<CL09D_ProcessView />} />
+            <Route path="/production_v2/inspection/qa" element={<CL09E_QAView />} />
+            <Route path="/production_v2/inspection/qa/:id" element={<CL09E_QAView />} />
+            <Route path="/production_v2/inspection" element={<Navigate to="/production_v2/inspection/first-sample" replace />} />
+            <Route path="/production_v2/inspection/:id" element={<Navigate to="/production_v2/inspection/first-sample" replace />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/login" replace />} />

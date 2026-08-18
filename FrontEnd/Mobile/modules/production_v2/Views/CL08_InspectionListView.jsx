@@ -7,7 +7,7 @@ import CustomSelect from '@mobile/Shared/Views/components/form/CustomSelect'
 import { useInspectionController } from '../Controllers/useInspectionController'
 import InspectionCard from './components/InspectionCard'
 import FilterPanel from './components/FilterPanel'
-import { MONTH_OPTIONS, ROUTES } from '../constants'
+import { MONTH_OPTIONS, ROUTES, MODE_TO_ROUTE } from '../constants'
 import '../styles/production_v2.css'
 
 const CL08_InspectionListView = () => {
@@ -118,13 +118,16 @@ const CL08_InspectionListView = () => {
               </div>
             </div>
           )}
-          {!loading && tickets.map((t) => (
-            <InspectionCard
-              key={t.id}
-              ticket={t}
-              onClick={() => navigate(`${ROUTES.INSPECTION_CREATE}/${t.code || t.id}`)}
-            />
-          ))}
+          {!loading && tickets.map((t) => {
+            const targetRoute = MODE_TO_ROUTE[t.mode] || ROUTES.INSPECTION_FIRST_SAMPLE
+            return (
+              <InspectionCard
+                key={t.id}
+                ticket={t}
+                onClick={() => navigate(`${targetRoute}/${t.code || t.id}`)}
+              />
+            )
+          })}
         </div>
 
         {/* Fixed Bottom Pagination Bar */}

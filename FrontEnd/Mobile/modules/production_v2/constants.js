@@ -54,6 +54,14 @@ export const INSPECT_MODES = {
   QA: 'qa',
 }
 
+export const MODE_TO_ROUTE = {
+  first_sample: ROUTES.INSPECTION_FIRST_SAMPLE,
+  re_inspect: ROUTES.INSPECTION_RE_INSPECT,
+  parameter: ROUTES.INSPECTION_PARAMETER,
+  process: ROUTES.INSPECTION_PROCESS,
+  qa: ROUTES.INSPECTION_QA,
+}
+
 export const INSPECT_MODE_OPTIONS = [
   { value: 'first_sample', label: 'Kiểm tra mẫu lần đầu' },
   { value: 're_inspect', label: 'Kiểm tra lại' },

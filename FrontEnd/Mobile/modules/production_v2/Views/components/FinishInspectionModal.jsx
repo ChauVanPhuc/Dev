@@ -1,18 +1,18 @@
 import { useState, useEffect } from 'react'
 import { X, ShoppingCart, Loader2 } from 'lucide-react'
 
-const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, onCreatePallet }) => {
+const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, onCreatePallet, isReInspect = false }) => {
   const [confirmCheck, setConfirmCheck] = useState(false)
   const [creating, setCreating] = useState(false)
 
   useEffect(() => {
     if (open) {
-      setConfirmCheck(Boolean(palletCode))
-      if (!palletCode && onCreatePallet) {
+      setConfirmCheck(isReInspect || Boolean(palletCode))
+      if (!isReInspect && !palletCode && onCreatePallet) {
         handleCreatePalletClick()
       }
     }
-  }, [open, palletCode])
+  }, [open, palletCode, isReInspect])
 
   const handleCreatePalletClick = async () => {
     if (onCreatePallet && !creating) {
@@ -295,90 +295,92 @@ const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, 
             </div>
           </div>
 
-          {/* Pallet Confirmation Section */}
-          <div style={{ marginTop: '8px', width: '100%', boxSizing: 'border-box' }}>
-            <label style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              fontSize: '14px',
-              fontWeight: '500',
-              color: '#0f172a',
-              cursor: 'pointer',
-              marginBottom: '12px'
-            }}>
-              <input
-                type="checkbox"
-                checked={confirmCheck}
-                onChange={(e) => setConfirmCheck(e.target.checked)}
-                style={{
-                  width: '18px',
-                  height: '18px',
-                  accentColor: '#3b2314',
-                  cursor: 'pointer',
-                  flexShrink: 0
-                }}
-              />
-              <span>Xác nhận hoàn thành kiểm tra cho mã Pallet:</span>
-            </label>
-
-            {/* Pallet Code Creation & Display Row */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '12px',
-              padding: '0 4px',
-              width: '100%',
-              boxSizing: 'border-box'
-            }}>
-              <button
-                type="button"
-                onClick={handleCreatePalletClick}
-                disabled={creating}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  backgroundColor: creating ? '#64748b' : '#3b2314',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '10px',
-                  padding: '10px 16px',
-                  fontSize: '14px',
-                  fontWeight: '700',
-                  cursor: creating ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 4px 10px rgba(59, 35, 20, 0.25)',
-                  transition: 'all 0.2s ease',
-                  flexShrink: 0,
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                {creating ? (
-                  <>
-                    <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Đang tạo...
-                  </>
-                ) : (
-                  <>
-                    <ShoppingCart size={16} /> Tạo mã pallet
-                  </>
-                )}
-              </button>
-
-              <span style={{
-                fontSize: '28px',
-                fontWeight: '900',
-                color: '#2b1810',
-                letterSpacing: '0.5px',
-                textAlign: 'right',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
+          {/* Pallet Confirmation Section (Chỉ hiển thị khi Kiểm tra lần đầu) */}
+          {!isReInspect && (
+            <div style={{ marginTop: '8px', width: '100%', boxSizing: 'border-box' }}>
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '14px',
+                fontWeight: '500',
+                color: '#0f172a',
+                cursor: 'pointer',
+                marginBottom: '12px'
               }}>
-                {palletCode || 'DA7819'}
-              </span>
+                <input
+                  type="checkbox"
+                  checked={confirmCheck}
+                  onChange={(e) => setConfirmCheck(e.target.checked)}
+                  style={{
+                    width: '18px',
+                    height: '18px',
+                    accentColor: '#3b2314',
+                    cursor: 'pointer',
+                    flexShrink: 0
+                  }}
+                />
+                <span>Xác nhận hoàn thành kiểm tra cho mã Pallet:</span>
+              </label>
+
+              {/* Pallet Code Creation & Display Row */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+                padding: '0 4px',
+                width: '100%',
+                boxSizing: 'border-box'
+              }}>
+                <button
+                  type="button"
+                  onClick={handleCreatePalletClick}
+                  disabled={creating}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    backgroundColor: creating ? '#64748b' : '#3b2314',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '10px',
+                    padding: '10px 16px',
+                    fontSize: '14px',
+                    fontWeight: '700',
+                    cursor: creating ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 4px 10px rgba(59, 35, 20, 0.25)',
+                    transition: 'all 0.2s ease',
+                    flexShrink: 0,
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  {creating ? (
+                    <>
+                      <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Đang tạo...
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart size={16} /> Tạo mã pallet
+                    </>
+                  )}
+                </button>
+
+                <span style={{
+                  fontSize: '28px',
+                  fontWeight: '900',
+                  color: '#2b1810',
+                  letterSpacing: '0.5px',
+                  textAlign: 'right',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap'
+                }}>
+                  {palletCode || 'DA7819'}
+                </span>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Footer Actions */}
@@ -408,8 +410,8 @@ const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, 
           </button>
           <button
             type="button"
-            disabled={!confirmCheck}
-            onClick={() => onConfirm({ ...summary, palletCode: palletCode || 'DA7819', confirmed: confirmCheck })}
+            disabled={!isReInspect && !confirmCheck}
+            onClick={() => onConfirm({ ...summary, palletCode: palletCode || '', confirmed: isReInspect || confirmCheck })}
             style={{
               flex: 1,
               padding: '12px',
@@ -419,9 +421,9 @@ const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, 
               color: '#ffffff',
               fontSize: '15px',
               fontWeight: '700',
-              cursor: confirmCheck ? 'pointer' : 'not-allowed',
-              opacity: confirmCheck ? 1 : 0.45,
-              boxShadow: confirmCheck ? '0 4px 12px rgba(59, 35, 20, 0.3)' : 'none'
+              cursor: (isReInspect || confirmCheck) ? 'pointer' : 'not-allowed',
+              opacity: (isReInspect || confirmCheck) ? 1 : 0.45,
+              boxShadow: (isReInspect || confirmCheck) ? '0 4px 12px rgba(59, 35, 20, 0.3)' : 'none'
             }}
           >
             Xác nhận

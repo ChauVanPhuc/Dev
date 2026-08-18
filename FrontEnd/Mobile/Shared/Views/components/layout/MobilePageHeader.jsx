@@ -68,7 +68,7 @@ const getMatchedScreen = (screensMap, path) => {
 
  */
 
-const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
+const PageHeader = ({ title, subTitle, showBack = false, headerRef, onBackClick }) => {
 
   const toggleSidebar = useUiStore((state) => state.toggleSidebar)
 
@@ -502,7 +502,7 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef }) => {
 
           id="header-menu-btn"
 
-          onClick={showBack ? () => navigate(-1) : toggleSidebar}
+          onClick={showBack ? (onBackClick ? onBackClick : () => navigate(-1)) : toggleSidebar}
 
           style={{
 
