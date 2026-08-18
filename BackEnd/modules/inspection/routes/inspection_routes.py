@@ -29,6 +29,7 @@ from modules.inspection.models.daily_inspection import DailyInspectionRecord, Da
 from modules.inspection.models.stage_inspection import StageInspection
 from modules.inspection.schemas.stage_inspection import StageInspectionCreate, StageInspectionRead
 from modules.auth.models.accounts import Account
+from modules.auth.models.departments import Department
 from shared.utils.string_cleaner import clean_and_standardize_name
 
 router = APIRouter()
@@ -1690,9 +1691,36 @@ def get_defect_types(
         query = query.filter(DefectType.category == category)
     
     target_dept = department or stage
-    if target_dept:
-        query = query.filter(DefectType.stage.ilike(f"%{target_dept}%"))
-        
+
+    # Tự động lấy bộ phận từ tài khoản nếu user_id được truyền lên mà chưa có department/stage
+    if not target_dept and user_id:
+        acc = db.query(Account).filter(Account.id == user_id).first()
+        if acc:
+            dept_name = None
+            if acc.department_id:
+                dept_obj = db.query(Department).filter(Department.id == acc.department_id).first()
+                if dept_obj and dept_obj.name:
+                    dept_name = dept_obj.name
+            if not dept_name:
+                dept_obj = db.query(Department).filter(Department.account_id == acc.id).first()
+                if dept_obj and dept_obj.name:
+                    dept_name = dept_obj.name
+            if dept_name:
+                target_dept = dept_name
+
+    if target_dept and target_dept.strip():
+        target_clean = target_dept.strip().lower()
+        if target_clean not in ['tat ca', 'tất cả', 'all', 'admin', 'quan ly', 'quản lý']:
+            query = query.filter(
+                or_(
+                    DefectType.stage.is_(None),
+                    DefectType.stage == '',
+                    DefectType.stage.ilike('%Tất cả%'),
+                    DefectType.stage.ilike('%All%'),
+                    DefectType.stage.ilike(f"%{target_dept}%")
+                )
+            )
+
     defects = query.all()
     
     # Nếu có user_id, lấy danh sách ID lỗi mà user này đang track

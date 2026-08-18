@@ -82,7 +82,6 @@ const InspectionStepsTable = ({ steps = [], onStepChange, sampleQty, disabled = 
               <th style={{ width: '42px', textAlign: 'center', color: '#ffffff' }}>Bước</th>
               <th style={{ width: '38%', textAlign: 'left', color: '#ffffff' }}>Mô tả</th>
               <th style={{ textAlign: 'left', color: '#ffffff' }}>Tiêu chuẩn</th>
-              <th style={{ width: '36px', textAlign: 'center', color: '#ffffff' }}>SL</th>
               <th style={{ width: '78px', textAlign: 'center', color: '#ffffff' }}>Kết quả</th>
             </tr>
           </thead>
@@ -91,7 +90,6 @@ const InspectionStepsTable = ({ steps = [], onStepChange, sampleQty, disabled = 
               const hasSubSteps = Array.isArray(step.sub_steps) && step.sub_steps.length > 0
               const hasImages = Array.isArray(step.images) && step.images.length > 0
               const stepResult = step.result || 'pass'
-              const displayQty = step.qty || sampleQty || 1
 
               // Tên bước ngắn gọn (làm sạch HTML)
               const rawTitle = step.title || `Bước ${step.step_no || idx + 1}`
@@ -156,12 +154,7 @@ const InspectionStepsTable = ({ steps = [], onStepChange, sampleQty, disabled = 
                     )}
                   </td>
 
-                  {/* Cột 4: SL */}
-                  <td className="pv2-sop-td-qty" style={{ textAlign: 'center' }}>
-                    <span className="pv2-sop-qty-num-text">{displayQty}</span>
-                  </td>
-
-                  {/* Cột 5: Kết quả (Đạt - xanh lá / Không đạt - đỏ) */}
+                  {/* Cột 4: Kết quả (Đạt - xanh lá / Không đạt - đỏ) */}
                   <td className="pv2-sop-td-result" style={{ textAlign: 'center' }}>
                     <button
                       type="button"
