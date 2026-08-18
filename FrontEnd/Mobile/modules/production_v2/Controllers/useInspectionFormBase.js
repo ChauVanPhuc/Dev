@@ -94,10 +94,10 @@ const isStageMatching = (selectedStage, targetStage) => {
 }
 
 const DEFAULT_FALLBACK_DEFECTS = [
-  { id: 'def_1', code: 'STR-001', name: 'Ráp Lệch/Hở', category: 'Lắp ráp', isCTQ: true, needs_tracking: true },
+  { id: 'def_1', code: 'STR-001', name: 'Ráp Lệch/Hở', category: 'Lắp ráp', isCTQ: false, needs_tracking: true },
   { id: 'def_2', code: 'SUR-002', name: 'Trầy Xước Bề Mặt', category: 'Ngoại quan', isCTQ: false, needs_tracking: true },
   { id: 'def_3', code: 'CLR-003', name: 'Lệch Màu Sơn/Ố Màu', category: 'Sơn', isCTQ: false, needs_tracking: true },
-  { id: 'def_4', code: 'DIM-004', name: 'Sai Kích Thước Khung', category: 'Tạo phôi', isCTQ: true, needs_tracking: true },
+  { id: 'def_4', code: 'DIM-004', name: 'Sai Kích Thước Khung', category: 'Tạo phôi', isCTQ: false, needs_tracking: true },
   { id: 'def_5', code: 'WOD-005', name: 'Nứt/Mẻ Gỗ', category: 'Vật tư', isCTQ: false, needs_tracking: false },
   { id: 'def_6', code: 'HARD-006', name: 'Thiếu/Hỏng Phụ Kiện Tay Nắm', category: 'Phụ kiện', isCTQ: false, needs_tracking: false },
   { id: 'def_7', code: 'PKG-007', name: 'Lỗi Đóng Gói/Rách Thùng', category: 'Đóng gói', isCTQ: false, needs_tracking: false },
