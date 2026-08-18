@@ -216,12 +216,17 @@ const ProductionOrderCreateView = () => {
     return val;
   };
 
-  // Fetch Purchase Requisitions
+  // Fetch Purchase Requisitions with backend search support
   useEffect(() => {
+    let isMounted = true;
     const fetchPOList = async () => {
       try {
-        const res = await purchasingService.getRequisitions({ limit: 100, order_type: 'Đơn bán hàng' }).catch(() => null);
-        if (res && res.items) {
+        const params = { limit: 100, order_type: 'Đơn bán hàng' };
+        if (poSearch.trim()) {
+          params.search = poSearch.trim();
+        }
+        const res = await purchasingService.getRequisitions(params).catch(() => null);
+        if (isMounted && res && res.items) {
           const salesOrders = res.items.filter(item => {
             const typeStr = (item.order_type || item.type || '').toLowerCase();
             return !typeStr || typeStr.includes('bán');
@@ -232,8 +237,16 @@ const ProductionOrderCreateView = () => {
         console.warn('Lỗi lấy danh sách Đơn bán hàng:', err);
       }
     };
-    fetchPOList();
-  }, []);
+
+    const timer = setTimeout(() => {
+      fetchPOList();
+    }, 250);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [poSearch]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -687,14 +700,15 @@ const ProductionOrderCreateView = () => {
       return true;
     });
 
-    if (!poSearch.trim()) return salesOnly.slice(0, 15);
-    const term = poSearch.toLowerCase();
+    if (!poSearch.trim()) return salesOnly.slice(0, 20);
+    const term = poSearch.toLowerCase().trim();
     return salesOnly.filter(po =>
-      (po.po_code && po.po_code.toLowerCase().includes(term)) ||
-      (po.supplier_name && po.supplier_name.toLowerCase().includes(term)) ||
-      (po.customer && po.customer.toLowerCase().includes(term)) ||
-      (po.order_code && po.order_code.toLowerCase().includes(term))
-    ).slice(0, 15);
+      String(po.po_code || '').toLowerCase().includes(term) ||
+      String(po.supplier_name || '').toLowerCase().includes(term) ||
+      String(po.customer || '').toLowerCase().includes(term) ||
+      String(po.order_code || '').toLowerCase().includes(term) ||
+      String(po.id || '').includes(term)
+    ).slice(0, 20);
   }, [purchaseRequisitions, poSearch]);
 
   const currentProduct = useMemo(() => {
