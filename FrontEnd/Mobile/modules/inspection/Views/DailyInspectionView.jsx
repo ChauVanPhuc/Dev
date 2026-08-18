@@ -155,27 +155,10 @@ const DailyInspection = () => {
         });
         setCounts(initialCounts);
       } catch (err) {
-        console.error("Lỗi khi tải danh mục lỗi, sử dụng dữ liệu mặc định:", err);
-        const fallbackData = [
-          { id: 101, name: 'Bề mặt xước', category: 'visual', needs_tracking: true, is_active: true },
-          { id: 102, name: 'Lệch màu', category: 'visual', needs_tracking: true, is_active: true },
-          { id: 103, name: 'Bọt khí', category: 'visual', needs_tracking: false, is_active: true },
-          { id: 104, name: 'Rỗ bề mặt', category: 'visual', needs_tracking: false, is_active: true },
-          { id: 201, name: 'Sai kích thước bao', category: 'structure', needs_tracking: true, is_active: true },
-          { id: 202, name: 'Móp méo góc', category: 'structure', needs_tracking: false, is_active: true },
-          { id: 203, name: 'Độ dày không đều', category: 'structure', needs_tracking: false, is_active: true },
-          { id: 301, name: 'Lẫn tạp chất', category: 'material', needs_tracking: true, is_active: true },
-          { id: 302, name: 'Ẩm mốc', category: 'material', needs_tracking: false, is_active: true },
-          { id: 303, name: 'Nứt vân', category: 'material', needs_tracking: false, is_active: true },
-        ];
-        setDefectTypes(fallbackData);
-        const allIds = fallbackData.map(d => d.id);
-        setVisibleDefectIds(allIds);
-        const initialCounts = {};
-        fallbackData.forEach(d => {
-          initialCounts[d.id] = 0;
-        });
-        setCounts(initialCounts);
+        console.error("Lỗi khi tải danh mục lỗi từ database:", err);
+        setDefectTypes([]);
+        setVisibleDefectIds([]);
+        setCounts({});
       }
     };
     fetchDefectTypes();

@@ -93,15 +93,7 @@ const isStageMatching = (selectedStage, targetStage) => {
   })
 }
 
-const DEFAULT_FALLBACK_DEFECTS = [
-  { id: 'def_1', code: 'STR-001', name: 'Ráp Lệch/Hở', category: 'Lắp ráp', isCTQ: false, needs_tracking: true },
-  { id: 'def_2', code: 'SUR-002', name: 'Trầy Xước Bề Mặt', category: 'Ngoại quan', isCTQ: false, needs_tracking: true },
-  { id: 'def_3', code: 'CLR-003', name: 'Lệch Màu Sơn/Ố Màu', category: 'Sơn', isCTQ: false, needs_tracking: true },
-  { id: 'def_4', code: 'DIM-004', name: 'Sai Kích Thước Khung', category: 'Tạo phôi', isCTQ: false, needs_tracking: true },
-  { id: 'def_5', code: 'WOD-005', name: 'Nứt/Mẻ Gỗ', category: 'Vật tư', isCTQ: false, needs_tracking: false },
-  { id: 'def_6', code: 'HARD-006', name: 'Thiếu/Hỏng Phụ Kiện Tay Nắm', category: 'Phụ kiện', isCTQ: false, needs_tracking: false },
-  { id: 'def_7', code: 'PKG-007', name: 'Lỗi Đóng Gói/Rách Thùng', category: 'Đóng gói', isCTQ: false, needs_tracking: false },
-]
+const DEFAULT_FALLBACK_DEFECTS = []
 
 export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) => {
   const { id } = useParams()
@@ -380,6 +372,32 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
       defect_type_id: d.defect_type_id,
     }))
   }, [combinedDefects])
+
+  // Tự động hiện sẵn các lỗi QA Track / QC Track / CTQ vào danh sách ghi nhận lỗi
+  useEffect(() => {
+    if (readOnly || !isNew) return
+    if (!defectOptions || defectOptions.length === 0) return
+
+    const trackedOpts = defectOptions.filter(
+      (opt) => opt.isQA || opt.isCTQ || opt.needs_tracking || opt.qc_tracking || opt.is_tracked_by_me
+    )
+    if (trackedOpts.length === 0) return
+
+    setErrors((prevErrors) => {
+      const hasRealSelection = prevErrors.some(
+        (e) => e.defectId || e.code || (e.name && e.name.trim() !== '') || Number(e.qty) > 0
+      )
+      if (hasRealSelection) return prevErrors
+
+      return trackedOpts.map((opt, idx) => ({
+        id: `auto_tracked_${opt.id}_${idx}`,
+        defectId: opt.id || opt.value,
+        code: opt.code || '',
+        name: opt.name,
+        qty: 0,
+      }))
+    })
+  }, [defectOptions, readOnly, isNew])
 
   const [modalConfig, setModalConfig] = useState({
     isOpen: false,
