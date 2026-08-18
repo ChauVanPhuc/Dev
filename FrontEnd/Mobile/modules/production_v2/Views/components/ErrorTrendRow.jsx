@@ -15,14 +15,7 @@ const ErrorTrendRow = ({
   const listContainerRef = useRef(null)
   const selectedItemRef = useRef(null)
 
-  const [isCustomMode, setIsCustomMode] = useState(() => {
-    if (!row.name) return false
-    if (!defectOptions || defectOptions.length === 0) return true
-    const found = defectOptions.some(
-      (opt) => opt.code === row.code || opt.name === row.name || String(opt.value) === String(row.defectId)
-    )
-    return !found
-  })
+  const [userCustomMode, setUserCustomMode] = useState(false)
 
   // Đóng dropdown khi click bên ngoài
   useEffect(() => {
@@ -114,26 +107,31 @@ const ErrorTrendRow = ({
     )
   }, [processedOptions, searchTerm])
 
-  // Option đang được chọn hiện tại
+  // Option đang được chọn hiện tại (luôn khớp với danh mục nếu có match)
   const currentSelectedOpt = useMemo(() => {
-    if (isCustomMode) return null
+    if (userCustomMode) return null
+    const optsToSearch = processedOptions.length > 0 ? processedOptions : defectOptions
+    if (!optsToSearch || optsToSearch.length === 0) return null
+
     if (row.defectId) {
-      const matchId = processedOptions.find((opt) => String(opt.value) === String(row.defectId) || String(opt.id) === String(row.defectId))
+      const matchId = optsToSearch.find((opt) => String(opt.value || opt.id) === String(row.defectId))
       if (matchId) return matchId
     }
     if (row.code) {
-      const matchCode = processedOptions.find((opt) => opt.code === row.code)
+      const matchCode = optsToSearch.find((opt) => opt.code === row.code)
       if (matchCode) return matchCode
     }
     if (row.name) {
-      const matchName = processedOptions.find((opt) => opt.name === row.name)
+      const matchName = optsToSearch.find((opt) => opt.name === row.name)
       if (matchName) return matchName
     }
     return null
-  }, [row, processedOptions, isCustomMode])
+  }, [row, processedOptions, defectOptions, userCustomMode])
+
+  const isCustomMode = userCustomMode || (!currentSelectedOpt && Boolean(row.name && row.name.trim()))
 
   const handleSelectOption = (opt) => {
-    setIsCustomMode(false)
+    setUserCustomMode(false)
     setIsOpen(false)
     setSearchTerm('')
     if (opt) {
@@ -143,13 +141,13 @@ const ErrorTrendRow = ({
           defectId: opt.id || opt.value,
           code: opt.code || '',
           name: opt.name,
-          qty: row.qty && row.qty > 0 ? row.qty : 1,
+          qty: row.qty && row.qty > 0 ? row.qty : 0,
         })
     }
   }
 
   const handleSwitchToCustom = () => {
-    setIsCustomMode(true)
+    setUserCustomMode(true)
     setIsOpen(false)
     setSearchTerm('')
     onChange && onChange({ ...row, defectId: null, code: '', name: row.name || '' })

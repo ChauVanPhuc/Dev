@@ -373,7 +373,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     }))
   }, [combinedDefects])
 
-  // Tự động hiện sẵn các lỗi QA Track / QC Track / CTQ vào danh sách ghi nhận lỗi
+  // Tự động hiện sẵn các lỗi QA Track / QC Track / CTQ theo công đoạn hiện tại vào danh sách ghi nhận lỗi
   useEffect(() => {
     if (readOnly || !isNew) return
     if (!defectOptions || defectOptions.length === 0) return
@@ -384,18 +384,28 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     if (trackedOpts.length === 0) return
 
     setErrors((prevErrors) => {
-      const hasRealSelection = prevErrors.some(
-        (e) => e.defectId || e.code || (e.name && e.name.trim() !== '') || Number(e.qty) > 0
+      // Giữ lại các dòng người dùng đã nhập số lượng > 0 hoặc dòng tự gõ lỗi thủ công
+      const userEditedRows = prevErrors.filter(
+        (e) => Number(e.qty) > 0 || (!e.defectId && e.name && e.name.trim() !== '')
       )
-      if (hasRealSelection) return prevErrors
 
-      return trackedOpts.map((opt, idx) => ({
+      const autoRows = trackedOpts.map((opt, idx) => ({
         id: `auto_tracked_${opt.id}_${idx}`,
         defectId: opt.id || opt.value,
         code: opt.code || '',
         name: opt.name,
         qty: 0,
       }))
+
+      if (userEditedRows.length > 0) {
+        const autoDefectIds = new Set(autoRows.map((a) => String(a.defectId)))
+        const extraUserRows = userEditedRows.filter(
+          (u) => !u.defectId || !autoDefectIds.has(String(u.defectId))
+        )
+        return [...autoRows, ...extraUserRows]
+      }
+
+      return autoRows
     })
   }, [defectOptions, readOnly, isNew])
 
