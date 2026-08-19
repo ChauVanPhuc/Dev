@@ -18,7 +18,7 @@ import {
   AlertCircle,
   X
 } from 'lucide-react';
-import api from '@webShared/Services/api.service';
+import api, { getBaseURL } from '@webShared/Services/api.service';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import AddComponentModal from '../Detail/modals/AddComponentModal';
@@ -718,63 +718,161 @@ const ProductCreateView = () => {
     setBomRows(prev => prev.filter(row => row.id !== id));
   };
 
-  // Xử lý Dán từ Excel (Paste Modal)
+  // Xử lý Dán từ Excel (Paste Modal) thông minh & chính xác
   const handlePasteExcel = () => {
     if (!pasteText.trim()) return;
 
-    const lines = pasteText.split('\n');
+    const lines = pasteText.trim().split('\n');
     let firstRowProductInfo = null;
+    const unitKeywords = ['cái', 'm3', 'm³', 'bộ', 'pcs', 'mét', 'm', 'kg', 'tấm', 'thanh', 'bịch', 'cuộn', 'lon', 'hộp'];
+    const stageKeywords = ['phôi', 'cắt', 'định hình', 'chà', 'nhám', 'lắp', 'sơn', 'qc', 'kiểm', 'gói', 'đóng gói', 'kho', 'lưu kho', 'nm1', 'nm2', 'nm3'];
 
     const newRows = lines.map((line, index) => {
-      const cells = line.split('\t');
-      if (cells.length < 3) return null;
+      const trimmedLine = line.trim();
+      if (!trimmedLine) return null;
+      const cells = trimmedLine.split('\t').map(c => c.trim());
+      if (cells.length < 2) return null;
 
-      // Nhận diện đơn vị mốc
+      // Bỏ qua dòng tiêu đề nếu người dùng copy cả header
+      const headerCheck = cells.join(' ').toLowerCase();
+      if (
+        (headerCheck.includes('tên thành phẩm') || headerCheck.includes('tên chi tiết') || headerCheck.includes('mã linh kiện')) &&
+        (headerCheck.includes('stt') || headerCheck.includes('đơn vị') || headerCheck.includes('quy cách'))
+      ) {
+        return null;
+      }
+
+      let sttVal = String(index + 1);
+      let compCode = '';
+      let compName = '';
+      let unit = 'Cái';
+      let quantity = 1;
+      let material = 'Gỗ / MDF';
+      let spec = '';
+      let length = 0;
+      let width = 0;
+      let height = 0;
+      let volume = '1';
+      let stageFrom = 'Định hình';
+      let stageTo = 'Lắp ráp';
+      let note = '';
+
+      // 1. Nhận diện STT ở cột 0 nếu có dạng số / phân cấp (1, 1.1, 1.2, 1.10...)
+      let colOffset = 0;
+      if (/^(\d+(\.\d+)*)$/.test(cells[0])) {
+        sttVal = cells[0];
+        colOffset = 1;
+      }
+
+      // 2. Tìm cột Đơn vị tính (ĐVT)
       let uIdx = -1;
-      const unitKeywords = ['cái', 'm3', 'bộ', 'pcs', 'mét', 'kg', 'tấm', 'thanh'];
-      for (let i = 0; i < Math.min(cells.length, 15); i++) {
-        const val = (cells[i] || '').toLowerCase().trim();
-        if (unitKeywords.includes(val)) {
+      for (let i = 0; i < cells.length; i++) {
+        if (unitKeywords.includes(cells[i].toLowerCase())) {
           uIdx = i;
+          unit = cells[i];
           break;
         }
       }
 
-      const unitIdx = uIdx > 0 ? uIdx : 5;
-      const nameIdx = unitIdx - 1;
-      const skuIdx = unitIdx - 2 >= 0 ? unitIdx - 2 : 0;
-      const specIdx = unitIdx + 1;
-      const qtyIdx = unitIdx + 2;
+      if (uIdx !== -1) {
+        // Nếu có ĐVT: Những cột trước ĐVT thường là STT, Mã, Tên
+        const beforeUnit = cells.slice(colOffset, uIdx);
+        if (beforeUnit.length === 1) {
+          compName = beforeUnit[0];
+        } else if (beforeUnit.length >= 2) {
+          compCode = beforeUnit[0];
+          compName = beforeUnit.slice(1).join(' ');
+        }
 
-      const childSku = cells[skuIdx]?.trim() || '';
-      const childName = cells[nameIdx]?.trim() || cells[1]?.trim() || '';
-      const childUnit = cells[unitIdx]?.trim() || 'Cái';
+        // Xử lý các cột sau ĐVT
+        const afterUnit = cells.slice(uIdx + 1);
+        const stagesFound = [];
+        
+        afterUnit.forEach(cell => {
+          if (!cell) return;
+          const lowerCell = cell.toLowerCase();
+          
+          // Kiểm tra xem có phải Công đoạn không
+          if (stageKeywords.some(kw => lowerCell.includes(kw))) {
+            stagesFound.push(cell);
+          }
+          // Kiểm tra xem có phải Quy cách (D*R*C hoặc D x R x C)
+          else if (/^\d+(\.\d+)?\s*[*xX]\s*\d+(\.\d+)?(\s*[*xX]\s*\d+(\.\d+)?)?$/.test(cell)) {
+            spec = cell;
+            const dims = cell.split(/[*xX]/).map(v => parseFloat(v.trim()) || 0);
+            if (dims.length >= 1) length = dims[0];
+            if (dims.length >= 2) width = dims[1];
+            if (dims.length >= 3) height = dims[2];
+          }
+          // Kiểm tra thể tích (dạng 0.0008...)
+          else if (/^0\.\d{3,}$/.test(cell)) {
+            volume = cell;
+          }
+          // Kiểm tra số lượng (số nguyên hoặc số nhỏ)
+          else if (/^\d+(\.\d+)?$/.test(cell) && quantity === 1 && parseFloat(cell) > 0 && parseFloat(cell) <= 1000) {
+            quantity = parseFloat(cell);
+          }
+          // Kiểm tra vật liệu
+          else if (lowerCell.includes('gỗ') || lowerCell.includes('mdf') || lowerCell.includes('fbt') || lowerCell.includes('sồi') || lowerCell.includes('veneer') || lowerCell.includes('vải')) {
+            material = cell;
+          }
+          // Khác: ghi chú
+          else if (!note) {
+            note = cell;
+          }
+        });
 
-      if (!childName || childName === 'Tên chi tiết' || childName === 'Tên thành phẩm' || childName === 'Tên mặt hàng') return null;
-
-      if (!firstRowProductInfo && cells[0] && cells[1]) {
-        firstRowProductInfo = {
-          sku: cells[0].trim(),
-          name: cells[1].trim()
-        };
+        if (stagesFound.length >= 2) {
+          stageFrom = stagesFound[0];
+          stageTo = stagesFound[1];
+        } else if (stagesFound.length === 1) {
+          stageFrom = stagesFound[0];
+        }
+      } else {
+        // Fallback theo thứ tự cột chuẩn
+        compCode = cells[1] || `SKU-${index + 1}`;
+        compName = cells[2] || cells[1] || '';
+        unit = cells[3] || 'Cái';
+        quantity = parseFloat(cells[4]) || 1;
+        spec = cells[5] || '';
+        material = cells[6] || 'Gỗ / MDF';
+        stageFrom = cells[cells.length - 2] || 'Định hình';
+        stageTo = cells[cells.length - 1] || 'Lắp ráp';
       }
 
-      const sttVal = cells[0]?.trim() || String(index + 1);
+      if (!compName) compName = compCode || `Chi tiết ${sttVal}`;
+      if (!compCode) compCode = `${formData.sku || 'SKU'}.${sttVal}`;
+
+      const isRoot = sttVal === '1' || sttVal === '1.0';
+
+      if (isRoot && !firstRowProductInfo) {
+        firstRowProductInfo = {
+          sku: compCode,
+          name: compName,
+          length,
+          width,
+          height,
+          spec
+        };
+      }
 
       return {
         id: Date.now() + index,
         stt: sttVal,
-        type: 'Chi tiết',
-        stageFrom: (cells[cells.length - 2] || '').trim() || 'Định hình',
-        stageTo: (cells[cells.length - 1] || '').trim() || 'Lắp ráp',
-        compCode: childSku || `SKU-${index + 1}`,
-        compName: childName,
-        quantity: parseFloat(cells[qtyIdx]) || 1,
-        unit: childUnit,
-        material: cells[specIdx] || 'Gỗ / MDF',
-        spec: cells[specIdx] || '',
-        volume: '1',
-        note: ''
+        type: isRoot ? 'Sản phẩm' : 'Chi tiết',
+        stageFrom: isRoot ? 'Đóng gói' : stageFrom,
+        stageTo: isRoot ? 'Lưu kho' : stageTo,
+        compCode: compCode,
+        compName: compName,
+        quantity: quantity,
+        unit: unit,
+        material: material,
+        spec: spec,
+        length: length,
+        width: width,
+        height: height,
+        volume: volume,
+        note: note
       };
     }).filter(r => r !== null);
 
@@ -782,8 +880,11 @@ const ProductCreateView = () => {
       if (firstRowProductInfo) {
         setFormData(prev => ({
           ...prev,
-          name: prev.name || firstRowProductInfo.name,
-          sku: prev.sku || firstRowProductInfo.sku
+          name: firstRowProductInfo.name || prev.name,
+          sku: firstRowProductInfo.sku || prev.sku,
+          length: firstRowProductInfo.length ? String(firstRowProductInfo.length) : prev.length,
+          width: firstRowProductInfo.width ? String(firstRowProductInfo.width) : prev.width,
+          height: firstRowProductInfo.height ? String(firstRowProductInfo.height) : prev.height,
         }));
       }
       setBomRows(newRows);
@@ -796,23 +897,56 @@ const ProductCreateView = () => {
   };
 
   // Upload Ảnh chính và Thumbnail
-  const handleImageUpload = (e, isMain = true, thumbIndex = 0) => {
+  const handleImageUpload = async (e, isMain = true, thumbIndex = 0) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      if (isMain) {
-        setMainImage(reader.result);
-      } else {
-        setSubImages(prev => {
-          const updated = [...prev];
-          updated[thumbIndex] = reader.result;
-          return updated;
-        });
+    // Hiển thị preview ngay lập tức
+    const previewUrl = URL.createObjectURL(file);
+    if (isMain) {
+      setMainImage(previewUrl);
+    } else {
+      setSubImages(prev => {
+        const updated = [...prev];
+        updated[thumbIndex] = previewUrl;
+        return updated;
+      });
+    }
+
+    // Tải ảnh trực tiếp lên Backend /master-products/upload-image
+    try {
+      const uploadFormData = new FormData();
+      uploadFormData.append('file', file);
+      const res = await api.post('/master-products/upload-image', uploadFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      if (res && res.url) {
+        if (isMain) {
+          setMainImage(res.url);
+        } else {
+          setSubImages(prev => {
+            const updated = [...prev];
+            updated[thumbIndex] = res.url;
+            return updated;
+          });
+        }
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (error) {
+      console.warn('Lỗi khi upload ảnh lên server, chuyển sang base64 fallback:', error);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (isMain) {
+          setMainImage(reader.result);
+        } else {
+          setSubImages(prev => {
+            const updated = [...prev];
+            updated[thumbIndex] = reader.result;
+            return updated;
+          });
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   // Lọc danh sách BOM hiển thị theo từ khóa tìm kiếm
@@ -855,6 +989,7 @@ const ProductCreateView = () => {
         specification: formData.note,
         description: formData.note,
         status: formData.bomStatus,
+        image_url: mainImage,
         master_bom_details: bomRows
           .filter(r => (r.compName && r.compName.trim() !== '') || (r.compCode && r.compCode.trim() !== ''))
           .map(r => ({
@@ -1030,7 +1165,43 @@ const ProductCreateView = () => {
                 }}
               >
                 {mainImage ? (
-                  <img src={mainImage} alt="Main Product" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <>
+                    <img
+                      src={mainImage.startsWith('/') ? `${getBaseURL().replace(/\/api\/v1\/?$/, '')}${mainImage}` : mainImage}
+                      alt="Main Product"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMainImage(null);
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                      }}
+                      style={{
+                        position: 'absolute',
+                        top: '6px',
+                        right: '6px',
+                        backgroundColor: 'rgba(239, 68, 68, 0.9)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '50%',
+                        width: '24px',
+                        height: '24px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                        fontSize: '14px',
+                        fontWeight: 'bold',
+                        zIndex: 10
+                      }}
+                      title="Xóa ảnh"
+                    >
+                      ×
+                    </button>
+                  </>
                 ) : (
                   <>
                     <Box size={52} style={{ strokeWidth: 1.5 }} />

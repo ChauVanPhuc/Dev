@@ -18,7 +18,7 @@ import {
   Palette,
   Layers
 } from 'lucide-react';
-import api from '@webShared/Services/api.service';
+import api, { getBaseURL } from '@webShared/Services/api.service';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import AddComponentModal from './modals/AddComponentModal';
@@ -61,6 +61,11 @@ const ProductDetailView = () => {
   const [selectedParentId, setSelectedParentId] = useState(null);
   const [detailRows, setDetailRows] = useState([]);
   const [paintColorRows, setPaintColorRows] = useState([]);
+
+  // Image Upload Preview State
+  const [mainImage, setMainImage] = useState(null);
+  const [subImages, setSubImages] = useState([null, null, null]);
+  const fileInputRef = useRef(null);
 
   // Gợi ý tên thành phẩm từ master_product_details
   const [detailSuggestions, setDetailSuggestions] = useState([]);
@@ -350,6 +355,7 @@ const ProductDetailView = () => {
 
       if (data && (data.id || data.sku || data.product_code || data.name)) {
         setProduct(data);
+        setMainImage(data.image_url || null);
 
         const formattedDate = data.adjusted_date
           ? data.adjusted_date
@@ -823,6 +829,63 @@ const ProductDetailView = () => {
     if (toast) toast('success', 'Đã xóa dòng chi tiết khỏi BOM!');
   };
 
+  // Upload Ảnh chính và Thumbnail cho sản phẩm
+  const handleImageUpload = async (e, isMain = true, thumbIndex = 0) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Hiển thị preview ngay lập tức
+    const previewUrl = URL.createObjectURL(file);
+    if (isMain) {
+      setMainImage(previewUrl);
+    } else {
+      setSubImages(prev => {
+        const updated = [...prev];
+        updated[thumbIndex] = previewUrl;
+        return updated;
+      });
+    }
+
+    // Tải ảnh trực tiếp lên Backend /master-products/upload-image
+    try {
+      const uploadFormData = new FormData();
+      uploadFormData.append('file', file);
+      const res = await api.post('/master-products/upload-image', uploadFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      if (res && res.url) {
+        if (isMain) {
+          setMainImage(res.url);
+          // Tự động cập nhật ngay URL ảnh vào sản phẩm
+          await api.put(`/master-products/${id}`, { image_url: res.url }).catch(() => {});
+        } else {
+          setSubImages(prev => {
+            const updated = [...prev];
+            updated[thumbIndex] = res.url;
+            return updated;
+          });
+        }
+        if (toast) toast('success', 'Đã tải lên ảnh sản phẩm thành công!');
+      }
+    } catch (error) {
+      console.warn('Lỗi khi upload ảnh lên server, chuyển sang base64 fallback:', error);
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        if (isMain) {
+          setMainImage(reader.result);
+          await api.put(`/master-products/${id}`, { image_url: reader.result }).catch(() => {});
+        } else {
+          setSubImages(prev => {
+            const updated = [...prev];
+            updated[thumbIndex] = reader.result;
+            return updated;
+          });
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSaveInfo = async () => {
     try {
       const parsedPrice = parseFloat(String(formData.estimatedCost || '0').replace(/\./g, '').replace(/,/g, '').replace(/[^\d.]/g, '')) || 0;
@@ -843,6 +906,7 @@ const ProductDetailView = () => {
         specification: formData.note,
         description: formData.note,
         status: formData.bomStatus,
+        image_url: mainImage,
         master_bom_details: bomRows
       });
 
@@ -1090,41 +1154,105 @@ const ProductDetailView = () => {
 
             {/* Khung Ảnh Sản Phẩm (Ảnh chính + 3 Thumbnail Phụ xếp dọc bên phải) */}
             <div style={{ display: 'flex', gap: '6px' }}>
+              <input
+                type="file"
+                ref={fileInputRef}
+                style={{ display: 'none' }}
+                accept="image/*"
+                onChange={(e) => handleImageUpload(e, true)}
+              />
+
               {/* Ô ảnh chính vuông lớn */}
-              <div style={{
-                width: '240px',
-                height: '165px',
-                backgroundColor: '#F8FAFC',
-                border: '1.5px dashed #CBD5E1',
-                borderRadius: '10px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexDirection: 'column',
-                color: '#94A3B8'
-              }}>
-                <Box size={52} style={{ strokeWidth: 1.5 }} />
-                <span style={{ fontSize: '0.72rem', fontWeight: '600', marginTop: '4px' }}>Hình sản phẩm</span>
+              <div
+                onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                style={{
+                  width: '240px',
+                  height: '165px',
+                  backgroundColor: '#F8FAFC',
+                  border: mainImage ? '1.5px solid #5D3B32' : '1.5px dashed #CBD5E1',
+                  borderRadius: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'column',
+                  color: '#94A3B8',
+                  cursor: 'pointer',
+                  overflow: 'hidden',
+                  position: 'relative'
+                }}
+              >
+                {mainImage ? (
+                  <>
+                    <img
+                      src={mainImage.startsWith('/') ? `${getBaseURL().replace(/\/api\/v1\/?$/, '')}${mainImage}` : mainImage}
+                      alt="Main Product"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        setMainImage(null);
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                        await api.put(`/master-products/${id}`, { image_url: '' }).catch(() => {});
+                        if (toast) toast('info', 'Đã xóa ảnh sản phẩm');
+                      }}
+                      style={{
+                        position: 'absolute',
+                        top: '6px',
+                        right: '6px',
+                        backgroundColor: 'rgba(239, 68, 68, 0.9)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '50%',
+                        width: '24px',
+                        height: '24px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                        fontSize: '14px',
+                        fontWeight: 'bold',
+                        zIndex: 10
+                      }}
+                      title="Xóa ảnh"
+                    >
+                      ×
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Box size={52} style={{ strokeWidth: 1.5 }} />
+                    <span style={{ fontSize: '0.72rem', fontWeight: '600', marginTop: '4px' }}>Tải ảnh chính</span>
+                  </>
+                )}
               </div>
 
               {/* 3 Ô ảnh thumbnail nhỏ xếp dọc bên phải */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', justifyContent: 'between' }}>
-                {[1, 2, 3].map((thumbIdx) => (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', justifyContent: 'space-between' }}>
+                {[0, 1, 2].map((thumbIdx) => (
                   <div
                     key={thumbIdx}
                     style={{
                       width: '64px',
                       height: '51px',
                       backgroundColor: '#F8FAFC',
-                      border: '1px solid #CBD5E1',
+                      border: subImages[thumbIdx] ? '1px solid #5D3B32' : '1px solid #CBD5E1',
                       borderRadius: '6px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: '#CBD5E1'
+                      color: '#CBD5E1',
+                      overflow: 'hidden',
+                      cursor: 'pointer'
                     }}
                   >
-                    <Box size={22} />
+                    {subImages[thumbIdx] ? (
+                      <img src={subImages[thumbIdx]} alt={`Thumb ${thumbIdx}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <Box size={22} />
+                    )}
                   </div>
                 ))}
               </div>

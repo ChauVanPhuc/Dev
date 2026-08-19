@@ -342,6 +342,7 @@ async def check_write_permissions(request: Request, call_next):
             "/api/v1/accounts/login",
             "/api/v1/claims/chat",
             "/api/v1/screen-bugs/upload-image",
+            "/api/v1/master-products/upload-image",
             "/health",
             "/ws",
         )
@@ -441,8 +442,8 @@ async def check_write_permissions(request: Request, call_next):
                                     ]
                                 elif path.startswith("/api/v1/production-routings"):
                                     candidate_keys = ["/admin/production-routing", "production-routing"]
-                                elif path.startswith("/api/v1/products"):
-                                    candidate_keys = ["/admin/products", "products"]
+                                elif path.startswith("/api/v1/products") or path.startswith("/api/v1/master-products") or path.startswith("/api/v1/master-categories"):
+                                    candidate_keys = ["/admin/products", "products", "/products", "/admin/master-products", "master-products"]
                                     
                                 # 4. KPI & HR
                                 elif path.startswith("/api/v1/kpis") or path.startswith("/api/v1/kpi"):

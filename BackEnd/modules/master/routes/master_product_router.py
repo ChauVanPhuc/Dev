@@ -1,3 +1,5 @@
+import os
+import uuid
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
@@ -10,6 +12,27 @@ from modules.master.controllers import master_product_controller
 router = APIRouter()
 
 from fastapi.responses import StreamingResponse
+
+@router.post("/upload-image")
+async def upload_master_product_image(file: UploadFile = File(...)):
+    """
+    [POST] Tải lên hình ảnh sản phẩm mẫu.
+    Lưu vào BackEnd/static/uploads/products/
+    """
+    upload_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "static", "uploads", "products"))
+    os.makedirs(upload_dir, exist_ok=True)
+    
+    file_ext = os.path.splitext(file.filename)[1] if file.filename else ".png"
+    if not file_ext:
+        file_ext = ".png"
+    new_filename = f"prod_{uuid.uuid4()}{file_ext}"
+    file_path = os.path.join(upload_dir, new_filename)
+    
+    with open(file_path, "wb") as buffer:
+        content = await file.read()
+        buffer.write(content)
+        
+    return {"url": f"/static/uploads/products/{new_filename}"}
 
 @router.post("/import-excel")
 async def import_master_products(file: UploadFile = File(...), db: Session = Depends(get_db)):

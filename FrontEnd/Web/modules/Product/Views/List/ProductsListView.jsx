@@ -364,8 +364,17 @@ const ManufactureProducts = () => {
                           </td>
                           <td data-label="Tên sản phẩm">
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                              <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#432818', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '0.78rem' }}>
-                                {(product.name || 'P').charAt(0).toUpperCase()}
+                              <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: '#432818', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '0.78rem', overflow: 'hidden', flexShrink: 0 }}>
+                                {product.image_url ? (
+                                  <img
+                                    src={product.image_url.startsWith('/') ? `${getBaseURL().replace(/\/api\/v1\/?$/, '')}${product.image_url}` : product.image_url}
+                                    alt={product.sku}
+                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                    onError={(e) => { e.target.style.display = 'none'; }}
+                                  />
+                                ) : (
+                                  (product.name || 'P').charAt(0).toUpperCase()
+                                )}
                               </div>
                               <div>
                                 <div style={{ fontWeight: '800', color: '#1e293b' }}>{product.sku}</div>

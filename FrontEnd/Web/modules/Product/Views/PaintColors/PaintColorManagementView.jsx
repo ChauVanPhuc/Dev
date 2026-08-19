@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Edit2, Trash2, X, AlertTriangle, Palette, Image as ImageIcon, MoreVertical, ArrowLeft, RefreshCw } from 'lucide-react';
-import api from '@webShared/Services/api.service';
+import api, { getBaseURL } from '@webShared/Services/api.service';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
@@ -426,7 +426,12 @@ const PaintColorManagementView = ({ isEmbedded = false }) => {
                           </td>
                           <td style={{ textAlign: 'center' }}>
                             {item.image_url ? (
-                              <img src={item.image_url} alt={item.color_name} style={{ width: '38px', height: '38px', borderRadius: '6px', objectFit: 'cover', border: '1px solid #D1D5DB' }} />
+                              <img
+                                src={item.image_url.startsWith('/') ? `${getBaseURL().replace(/\/api\/v1\/?$/, '')}${item.image_url}` : item.image_url}
+                                alt={item.color_name}
+                                style={{ width: '38px', height: '38px', borderRadius: '6px', objectFit: 'cover', border: '1px solid #D1D5DB' }}
+                                onError={(e) => { e.target.style.display = 'none'; }}
+                              />
                             ) : (
                               <div style={{ width: '38px', height: '38px', borderRadius: '6px', backgroundColor: '#E2E8F0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
                                 <Palette size={18} color="#94A3B8" />
@@ -597,7 +602,11 @@ const PaintColorManagementView = ({ isEmbedded = false }) => {
                     onClick={() => document.getElementById('paint-img-upload-input').click()}
                   >
                     {imagePreview ? (
-                      <img src={imagePreview} alt="Mẫu màu sơn" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <img
+                        src={imagePreview.startsWith('/') ? `${getBaseURL().replace(/\/api\/v1\/?$/, '')}${imagePreview}` : imagePreview}
+                        alt="Mẫu màu sơn"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
                     ) : (
                       <>
                         <ImageIcon size={28} color="#94a3b8" />

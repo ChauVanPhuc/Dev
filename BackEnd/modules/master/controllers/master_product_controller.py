@@ -3,21 +3,76 @@ import pandas as pd
 import io
 import json
 import re
+import os
+import uuid
+import base64
 from sqlalchemy.orm import Session
 import app.models  # Register all SQLAlchemy ORM models to prevent InvalidRequestError
 from modules.master.models.master_product import MasterProduct
-from modules.production.models.product import Product
-from modules.production.models.bom_detail import BOMDetail
+from modules.master.models.master_category import MasterCategory
 from modules.master.models.master_bom_detail import MasterBOMDetail
-from modules.master.schemas.master_product import MasterProductCreate, MasterProductUpdate
-from shared.utils.string_cleaner import clean_and_standardize_name, clean_and_standardize_sku
-
+from modules.master.models.master_product_detail import MasterProductDetail
 from modules.master.models.technical_drawing import TechnicalDrawing
 from modules.master.models.paint_color_sample import PaintColorSample
 from modules.master.models.master_product_material import MasterProductMaterial
 from modules.master.models.technical_pending_task import TechnicalPendingTask
-from modules.master.models.master_product_detail import MasterProductDetail
+from modules.production.models.product import Product
+from modules.production.models.bom_detail import BOMDetail
+from modules.master.schemas.master_product import MasterProductCreate, MasterProductUpdate
+from shared.utils.string_cleaner import clean_and_standardize_name, clean_and_standardize_sku
 
+def clean_stage_name(val):
+    if not val or pd.isna(val) or str(val).lower() == 'nan':
+        return None
+    s = str(val).strip()
+    # Loại bỏ tiền tố nhà máy như "NM1 - ", "NM2 - ", "NM3 - ", v.v.
+    s = re.sub(r'^(NM\d+\s*[-_–—]\s*)', '', s, flags=re.IGNORECASE)
+    # Loại bỏ số ở cuối tên công đoạn như "Sơn 3" -> "Sơn", "Tạo phôi 3" -> "Tạo phôi"
+    s = re.sub(r'\s+\d+$', '', s)
+    return s.strip() or None
+
+def get_stage_rank(stage_name):
+    if not stage_name:
+        return 0
+    if "Định hình" in stage_name or "Tạo phôi" in stage_name:
+        return 1
+    if "Lắp ráp" in stage_name:
+        return 2
+    if "Sơn" in stage_name:
+        return 3
+    if "Đóng gói" in stage_name:
+        return 4
+    return 0
+
+def save_base64_image_if_needed(image_url: Optional[str], subfolder: str = "products") -> Optional[str]:
+    """
+    Nếu image_url là chuỗi base64 (data:image/...), tự động decode và lưu vào file tĩnh,
+    trả về đường dẫn tĩnh ngắn gọn /static/uploads/{subfolder}/filename.ext để lưu an toàn vào DB.
+    """
+    if not image_url or not isinstance(image_url, str):
+        return image_url
+    if image_url.startswith("data:image/"):
+        try:
+            header, encoded = image_url.split(",", 1)
+            ext = ".png"
+            if "jpeg" in header.lower() or "jpg" in header.lower():
+                ext = ".jpg"
+            elif "webp" in header.lower():
+                ext = ".webp"
+            elif "gif" in header.lower():
+                ext = ".gif"
+            
+            upload_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "static", "uploads", subfolder))
+            os.makedirs(upload_dir, exist_ok=True)
+            new_filename = f"{subfolder[:4]}_{uuid.uuid4()}{ext}"
+            file_path = os.path.join(upload_dir, new_filename)
+            with open(file_path, "wb") as f:
+                f.write(base64.b64decode(encoded))
+            return f"/static/uploads/{subfolder}/{new_filename}"
+        except Exception as e:
+            print(f"Error saving base64 image: {e}")
+            return None
+    return image_url
 
 def serialize_bom_item(item):
     if not item: return None
@@ -165,6 +220,8 @@ def create_master_product(db: Session, master_product: MasterProductCreate):
         product_data['sku'] = clean_and_standardize_sku(product_data['sku'])
     if 'name' in product_data:
         product_data['name'] = clean_and_standardize_name(product_data['name'])
+    if 'image_url' in product_data and product_data['image_url']:
+        product_data['image_url'] = save_base64_image_if_needed(product_data['image_url'], 'products')
         
     bom_data_list = getattr(master_product, 'master_bom_details', []) or []
     product_details_list = getattr(master_product, 'product_details', []) or []
@@ -176,6 +233,7 @@ def create_master_product(db: Session, master_product: MasterProductCreate):
         db_master = existing
         for k, v in product_data.items():
             setattr(db_master, k, v)
+        db.query(MasterBOMDetail).filter(MasterBOMDetail.master_product_id == db_master.id).update({MasterBOMDetail.parent_id: None}, synchronize_session=False)
         db.query(MasterBOMDetail).filter(MasterBOMDetail.master_product_id == db_master.id).delete(synchronize_session=False)
         db.query(MasterProductDetail).filter(MasterProductDetail.master_product_id == db_master.id).delete(synchronize_session=False)
         db.query(PaintColorSample).filter(PaintColorSample.master_product_id == db_master.id).delete(synchronize_session=False)
@@ -206,9 +264,21 @@ def create_master_product(db: Session, master_product: MasterProductCreate):
             qty = float(node_dict.get('quantity') or 1.0)
             desc = node_dict.get('description') or node_dict.get('note') or ''
             
-            # Determine parent_id
-            parent_id = node_dict.get('parent_id')
-            if parent_id is None and stt:
+            len_val = float(node_dict.get('length') or 0.0)
+            wid_val = float(node_dict.get('width') or 0.0)
+            hgt_val = float(node_dict.get('height') or 0.0)
+            if not len_val and not wid_val and not hgt_val and spec:
+                try:
+                    parts = [float(p.strip()) for p in str(spec).replace('*', 'x').replace('X', 'x').split('x') if p.strip()]
+                    if len(parts) >= 1: len_val = parts[0]
+                    if len(parts) >= 2: wid_val = parts[1]
+                    if len(parts) >= 3: hgt_val = parts[2]
+                except Exception:
+                    pass
+
+            # Determine parent_id strictly from hierarchy stt to avoid stale foreign keys
+            parent_id = None
+            if stt:
                 stt_str = str(stt).strip()
                 if '.' in stt_str:
                     p_stt = '.'.join(stt_str.split('.')[:-1])
@@ -222,6 +292,9 @@ def create_master_product(db: Session, master_product: MasterProductCreate):
                 unit=unit,
                 material=material,
                 specification=spec,
+                length=len_val,
+                width=wid_val,
+                height=hgt_val,
                 input_stage=in_stg,
                 output_stage=out_stg,
                 quantity=qty,
@@ -255,7 +328,7 @@ def create_master_product(db: Session, master_product: MasterProductCreate):
                 color_code=pc.get('color_code', ''),
                 color_name=pc.get('color_name', ''),
                 supplier=pc.get('supplier', ''),
-                image_url=pc.get('image_url', ''),
+                image_url=save_base64_image_if_needed(pc.get('image_url', ''), 'paint_colors'),
                 note=pc.get('note', '')
             ))
 
@@ -271,11 +344,14 @@ def update_master_product(db: Session, master_product_id: int, master_product: M
             update_data['sku'] = clean_and_standardize_sku(update_data['sku'])
         if 'name' in update_data:
             update_data['name'] = clean_and_standardize_name(update_data['name'])
+        if 'image_url' in update_data and update_data['image_url']:
+            update_data['image_url'] = save_base64_image_if_needed(update_data['image_url'], 'products')
         for key, value in update_data.items():
             setattr(db_master, key, value)
             
         bom_data_list = getattr(master_product, 'master_bom_details', None)
         if bom_data_list is not None and isinstance(bom_data_list, list):
+            db.query(MasterBOMDetail).filter(MasterBOMDetail.master_product_id == db_master.id).update({MasterBOMDetail.parent_id: None}, synchronize_session=False)
             db.query(MasterBOMDetail).filter(MasterBOMDetail.master_product_id == db_master.id).delete(synchronize_session=False)
             stt_to_id = {}
             for item in bom_data_list:
@@ -297,8 +373,21 @@ def update_master_product(db: Session, master_product_id: int, master_product: M
                 qty = float(node_dict.get('quantity') or 1.0)
                 desc = node_dict.get('description') or node_dict.get('note') or ''
                 
-                parent_id = node_dict.get('parent_id')
-                if parent_id is None and stt:
+                len_val = float(node_dict.get('length') or 0.0)
+                wid_val = float(node_dict.get('width') or 0.0)
+                hgt_val = float(node_dict.get('height') or 0.0)
+                if not len_val and not wid_val and not hgt_val and spec:
+                    try:
+                        parts = [float(p.strip()) for p in str(spec).replace('*', 'x').replace('X', 'x').split('x') if p.strip()]
+                        if len(parts) >= 1: len_val = parts[0]
+                        if len(parts) >= 2: wid_val = parts[1]
+                        if len(parts) >= 3: hgt_val = parts[2]
+                    except Exception:
+                        pass
+
+                # Determine parent_id strictly from hierarchy stt to avoid stale foreign keys
+                parent_id = None
+                if stt:
                     stt_str = str(stt).strip()
                     if '.' in stt_str:
                         p_stt = '.'.join(stt_str.split('.')[:-1])
@@ -312,6 +401,9 @@ def update_master_product(db: Session, master_product_id: int, master_product: M
                     unit=unit,
                     material=material,
                     specification=spec,
+                    length=len_val,
+                    width=wid_val,
+                    height=hgt_val,
                     input_stage=in_stg,
                     output_stage=out_stg,
                     quantity=qty,
@@ -349,7 +441,7 @@ def update_master_product(db: Session, master_product_id: int, master_product: M
                         color_code=pc.get('color_code', ''),
                         color_name=pc.get('color_name', ''),
                         supplier=pc.get('supplier', ''),
-                        image_url=pc.get('image_url', ''),
+                        image_url=save_base64_image_if_needed(pc.get('image_url', ''), 'paint_colors'),
                         note=pc.get('note', '')
                     ))
 
@@ -360,6 +452,8 @@ def update_master_product(db: Session, master_product_id: int, master_product: M
 def delete_master_product(db: Session, master_product_id: int):
     db_master = db.query(MasterProduct).filter(MasterProduct.id == master_product_id).first()
     if db_master:
+        db.query(MasterBOMDetail).filter(MasterBOMDetail.master_product_id == master_product_id).update({MasterBOMDetail.parent_id: None}, synchronize_session=False)
+        db.query(MasterBOMDetail).filter(MasterBOMDetail.master_product_id == master_product_id).delete(synchronize_session=False)
         db.delete(db_master)
         db.commit()
         return True
@@ -448,28 +542,6 @@ def parse_color(sku, name, desc=None):
             
     return None
 
-def clean_stage_name(val):
-    if not val or pd.isna(val) or str(val).lower() == 'nan':
-        return None
-    s = str(val).strip()
-    # Loại bỏ tiền tố nhà máy như "NM1 - ", "NM2 - ", "NM3 - ", v.v.
-    s = re.sub(r'^(NM\d+\s*[-_–—]\s*)', '', s, flags=re.IGNORECASE)
-    # Loại bỏ số ở cuối tên công đoạn như "Sơn 3" -> "Sơn", "Tạo phôi 3" -> "Tạo phôi"
-    s = re.sub(r'\s+\d+$', '', s)
-    return s.strip() or None
-
-def get_stage_rank(stage_name):
-    if not stage_name:
-        return 0
-    if "Định hình" in stage_name or "Tạo phôi" in stage_name:
-        return 1
-    if "Lắp ráp" in stage_name:
-        return 2
-    if "Sơn" in stage_name:
-        return 3
-    if "Đóng gói" in stage_name:
-        return 4
-    return 0
 
 def import_master_products_from_excel(db: Session, file_content: bytes):
 
@@ -594,6 +666,7 @@ def import_master_products_from_excel(db: Session, file_content: bytes):
                 target_ids = [r[0] for r in target_ids]
                 
                 if target_ids:
+                    db.query(MasterBOMDetail).filter(MasterBOMDetail.master_product_id.in_(target_ids)).update({MasterBOMDetail.parent_id: None}, synchronize_session=False)
                     db.query(MasterBOMDetail).filter(MasterBOMDetail.master_product_id.in_(target_ids)).delete(synchronize_session=False)
                     db.query(MasterProduct).filter(MasterProduct.id.in_(target_ids)).delete(synchronize_session=False)
             db.commit()
@@ -833,7 +906,7 @@ def create_paint_color_sample(db: Session, product_id: int, data: dict):
         color_code=data.get('color_code', 'MS-01'),
         color_name=data.get('color_name', 'Màu sơn gỗ tự nhiên'),
         supplier=data.get('supplier', 'NPP Sơn Nippon'),
-        image_url=data.get('image_url', ''),
+        image_url=save_base64_image_if_needed(data.get('image_url', ''), 'paint_colors'),
         note=data.get('note', '')
     )
     db.add(sample)
@@ -1072,7 +1145,7 @@ def update_paint_color_sample(db: Session, sample_id: int, data: dict):
         except Exception:
             pass
     if 'image_url' in data:
-        sample.image_url = data['image_url']
+        sample.image_url = save_base64_image_if_needed(data['image_url'], 'paint_colors')
     if 'note' in data:
         sample.note = data['note']
     if 'master_product_id' in data and data['master_product_id']:
