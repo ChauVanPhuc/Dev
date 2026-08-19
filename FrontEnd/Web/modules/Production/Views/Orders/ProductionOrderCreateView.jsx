@@ -200,8 +200,9 @@ const ProductionOrderCreateView = () => {
   };
 
   // State & Logic cho Tab Quy Trình - Kế Hoạch
-  const [activeStage, setActiveStage] = useState('Định hình');
-  const mainStages = ['Tạo phôi', 'Định hình', 'Lắp ráp', 'Sơn', 'Đóng gói', 'Lưu kho'];
+  const [activeStage, setActiveStage] = useState('');
+  const [resolvedRoutingData, setResolvedRoutingData] = useState(null);
+  const [loadingRouting, setLoadingRouting] = useState(false);
   const [customScheduleRows, setCustomScheduleRows] = useState([]);
 
   const toISODate = (val) => {
@@ -752,37 +753,88 @@ const ProductionOrderCreateView = () => {
     });
   };
 
-  const dynamicSubStages = useMemo(() => {
-    const pCode = selectedProductCode || (orderProducts[0] ? orderProducts[0].productCode : null);
-    const prodObj = orderProducts.find(p => p.productCode === pCode);
-    const pName = prodObj ? prodObj.productName : '';
-    const codeUpper = (pCode || '').toUpperCase();
-    const nameUpper = (pName || '').toUpperCase();
+  // Tra cứu Quy trình sản xuất phù hợp từ CSDL theo Sản phẩm / Dòng hàng / Nhà máy
+  useEffect(() => {
+    let isMounted = true;
+    const resolveRouting = async () => {
+      const p = orderProducts.find(prod => prod.productCode === selectedProductCode) || orderProducts[0];
+      if (!p) return;
 
-    const isTable = codeUpper.includes('TABLE') || nameUpper.includes('TABLE') || nameUpper.includes('BÀN') || nameUpper.includes('DESK');
-    const isChair = codeUpper.includes('CHAIR') || nameUpper.includes('CHAIR') || nameUpper.includes('GHẾ') || nameUpper.includes('STOOL');
-    const isBed = codeUpper.includes('BED') || nameUpper.includes('HEADBOARD') || nameUpper.includes('GIƯỜNG');
+      setLoadingRouting(true);
+      try {
+        const params = new URLSearchParams();
+        if (p.productCode) params.append('sku', p.productCode);
+        if (p.lineType) params.append('line', p.lineType);
+        if (p.factory) params.append('factory', p.factory);
 
-    if (activeStage === 'Tạo phôi') {
-      return [{ id: 1, name: 'Xẻ phôi gỗ' }, { id: 2, name: 'Bào 4 mặt' }];
-    } else if (activeStage === 'Định hình') {
-      if (isTable) return [{ id: 1, name: 'Cắt mặt bàn CNC' }, { id: 2, name: 'Tiện chân bàn' }, { id: 3, name: 'Chạy diềm' }];
-      if (isChair) return [{ id: 1, name: 'Uốn nan tựa' }, { id: 2, name: 'Vót nhọn chân ghế' }, { id: 3, name: 'Đánh mộng' }];
-      if (isBed) return [{ id: 1, name: 'Cắt ván khung' }, { id: 2, name: 'Định hình vách' }, { id: 3, name: 'Cắt mút đệm' }];
-      return [{ id: 1, name: 'Cắt ván CNC' }, { id: 2, name: 'Dán viền nẹp' }, { id: 3, name: 'Khoan chốt cam' }];
-    } else if (activeStage === 'Lắp ráp') {
-      if (isTable) return [{ id: 1, name: 'Lắp khung diềm bàn' }, { id: 2, name: 'Bắt ke liên kết chân' }];
-      if (isChair) return [{ id: 1, name: 'Lắp khung ghế' }, { id: 2, name: 'Bọc nệm da' }];
-      return [{ id: 1, name: 'Khoan chốt cam' }, { id: 2, name: 'Lắp cụm khung' }];
-    } else if (activeStage === 'Sơn') {
-      return [{ id: 1, name: 'Sơn lót PU 1' }, { id: 2, name: 'Chà nhám xả bả' }, { id: 3, name: 'Sơn bóng PU' }];
-    } else if (activeStage === 'Đóng gói') {
-      return [{ id: 1, name: 'Bọc màng PE chống trầy' }, { id: 2, name: 'Dán tem QR Barcode' }, { id: 3, name: 'Đóng thùng Carton' }];
-    } else if (activeStage === 'Lưu kho') {
-      return [{ id: 1, name: 'Kiểm tra QC thành phẩm' }, { id: 2, name: 'Nhập kho thành phẩm' }];
+        const res = await api.get(`/production/routings/resolve?${params.toString()}`).catch(() => null);
+        if (isMounted && res) {
+          setResolvedRoutingData(res);
+        }
+      } catch (err) {
+        console.warn('Lỗi tra cứu Quy trình sản xuất:', err);
+      } finally {
+        if (isMounted) setLoadingRouting(false);
+      }
+    };
+
+    resolveRouting();
+    return () => { isMounted = false; };
+  }, [selectedProductCode, orderProducts]);
+
+  // Cụm các công đoạn thực tế được thiết lập trong Quy trình cho Nhà máy của sản phẩm
+  const factoryPipelineClusters = useMemo(() => {
+    if (resolvedRoutingData && resolvedRoutingData.clusters && resolvedRoutingData.clusters.length > 0) {
+      return resolvedRoutingData.clusters;
     }
-    return [{ id: 1, name: 'Thực hiện công đoạn' }];
-  }, [activeStage, selectedProductCode, orderProducts]);
+    // Fallback chuẩn nếu chưa có quy trình riêng
+    const defaultFacStages = currentFactoryStages && currentFactoryStages.length > 0
+      ? currentFactoryStages
+      : ['Tạo phôi', 'Định hình', 'Lắp ráp', 'Sơn', 'Đóng gói'];
+
+    return defaultFacStages.map((stgName, idx) => ({
+      stage_name: stgName,
+      stage_id: idx + 1,
+      color: '#5D3B32',
+      nodes: [
+        {
+          id: `default-${idx}`,
+          team_code: `TO-${stgName.toUpperCase().replace(/\s+/g, '')}`,
+          team_name: `Tổ ${stgName}`,
+          stage_name: stgName,
+          color: '#5D3B32'
+        }
+      ]
+    }));
+  }, [resolvedRoutingData, currentFactoryStages]);
+
+  const mainStages = useMemo(() => {
+    return factoryPipelineClusters.map(c => c.stage_name);
+  }, [factoryPipelineClusters]);
+
+  // Tự động chọn công đoạn đầu tiên khi danh sách mainStages sẵn sàng
+  useEffect(() => {
+    if (mainStages.length > 0) {
+      if (!activeStage || !mainStages.includes(activeStage)) {
+        setActiveStage(mainStages[0]);
+      }
+    }
+  }, [mainStages, activeStage]);
+
+  // Tổ máy thực tế thuộc công đoạn đang chọn (lấy từ các Nodes trong Routing của DB)
+  const dynamicSubStages = useMemo(() => {
+    const currentCluster = factoryPipelineClusters.find(c => c.stage_name === activeStage);
+    if (currentCluster && currentCluster.nodes && currentCluster.nodes.length > 0) {
+      return currentCluster.nodes.map((node, idx) => ({
+        id: node.id || node.team_id || idx + 1,
+        team_code: node.team_code,
+        name: node.team_name ? (node.team_code ? `${node.team_code} - ${node.team_name}` : node.team_name) : `Tổ ${activeStage}`,
+        team_name: node.team_name,
+        color: node.color || currentCluster.color || '#3B82F6'
+      }));
+    }
+    return [{ id: 1, name: `Tổ ${activeStage}`, team_name: `Tổ ${activeStage}`, color: '#3B82F6' }];
+  }, [factoryPipelineClusters, activeStage]);
 
   const routingDisplayItems = useMemo(() => {
     const pCode = selectedProductCode || (orderProducts[0] ? orderProducts[0].productCode : null);
@@ -793,7 +845,39 @@ const ProductionOrderCreateView = () => {
     const todayStr = orderForm.startDate || new Date().toISOString().split('T')[0];
     const endStr = toISODate(orderForm.endDate) || '2026-08-15';
 
-    if (activeStage === 'Tạo phôi') {
+    // Tên tổ thực tế trong CSDL phụ trách công đoạn này
+    const currentCluster = factoryPipelineClusters.find(c => c.stage_name === activeStage);
+    const primaryTeamName = currentCluster?.nodes?.[0]?.team_name || (currentCluster?.nodes?.[0]?.team_code) || `Tổ ${activeStage}`;
+
+    // Công đoạn nhận kế tiếp trong chuỗi Pipeline
+    const currentStageIdx = mainStages.indexOf(activeStage);
+    const nextStageName = (currentStageIdx >= 0 && currentStageIdx < mainStages.length - 1)
+      ? mainStages[currentStageIdx + 1]
+      : (activeStage === 'Đóng gói' ? 'Lưu kho' : 'Kho thành phẩm');
+
+    // Lọc linh kiện BOM thuộc công đoạn activeStage
+    const actLower = (activeStage || '').toLowerCase();
+    const matchedBom = bomItems.filter(item => {
+      const sFrom = (item.stageFrom || item.input_stage || '').toLowerCase();
+      const sTo = (item.stageTo || item.output_stage || '').toLowerCase();
+      return sFrom === actLower || sFrom.includes(actLower) || actLower.includes(sFrom);
+    });
+
+    if (matchedBom.length > 0) {
+      return matchedBom.map((r, idx) => ({
+        ...r,
+        id: `route-${r.id || idx}`,
+        startDate: todayStr,
+        endDate: endStr,
+        team: primaryTeamName,
+        type: r.type || 'Linh kiện gia công',
+        stageFrom: activeStage,
+        stageTo: r.stageTo || nextStageName,
+        status: r.status || 'Chờ sản xuất'
+      }));
+    }
+
+    if (actLower.includes('phôi')) {
       const rawItems = bomItems.filter(i => (i.unit === 'm3' || (i.material || '').toLowerCase().includes('gỗ') || (i.compName || '').toLowerCase().includes('gỗ') || (i.compName || '').toLowerCase().includes('phôi')));
       if (rawItems.length > 0) {
         return rawItems.map((r, idx) => ({
@@ -801,75 +885,28 @@ const ProductionOrderCreateView = () => {
           id: `route-${r.id || idx}`,
           startDate: todayStr,
           endDate: endStr,
-          team: 'Tổ Tạo phôi',
+          team: primaryTeamName,
           type: 'Phôi gỗ thô',
-          stageFrom: 'Tạo phôi',
-          stageTo: 'Định hình',
+          stageFrom: activeStage,
+          stageTo: nextStageName,
           status: r.status || 'Chờ sản xuất'
         }));
       }
       return [
-        { id: 'raw-1', compCode: `${pCode || 'SKU'}-RAW-01`, compName: `Gỗ sồi xẻ phôi thô cho ${pName}`, quantity: '0/2', unit: 'm3', material: 'Gỗ Sồi (Oak)', spec: '30*150*1800', volume: 0.8, team: 'Tổ Tạo phôi', type: 'Phôi gỗ thô', stageFrom: 'Tạo phôi', stageTo: 'Định hình', startDate: todayStr, endDate: endStr, status: 'Chờ sản xuất' },
-        { id: 'raw-2', compCode: `${pCode || 'SKU'}-RAW-02`, compName: `Ván công nghiệp xẻ thanh cho ${pName}`, quantity: '0/5', unit: 'Tấm', material: 'MDF Chống ẩm', spec: '18*1220*2440', volume: 1.2, team: 'Tổ Tạo phôi', type: 'Ván thô', stageFrom: 'Tạo phôi', stageTo: 'Định hình', startDate: todayStr, endDate: endStr, status: 'Chờ sản xuất' }
+        { id: 'raw-1', compCode: `${pCode || 'SKU'}-RAW-01`, compName: `Gỗ xẻ phôi thô cho ${pName}`, quantity: '0/2', unit: 'm3', material: 'Gỗ Sồi (Oak)', spec: '30*150*1800', volume: 0.8, team: primaryTeamName, type: 'Phôi gỗ thô', stageFrom: activeStage, stageTo: nextStageName, startDate: todayStr, endDate: endStr, status: 'Chờ sản xuất' },
+        { id: 'raw-2', compCode: `${pCode || 'SKU'}-RAW-02`, compName: `Ván công nghiệp xẻ thanh cho ${pName}`, quantity: '0/5', unit: 'Tấm', material: 'MDF Chống ẩm', spec: '18*1220*2440', volume: 1.2, team: primaryTeamName, type: 'Ván thô', stageFrom: activeStage, stageTo: nextStageName, startDate: todayStr, endDate: endStr, status: 'Chờ sản xuất' }
       ];
     }
 
-    if (activeStage === 'Định hình') {
-      const detailItems = bomItems.filter(i => !((i.compName || '').toLowerCase().includes('thùng') || (i.compName || '').toLowerCase().includes('pe')));
-      return detailItems.map((r, idx) => ({
-        ...r,
-        id: `route-${r.id || idx}`,
-        startDate: todayStr,
-        endDate: endStr,
-        team: 'Tổ Định hình',
-        type: r.type || 'Linh kiện gia công',
-        stageFrom: 'Định hình',
-        stageTo: 'Lắp ráp',
-        status: r.status || 'Chờ sản xuất'
-      }));
-    }
-
-    if (activeStage === 'Lắp ráp') {
-      const mainItems = bomItems.filter(i => (i.compName || '').toLowerCase().includes('mặt') || (i.compName || '').toLowerCase().includes('khung') || (i.compName || '').toLowerCase().includes('chân') || (i.compName || '').toLowerCase().includes('cánh'));
-      const listToUse = mainItems.length > 0 ? mainItems : bomItems.slice(0, 4);
-      return listToUse.map((r, idx) => ({
-        ...r,
-        id: `route-${r.id || idx}`,
-        startDate: todayStr,
-        endDate: endStr,
-        team: 'Tổ Lắp ráp',
-        type: 'Cụm lắp ráp',
-        stageFrom: 'Lắp ráp',
-        stageTo: 'Sơn',
-        status: r.status || 'Chờ sản xuất'
-      }));
-    }
-
-    if (activeStage === 'Sơn') {
-      const mainStructure = bomItems.filter(i => (i.compName || '').toLowerCase().includes('mặt') || (i.compName || '').toLowerCase().includes('khung') || (i.compName || '').toLowerCase().includes('cánh'));
-      const listToUse = mainStructure.length > 0 ? mainStructure.slice(0, 3) : bomItems.slice(0, 2);
-      return listToUse.map((r, idx) => ({
-        ...r,
-        id: `route-${r.id || idx}`,
-        startDate: todayStr,
-        endDate: endStr,
-        team: 'Tổ Sơn PU',
-        type: 'Khung/Mặt hoàn thiện',
-        stageFrom: 'Sơn',
-        stageTo: 'Đóng gói',
-        status: r.status || 'Chờ sản xuất'
-      }));
-    }
-
-    if (activeStage === 'Đóng gói') {
+    if (actLower.includes('đóng gói')) {
       return [
-        { id: 'pack-1', compCode: `PK-CARTON-${pCode || '01'}`, compName: `Thùng Carton in logo thương hiệu cho ${pName}`, quantity: `0/${targetProd?.totalQty || 50}`, unit: 'Bộ', material: 'Giấy sóng 5 lớp', spec: '600*800*1200', volume: 0.5, team: 'Tổ Đóng gói', type: 'Thùng đóng gói', stageFrom: 'Đóng gói', stageTo: 'Lưu kho', startDate: todayStr, endDate: endStr, status: 'Chờ sản xuất' },
-        { id: 'pack-2', compCode: `PK-PE-${pCode || '02'}`, compName: `Mút xốp PE foam bảo vệ góc cho ${pName}`, quantity: `0/${targetProd?.totalQty || 50}`, unit: 'Bộ', material: 'EPE Foam 5mm', spec: 'Tiêu chuẩn', volume: 0.1, team: 'Tổ Đóng gói', type: 'Vật liệu bảo vệ', stageFrom: 'Đóng gói', stageTo: 'Lưu kho', startDate: todayStr, endDate: endStr, status: 'Chờ sản xuất' },
-        { id: 'pack-3', compCode: `PK-LABEL-${pCode || '03'}`, compName: `Tem nhãn QR Barcode & Thẻ bảo hành ${pName}`, quantity: `0/${targetProd?.totalQty || 50}`, unit: 'Bộ', material: 'Decal bóc dán', spec: 'A5', volume: 0.01, team: 'Tổ Đóng gói', type: 'Nhãn tem QR', stageFrom: 'Đóng gói', stageTo: 'Lưu kho', startDate: todayStr, endDate: endStr, status: 'Chờ sản xuất' }
+        { id: 'pack-1', compCode: `PK-CARTON-${pCode || '01'}`, compName: `Thùng Carton in logo thương hiệu cho ${pName}`, quantity: `0/${targetProd?.totalQty || 50}`, unit: 'Bộ', material: 'Giấy sóng 5 lớp', spec: '600*800*1200', volume: 0.5, team: primaryTeamName, type: 'Thùng đóng gói', stageFrom: activeStage, stageTo: nextStageName, startDate: todayStr, endDate: endStr, status: 'Chờ sản xuất' },
+        { id: 'pack-2', compCode: `PK-PE-${pCode || '02'}`, compName: `Mút xốp PE foam bảo vệ góc cho ${pName}`, quantity: `0/${targetProd?.totalQty || 50}`, unit: 'Bộ', material: 'EPE Foam 5mm', spec: 'Tiêu chuẩn', volume: 0.1, team: primaryTeamName, type: 'Vật liệu bảo vệ', stageFrom: activeStage, stageTo: nextStageName, startDate: todayStr, endDate: endStr, status: 'Chờ sản xuất' },
+        { id: 'pack-3', compCode: `PK-LABEL-${pCode || '03'}`, compName: `Tem nhãn QR Barcode & Thẻ bảo hành ${pName}`, quantity: `0/${targetProd?.totalQty || 50}`, unit: 'Bộ', material: 'Decal bóc dán', spec: 'A5', volume: 0.01, team: primaryTeamName, type: 'Nhãn tem QR', stageFrom: activeStage, stageTo: nextStageName, startDate: todayStr, endDate: endStr, status: 'Chờ sản xuất' }
       ];
     }
 
-    if (activeStage === 'Lưu kho') {
+    if (actLower.includes('lưu kho') || actLower.includes('kho')) {
       return [
         {
           id: `finished-${pCode || '01'}`,
@@ -880,9 +917,9 @@ const ProductionOrderCreateView = () => {
           material: targetProd?.material || 'Gỗ Sồi + MDF',
           spec: targetProd?.spec || 'Hoàn chỉnh',
           volume: 1.0,
-          team: 'Kho thành phẩm',
+          team: primaryTeamName,
           type: 'Thành phẩm hoàn chỉnh',
-          stageFrom: 'Kho thành phẩm',
+          stageFrom: activeStage,
           stageTo: 'Xuất hàng',
           startDate: todayStr,
           endDate: endStr,
@@ -891,8 +928,19 @@ const ProductionOrderCreateView = () => {
       ];
     }
 
-    return bomItems;
-  }, [activeStage, displayedProductDetails, selectedProductCode, orderProducts, orderForm]);
+    const listToUse = bomItems.slice(0, 4);
+    return listToUse.map((r, idx) => ({
+      ...r,
+      id: `route-${r.id || idx}`,
+      startDate: todayStr,
+      endDate: endStr,
+      team: primaryTeamName,
+      type: r.type || 'Linh kiện gia công',
+      stageFrom: activeStage,
+      stageTo: nextStageName,
+      status: r.status || 'Chờ sản xuất'
+    }));
+  }, [activeStage, factoryPipelineClusters, mainStages, displayedProductDetails, selectedProductCode, orderProducts, orderForm]);
 
   const combinedScheduleRows = useMemo(() => {
     const customForCurrentStage = customScheduleRows.filter(r => r.stageFrom === activeStage);
@@ -1412,20 +1460,55 @@ const ProductionOrderCreateView = () => {
                 padding: '20px 24px',
                 boxShadow: '0 2px 12px rgba(45, 26, 18, 0.03)'
               }}>
-                <h4 style={{ margin: '0 0 16px 0', fontSize: '1.18rem', fontWeight: '800', color: '#2D1A12' }}>
-                  Quy trình sản xuất
-                </h4>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <h4 style={{ margin: 0, fontSize: '1.18rem', fontWeight: '800', color: '#2D1A12' }}>
+                      Quy trình sản xuất
+                    </h4>
+                    {loadingRouting && (
+                      <span style={{ fontSize: '0.75rem', color: '#B45309', fontWeight: '600' }}>Đang tra cứu...</span>
+                    )}
+                  </div>
+                  {resolvedRoutingData?.routing && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <span style={{
+                        fontSize: '0.78rem',
+                        fontWeight: '700',
+                        backgroundColor: '#FEF3C7',
+                        color: '#92400E',
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid #FDE68A'
+                      }}>
+                        Quy trình: <strong>{resolvedRoutingData.routing.name}</strong> ({resolvedRoutingData.routing.code})
+                      </span>
+                      <span style={{
+                        fontSize: '0.75rem',
+                        fontWeight: '700',
+                        backgroundColor: '#F3F4F6',
+                        color: '#4B5563',
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                        border: '1px solid #E5E7EB'
+                      }}>
+                        Khớp: {resolvedRoutingData.matched_by === 'product_sku' ? 'Theo SKU' : resolvedRoutingData.matched_by === 'line' ? 'Theo Dòng sản phẩm' : resolvedRoutingData.matched_by === 'category' ? 'Theo Phân loại' : 'Mặc định'}
+                      </span>
+                    </div>
+                  )}
+                </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto', paddingBottom: '16px', marginBottom: '16px' }}>
                   {mainStages.map((stg, idx) => {
                     const isActive = activeStage === stg;
+                    const cluster = factoryPipelineClusters.find(c => c.stage_name === stg);
+                    const nodeCount = cluster?.nodes?.length || 0;
                     return (
                       <React.Fragment key={stg}>
                         <button
                           type="button"
                           onClick={() => setActiveStage(stg)}
                           style={{
-                            padding: '10px 18px',
+                            padding: '10px 16px',
                             backgroundColor: isActive ? '#A3E635' : '#FFFFFF',
                             border: `2px solid ${isActive ? '#65A30D' : '#EADCC9'}`,
                             borderRadius: '8px',
@@ -1435,10 +1518,25 @@ const ProductionOrderCreateView = () => {
                             cursor: 'pointer',
                             whiteSpace: 'nowrap',
                             boxShadow: isActive ? '0 4px 12px rgba(163, 230, 53, 0.4)' : 'none',
-                            transition: 'all 0.15s ease'
+                            transition: 'all 0.15s ease',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px'
                           }}
                         >
-                          {stg}
+                          <span>{idx + 1}. {stg}</span>
+                          {nodeCount > 0 && (
+                            <span style={{
+                              fontSize: '0.72rem',
+                              fontWeight: '700',
+                              padding: '1px 6px',
+                              borderRadius: '9999px',
+                              backgroundColor: isActive ? '#4D7C0F' : '#F1E9DE',
+                              color: isActive ? '#FFFFFF' : '#785549'
+                            }}>
+                              {nodeCount} tổ
+                            </span>
+                          )}
                         </button>
                         {idx < mainStages.length - 1 && (
                           <ArrowRight size={18} style={{ color: '#94A3B8', flexShrink: 0 }} />
@@ -1449,8 +1547,10 @@ const ProductionOrderCreateView = () => {
                 </div>
 
                 <div style={{ border: '2px dashed #EADCC9', borderRadius: '10px', padding: '16px 20px', backgroundColor: '#FAF8F6' }}>
-                  <div style={{ fontSize: '0.82rem', fontWeight: '700', color: '#7B5233', marginBottom: '10px' }}>
-                    Tổ máy & Công đoạn con thuộc: <strong style={{ color: '#1A2E05' }}>{activeStage}</strong>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ fontSize: '0.84rem', fontWeight: '700', color: '#7B5233' }}>
+                      Tổ máy thực hiện công đoạn: <strong style={{ color: '#1A2E05' }}>{activeStage}</strong> ({dynamicSubStages.length} tổ)
+                    </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                     {dynamicSubStages.map((sub, sIdx, arr) => (
@@ -1458,16 +1558,20 @@ const ProductionOrderCreateView = () => {
                         <div style={{
                           padding: '8px 18px',
                           borderRadius: '9999px',
-                          backgroundColor: '#7DD3FC',
+                          backgroundColor: '#E0F2FE',
                           border: '1.5px solid #0284C7',
-                          color: '#0F172A',
+                          color: '#0369A1',
                           fontWeight: '800',
-                          fontSize: '0.9rem'
+                          fontSize: '0.88rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 2px 6px rgba(2, 132, 199, 0.15)'
                         }}>
-                          {sub.name}
+                          <span>{sub.name}</span>
                         </div>
                         {sIdx < arr.length - 1 && (
-                          <ArrowRight size={20} style={{ color: '#475569' }} />
+                          <ArrowRight size={20} style={{ color: '#0284C7' }} />
                         )}
                       </React.Fragment>
                     ))}
@@ -1563,28 +1667,6 @@ const ProductionOrderCreateView = () => {
                   </table>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleAddScheduleRow}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '6px 14px',
-                    backgroundColor: '#FAF6F0',
-                    border: '1.5px solid #EADCC9',
-                    borderRadius: '8px',
-                    color: '#5D3B32',
-                    fontWeight: '700',
-                    fontSize: '0.82rem',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#EADCC9'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FAF6F0'}
-                >
-                  <Plus size={15} /> Thêm mới
-                </button>
               </div>
             </div>
           )}

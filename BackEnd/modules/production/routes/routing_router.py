@@ -19,8 +19,13 @@ def create_team(data: ProductionTeamCreate, db: Session = Depends(get_db)):
     """Tạo mới một Tổ sản xuất"""
     return routing_controller.create_team(db, data)
 
+@router.post("/teams/sync-from-system")
+def sync_teams(db: Session = Depends(get_db)):
+    """Đồng bộ / Khởi tạo Master Data các Tổ sản xuất chuẩn theo từng Nhà máy từ Hệ thống"""
+    return routing_controller.sync_teams_from_system(db)
+
 @router.delete("/teams/{team_id}")
-def delete_team(team_id: int, db: Session = Depends(get_db)):
+def delete_team(team_id: str, db: Session = Depends(get_db)):
     """Xóa một Tổ sản xuất khỏi CSDL"""
     return routing_controller.delete_team(db, team_id)
 
@@ -34,6 +39,17 @@ def get_next_routing_code(db: Session = Depends(get_db)):
     max_id = db.query(func.max(ProductionRouting.id)).scalar() or 0
     next_num = max_id + 1
     return {"next_code": f"QTSX-{str(next_num).zfill(2)}", "next_num": next_num}
+
+@router.get("/routings/resolve")
+def resolve_routing(
+    sku: str = None,
+    line: str = None,
+    category_id: int = None,
+    factory: str = None,
+    db: Session = Depends(get_db)
+):
+    """Tra cứu Quy trình phù hợp nhất cho 1 sản phẩm / dòng hàng / nhà máy"""
+    return routing_controller.resolve_routing_for_product(db, sku, line, category_id, factory)
 
 @router.get("/routings")
 def get_routings(db: Session = Depends(get_db)):
@@ -58,6 +74,23 @@ def add_team_to_routing(routing_id: str, body: dict, db: Session = Depends(get_d
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="Thiếu team_id!")
     return routing_controller.add_team_to_routing(db, routing_id, int(team_id))
+
+@router.put("/routings/{routing_id}/save-full")
+def save_full_routing(routing_id: str, body: dict, db: Session = Depends(get_db)):
+    """Lưu toàn bộ thông tin Quy trình và đồng bộ toàn bộ danh sách Tổ sản xuất (Nodes) theo đúng thứ tự"""
+    return routing_controller.save_full_routing(db, routing_id, body)
+
+@router.put("/routings/{routing_id}")
+def update_routing(routing_id: str, body: dict, db: Session = Depends(get_db)):
+    """Cập nhật thông tin Quy trình"""
+    return routing_controller.save_full_routing(db, routing_id, body)
+
+@router.put("/routings/{routing_id}/nodes/reorder")
+def reorder_routing_nodes(routing_id: str, body: dict, db: Session = Depends(get_db)):
+    """Cập nhật thứ tự các Tổ trong một Nhà máy thuộc Quy trình"""
+    factory = body.get("factory", "")
+    team_ids = body.get("team_ids") or body.get("ordered_node_ids") or body.get("node_ids") or []
+    return routing_controller.reorder_routing_nodes(db, routing_id, factory, team_ids)
 
 @router.post("/routings/components")
 def create_routing_component(data: ProductionRoutingComponentCreate, db: Session = Depends(get_db)):
@@ -89,9 +122,18 @@ def assign_products_to_routing(routing_id: str, body: dict, db: Session = Depend
         skus = [skus]
     return routing_controller.assign_products_to_routing(db, routing_id, skus)
 
+@router.post("/routings/{routing_id}/products/assign-by-line")
+def assign_products_by_line(routing_id: str, body: dict, db: Session = Depends(get_db)):
+    """Gán nhanh toàn bộ sản phẩm thuộc 1 Dòng hàng (BOM Master: APT, ATL, FOL...) vào Quy trình"""
+    line = body.get("line")
+    if not line:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Thiếu tên dòng hàng (line)!")
+    return routing_controller.assign_products_by_line(db, routing_id, str(line))
+
 @router.post("/routings/{routing_id}/products/assign-by-category")
 def assign_products_by_category(routing_id: str, body: dict, db: Session = Depends(get_db)):
-    """Gán nhanh toàn bộ sản phẩm thuộc 1 Dòng hàng (category_id) vào Quy trình"""
+    """Gán nhanh toàn bộ sản phẩm thuộc 1 Danh mục (category_id) vào Quy trình"""
     category_id = body.get("category_id")
     if not category_id:
         from fastapi import HTTPException

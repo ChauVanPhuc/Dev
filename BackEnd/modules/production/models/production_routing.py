@@ -3,6 +3,7 @@ from sqlalchemy.dialects.mssql import NVARCHAR
 from sqlalchemy.orm import relationship
 from config.database import Base
 from shared.utils.timezone import get_vietnam_time
+from modules.master.models.master_category import MasterCategory
 
 class ProductionRouting(Base):
     """
@@ -13,6 +14,7 @@ class ProductionRouting(Base):
     id = Column(Integer, primary_key=True, index=True)
     routing_code = Column(NVARCHAR(50), nullable=False, unique=True, index=True)
     routing_name = Column(NVARCHAR(255), nullable=False)
+    line = Column(NVARCHAR(100), nullable=True, index=True) # Dòng hàng (BOM Master: APT, ATL, FOL, ADV...)
     category = Column(NVARCHAR(100), nullable=True)
     category_id = Column(Integer, ForeignKey("master_categories.id"), nullable=True, index=True)
     is_default = Column(Boolean, default=False)
@@ -36,6 +38,8 @@ class ProductionRoutingNode(Base):
     id = Column(Integer, primary_key=True, index=True)
     routing_id = Column(Integer, ForeignKey("production_routings.id", ondelete="CASCADE"), nullable=False)
     team_id = Column(Integer, ForeignKey("production_teams.id"), nullable=False)
+    stage_id = Column(Integer, ForeignKey("stages.id"), nullable=True, index=True)
+    stage_name = Column(NVARCHAR(100), nullable=True)
     step_order = Column(Integer, nullable=False, default=1)
     color = Column(NVARCHAR(20), nullable=True)
     created_at = Column(DateTime, default=get_vietnam_time)
@@ -43,6 +47,7 @@ class ProductionRoutingNode(Base):
     # Relationships
     routing = relationship("ProductionRouting", back_populates="nodes")
     team = relationship("ProductionTeam", back_populates="nodes")
+    stage = relationship("Stage", foreign_keys=[stage_id])
 
 
 class ProductionRoutingComponent(Base):

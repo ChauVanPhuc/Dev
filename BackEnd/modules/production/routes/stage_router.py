@@ -36,6 +36,7 @@ def normalize_and_reorder_stages(db: Session, target_stage_id: Optional[int] = N
     db.commit()
 
 
+@router.get("", response_model=List[StageSchema])
 @router.get("/", response_model=List[StageSchema])
 def read_stages(include_inactive: bool = Query(True), db: Session = Depends(get_db)):
     """
@@ -50,6 +51,7 @@ def read_stages(include_inactive: bool = Query(True), db: Session = Depends(get_
     return query.order_by(Stage.sequence.asc(), Stage.id.asc()).all()
 
 
+@router.post("", response_model=StageSchema)
 @router.post("/", response_model=StageSchema)
 def create_stage(data: StageCreate, db: Session = Depends(get_db)):
     """

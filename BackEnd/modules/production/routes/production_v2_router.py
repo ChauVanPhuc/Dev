@@ -34,28 +34,33 @@ router = APIRouter()
 # ----------------------------------------------------------------------
 @router.get("/stages", response_model=List[dict])
 def read_stages_v2(db: Session = Depends(get_db)):
-    """[GET] Lấy toàn bộ công đoạn tiêu chuẩn từ BOM: Tạo Phôi, Định Hình, Lắp Ráp, Sơn, Đóng Gói, Lưu Kho."""
-    STANDARD_STAGES = [
-        {"id": 1, "name": "Tạo Phôi", "description": "Công đoạn Tạo Phôi"},
-        {"id": 2, "name": "Định Hình", "description": "Công đoạn Định Hình"},
-        {"id": 3, "name": "Lắp Ráp", "description": "Công đoạn Lắp Ráp"},
-        {"id": 4, "name": "Sơn", "description": "Công đoạn Sơn"},
-        {"id": 5, "name": "Đóng Gói", "description": "Công đoạn Đóng Gói"},
-        {"id": 6, "name": "Lưu Kho", "description": "Công đoạn Lưu Kho"},
+    """[GET] Lấy toàn bộ công đoạn tiêu chuẩn từ CSDL: Nhập Kho/Đầu Vào, Tạo Phôi, Định Hình, Lắp Ráp, Sơn, Đóng Gói, Lưu Kho."""
+    FALLBACK_STAGES = [
+        {"id": 1, "code": "CD01", "name": "Nhập Kho/Đầu Vào", "sequence": 1, "description": "Nhập kho nguyên vật liệu đầu vào"},
+        {"id": 2, "code": "CD02", "name": "Tạo Phôi", "sequence": 2, "description": "Công đoạn Tạo Phôi"},
+        {"id": 3, "code": "CD03", "name": "Định Hình", "sequence": 3, "description": "Công đoạn Định Hình"},
+        {"id": 4, "code": "CD04", "name": "Lắp Ráp", "sequence": 4, "description": "Công đoạn Lắp Ráp"},
+        {"id": 5, "code": "CD05", "name": "Sơn", "sequence": 5, "description": "Công đoạn Sơn"},
+        {"id": 6, "code": "CD06", "name": "Đóng Gói", "sequence": 6, "description": "Công đoạn Đóng Gói"},
+        {"id": 7, "code": "CD07", "name": "Lưu Kho", "sequence": 7, "description": "Công đoạn Lưu Kho"},
     ]
     try:
-        db_stages = db.query(Stage).all()
-        if db_stages:
-            names_seen = {s["name"].lower() for s in STANDARD_STAGES}
-            extra = []
-            for s in db_stages:
-                if s.name and s.name.lower() not in names_seen:
-                    extra.append({"id": s.id, "name": s.name, "description": s.description or s.name})
-                    names_seen.add(s.name.lower())
-            return STANDARD_STAGES + extra
-        return STANDARD_STAGES
+        db_stages = db.query(Stage).order_by(Stage.sequence.asc(), Stage.id.asc()).all()
+        if db_stages and len(db_stages) > 0:
+            return [
+                {
+                    "id": s.id,
+                    "code": s.code or f"CD{s.id:02d}",
+                    "name": s.name,
+                    "sequence": s.sequence or idx + 1,
+                    "description": s.description or s.name,
+                    "is_active": s.is_active if s.is_active is not None else True
+                }
+                for idx, s in enumerate(db_stages)
+            ]
+        return FALLBACK_STAGES
     except Exception:
-        return STANDARD_STAGES
+        return FALLBACK_STAGES
 
 # ----------------------------------------------------------------------
 # 0. API: Lấy danh sách Tháng có kế hoạch sản xuất từ CSDL

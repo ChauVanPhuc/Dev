@@ -4,7 +4,7 @@ import {
   Search, ArrowUpDown, Filter, Plus, Copy, MoreHorizontal, Upload, Download,
   ArrowRight, ArrowLeft, Trash2, CheckCircle2, Layers, Building2, Wrench, Settings,
   Grid, PlusCircle, Check, X, ShieldAlert, Sparkles, RefreshCw, Calendar, Edit3, AlertTriangle,
-  ChevronLeft, ChevronRight, ChevronUp, ChevronDown
+  ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Users, List, LayoutGrid, Save
 } from 'lucide-react';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
@@ -28,9 +28,20 @@ const ProductionRoutingView = () => {
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
 
   const [activeTab, setActiveTab] = useState('routing');
+  const [selectedFactoryTab, setSelectedFactoryTab] = useState('ALL');
+  const [selectedTeamFactoryFilter, setSelectedTeamFactoryFilter] = useState('ALL');
+  const [selectedTeamStageFilter, setSelectedTeamStageFilter] = useState('ALL');
+  const [teamSearchQuery, setTeamSearchQuery] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [isKhoTổCollapsed, setIsKhoTổCollapsed] = useState(false);
-  const [isPipelineCollapsed, setIsPipelineCollapsed] = useState(false);
+  const [factoryStructures, setFactoryStructures] = useState([]);
+  const [bomStages, setBomStages] = useState([]);
+  const [dbStages, setDbStages] = useState([]);
+
+  // Chế độ gom nhóm và lọc công đoạn trực quan
+  const [factoryStageTabMap, setFactoryStageTabMap] = useState({});
+  const [catalogViewMode, setCatalogViewMode] = useState('ROWS'); // 'ROWS' (hàng ngang siêu gọn) | 'GRID' (lưới ô)
+  const [pipelineViewMode, setPipelineViewMode] = useState('STAGE_GROUPED'); // 'STAGE_GROUPED' (gom theo công đoạn) | 'STEPS' (từng bước tuần tự)
 
   const [routingsList, setRoutingsList] = useState([
     {
@@ -342,6 +353,7 @@ const ProductionRoutingView = () => {
     }
 
     // Fallback: quy trình chưa gắn category_id -> dùng đối chiếu text tạm thời
+    const currentRoutingCategorySeries = currentRouting?.line || currentRouting?.category || '';
     const sameCatProds = allProductsListFormatted.filter(p => {
       if (!currentRoutingCategorySeries) return true;
       return (p.category || '').toUpperCase().includes(currentRoutingCategorySeries.toUpperCase()) ||
@@ -390,21 +402,141 @@ const ProductionRoutingView = () => {
     return routingTeamsMap[selectedRoutingId] || [];
   }, [routingTeamsMap, selectedRoutingId]);
 
-  const currentFactoryTeamsGrouped = useMemo(() => {
-    const map = {};
-    currentRoutingTeams.forEach(t => {
-      const fac = t.factory || 'Nhà máy 1';
-      if (!map[fac]) {
-        map[fac] = {
-          factory: fac,
-          color: fac === 'Nhà máy 1' ? '#2D1A12' : fac === 'Nhà máy 2' ? '#D97706' : '#3B82F6',
-          teams: []
+  const FACTORY_PALETTE = ['#4A2E27', '#5D3B32', '#6D4C3D', '#795548', '#8D6E63', '#3E2723'];
+  const getFactoryColor = (facName, index = 0) => {
+    if (!facName) return FACTORY_PALETTE[index % FACTORY_PALETTE.length];
+    if (facName.includes('1') || facName.includes('NM1')) return '#4A2E27';
+    if (facName.includes('2') || facName.includes('NM2')) return '#5D3B32';
+    if (facName.includes('3') || facName.includes('NM3')) return '#6D4C3D';
+    if (facName.includes('4') || facName.includes('NM4')) return '#795548';
+    return FACTORY_PALETTE[index % FACTORY_PALETTE.length];
+  };
+
+  const currentFactoryStagesTeamsGrouped = useMemo(() => {
+    const rawFactories = (factoryStructures.length > 0)
+      ? factoryStructures.map(f => f.structure_name)
+      : ['Vaniti Phân Xưởng 1', 'Vaniti Phân Xưởng 2', 'Vaniti Phân Xưởng 3'];
+    const uniqueFacs = Array.from(new Set(rawFactories)).filter(f => !f.toLowerCase().includes('văn phòng') && !f.toLowerCase().includes('van phong'));
+
+    const sourceTeams = teamsList.length > 0 ? teamsList : currentRoutingTeams;
+    
+    // Stages from database (7 standard stages) or fallback list
+    const stagesToUse = (dbStages && dbStages.length > 0) ? dbStages : [
+      { id: 1, code: 'CD01', name: 'Nhập Kho/Đầu Vào', sequence: 1 },
+      { id: 2, code: 'CD02', name: 'Tạo Phôi', sequence: 2 },
+      { id: 3, code: 'CD03', name: 'Định Hình', sequence: 3 },
+      { id: 4, code: 'CD04', name: 'Lắp Ráp', sequence: 4 },
+      { id: 5, code: 'CD05', name: 'Sơn', sequence: 5 },
+      { id: 6, code: 'CD06', name: 'Đóng Gói', sequence: 6 },
+      { id: 7, code: 'CD07', name: 'Lưu Kho', sequence: 7 }
+    ];
+
+    const result = uniqueFacs.map((fac, idx) => {
+      // Find all teams belonging to this factory
+      const facTeams = sourceTeams.filter(t => {
+        let tFac = t.factory;
+        if (tFac === fac) return true;
+        if (tFac && (tFac.includes('1') && fac.includes('1') || tFac.includes('2') && fac.includes('2') || tFac.includes('3') && fac.includes('3'))) return true;
+        if (t.teamCode && (t.teamCode.includes('NM1') && fac.includes('1') || t.teamCode.includes('NM2') && fac.includes('2') || t.teamCode.includes('NM3') && fac.includes('3'))) return true;
+        return false;
+      });
+
+      // Group these teams by Stage
+      const stageGroups = stagesToUse.map(stg => {
+        const sName = stg.name || stg.stage_name;
+        const sId = stg.id;
+        
+        const matchedTeams = facTeams.filter(t => {
+          const tStageId = t.stageId ?? t.stage_id;
+          const tStageName = t.stageName || t.stage_name;
+
+          // Priority 1: match on explicit Stage ID
+          if (tStageId != null && tStageId !== '') {
+            return Number(tStageId) === Number(sId);
+          }
+          // Priority 2: match on explicit Stage Name
+          if (tStageName) {
+            return tStageName.trim().toLowerCase() === sName.trim().toLowerCase();
+          }
+
+          // Fuzzy fallback only when both stageId and stageName are missing
+          const tText = `${t.teamCode || ''} ${t.teamName || ''}`.toLowerCase();
+          const sLower = sName.toLowerCase();
+          if ((sLower.includes('nhập kho') || sLower.includes('đầu vào')) && (tText.includes('nhap') || tText.includes('nhập') || tText.includes('dau vao') || tText.includes('vật tư'))) return true;
+          if ((sLower.includes('phôi') || sLower.includes('phoi')) && (tText.includes('phoi') || tText.includes('phôi') || tText.includes('xẻ'))) return true;
+          if (sLower.includes('định hình') && (tText.includes('dinhhinh') || tText.includes('định hình') || tText.includes('cnc') || tText.includes('nẹp') || tText.includes('khoan') || tText.includes('uốn') || tText.includes('bào') || tText.includes('phay'))) return true;
+          if (sLower.includes('lắp ráp') && (tText.includes('laprap') || tText.includes('lắp ráp') || tText.includes('lắp') || tText.includes('hàn') || tText.includes('module') || tText.includes('nệm') || tText.includes('nem') || tText.includes('han'))) return true;
+          if (sLower.includes('sơn') && (tText.includes('son') || tText.includes('sơn') || tText.includes('sontd'))) return true;
+          if (sLower.includes('đóng gói') && (tText.includes('donggoi') || tText.includes('đóng gói') || tText.includes('gói') || tText.includes('pallet') || tText.includes('pe') || tText.includes('bọc màng'))) return true;
+          if ((sLower.includes('lưu kho') || sLower.includes('thành phẩm')) && (tText.includes('luukho') || tText.includes('lưu kho') || tText.includes('thành phẩm') || tText.includes('kho-tp'))) return true;
+          return false;
+        });
+
+        return {
+          stageId: sId,
+          stageCode: stg.code,
+          stageName: sName,
+          stageSequence: stg.sequence || 0,
+          teams: matchedTeams
         };
+      });
+
+      // Unassigned / other teams
+      const assignedTeamIds = new Set(stageGroups.flatMap(sg => sg.teams.map(t => t.id || t.teamCode)));
+      const unassignedTeams = facTeams.filter(t => !assignedTeamIds.has(t.id || t.teamCode));
+      if (unassignedTeams.length > 0) {
+        stageGroups.push({
+          stageId: null,
+          stageCode: 'OTHER',
+          stageName: 'Tổ công đoạn khác',
+          stageSequence: 99,
+          teams: unassignedTeams
+        });
       }
-      map[fac].teams.push(t);
+
+      return {
+        factory: fac,
+        color: getFactoryColor(fac, idx),
+        totalTeams: facTeams.length,
+        teams: facTeams,
+        stages: stageGroups
+      };
     });
-    return Object.values(map);
-  }, [currentRoutingTeams]);
+
+    return result;
+  }, [teamsList, currentRoutingTeams, factoryStructures, dbStages]);
+
+  const currentFactoryTeamsGrouped = useMemo(() => {
+    return currentFactoryStagesTeamsGrouped.map(fg => ({
+      factory: fg.factory,
+      color: fg.color,
+      teams: fg.teams
+    }));
+  }, [currentFactoryStagesTeamsGrouped]);
+
+  const filteredTeamsForTab = useMemo(() => {
+    const source = teamsList.length > 0 ? teamsList : currentRoutingTeams;
+    return source.filter(t => {
+      const matchFactory = selectedTeamFactoryFilter === 'ALL' || t.factory === selectedTeamFactoryFilter;
+      if (!matchFactory) return false;
+
+      const matchStage = selectedTeamStageFilter === 'ALL' ||
+        (t.stageId && String(t.stageId) === String(selectedTeamStageFilter)) ||
+        (t.stageName && t.stageName === selectedTeamStageFilter);
+      if (!matchStage) return false;
+
+      if (teamSearchQuery.trim()) {
+        const q = teamSearchQuery.trim().toLowerCase();
+        const code = (t.teamCode || '').toLowerCase();
+        const name = (t.teamName || '').toLowerCase();
+        const desc = (t.desc || t.description || '').toLowerCase();
+        const fac = (t.factory || '').toLowerCase();
+        const stg = (t.stageName || '').toLowerCase();
+        return code.includes(q) || name.includes(q) || desc.includes(q) || fac.includes(q) || stg.includes(q);
+      }
+      return true;
+    });
+  }, [teamsList, currentRoutingTeams, selectedTeamFactoryFilter, selectedTeamStageFilter, teamSearchQuery]);
 
   const validPipelineNodes = useMemo(() => {
     if (!currentRouting || !currentRouting.nodes) return currentRoutingTeams;
@@ -413,6 +545,75 @@ const ProductionRoutingView = () => {
     }
     return currentRouting.nodes;
   }, [currentRouting, currentRoutingTeams, selectedRoutingId]);
+
+  const factoryPipelineGroups = useMemo(() => {
+    const rawFactories = (factoryStructures.length > 0)
+      ? factoryStructures.map(f => f.structure_name)
+      : ['Vaniti Phân Xưởng 1', 'Vaniti Phân Xưởng 2', 'Vaniti Phân Xưởng 3'];
+    const uniqueFacs = Array.from(new Set(rawFactories)).filter(f => !f.toLowerCase().includes('văn phòng') && !f.toLowerCase().includes('van phong'));
+
+    return uniqueFacs.map((facName, idx) => {
+      const facNodes = (validPipelineNodes || []).filter(n => {
+        const nFac = n.factory;
+        if (nFac === facName) return true;
+        if (nFac === 'Nhà máy 1' && facName.includes('1')) return true;
+        if (nFac === 'Nhà máy 2' && facName.includes('2')) return true;
+        if (nFac === 'Nhà máy 3' && facName.includes('3')) return true;
+        if (nFac === 'Nhà máy 4' && facName.includes('4')) return true;
+        return false;
+      });
+      return {
+        factory: facName,
+        color: getFactoryColor(facName, idx),
+        nodes: facNodes
+      };
+    });
+  }, [factoryStructures, validPipelineNodes]);
+
+  // Gom cụm các mắt xích theo Công đoạn để hiển thị chuỗi quy trình cực kỳ trực quan
+  const factoryPipelineStageClusters = useMemo(() => {
+    return factoryPipelineGroups.map(fg => {
+      const clusters = [];
+      let currentCluster = null;
+
+      (fg.nodes || []).forEach((node, nodeIdx) => {
+        const matchingTeam = teamsList.find(t => (t.teamCode && t.teamCode === node.teamCode) || (t.numericId && Number(t.numericId) === Number(node.teamId)));
+        const officialStageName = matchingTeam?.stageName || node.stageName || (node.stageId ? `Công đoạn ${node.stageId}` : 'Chưa phân công đoạn');
+        const officialStageId = matchingTeam?.stageId ?? node.stageId;
+        const normalizedNode = { ...node, stageName: officialStageName, stageId: officialStageId, originalIndex: nodeIdx };
+
+        if (!currentCluster || currentCluster.stageName !== officialStageName) {
+          currentCluster = {
+            stageId: officialStageId,
+            stageName: officialStageName,
+            nodes: [normalizedNode]
+          };
+          clusters.push(currentCluster);
+        } else {
+          currentCluster.nodes.push(normalizedNode);
+        }
+      });
+
+      return {
+        factory: fg.factory,
+        color: fg.color,
+        totalNodes: (fg.nodes || []).length,
+        clusters: clusters
+      };
+    });
+  }, [factoryPipelineGroups, teamsList]);
+
+  const factoryTeamCounts = useMemo(() => {
+    const source = teamsList.length > 0 ? teamsList : currentRoutingTeams;
+    const counts = { ALL: source.length };
+    (factoryStructures || []).forEach(f => {
+      counts[f.structure_name] = 0;
+    });
+    currentFactoryTeamsGrouped.forEach(fg => {
+      counts[fg.factory] = fg.teams.length;
+    });
+    return counts;
+  }, [teamsList, currentRoutingTeams, factoryStructures, currentFactoryTeamsGrouped]);
 
   const [allExecutionPlanRows, setAllExecutionPlanRows] = useState([]);
 
@@ -445,9 +646,6 @@ const ProductionRoutingView = () => {
     desc: ''
   });
 
-  // Danh sách nhà máy lấy từ CSDL cấu hình (hr_factory_structures)
-  const [factoryStructures, setFactoryStructures] = useState([]);
-
   const factoryStagesMap = useMemo(() => ({
     'Nhà máy 1': [
       'Tổ tạo phôi',
@@ -476,43 +674,53 @@ const ProductionRoutingView = () => {
     ]
   }), []);
 
-  // 5 công đoạn sản xuất chuẩn hóa cho Tổ sản xuất
+  // 7 công đoạn sản xuất chuẩn hóa từ CSDL cho Tổ sản xuất
   const STANDARD_PRODUCTION_STAGES = useMemo(() => [
+    'Nhập Kho/Đầu Vào',
     'Tạo Phôi',
     'Định Hình',
     'Lắp Ráp',
     'Sơn',
-    'Đóng Gói'
+    'Đóng Gói',
+    'Lưu Kho'
   ], []);
 
   const availableStagesForFactory = useMemo(() => {
+    if (dbStages && dbStages.length > 0) {
+      return dbStages.map(s => s.name || s.stage_name).filter(Boolean);
+    }
     return STANDARD_PRODUCTION_STAGES;
-  }, [STANDARD_PRODUCTION_STAGES]);
+  }, [dbStages, STANDARD_PRODUCTION_STAGES]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [teamsRes, routingsRes, factoryRes] = await Promise.all([
+        const [teamsRes, routingsRes, factoryRes, stagesRes] = await Promise.all([
           api.get('/production/teams'),
           api.get('/production/routings'),
-          api.get('/hr/factory-structures').catch(() => [])
+          api.get('/hr/factory-structures').catch(() => []),
+          api.get('/stages').catch(() => [])
         ]);
 
-        // Cập nhật danh sách nhà máy từ CSDL cấu hình
+        // Cập nhật danh sách nhà máy sản xuất từ CSDL cấu hình (loại bỏ Văn phòng / VP)
         const rawFactories = Array.isArray(factoryRes) ? factoryRes : (factoryRes?.data || []);
-        if (rawFactories.length > 0) {
-          setFactoryStructures(rawFactories);
+        const productionFactories = rawFactories.filter(f => {
+          const code = (f.structure_code || '').toUpperCase();
+          const name = (f.structure_name || '').toLowerCase();
+          return code !== 'VP' && !name.includes('văn phòng') && !name.includes('van phong');
+        });
+        if (productionFactories.length > 0) {
+          setFactoryStructures(productionFactories);
         }
-        const productsRes = [];
-        const stagesRes = [];
 
         const rawTeams = Array.isArray(teamsRes) ? teamsRes : (teamsRes && teamsRes.data) ? teamsRes.data : [];
         const rawRoutings = Array.isArray(routingsRes) ? routingsRes : (routingsRes && routingsRes.data) ? routingsRes.data : [];
-        const rawProducts = Array.isArray(productsRes) ? productsRes : (productsRes && productsRes.data) ? productsRes.data : [];
         const rawStages = Array.isArray(stagesRes) ? stagesRes : (stagesRes && stagesRes.data) ? stagesRes.data : [];
 
         if (Array.isArray(rawStages) && rawStages.length > 0) {
-          const names = rawStages.map(s => s.stage_name || s.name || s.code).filter(Boolean);
+          const sortedStages = [...rawStages].sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+          setDbStages(sortedStages);
+          const names = sortedStages.map(s => s.stage_name || s.name || s.code).filter(Boolean);
           if (names.length > 0) {
             setBomStages(prev => Array.from(new Set([...prev, ...names])));
           }
@@ -520,14 +728,17 @@ const ProductionRoutingView = () => {
 
         let loadedTeams = [];
         if (Array.isArray(rawTeams) && rawTeams.length > 0) {
-          loadedTeams = rawTeams.map(t => ({
-            id: t.id,
+          loadedTeams = rawTeams.map((t, idx) => ({
+            id: t.id ? String(t.id) : (t.team_code || `team-${idx}`),
+            numericId: t.id,
             teamCode: t.team_code,
             teamName: t.team_name,
             factory: t.factory,
+            stageId: t.stage_id,
+            stageName: t.stage_name,
             members: t.members_count || 10,
             desc: t.description || '',
-            color: t.color || (t.factory === 'Nhà máy 1' ? '#2D1A12' : t.factory === 'Nhà máy 2' ? '#D97706' : '#3B82F6')
+            color: t.color || (t.factory === 'Nhà máy 1' ? '#4A2E27' : t.factory === 'Nhà máy 2' ? '#5D3B32' : '#6D4C3D')
           }));
 
           setTeamsList(loadedTeams);
@@ -537,14 +748,19 @@ const ProductionRoutingView = () => {
         if (Array.isArray(rawRoutings) && rawRoutings.length > 0) {
           const newTeamsMap = {};
           parsedRoutings = rawRoutings.map(r => {
-            const dbNodes = (r.nodes || []).map(n => ({
-              id: n.id || n.team_id,
+            const dbNodes = (r.nodes || []).map((n, idx) => ({
+              id: n.id ? String(n.id) : (n.team_code ? `${r.routing_code}-${n.team_code}-${idx}` : `node-${idx}`),
+              numericId: n.id,
+              teamId: n.team_id,
               teamCode: n.team_code,
               teamName: n.team_name,
               factory: n.factory,
+              stageId: n.stage_id,
+              stageName: n.stage_name,
+              stepOrder: n.step_order || (idx + 1),
               members: 10,
-              desc: `Tổ phụ trách công đoạn ${n.team_name}`,
-              color: n.color || (n.factory === 'Nhà máy 1' ? '#2D1A12' : n.factory === 'Nhà máy 2' ? '#D97706' : '#3B82F6')
+              desc: `Tổ phụ trách công đoạn ${n.stage_name || n.team_name}`,
+              color: n.color || (n.factory === 'Nhà máy 1' ? '#4A2E27' : n.factory === 'Nhà máy 2' ? '#5D3B32' : '#6D4C3D')
             }));
 
             const isPreset = ['QT-TU-01', 'QT-BAN-01', 'QT-GIUONG-01'].includes(r.routing_code);
@@ -609,7 +825,13 @@ const ProductionRoutingView = () => {
   }, [selectedRoutingId]);
 
   const activeNodeObj = useMemo(() => {
-    return validPipelineNodes.find(n => n.id === activeNodeId) || validPipelineNodes[0] || null;
+    if (!validPipelineNodes || validPipelineNodes.length === 0) return null;
+    return validPipelineNodes.find(n =>
+      Boolean(activeNodeId) && (
+        String(n.id) === String(activeNodeId) ||
+        (n.teamCode && n.teamCode === activeNodeId)
+      )
+    ) || validPipelineNodes[0] || null;
   }, [validPipelineNodes, activeNodeId]);
 
   const filteredExecutionPlanRows = useMemo(() => {
@@ -634,31 +856,141 @@ const ProductionRoutingView = () => {
     return rows;
   }, [allExecutionPlanRows, currentRouting.id, activeNodeObj, searchTerm, validPipelineNodes]);
 
-  const handleAddTeamToPipeline = (team) => {
-    const isExist = currentRouting.nodes.some(n => n.teamCode === team.teamCode);
+  const [isSavingRouting, setIsSavingRouting] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  const handleSaveCurrentRouting = async () => {
+    if (!currentRouting) return;
+    const routingIdentifier = currentRouting.numericId !== undefined && currentRouting.numericId !== null
+      ? currentRouting.numericId
+      : (currentRouting.code || currentRouting.id);
+
+    setIsSavingRouting(true);
+    try {
+      const nodesToSave = (currentRouting.nodes || []).map((node, idx) => ({
+        team_id: node.teamId || node.numericId || (typeof node.id === 'number' ? node.id : null),
+        team_code: node.teamCode || node.code,
+        stage_id: node.stageId,
+        stage_name: node.stageName,
+        step_order: idx + 1,
+        factory: node.factory,
+        color: node.color
+      }));
+
+      const payload = {
+        routing_name: currentRouting.name,
+        line: currentRouting.line || currentRouting.category,
+        category: currentRouting.category,
+        category_id: currentRouting.categoryId,
+        description: currentRouting.description,
+        is_default: currentRouting.isDefault,
+        nodes: nodesToSave
+      };
+
+      const res = await api.put(`/production/routings/${routingIdentifier}/save-full`, payload);
+
+      const rawRoutings = Array.isArray(res) ? res : (res && res.data) ? res.data : [];
+      if (Array.isArray(rawRoutings) && rawRoutings.length > 0) {
+        const newTeamsMap = {};
+        const parsed = rawRoutings.map(r => {
+          const dbNodes = (r.nodes || []).map((n, idx) => ({
+            id: n.id ? String(n.id) : (n.team_code ? `${r.routing_code}-${n.team_code}-${idx}` : `node-${idx}`),
+            numericId: n.id,
+            teamId: n.team_id,
+            teamCode: n.team_code,
+            teamName: n.team_name,
+            factory: n.factory,
+            stageId: n.stage_id,
+            stageName: n.stage_name,
+            stepOrder: n.step_order || (idx + 1),
+            members: 10,
+            desc: `Tổ phụ trách công đoạn ${n.stage_name || n.team_name}`,
+            color: n.color || (n.factory === 'Nhà máy 1' ? '#4A2E27' : n.factory === 'Nhà máy 2' ? '#5D3B32' : '#6D4C3D')
+          }));
+          newTeamsMap[r.routing_code] = dbNodes;
+          return {
+            id: r.routing_code,
+            numericId: r.id,
+            code: r.routing_code,
+            name: r.routing_name,
+            line: r.line,
+            category: r.category || r.category_name || '',
+            categoryId: r.category_id || null,
+            categoryName: r.category_name || r.category || '',
+            isDefault: r.is_default,
+            appliedCount: r.applied_count || 0,
+            nodes: dbNodes
+          };
+        });
+        setRoutingsList(parsed);
+        setRoutingTeamsMap(newTeamsMap);
+      }
+
+      setHasUnsavedChanges(false);
+      if (toast) toast('success', `Đã lưu toàn bộ cấu hình Quy trình "${currentRouting.name}" vào CSDL thành công!`);
+    } catch (err) {
+      console.error('Lỗi khi lưu quy trình:', err);
+      if (toast) toast('error', `Lỗi lưu quy trình: ${err?.response?.data?.detail || err.message}`);
+    } finally {
+      setIsSavingRouting(false);
+    }
+  };
+
+  const handleAddTeamToPipeline = async (team) => {
+    const isExist = (currentRouting.nodes || []).some(n => n.teamCode === team.teamCode);
     if (isExist) {
       if (toast) toast('warning', `Tổ ${team.teamName} đã có trên chuỗi quy trình này!`);
       return;
     }
 
+    const matchingTeam = teamsList.find(t => (t.teamCode && t.teamCode === team.teamCode) || (t.numericId && Number(t.numericId) === Number(team.numericId || team.id)));
+    const sId = matchingTeam?.stageId ?? team.stageId ?? team.stage_id;
+    const sName = matchingTeam?.stageName || team.stageName || team.stage_name || (dbStages.find(s => Number(s.id) === Number(sId))?.name) || 'Chưa phân công đoạn';
+
     const newNode = {
       id: Date.now(),
+      numericId: null,
+      teamId: team.numericId || team.id,
       teamCode: team.teamCode,
       teamName: team.teamName,
       factory: team.factory,
-      color: team.factory === 'Nhà máy 1' ? '#2D1A12' : team.factory === 'Nhà máy 2' ? '#D97706' : '#3B82F6'
+      stageId: sId,
+      stageName: sName,
+      color: getFactoryColor(team.factory)
     };
 
     const updatedRoutings = routingsList.map(r => {
-      if (r.id === currentRouting.id) {
-        return { ...r, nodes: [...r.nodes, newNode] };
+      if (r.id === currentRouting.id || r.code === currentRouting.code) {
+        return { ...r, nodes: [...(r.nodes || []), newNode] };
       }
       return r;
     });
 
     setRoutingsList(updatedRoutings);
-    setActiveNodeId(newNode.id);
-    if (toast) toast('success', `Đã thêm ${team.teamName} vào chuỗi luồng!`);
+    setActiveNodeId(newNode.teamCode || newNode.id);
+    setHasUnsavedChanges(true);
+
+    try {
+      if (currentRouting.numericId && (team.numericId || team.id)) {
+        const teamIdToSend = team.numericId || (typeof team.id === 'number' ? team.id : null);
+        if (teamIdToSend) {
+          await api.post(`/production/routings/${currentRouting.numericId}/nodes`, { team_id: teamIdToSend });
+        }
+      }
+    } catch (e) {
+      console.warn('Lỗi lưu node vào backend:', e);
+    }
+
+    if (toast) toast('success', `Đã thêm ${team.teamName} vào chuỗi luồng! Bấm "Lưu quy trình" để lưu cố định.`);
+  };
+
+  const handleToggleTeamInPipeline = async (team) => {
+    const isExist = (currentRouting.nodes || []).some(n => n.teamCode === team.teamCode);
+    if (isExist) {
+      handleRemoveNode(team.teamCode || team.id);
+    } else {
+      handleAddTeamToPipeline(team);
+    }
   };
 
   const handleMoveNode = (nodeId, direction) => {
@@ -674,16 +1006,137 @@ const ProductionRoutingView = () => {
     nodes[targetIndex] = temp;
 
     setRoutingsList(routingsList.map(r => r.id === currentRouting.id ? { ...r, nodes } : r));
+    setHasUnsavedChanges(true);
   };
 
-  const handleRemoveNode = (nodeId) => {
+  const handleMoveFactoryNode = async (factoryName, nodeId, direction) => {
+    const allNodes = [...(currentRouting.nodes || [])];
+    const facNodes = allNodes.filter(n => (n.factory || 'Nhà máy 1') === (factoryName || 'Nhà máy 1'));
+    const index = facNodes.findIndex(n => String(n.id) === String(nodeId) || (n.teamCode && n.teamCode === nodeId));
+    if (index === -1) return;
+
+    const targetIndex = direction === 'left' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= facNodes.length) return;
+
+    const temp = facNodes[index];
+    facNodes[index] = facNodes[targetIndex];
+    facNodes[targetIndex] = temp;
+
+    let fPointer = 0;
+    const newAllNodes = allNodes.map(n => {
+      if ((n.factory || 'Nhà máy 1') === (factoryName || 'Nhà máy 1')) {
+        const item = facNodes[fPointer];
+        fPointer++;
+        return item;
+      }
+      return n;
+    });
+
+    setRoutingsList(routingsList.map(r => r.id === currentRouting.id ? { ...r, nodes: newAllNodes } : r));
+    setHasUnsavedChanges(true);
+
+    try {
+      if (currentRouting.numericId) {
+        const orderedNodeIds = newAllNodes.map(n => n.numericId || n.id).filter(id => typeof id === 'number');
+        if (orderedNodeIds.length > 0) {
+          await api.put(`/production/routings/${currentRouting.numericId}/nodes/reorder`, {
+            ordered_node_ids: orderedNodeIds
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Lỗi lưu thứ tự node:', e);
+    }
+  };
+
+  const handleMoveFactoryCluster = async (factoryName, clusterIndex, direction) => {
+    const fGroup = factoryPipelineStageClusters.find(fg => fg.factory === factoryName);
+    if (!fGroup || !fGroup.clusters) return;
+
+    const clusters = fGroup.clusters;
+    const targetClusterIndex = direction === 'left' ? clusterIndex - 1 : clusterIndex + 1;
+    if (targetClusterIndex < 0 || targetClusterIndex >= clusters.length) return;
+
+    const reorderedClusters = [...clusters];
+    const temp = reorderedClusters[clusterIndex];
+    reorderedClusters[clusterIndex] = reorderedClusters[targetClusterIndex];
+    reorderedClusters[targetClusterIndex] = temp;
+
+    const reorderedFacNodes = reorderedClusters.flatMap(c => (c.nodes || []).map(n => {
+      const { originalIndex, ...rest } = n;
+      return rest;
+    }));
+
+    const allNodes = [...(currentRouting.nodes || [])];
+    let fPointer = 0;
+    const newAllNodes = allNodes.map(n => {
+      if ((n.factory || 'Nhà máy 1') === (factoryName || 'Nhà máy 1')) {
+        const item = reorderedFacNodes[fPointer];
+        fPointer++;
+        return item;
+      }
+      return n;
+    });
+
+    setRoutingsList(routingsList.map(r => r.id === currentRouting.id ? { ...r, nodes: newAllNodes } : r));
+    setHasUnsavedChanges(true);
+
+    try {
+      if (currentRouting.numericId) {
+        const orderedNodeIds = newAllNodes.map(n => n.numericId || n.id).filter(id => typeof id === 'number');
+        if (orderedNodeIds.length > 0) {
+          await api.put(`/production/routings/${currentRouting.numericId}/nodes/reorder`, {
+            ordered_node_ids: orderedNodeIds
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Lỗi lưu thứ tự công đoạn:', e);
+    }
+
+    if (toast) toast('info', `Đã chuyển vị trí công đoạn "${temp.stageName}"! Bấm "Lưu quy trình" để ghi nhận.`);
+  };
+
+  const handleAssignProductsByLine = async (lineCode) => {
+    if (!lineCode || lineCode === 'ALL') return;
+    const targetRoutingNumericId = currentRouting?.numericId;
+    if (!targetRoutingNumericId) {
+      if (toast) toast('warning', 'Không tìm thấy ID quy trình trong CSDL!');
+      return;
+    }
+    try {
+      const res = await api.post(`/production/routings/${targetRoutingNumericId}/products/assign-by-line`, { line: lineCode });
+      const count = res?.assigned_count || 0;
+      if (toast) toast('success', `Đã gán thành công ${count} sản phẩm thuộc Dòng hàng "${lineCode}" vào Quy trình!`);
+      setRoutingsList(prev => prev.map(r => r.id === currentRouting.id ? { ...r, appliedCount: (r.appliedCount || 0) + count } : r));
+    } catch (err) {
+      console.error('Lỗi gán sản phẩm theo dòng hàng:', err);
+      if (toast) toast('error', 'Lỗi gán sản phẩm theo dòng hàng!');
+    }
+  };
+
+  const handleRemoveNode = async (nodeId) => {
     if (currentRouting.nodes.length <= 1) {
       if (toast) toast('warning', 'Quy trình phải có ít nhất 1 tổ sản xuất!');
       return;
     }
-    const updatedNodes = currentRouting.nodes.filter(n => n.id !== nodeId);
+    const nodeObj = currentRouting.nodes.find(n => String(n.id) === String(nodeId) || (n.teamCode && n.teamCode === nodeId));
+    const updatedNodes = currentRouting.nodes.filter(n => String(n.id) !== String(nodeId) && (!n.teamCode || n.teamCode !== nodeId));
     setRoutingsList(routingsList.map(r => r.id === currentRouting.id ? { ...r, nodes: updatedNodes } : r));
-    if (activeNodeId === nodeId) setActiveNodeId(updatedNodes[0].id);
+    setHasUnsavedChanges(true);
+
+    if ((String(activeNodeId) === String(nodeId) || (nodeObj && activeNodeObj?.teamCode === nodeObj.teamCode)) && updatedNodes.length > 0) {
+      setActiveNodeId(updatedNodes[0].teamCode || updatedNodes[0].id);
+    }
+
+    try {
+      if (currentRouting.numericId) {
+        const nodeRef = (nodeObj && nodeObj.numericId) ? nodeObj.numericId : ((nodeObj && nodeObj.teamCode) ? nodeObj.teamCode : nodeId);
+        await api.delete(`/production/routings/${currentRouting.numericId}/nodes/${nodeRef}`);
+      }
+    } catch (e) {
+      console.warn('Lỗi xóa node trên backend:', e);
+    }
   };
 
   const handleCopyRouting = async () => {
@@ -712,20 +1165,24 @@ const ProductionRoutingView = () => {
   const handleOpenAddTeamModal = () => {
     // Lấy nhà máy đầu tiên từ CSDL cấu hình, fallback hardcoded nếu chưa có
     const defaultFac = (factoryStructures.length > 0)
-      ? (factoryStructures[0].structure_name || 'Nhà máy 1')
-      : 'Nhà máy 1';
+      ? (factoryStructures[0].structure_name || 'Vaniti Phân Xưởng 1')
+      : 'Vaniti Phân Xưởng 1';
     const facCode = (factoryStructures.length > 0)
       ? (factoryStructures[0].structure_code || 'NM1')
       : 'NM1';
     const code = `TO-${facCode}-${Math.floor(100 + Math.random() * 900)}`;
-    const firstStage = (STANDARD_PRODUCTION_STAGES && STANDARD_PRODUCTION_STAGES[0]) || 'Tạo Phôi';
+    const firstStage = (dbStages && dbStages.length > 0) ? dbStages[0] : { id: 1, code: 'CD01', name: 'Nhập Kho/Đầu Vào' };
+    const firstStageName = firstStage.name || firstStage.stage_name || 'Nhập Kho/Đầu Vào';
+
     setNewTeamForm({
       factory: defaultFac,
+      stageId: firstStage.id,
+      stageName: firstStageName,
       teamCode: code,
-      teamName: '',
-      selectedStages: [firstStage],
+      teamName: `Tổ ${firstStageName}`,
+      selectedStages: [firstStageName],
       members: 10,
-      desc: ''
+      desc: `Tổ sản xuất thuộc công đoạn ${firstStageName}`
     });
     setIsStageDropdownOpen(false);
     setShowAddTeamModal(true);
@@ -735,7 +1192,7 @@ const ProductionRoutingView = () => {
     e.preventDefault();
     const finalTeamName = (newTeamForm.teamName && newTeamForm.teamName.trim())
       ? newTeamForm.teamName.trim()
-      : ((newTeamForm.selectedStages && newTeamForm.selectedStages.length > 0) ? newTeamForm.selectedStages.join(', ') : 'Tổ sản xuất');
+      : (newTeamForm.stageName ? `Tổ ${newTeamForm.stageName}` : 'Tổ sản xuất');
 
     if (!finalTeamName) {
       if (toast) toast('warning', 'Vui lòng nhập Tên tổ sản xuất hoặc chọn Công đoạn!');
@@ -746,23 +1203,29 @@ const ProductionRoutingView = () => {
     const payload = {
       team_code: tCode,
       team_name: finalTeamName,
-      factory: newTeamForm.factory || 'Nhà máy 1',
+      factory: newTeamForm.factory || 'Vaniti Phân Xưởng 1',
+      stage_id: newTeamForm.stageId ? Number(newTeamForm.stageId) : null,
+      stage_name: newTeamForm.stageName || null,
       members_count: Number(newTeamForm.members) || 10,
-      description: newTeamForm.desc || 'Tổ sản xuất mới',
-      color: newTeamForm.factory === 'Nhà máy 1' ? '#2D1A12' : newTeamForm.factory === 'Nhà máy 2' ? '#D97706' : '#3B82F6'
+      description: newTeamForm.desc || `Tổ sản xuất ${finalTeamName}`,
+      color: getFactoryColor(newTeamForm.factory)
     };
 
     try {
       const res = await api.post('/production/teams', payload);
       const created = (res && res.id) ? res : (res && res.data ? res.data : (res || {}));
       const newTeamObj = {
-        id: created.id || Date.now(),
+        id: created.id ? String(created.id) : String(Date.now()),
+        numericId: created.id,
         teamCode: created.team_code || tCode,
         teamName: created.team_name || finalTeamName,
         factory: created.factory || newTeamForm.factory,
+        stageId: created.stage_id || newTeamForm.stageId,
+        stageName: created.stage_name || newTeamForm.stageName,
         members: created.members_count || 10,
         stages: newTeamForm.selectedStages || [],
-        desc: created.description || ''
+        desc: created.description || '',
+        color: getFactoryColor(newTeamForm.factory)
       };
 
       // Gọi API thêm tổ vào quy trình (tạo routing_node trong CSDL)
@@ -770,7 +1233,9 @@ const ProductionRoutingView = () => {
       const rObj = routingsList.find(r => r.id === routingKey || r.code === routingKey);
       const targetRoutingId = (rObj && rObj.numericId) ? rObj.numericId : routingKey;
       try {
-        await api.post(`/production/routings/${targetRoutingId}/nodes`, { team_id: newTeamObj.id });
+        if (targetRoutingId && newTeamObj.numericId) {
+          await api.post(`/production/routings/${targetRoutingId}/nodes`, { team_id: newTeamObj.numericId });
+        }
       } catch (nodeErr) {
         console.warn('Lỗi tạo routing node:', nodeErr);
       }
@@ -784,17 +1249,21 @@ const ProductionRoutingView = () => {
       setTeamsList(prev => [...(prev || []), newTeamObj]);
 
       setRoutingsList(prevRoutings => prevRoutings.map(r => {
-        if (r.id === routingKey) {
+        if (r.id === routingKey || r.code === routingKey) {
           const exists = (r.nodes || []).some(n => n.teamCode === newTeamObj.teamCode);
           if (!exists) {
             return {
               ...r,
               nodes: [...(r.nodes || []), {
                 id: newTeamObj.id,
+                numericId: newTeamObj.numericId,
+                teamId: newTeamObj.numericId,
                 teamCode: newTeamObj.teamCode,
                 teamName: newTeamObj.teamName,
                 factory: newTeamObj.factory,
-                color: newTeamObj.factory === 'Nhà máy 1' ? '#2D1A12' : newTeamObj.factory === 'Nhà máy 2' ? '#D97706' : '#3B82F6'
+                stageId: newTeamObj.stageId,
+                stageName: newTeamObj.stageName,
+                color: getFactoryColor(newTeamObj.factory)
               }]
             };
           }
@@ -803,7 +1272,7 @@ const ProductionRoutingView = () => {
       }));
 
       setShowAddTeamModal(false);
-      setNewTeamForm({ factory: 'Nhà máy 1', teamCode: '', teamName: '', members: 10, desc: '' });
+      setNewTeamForm({ factory: 'Vaniti Phân Xưởng 1', teamCode: '', teamName: '', stageId: null, stageName: '', members: 10, desc: '' });
       if (toast) toast('success', `Đã lưu CSDL thành công Tổ ${newTeamForm.teamName} (${tCode})!`);
     } catch (err) {
       console.error('Lỗi khi lưu Tổ vào CSDL:', err);
@@ -812,6 +1281,8 @@ const ProductionRoutingView = () => {
         teamCode: tCode,
         teamName: newTeamForm.teamName,
         factory: newTeamForm.factory,
+        stageId: newTeamForm.stageId,
+        stageName: newTeamForm.stageName,
         members: Number(newTeamForm.members) || 10,
         desc: newTeamForm.desc || 'Tổ sản xuất mới'
       };
@@ -967,46 +1438,45 @@ const ProductionRoutingView = () => {
     });
   };
 
-  const handleDeleteTeamFromRouting = (teamId) => {
-    const routingKey = selectedRoutingId || 'QT-TU-01';
-    const teamObj = (currentRoutingTeams || []).find(t => t.id === teamId || t.teamCode === teamId) || {};
-    const tName = teamObj.teamName || 'Tổ sản xuất';
-    const tCode = teamObj.teamCode || '';
+  const handleDeleteTeam = (team) => {
+    if (!team) return;
+    const tId = team.id !== undefined ? team.id : (team.numericId || team.teamCode);
+    const tCode = team.teamCode || '';
+    const tName = team.teamName || 'Tổ sản xuất';
+    const tFactory = team.factory || 'Nhà máy';
 
     setConfirmModalState({
       isOpen: true,
-      title: 'Xác nhận xóa Tổ khỏi Quy trình',
-      message: `Bạn có chắc chắn muốn xóa Tổ "${tName}" ${tCode ? `(${tCode})` : ''} khỏi Quy trình ${routingKey}?`,
-      confirmText: 'Xóa Tổ khỏi quy trình',
+      title: 'Xác nhận xóa Tổ sản xuất',
+      message: `Bạn có chắc chắn muốn xóa "${tName}" ${tCode ? `(${tCode})` : ''} thuộc ${tFactory}? Thao tác này sẽ xóa tổ khỏi hệ thống và gỡ khỏi các quy trình liên quan.`,
+      confirmText: 'Xóa Tổ sản xuất',
       onConfirm: async () => {
         try {
-          const rObj = routingsList.find(r => r.id === routingKey || r.code === routingKey);
-          const targetId = (rObj && rObj.numericId) ? rObj.numericId : routingKey;
-          await api.delete(`/production/routings/${targetId}/nodes/${tCode || teamId}`);
+          await api.delete(`/production/teams/${tId}`);
         } catch (e) {
-          console.warn('Lỗi gọi API xóa node backend:', e);
+          console.warn('Lỗi gọi API xóa tổ backend:', e);
         }
 
+        // Cập nhật danh sách tổ toàn cục
+        setTeamsList(prev => prev.filter(t => t.id !== tId && t.teamCode !== tCode && t.id !== team.id));
+
+        // Cập nhật danh sách tổ trong từng quy trình
         setRoutingTeamsMap(prev => {
-          const currentList = prev[routingKey] || currentRoutingTeams || [];
-          return {
-            ...prev,
-            [routingKey]: currentList.filter(t => t.id !== teamId && t.teamCode !== tCode)
-          };
+          const next = { ...prev };
+          Object.keys(next).forEach(k => {
+            next[k] = (next[k] || []).filter(t => t.id !== tId && t.teamCode !== tCode && t.id !== team.id);
+          });
+          return next;
         });
 
-        setRoutingsList(prevRoutings => prevRoutings.map(r => {
-          if (r.id === routingKey || r.code === routingKey) {
-            return {
-              ...r,
-              nodes: (r.nodes || []).filter(n => n.id !== teamId && n.team_id !== teamId && n.teamCode !== tCode)
-            };
-          }
-          return r;
-        }));
+        // Cập nhật node trong routingsList
+        setRoutingsList(prevRoutings => prevRoutings.map(r => ({
+          ...r,
+          nodes: (r.nodes || []).filter(n => n.id !== tId && n.team_id !== tId && n.teamCode !== tCode && n.id !== team.id)
+        })));
 
         setConfirmModalState(prev => ({ ...prev, isOpen: false }));
-        if (toast) toast('info', `Đã xóa Tổ ${tName} khỏi Quy trình ${routingKey}`);
+        if (toast) toast('info', `Đã xóa "${tName}" thành công!`);
       }
     });
   };
@@ -1097,184 +1567,372 @@ const ProductionRoutingView = () => {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
           {[
-            { id: 'routing', label: 'Quy trình' },
-            { id: 'products', label: 'Danh sách sản phẩm' },
-            { id: 'workshops', label: 'Danh sách tổ' },
-          ].map(tab => (
+            { id: 'routing', label: 'Quy trình sản xuất', icon: Layers },
+            { id: 'products', label: 'Danh sách sản phẩm áp dụng', icon: Grid },
+            { id: 'workshops', label: 'Danh mục Tổ sản xuất', icon: Building2 },
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isTabActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  fontSize: '0.94rem',
+                  fontWeight: isTabActive ? '800' : '600',
+                  color: isTabActive ? '#2D1A12' : '#6B7280',
+                  borderBottom: isTabActive ? '3px solid #5D3B32' : '3px solid transparent',
+                  paddingBottom: '10px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '7px',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <Icon size={16} color={isTabActive ? '#5D3B32' : '#9CA3AF'} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {activeTab !== 'workshops' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              type="button"
+              onClick={handleSaveCurrentRouting}
+              disabled={isSavingRouting}
+              title="Lưu toàn bộ cấu hình thứ tự tổ và quy trình vào CSDL"
               style={{
-                border: 'none',
-                background: 'transparent',
-                fontSize: '0.98rem',
-                fontWeight: activeTab === tab.id ? '800' : '600',
-                color: activeTab === tab.id ? '#2D1A12' : '#6B7280',
-                borderBottom: activeTab === tab.id ? '3.5px solid #2D1A12' : '3.5px solid transparent',
-                paddingBottom: '8px',
-                cursor: 'pointer',
-                transition: 'all 0.2s'
+                padding: '8px 18px',
+                background: hasUnsavedChanges
+                  ? 'linear-gradient(135deg, #15803D 0%, #166534 100%)'
+                  : 'linear-gradient(135deg, #2E7D32 0%, #1B5E20 100%)',
+                border: hasUnsavedChanges ? '1.5px solid #86EFAC' : 'none',
+                borderRadius: '8px',
+                color: '#FFFFFF',
+                fontWeight: '800',
+                fontSize: '0.86rem',
+                cursor: isSavingRouting ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '7px',
+                boxShadow: hasUnsavedChanges
+                  ? '0 0 14px rgba(34, 197, 94, 0.45), 0 2px 8px rgba(21, 128, 61, 0.3)'
+                  : '0 2px 8px rgba(46, 125, 50, 0.25)',
+                transition: 'all 0.2s ease',
+                position: 'relative'
               }}
             >
-              {tab.label}
+              {isSavingRouting ? (
+                <>
+                  <RefreshCw size={16} className="animate-spin" /> Đang lưu CSDL...
+                </>
+              ) : (
+                <>
+                  <Save size={16} /> Lưu quy trình
+                  {hasUnsavedChanges && (
+                    <span style={{
+                      backgroundColor: '#FEF08A',
+                      color: '#854D0E',
+                      fontSize: '0.68rem',
+                      fontWeight: '800',
+                      padding: '1px 6px',
+                      borderRadius: '10px',
+                      marginLeft: '2px',
+                      border: '1px solid #FDE047'
+                    }}>
+                      Chưa lưu
+                    </span>
+                  )}
+                </>
+              )}
             </button>
-          ))}
-        </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button
-            onClick={handleOpenAddRoutingModal}
-            style={{
-              padding: '8px 18px',
-              backgroundColor: '#5D3B32',
-              border: 'none',
-              borderRadius: '8px',
-              color: '#FFFFFF',
-              fontWeight: '800',
-              fontSize: '0.88rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              boxShadow: '0 2px 6px rgba(93, 59, 50, 0.25)',
-              transition: 'all 0.2s'
-            }}
-          >
-            <Plus size={16} /> Tạo quy trình mới
-          </button>
+            <button
+              onClick={handleOpenAddRoutingModal}
+              style={{
+                padding: '8px 16px',
+                background: 'linear-gradient(135deg, #5D3B32 0%, #3D2218 100%)',
+                border: 'none',
+                borderRadius: '8px',
+                color: '#FFFFFF',
+                fontWeight: '800',
+                fontSize: '0.86rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 2px 8px rgba(93, 59, 50, 0.25)',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Plus size={16} /> Tạo quy trình mới
+            </button>
 
-          <button
-            onClick={handleCopyRouting}
-            style={{
-              padding: '8px 18px',
-              backgroundColor: '#FFFFFF',
-              border: '1.5px solid #2D1A12',
-              borderRadius: '8px',
-              color: '#2D1A12',
-              fontWeight: '800',
-              fontSize: '0.88rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.03)',
-              transition: 'all 0.2s'
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#2D1A12'; e.currentTarget.style.color = '#FFF'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FFF'; e.currentTarget.style.color = '#2D1A12'; }}
-          >
-            <Copy size={16} /> Sao chép quy trình
-          </button>
+            <button
+              onClick={handleCopyRouting}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#FFFFFF',
+                border: '1.5px solid #EADCC9',
+                borderRadius: '8px',
+                color: '#5D3B32',
+                fontWeight: '700',
+                fontSize: '0.86rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#FAF6F0'; e.currentTarget.style.borderColor = '#D6C2AC'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; e.currentTarget.style.borderColor = '#EADCC9'; }}
+            >
+              <Copy size={15} /> Sao chép quy trình
+            </button>
 
-          <button
-            onClick={handleDeleteCurrentRouting}
-            title="Xóa Quy trình hiện tại"
-            style={{
-              padding: '8px 14px',
-              backgroundColor: '#FEF2F2',
-              border: '1.5px solid #FCA5A5',
-              borderRadius: '8px',
-              color: '#DC2626',
-              fontWeight: '700',
-              fontSize: '0.88rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              transition: 'all 0.2s'
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#DC2626'; e.currentTarget.style.color = '#FFF'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FEF2F2'; e.currentTarget.style.color = '#DC2626'; }}
-          >
-            <Trash2 size={16} /> Xóa quy trình
-          </button>
-        </div>
+            <button
+              onClick={handleDeleteCurrentRouting}
+              title="Xóa Quy trình hiện tại"
+              style={{
+                padding: '8px 14px',
+                backgroundColor: '#FEF2F2',
+                border: '1.5px solid #FEE2E2',
+                borderRadius: '8px',
+                color: '#DC2626',
+                fontWeight: '700',
+                fontSize: '0.86rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#FEE2E2'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FEF2F2'; }}
+            >
+              <Trash2 size={15} /> Xóa quy trình
+            </button>
+          </div>
+        )}
       </div>
 
-      <div style={{
-        backgroundColor: '#FFFFFF',
-        borderRadius: '12px',
-        border: '1.5px solid #EADCC9',
-        padding: '14px 20px',
-        marginBottom: '16px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '12px',
-        boxShadow: '0 2px 8px rgba(45, 26, 18, 0.03)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '0.88rem', fontWeight: '800', color: '#2D1A12', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Layers size={18} color="#5D3B32" /> Chọn Quy trình:
-          </span>
-          <select
-            value={selectedRoutingId}
-            onChange={(e) => {
-              setSelectedRoutingId(e.target.value);
-              const found = routingsList.find(r => r.id === e.target.value);
-              if (found && found.nodes.length > 0) {
-                setActiveNodeId(found.nodes[0].id);
-              }
-            }}
-            style={{
-              padding: '7px 14px',
+      {activeTab !== 'workshops' && (
+        <div style={{
+          backgroundColor: '#FFFFFF',
+          borderRadius: '14px',
+          border: '1.5px solid #EADCC9',
+          padding: '14px 20px',
+          marginBottom: '18px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px',
+          boxShadow: '0 3px 12px rgba(45, 26, 18, 0.03)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <div style={{
+              width: '32px',
+              height: '32px',
               borderRadius: '8px',
-              border: '1.5px solid #EADCC9',
               backgroundColor: '#FAF6F0',
-              fontWeight: '800',
-              color: '#2D1A12',
-              fontSize: '0.9rem',
-              outline: 'none',
-              cursor: 'pointer',
-              minWidth: '340px'
-            }}
-          >
-            {routingsList.map(r => (
-              <option key={r.id} value={r.id}>
-                {r.code} - {r.name} ({r.nodes.length} Tổ trên luồng)
-              </option>
-            ))}
-          </select>
-        </div>
+              border: '1px solid #EADCC9',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#5D3B32'
+            }}>
+              <Layers size={16} />
+            </div>
+            <span style={{ fontSize: '0.9rem', fontWeight: '800', color: '#2D1A12' }}>
+              Quy trình đang chọn:
+            </span>
+            <select
+              value={selectedRoutingId}
+              onChange={(e) => {
+                setSelectedRoutingId(e.target.value);
+                const found = routingsList.find(r => r.id === e.target.value);
+                if (found && found.nodes.length > 0) {
+                  setActiveNodeId(found.nodes[0].id);
+                }
+              }}
+              style={{
+                padding: '8px 14px',
+                borderRadius: '8px',
+                border: '1.5px solid #EADCC9',
+                backgroundColor: '#FAF6F0',
+                fontWeight: '800',
+                color: '#2D1A12',
+                fontSize: '0.9rem',
+                outline: 'none',
+                cursor: 'pointer',
+                minWidth: '340px'
+              }}
+            >
+              {routingsList.map(r => (
+                <option key={r.id} value={r.id}>
+                  {r.code} - {r.name} ({r.nodes.length} Tổ trên luồng)
+                </option>
+              ))}
+            </select>
+          </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#059669', backgroundColor: '#ECFDF5', padding: '4px 12px', borderRadius: '6px', border: '1px solid #A7F3D0' }}>
-            Đang áp dụng cho {assignedToThisCount.toLocaleString('vi-VN')} sản phẩm
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{
+              fontSize: '0.82rem',
+              fontWeight: '700',
+              color: '#5D3B32',
+              backgroundColor: '#FAF6F0',
+              padding: '6px 14px',
+              borderRadius: '20px',
+              border: '1px solid #EADCC9',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}>
+              <CheckCircle2 size={14} color="#5D3B32" />
+              Đang áp dụng cho <strong>{assignedToThisCount.toLocaleString('vi-VN')}</strong> sản phẩm
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
       {activeTab === 'routing' && (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+          {/* Factory Scope Switcher Bar */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            marginBottom: '20px',
+            flexWrap: 'wrap'
+          }}>
+            {[
+              { id: 'ALL', label: 'Tất cả nhà máy', desc: 'Toàn bộ xưởng', icon: '🏢' },
+              ...((factoryStructures.length > 0 ? factoryStructures : [
+                { structure_name: 'Vaniti Phân Xưởng 1', structure_code: 'NM1', description: 'Gỗ tự nhiên' },
+                { structure_name: 'Vaniti Phân Xưởng 2', structure_code: 'NM2', description: 'Ván CN & MDF' },
+                { structure_name: 'Vaniti Phân Xưởng 3', structure_code: 'NM3', description: 'Cơ khí & Kim loại' }
+              ]).filter(f => (f.structure_code || '').toUpperCase() !== 'VP' && !(f.structure_name || '').toLowerCase().includes('văn phòng')).map(f => ({
+                id: f.structure_name,
+                label: f.structure_name,
+                desc: f.structure_code ? `Mã: ${f.structure_code}` : (f.description || f.structure_type || 'Xưởng sản xuất'),
+                icon: '🏭'
+              })))
+            ].map(fTab => {
+              const isSelected = selectedFactoryTab === fTab.id;
+              const fGroup = factoryPipelineGroups.find(fg => fg.factory === fTab.id);
+              const nodeCount = fTab.id === 'ALL'
+                ? (validPipelineNodes || []).length
+                : (fGroup?.nodes?.length || 0);
+
+              return (
+                <button
+                  key={fTab.id}
+                  onClick={() => setSelectedFactoryTab(fTab.id)}
+                  style={{
+                    padding: '10px 18px',
+                    borderRadius: '12px',
+                    border: isSelected ? '2px solid #5D3B32' : '1.5px solid #EADCC9',
+                    background: isSelected
+                      ? 'linear-gradient(135deg, #3D251E 0%, #25140E 100%)'
+                      : '#FFFFFF',
+                    color: isSelected ? '#FFFFFF' : '#4B5563',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'flex-start',
+                    gap: '4px',
+                    minWidth: '150px',
+                    boxShadow: isSelected
+                      ? '0 6px 16px rgba(45, 26, 18, 0.2)'
+                      : '0 2px 4px rgba(0,0,0,0.02)',
+                    transform: isSelected ? 'translateY(-1px)' : 'none',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '8px' }}>
+                    <span style={{ fontSize: '0.88rem', fontWeight: '800', color: isSelected ? '#FFFFFF' : '#1F2937' }}>
+                      {fTab.icon} {fTab.label}
+                    </span>
+                    <span style={{
+                      fontSize: '0.72rem',
+                      fontWeight: '800',
+                      padding: '1px 7px',
+                      borderRadius: '10px',
+                      backgroundColor: isSelected ? 'rgba(255,255,255,0.22)' : '#FAF6F0',
+                      color: isSelected ? '#FFFFFF' : '#5D3B32',
+                      border: isSelected ? 'none' : '1px solid #EADCC9'
+                    }}>
+                      {nodeCount} tổ
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '0.73rem', color: isSelected ? 'rgba(255,255,255,0.75)' : '#78716C' }}>
+                    {fTab.desc}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Kho Tổ Sản Xuất */}
           <div style={{
             backgroundColor: '#FFFFFF',
-            borderRadius: '12px',
+            borderRadius: '14px',
             border: '1.5px solid #EADCC9',
-            padding: '20px 24px',
+            padding: '18px 22px',
             marginBottom: '20px',
-            boxShadow: '0 2px 8px rgba(45, 26, 18, 0.04)'
+            boxShadow: '0 4px 16px rgba(45, 26, 18, 0.03)'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isKhoTổCollapsed ? '0px' : '14px', flexWrap: 'wrap', gap: '10px' }}>
-              <div style={{ fontSize: '0.88rem', fontWeight: '800', color: '#2D1A12', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Building2 size={18} color="#5D3B32" /> Kho Tổ sản xuất (Cấu hình từ Tab "Danh sách tổ" - Bấm chọn Tổ để thêm vào Chuỗi luồng):
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: isKhoTổCollapsed ? '0px' : '14px',
+              flexWrap: 'wrap',
+              gap: '10px'
+            }}>
+              <div style={{ fontSize: '0.9rem', fontWeight: '800', color: '#2D1A12', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{
+                  width: '30px',
+                  height: '30px',
+                  borderRadius: '8px',
+                  backgroundColor: '#FAF6F0',
+                  border: '1px solid #EADCC9',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#5D3B32'
+                }}>
+                  <Building2 size={16} />
+                </div>
+                <span>Kho Tổ sản xuất <span style={{ fontWeight: '500', color: '#78716C', fontSize: '0.82rem' }}>(Nhấp để thêm/bớt Tổ vào chuỗi luồng sản xuất):</span></span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <button
                   onClick={() => setActiveTab('workshops')}
                   style={{
-                    padding: '5px 12px',
+                    padding: '6px 13px',
                     backgroundColor: '#FAF6F0',
                     border: '1.5px solid #EADCC9',
-                    borderRadius: '6px',
+                    borderRadius: '8px',
                     color: '#5D3B32',
                     fontWeight: '700',
                     fontSize: '0.78rem',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '4px'
+                    gap: '5px',
+                    transition: 'all 0.15s'
                   }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#5D3B32'; e.currentTarget.style.color = '#FFF'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FAF6F0'; e.currentTarget.style.color = '#5D3B32'; }}
                 >
                   <Settings size={14} /> Quản lý danh sách tổ
                 </button>
@@ -1282,18 +1940,18 @@ const ProductionRoutingView = () => {
                   onClick={() => setIsKhoTổCollapsed(prev => !prev)}
                   title={isKhoTổCollapsed ? "Mở rộng Kho Tổ" : "Thu gọn Kho Tổ"}
                   style={{
-                    padding: '5px 12px',
+                    padding: '6px 13px',
                     backgroundColor: isKhoTổCollapsed ? '#5D3B32' : '#FAF6F0',
                     border: '1.5px solid #EADCC9',
-                    borderRadius: '6px',
+                    borderRadius: '8px',
                     color: isKhoTổCollapsed ? '#FFFFFF' : '#5D3B32',
                     fontWeight: '700',
                     fontSize: '0.78rem',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '4px',
-                    transition: 'all 0.2s ease'
+                    gap: '5px',
+                    transition: 'all 0.15s ease'
                   }}
                 >
                   {isKhoTổCollapsed ? (
@@ -1310,207 +1968,1073 @@ const ProductionRoutingView = () => {
             </div>
 
             {!isKhoTổCollapsed && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px' }}>
-                {currentFactoryTeamsGrouped.length === 0 ? (
-                  <div style={{ color: '#9CA3AF', fontSize: '0.88rem' }}>Chưa có Tổ nào trong danh sách tổ của quy trình này. Vui lòng thêm bên Tab "Danh sách tổ".</div>
-                ) : (
-                  currentFactoryTeamsGrouped.map(fac => (
-                    <div key={fac.factory}>
-                      <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#6B7280', marginBottom: '10px' }}>
-                        {fac.factory}
-                      </div>
-                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                        {fac.teams.map(t => {
-                          const isInRouting = validPipelineNodes.some(n => n.teamCode === t.teamCode);
-                          return (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px'
+              }}>
+                {currentFactoryStagesTeamsGrouped
+                  .filter(fac => selectedFactoryTab === 'ALL' || selectedFactoryTab === fac.factory)
+                  .map(fac => {
+                    const currentFacStageTab = factoryStageTabMap[fac.factory] || 'ALL';
+                    const displayedStages = fac.stages.filter(s => {
+                      if (currentFacStageTab === 'ALL') return true;
+                      return String(s.stageId) === String(currentFacStageTab) || s.stageName === currentFacStageTab;
+                    });
+
+                    return (
+                      <div key={fac.factory} style={{
+                        backgroundColor: '#FAF7F2',
+                        padding: '16px 18px',
+                        borderRadius: '12px',
+                        border: '1px solid #E8DCce',
+                        borderLeft: `5px solid ${fac.color}`
+                      }}>
+                        {/* Factory Header & View Switcher */}
+                        <div style={{
+                          marginBottom: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          borderBottom: '1px solid #EADCC9',
+                          paddingBottom: '10px',
+                          flexWrap: 'wrap',
+                          gap: '10px'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '1rem' }}>🏭</span>
+                            <span style={{ fontSize: '0.94rem', fontWeight: '800', color: fac.color }}>{fac.factory}</span>
+                            <span style={{
+                              fontSize: '0.74rem',
+                              fontWeight: '700',
+                              color: '#78716C',
+                              backgroundColor: '#FFFFFF',
+                              padding: '2px 8px',
+                              borderRadius: '10px',
+                              border: '1px solid #E5D7C7'
+                            }}>
+                              {fac.totalTeams} tổ • {fac.stages.filter(s => s.teams.length > 0).length}/7 công đoạn
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {/* View Switcher: Rows vs Grid */}
+                            <div style={{
+                              display: 'inline-flex',
+                              backgroundColor: '#FFFFFF',
+                              borderRadius: '8px',
+                              border: '1px solid #EADCC9',
+                              padding: '2px'
+                            }}>
+                              <button
+                                type="button"
+                                onClick={() => setCatalogViewMode('ROWS')}
+                                title="Chế độ Hàng ngang phân cấp (Gọn gàng nhất)"
+                                style={{
+                                  border: 'none',
+                                  backgroundColor: catalogViewMode === 'ROWS' ? '#5D3B32' : 'transparent',
+                                  color: catalogViewMode === 'ROWS' ? '#FFFFFF' : '#78716C',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  fontSize: '0.74rem',
+                                  fontWeight: '700',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                <List size={13} /> Hàng ngang
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setCatalogViewMode('GRID')}
+                                title="Chế độ Lưới cột"
+                                style={{
+                                  border: 'none',
+                                  backgroundColor: catalogViewMode === 'GRID' ? '#5D3B32' : 'transparent',
+                                  color: catalogViewMode === 'GRID' ? '#FFFFFF' : '#78716C',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  fontSize: '0.74rem',
+                                  fontWeight: '700',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                <LayoutGrid size={13} /> Lưới cột
+                              </button>
+                            </div>
+
+                            {/* Add team to factory button */}
                             <button
-                              key={t.teamCode}
-                              onClick={() => handleAddTeamToPipeline({ ...t, factory: fac.factory })}
-                              title={`Click để thêm ${t.teamName} vào quy trình`}
+                              type="button"
+                              onClick={() => {
+                                const facDigits = fac.factory.replace(/\D/g, '');
+                                const facCode = facDigits ? `NM${facDigits}` : 'NM1';
+                                const firstStage = (dbStages && dbStages.length > 0) ? dbStages[0] : { id: 1, name: 'Nhập Kho/Đầu Vào' };
+                                const firstStageName = firstStage.name || firstStage.stage_name || 'Nhập Kho/Đầu Vào';
+                                setNewTeamForm({
+                                  factory: fac.factory,
+                                  stageId: firstStage.id,
+                                  stageName: firstStageName,
+                                  teamCode: `TO-${facCode}-${Math.floor(100 + Math.random() * 900)}`,
+                                  teamName: `Tổ ${firstStageName}`,
+                                  selectedStages: [firstStageName],
+                                  members: 10,
+                                  desc: `Tổ sản xuất thuộc ${fac.factory}`
+                                });
+                                setShowAddTeamModal(true);
+                              }}
                               style={{
                                 border: 'none',
-                                backgroundColor: fac.color,
-                                color: '#FFFFFF',
-                                padding: '8px 16px',
-                                borderRadius: '8px',
-                                fontWeight: '700',
-                                fontSize: '0.88rem',
+                                background: 'transparent',
+                                color: '#5D3B32',
+                                fontSize: '0.78rem',
+                                fontWeight: '800',
                                 cursor: 'pointer',
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                gap: '6px',
-                                opacity: isInRouting ? 1 : 0.75,
-                                boxShadow: isInRouting ? '0 2px 8px rgba(0,0,0,0.15)' : 'none',
-                                transition: 'all 0.15s ease'
+                                gap: '4px'
                               }}
-                              onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-                              onMouseLeave={(e) => e.currentTarget.style.opacity = isInRouting ? '1' : '0.75'}
                             >
-                              {t.teamName}
-                              {isInRouting ? <Check size={14} /> : <Plus size={14} />}
+                              <Plus size={14} /> Thêm tổ
                             </button>
-                          );
-                        })}
+                          </div>
+                        </div>
+
+                        {/* Stage Quick-Filter Pills */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          overflowX: 'auto',
+                          paddingBottom: '8px',
+                          marginBottom: '10px'
+                        }}>
+                          <span style={{ fontSize: '0.72rem', fontWeight: '800', color: '#8C7A6B', textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0, marginRight: '4px' }}>
+                            Công đoạn:
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setFactoryStageTabMap(prev => ({ ...prev, [fac.factory]: 'ALL' }))}
+                            style={{
+                              border: currentFacStageTab === 'ALL' ? '1.5px solid #5D3B32' : '1px solid #EADCC9',
+                              backgroundColor: currentFacStageTab === 'ALL' ? '#5D3B32' : '#FFFFFF',
+                              color: currentFacStageTab === 'ALL' ? '#FFFFFF' : '#4B5563',
+                              padding: '3px 9px',
+                              borderRadius: '20px',
+                              fontSize: '0.74rem',
+                              fontWeight: '700',
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap',
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            Tất cả ({fac.totalTeams})
+                          </button>
+                          {fac.stages.map((stg, stgIdx) => {
+                            const isTabActive = currentFacStageTab === String(stg.stageId) || currentFacStageTab === stg.stageName;
+                            return (
+                              <button
+                                key={stg.stageId || stg.stageCode || stgIdx}
+                                type="button"
+                                onClick={() => setFactoryStageTabMap(prev => ({ ...prev, [fac.factory]: isTabActive ? 'ALL' : (stg.stageId || stg.stageName) }))}
+                                style={{
+                                  border: isTabActive ? `1.5px solid ${fac.color}` : '1px solid #EADCC9',
+                                  backgroundColor: isTabActive ? fac.color : '#FFFFFF',
+                                  color: isTabActive ? '#FFFFFF' : (stg.teams.length > 0 ? '#1F2937' : '#9CA3AF'),
+                                  padding: '3px 9px',
+                                  borderRadius: '20px',
+                                  fontSize: '0.74rem',
+                                  fontWeight: '700',
+                                  cursor: 'pointer',
+                                  whiteSpace: 'nowrap',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  transition: 'all 0.15s ease'
+                                }}
+                              >
+                                <span>{stgIdx + 1}. {stg.stageName}</span>
+                                <span style={{
+                                  fontSize: '0.68rem',
+                                  opacity: isTabActive ? 0.9 : 0.7,
+                                  backgroundColor: isTabActive ? 'rgba(255,255,255,0.25)' : '#F3E8DB',
+                                  color: isTabActive ? '#FFFFFF' : '#78716C',
+                                  padding: '1px 5px',
+                                  borderRadius: '10px'
+                                }}>
+                                  {stg.teams.length}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* STAGE CATALOG: ROWS MODE (Gọn gàng nhất) */}
+                        {catalogViewMode === 'ROWS' ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {displayedStages.map((stg, stgIdx) => (
+                              <div
+                                key={stg.stageId || stg.stageCode || stg.stageName}
+                                style={{
+                                  backgroundColor: '#FFFFFF',
+                                  borderRadius: '9px',
+                                  border: '1px solid #EADCC9',
+                                  padding: '8px 12px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '12px',
+                                  boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
+                                  flexWrap: 'wrap'
+                                }}
+                              >
+                                {/* Stage Badge on Left */}
+                                <div style={{
+                                  minWidth: '170px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '7px',
+                                  flexShrink: 0
+                                }}>
+                                  <span style={{
+                                    width: '20px',
+                                    height: '20px',
+                                    borderRadius: '50%',
+                                    backgroundColor: '#FAF6F0',
+                                    border: `1.5px solid ${fac.color}`,
+                                    color: fac.color,
+                                    fontSize: '0.72rem',
+                                    fontWeight: '800',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0
+                                  }}>
+                                    {stg.stageSequence || (stgIdx + 1)}
+                                  </span>
+                                  <span style={{ fontSize: '0.82rem', fontWeight: '800', color: '#2D1A12' }}>
+                                    {stg.stageName}
+                                  </span>
+                                  <span style={{
+                                    fontSize: '0.68rem',
+                                    fontWeight: '800',
+                                    color: stg.teams.length > 0 ? fac.color : '#9CA3AF',
+                                    backgroundColor: '#FAF6F0',
+                                    padding: '1px 6px',
+                                    borderRadius: '10px',
+                                    border: '1px solid #EADCC9'
+                                  }}>
+                                    {stg.teams.length}
+                                  </span>
+                                </div>
+
+                                {/* Teams Horizontal Pills Container */}
+                                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', flex: 1 }}>
+                                  {stg.teams.length === 0 ? (
+                                    <span style={{ fontSize: '0.74rem', color: '#A8A29E', fontStyle: 'italic' }}>
+                                      Chưa có tổ nào gán vào công đoạn này
+                                    </span>
+                                  ) : (
+                                    stg.teams.map(t => {
+                                      const isInRouting = (validPipelineNodes || []).some(n => n.teamCode === t.teamCode);
+                                      return (
+                                        <button
+                                          key={t.teamCode}
+                                          type="button"
+                                          onClick={() => handleAddTeamToPipeline({ ...t, factory: fac.factory, stageId: stg.stageId, stageName: stg.stageName })}
+                                          title={isInRouting ? `Đang có trong chuỗi luồng. Bấm để thêm lại nếu cần` : `Bấm để thêm ${t.teamName} (${stg.stageName}) vào chuỗi luồng`}
+                                          style={{
+                                            border: isInRouting ? `1.5px solid ${fac.color}` : '1.5px dashed #D6C2AC',
+                                            backgroundColor: isInRouting ? fac.color : '#FFFFFF',
+                                            color: isInRouting ? '#FFFFFF' : '#2D1A12',
+                                            padding: '4px 9px',
+                                            borderRadius: '6px',
+                                            fontWeight: '700',
+                                            fontSize: '0.78rem',
+                                            cursor: 'pointer',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '6px',
+                                            boxShadow: isInRouting ? `0 2px 5px ${fac.color}25` : 'none',
+                                            transition: 'all 0.15s ease'
+                                          }}
+                                          onMouseEnter={(e) => {
+                                            if (!isInRouting) {
+                                              e.currentTarget.style.borderColor = fac.color;
+                                              e.currentTarget.style.backgroundColor = '#FAF6F0';
+                                              e.currentTarget.style.color = fac.color;
+                                            }
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            if (!isInRouting) {
+                                              e.currentTarget.style.borderColor = '#D6C2AC';
+                                              e.currentTarget.style.backgroundColor = '#FFFFFF';
+                                              e.currentTarget.style.color = '#2D1A12';
+                                            }
+                                          }}
+                                        >
+                                          <span>{t.teamName}</span>
+                                          <span style={{ fontSize: '0.68rem', opacity: 0.75, fontFamily: 'monospace' }}>
+                                            ({t.teamCode})
+                                          </span>
+                                          {isInRouting ? (
+                                            <span style={{
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              width: '15px',
+                                              height: '15px',
+                                              borderRadius: '50%',
+                                              backgroundColor: 'rgba(255,255,255,0.25)',
+                                              flexShrink: 0
+                                            }}>
+                                              <Check size={10} strokeWidth={3} />
+                                            </span>
+                                          ) : (
+                                            <Plus size={11} color="#9CA3AF" style={{ flexShrink: 0 }} />
+                                          )}
+                                        </button>
+                                      );
+                                    })
+                                  )}
+                                </div>
+
+                                {/* Quick Add Button for this stage */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const facDigits = fac.factory.replace(/\D/g, '');
+                                    const facCode = facDigits ? `NM${facDigits}` : 'NM1';
+                                    setNewTeamForm({
+                                      factory: fac.factory,
+                                      stageId: stg.stageId,
+                                      stageName: stg.stageName,
+                                      teamCode: `TO-${facCode}-${Math.floor(100 + Math.random() * 900)}`,
+                                      teamName: `Tổ ${stg.stageName}`,
+                                      selectedStages: [stg.stageName],
+                                      members: 10,
+                                      desc: `Tổ sản xuất thuộc công đoạn ${stg.stageName}`
+                                    });
+                                    setShowAddTeamModal(true);
+                                  }}
+                                  style={{
+                                    border: 'none',
+                                    background: 'transparent',
+                                    color: '#78716C',
+                                    fontSize: '0.72rem',
+                                    fontWeight: '700',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '2px',
+                                    flexShrink: 0
+                                  }}
+                                >
+                                  <Plus size={12} /> Thêm tổ
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          /* STAGE CATALOG: GRID MODE */
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+                            gap: '12px'
+                          }}>
+                            {displayedStages.map(stg => (
+                              <div
+                                key={stg.stageId || stg.stageCode || stg.stageName}
+                                style={{
+                                  backgroundColor: '#FFFFFF',
+                                  borderRadius: '10px',
+                                  border: '1px solid #EADCC9',
+                                  padding: '10px 12px',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '8px',
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                                }}
+                              >
+                                <div style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  borderBottom: '1px dashed #F0E6D8',
+                                  paddingBottom: '5px'
+                                }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                    <span style={{
+                                      width: '7px',
+                                      height: '7px',
+                                      borderRadius: '50%',
+                                      backgroundColor: fac.color,
+                                      display: 'inline-block'
+                                    }} />
+                                    <span style={{ fontSize: '0.82rem', fontWeight: '800', color: '#2D1A12' }}>
+                                      {stg.stageName}
+                                    </span>
+                                  </div>
+                                  <span style={{
+                                    fontSize: '0.7rem',
+                                    fontWeight: '800',
+                                    color: stg.teams.length > 0 ? '#5D3B32' : '#9CA3AF',
+                                    backgroundColor: '#FAF6F0',
+                                    padding: '1px 6px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #EADCC9'
+                                  }}>
+                                    {stg.teams.length}
+                                  </span>
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minHeight: '36px' }}>
+                                  {stg.teams.length === 0 ? (
+                                    <div style={{
+                                      fontSize: '0.74rem',
+                                      color: '#A8A29E',
+                                      fontStyle: 'italic',
+                                      padding: '6px 4px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between'
+                                    }}>
+                                      <span>Chưa có tổ</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const facDigits = fac.factory.replace(/\D/g, '');
+                                          const facCode = facDigits ? `NM${facDigits}` : 'NM1';
+                                          setNewTeamForm({
+                                            factory: fac.factory,
+                                            stageId: stg.stageId,
+                                            stageName: stg.stageName,
+                                            teamCode: `TO-${facCode}-${Math.floor(100 + Math.random() * 900)}`,
+                                            teamName: `Tổ ${stg.stageName}`,
+                                            selectedStages: [stg.stageName],
+                                            members: 10,
+                                            desc: `Tổ sản xuất thuộc công đoạn ${stg.stageName}`
+                                          });
+                                          setShowAddTeamModal(true);
+                                        }}
+                                        style={{
+                                          border: 'none',
+                                          background: 'transparent',
+                                          color: '#5D3B32',
+                                          fontSize: '0.72rem',
+                                          fontWeight: '700',
+                                          cursor: 'pointer',
+                                          textDecoration: 'underline'
+                                        }}
+                                      >
+                                        + Thêm
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    stg.teams.map(t => {
+                                      const isInRouting = (validPipelineNodes || []).some(n => n.teamCode === t.teamCode);
+                                      return (
+                                        <button
+                                          key={t.teamCode}
+                                          type="button"
+                                          onClick={() => handleAddTeamToPipeline({ ...t, factory: fac.factory, stageId: stg.stageId, stageName: stg.stageName })}
+                                          title={isInRouting ? `Đang có trong chuỗi luồng. Bấm để thêm lại nếu cần` : `Bấm để thêm ${t.teamName} (${stg.stageName}) vào chuỗi luồng`}
+                                          style={{
+                                            border: isInRouting ? `1.5px solid ${fac.color}` : '1.5px dashed #D6C2AC',
+                                            backgroundColor: isInRouting ? fac.color : '#FFFFFF',
+                                            color: isInRouting ? '#FFFFFF' : '#374151',
+                                            padding: '6px 10px',
+                                            borderRadius: '7px',
+                                            fontWeight: '700',
+                                            fontSize: '0.8rem',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            gap: '6px',
+                                            boxShadow: isInRouting ? `0 2px 6px ${fac.color}30` : 'none',
+                                            transition: 'all 0.15s ease',
+                                            textAlign: 'left'
+                                          }}
+                                          onMouseEnter={(e) => {
+                                            if (!isInRouting) {
+                                              e.currentTarget.style.borderColor = fac.color;
+                                              e.currentTarget.style.backgroundColor = '#FAF6F0';
+                                              e.currentTarget.style.color = fac.color;
+                                            }
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            if (!isInRouting) {
+                                              e.currentTarget.style.borderColor = '#D6C2AC';
+                                              e.currentTarget.style.backgroundColor = '#FFFFFF';
+                                              e.currentTarget.style.color = '#374151';
+                                            }
+                                          }}
+                                        >
+                                          <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.teamName}</span>
+                                            <span style={{ fontSize: '0.68rem', opacity: 0.75, fontFamily: 'monospace' }}>{t.teamCode}</span>
+                                          </div>
+                                          {isInRouting ? (
+                                            <span style={{
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              width: '16px',
+                                              height: '16px',
+                                              borderRadius: '50%',
+                                              backgroundColor: 'rgba(255,255,255,0.25)',
+                                              flexShrink: 0
+                                            }}>
+                                              <Check size={10} strokeWidth={3} />
+                                            </span>
+                                          ) : (
+                                            <Plus size={12} color="#9CA3AF" style={{ flexShrink: 0 }} />
+                                          )}
+                                        </button>
+                                      );
+                                    })
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))
-                )}
+                    );
+                  })}
               </div>
             )}
           </div>
 
-          <div style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '12px',
-            border: '1.5px solid #EADCC9',
-            padding: '24px',
-            marginBottom: '20px',
-            boxShadow: '0 2px 8px rgba(45, 26, 18, 0.04)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isPipelineCollapsed ? '0px' : '16px', flexWrap: 'wrap', gap: '10px' }}>
-              <div style={{ fontSize: '0.92rem', fontWeight: '800', color: '#2D1A12', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Sparkles size={18} color="#D97706" /> Chuỗi Quy trình Chuyển tiếp giữa các Tổ (Nhấp chọn Tổ để lọc Bảng kế hoạch bên dưới):
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{ fontSize: '0.78rem', color: '#6B7280', fontWeight: '600' }}>
-                  Dùng nút ← → để đổi thứ tự
-                </span>
-                <button
-                  onClick={() => setIsPipelineCollapsed(prev => !prev)}
-                  title={isPipelineCollapsed ? "Mở rộng Chuỗi Quy trình" : "Thu gọn Chuỗi Quy trình"}
-                  style={{
-                    padding: '5px 12px',
-                    backgroundColor: isPipelineCollapsed ? '#5D3B32' : '#FAF6F0',
-                    border: '1.5px solid #EADCC9',
-                    borderRadius: '6px',
-                    color: isPipelineCollapsed ? '#FFFFFF' : '#5D3B32',
-                    fontWeight: '700',
-                    fontSize: '0.78rem',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  {isPipelineCollapsed ? (
-                    <>
-                      <ChevronDown size={14} /> Mở rộng Chuỗi
-                    </>
-                  ) : (
-                    <>
-                      <ChevronUp size={14} /> Thu gọn
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {!isPipelineCollapsed && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: validPipelineNodes.length === 0 ? 'center' : 'flex-start',
-                flexWrap: 'wrap',
-                gap: '16px',
-                minHeight: '80px',
-                padding: '12px 0'
-              }}>
-                {validPipelineNodes.length === 0 ? (
-                  <div style={{ color: '#9CA3AF', fontSize: '0.88rem', padding: '20px', textAlign: 'center', fontWeight: '600' }}>
-                    Chưa có Tổ nào trong chuỗi luồng quy trình này. Vui lòng chọn Tổ ở khối "Kho Tổ sản xuất" phía trên để đưa vào chuỗi.
+          {/* Isolated Factory Pipelines */}
+          {factoryPipelineStageClusters
+            .filter(fGroup => selectedFactoryTab === 'ALL' || selectedFactoryTab === fGroup.factory)
+            .map((fGroup) => (
+              <div
+                key={fGroup.factory}
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '14px',
+                  border: `1.5px solid ${fGroup.color || '#5D3B32'}35`,
+                  padding: '18px 22px',
+                  marginBottom: '22px',
+                  boxShadow: '0 4px 16px rgba(45, 26, 18, 0.04)'
+                }}
+              >
+                {/* Pipeline Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <span style={{
+                      backgroundColor: fGroup.color,
+                      color: '#FFF',
+                      padding: '4px 12px',
+                      borderRadius: '8px',
+                      fontWeight: '800',
+                      fontSize: '0.84rem'
+                    }}>
+                      🏭 {fGroup.factory}
+                    </span>
+                    <span style={{ fontSize: '0.94rem', fontWeight: '800', color: '#1F2937' }}>
+                      Chuỗi Luồng Sản xuất ({fGroup.totalNodes} Tổ • {fGroup.clusters.length} Công đoạn)
+                    </span>
+                    <span style={{ fontSize: '0.75rem', color: '#5D3B32', backgroundColor: '#FAF6F0', border: '1px solid #EADCC9', padding: '3px 10px', borderRadius: '20px', fontWeight: '700' }}>
+                      ✓ Khép kín 100% tại {fGroup.factory}
+                    </span>
                   </div>
-                ) : (
-                  <>
-                    {validPipelineNodes.map((node, idx, arr) => {
-                      const isActive = activeNodeId === node.id;
-                      return (
-                        <React.Fragment key={node.id}>
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-                            <div
-                              onClick={() => setActiveNodeId(node.id)}
-                              style={{
-                                backgroundColor: node.color || '#2D1A12',
-                                color: '#FFFFFF',
-                                padding: '12px 24px',
-                                borderRadius: '10px',
-                                fontWeight: '800',
-                                fontSize: '0.95rem',
-                                cursor: 'pointer',
-                                boxShadow: isActive ? `0 0 0 3px #10B981, 0 4px 14px ${node.color}55` : '0 4px 10px rgba(45, 26, 18, 0.12)',
-                                transform: isActive ? 'scale(1.05)' : 'scale(1)',
-                                transition: 'all 0.2s ease',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '10px',
-                                userSelect: 'none'
-                              }}
-                            >
-                              <span>{node.teamName}</span>
 
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderLeft: '1px solid rgba(255,255,255,0.25)', paddingLeft: '8px' }}>
-                                {idx > 0 && (
+                  {/* View Mode Toggle: Stage Grouped vs Sequential Steps */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                      display: 'inline-flex',
+                      backgroundColor: '#FAF6F0',
+                      borderRadius: '8px',
+                      border: '1px solid #EADCC9',
+                      padding: '2px'
+                    }}>
+                      <button
+                        type="button"
+                        onClick={() => setPipelineViewMode('STAGE_GROUPED')}
+                        title="Gom nhóm các tổ theo từng Công đoạn"
+                        style={{
+                          border: 'none',
+                          backgroundColor: pipelineViewMode === 'STAGE_GROUPED' ? '#5D3B32' : 'transparent',
+                          color: pipelineViewMode === 'STAGE_GROUPED' ? '#FFFFFF' : '#78716C',
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          fontSize: '0.74rem',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px'
+                        }}
+                      >
+                        <Layers size={13} /> Gom theo Công đoạn
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPipelineViewMode('STEPS')}
+                        title="Xem chi tiết từng bước tuần tự"
+                        style={{
+                          border: 'none',
+                          backgroundColor: pipelineViewMode === 'STEPS' ? '#5D3B32' : 'transparent',
+                          color: pipelineViewMode === 'STEPS' ? '#FFFFFF' : '#78716C',
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          fontSize: '0.74rem',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px'
+                        }}
+                      >
+                        <ArrowRight size={13} /> Từng bước tuần tự
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Pipeline Body */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'stretch',
+                  flexWrap: 'wrap',
+                  gap: '8px',
+                  minHeight: '60px',
+                  padding: '4px 0'
+                }}>
+                  {fGroup.totalNodes === 0 ? (
+                    <div style={{
+                      color: '#9CA3AF',
+                      fontSize: '0.84rem',
+                      padding: '16px',
+                      backgroundColor: '#FAF7F2',
+                      borderRadius: '8px',
+                      border: '1.5px dashed #E5D7C7',
+                      width: '100%',
+                      textAlign: 'center'
+                    }}>
+                      Chưa có tổ nào được cấu hình cho {fGroup.factory}. Hãy nhấp chọn các tổ từ <strong>Kho Tổ sản xuất</strong> phía trên để đưa vào chuỗi.
+                    </div>
+                  ) : pipelineViewMode === 'STAGE_GROUPED' ? (
+                    /* VIEW 1: STAGE GROUPED PIPELINE (Gom theo công đoạn) */
+                    <>
+                      {fGroup.clusters.map((cluster, cIdx) => (
+                        <React.Fragment key={`${cluster.stageName}-${cIdx}`}>
+                          {/* Stage Process Cluster Card */}
+                          <div style={{
+                            minWidth: '170px',
+                            maxWidth: '220px',
+                            borderRadius: '10px',
+                            border: `1.5px solid ${fGroup.color}35`,
+                            backgroundColor: '#FFFFFF',
+                            boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
+                            overflow: 'hidden',
+                            display: 'flex',
+                            flexDirection: 'column'
+                          }}>
+                            {/* Cluster Header with Stage Title, Count, and Stage Reorder Buttons */}
+                            <div style={{
+                              padding: '5px 8px',
+                              backgroundColor: fGroup.color,
+                              color: '#FFFFFF',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: '4px'
+                            }}>
+                              <span style={{ fontSize: '0.74rem', fontWeight: '800', letterSpacing: '0.02em', display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden' }}>
+                                <span style={{
+                                  backgroundColor: 'rgba(255,255,255,0.25)',
+                                  width: '17px',
+                                  height: '17px',
+                                  borderRadius: '50%',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: '0.66rem',
+                                  flexShrink: 0
+                                }}>
+                                  {cIdx + 1}
+                                </span>
+                                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={cluster.stageName}>
+                                  {cluster.stageName}
+                                </span>
+                              </span>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
+                                <span style={{
+                                  fontSize: '0.64rem',
+                                  fontWeight: '700',
+                                  backgroundColor: 'rgba(255,255,255,0.22)',
+                                  padding: '1px 5px',
+                                  borderRadius: '8px',
+                                  whiteSpace: 'nowrap'
+                                }}>
+                                  {cluster.nodes.length} tổ
+                                </span>
+                                {cIdx > 0 && (
                                   <button
                                     type="button"
-                                    onClick={(e) => { e.stopPropagation(); handleMoveNode(node.id, 'left'); }}
-                                    title="Di chuyển sang trái"
-                                    style={{ border: 'none', background: 'transparent', color: '#FFF', cursor: 'pointer', padding: '2px' }}
+                                    onClick={(e) => { e.stopPropagation(); handleMoveFactoryCluster(fGroup.factory, cIdx, 'left'); }}
+                                    title={`Chuyển cả công đoạn "${cluster.stageName}" sang trước`}
+                                    style={{
+                                      border: 'none',
+                                      background: 'rgba(255,255,255,0.22)',
+                                      color: '#FFFFFF',
+                                      cursor: 'pointer',
+                                      borderRadius: '3px',
+                                      padding: '1px 3px',
+                                      display: 'inline-flex',
+                                      alignItems: 'center'
+                                    }}
                                   >
-                                    <ArrowLeft size={14} />
+                                    <ArrowLeft size={10} />
                                   </button>
                                 )}
-                                {idx < arr.length - 1 && (
+                                {cIdx < fGroup.clusters.length - 1 && (
                                   <button
                                     type="button"
-                                    onClick={(e) => { e.stopPropagation(); handleMoveNode(node.id, 'right'); }}
-                                    title="Di chuyển sang phải"
-                                    style={{ border: 'none', background: 'transparent', color: '#FFF', cursor: 'pointer', padding: '2px' }}
+                                    onClick={(e) => { e.stopPropagation(); handleMoveFactoryCluster(fGroup.factory, cIdx, 'right'); }}
+                                    title={`Chuyển cả công đoạn "${cluster.stageName}" ra sau`}
+                                    style={{
+                                      border: 'none',
+                                      background: 'rgba(255,255,255,0.22)',
+                                      color: '#FFFFFF',
+                                      cursor: 'pointer',
+                                      borderRadius: '3px',
+                                      padding: '1px 3px',
+                                      display: 'inline-flex',
+                                      alignItems: 'center'
+                                    }}
                                   >
-                                    <ArrowRight size={14} />
+                                    <ArrowRight size={10} />
                                   </button>
                                 )}
-                                <button
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); handleRemoveNode(node.id); }}
-                                  title="Xóa tổ khỏi chuỗi"
-                                  style={{ border: 'none', background: 'transparent', color: '#F87171', cursor: 'pointer', padding: '2px', marginLeft: '2px' }}
-                                >
-                                  <X size={14} />
-                                </button>
                               </div>
                             </div>
 
-                            {isActive && (
-                              <span style={{ fontSize: '0.72rem', fontWeight: '800', color: '#10B981', backgroundColor: '#ECFDF5', padding: '2px 8px', borderRadius: '10px', border: '1px solid #A7F3D0' }}>
-                                Đang chọn
-                              </span>
-                            )}
+                            {/* Teams inside this Stage */}
+                            <div style={{ padding: '5px', display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, backgroundColor: '#FAF7F2' }}>
+                              {cluster.nodes.map((node) => {
+                                const isActive = Boolean(activeNodeId) && (
+                                  String(node.id) === String(activeNodeId) ||
+                                  (node.teamCode && node.teamCode === activeNodeId)
+                                );
+                                return (
+                                  <div
+                                    key={node.teamCode || node.id}
+                                    onClick={() => setActiveNodeId(node.teamCode || node.id)}
+                                    style={{
+                                      padding: '4px 7px',
+                                      borderRadius: '6px',
+                                      backgroundColor: isActive ? '#5D3B32' : '#FFFFFF',
+                                      color: isActive ? '#FFFFFF' : '#2D1A12',
+                                      border: isActive ? '1.5px solid #5D3B32' : '1px solid #EADCC9',
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      gap: '5px',
+                                      boxShadow: isActive ? '0 2px 6px rgba(93,59,50,0.25)' : '0 1px 2px rgba(0,0,0,0.02)',
+                                      transition: 'all 0.15s ease'
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+                                      <span style={{
+                                        fontSize: '0.78rem',
+                                        fontWeight: '800',
+                                        whiteSpace: 'nowrap',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis'
+                                      }} title={node.teamName}>
+                                        {node.teamName}
+                                      </span>
+                                      <span style={{
+                                        fontSize: '0.64rem',
+                                        opacity: isActive ? 0.85 : 0.65,
+                                        fontFamily: 'monospace'
+                                      }}>
+                                        {node.teamCode}
+                                      </span>
+                                    </div>
+
+                                    {/* Action Buttons: Move Team & Remove */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
+                                      {node.originalIndex > 0 && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => { e.stopPropagation(); handleMoveFactoryNode(fGroup.factory, node.id, 'left'); }}
+                                          title="Chuyển tổ lên trước"
+                                          style={{
+                                            border: 'none',
+                                            background: isActive ? 'rgba(255,255,255,0.25)' : '#F3E8DB',
+                                            color: isActive ? '#FFF' : '#5D3B32',
+                                            cursor: 'pointer',
+                                            borderRadius: '3px',
+                                            padding: '1px 3px',
+                                            display: 'inline-flex',
+                                            alignItems: 'center'
+                                          }}
+                                        >
+                                          <ArrowLeft size={10} />
+                                        </button>
+                                      )}
+                                      {node.originalIndex < fGroup.totalNodes - 1 && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => { e.stopPropagation(); handleMoveFactoryNode(fGroup.factory, node.id, 'right'); }}
+                                          title="Chuyển tổ ra sau"
+                                          style={{
+                                            border: 'none',
+                                            background: isActive ? 'rgba(255,255,255,0.25)' : '#F3E8DB',
+                                            color: isActive ? '#FFF' : '#5D3B32',
+                                            cursor: 'pointer',
+                                            borderRadius: '3px',
+                                            padding: '1px 3px',
+                                            display: 'inline-flex',
+                                            alignItems: 'center'
+                                          }}
+                                        >
+                                          <ArrowRight size={10} />
+                                        </button>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); handleRemoveNode(node.id); }}
+                                        title="Xóa tổ khỏi quy trình"
+                                        style={{
+                                          border: 'none',
+                                          background: 'rgba(239,68,68,0.15)',
+                                          color: '#DC2626',
+                                          cursor: 'pointer',
+                                          borderRadius: '3px',
+                                          padding: '1px 3px',
+                                          display: 'inline-flex',
+                                          alignItems: 'center'
+                                        }}
+                                      >
+                                        <X size={10} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
 
-                          <ArrowRight size={24} color="#9CA3AF" />
+                          {/* Stage Connector Arrow */}
+                          {cIdx < fGroup.clusters.length - 1 && (
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              alignSelf: 'center',
+                              flexShrink: 0
+                            }}>
+                              <div style={{
+                                width: '20px',
+                                height: '20px',
+                                borderRadius: '50%',
+                                backgroundColor: '#FAF6F0',
+                                border: '1.2px solid #EADCC9',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                              }}>
+                                <ArrowRight size={11} color={fGroup.color} />
+                              </div>
+                            </div>
+                          )}
                         </React.Fragment>
-                      );
-                    })}
+                      ))}
+                    </>
+                  ) : (
+                    /* VIEW 2: INDIVIDUAL SEQUENTIAL STEPS */
+                    <>
+                      {fGroup.clusters.flatMap(c => c.nodes).map((node, idx, arr) => {
+                        const nodeKey = node.teamCode || node.id || `node-${idx}`;
+                        const isActive = Boolean(activeNodeId) && (
+                          String(node.id) === String(activeNodeId) ||
+                          (node.teamCode && node.teamCode === activeNodeId)
+                        );
+                        return (
+                          <React.Fragment key={nodeKey}>
+                            {/* Step Card */}
+                            <div
+                              onClick={() => setActiveNodeId(node.teamCode || node.id)}
+                              style={{
+                                width: '160px',
+                                borderRadius: '8px',
+                                border: isActive ? '2px solid #5D3B32' : '1.5px solid #EADCC9',
+                                backgroundColor: isActive ? '#FFFFFF' : '#FAF6F0',
+                                boxShadow: isActive
+                                  ? '0 3px 10px rgba(93, 59, 50, 0.18), 0 0 0 2px rgba(93, 59, 50, 0.15)'
+                                  : '0 1px 4px rgba(0,0,0,0.02)',
+                                overflow: 'hidden',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                                transform: isActive ? 'translateY(-2px)' : 'none'
+                              }}
+                            >
+                              {/* Step Top Bar */}
+                              <div style={{
+                                padding: '4px 6px',
+                                backgroundColor: isActive ? '#5D3B32' : (fGroup.color || '#6D4C3D'),
+                                color: '#FFFFFF',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between'
+                              }}>
+                                <span style={{ fontSize: '0.66rem', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.03em', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                  <span>B.{idx + 1}</span>
+                                  {node.stageName && (
+                                    <span style={{
+                                      fontSize: '0.62rem',
+                                      backgroundColor: 'rgba(255,255,255,0.22)',
+                                      padding: '1px 4px',
+                                      borderRadius: '4px',
+                                      fontWeight: '700'
+                                    }}>
+                                      {node.stageName}
+                                    </span>
+                                  )}
+                                </span>
 
-                    <div style={{
-                      backgroundColor: '#10B981',
-                      color: '#FFFFFF',
-                      padding: '12px 24px',
-                      borderRadius: '10px',
-                      fontWeight: '800',
-                      fontSize: '0.95rem',
-                      boxShadow: '0 4px 10px rgba(16, 185, 129, 0.25)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px'
-                    }}>
-                      <CheckCircle2 size={18} /> Kho thành phẩm
-                    </div>
-                  </>
-                )}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                                  {idx > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); handleMoveFactoryNode(fGroup.factory, node.id, 'left'); }}
+                                      title="Chuyển lên trước"
+                                      style={{
+                                        border: 'none',
+                                        background: 'rgba(255,255,255,0.2)',
+                                        color: '#FFF',
+                                        cursor: 'pointer',
+                                        borderRadius: '3px',
+                                        padding: '1px 3px',
+                                        display: 'inline-flex',
+                                        alignItems: 'center'
+                                      }}
+                                    >
+                                      <ArrowLeft size={10} />
+                                    </button>
+                                  )}
+                                  {idx < arr.length - 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); handleMoveFactoryNode(fGroup.factory, node.id, 'right'); }}
+                                      title="Chuyển ra sau"
+                                      style={{
+                                        border: 'none',
+                                        background: 'rgba(255,255,255,0.2)',
+                                        color: '#FFF',
+                                        cursor: 'pointer',
+                                        borderRadius: '3px',
+                                        padding: '1px 3px',
+                                        display: 'inline-flex',
+                                        alignItems: 'center'
+                                      }}
+                                    >
+                                      <ArrowRight size={10} />
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleRemoveNode(node.id); }}
+                                    title="Xóa tổ khỏi chuỗi"
+                                    style={{
+                                      border: 'none',
+                                      background: 'rgba(239,68,68,0.3)',
+                                      color: '#FFF',
+                                      cursor: 'pointer',
+                                      borderRadius: '3px',
+                                      padding: '1px 3px',
+                                      marginLeft: '2px',
+                                      display: 'inline-flex',
+                                      alignItems: 'center'
+                                    }}
+                                  >
+                                    <X size={10} />
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Step Content */}
+                              <div style={{
+                                padding: '6px 8px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '5px'
+                              }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+                                  <div style={{
+                                    fontWeight: '800',
+                                    fontSize: '0.78rem',
+                                    color: '#2D1A12',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis'
+                                  }} title={node.teamName}>
+                                    {node.teamName}
+                                  </div>
+                                  <div style={{ fontSize: '0.64rem', color: '#78716C', fontFamily: 'monospace' }}>
+                                    {node.teamCode}
+                                  </div>
+                                </div>
+                                {isActive && (
+                                  <span style={{
+                                    fontSize: '0.62rem',
+                                    fontWeight: '800',
+                                    color: '#5D3B32',
+                                    backgroundColor: '#F5EBE1',
+                                    padding: '1px 5px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #D6C2AC',
+                                    whiteSpace: 'nowrap',
+                                    flexShrink: 0
+                                  }}>
+                                    ✓ Chọn
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Circular Arrow Connector */}
+                            {idx < arr.length - 1 && (
+                              <div style={{
+                                width: '20px',
+                                height: '20px',
+                                borderRadius: '50%',
+                                backgroundColor: '#FAF6F0',
+                                border: '1.2px solid #EADCC9',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0,
+                                alignSelf: 'center',
+                                boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+                              }}>
+                                <ArrowRight size={11} color="#78716C" />
+                              </div>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
+            ))}
 
           <div style={{
             backgroundColor: '#FFFFFF',
@@ -1559,7 +3083,7 @@ const ProductionRoutingView = () => {
             <div style={{ overflowX: 'auto', border: '1px solid #EADCC9', borderRadius: '8px', flex: 1, display: 'flex', flexDirection: 'column' }}>
               <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', height: filteredExecutionPlanRows.length === 0 ? '100%' : 'auto' }}>
                 <thead>
-                  <tr style={{ backgroundColor: '#6D4C3D', color: '#FFFFFF' }}>
+                  <tr style={{ backgroundColor: '#5D3B32', color: '#FFFFFF' }}>
                     <th style={{ padding: '9px 10px', textAlign: 'center', width: '45px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>STT</th>
                     <th style={{ padding: '9px 10px', textAlign: 'center', width: '110px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Ngày bắt đầu (dự kiến)</th>
                     <th style={{ padding: '9px 10px', textAlign: 'center', width: '110px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Ngày kết thúc (dự kiến)</th>
@@ -1594,7 +3118,7 @@ const ProductionRoutingView = () => {
                         <td style={{ padding: '8px 10px', fontWeight: '700', color: '#1E293B' }}>{r.teamName}</td>
                         <td style={{ padding: '8px 10px', color: '#334155' }}>{r.partType}</td>
                         <td style={{ padding: '8px 10px', color: '#475569' }}>{r.stageFrom}</td>
-                        <td style={{ padding: '8px 10px', color: '#0284C7', fontWeight: '700' }}>{r.stageTo}</td>
+                        <td style={{ padding: '8px 10px', color: '#5D3B32', fontWeight: '700' }}>{r.stageTo}</td>
                         <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0F172A' }}>{r.partName}</td>
                         <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: '#1E293B' }}>{r.quantity}</td>
                         <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>{r.unit}</td>
@@ -1609,9 +3133,9 @@ const ProductionRoutingView = () => {
                             borderRadius: '12px',
                             fontSize: '0.72rem',
                             fontWeight: '700',
-                            backgroundColor: '#FEF3C7',
-                            color: '#D97706',
-                            border: '1px solid #FDE68A'
+                            backgroundColor: '#FAF6F0',
+                            color: '#5D3B32',
+                            border: '1px solid #EADCC9'
                           }}>
                             {r.status}
                           </span>
@@ -1881,7 +3405,7 @@ const ProductionRoutingView = () => {
                             {p.category}
                           </span>
                         </td>
-                        <td style={{ padding: '12px 14px', fontWeight: '800', color: '#0284C7', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1' }}>
+                        <td style={{ padding: '12px 14px', fontWeight: '800', color: '#5D3B32', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1' }}>
                           {p.routingCode}
                         </td>
                         <td style={{ padding: '12px 14px', textAlign: 'center', borderTop: '1px solid #F3EBE1', borderBottom: '1px solid #F3EBE1' }}>
@@ -1891,9 +3415,9 @@ const ProductionRoutingView = () => {
                             borderRadius: '16px',
                             fontSize: '0.72rem',
                             fontWeight: '700',
-                            backgroundColor: p.isAssignedToThis ? '#ECFDF5' : (p.routingCode !== '---' ? '#EFF6FF' : '#F3F4F6'),
-                            color: p.isAssignedToThis ? '#10B981' : (p.routingCode !== '---' ? '#2563EB' : '#6B7280'),
-                            border: `1px solid ${p.isAssignedToThis ? '#A7F3D0' : (p.routingCode !== '---' ? '#BFDBFE' : '#E5E7EB')}`
+                            backgroundColor: p.isAssignedToThis ? '#FAF6F0' : '#F9FAFB',
+                            color: p.isAssignedToThis ? '#5D3B32' : '#6B7280',
+                            border: `1px solid ${p.isAssignedToThis ? '#D6C2AC' : '#E5E7EB'}`
                           }}>
                             {p.status}
                           </span>
@@ -2016,84 +3540,416 @@ const ProductionRoutingView = () => {
       {activeTab === 'workshops' && (
         <div style={{
           backgroundColor: '#FFFFFF',
-          borderRadius: '12px',
+          borderRadius: '16px',
           border: '1.5px solid #EADCC9',
           overflow: 'hidden',
-          boxShadow: '0 4px 16px rgba(45, 26, 18, 0.04)'
+          boxShadow: '0 8px 24px rgba(45, 26, 18, 0.05)',
+          display: 'flex',
+          flexDirection: 'column'
         }}>
+          {/* Header Bar */}
           <div style={{
-            padding: '16px 20px',
+            padding: '18px 24px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             borderBottom: '1.5px solid #EADCC9',
-            backgroundColor: '#FAF6F0'
+            backgroundColor: '#FAF6F0',
+            flexWrap: 'wrap',
+            gap: '16px'
           }}>
-            <div>
-              <span style={{ fontSize: '1rem', fontWeight: '800', color: '#2D1A12' }}>
-                Danh sách Tổ thuộc Quy trình: {currentRouting.code} ({currentRouting.name})
-              </span>
-              <span style={{ display: 'block', fontSize: '0.8rem', color: '#6B7280', marginTop: '2px' }}>
-                Danh sách tổ ở tab này sẽ hiển thị trực tiếp ở khối "Kho Tổ sản xuất" ở Tab Quy trình (Ảnh 1)
-              </span>
-            </div>
-
-            <button
-              onClick={handleOpenAddTeamModal}
-              style={{
-                padding: '8px 18px',
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '10px',
                 backgroundColor: '#5D3B32',
-                border: 'none',
-                borderRadius: '8px',
-                color: '#FFF',
-                fontWeight: '800',
-                fontSize: '0.88rem',
-                cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px'
-              }}
-            >
-              <Plus size={18} /> Thêm tổ vào quy trình
-            </button>
+                justifyContent: 'center',
+                color: '#FFFFFF',
+                boxShadow: '0 3px 8px rgba(93, 59, 50, 0.25)'
+              }}>
+                <Building2 size={22} />
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '1.08rem', fontWeight: '800', color: '#2D1A12', letterSpacing: '-0.01em' }}>
+                    Danh mục Tổ sản xuất theo Nhà máy
+                  </span>
+                  <span style={{
+                    fontSize: '0.76rem',
+                    fontWeight: '800',
+                    color: '#5D3B32',
+                    backgroundColor: '#EADCC9',
+                    padding: '2px 9px',
+                    borderRadius: '12px'
+                  }}>
+                    {filteredTeamsForTab.length} / {(teamsList.length > 0 ? teamsList : currentRoutingTeams).length} Tổ
+                  </span>
+                </div>
+                <span style={{ display: 'block', fontSize: '0.82rem', color: '#78716C', marginTop: '2px' }}>
+                  Quản trị cơ cấu các tổ sản xuất theo từng phân xưởng. Dữ liệu dùng chung trực tiếp cho toàn bộ Quy trình sản xuất.
+                </span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <button
+                onClick={handleOpenAddTeamModal}
+                style={{
+                  padding: '9px 20px',
+                  backgroundColor: '#5D3B32',
+                  border: 'none',
+                  borderRadius: '9px',
+                  color: '#FFF',
+                  fontWeight: '800',
+                  fontSize: '0.88rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  boxShadow: '0 3px 10px rgba(93, 59, 50, 0.28)',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#432921'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#5D3B32'; e.currentTarget.style.transform = 'translateY(0)'; }}
+              >
+                <Plus size={18} /> Thêm tổ sản xuất mới
+              </button>
+            </div>
           </div>
 
+          {/* Search & Filter Toolbar */}
+          <div style={{
+            padding: '14px 24px',
+            backgroundColor: '#FFFFFF',
+            borderBottom: '1px solid #EAE0D5',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            flexWrap: 'wrap'
+          }}>
+            {/* Search Box */}
+            <div style={{ position: 'relative', width: '280px', maxWidth: '100%' }}>
+              <Search size={16} color="#9CA3AF" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+              <input
+                type="text"
+                value={teamSearchQuery}
+                onChange={(e) => setTeamSearchQuery(e.target.value)}
+                placeholder="Tìm mã tổ, tên tổ, năng lực..."
+                style={{
+                  width: '100%',
+                  padding: '8px 12px 8px 36px',
+                  borderRadius: '8px',
+                  border: '1.5px solid #EADCC9',
+                  backgroundColor: '#FAF6F0',
+                  fontSize: '0.85rem',
+                  color: '#2D1A12',
+                  outline: 'none',
+                  transition: 'all 0.15s'
+                }}
+                onFocus={(e) => { e.target.style.borderColor = '#5D3B32'; e.target.style.backgroundColor = '#FFFFFF'; }}
+                onBlur={(e) => { e.target.style.borderColor = '#EADCC9'; e.target.style.backgroundColor = '#FAF6F0'; }}
+              />
+              {teamSearchQuery && (
+                <button
+                  onClick={() => setTeamSearchQuery('')}
+                  style={{
+                    position: 'absolute',
+                    right: '10px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    border: 'none',
+                    background: 'transparent',
+                    color: '#9CA3AF',
+                    cursor: 'pointer',
+                    padding: '2px'
+                  }}
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            {/* Filter Controls: Stage Filter & Factory Pills */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              {/* Stage Filter Dropdown */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#5D3B32' }}>Công đoạn:</span>
+                <select
+                  value={selectedTeamStageFilter}
+                  onChange={(e) => setSelectedTeamStageFilter(e.target.value)}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #EADCC9',
+                    backgroundColor: '#FAF6F0',
+                    color: '#2D1A12',
+                    fontSize: '0.82rem',
+                    fontWeight: '700',
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="ALL">Tất cả công đoạn</option>
+                  {(dbStages.length > 0 ? dbStages : [
+                    { id: 1, name: 'Nhập Kho/Đầu Vào' },
+                    { id: 2, name: 'Tạo Phôi' },
+                    { id: 3, name: 'Định Hình' },
+                    { id: 4, name: 'Lắp Ráp' },
+                    { id: 5, name: 'Sơn' },
+                    { id: 6, name: 'Đóng Gói' },
+                    { id: 7, name: 'Lưu Kho' }
+                  ]).map(s => {
+                    const sName = s.name || s.stage_name;
+                    return (
+                      <option key={s.id || sName} value={sName}>
+                        {s.code ? `[${s.code}] ` : ''}{sName}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* Factory Pills */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                {[
+                  { id: 'ALL', label: 'Tất cả nhà máy' },
+                  ...((factoryStructures.length > 0 ? factoryStructures : [
+                    { structure_name: 'Vaniti Phân Xưởng 1' },
+                    { structure_name: 'Vaniti Phân Xưởng 2' },
+                    { structure_name: 'Vaniti Phân Xưởng 3' }
+                  ]).filter(f => (f.structure_code || '').toUpperCase() !== 'VP' && !(f.structure_name || '').toLowerCase().includes('văn phòng')).map(f => ({
+                    id: f.structure_name,
+                    label: f.structure_name
+                  })))
+                ].map(fTab => {
+                  const isSelected = selectedTeamFactoryFilter === fTab.id;
+                  const count = factoryTeamCounts[fTab.id] || 0;
+                  const pillColor = fTab.id === 'ALL' ? '#5D3B32' : getFactoryColor(fTab.id);
+
+                  return (
+                    <button
+                      key={fTab.id}
+                      onClick={() => setSelectedTeamFactoryFilter(fTab.id)}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '20px',
+                        border: isSelected ? `1.5px solid ${pillColor}` : '1.5px solid #EADCC9',
+                        backgroundColor: isSelected ? pillColor : '#FAF6F0',
+                        color: isSelected ? '#FFFFFF' : '#4B5563',
+                        fontWeight: isSelected ? '800' : '600',
+                        fontSize: '0.8rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: isSelected ? '0 2px 8px rgba(0,0,0,0.12)' : 'none',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {fTab.id !== 'ALL' && (
+                        <span style={{
+                          width: '7px',
+                          height: '7px',
+                          borderRadius: '50%',
+                          backgroundColor: isSelected ? '#FFFFFF' : pillColor,
+                          display: 'inline-block'
+                        }} />
+                      )}
+                      <span>{fTab.label}</span>
+                      <span style={{
+                        backgroundColor: isSelected ? 'rgba(255,255,255,0.28)' : '#E5D7C7',
+                        color: isSelected ? '#FFFFFF' : '#2D1A12',
+                        padding: '1px 6px',
+                        borderRadius: '10px',
+                        fontSize: '0.7rem',
+                        fontWeight: '800'
+                      }}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Table */}
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
               <thead>
-                <tr style={{ backgroundColor: '#5D3B32', color: '#FFFFFF' }}>
-                  <th style={{ padding: '12px 16px', fontWeight: '800', width: '140px' }}>Mã tổ</th>
-                  <th style={{ padding: '12px 16px', fontWeight: '800', width: '220px' }}>Tên tổ</th>
-                  <th style={{ padding: '12px 16px', fontWeight: '800', width: '160px' }}>Tên nhà máy</th>
-                  <th style={{ padding: '12px 16px', fontWeight: '800' }}>Mô tả công việc & Năng lực</th>
-                  <th style={{ padding: '12px 16px', fontWeight: '800', width: '100px', textAlign: 'center' }}>Thao tác</th>
+                <tr style={{ backgroundColor: '#3A241D', color: '#FFFFFF' }}>
+                  <th style={{ padding: '13px 18px', fontWeight: '800', width: '150px', whiteSpace: 'nowrap', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Mã tổ
+                  </th>
+                  <th style={{ padding: '13px 18px', fontWeight: '800', width: '200px', whiteSpace: 'nowrap', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Tên tổ sản xuất
+                  </th>
+                  <th style={{ padding: '13px 18px', fontWeight: '800', width: '160px', whiteSpace: 'nowrap', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Công đoạn
+                  </th>
+                  <th style={{ padding: '13px 18px', fontWeight: '800', width: '190px', whiteSpace: 'nowrap', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Nhà máy trực thuộc
+                  </th>
+                  <th style={{ padding: '13px 18px', fontWeight: '800', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Mô tả công việc & Năng lực
+                  </th>
+                  <th style={{ padding: '13px 18px', fontWeight: '800', width: '90px', textAlign: 'center', whiteSpace: 'nowrap', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Thao tác
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {currentRoutingTeams.length === 0 ? (
+                {filteredTeamsForTab.length === 0 ? (
                   <tr>
-                    <td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: '#9CA3AF', fontWeight: '600' }}>
-                      Chưa có Tổ nào thuộc Quy trình này. Nhấp nút "Thêm tổ vào quy trình" góc trên để bổ sung.
+                    <td colSpan={6} style={{ padding: '50px 20px', textAlign: 'center', color: '#9CA3AF' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                        <Building2 size={36} color="#D1D5DB" />
+                        <span style={{ fontWeight: '700', fontSize: '0.95rem', color: '#6B7280' }}>
+                          Không tìm thấy Tổ sản xuất nào phù hợp
+                        </span>
+                        <span style={{ fontSize: '0.82rem', color: '#9CA3AF' }}>
+                          Thử thay đổi bộ lọc nhà máy, công đoạn hoặc từ khóa tìm kiếm.
+                        </span>
+                      </div>
                     </td>
                   </tr>
                 ) : (
-                  currentRoutingTeams.map((t, idx) => (
-                    <tr key={t.id || t.teamCode} style={{ borderBottom: '1px solid #F3F4F6', backgroundColor: idx % 2 === 1 ? '#FAF6F0' : '#FFFFFF' }}>
-                      <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontWeight: '800', color: '#5D3B32' }}>{t.teamCode}</td>
-                      <td style={{ padding: '12px 16px', fontWeight: '800', color: '#1F2937' }}>{t.teamName}</td>
-                      <td style={{ padding: '12px 16px', color: '#4B5563', fontWeight: '700' }}>{t.factory}</td>
-                      <td style={{ padding: '12px 16px', color: '#6B7280' }}>{t.desc}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                        <button
-                          onClick={() => handleDeleteTeamFromRouting(t.id)}
-                          title="Xóa tổ khỏi quy trình"
-                          style={{ border: 'none', background: 'transparent', color: '#EF4444', cursor: 'pointer', padding: '4px' }}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  filteredTeamsForTab.map((t, idx) => {
+                    const facColor = getFactoryColor(t.factory);
+                    const teamColor = t.color || facColor;
+                    const stageDisplay = t.stageName || (dbStages.find(s => s.id === t.stageId)?.name) || 'Tạo Phôi';
+
+                    return (
+                      <tr
+                        key={t.id || t.teamCode}
+                        style={{
+                          borderBottom: '1px solid #F3EDE5',
+                          backgroundColor: idx % 2 === 1 ? '#FAF6F0' : '#FFFFFF',
+                          transition: 'background-color 0.15s ease'
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#FFF6EC'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = idx % 2 === 1 ? '#FAF6F0' : '#FFFFFF'; }}
+                      >
+                        {/* Mã tổ */}
+                        <td style={{ padding: '14px 18px', whiteSpace: 'nowrap' }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '4px 10px',
+                            backgroundColor: '#F3EDE6',
+                            borderRadius: '6px',
+                            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                            fontWeight: '800',
+                            fontSize: '0.82rem',
+                            color: '#5D3B32',
+                            border: '1px solid #E5D7C7',
+                            letterSpacing: '0.02em',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {t.teamCode}
+                          </span>
+                        </td>
+
+                        {/* Tên tổ */}
+                        <td style={{ padding: '14px 18px', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={{
+                              width: '10px',
+                              height: '10px',
+                              borderRadius: '50%',
+                              backgroundColor: teamColor,
+                              flexShrink: 0,
+                              boxShadow: `0 0 0 2px ${teamColor}33`
+                            }} />
+                            <span style={{ fontWeight: '800', color: '#1F2937', fontSize: '0.92rem', whiteSpace: 'nowrap' }}>
+                              {t.teamName}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Công đoạn */}
+                        <td style={{ padding: '14px 18px', whiteSpace: 'nowrap' }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            backgroundColor: '#FAF6F0',
+                            color: '#5D3B32',
+                            border: '1px solid #EADCC9',
+                            padding: '3px 10px',
+                            borderRadius: '6px',
+                            fontWeight: '700',
+                            fontSize: '0.8rem',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#5D3B32' }} />
+                            {stageDisplay}
+                          </span>
+                        </td>
+
+                        {/* Nhà máy trực thuộc */}
+                        <td style={{ padding: '14px 18px', whiteSpace: 'nowrap' }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            backgroundColor: `${facColor}12`,
+                            color: facColor,
+                            border: `1.5px solid ${facColor}35`,
+                            padding: '4px 12px',
+                            borderRadius: '20px',
+                            fontWeight: '700',
+                            fontSize: '0.82rem',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            🏭 {t.factory}
+                          </span>
+                        </td>
+
+                        {/* Mô tả công việc & Năng lực */}
+                        <td style={{ padding: '14px 18px', color: '#4B5563', fontSize: '0.86rem', lineHeight: '1.45' }}>
+                          {t.desc || t.description || 'Chưa có mô tả chi tiết'}
+                        </td>
+
+                        {/* Thao tác */}
+                        <td style={{ padding: '14px 18px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          <button
+                            onClick={() => handleDeleteTeam(t)}
+                            title="Xóa tổ sản xuất khỏi hệ thống"
+                            style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '8px',
+                              border: '1px solid #FEE2E2',
+                              backgroundColor: '#FEF2F2',
+                              color: '#DC2626',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#DC2626';
+                              e.currentTarget.style.color = '#FFFFFF';
+                              e.currentTarget.style.borderColor = '#DC2626';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = '#FEF2F2';
+                              e.currentTarget.style.color = '#DC2626';
+                              e.currentTarget.style.borderColor = '#FEE2E2';
+                            }}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -2137,7 +3993,7 @@ const ProductionRoutingView = () => {
             </div>
 
             <form onSubmit={handleCreateNewTeam}>
-              {/* FIELD 1 (ĐƯA LÊN ĐẦU & XÁM KHÔNG CẦN NHẬP): Mã Tổ Tự động Khởi tạo */}
+              {/* FIELD 1: Mã Tổ Tự động Khởi tạo */}
               <div style={{ marginBottom: '14px' }}>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#374151', marginBottom: '6px' }}>
                   Mã Tổ sản xuất (Tự động khởi tạo)
@@ -2146,7 +4002,7 @@ const ProductionRoutingView = () => {
                   type="text"
                   disabled
                   readOnly
-                  value={newTeamForm.teamCode || `TO-NM1-${Math.floor(100 + Math.random() * 900)}`}
+                  value={newTeamForm.teamCode || 'TO-NM1-501'}
                   style={{
                     width: '100%',
                     padding: '9px 12px',
@@ -2166,7 +4022,7 @@ const ProductionRoutingView = () => {
               {/* FIELD 2: Thuộc Nhà máy / Xưởng */}
               <div style={{ marginBottom: '14px' }}>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#374151', marginBottom: '6px' }}>
-                  Thuộc Nhà máy / Xưởng *
+                  Thuộc Nhà máy / Phân xưởng *
                 </label>
                 <select
                   value={newTeamForm.factory}
@@ -2174,14 +4030,10 @@ const ProductionRoutingView = () => {
                     const fac = e.target.value;
                     const facObj = factoryStructures.find(f => f.structure_name === fac);
                     const facCode = facObj ? facObj.structure_code : (fac.replace(/\D/g, '') ? `NM${fac.replace(/\D/g, '')}` : 'NM1');
-                    const defaultStage = 'Tạo Phôi';
                     setNewTeamForm({
                       ...newTeamForm,
                       factory: fac,
-                      teamCode: `TO-${facCode}-${Math.floor(100 + Math.random() * 900)}`,
-                      teamName: '',
-                      selectedStages: [defaultStage],
-                      desc: ''
+                      teamCode: `TO-${facCode}-${Math.floor(100 + Math.random() * 900)}`
                     });
                   }}
                   style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #EADCC9', outline: 'none', fontSize: '0.88rem', fontWeight: '700' }}
@@ -2194,127 +4046,111 @@ const ProductionRoutingView = () => {
                     ))
                   ) : (
                     <>
-                      <option value="Nhà máy 1">Nhà máy 1</option>
-                      <option value="Nhà máy 2">Nhà máy 2</option>
-                      <option value="Nhà máy 3">Nhà máy 3</option>
-                      <option value="Nhà máy 4">Nhà máy 4</option>
+                      <option value="Vaniti Phân Xưởng 1">Vaniti Phân Xưởng 1 (NM1)</option>
+                      <option value="Vaniti Phân Xưởng 2">Vaniti Phân Xưởng 2 (NM2)</option>
+                      <option value="Vaniti Phân Xưởng 3">Vaniti Phân Xưởng 3 (NM3)</option>
                     </>
                   )}
                 </select>
               </div>
 
-              {/* FIELD 3: Tên Tổ sản xuất (Lọc theo Nhà máy đã chọn) */}
+              {/* FIELD 3: Thuộc Công đoạn sản xuất */}
               <div style={{ marginBottom: '14px' }}>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#374151', marginBottom: '6px' }}>
-                  Tên Tổ sản xuất (Lọc theo {newTeamForm.factory}) *
+                  Thuộc Công đoạn sản xuất *
                 </label>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {/* BỘ CHỌN CÔNG ĐOẠN ĐA CHỌN (MULTI-SELECT DROPDOWN) */}
-                  <div style={{ position: 'relative', width: '50%' }}>
-                    <button
-                      type="button"
-                      onClick={() => setIsStageDropdownOpen(!isStageDropdownOpen)}
-                      style={{
-                        width: '100%',
-                        padding: '9px 10px',
-                        borderRadius: '8px',
-                        border: '1.5px solid #EADCC9',
-                        outline: 'none',
-                        fontSize: '0.84rem',
-                        fontWeight: '700',
-                        backgroundColor: '#FAF6F0',
-                        color: '#2D1A12',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        cursor: 'pointer',
-                        textAlign: 'left'
-                      }}
-                    >
-                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginRight: '4px' }}>
-                        {(newTeamForm.selectedStages && newTeamForm.selectedStages.length > 0)
-                          ? newTeamForm.selectedStages.join(', ')
-                          : '-- Chọn công đoạn --'}
-                      </span>
-                      <ChevronDown size={16} style={{ flexShrink: 0, color: '#5D3B32' }} />
-                    </button>
+                <select
+                  value={newTeamForm.stageId || ''}
+                  onChange={(e) => {
+                    const sId = Number(e.target.value);
+                    const stg = dbStages.find(s => s.id === sId);
+                    const sName = stg ? (stg.name || stg.stage_name) : 'Tạo Phôi';
+                    setNewTeamForm(prev => ({
+                      ...prev,
+                      stageId: sId,
+                      stageName: sName,
+                      teamName: prev.teamName.startsWith('Tổ ') ? `Tổ ${sName}` : prev.teamName,
+                      selectedStages: [sName],
+                      desc: `Tổ sản xuất thuộc công đoạn ${sName}`
+                    }));
+                  }}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #EADCC9', outline: 'none', fontSize: '0.88rem', fontWeight: '700', backgroundColor: '#FAF6F0' }}
+                >
+                  {(dbStages.length > 0 ? dbStages : [
+                    { id: 1, code: 'CD01', name: 'Nhập Kho/Đầu Vào' },
+                    { id: 2, code: 'CD02', name: 'Tạo Phôi' },
+                    { id: 3, code: 'CD03', name: 'Định Hình' },
+                    { id: 4, code: 'CD04', name: 'Lắp Ráp' },
+                    { id: 5, code: 'CD05', name: 'Sơn' },
+                    { id: 6, code: 'CD06', name: 'Đóng Gói' },
+                    { id: 7, code: 'CD07', name: 'Lưu Kho' }
+                  ]).map((stg) => (
+                    <option key={stg.id} value={stg.id}>
+                      {stg.code ? `[${stg.code}] ` : ''}{stg.name || stg.stage_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-                    {isStageDropdownOpen && (
-                      <>
-                        <div
-                          onClick={() => setIsStageDropdownOpen(false)}
-                          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1050 }}
-                        />
-                        <div style={{
-                          position: 'absolute',
-                          top: '100%',
-                          left: 0,
-                          right: 0,
-                          marginTop: '4px',
-                          backgroundColor: '#FFFFFF',
-                          border: '1.5px solid #EADCC9',
-                          borderRadius: '8px',
-                          boxShadow: '0 8px 20px rgba(0,0,0,0.15)',
-                          zIndex: 1100,
-                          maxHeight: '220px',
-                          overflowY: 'auto',
-                          padding: '4px 0'
-                        }}>
-                          {availableStagesForFactory.map((stage, idx) => {
-                            const isChecked = (newTeamForm.selectedStages || []).includes(stage);
-                            return (
-                              <label
-                                key={idx}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '8px',
-                                  padding: '8px 12px',
-                                  cursor: 'pointer',
-                                  fontSize: '0.84rem',
-                                  fontWeight: isChecked ? '800' : '600',
-                                  color: isChecked ? '#5D3B32' : '#374151',
-                                  backgroundColor: isChecked ? '#FAF6F0' : 'transparent',
-                                  borderBottom: idx < availableStagesForFactory.length - 1 ? '1px solid #F9FAFB' : 'none'
-                                }}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={isChecked}
-                                  onChange={(e) => {
-                                    const current = newTeamForm.selectedStages || [];
-                                    let updated = [];
-                                    if (e.target.checked) {
-                                      updated = [...current, stage];
-                                    } else {
-                                      updated = current.filter(s => s !== stage);
-                                    }
-                                    setNewTeamForm({
-                                      ...newTeamForm,
-                                      selectedStages: updated
-                                    });
-                                  }}
-                                  style={{ accentColor: '#5D3B32', width: '16px', height: '16px', cursor: 'pointer' }}
-                                />
-                                <span>{stage}</span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="Hoặc nhập tên Tổ..."
-                    value={newTeamForm.teamName}
-                    onChange={(e) => setNewTeamForm({ ...newTeamForm, teamName: e.target.value })}
-                    style={{ width: '50%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #EADCC9', outline: 'none', fontSize: '0.88rem' }}
-                  />
+              {/* FIELD 4: Tên Tổ sản xuất */}
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#374151', marginBottom: '6px' }}>
+                  Tên Tổ sản xuất *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ví dụ: Tổ Tạo Phôi 1, Tổ Sơn tĩnh điện, Tổ Lắp ráp..."
+                  value={newTeamForm.teamName}
+                  onChange={(e) => setNewTeamForm({ ...newTeamForm, teamName: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #EADCC9',
+                    outline: 'none',
+                    fontSize: '0.88rem',
+                    fontWeight: '600'
+                  }}
+                />
+
+                {/* Gợi ý chọn nhanh tên theo Công đoạn */}
+                <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                  <span style={{ fontSize: '0.74rem', color: '#78716C', fontWeight: '600' }}>Gợi ý nhanh:</span>
+                  {availableStagesForFactory.map((stgName, sIdx) => (
+                    <button
+                      key={sIdx}
+                      type="button"
+                      onClick={() => {
+                        const matchedStg = dbStages.find(s => (s.name || s.stage_name || '').toLowerCase() === stgName.toLowerCase());
+                        setNewTeamForm(prev => ({
+                          ...prev,
+                          stageId: matchedStg ? matchedStg.id : prev.stageId,
+                          stageName: matchedStg ? (matchedStg.name || matchedStg.stage_name) : stgName,
+                          teamName: `Tổ ${stgName}`,
+                          selectedStages: [stgName],
+                          desc: `Tổ sản xuất thuộc công đoạn ${stgName}`
+                        }));
+                      }}
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        border: '1px solid #EADCC9',
+                        backgroundColor: '#FAF6F0',
+                        color: '#5D3B32',
+                        fontSize: '0.74rem',
+                        fontWeight: '700',
+                        cursor: 'pointer'
+                      }}
+                      title={`Điền nhanh "Tổ ${stgName}"`}
+                    >
+                      + Tổ {stgName}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* FIELD 4: Mô tả công việc & Năng lực */}
+              {/* FIELD 5: Mô tả công việc & Năng lực */}
               <div style={{ marginBottom: '20px' }}>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#374151', marginBottom: '6px' }}>
                   Mô tả công việc & Năng lực
@@ -2484,6 +4320,131 @@ const ProductionRoutingView = () => {
                   style={{ padding: '8px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#5D3B32', color: '#FFF', fontWeight: '800', cursor: 'pointer' }}
                 >
                   Lưu Quy Trình
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showAddPlanModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1050,
+          backdropFilter: 'blur(2px)'
+        }}>
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '12px',
+            width: '560px',
+            maxWidth: '90%',
+            padding: '24px',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.15)',
+            border: '1px solid #EADCC9'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #EADCC9', paddingBottom: '12px' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '800', color: '#5D3B32' }}>
+                Thêm Dòng Kế Hoạch Sản Xuất
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddPlanModal(false)}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#8C7A6B' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreatePlanRow} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#5D3B32', marginBottom: '4px' }}>
+                  Tên thành phẩm / Chi tiết *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="VD: Cánh tủ áo trên, Mặt bàn làm việc..."
+                  value={newPlanForm.partName}
+                  onChange={(e) => setNewPlanForm(prev => ({ ...prev, partName: e.target.value }))}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1.5px solid #EADCC9', fontSize: '0.85rem' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#5D3B32', marginBottom: '4px' }}>
+                    Mã SKU / Chi tiết
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="VD: CT-001"
+                    value={newPlanForm.partSku}
+                    onChange={(e) => setNewPlanForm(prev => ({ ...prev, partSku: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1.5px solid #EADCC9', fontSize: '0.85rem' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#5D3B32', marginBottom: '4px' }}>
+                    Loại chi tiết
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="VD: Chi tiết gỗ mộc"
+                    value={newPlanForm.partType}
+                    onChange={(e) => setNewPlanForm(prev => ({ ...prev, partType: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1.5px solid #EADCC9', fontSize: '0.85rem' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#5D3B32', marginBottom: '4px' }}>
+                    Số lượng
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="VD: 0/500"
+                    value={newPlanForm.quantity}
+                    onChange={(e) => setNewPlanForm(prev => ({ ...prev, quantity: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1.5px solid #EADCC9', fontSize: '0.85rem' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#5D3B32', marginBottom: '4px' }}>
+                    Quy cách (mm)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="VD: 20*600*1200"
+                    value={newPlanForm.dimensions}
+                    onChange={(e) => setNewPlanForm(prev => ({ ...prev, dimensions: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1.5px solid #EADCC9', fontSize: '0.85rem' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddPlanModal(false)}
+                  style={{ padding: '8px 16px', borderRadius: '8px', border: '1.5px solid #EADCC9', backgroundColor: '#FFF', color: '#5D3B32', fontWeight: '700', cursor: 'pointer' }}
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '8px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#5D3B32', color: '#FFF', fontWeight: '800', cursor: 'pointer' }}
+                >
+                  Thêm Dòng Kế Hoạch
                 </button>
               </div>
             </form>

@@ -7,6 +7,8 @@ class ProductionTeamBase(BaseModel):
     team_code: str
     team_name: str
     factory: str
+    stage_id: Optional[int] = None
+    stage_name: Optional[str] = None
     members_count: Optional[int] = 10
     description: Optional[str] = None
     color: Optional[str] = '#2D1A12'
@@ -25,6 +27,8 @@ class ProductionTeamResponse(ProductionTeamBase):
 # --- ROUTING NODES SCHEMAS ---
 class ProductionRoutingNodeBase(BaseModel):
     team_id: int
+    stage_id: Optional[int] = None
+    stage_name: Optional[str] = None
     step_order: int
     color: Optional[str] = None
 
@@ -32,6 +36,8 @@ class ProductionRoutingNodeResponse(BaseModel):
     id: int
     routing_id: int
     team_id: int
+    stage_id: Optional[int] = None
+    stage_name: Optional[str] = None
     step_order: int
     color: Optional[str] = None
     team_code: Optional[str] = None
@@ -66,6 +72,7 @@ class ProductionRoutingComponentResponse(ProductionRoutingComponentBase):
 class ProductionRoutingBase(BaseModel):
     routing_code: str
     routing_name: str
+    line: Optional[str] = None # Dòng hàng (BOM Master)
     category: Optional[str] = None
     category_id: Optional[int] = None
     is_default: Optional[bool] = False
