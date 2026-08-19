@@ -259,12 +259,7 @@ app = FastAPI(
 async def health_check():
     return {"status": "ok"}
 
-# [STATIC FILES] Mount thư mục static chứa ảnh uploads (screen_bugs, component_samples, v.v.)
-static_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static"))
-os.makedirs(static_dir, exist_ok=True)
-os.makedirs(os.path.join(static_dir, "uploads", "screen_bugs"), exist_ok=True)
-os.makedirs(os.path.join(static_dir, "uploads", "component_samples"), exist_ok=True)
-app.mount("/static", StaticFiles(directory=static_dir), name="static")
+# [STATIC FILES] Static files are mounted after router registration (see below)
 
 
 
@@ -643,8 +638,12 @@ app.include_router(account_router.router, prefix="/accounts", tags=["test_accoun
 
 
 
-# Mount static files for uploads - Sử dụng BackEnd/static
+# [STATIC FILES] Mount thư mục static chứa uploads (screen_bugs, component_samples, products, v.v.)
 STATIC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static"))
+os.makedirs(STATIC_DIR, exist_ok=True)
+os.makedirs(os.path.join(STATIC_DIR, "uploads", "screen_bugs"), exist_ok=True)
+os.makedirs(os.path.join(STATIC_DIR, "uploads", "component_samples"), exist_ok=True)
+os.makedirs(os.path.join(STATIC_DIR, "uploads", "products"), exist_ok=True)
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
