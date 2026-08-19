@@ -350,8 +350,8 @@ async def check_write_permissions(request: Request, call_next):
                     from config.settings import settings
                     from config.database import SessionLocal
                     from modules.auth.models.accounts import Account as AccountModel
-                    from modules.auth.models.department import Department as DepartmentModel
-                    from modules.auth.models.roles import Role as RoleModel
+                    from modules.auth.models.departments import Department as DepartmentModel
+                    from modules.auth.models.role import Role as RoleModel
                     from modules.auth.controllers.account_controller import resolve_user_permissions
                     import json
 
