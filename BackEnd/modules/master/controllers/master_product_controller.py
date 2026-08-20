@@ -2127,6 +2127,7 @@ def is_hardware_material(mat) -> bool:
 def get_materials_by_product(db: Session, product_id: Optional[int] = None, sku: Optional[str] = None, name: Optional[str] = None):
     """
     Tự động truy vấn Định mức Vật tư theo product_id HOẶC theo sự trùng khớp thông minh của Mã SP (SKU) / Tên SP.
+    Hỗ trợ đối soát kích thước / model (24S, 30S, 36S, 42S, 48S, 54S, 60D, 66D, 72D, ...) từ cả SKU lẫn Tên SP.
     Đảm bảo chỉ nạp đúng các phụ kiện/vật tư tiêu hao phục vụ cho cấu trúc BOM chi tiết của sản phẩm.
     """
     import re
@@ -2146,23 +2147,63 @@ def get_materials_by_product(db: Session, product_id: Optional[int] = None, sku:
         MasterProductMaterial.product_sku != '---'
     ).distinct().all() if r[0]]
 
-    target_tokens = []
-    if sku:
-        clean_sku = sku.strip()
-        target_tokens.append(clean_sku)
-        target_tokens.extend(re.findall(r'[0-9]+[A-Za-z]+|[A-Za-z]+[0-9]+', clean_sku))
-    if name:
-        clean_name = name.strip()
-        target_tokens.append(clean_name)
-        target_tokens.extend(re.findall(r'[0-9]+[A-Za-z]+|[A-Za-z]+[0-9]+', clean_name))
+    raw_tokens = set()
+    synthesized_tokens = set()
+    
+    for text in [sku or '', name or '']:
+        words = re.split(r'[^A-Za-z0-9]', text)
+        for w in words:
+            if w:
+                raw_tokens.add(w.upper())
+                digits = re.findall(r'\d+', w)
+                for d in digits:
+                    synthesized_tokens.add(d)
+                    synthesized_tokens.add(f"{d}S")
+                    synthesized_tokens.add(f"{d}D")
+                    synthesized_tokens.add(f"{d}C")
+                    if d.startswith('0') and len(d) > 1:
+                        d_no0 = str(int(d))
+                        synthesized_tokens.add(d_no0)
+                        synthesized_tokens.add(f"{d_no0}S")
+                        synthesized_tokens.add(f"{d_no0}D")
+                        synthesized_tokens.add(f"{d_no0}C")
 
     matched_sku = None
-    # So khớp chính xác hoặc đối soát token
+
+    # Priority 1: Khớp chính xác với RAW tokens (ví dụ: 66D, 60D, 48S, 72D, 36C-1)
     for d_sku in distinct_skus:
-        d_lower = d_sku.strip().lower()
-        if any(d_lower == t.lower() or d_lower in (sku or '').lower() or d_lower in (name or '').lower() for t in target_tokens):
+        if d_sku.upper() in raw_tokens:
             matched_sku = d_sku
             break
+
+    # Priority 2: Khớp theo kích thước model & cấu hình S (Single) / D (Double) / L-R (Left-Right)
+    if not matched_sku:
+        wants_left_right = any(k in (sku or '').upper() or k in (name or '').upper() for k in ['-L', '-R', '36L', '36R', '42L', '42R', 'S-L', 'S-R', 'L/R'])
+        wants_double = ('D' in (sku or '').upper() or 'D' in (name or '').upper()) and not ('S' in (sku or '').upper())
+
+        candidates = []
+        for d_sku in distinct_skus:
+            m_up = d_sku.upper()
+            m_digits = re.findall(r'\d+', m_up)
+            if m_up in synthesized_tokens or (m_digits and m_digits[0] in synthesized_tokens):
+                candidates.append(d_sku)
+
+        if candidates:
+            if wants_left_right:
+                lr_cands = [c for c in candidates if 'L-R' in c.upper() or 'L/R' in c.upper()]
+                if lr_cands:
+                    matched_sku = lr_cands[0]
+            if not matched_sku:
+                if wants_double:
+                    d_cands = [c for c in candidates if 'D' in c.upper()]
+                    if d_cands:
+                        matched_sku = d_cands[0]
+                else:
+                    s_cands = [c for c in candidates if 'S' in c.upper() and 'L-R' not in c.upper()]
+                    if s_cands:
+                        matched_sku = s_cands[0]
+            if not matched_sku:
+                matched_sku = candidates[0]
 
     if matched_sku:
         raw_mats = db.query(MasterProductMaterial).filter(
