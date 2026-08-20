@@ -501,7 +501,10 @@ const DefectManagement = () => {
     is_active: true,
     code: '',
     aql_class: 'Minor',
-    images: [] // Danh sách URL ảnh minh họa mẫu lỗi (tối đa 5 ảnh)
+    images: [], // Danh sách URL ảnh minh họa mẫu lỗi (tối đa 5 ảnh)
+    root_cause: '',
+    solution: '',
+    capa_reference: ''
   });
   const [isUploadingImages, setIsUploadingImages] = useState(false);
   const imageUploadRef = useRef(null);
@@ -741,7 +744,10 @@ const DefectManagement = () => {
       is_active: true,
       code: '',
       aql_class: 'Minor',
-      images: []
+      images: [],
+      root_cause: '',
+      solution: '',
+      capa_reference: ''
     });
     setIsFormOpen(true);
     fetchNextDefectCode(initialCategory);
@@ -777,7 +783,10 @@ const DefectManagement = () => {
       is_active: defect.is_active,
       code: defect.code || '',
       aql_class: defect.aql_class || 'Minor',
-      images: getDefectImages(defect)
+      images: getDefectImages(defect),
+      root_cause: defect.root_cause || '',
+      solution: defect.solution || '',
+      capa_reference: defect.capa_reference || ''
     });
     setIsFormOpen(true);
   };
@@ -1068,11 +1077,49 @@ const DefectManagement = () => {
         .modal-footer .btn:hover {
           transform: none !important;
         }
+        .defect-table-scroll .data-table th {
+          padding: 8px 6px !important;
+          font-size: 0.76rem !important;
+          white-space: nowrap !important;
+        }
+        .defect-table-scroll .data-table td {
+          padding: 6px 6px !important;
+          font-size: 0.78rem !important;
+          vertical-align: middle !important;
+        }
+        @keyframes toastBottomSlide {
+          from {
+            transform: translate(-50%, 20px);
+            opacity: 0;
+          }
+          to {
+            transform: translate(-50%, 0);
+            opacity: 1;
+          }
+        }
       `}} />
       <div className="mgmt-main">
-        {/* Toast Alert */}
+        {/* Toast Alert - Bottom Aligned */}
         {toast.show && (
-          <div className={`toast-alert ${toast.type}`}>
+          <div 
+            className={`toast-alert ${toast.type}`}
+            style={{
+              position: 'fixed',
+              bottom: '30px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              top: 'auto',
+              right: 'auto',
+              zIndex: 9999,
+              borderRadius: '9999px',
+              padding: '10px 22px',
+              boxShadow: '0 10px 25px rgba(0, 0, 0, 0.18)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              animation: 'toastBottomSlide 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards'
+            }}
+          >
             <span className="toast-icon">{toast.type === 'success' ? '✓' : '✗'}</span>
             <span className="toast-text">{toast.message}</span>
           </div>
@@ -1368,16 +1415,19 @@ const DefectManagement = () => {
                     <table className="data-table">
                       <thead>
                         <tr>
-                          <th style={{ width: '110px', textAlign: 'center' }}>Mã G7 / ID</th>
-                          <th>Tên lỗi / Mô tả</th>
-                          <th style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>Phân nhóm</th>
-                          <th style={{ width: '90px', textAlign: 'center', whiteSpace: 'nowrap' }}>Mức AQL</th>
+                          <th style={{ width: '85px', textAlign: 'center', whiteSpace: 'nowrap' }}>Mã G7</th>
+                          <th style={{ width: '120px' }}>Tên lỗi</th>
+                          <th style={{ minWidth: '160px', maxWidth: '200px' }}>Mô tả</th>
+                          <th style={{ width: '80px', textAlign: 'center', whiteSpace: 'nowrap' }}>Ảnh</th>
+                          <th style={{ width: '100px', textAlign: 'center', whiteSpace: 'nowrap' }}>Phân nhóm</th>
+                          <th style={{ width: '75px', textAlign: 'center', whiteSpace: 'nowrap' }}>Mức AQL</th>
                           <th 
                             style={{ 
                               textAlign: 'center', 
                               whiteSpace: 'nowrap', 
                               cursor: 'pointer',
                               userSelect: 'none',
+                              width: '90px',
                               backgroundColor: sortBy !== 'default' ? '#F4E8DB' : undefined
                             }}
                             onClick={() => {
@@ -1393,14 +1443,17 @@ const DefectManagement = () => {
                             }}
                             title="Click để đổi sắp xếp theo tỷ lệ lỗi: Tháng ↓ / Toàn bộ ↓ / Mặc định"
                           >
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                              % Tỷ lệ {sortBy === 'monthly_rate' ? '⏳(Tháng ↓)' : sortBy === 'all_time_rate' ? '🌐(All ↓)' : '(Tháng/All)'}
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                              % Tỷ lệ {sortBy === 'monthly_rate' ? '⏳' : sortBy === 'all_time_rate' ? '🌐' : ''}
                             </span>
                           </th>
-                          <th style={{ textAlign: 'left', whiteSpace: 'nowrap' }}>Bộ phận</th>
-                          <th style={{ width: '90px', textAlign: 'center', whiteSpace: 'nowrap' }}>QA Track</th>
-                          <th style={{ width: '130px', textAlign: 'center', whiteSpace: 'nowrap' }}>Trạng thái</th>
-                          <th style={{ width: '80px', textAlign: 'center', whiteSpace: 'nowrap' }}>Thao tác</th>
+                          <th style={{ width: '150px', textAlign: 'left', whiteSpace: 'nowrap' }}>Bộ phận</th>
+                          <th style={{ minWidth: '140px', maxWidth: '180px', textAlign: 'left', whiteSpace: 'nowrap' }}>Nguyên Nhân Chính</th>
+                          <th style={{ minWidth: '140px', maxWidth: '180px', textAlign: 'left', whiteSpace: 'nowrap' }}>Giải Pháp</th>
+                          <th style={{ width: '90px', textAlign: 'center', whiteSpace: 'nowrap' }}>CAPA</th>
+                          <th style={{ width: '75px', textAlign: 'center', whiteSpace: 'nowrap' }}>QA Track</th>
+                          <th style={{ width: '100px', textAlign: 'center', whiteSpace: 'nowrap' }}>Trạng thái</th>
+                          <th style={{ width: '70px', textAlign: 'center', whiteSpace: 'nowrap' }}>Thao tác</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1414,54 +1467,70 @@ const DefectManagement = () => {
                                 zIndex: actionMenuId === defect.id ? 30 : 1
                               }}
                             >
-                              <td style={{ textAlign: 'center', color: '#4b301e', fontWeight: 'bold', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                              {/* Cột 1: Mã G7 */}
+                              <td style={{ textAlign: 'center', color: '#4b301e', fontWeight: 'bold', fontFamily: 'monospace', fontSize: '0.82rem', verticalAlign: 'middle' }}>
                                 {defect.code ? defect.code : `#${defect.id}`}
                               </td>
-                              <td className="defect-name-cell">
-                                <div style={{ fontWeight: '700', color: '#4b301e' }}>{defect.name}</div>
-                                {defect.description && (
-                                  <div style={{ fontSize: '0.75rem', color: '#777', fontWeight: 'normal', marginTop: '2px', lineHeight: '1.3' }}>
+
+                              {/* Cột 2: Tên lỗi */}
+                              <td style={{ fontWeight: '700', color: '#4b301e', verticalAlign: 'middle', fontSize: '0.85rem' }}>
+                                {defect.name}
+                              </td>
+
+                              {/* Cột 3: Mô tả (Rút gọn tối đa 2 dòng) */}
+                              <td title={defect.description || ''} style={{ fontSize: '0.75rem', color: '#475569', lineHeight: '1.3', verticalAlign: 'middle', maxWidth: '200px' }}>
+                                {defect.description ? (
+                                  <div style={{
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: 2,
+                                    WebkitBoxOrient: 'vertical',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis'
+                                  }}>
                                     {defect.description}
                                   </div>
+                                ) : (
+                                  <span style={{ color: '#cbd5e1', fontStyle: 'italic' }}>---</span>
                                 )}
-                                {/* Hiển thị thumbnails ảnh mẫu lỗi */}
+                              </td>
+
+                              {/* Cột 4: Ảnh minh họa */}
+                              <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
                                 {(() => {
                                   const imgs = getDefectImages(defect);
-                                  if (imgs.length === 0) return null;
+                                  if (imgs.length === 0) return <span style={{ color: '#cbd5e1', fontStyle: 'italic', fontSize: '0.72rem' }}>---</span>;
                                   return (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '6px' }}>
-                                      <div style={{ display: 'flex', gap: '4px' }}>
-                                        {imgs.slice(0, 3).map((imgUrl, i) => (
-                                          <img
-                                            key={i}
-                                            src={imgUrl}
-                                            alt="Mẫu lỗi"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setPreviewModal({
-                                                isOpen: true,
-                                                images: imgs,
-                                                currentIndex: i,
-                                                title: `${defect.code ? defect.code + ' - ' : ''}${defect.name}`
-                                              });
-                                            }}
-                                            style={{
-                                              width: '26px',
-                                              height: '26px',
-                                              borderRadius: '4px',
-                                              objectFit: 'cover',
-                                              border: '1px solid #D9B99B',
-                                              cursor: 'pointer',
-                                              boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
-                                              transition: 'transform 0.15s ease'
-                                            }}
-                                            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.15)'}
-                                            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                                            title="Click để phóng to ảnh mẫu lỗi"
-                                          />
-                                        ))}
-                                      </div>
-                                      {imgs.length > 3 && (
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
+                                      {imgs.slice(0, 2).map((imgUrl, i) => (
+                                        <img
+                                          key={i}
+                                          src={imgUrl}
+                                          alt="Mẫu lỗi"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setPreviewModal({
+                                              isOpen: true,
+                                              images: imgs,
+                                              currentIndex: i,
+                                              title: `${defect.code ? defect.code + ' - ' : ''}${defect.name}`
+                                            });
+                                          }}
+                                          style={{
+                                            width: '26px',
+                                            height: '26px',
+                                            borderRadius: '4px',
+                                            objectFit: 'cover',
+                                            border: '1px solid #D9B99B',
+                                            cursor: 'pointer',
+                                            boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
+                                            transition: 'transform 0.15s ease'
+                                          }}
+                                          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.2)'}
+                                          onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                                          title="Click để phóng to"
+                                        />
+                                      ))}
+                                      {imgs.length > 2 && (
                                         <span 
                                           onClick={(e) => {
                                             e.stopPropagation();
@@ -1473,39 +1542,43 @@ const DefectManagement = () => {
                                             });
                                           }}
                                           style={{ 
-                                            fontSize: '0.68rem', 
+                                            fontSize: '0.62rem', 
                                             color: '#7B5233', 
                                             fontWeight: '700', 
                                             cursor: 'pointer', 
                                             backgroundColor: '#FAF6F0', 
-                                            padding: '2px 6px', 
-                                            borderRadius: '4px',
+                                            padding: '1px 4px', 
+                                            borderRadius: '3px',
                                             border: '1px solid #EADCC9'
                                           }}
                                           title="Xem tất cả ảnh"
                                         >
-                                          +{imgs.length - 3}
+                                          +{imgs.length - 2}
                                         </span>
                                       )}
                                     </div>
                                   );
                                 })()}
                               </td>
-                              <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+
+                              {/* Cột 5: Phân nhóm */}
+                              <td style={{ textAlign: 'center', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>
                                 <span 
                                   className={`category-badge ${defect.category}`} 
                                   style={{
                                     whiteSpace: 'nowrap',
                                     display: 'inline-block',
-                                    fontSize: '0.75rem',
-                                    padding: '4px 12px',
+                                    fontSize: '0.7rem',
+                                    padding: '2px 8px',
                                     ...(defect.category === 'paint' ? { backgroundColor: '#F2D2BD', color: '#7B5233', border: '1px solid #EADCC9' } : {})
                                   }}
                                 >
                                   {categoryLabels[defect.category] || defect.category}
                                 </span>
                               </td>
-                              <td style={{ textAlign: 'center' }}>
+
+                              {/* Cột 6: Mức AQL */}
+                              <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
                                 {defect.aql_class ? (
                                   <span className="status-badge" style={{
                                     backgroundColor: 
@@ -1514,94 +1587,158 @@ const DefectManagement = () => {
                                       defect.aql_class === 'Major' ? '#991b1b' : '#166534',
                                     border: '1px solid currentColor',
                                     fontWeight: '700',
-                                    fontSize: '0.7rem',
-                                    padding: '2px 8px',
+                                    fontSize: '0.68rem',
+                                    padding: '2px 6px',
                                     borderRadius: '4px'
                                   }}>
                                     {defect.aql_class === 'Major' ? 'Nặng' : 'Nhẹ'}
                                   </span>
                                 ) : (
-                                  <span style={{ color: '#999' }}>---</span>
+                                  <span style={{ color: '#cbd5e1', fontStyle: 'italic' }}>---</span>
                                 )}
                               </td>
 
-                              {/* Cột % Tỷ lệ lỗi (Tháng / All) */}
-                              <td style={{ textAlign: 'center', whiteSpace: 'nowrap', verticalAlign: 'middle', padding: '4px 8px' }}>
-                                <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-start', fontSize: '0.72rem' }}>
+                              {/* Cột 7: % Tỷ lệ lỗi (Tháng / All) */}
+                              <td style={{ textAlign: 'center', whiteSpace: 'nowrap', verticalAlign: 'middle', padding: '2px 4px' }}>
+                                <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '1px', alignItems: 'flex-start', fontSize: '0.68rem' }}>
                                   <div 
                                     title={`Tháng này: ${defect.monthly_count || 0} lỗi (${defect.monthly_rate || 0}% tổng số lỗi tháng)`}
-                                    style={{ display: 'flex', alignItems: 'center', gap: '3px' }}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '2px' }}
                                   >
-                                    <span style={{ color: '#888', fontSize: '0.65rem', fontWeight: 'bold' }}>T:</span>
+                                    <span style={{ color: '#888', fontSize: '0.62rem', fontWeight: 'bold' }}>T:</span>
                                     <span style={{ 
                                       fontWeight: '700', 
-                                      fontSize: '0.7rem',
+                                      fontSize: '0.68rem',
                                       color: (defect.monthly_rate || 0) >= 20 ? '#b91c1c' : (defect.monthly_rate || 0) > 0 ? '#b45309' : '#15803d',
                                       backgroundColor: (defect.monthly_rate || 0) >= 20 ? '#fee2e2' : (defect.monthly_rate || 0) > 0 ? '#fef3c7' : '#dcfce7',
-                                      padding: '1px 5px',
+                                      padding: '0 4px',
                                       borderRadius: '3px'
                                     }}>
                                       {defect.monthly_rate !== undefined ? `${defect.monthly_rate}%` : '0%'}
                                     </span>
                                     {(defect.monthly_count || 0) > 0 && (
-                                      <span style={{ fontSize: '0.65rem', color: '#777' }}>({defect.monthly_count})</span>
+                                      <span style={{ fontSize: '0.62rem', color: '#777' }}>({defect.monthly_count})</span>
                                     )}
                                   </div>
                                   <div 
                                     title={`Toàn thời gian: ${defect.all_time_count || 0} lỗi (${defect.all_time_rate || 0}% tổng số lỗi toàn bộ)`}
-                                    style={{ display: 'flex', alignItems: 'center', gap: '3px' }}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '2px' }}
                                   >
-                                    <span style={{ color: '#888', fontSize: '0.65rem', fontWeight: 'bold' }}>A:</span>
+                                    <span style={{ color: '#888', fontSize: '0.62rem', fontWeight: 'bold' }}>A:</span>
                                     <span style={{ 
                                       fontWeight: '600', 
-                                      fontSize: '0.7rem',
+                                      fontSize: '0.68rem',
                                       color: '#475569',
                                       backgroundColor: '#f1f5f9',
-                                      padding: '1px 5px',
+                                      padding: '0 4px',
                                       borderRadius: '3px'
                                     }}>
                                       {defect.all_time_rate !== undefined ? `${defect.all_time_rate}%` : '0%'}
                                     </span>
                                     {(defect.all_time_count || 0) > 0 && (
-                                      <span style={{ fontSize: '0.65rem', color: '#777' }}>({defect.all_time_count})</span>
+                                      <span style={{ fontSize: '0.62rem', color: '#777' }}>({defect.all_time_count})</span>
                                     )}
                                   </div>
                                 </div>
                               </td>
 
-                              <td style={{ whiteSpace: 'nowrap', verticalAlign: 'middle', padding: '4px 10px' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', alignItems: 'flex-start' }}>
-                                  {(() => {
-                                    try {
-                                      if (!defect.stage) return <span style={{ color: '#999', fontSize: '0.68rem' }}>---</span>;
-                                      const stages = defect.stage.startsWith('[') ? JSON.parse(defect.stage) : [defect.stage];
-                                      if (!Array.isArray(stages) || stages.length === 0) return <span style={{ color: '#999', fontSize: '0.68rem' }}>---</span>;
-                                      return stages.map((s, idx) => {
-                                        // Rút gọn chữ để hiển thị ngắn gọn nhất (vd: "QC Kiểm soát đầu vào" -> "QC Đầu vào")
-                                        const shortName = s.replace(/^QC\s+kiểm\s+(soát|tra)\s+/i, 'QC ');
-                                        return (
-                                          <span 
-                                            key={idx} 
-                                            title={s}
-                                            style={{ 
-                                              fontSize: '0.68rem', 
-                                              color: '#4b301e',
-                                              whiteSpace: 'nowrap',
-                                              lineHeight: '1.15',
-                                              fontWeight: '500'
-                                            }}
-                                          >
-                                            {shortName}
-                                          </span>
-                                        );
-                                      });
-                                    } catch (e) {
-                                      return <span style={{ whiteSpace: 'nowrap', fontSize: '0.68rem', color: '#4b301e' }}>{defect.stage || '---'}</span>;
+                              {/* Cột 8: Bộ phận (Hiển thị dạng Badge gộp nằm ngang gọn gàng) */}
+                              <td style={{ verticalAlign: 'middle', padding: '4px 6px' }}>
+                                {(() => {
+                                  try {
+                                    if (!defect.stage) return <span style={{ color: '#cbd5e1', fontStyle: 'italic', fontSize: '0.68rem' }}>---</span>;
+                                    const stages = defect.stage.startsWith('[') ? JSON.parse(defect.stage) : [defect.stage];
+                                    if (!Array.isArray(stages) || stages.length === 0) return <span style={{ color: '#cbd5e1', fontStyle: 'italic', fontSize: '0.68rem' }}>---</span>;
+                                    
+                                    const cleanStages = stages.map(s => s.replace(/^QC\s+kiểm\s+(soát|tra)\s+/i, 'QC ').replace(/^Nhân\s+Viên\s+/i, ''));
+                                    const fullListText = stages.join(', ');
+                                    
+                                    if (cleanStages.length <= 2) {
+                                      return (
+                                        <div title={fullListText} style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+                                          {cleanStages.map((stg, i) => (
+                                            <span key={i} style={{ fontSize: '0.67rem', color: '#4b301e', backgroundColor: '#FAF6F0', border: '1px solid #EADCC9', borderRadius: '4px', padding: '1px 5px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                                              {stg}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      );
                                     }
-                                  })()}
-                                </div>
+                                    
+                                    return (
+                                      <div title={fullListText} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '3px' }}>
+                                        {cleanStages.slice(0, 2).map((stg, i) => (
+                                          <span key={i} style={{ fontSize: '0.67rem', color: '#4b301e', backgroundColor: '#FAF6F0', border: '1px solid #EADCC9', borderRadius: '4px', padding: '1px 5px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                                            {stg}
+                                          </span>
+                                        ))}
+                                        <span style={{ fontSize: '0.65rem', color: '#7B5233', backgroundColor: '#F4E8DB', border: '1px solid #D9B99B', borderRadius: '4px', padding: '1px 4px', fontWeight: '700', cursor: 'help' }}>
+                                          +{cleanStages.length - 2}
+                                        </span>
+                                      </div>
+                                    );
+                                  } catch (e) {
+                                    return <span style={{ whiteSpace: 'nowrap', fontSize: '0.68rem', color: '#4b301e' }}>{defect.stage || '---'}</span>;
+                                  }
+                                })()}
                               </td>
-                              <td style={{ textAlign: 'center' }}>
+
+                              {/* Cột 9: Nguyên Nhân Chính (Clamp 2 dòng) */}
+                              <td title={defect.root_cause || ''} style={{ fontSize: '0.75rem', color: '#334155', verticalAlign: 'middle', lineHeight: '1.3', maxWidth: '180px' }}>
+                                {defect.root_cause ? (
+                                  <div style={{
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: 2,
+                                    WebkitBoxOrient: 'vertical',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis'
+                                  }}>
+                                    {defect.root_cause}
+                                  </div>
+                                ) : (
+                                  <span style={{ color: '#cbd5e1', fontStyle: 'italic' }}>---</span>
+                                )}
+                              </td>
+
+                              {/* Cột 10: Giải Pháp (Clamp 2 dòng) */}
+                              <td title={defect.solution || ''} style={{ fontSize: '0.75rem', color: '#166534', verticalAlign: 'middle', lineHeight: '1.3', fontWeight: '500', maxWidth: '180px' }}>
+                                {defect.solution ? (
+                                  <div style={{
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: 2,
+                                    WebkitBoxOrient: 'vertical',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis'
+                                  }}>
+                                    {defect.solution}
+                                  </div>
+                                ) : (
+                                  <span style={{ color: '#cbd5e1', fontStyle: 'italic' }}>---</span>
+                                )}
+                              </td>
+
+                              {/* Cột 11: CAPA */}
+                              <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
+                                {defect.capa_reference ? (
+                                  <span style={{
+                                    fontSize: '0.68rem',
+                                    fontWeight: '700',
+                                    color: '#1e40af',
+                                    backgroundColor: '#dbeafe',
+                                    border: '1px solid #bfdbfe',
+                                    padding: '1px 6px',
+                                    borderRadius: '4px',
+                                    whiteSpace: 'nowrap'
+                                  }}>
+                                    {defect.capa_reference}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#cbd5e1', fontStyle: 'italic' }}>---</span>
+                                )}
+                              </td>
+
+                              {/* Cột 12: QA Track */}
+                              <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
                                 <div style={{ display: 'flex', justifyContent: 'center' }}>
                                   <label className="switch">
                                     <input
@@ -1614,14 +1751,18 @@ const DefectManagement = () => {
                                   </label>
                                 </div>
                               </td>
-                              <td style={{ textAlign: 'center' }}>
+
+                              {/* Cột 13: Trạng thái */}
+                              <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
                                 {defect.is_active ? (
-                                  <span className="status-badge active">Đang sử dụng</span>
+                                  <span className="status-badge active" style={{ fontSize: '0.68rem', padding: '2px 8px' }}>Đang dùng</span>
                                 ) : (
-                                  <span className="status-badge inactive">Ngừng sử dụng</span>
+                                  <span className="status-badge inactive" style={{ fontSize: '0.68rem', padding: '2px 8px' }}>Ngừng dùng</span>
                                 )}
                               </td>
-                              <td style={{ position: 'relative', textAlign: 'center', zIndex: actionMenuId === defect.id ? 40 : 1 }}>
+
+                              {/* Cột 14: Thao tác */}
+                              <td style={{ position: 'relative', textAlign: 'center', verticalAlign: 'middle', zIndex: actionMenuId === defect.id ? 40 : 1 }}>
                                 <button
                                   className="action-btn"
                                   onClick={(e) => {
@@ -1658,7 +1799,7 @@ const DefectManagement = () => {
                           ))
                         ) : (
                           <tr>
-                            <td colSpan="9" style={{ textAlign: 'center', padding: '50px 20px', color: '#888' }}>
+                            <td colSpan="14" style={{ textAlign: 'center', padding: '50px 20px', color: '#888' }}>
                                Không tìm thấy loại lỗi nào khớp với bộ lọc hiện tại.
                             </td>
                           </tr>
@@ -2127,8 +2268,42 @@ const DefectManagement = () => {
                     value={formData.description}
                     onChange={handleInputChange}
                     placeholder="Nhập mô tả thêm về lỗi này (nếu có)..."
-                    style={{ minHeight: '80px', padding: '10px' }}
+                    style={{ minHeight: '70px', padding: '10px' }}
                   />
+                </div>
+
+                <div className="form-group">
+                  <label>Nguyên nhân chính (Root Cause)</label>
+                  <textarea
+                    name="root_cause"
+                    value={formData.root_cause}
+                    onChange={handleInputChange}
+                    placeholder="Nhập nguyên nhân gốc rễ gây ra lỗi..."
+                    style={{ minHeight: '65px', padding: '10px' }}
+                  />
+                </div>
+
+                <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '15px' }}>
+                  <div>
+                    <label>Giải pháp (Solution / Action Plan)</label>
+                    <input
+                      type="text"
+                      name="solution"
+                      value={formData.solution}
+                      onChange={handleInputChange}
+                      placeholder="Ví dụ: Căn chỉnh lại gá kẹp, thay lưỡi soi..."
+                    />
+                  </div>
+                  <div>
+                    <label>Mã CAPA liên quan</label>
+                    <input
+                      type="text"
+                      name="capa_reference"
+                      value={formData.capa_reference}
+                      onChange={handleInputChange}
+                      placeholder="Ví dụ: CAPA-2026-003"
+                    />
+                  </div>
                 </div>
 
                 {/* ── Khối Hình ảnh minh họa mẫu lỗi (0 - 5 ảnh) ── */}

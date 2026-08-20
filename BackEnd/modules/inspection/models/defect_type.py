@@ -23,6 +23,9 @@ class DefectType(Base):
     code = Column(NVARCHAR(50), nullable=True, unique=True, index=True) # Mã lỗi G7 (Ví dụ: MAT-01, STR-01)
     aql_class = Column(NVARCHAR(50), nullable=True)                     # Phân loại AQL (Critical, Major, Minor)
     images = Column(NVARCHAR(None), nullable=True)                      # JSON list chứa URL tối đa 5 ảnh minh họa
+    root_cause = Column(NVARCHAR(1000), nullable=True)                  # Nguyên nhân chính gây lỗi
+    solution = Column(NVARCHAR(1000), nullable=True)                    # Giải pháp khắc phục / Phòng ngừa
+    capa_reference = Column(NVARCHAR(250), nullable=True)               # Mã hoặc thông tin CAPA liên quan
 
     # Mối quan hệ tới lỗi của khách hàng
     client_defects = relationship("ClientDefect", back_populates="g7_defect", cascade="all, delete-orphan")

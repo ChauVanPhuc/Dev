@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
+import { useParams, useNavigate, useOutletContext, useSearchParams, useLocation } from 'react-router-dom';
+
 import {
   ArrowLeft,
   Copy,
@@ -16,54 +17,76 @@ import {
   Box,
   Trash2,
   Palette,
-  Layers
+  Layers,
+  Edit3,
+  X,
+  FileSpreadsheet
 } from 'lucide-react';
-import api, { getBaseURL } from '@webShared/Services/api.service';
+import * as XLSX from 'xlsx';
+import api, { getBaseURL, API_URL } from '@webShared/Services/api.service';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import AddComponentModal from './modals/AddComponentModal';
 import AddDetailModal from './modals/AddDetailModal';
 import AddPaintColorModal from './modals/AddPaintColorModal';
+import AddMaterialModal from './modals/AddMaterialModal';
 import ConfigInfoModal from './modals/ConfigInfoModal';
 import CopyProductModal from './modals/CopyProductModal';
+import SelectSheetsModal from '../List/modals/SelectSheetsModal';
 import '@styles/components.css';
+
+// Global memory cache for categories
+let globalCachedCategories = null;
 
 /**
  * View: Chi tiết sản phẩm - KT03 (/admin/products/:id)
- * Tái hiện chính xác 100% Giao diện Mockup 1:
- * - Khung Thông tin chung: 5 nút thao tác góc phải, khung ảnh chính + 3 ảnh thumbnail phụ xếp dọc bên phải.
- * - Form thông tin chung + Hàng Meta 6 ô nền xám #E5E7EB bên dưới.
- * - Thanh Action Toolbar: Search, Icon Sort A-Z, Icon Filter, 4 nút nâu đậm (Cấu hình thông tin, Nhập dữ liệu, Xuất dữ liệu, + Thêm mới).
- * - Bảng BOM 13 cột chuẩn Mockup với STT phân cấp (1, 1.1, 1.1.1, 1.1.1.1, 1.1.1.1.1, 1.1.1.3, 1.2, 2, 3, 4).
  */
 const ProductDetailView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const initialProduct = location.state?.product;
   const { toast } = useToast();
 
   const outletContext = useOutletContext() || {};
-  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = outletContext;
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra, startGlobalUpload } = outletContext;
 
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/products/:id');
 
-  const [product, setProduct] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('bom');
+  const [searchParams] = useSearchParams();
+  const [product, setProduct] = useState(initialProduct || null);
+  const [loading, setLoading] = useState(!initialProduct);
+  const [isFetchingBom, setIsFetchingBom] = useState(true);
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'bom');
+
   const [searchTerm, setSearchTerm] = useState('');
   const [activeStage, setActiveStage] = useState('Định hình');
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [showAddDetailModal, setShowAddDetailModal] = useState(false);
   const [showAddComponentModal, setShowAddComponentModal] = useState(false);
   const [showAddPaintModal, setShowAddPaintModal] = useState(false);
+  const [showAddMaterialModal, setShowAddMaterialModal] = useState(false);
+  const [editingMaterial, setEditingMaterial] = useState(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [isConfigDropdownOpen, setIsConfigDropdownOpen] = useState(false);
   const [isAddDropdownOpen, setIsAddDropdownOpen] = useState(false);
   const [selectedParentId, setSelectedParentId] = useState(null);
   const [detailRows, setDetailRows] = useState([]);
   const [paintColorRows, setPaintColorRows] = useState([]);
+  const [materialRows, setMaterialRows] = useState([]);
+  const [materialSearch, setMaterialSearch] = useState('');
+  const [materialGroupFilter, setMaterialGroupFilter] = useState('ALL');
+  const [defaultMaterialGroup, setDefaultMaterialGroup] = useState('VẬT TƯ HÀNG TRẮNG');
+  const [sheetModal, setSheetModal] = useState({
+    visible: false,
+    file: null,
+    sheets: []
+  });
+  const excelInputRef = useRef(null);
+
 
   // Image Upload Preview State
-  const [mainImage, setMainImage] = useState(null);
+  const [mainImage, setMainImage] = useState(initialProduct?.image_url || null);
   const [subImages, setSubImages] = useState([null, null, null]);
   const fileInputRef = useRef(null);
 
@@ -93,22 +116,21 @@ const ProductDetailView = () => {
     }
   };
 
-  // Load danh sách tên thành phẩm từ master
+  // Load danh sách tên thành phẩm từ master (chạy trễ ở background để không cản trở render trang)
   useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await api.get('/master-products/detail-suggestions').catch(() => null);
-        if (res) {
-          setDetailSuggestions(res.detail_names || []);
-          setDetailMetaMap(res.detail_meta_map || {});
-          const detailSet = new Set(res.detail_names || []);
-          setLoaiOptions((res.parent_names || []).filter(n => detailSet.has(n)));
-        }
-      } catch (err) {
-        console.warn('Lỗi lấy gợi ý tên thành phẩm:', err);
-      }
-    };
-    load();
+    const timer = setTimeout(() => {
+      api.get('/master-products/detail-suggestions')
+        .then(res => {
+          if (res) {
+            setDetailSuggestions(res.detail_names || []);
+            setDetailMetaMap(res.detail_meta_map || {});
+            const detailSet = new Set(res.detail_names || []);
+            setLoaiOptions((res.parent_names || []).filter(n => detailSet.has(n)));
+          }
+        })
+        .catch(err => console.warn('Lỗi lấy gợi ý tên thành phẩm:', err));
+    }, 400);
+    return () => clearTimeout(timer);
   }, []);
 
   const [visibleColumns, setVisibleColumns] = useState({
@@ -132,65 +154,60 @@ const ProductDetailView = () => {
     if (setCustomTitle) setCustomTitle(title);
     if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
     if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
-    if (setHeaderExtra) {
-      setHeaderExtra(
-        <button
-          type="button"
-          onClick={() => navigate('/admin/products')}
-          style={{
-            padding: '7px 16px',
-            backgroundColor: '#FFFFFF',
-            border: '1.5px solid #5D3B32',
-            borderRadius: '8px',
-            color: '#5D3B32',
-            fontWeight: '800',
-            fontSize: '0.85rem',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
-            transition: 'all 0.2s ease'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = '#5D3B32';
-            e.currentTarget.style.color = '#FFFFFF';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = '#FFFFFF';
-            e.currentTarget.style.color = '#5D3B32';
-          }}
-        >
-          <ArrowLeft size={16} /> Quay lại danh sách sản phẩm
-        </button>
-      );
-    }
     return () => {
       if (setHeaderExtra) setHeaderExtra(null);
     };
-  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra, navigate, title, subtitle, screenCode]);
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra, title, subtitle, screenCode]);
+
+  // Trạng thái Chế độ Xem (View) vs Chỉnh sửa (Edit)
+  const [isEditing, setIsEditing] = useState(searchParams.get('edit') === 'true');
+  const [originalData, setOriginalData] = useState(null);
 
   // Form Thông tin chung
-  const [formData, setFormData] = useState({
-    sku: '',
-    category: 'Tủ quần áo',
-    line: 'APT',
-    name: '',
-    length: '',
-    width: '',
-    height: '',
-    weight: '',
-    note: '',
-    updatedAt: new Date().toLocaleDateString('vi-VN'),
-    updatedBy: 'Admin Hệ Thống',
-    bomStatus: 'Đã duyệt',
-    totalComponents: '10',
-    estimatedCost: '5.200.000 VNĐ',
-    color: 'Màu tự nhiên'
+  const [formData, setFormData] = useState(() => {
+    if (initialProduct) {
+      const formattedDate = initialProduct.adjusted_date
+        ? initialProduct.adjusted_date
+        : (initialProduct.created_at ? new Date(initialProduct.created_at).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN'));
+      return {
+        sku: initialProduct.sku || initialProduct.product_code || initialProduct.code || `ADV${id}`,
+        category: initialProduct.category_name || initialProduct.master_category?.name || 'Tủ quần áo',
+        line: initialProduct.brand_name || initialProduct.group_name || (initialProduct.sku ? initialProduct.sku.slice(0, 3) : 'ADV'),
+        name: initialProduct.name || initialProduct.product_name || initialProduct.new_name || `Sản phẩm ${id}`,
+        length: (initialProduct.length !== undefined && initialProduct.length !== null) ? String(initialProduct.length) : '1200',
+        width: (initialProduct.width !== undefined && initialProduct.width !== null) ? String(initialProduct.width) : '450',
+        height: (initialProduct.height !== undefined && initialProduct.height !== null) ? String(initialProduct.height) : '750',
+        weight: initialProduct.weight ? `${initialProduct.weight} kg` : '25 kg',
+        note: initialProduct.specification || initialProduct.description || 'Chuẩn',
+        updatedAt: formattedDate,
+        updatedBy: initialProduct.updated_by || 'Admin Hệ Thống',
+        bomStatus: initialProduct.status || 'Đã duyệt',
+        totalComponents: (initialProduct.master_bom_details || initialProduct.bom_details || []).length ? String((initialProduct.master_bom_details || initialProduct.bom_details).length) : '0',
+        estimatedCost: initialProduct.price ? Number(String(initialProduct.price).replace(/\D/g, '')).toLocaleString('vi-VN') : '0',
+        color: initialProduct.color || 'Màu tự nhiên'
+      };
+    }
+    return {
+      sku: '',
+      category: 'Tủ quần áo',
+      line: 'APT',
+      name: '',
+      length: '',
+      width: '',
+      height: '',
+      weight: '',
+      note: '',
+      updatedAt: new Date().toLocaleDateString('vi-VN'),
+      updatedBy: 'Admin Hệ Thống',
+      bomStatus: 'Đã duyệt',
+      totalComponents: '10',
+      estimatedCost: '5.200.000 VNĐ',
+      color: 'Màu tự nhiên'
+    };
   });
 
   // State chứa danh sách Danh mục động từ Backend API (/categories)
-  const [categoriesOptions, setCategoriesOptions] = useState([]);
+  const [categoriesOptions, setCategoriesOptions] = useState(globalCachedCategories || []);
 
   // Danh mục dòng hàng mặc định từ BOM làm fallback
   const defaultBomLines = [
@@ -201,6 +218,10 @@ const ProductDetailView = () => {
 
   // Lấy danh sách Dòng hàng từ SQL Server (/master-categories/ hoặc /categories)
   useEffect(() => {
+    if (globalCachedCategories && globalCachedCategories.length > 0) {
+      setCategoriesOptions(globalCachedCategories);
+      return;
+    }
     const fetchCategories = async () => {
       try {
         let res = await api.get('/master-categories/').catch(() => null);
@@ -214,6 +235,7 @@ const ProductDetailView = () => {
             const cleanName = rawName.replace(/^Dòng hàng\s*/i, '').trim();
             return typeof c === 'string' ? { name: cleanName } : { ...c, name: cleanName };
           });
+          globalCachedCategories = list;
           setCategoriesOptions(list);
           setFormData(prev => {
             if (!prev.line || prev.line === 'Nội thất') {
@@ -346,7 +368,10 @@ const ProductDetailView = () => {
   // Tải thông tin DỮ LIỆU ĐỘNG từ Backend API (/master-products/:id)
   const fetchProduct = async () => {
     try {
-      setLoading(true);
+      setIsFetchingBom(true);
+      if (!initialProduct && !product) {
+        setLoading(true);
+      }
       let res = await api.get(`/master-products/${id}`).catch(() => null);
       if (!res) {
         res = await api.get(`/products/${id}`).catch(() => null);
@@ -361,8 +386,7 @@ const ProductDetailView = () => {
           ? data.adjusted_date
           : (data.created_at ? new Date(data.created_at).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN'));
 
-        setFormData(prev => ({
-          ...prev,
+        const formSnapshot = {
           sku: data.sku || data.product_code || data.code || `ADV${id}`,
           category: data.category_name || data.master_category?.name || 'Tủ quần áo',
           line: data.brand_name || data.group_name || 'Nội thất',
@@ -378,15 +402,24 @@ const ProductDetailView = () => {
           totalComponents: (data.master_bom_details || data.bom_details || data.bom || []).length ? String((data.master_bom_details || data.bom_details || data.bom).length) : '0',
           estimatedCost: data.price ? Number(String(data.price).replace(/\D/g, '')).toLocaleString('vi-VN') : '0',
           color: data.color || 'Màu tự nhiên'
-        }));
+        };
+        setFormData(formSnapshot);
 
+        let finalProcessedBom = [];
         const bomList = data.master_bom_details || data.bom_tree || data.bom_details || data.bom || [];
         if (Array.isArray(bomList) && bomList.length > 0) {
           const processed = processBackendBOM(bomList);
           if (processed.length > 0) {
+            finalProcessedBom = processed;
             setBomRows(processed);
           }
         }
+
+        setOriginalData({
+          formData: formSnapshot,
+          bomRows: finalProcessedBom,
+          mainImage: data.image_url || null
+        });
 
         const detailsList = data.product_details || data.details || [];
         if (Array.isArray(detailsList)) {
@@ -397,10 +430,28 @@ const ProductDetailView = () => {
         if (Array.isArray(paintList)) {
           setPaintColorRows(paintList);
         }
+
+        const materialsList = data.materials || [];
+        if (Array.isArray(materialsList) && materialsList.length > 0) {
+          setMaterialRows(materialsList);
+        } else {
+          // Tự động kéo dữ liệu định mức vật tư ở chế độ nền (non-blocking)
+          const pSku = data.sku || data.product_code || '';
+          const pName = data.name || '';
+          api.get(`/master-products/materials-by-product?product_id=${data.id}&sku=${encodeURIComponent(pSku)}&name=${encodeURIComponent(pName)}`)
+            .then(matRes => {
+              if (Array.isArray(matRes) && matRes.length > 0) {
+                setMaterialRows(matRes);
+              } else {
+                setMaterialRows([]);
+              }
+            })
+            .catch(() => {
+              setMaterialRows([]);
+            });
+        }
       } else {
-        setProduct({ id, sku: `ADV${id}`, name: `Sản phẩm ${id}` });
-        setFormData(prev => ({
-          ...prev,
+        const defaultForm = {
           sku: `ADV${id}`,
           category: 'Tủ quần áo',
           line: 'Nội thất',
@@ -411,13 +462,21 @@ const ProductDetailView = () => {
           weight: '25 kg',
           note: 'Chuẩn',
           color: 'Màu tự nhiên'
-        }));
+        };
+        setProduct({ id, sku: `ADV${id}`, name: `Sản phẩm ${id}` });
+        setFormData(prev => ({ ...prev, ...defaultForm }));
+        setOriginalData({
+          formData: defaultForm,
+          bomRows: [],
+          mainImage: null
+        });
       }
     } catch (err) {
       console.warn('Lỗi lấy chi tiết sản phẩm:', err);
       setProduct({ id, sku: `ADV${id}`, name: `Sản phẩm ${id}` });
     } finally {
       setLoading(false);
+      setIsFetchingBom(false);
     }
   };
 
@@ -448,6 +507,142 @@ const ProductDetailView = () => {
       if (toast) toast('error', 'Không thể xóa mẫu màu sơn');
     }
   };
+
+  // Hàm xóa dòng vật tư BOM
+  const handleDeleteMaterial = async (materialId, rowIdx = null) => {
+    try {
+      if (materialId) {
+        await api.delete(`/master-products/materials-item/${materialId}`).catch(err => {
+          console.warn('Lưu ý khi gọi API xóa vật tư:', err);
+        });
+      }
+      setMaterialRows(prev => prev.filter((m, i) => materialId ? m.id !== materialId : i !== rowIdx));
+      if (toast) toast('success', 'Đã xóa dòng vật tư thành công!');
+    } catch (err) {
+      console.error('Lỗi khi xóa vật tư:', err);
+      if (toast) toast('error', 'Không thể xóa vật tư');
+    }
+  };
+
+  // Hàm xuất Excel Định mức vật tư chuẩn cho riêng sản phẩm này
+  const handleExportMaterialBOM = () => {
+    if (!materialRows || materialRows.length === 0) {
+      if (toast) toast('warning', 'Không có dữ liệu định mức vật tư để xuất Excel!');
+      return;
+    }
+
+    try {
+      const pSku = formData.sku || product?.sku || `SP_${id}`;
+      const pName = formData.name || product?.name || 'Sản phẩm';
+
+      // Chuẩn hóa dữ liệu xuất Excel
+      const exportData = materialRows.map((m, idx) => ({
+        'STT': m.stt || idx + 1,
+        'Nhóm vật tư': m.group_type || 'VẬT TƯ HÀNG TRẮNG',
+        'Mã vật tư': m.material_code || '',
+        'Tên vật tư / Phụ kiện': m.material_name || m.name || '',
+        'Màu sắc / Xi mạ': m.color || '',
+        'Định mức': m.quota || m.quantity || 1,
+        'Đơn vị': m.unit || 'Cái',
+        'Nhà cung cấp': m.supplier || '',
+        'Ghi chú': m.note || ''
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'DinhMucVatTu');
+      
+      const cleanFileName = `Dinh_Muc_Vat_Tu_${pSku.replace(/[^a-zA-Z0-9_-]/g, '_')}.xlsx`;
+      XLSX.writeFile(workbook, cleanFileName);
+
+      if (toast) toast('success', `Đã xuất file ${cleanFileName} thành công!`);
+    } catch (err) {
+      console.error('Lỗi xuất Excel vật tư:', err);
+      if (toast) toast('error', 'Lỗi xuất Excel: ' + err.message);
+    }
+  };
+
+  // Hàm Import Excel tự động có Thanh tiến trình Upload toàn cục & Chọn Sheet
+  const handleImportExcel = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      // 1. Quét nhanh metadata các sheet trong file Excel
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const token = localStorage.getItem('token');
+      const authHeaders = { 'ngrok-skip-browser-warning': 'true' };
+      if (token && token !== 'null' && token !== 'undefined') {
+        authHeaders['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${API_URL}master-products/inspect-excel-sheets`, {
+        method: 'POST',
+        body: formData,
+        headers: authHeaders
+      });
+
+      if (response.ok) {
+        const inspectRes = await response.json();
+        if (inspectRes && inspectRes.sheets && inspectRes.sheets.length > 1) {
+          // Nhiều sheet: Mở Modal cho người dùng chọn sheet mong muốn
+          setSheetModal({
+            visible: true,
+            file: file,
+            sheets: inspectRes.sheets
+          });
+          return;
+        }
+      }
+
+      if (startGlobalUpload) {
+        await startGlobalUpload(
+          file, 
+          '/master-products/import-excel', 
+          () => {
+            fetchProduct();
+            if (toast) toast('success', 'Đã nhập dữ liệu BOM & Vật tư từ Excel thành công!');
+          }
+        );
+      } else {
+        const formDataUpload = new FormData();
+        formDataUpload.append('file', file);
+        await api.post('/master-products/import-excel', formDataUpload);
+        fetchProduct();
+        if (toast) toast('success', 'Đã nhập dữ liệu BOM & Vật tư từ Excel thành công!');
+      }
+    } catch (error) {
+      console.error('Lỗi khi upload file Excel:', error);
+      if (toast) toast('error', 'Lỗi khi nhập dữ liệu Excel');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const handleConfirmSheetImport = async (selectedSheets) => {
+    const targetFile = sheetModal.file;
+    setSheetModal({ visible: false, file: null, sheets: [] });
+    if (!targetFile) return;
+
+    try {
+      if (startGlobalUpload) {
+        await startGlobalUpload(
+          targetFile,
+          '/master-products/import-excel',
+          () => {
+            fetchProduct();
+            if (toast) toast('success', 'Đã nhập dữ liệu BOM từ các Sheet đã chọn!');
+          },
+          { sheets: JSON.stringify(selectedSheets) }
+        );
+      }
+    } catch (error) {
+      console.error('Lỗi upload sheets:', error);
+    }
+  };
+
 
   // Dữ liệu bảng BOM 13 Cột phân cấp chuẩn Mockup 1
   const [bomRows, setBomRows] = useState([]);
@@ -678,12 +873,12 @@ const ProductDetailView = () => {
 
     if (activeLower.includes('sơn')) {
       const sonOnly = enrichedRows.filter(i => !i.isRawMaterial && !i.isPackaging && i.level <= 1);
-      return sonOnly.map(formatRow);
+      return sonOnly.map(formatItem);
     }
 
     if (activeLower.includes('đóng gói') || activeLower.includes('gói')) {
       const pkgOnly = enrichedRows.filter(i => i.isPackaging || i.level === 0);
-      return pkgOnly.map(formatRow);
+      return pkgOnly.map(formatItem);
     }
 
     if (activeLower.includes('kho') || activeLower.includes('lưu kho')) {
@@ -705,7 +900,7 @@ const ProductDetailView = () => {
       }];
     }
 
-    return enrichedRows.map(formatRow);
+    return enrichedRows.map(formatItem);
   }, [bomRows, activeStage, product]);
 
   const defaultStageOptions = [
@@ -886,38 +1081,6 @@ const ProductDetailView = () => {
     }
   };
 
-  const handleSaveInfo = async () => {
-    try {
-      const parsedPrice = parseFloat(String(formData.estimatedCost || '0').replace(/\./g, '').replace(/,/g, '').replace(/[^\d.]/g, '')) || 0;
-      const selectedCat = categoriesOptions.find(c => c.name === formData.category || String(c.id) === String(formData.category));
-      const categoryId = selectedCat?.id || product?.category_id || undefined;
-
-      await api.put(`/master-products/${id}`, {
-        sku: formData.sku,
-        name: formData.name,
-        category_id: categoryId,
-        brand_name: formData.line,
-        color: formData.color,
-        price: parsedPrice,
-        length: Number(formData.length) || 0,
-        width: Number(formData.width) || 0,
-        height: Number(formData.height) || 0,
-        weight: parseFloat(String(formData.weight || '0').replace(/[^\d.]/g, '')) || 0,
-        specification: formData.note,
-        description: formData.note,
-        status: formData.bomStatus,
-        image_url: mainImage,
-        master_bom_details: bomRows
-      });
-
-      if (toast) toast('success', 'Đã lưu thông tin chi tiết sản phẩm và BOM thành công!');
-      fetchProduct();
-    } catch (err) {
-      console.error('Lỗi lưu chi tiết sản phẩm:', err);
-      if (toast) toast('error', 'Có lỗi xảy ra khi lưu thông tin sản phẩm.');
-    }
-  };
-
   // Xử lý nạp dữ liệu từ sản phẩm mẫu khác
   const handleApplyFromProduct = (sourceProduct, options = {}) => {
     if (!sourceProduct) return;
@@ -1009,6 +1172,102 @@ const ProductDetailView = () => {
     });
   }, [bomRows, searchTerm]);
 
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleStartEdit = () => {
+    setOriginalData({
+      formData: { ...formData },
+      bomRows: JSON.parse(JSON.stringify(bomRows)),
+      mainImage: mainImage
+    });
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    if (originalData) {
+      if (originalData.formData) setFormData(originalData.formData);
+      if (originalData.bomRows) setBomRows(originalData.bomRows);
+      if (originalData.mainImage !== undefined) setMainImage(originalData.mainImage);
+    }
+    setIsEditing(false);
+  };
+
+  const handleSaveInfo = async () => {
+    if (!formData.name?.trim() || !formData.sku?.trim()) {
+      if (toast) toast('warning', 'Vui lòng nhập Mã sản phẩm (SKU) và Tên sản phẩm!');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const matchedCategory = categoriesOptions.find(c => c.name === formData.line || c.name === formData.category);
+      const parsedPrice = parseFloat(String(formData.estimatedCost || '0').replace(/\./g, '').replace(/,/g, '').replace(/[^\d.]/g, '')) || 0;
+
+      const payload = {
+        name: formData.name,
+        sku: formData.sku,
+        brand_name: formData.line,
+        category_id: matchedCategory?.id || null,
+        price: parsedPrice,
+        color: formData.color,
+        length: parseFloat(formData.length) || 0,
+        width: parseFloat(formData.width) || 0,
+        height: parseFloat(formData.height) || 0,
+        weight: parseFloat(String(formData.weight || '0').replace(/[^\d.]/g, '')) || 0,
+        quantity: parseFloat(formData.totalComponents) || 1.0,
+        unit: 'Bộ',
+        specification: formData.note,
+        description: formData.note,
+        status: formData.bomStatus,
+        image_url: mainImage,
+        master_bom_details: bomRows
+          .filter(r => (r.compName && r.compName.trim() !== '') || (r.compCode && r.compCode.trim() !== ''))
+          .map(r => ({
+            tree_stt: r.stt,
+            sku: r.compCode || r.sku,
+            component_sku: r.compCode || r.sku,
+            name: r.compName || r.name || 'Chi tiết',
+            component_type: r.type,
+            quantity: parseFloat(r.quantity) || 1,
+            unit: r.unit || 'Cái',
+            material: r.material || 'Gỗ / MDF',
+            specification: r.spec || '',
+            input_stage: r.stageFrom,
+            output_stage: r.stageTo,
+            description: r.note || ''
+          })),
+        materials: materialRows.map((m, idx) => ({
+          id: m.id || null,
+          stt: m.stt || idx + 1,
+          group_type: m.group_type || 'VẬT TƯ HÀNG TRẮNG',
+          material_code: m.material_code || '',
+          material_name: m.material_name || m.name || '',
+          color: m.color || '',
+          quota: parseFloat(m.quota || m.quantity || 1.0) || 1.0,
+          unit: m.unit || 'Cái',
+          supplier: m.supplier || '',
+          note: m.note || ''
+        }))
+      };
+
+      await api.put(`/master-products/${id}`, payload);
+      if (toast) toast('success', 'Lưu thông tin sản phẩm thành công!');
+      setIsEditing(false);
+      fetchProduct();
+    } catch (err) {
+      console.error('Lỗi lưu thông tin sản phẩm:', err);
+      if (toast) toast('error', 'Lưu thông tin thất bại: ' + (err?.response?.data?.detail || err.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="mgmt-container" style={{ backgroundColor: '#FAF6F1', minHeight: '100vh', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1031,7 +1290,7 @@ const ProductDetailView = () => {
   }
 
   return (
-    <div className="product-detail-container detail-view-container" style={{ backgroundColor: '#FAF6F1', minHeight: '100%', padding: '12px 16px 60px 16px' }}>
+    <div className="product-detail-container detail-view-container" style={{ backgroundColor: '#FAF6F1', padding: '12px 16px 16px 16px', boxSizing: 'border-box' }}>
       <div className="mgmt-main" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
 
         {/* KHUNG 1: THÔNG TIN CHUNG (CHUẨN MOCKUP 1 - TỐI ƯU COMPACT VỀ CHIỀU CAO) */}
@@ -1042,11 +1301,24 @@ const ProductDetailView = () => {
           padding: '12px 18px',
           boxShadow: '0 2px 10px rgba(45, 26, 18, 0.03)'
         }}>
-          {/* Header Card + 5 Nút Thao Tác Bên Phải */}
+          {/* Header Card + Nút Thao Tác Bên Phải */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
-            <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '800', color: '#2D1A12' }}>
-              Thông tin chung
-            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '800', color: '#2D1A12' }}>
+                Thông tin chung
+              </h3>
+              <span style={{
+                fontSize: '0.72rem',
+                fontWeight: '700',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                backgroundColor: isEditing ? '#FEF3C7' : '#F1F5F9',
+                color: isEditing ? '#92400E' : '#475569',
+                border: isEditing ? '1px solid #FCD34D' : '1px solid #E2E8F0'
+              }}>
+                {isEditing ? '● Đang chỉnh sửa' : '○ Chỉ xem'}
+              </span>
+            </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <button
@@ -1071,46 +1343,6 @@ const ProductDetailView = () => {
 
               <button
                 type="button"
-                onClick={() => toast('info', 'Nhập danh sách linh kiện')}
-                style={{
-                  padding: '7px 14px',
-                  backgroundColor: '#8D6E63',
-                  border: 'none',
-                  borderRadius: '8px',
-                  color: '#FFFFFF',
-                  fontWeight: '700',
-                  fontSize: '0.82rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <Upload size={15} /> Nhập danh sách
-              </button>
-
-              <button
-                type="button"
-                onClick={() => toast('info', 'Xuất lệnh sản xuất')}
-                style={{
-                  padding: '7px 14px',
-                  backgroundColor: '#8D6E63',
-                  border: 'none',
-                  borderRadius: '8px',
-                  color: '#FFFFFF',
-                  fontWeight: '700',
-                  fontSize: '0.82rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <Download size={15} /> Xuất lệnh
-              </button>
-
-              <button
-                type="button"
                 onClick={() => toast('info', 'Chuyển thông tin kỹ thuật')}
                 style={{
                   padding: '7px 14px',
@@ -1129,23 +1361,72 @@ const ProductDetailView = () => {
                 <Send size={15} /> Chuyển thông tin
               </button>
 
-              <button
-                type="button"
-                onClick={handleSaveInfo}
-                style={{
-                  padding: '7px 18px',
-                  backgroundColor: '#5D3B32',
-                  border: 'none',
-                  borderRadius: '8px',
-                  color: '#FFFFFF',
-                  fontWeight: '800',
-                  fontSize: '0.82rem',
-                  cursor: 'pointer',
-                  boxShadow: '0 3px 8px rgba(93, 59, 50, 0.2)'
-                }}
-              >
-                <Save size={15} /> Lưu thông tin
-              </button>
+              {!isEditing ? (
+                <button
+                  type="button"
+                  onClick={handleStartEdit}
+                  style={{
+                    padding: '7px 18px',
+                    backgroundColor: '#5D3B32',
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: '#FFFFFF',
+                    fontWeight: '800',
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    boxShadow: '0 3px 8px rgba(93, 59, 50, 0.2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Edit3 size={15} /> Chỉnh sửa
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleCancelEdit}
+                    style={{
+                      padding: '7px 16px',
+                      backgroundColor: '#FFFFFF',
+                      border: '1.5px solid #EF4444',
+                      borderRadius: '8px',
+                      color: '#EF4444',
+                      fontWeight: '700',
+                      fontSize: '0.82rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <X size={15} /> Hủy
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveInfo}
+                    disabled={loading}
+                    style={{
+                      padding: '7px 18px',
+                      backgroundColor: '#5D3B32',
+                      border: 'none',
+                      borderRadius: '8px',
+                      color: '#FFFFFF',
+                      fontWeight: '800',
+                      fontSize: '0.82rem',
+                      cursor: 'pointer',
+                      boxShadow: '0 3px 8px rgba(93, 59, 50, 0.2)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Save size={15} /> {loading ? 'Đang lưu...' : 'Lưu thông tin'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -1159,12 +1440,14 @@ const ProductDetailView = () => {
                 ref={fileInputRef}
                 style={{ display: 'none' }}
                 accept="image/*"
+                disabled={!isEditing}
                 onChange={(e) => handleImageUpload(e, true)}
               />
 
               {/* Ô ảnh chính vuông lớn */}
               <div
-                onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                onClick={() => isEditing && fileInputRef.current && fileInputRef.current.click()}
+                title={isEditing ? 'Nhấn để thay đổi ảnh' : undefined}
                 style={{
                   width: '240px',
                   height: '165px',
@@ -1176,7 +1459,7 @@ const ProductDetailView = () => {
                   justifyContent: 'center',
                   flexDirection: 'column',
                   color: '#94A3B8',
-                  cursor: 'pointer',
+                  cursor: isEditing ? 'pointer' : 'default',
                   overflow: 'hidden',
                   position: 'relative'
                 }}
@@ -1188,43 +1471,47 @@ const ProductDetailView = () => {
                       alt="Main Product"
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
-                    <button
-                      type="button"
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        setMainImage(null);
-                        if (fileInputRef.current) fileInputRef.current.value = '';
-                        await api.put(`/master-products/${id}`, { image_url: '' }).catch(() => {});
-                        if (toast) toast('info', 'Đã xóa ảnh sản phẩm');
-                      }}
-                      style={{
-                        position: 'absolute',
-                        top: '6px',
-                        right: '6px',
-                        backgroundColor: 'rgba(239, 68, 68, 0.9)',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '50%',
-                        width: '24px',
-                        height: '24px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                        fontSize: '14px',
-                        fontWeight: 'bold',
-                        zIndex: 10
-                      }}
-                      title="Xóa ảnh"
-                    >
-                      ×
-                    </button>
+                    {isEditing && (
+                      <button
+                        type="button"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          setMainImage(null);
+                          if (fileInputRef.current) fileInputRef.current.value = '';
+                          await api.put(`/master-products/${id}`, { image_url: '' }).catch(() => {});
+                          if (toast) toast('info', 'Đã xóa ảnh sản phẩm');
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: '6px',
+                          right: '6px',
+                          backgroundColor: 'rgba(239, 68, 68, 0.9)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '50%',
+                          width: '24px',
+                          height: '24px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                          fontSize: '14px',
+                          fontWeight: 'bold',
+                          zIndex: 10
+                        }}
+                        title="Xóa ảnh"
+                      >
+                        ×
+                      </button>
+                    )}
                   </>
                 ) : (
                   <>
                     <Box size={52} style={{ strokeWidth: 1.5 }} />
-                    <span style={{ fontSize: '0.72rem', fontWeight: '600', marginTop: '4px' }}>Tải ảnh chính</span>
+                    <span style={{ fontSize: '0.72rem', fontWeight: '600', marginTop: '4px' }}>
+                      {isEditing ? 'Tải ảnh chính' : 'Chưa có ảnh'}
+                    </span>
                   </>
                 )}
               </div>
@@ -1245,7 +1532,7 @@ const ProductDetailView = () => {
                       justifyContent: 'center',
                       color: '#CBD5E1',
                       overflow: 'hidden',
-                      cursor: 'pointer'
+                      cursor: isEditing ? 'pointer' : 'default'
                     }}
                   >
                     {subImages[thumbIdx] ? (
@@ -1258,219 +1545,230 @@ const ProductDetailView = () => {
               </div>
             </div>
 
-            {/* Form Fields: Hàng 1 & Hàng 2 */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {/* Hàng 1: Mã SP | Danh mục | Dòng hàng | Tên sản phẩm */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.5fr 1.5fr 3fr', gap: '12px' }}>
+            {/* Form 7 Ô Nhập: Bố cục 2 Hàng (Hàng 1: 3 ô, Hàng 2: 4 ô) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', justifyContent: 'center' }}>
+              {/* Hàng 1: 3 Ô Nhập (Mã SKU | Phân loại | Tên sản phẩm) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 2fr', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#4B5563', marginBottom: '4px' }}>Mã sản phẩm</label>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#5D3B32', marginBottom: '3px' }}>
+                    Mã sản phẩm (SKU) <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
                   <input
                     type="text"
-                    value={formData.sku}
-                    onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-                    style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #D1D5DB', borderRadius: '7px', backgroundColor: '#FFF', fontWeight: '800', color: '#1F2937', outline: 'none' }}
+                    name="sku"
+                    value={formData.sku || ''}
+                    disabled={!isEditing}
+                    onChange={handleInputChange}
+                    placeholder="VD: ADV1234..."
+                    style={{
+                      width: '100%',
+                      padding: '6px 10px',
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '6px',
+                      fontSize: '0.84rem',
+                      fontWeight: '700',
+                      backgroundColor: !isEditing ? '#F3F4F6' : '#FFFFFF',
+                      color: '#1F2937',
+                      cursor: !isEditing ? 'not-allowed' : 'text'
+                    }}
                   />
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#4B5563', marginBottom: '4px' }}>Danh mục</label>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#5D3B32', marginBottom: '3px' }}>
+                    Phân loại
+                  </label>
                   <select
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #D1D5DB', borderRadius: '7px', backgroundColor: '#FFF', fontWeight: '700', color: '#1F2937', outline: 'none' }}
+                    name="category"
+                    value={formData.category || ''}
+                    disabled={!isEditing}
+                    onChange={handleInputChange}
+                    style={{
+                      width: '100%',
+                      padding: '6px 10px',
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '6px',
+                      fontSize: '0.84rem',
+                      backgroundColor: !isEditing ? '#F3F4F6' : '#FFFFFF',
+                      color: '#1F2937',
+                      cursor: !isEditing ? 'not-allowed' : 'pointer'
+                    }}
                   >
-                    <option value="Tủ quần áo">Tủ quần áo</option>
-                    <option value="Tủ trưng bày">Tủ trưng bày</option>
-                    <option value="Bàn ăn">Bàn ăn</option>
-                    <option value="Ghế nội thất">Ghế nội thất</option>
-                    <option value="Bàn làm việc">Bàn làm việc</option>
-                    <option value="Giường ngủ">Giường ngủ</option>
-                    <option value="Kệ tivi">Kệ tivi</option>
-                    <option value="Bàn trang điểm">Bàn trang điểm</option>
-                    <option value="Tủ bếp">Tủ bếp</option>
-                    <option value="Khác">Khác</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#4B5563', marginBottom: '4px' }}>Dòng hàng (BOM Master)</label>
-                  <select
-                    value={formData.line}
-                    onChange={(e) => setFormData({ ...formData, line: e.target.value })}
-                    style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #D1D5DB', borderRadius: '7px', backgroundColor: '#FFF', fontWeight: '700', color: '#1F2937', outline: 'none' }}
-                  >
-                    {(categoriesOptions.length > 0 ? categoriesOptions : defaultBomLines.map(name => ({ name }))).map(cat => (
-                      <option key={cat.id || cat.name} value={cat.name}>{cat.name}</option>
+                    <option value="">-- Chọn phân loại --</option>
+                    {categoriesOptions.map((cat) => (
+                      <option key={cat.id || cat.name} value={cat.name}>
+                        {cat.name}
+                      </option>
                     ))}
                   </select>
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#4B5563', marginBottom: '4px' }}>Tên sản phẩm</label>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#5D3B32', marginBottom: '3px' }}>
+                    Tên sản phẩm <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
                   <input
                     type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #D1D5DB', borderRadius: '7px', backgroundColor: '#FFF', fontWeight: '700', color: '#2D1A12', outline: 'none' }}
+                    name="name"
+                    value={formData.name || ''}
+                    disabled={!isEditing}
+                    onChange={handleInputChange}
+                    placeholder="VD: Bàn ăn 6 ghế gỗ sồi..."
+                    style={{
+                      width: '100%',
+                      padding: '6px 10px',
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '6px',
+                      fontSize: '0.84rem',
+                      fontWeight: '700',
+                      backgroundColor: !isEditing ? '#F3F4F6' : '#FFFFFF',
+                      color: '#1F2937',
+                      cursor: !isEditing ? 'not-allowed' : 'text'
+                    }}
                   />
                 </div>
               </div>
 
-              {/* Hàng 2: Kích thước tổng thể (3 ô) | Khối lượng | Ghi chú */}
-              <div style={{ display: 'grid', gridTemplateColumns: '2.5fr 1.2fr 3.5fr', gap: '12px' }}>
+              {/* Hàng 2: 4 Ô Nhập (Kích thước | Màu sơn | Dự toán chi phí | Ghi chú) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.2fr 1.2fr 1.6fr', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#4B5563', marginBottom: '4px' }}>Kích thước tổng thể (mm)</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#5D3B32', marginBottom: '3px' }}>
+                    Kích thước (D x R x C mm)
+                  </label>
+                  <div style={{ display: 'flex', gap: '4px' }}>
                     <input
-                      type="text"
+                      type="number"
+                      name="length"
+                      value={formData.length || ''}
+                      disabled={!isEditing}
+                      onChange={handleInputChange}
                       placeholder="Dài"
-                      value={formData.length}
-                      onChange={(e) => setFormData({ ...formData, length: e.target.value })}
-                      style={{ padding: '7px 8px', border: '1.5px solid #D1D5DB', borderRadius: '7px', fontWeight: '600', fontSize: '0.82rem', textAlign: 'center', backgroundColor: '#FFF' }}
+                      style={{
+                        width: '33%',
+                        padding: '6px 4px',
+                        border: '1px solid #D1D5DB',
+                        borderRadius: '6px',
+                        fontSize: '0.8rem',
+                        textAlign: 'center',
+                        backgroundColor: !isEditing ? '#F3F4F6' : '#FFFFFF',
+                        cursor: !isEditing ? 'not-allowed' : 'text'
+                      }}
                     />
                     <input
-                      type="text"
+                      type="number"
+                      name="width"
+                      value={formData.width || ''}
+                      disabled={!isEditing}
+                      onChange={handleInputChange}
                       placeholder="Rộng"
-                      value={formData.width}
-                      onChange={(e) => setFormData({ ...formData, width: e.target.value })}
-                      style={{ padding: '7px 8px', border: '1.5px solid #D1D5DB', borderRadius: '7px', fontWeight: '600', fontSize: '0.82rem', textAlign: 'center', backgroundColor: '#FFF' }}
+                      style={{
+                        width: '33%',
+                        padding: '6px 4px',
+                        border: '1px solid #D1D5DB',
+                        borderRadius: '6px',
+                        fontSize: '0.8rem',
+                        textAlign: 'center',
+                        backgroundColor: !isEditing ? '#F3F4F6' : '#FFFFFF',
+                        cursor: !isEditing ? 'not-allowed' : 'text'
+                      }}
                     />
                     <input
-                      type="text"
+                      type="number"
+                      name="height"
+                      value={formData.height || ''}
+                      disabled={!isEditing}
+                      onChange={handleInputChange}
                       placeholder="Cao"
-                      value={formData.height}
-                      onChange={(e) => setFormData({ ...formData, height: e.target.value })}
-                      style={{ padding: '7px 8px', border: '1.5px solid #D1D5DB', borderRadius: '7px', fontWeight: '600', fontSize: '0.82rem', textAlign: 'center', backgroundColor: '#FFF' }}
+                      style={{
+                        width: '33%',
+                        padding: '6px 4px',
+                        border: '1px solid #D1D5DB',
+                        borderRadius: '6px',
+                        fontSize: '0.8rem',
+                        textAlign: 'center',
+                        backgroundColor: !isEditing ? '#F3F4F6' : '#FFFFFF',
+                        cursor: !isEditing ? 'not-allowed' : 'text'
+                      }}
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#4B5563', marginBottom: '4px' }}>Khối lượng</label>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#5D3B32', marginBottom: '3px' }}>
+                    Màu sơn
+                  </label>
                   <input
                     type="text"
-                    value={formData.weight}
-                    onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
-                    style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #D1D5DB', borderRadius: '7px', backgroundColor: '#FFF', fontWeight: '700', color: '#1F2937', outline: 'none' }}
+                    name="color"
+                    value={formData.color || ''}
+                    disabled={!isEditing}
+                    onChange={handleInputChange}
+                    placeholder="VD: Tự nhiên, Walnut..."
+                    style={{
+                      width: '100%',
+                      padding: '6px 10px',
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '6px',
+                      fontSize: '0.84rem',
+                      backgroundColor: !isEditing ? '#F3F4F6' : '#FFFFFF',
+                      color: '#1F2937',
+                      cursor: !isEditing ? 'not-allowed' : 'text'
+                    }}
                   />
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#4B5563', marginBottom: '4px' }}>Ghi chú</label>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#5D3B32', marginBottom: '3px' }}>
+                    Ước tính chi phí (VND)
+                  </label>
                   <input
                     type="text"
-                    value={formData.note}
-                    onChange={(e) => setFormData({ ...formData, note: e.target.value })}
-                    style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #D1D5DB', borderRadius: '7px', backgroundColor: '#FFF', fontWeight: '600', color: '#334155', outline: 'none' }}
+                    name="estimatedCost"
+                    value={formData.estimatedCost || ''}
+                    disabled={!isEditing}
+                    onChange={handleInputChange}
+                    placeholder="0"
+                    style={{
+                      width: '100%',
+                      padding: '6px 10px',
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '6px',
+                      fontSize: '0.84rem',
+                      fontWeight: '700',
+                      backgroundColor: !isEditing ? '#F3F4F6' : '#FFFFFF',
+                      color: '#1F2937',
+                      cursor: !isEditing ? 'not-allowed' : 'text'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#5D3B32', marginBottom: '3px' }}>
+                    Ghi chú
+                  </label>
+                  <input
+                    type="text"
+                    name="note"
+                    value={formData.note || ''}
+                    disabled={!isEditing}
+                    onChange={handleInputChange}
+                    placeholder="Ghi chú kỹ thuật..."
+                    style={{
+                      width: '100%',
+                      padding: '6px 10px',
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '6px',
+                      fontSize: '0.84rem',
+                      backgroundColor: !isEditing ? '#F3F4F6' : '#FFFFFF',
+                      color: '#1F2937',
+                      cursor: !isEditing ? 'not-allowed' : 'text'
+                    }}
                   />
                 </div>
               </div>
             </div>
 
           </div>
-
-          {/* Hàng 3: Hàng Thông Tin Meta 6 Ô Nền Xám (Ngày cập nhật, Người cập nhật, Trạng thái BOM, Tổng số LK, Ước tính chi phí, Màu sắc) */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '12px', paddingTop: '8px', borderTop: '1px solid #F1F5F9' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Ngày cập nhật</label>
-              <input
-                type="text"
-                readOnly
-                value={formData.updatedAt}
-                style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #D1D5DB', borderRadius: '7px', backgroundColor: '#E5E7EB', fontWeight: '700', color: '#334155', outline: 'none' }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Người cập nhật</label>
-              <input
-                type="text"
-                readOnly
-                value={formData.updatedBy}
-                style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #D1D5DB', borderRadius: '7px', backgroundColor: '#E5E7EB', fontWeight: '700', color: '#334155', outline: 'none' }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Trạng thái bom</label>
-              <select
-                value={formData.bomStatus}
-                onChange={(e) => setFormData({ ...formData, bomStatus: e.target.value })}
-                style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #D1D5DB', borderRadius: '7px', backgroundColor: '#FFF', fontWeight: '700', color: '#166534', outline: 'none' }}
-              >
-                <option value="Đã duyệt">Đã duyệt</option>
-                <option value="Chờ duyệt">Chờ duyệt</option>
-                <option value="Đang thiết kế">Đang thiết kế</option>
-                <option value="Hoạt động">Hoạt động</option>
-              </select>
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Tổng số linh kiện</label>
-              <input
-                type="text"
-                readOnly
-                value={bomRows.length}
-                style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #D1D5DB', borderRadius: '7px', backgroundColor: '#E5E7EB', fontWeight: '800', color: '#2D1A12', outline: 'none', textAlign: 'center' }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Ước tính chi phí</label>
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <input
-                  type="text"
-                  value={formData.estimatedCost}
-                  onChange={(e) => {
-                    const rawDigits = e.target.value.replace(/\D/g, '');
-                    const formatted = rawDigits ? Number(rawDigits).toLocaleString('vi-VN') : '';
-                    setFormData({ ...formData, estimatedCost: formatted });
-                  }}
-                  placeholder="0"
-                  style={{
-                    width: '100%',
-                    padding: '7px 48px 7px 10px',
-                    border: '1.5px solid #D1D5DB',
-                    borderRadius: '7px',
-                    backgroundColor: '#FFF',
-                    fontWeight: '700',
-                    color: '#1F2937',
-                    outline: 'none'
-                  }}
-                />
-                <span style={{
-                  position: 'absolute',
-                  right: '10px',
-                  fontSize: '0.78rem',
-                  fontWeight: '800',
-                  color: '#9CA3AF',
-                  pointerEvents: 'none',
-                  userSelect: 'none'
-                }}>
-                  VNĐ
-                </span>
-              </div>
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Màu sắc</label>
-              <select
-                value={formData.color}
-                onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #D1D5DB', borderRadius: '7px', backgroundColor: '#FFF', fontWeight: '700', color: '#1F2937', outline: 'none' }}
-              >
-                <option value="Màu tự nhiên">Màu tự nhiên</option>
-                <option value="WOA">WOA (Gỗ Sồi Tự Nhiên)</option>
-                <option value="GRY">GRY (Gỗ Sơn Xám)</option>
-                <option value="BLK">BLK (Gỗ Sơn Đen)</option>
-                <option value="VGN">VGN (Veneer Tự Nhiên)</option>
-                <option value="MCA">MCA (Màu Cánh Gián)</option>
-                <option value="F216">F216 (Sơn Phủ PU)</option>
-                <option value="WUT">WUT (Màu Óc Chó Walnut)</option>
-              </select>
-            </div>
-          </div>
-
         </div>
 
         {/* KHUNG 2: THANH 4 TAB NỔI BẬT (BOM sản phẩm | Quy trình thực hiện | Bản vẽ kỹ thuật | Định mức vật tư) */}
@@ -1490,7 +1788,7 @@ const ProductDetailView = () => {
               transition: 'all 0.2s'
             }}
           >
-            Bom sản
+            BOM sản phẩm
           </button>
 
           <button
@@ -1555,7 +1853,7 @@ const ProductDetailView = () => {
             {/* THANH ACTION TOOLBAR PHÍA TRÊN BẢNG BOM - CHIA 2 BÊN TUYỆT ĐỐI */}
             <div style={{
               display: 'flex',
-              justify: 'space-between',
+              justifyContent: 'space-between',
               alignItems: 'center',
               backgroundColor: '#FFFFFF',
               borderRadius: '10px',
@@ -1694,9 +1992,11 @@ const ProductDetailView = () => {
                   )}
                 </div>
 
+                <input type="file" ref={excelInputRef} accept=".xlsx, .xls" style={{ display: 'none' }} disabled={!isEditing} onChange={handleImportExcel} />
                 <button
                   type="button"
-                  onClick={() => toast('info', 'Nhập dữ liệu')}
+                  disabled={!isEditing}
+                  onClick={() => isEditing && excelInputRef.current && excelInputRef.current.click()}
                   style={{
                     padding: '7px 14px',
                     backgroundColor: '#5D3B32',
@@ -1705,11 +2005,13 @@ const ProductDetailView = () => {
                     color: '#FFFFFF',
                     fontWeight: '700',
                     fontSize: '0.82rem',
-                    cursor: 'pointer',
+                    cursor: isEditing ? 'pointer' : 'not-allowed',
+                    opacity: isEditing ? 1 : 0.55,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px'
                   }}
+                  title={isEditing ? 'Nhập dữ liệu Excel' : 'Bật chế độ Chỉnh sửa để nhập dữ liệu'}
                 >
                   <Upload size={15} /> Nhập dữ liệu
                 </button>
@@ -1737,7 +2039,8 @@ const ProductDetailView = () => {
                 {/* NÚT THÊM CHI TIẾT TRỰC TIẾP VÀO BẢNG BOM */}
                 <button
                   type="button"
-                  onClick={handleAddMainBomRow}
+                  disabled={!isEditing}
+                  onClick={() => isEditing && handleAddMainBomRow()}
                   style={{
                     padding: '7px 16px',
                     backgroundColor: '#5D3B32',
@@ -1746,12 +2049,14 @@ const ProductDetailView = () => {
                     color: '#FFFFFF',
                     fontWeight: '800',
                     fontSize: '0.82rem',
-                    cursor: 'pointer',
+                    cursor: isEditing ? 'pointer' : 'not-allowed',
+                    opacity: isEditing ? 1 : 0.55,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
-                    boxShadow: '0 3px 8px rgba(93, 59, 50, 0.2)'
+                    boxShadow: isEditing ? '0 3px 8px rgba(93, 59, 50, 0.2)' : 'none'
                   }}
+                  title={isEditing ? 'Thêm chi tiết' : 'Bật chế độ Chỉnh sửa để thêm chi tiết'}
                 >
                   <Plus size={16} /> Thêm chi tiết
                 </button>
@@ -1765,15 +2070,15 @@ const ProductDetailView = () => {
               border: '1.5px solid #EADCC9',
               overflow: 'hidden',
               boxShadow: '0 4px 16px rgba(45, 26, 18, 0.05)',
-              marginBottom: '24px'
+              marginBottom: '0px'
             }}>
               <div style={{
                 overflowX: 'auto',
                 overflowY: 'auto',
                 minHeight: '280px',
-                maxHeight: 'calc(100vh - 520px)',
+                maxHeight: 'calc(100vh - 440px)',
                 borderRadius: '10px',
-                paddingBottom: '24px'
+                paddingBottom: '0px'
               }}>
                 <table style={{ width: '100%', minWidth: '1200px', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                   <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
@@ -1794,7 +2099,23 @@ const ProductDetailView = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredBomRows.length === 0 ? (
+                    {isFetchingBom ? (
+                      <tr>
+                        <td colSpan={13} style={{ textAlign: 'center', padding: '3.5rem', color: '#7B5233' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '10px', fontWeight: '700', fontSize: '0.95rem' }}>
+                            <div style={{
+                              width: '18px',
+                              height: '18px',
+                              border: '2.5px solid #EADCC9',
+                              borderTop: '2.5px solid #7B5233',
+                              borderRadius: '50%',
+                              animation: 'spin 1s linear infinite'
+                            }}></div>
+                            Đang tải dữ liệu linh kiện BOM...
+                          </div>
+                        </td>
+                      </tr>
+                    ) : filteredBomRows.length === 0 ? (
                       <tr>
                         <td colSpan={13} style={{ textAlign: 'center', padding: '3rem', color: '#94A3B8' }}>
                           Không tìm thấy linh kiện BOM phù hợp
@@ -1803,6 +2124,7 @@ const ProductDetailView = () => {
                     ) : (
                       filteredBomRows.map((row, index) => {
                         const isRootRow = (index === 0);
+                        const isRowDisabled = isRootRow || !isEditing;
                         const levelDepth = row.stt ? row.stt.split('.').length - 1 : 0;
                         const effectiveSuggestions = (row.type && suggestionsByParent[row.type])
                           ? suggestionsByParent[row.type]
@@ -1822,15 +2144,15 @@ const ProductDetailView = () => {
                                 <input
                                   type="text"
                                   value={row.stt || ''}
-                                  readOnly={isRootRow}
-                                  disabled={isRootRow}
+                                  readOnly={isRowDisabled}
+                                  disabled={isRowDisabled}
                                   onChange={(e) => {
-                                    if (isRootRow) return;
+                                    if (isRowDisabled) return;
                                     const numericDotVal = e.target.value.replace(/[^0-9.]/g, '').replace(/\.{2,}/g, '.');
                                     updateBomRow(row.id, 'stt', numericDotVal);
                                   }}
                                   onKeyDown={(e) => {
-                                    if (isRootRow) return;
+                                    if (isRowDisabled) return;
                                     if (['Backspace', 'Tab', 'Enter', 'Escape', 'ArrowLeft', 'ArrowRight', 'Delete', 'Home', 'End'].includes(e.key) || e.ctrlKey || e.metaKey) {
                                       return;
                                     }
@@ -1846,7 +2168,7 @@ const ProductDetailView = () => {
                                     textAlign: 'center',
                                     fontWeight: '800',
                                     color: '#5D3B32',
-                                    cursor: isRootRow ? 'default' : 'text'
+                                    cursor: isRowDisabled ? 'default' : 'text'
                                   }}
                                 />
                               </td>
@@ -1860,15 +2182,15 @@ const ProductDetailView = () => {
                                     id={`loai-input-${row.id}`}
                                     type="text"
                                     value={row.type || ''}
-                                    readOnly={isRootRow}
-                                    disabled={isRootRow}
+                                    readOnly={isRowDisabled}
+                                    disabled={isRowDisabled}
                                     onChange={(e) => {
-                                      if (isRootRow) return;
+                                      if (isRowDisabled) return;
                                       updateBomRow(row.id, 'type', e.target.value);
                                       if (levelDepth > 0) setActiveTypeRow(row.id);
                                     }}
                                     onFocus={() => {
-                                      if (isRootRow || levelDepth === 0) return;
+                                      if (isRowDisabled || levelDepth === 0) return;
                                       setActiveTypeRow(row.id);
                                       const el = document.getElementById(`loai-input-${row.id}`);
                                       if (el) {
@@ -1886,7 +2208,7 @@ const ProductDetailView = () => {
                                       }
                                     }}
                                     onBlur={() => {
-                                      if (isRootRow || levelDepth === 0) return;
+                                      if (isRowDisabled || levelDepth === 0) return;
                                       setTimeout(() => {
                                         if (selectingTypeRef.current) return;
                                         const exact = loaiOptions.find(o => o.toLowerCase() === (row.type || '').trim().toLowerCase());
@@ -1904,13 +2226,13 @@ const ProductDetailView = () => {
                                       border: '1px solid #E5E7EB',
                                       borderRadius: '4px',
                                       fontSize: '0.8rem',
-                                      backgroundColor: isRootRow ? '#F9FAFB' : '#FFFFFF',
+                                      backgroundColor: isRowDisabled ? '#F9FAFB' : '#FFFFFF',
                                       color: isRootRow ? '#4B5563' : '#1F2937',
                                       fontWeight: isRootRow ? '700' : 'normal',
-                                      cursor: isRootRow ? 'not-allowed' : 'text'
+                                      cursor: isRowDisabled ? 'not-allowed' : 'text'
                                     }}
                                   />
-                                  {!isRootRow && activeTypeRow === row.id && levelDepth > 0 && (() => {
+                                  {!isRowDisabled && activeTypeRow === row.id && levelDepth > 0 && (() => {
                                     const query = (row.type || '').toLowerCase().trim();
                                     const filtered = query
                                       ? loaiOptions.filter(o => o.toLowerCase().includes(query)).slice(0, 100)
@@ -1955,7 +2277,7 @@ const ProductDetailView = () => {
                               <td style={{ padding: '6px 8px' }}>
                                 <select
                                   value={row.stageFrom || 'Định hình'}
-                                  disabled={isRootRow}
+                                  disabled={isRowDisabled}
                                   onChange={(e) => updateBomRow(row.id, 'stageFrom', e.target.value)}
                                   style={{
                                     width: '100%',
@@ -1963,10 +2285,10 @@ const ProductDetailView = () => {
                                     border: '1px solid #D1D5DB',
                                     borderRadius: '4px',
                                     fontSize: '0.8rem',
-                                    backgroundColor: isRootRow ? '#F9FAFB' : '#FFF',
+                                    backgroundColor: isRowDisabled ? '#F9FAFB' : '#FFF',
                                     fontWeight: '600',
-                                    color: isRootRow ? '#4B5563' : '#1F2937',
-                                    cursor: isRootRow ? 'not-allowed' : 'pointer',
+                                    color: isRowDisabled ? '#4B5563' : '#1F2937',
+                                    cursor: isRowDisabled ? 'not-allowed' : 'pointer',
                                     outline: 'none'
                                   }}
                                 >
@@ -1982,7 +2304,7 @@ const ProductDetailView = () => {
                               <td style={{ padding: '6px 8px' }}>
                                 <select
                                   value={row.stageTo || 'Lắp ráp'}
-                                  disabled={isRootRow}
+                                  disabled={isRowDisabled}
                                   onChange={(e) => updateBomRow(row.id, 'stageTo', e.target.value)}
                                   style={{
                                     width: '100%',
@@ -1990,10 +2312,10 @@ const ProductDetailView = () => {
                                     border: '1px solid #D1D5DB',
                                     borderRadius: '4px',
                                     fontSize: '0.8rem',
-                                    backgroundColor: isRootRow ? '#F9FAFB' : '#FFF',
+                                    backgroundColor: isRowDisabled ? '#F9FAFB' : '#FFF',
                                     fontWeight: '600',
-                                    color: isRootRow ? '#4B5563' : '#1F2937',
-                                    cursor: isRootRow ? 'not-allowed' : 'pointer',
+                                    color: isRowDisabled ? '#4B5563' : '#1F2937',
+                                    cursor: isRowDisabled ? 'not-allowed' : 'pointer',
                                     outline: 'none'
                                   }}
                                 >
@@ -2010,8 +2332,8 @@ const ProductDetailView = () => {
                                 <input
                                   type="text"
                                   value={row.compCode || ''}
-                                  readOnly={isRootRow}
-                                  disabled={isRootRow}
+                                  readOnly={isRowDisabled}
+                                  disabled={isRowDisabled}
                                   onChange={(e) => updateBomRow(row.id, 'compCode', e.target.value)}
                                   placeholder="Mã TP..."
                                   style={{
@@ -2021,9 +2343,9 @@ const ProductDetailView = () => {
                                     borderRadius: '4px',
                                     fontSize: '0.8rem',
                                     fontWeight: '700',
-                                    backgroundColor: isRootRow ? '#F9FAFB' : '#FFFFFF',
-                                    color: isRootRow ? '#1F2937' : '#1F2937',
-                                    cursor: isRootRow ? 'not-allowed' : 'text'
+                                    backgroundColor: isRowDisabled ? '#F9FAFB' : '#FFFFFF',
+                                    color: '#1F2937',
+                                    cursor: isRowDisabled ? 'not-allowed' : 'text'
                                   }}
                                 />
                               </td>
@@ -2041,15 +2363,15 @@ const ProductDetailView = () => {
                                       id={`compname-input-${row.id}`}
                                       type="text"
                                       value={row.compName || ''}
-                                      readOnly={isRootRow}
-                                      disabled={isRootRow}
+                                      readOnly={isRowDisabled}
+                                      disabled={isRowDisabled}
                                       onChange={(e) => {
-                                        if (isRootRow) return;
+                                        if (isRowDisabled) return;
                                         updateBomRow(row.id, 'compName', e.target.value);
                                         if (levelDepth > 0) setActiveCompNameRow(row.id);
                                       }}
                                       onFocus={() => {
-                                        if (isRootRow || levelDepth === 0) return;
+                                        if (isRowDisabled || levelDepth === 0) return;
                                         setActiveCompNameRow(row.id);
                                         const el = document.getElementById(`compname-input-${row.id}`);
                                         if (el) {
@@ -2067,7 +2389,7 @@ const ProductDetailView = () => {
                                         }
                                       }}
                                       onBlur={() => {
-                                        if (isRootRow || levelDepth === 0) return;
+                                        if (isRowDisabled || levelDepth === 0) return;
                                         setTimeout(() => {
                                           if (selectingCompNameRef.current) return;
                                           const match = effectiveSuggestions.find(s => s.toLowerCase() === (row.compName || '').trim().toLowerCase());
@@ -2097,12 +2419,12 @@ const ProductDetailView = () => {
                                         borderRadius: '4px',
                                         fontSize: '0.8rem',
                                         fontWeight: levelDepth === 0 ? '700' : '400',
-                                        backgroundColor: isRootRow ? '#F9FAFB' : '#FFFFFF',
+                                        backgroundColor: isRowDisabled ? '#F9FAFB' : '#FFFFFF',
                                         color: levelDepth === 0 ? '#5D3B32' : '#1F2937',
-                                        cursor: isRootRow ? 'not-allowed' : 'text'
+                                        cursor: isRowDisabled ? 'not-allowed' : 'text'
                                       }}
                                     />
-                                    {!isRootRow && activeCompNameRow === row.id && levelDepth > 0 && (() => {
+                                    {!isRowDisabled && activeCompNameRow === row.id && levelDepth > 0 && (() => {
                                       const query = (row.compName || '').toLowerCase().trim();
                                       const filtered = query
                                         ? effectiveSuggestions.filter(s => s.toLowerCase().includes(query)).slice(0, 100)
@@ -2160,8 +2482,8 @@ const ProductDetailView = () => {
                                 <input
                                   type="number"
                                   value={row.quantity != null ? row.quantity : ''}
-                                  readOnly={isRootRow}
-                                  disabled={isRootRow}
+                                  readOnly={isRowDisabled}
+                                  disabled={isRowDisabled}
                                   onChange={(e) => updateBomRow(row.id, 'quantity', e.target.value)}
                                   style={{
                                     width: '100%',
@@ -2170,9 +2492,9 @@ const ProductDetailView = () => {
                                     borderRadius: '4px',
                                     textAlign: 'center',
                                     fontWeight: '700',
-                                    backgroundColor: isRootRow ? '#F9FAFB' : '#FFFFFF',
-                                    color: isRootRow ? '#4B5563' : '#1F2937',
-                                    cursor: isRootRow ? 'not-allowed' : 'text'
+                                    backgroundColor: isRowDisabled ? '#F9FAFB' : '#FFFFFF',
+                                    color: isRowDisabled ? '#4B5563' : '#1F2937',
+                                    cursor: isRowDisabled ? 'not-allowed' : 'text'
                                   }}
                                 />
                               </td>
@@ -2184,8 +2506,8 @@ const ProductDetailView = () => {
                                 <input
                                   type="text"
                                   value={row.unit || ''}
-                                  readOnly={isRootRow}
-                                  disabled={isRootRow}
+                                  readOnly={isRowDisabled}
+                                  disabled={isRowDisabled}
                                   onChange={(e) => updateBomRow(row.id, 'unit', e.target.value)}
                                   style={{
                                     width: '100%',
@@ -2193,9 +2515,9 @@ const ProductDetailView = () => {
                                     border: '1px solid #E5E7EB',
                                     borderRadius: '4px',
                                     textAlign: 'center',
-                                    backgroundColor: isRootRow ? '#F9FAFB' : '#FFFFFF',
-                                    color: isRootRow ? '#4B5563' : '#1F2937',
-                                    cursor: isRootRow ? 'not-allowed' : 'text'
+                                    backgroundColor: isRowDisabled ? '#F9FAFB' : '#FFFFFF',
+                                    color: isRowDisabled ? '#4B5563' : '#1F2937',
+                                    cursor: isRowDisabled ? 'not-allowed' : 'text'
                                   }}
                                 />
                               </td>
@@ -2207,8 +2529,8 @@ const ProductDetailView = () => {
                                 <input
                                   type="text"
                                   value={row.material || ''}
-                                  readOnly={isRootRow}
-                                  disabled={isRootRow}
+                                  readOnly={isRowDisabled}
+                                  disabled={isRowDisabled}
                                   onChange={(e) => updateBomRow(row.id, 'material', e.target.value)}
                                   style={{
                                     width: '100%',
@@ -2216,9 +2538,9 @@ const ProductDetailView = () => {
                                     border: '1px solid #E5E7EB',
                                     borderRadius: '4px',
                                     fontSize: '0.8rem',
-                                    backgroundColor: isRootRow ? '#F9FAFB' : '#FFFFFF',
-                                    color: isRootRow ? '#4B5563' : '#1F2937',
-                                    cursor: isRootRow ? 'not-allowed' : 'text'
+                                    backgroundColor: isRowDisabled ? '#F9FAFB' : '#FFFFFF',
+                                    color: isRowDisabled ? '#4B5563' : '#1F2937',
+                                    cursor: isRowDisabled ? 'not-allowed' : 'text'
                                   }}
                                 />
                               </td>
@@ -2232,10 +2554,10 @@ const ProductDetailView = () => {
                                     type="number"
                                     placeholder="D"
                                     value={row.length || ''}
-                                    readOnly={isRootRow}
-                                    disabled={isRootRow}
+                                    readOnly={isRowDisabled}
+                                    disabled={isRowDisabled}
                                     onChange={(e) => {
-                                      if (isRootRow) return;
+                                      if (isRowDisabled) return;
                                       const val = parseFloat(e.target.value) || 0;
                                       const newSpec = [val, row.width || 0, row.height || 0].join('*');
                                       updateBomRow(row.id, { length: val, spec: newSpec });
@@ -2246,18 +2568,18 @@ const ProductDetailView = () => {
                                       border: '1px solid #E5E7EB',
                                       textAlign: 'center',
                                       fontSize: '0.75rem',
-                                      backgroundColor: isRootRow ? '#F9FAFB' : '#FFFFFF',
-                                      cursor: isRootRow ? 'not-allowed' : 'text'
+                                      backgroundColor: isRowDisabled ? '#F9FAFB' : '#FFFFFF',
+                                      cursor: isRowDisabled ? 'not-allowed' : 'text'
                                     }}
                                   />
                                   <input
                                     type="number"
                                     placeholder="R"
                                     value={row.width || ''}
-                                    readOnly={isRootRow}
-                                    disabled={isRootRow}
+                                    readOnly={isRowDisabled}
+                                    disabled={isRowDisabled}
                                     onChange={(e) => {
-                                      if (isRootRow) return;
+                                      if (isRowDisabled) return;
                                       const val = parseFloat(e.target.value) || 0;
                                       const newSpec = [row.length || 0, val, row.height || 0].join('*');
                                       updateBomRow(row.id, { width: val, spec: newSpec });
@@ -2268,18 +2590,18 @@ const ProductDetailView = () => {
                                       border: '1px solid #E5E7EB',
                                       textAlign: 'center',
                                       fontSize: '0.75rem',
-                                      backgroundColor: isRootRow ? '#F9FAFB' : '#FFFFFF',
-                                      cursor: isRootRow ? 'not-allowed' : 'text'
+                                      backgroundColor: isRowDisabled ? '#F9FAFB' : '#FFFFFF',
+                                      cursor: isRowDisabled ? 'not-allowed' : 'text'
                                     }}
                                   />
                                   <input
                                     type="number"
                                     placeholder="C"
                                     value={row.height || ''}
-                                    readOnly={isRootRow}
-                                    disabled={isRootRow}
+                                    readOnly={isRowDisabled}
+                                    disabled={isRowDisabled}
                                     onChange={(e) => {
-                                      if (isRootRow) return;
+                                      if (isRowDisabled) return;
                                       const val = parseFloat(e.target.value) || 0;
                                       const newSpec = [row.length || 0, row.width || 0, val].join('*');
                                       updateBomRow(row.id, { height: val, spec: newSpec });
@@ -2290,8 +2612,8 @@ const ProductDetailView = () => {
                                       border: '1px solid #E5E7EB',
                                       textAlign: 'center',
                                       fontSize: '0.75rem',
-                                      backgroundColor: isRootRow ? '#F9FAFB' : '#FFFFFF',
-                                      cursor: isRootRow ? 'not-allowed' : 'text'
+                                      backgroundColor: isRowDisabled ? '#F9FAFB' : '#FFFFFF',
+                                      cursor: isRowDisabled ? 'not-allowed' : 'text'
                                     }}
                                   />
                                 </div>
@@ -2304,8 +2626,8 @@ const ProductDetailView = () => {
                                 <input
                                   type="text"
                                   value={row.volume != null ? row.volume : ''}
-                                  readOnly={isRootRow}
-                                  disabled={isRootRow}
+                                  readOnly={isRowDisabled}
+                                  disabled={isRowDisabled}
                                   onChange={(e) => updateBomRow(row.id, 'volume', e.target.value)}
                                   style={{
                                     width: '100%',
@@ -2314,8 +2636,8 @@ const ProductDetailView = () => {
                                     borderRadius: '4px',
                                     textAlign: 'center',
                                     color: '#6B7280',
-                                    backgroundColor: isRootRow ? '#F9FAFB' : '#FFFFFF',
-                                    cursor: isRootRow ? 'not-allowed' : 'text'
+                                    backgroundColor: isRowDisabled ? '#F9FAFB' : '#FFFFFF',
+                                    cursor: isRowDisabled ? 'not-allowed' : 'text'
                                   }}
                                 />
                               </td>
@@ -2327,8 +2649,8 @@ const ProductDetailView = () => {
                                 <input
                                   type="text"
                                   value={row.note || ''}
-                                  readOnly={isRootRow}
-                                  disabled={isRootRow}
+                                  readOnly={isRowDisabled}
+                                  disabled={isRowDisabled}
                                   onChange={(e) => updateBomRow(row.id, 'note', e.target.value)}
                                   style={{
                                     width: '100%',
@@ -2336,8 +2658,8 @@ const ProductDetailView = () => {
                                     border: '1px solid #E5E7EB',
                                     borderRadius: '4px',
                                     fontSize: '0.8rem',
-                                    backgroundColor: isRootRow ? '#F9FAFB' : '#FFFFFF',
-                                    cursor: isRootRow ? 'not-allowed' : 'text'
+                                    backgroundColor: isRowDisabled ? '#F9FAFB' : '#FFFFFF',
+                                    cursor: isRowDisabled ? 'not-allowed' : 'text'
                                   }}
                                 />
                               </td>
@@ -2349,18 +2671,34 @@ const ProductDetailView = () => {
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
                                   <button
                                     type="button"
-                                    onClick={() => handleAddSubBomRow(row)}
-                                    style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#5D3B32', padding: '3px' }}
-                                    title="Thêm chi tiết con"
+                                    disabled={!isEditing}
+                                    onClick={() => isEditing && handleAddSubBomRow(row)}
+                                    style={{
+                                      border: 'none',
+                                      background: 'transparent',
+                                      cursor: isEditing ? 'pointer' : 'not-allowed',
+                                      opacity: isEditing ? 1 : 0.35,
+                                      color: '#5D3B32',
+                                      padding: '3px'
+                                    }}
+                                    title={isEditing ? 'Thêm chi tiết con' : 'Bật chế độ Chỉnh sửa'}
                                   >
                                     <Plus size={15} />
                                   </button>
                                   {!isRootRow && (
                                     <button
                                       type="button"
-                                      onClick={() => handleDeleteBomRow(row.id)}
-                                      style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#EF4444', padding: '3px' }}
-                                      title="Xóa dòng"
+                                      disabled={!isEditing}
+                                      onClick={() => isEditing && handleDeleteBomRow(row.id)}
+                                      style={{
+                                        border: 'none',
+                                        background: 'transparent',
+                                        cursor: isEditing ? 'pointer' : 'not-allowed',
+                                        opacity: isEditing ? 1 : 0.35,
+                                        color: '#EF4444',
+                                        padding: '3px'
+                                      }}
+                                      title={isEditing ? 'Xóa dòng' : 'Bật chế độ Chỉnh sửa'}
                                     >
                                       <Trash2 size={15} />
                                     </button>
@@ -2371,190 +2709,6 @@ const ProductDetailView = () => {
                           </tr>
                         );
                       })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* BẢNG PHỤ TRỢ 1: BẢNG DANH SÁCH CHI TIẾT (KT03.1) */}
-            <div style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: '12px',
-              border: '1.5px solid #EADCC9',
-              overflow: 'hidden',
-              boxShadow: '0 4px 16px rgba(45, 26, 18, 0.05)',
-              marginBottom: '20px'
-            }}>
-              <div style={{
-                padding: '12px 18px',
-                backgroundColor: '#FAF6F0',
-                borderBottom: '1.5px solid #EADCC9',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Layers size={18} color="#6D4C3D" />
-                  <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '800', color: '#2D1A12' }}>
-                    KT03.1: Danh sách Chi tiết
-                  </h4>
-                  <span style={{
-                    backgroundColor: '#6D4C3D',
-                    color: '#FFFFFF',
-                    borderRadius: '12px',
-                    padding: '2px 8px',
-                    fontSize: '0.75rem',
-                    fontWeight: '700'
-                  }}>
-                    {detailRows.length}
-                  </span>
-                </div>
-              </div>
-
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#6D4C3D', color: '#FFFFFF' }}>
-                      <th style={{ padding: '9px 10px', textAlign: 'center', width: '50px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>STT</th>
-                      <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Tên chi tiết</th>
-                      <th style={{ padding: '9px 10px', textAlign: 'center', width: '80px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Số lượng</th>
-                      <th style={{ padding: '9px 10px', textAlign: 'center', width: '70px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Đơn vị</th>
-                      <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Công đoạn giao</th>
-                      <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Công đoạn nhận</th>
-                      <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Thành phẩm</th>
-                      <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Vật liệu</th>
-                      <th style={{ padding: '9px 10px', textAlign: 'center', width: '70px', fontWeight: '700' }}>Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detailRows.length === 0 ? (
-                      <tr>
-                        <td colSpan={9} style={{ textAlign: 'center', padding: '1.8rem', color: '#94A3B8', fontWeight: '600' }}>
-                          Chưa có chi tiết nào được thêm. Nhấn "Cấu hình thông tin" → 'Thêm chi tiết" để tạo mới.
-                        </td>
-                      </tr>
-                    ) : (
-                      detailRows.map((row, idx) => (
-                        <tr key={row.id || idx} style={{ borderBottom: '1px solid #EADCC9', backgroundColor: idx % 2 === 1 ? '#FAF6F0' : '#FFFFFF' }}>
-                          <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '700', color: '#2D1A12' }}>{idx + 1}</td>
-                          <td style={{ padding: '8px 10px', fontWeight: '700', color: '#2D1A12' }}>{row.name}</td>
-                          <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: '#1F2937' }}>{row.quantity}</td>
-                          <td style={{ padding: '8px 10px', textAlign: 'center', color: '#475569' }}>{row.unit}</td>
-                          <td style={{ padding: '8px 10px', color: '#475569' }}>{row.input_stage || '---'}</td>
-                          <td style={{ padding: '8px 10px', color: '#475569' }}>{row.output_stage || '---'}</td>
-                          <td style={{ padding: '8px 10px', fontWeight: '600', color: '#334155' }}>{row.parent_name || '---'}</td>
-                          <td style={{ padding: '8px 10px', color: '#334155' }}>{row.material || '---'}</td>
-                          <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteDetail(row.id)}
-                              style={{ border: 'none', background: 'transparent', color: '#EF4444', cursor: 'pointer', padding: '4px' }}
-                              title="Xóa chi tiết"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* BẢNG PHỤ TRỢ 2: BẢNG DANH SÁCH MẪU MÀU SƠN (KT03.3) */}
-            <div style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: '12px',
-              border: '1.5px solid #EADCC9',
-              overflow: 'hidden',
-              boxShadow: '0 4px 16px rgba(45, 26, 18, 0.05)',
-              marginBottom: '24px'
-            }}>
-              <div style={{
-                padding: '12px 18px',
-                backgroundColor: '#FAF6F0',
-                borderBottom: '1.5px solid #EADCC9',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Palette size={18} color="#6D4C3D" />
-                  <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '800', color: '#2D1A12' }}>
-                    KT03.3: Danh sách Mẫu Màu Sơn
-                  </h4>
-                  <span style={{
-                    backgroundColor: '#6D4C3D',
-                    color: '#FFFFFF',
-                    borderRadius: '12px',
-                    padding: '2px 8px',
-                    fontSize: '0.75rem',
-                    fontWeight: '700'
-                  }}>
-                    {paintColorRows.length}
-                  </span>
-                </div>
-              </div>
-
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#6D4C3D', color: '#FFFFFF' }}>
-                      <th style={{ padding: '9px 10px', textAlign: 'center', width: '50px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>STT</th>
-                      <th style={{ padding: '9px 10px', textAlign: 'center', width: '65px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Ảnh mẫu</th>
-                      <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Mã màu sơn</th>
-                      <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Tên màu sơn</th>
-                      <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Nhà cung cấp</th>
-                      <th style={{ padding: '9px 10px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Ngày hết hạn</th>
-                      <th style={{ padding: '9px 10px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Ghi chú</th>
-                      <th style={{ padding: '9px 10px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Ngày tạo</th>
-                      <th style={{ padding: '9px 10px', textAlign: 'center', width: '70px', fontWeight: '700' }}>Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paintColorRows.length === 0 ? (
-                      <tr>
-                        <td colSpan={9} style={{ textAlign: 'center', padding: '1.8rem', color: '#94A3B8', fontWeight: '600' }}>
-                          Chưa có mẫu màu sơn nào được thêm. Nhấn "Cấu hình thông tin" → 'Thêm mẫu màu sơn" để tạo mới.
-                        </td>
-                      </tr>
-                    ) : (
-                      paintColorRows.map((row, idx) => (
-                        <tr key={row.id || idx} style={{ borderBottom: '1px solid #EADCC9', backgroundColor: idx % 2 === 1 ? '#FAF6F0' : '#FFFFFF' }}>
-                          <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '700', color: '#2D1A12' }}>{idx + 1}</td>
-                          <td style={{ padding: '6px 10px', textAlign: 'center' }}>
-                            {row.image_url ? (
-                              <img src={row.image_url} alt={row.color_name} style={{ width: '36px', height: '36px', borderRadius: '6px', objectFit: 'cover', border: '1px solid #D1D5DB' }} />
-                            ) : (
-                              <div style={{ width: '36px', height: '36px', borderRadius: '6px', backgroundColor: '#E2E8F0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <Palette size={18} color="#94A3B8" />
-                              </div>
-                            )}
-                          </td>
-                          <td style={{ padding: '8px 10px', fontWeight: '800', color: '#2D1A12' }}>{row.color_code}</td>
-                          <td style={{ padding: '8px 10px', fontWeight: '700', color: '#334155' }}>{row.color_name}</td>
-                          <td style={{ padding: '8px 10px', color: '#475569' }}>{row.supplier || '---'}</td>
-                          <td style={{ padding: '8px 10px', textAlign: 'center', color: '#475569' }}>
-                            {row.expiry_date ? new Date(row.expiry_date).toLocaleDateString('vi-VN') : '---'}
-                          </td>
-                          <td style={{ padding: '8px 10px', color: '#64748B' }}>{row.note || '---'}</td>
-                          <td style={{ padding: '8px 10px', textAlign: 'center', color: '#94A3B8' }}>
-                            {row.created_at ? new Date(row.created_at).toLocaleDateString('vi-VN') : '---'}
-                          </td>
-                          <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                            <button
-                              type="button"
-                              onClick={() => handleDeletePaintColor(row.id)}
-                              style={{ border: 'none', background: 'transparent', color: '#EF4444', cursor: 'pointer', padding: '4px' }}
-                              title="Xóa mẫu màu sơn"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
                     )}
                   </tbody>
                 </table>
@@ -2656,7 +2810,23 @@ const ProductDetailView = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {displayItems.length === 0 ? (
+                    {isFetchingBom ? (
+                      <tr>
+                        <td colSpan={13} style={{ textAlign: 'center', padding: '3.5rem', color: '#7B5233' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '10px', fontWeight: '700', fontSize: '0.95rem' }}>
+                            <div style={{
+                              width: '18px',
+                              height: '18px',
+                              border: '2.5px solid #EADCC9',
+                              borderTop: '2.5px solid #7B5233',
+                              borderRadius: '50%',
+                              animation: 'spin 1s linear infinite'
+                            }}></div>
+                            Đang tải quy trình công đoạn...
+                          </div>
+                        </td>
+                      </tr>
+                    ) : displayItems.length === 0 ? (
                       <tr>
                         <td colSpan={13} style={{ textAlign: 'center', padding: '3rem', color: '#94A3B8', fontWeight: '600' }}>
                           Không có linh kiện nào trong công đoạn {activeStage}
@@ -2716,8 +2886,446 @@ const ProductDetailView = () => {
               </div>
             </div>
           </div>
+        ) : activeTab === 'materials' ? (
+          /* TAB 4: ĐỊNH MỨC VẬT TƯ (BOM PHỤ KIỆN HÀNG TRẮNG & SAU SƠN CHUẨN G7) */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            
+            {/* KPI STATS BAR & ACTION TOOLBAR */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              backgroundColor: '#FFFFFF',
+              borderRadius: '12px',
+              border: '1.5px solid #EADCC9',
+              padding: '14px 20px',
+              boxShadow: '0 4px 16px rgba(45, 26, 18, 0.04)',
+              flexWrap: 'wrap',
+              gap: '16px'
+            }}>
+              {/* Left: 4 Metric Cards */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                {/* Tổng phụ kiện */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#FAF6F0', border: '1px solid #EADCC9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Box size={20} color="#5D3B32" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', fontWeight: '700', color: '#7B5233', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Tổng phụ kiện</div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#2D1A12' }}>
+                      {materialRows.length} <span style={{ fontSize: '0.78rem', fontWeight: '600', color: '#64748B' }}>mục</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ height: '32px', width: '1px', backgroundColor: '#EADCC9' }} />
+
+                {/* Hàng trắng */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Layers size={20} color="#1D4ED8" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', fontWeight: '700', color: '#1E40AF', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Hàng trắng</div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#1E3A8A' }}>
+                      {materialRows.filter(m => (m.group_type || '').toUpperCase().includes('TRẮNG')).length} <span style={{ fontSize: '0.78rem', fontWeight: '600', color: '#64748B' }}>mục</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ height: '32px', width: '1px', backgroundColor: '#EADCC9' }} />
+
+                {/* Sau sơn */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Palette size={20} color="#15803D" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', fontWeight: '700', color: '#166534', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Sau sơn</div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#14532D' }}>
+                      {materialRows.filter(m => (m.group_type || '').toUpperCase().includes('SƠN')).length} <span style={{ fontSize: '0.78rem', fontWeight: '600', color: '#64748B' }}>mục</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ height: '32px', width: '1px', backgroundColor: '#EADCC9' }} />
+
+                {/* Tổng định mức */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Sliders size={20} color="#B45309" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', fontWeight: '700', color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Tổng định mức</div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#78350F' }}>
+                      {materialRows.reduce((acc, m) => acc + (parseFloat(m.quota || m.quantity || 0) || 0), 0)} <span style={{ fontSize: '0.78rem', fontWeight: '600', color: '#64748B' }}>phụ kiện</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: Search, Filter & Action Buttons */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                {/* Ô tìm kiếm nội bộ Tab vật tư */}
+                <div style={{ position: 'relative', minWidth: '220px' }}>
+                  <input
+                    type="text"
+                    placeholder="Tìm tên VT, mã, màu, NCC..."
+                    value={materialSearch}
+                    onChange={(e) => setMaterialSearch(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '7px 28px 7px 32px',
+                      fontSize: '0.82rem',
+                      borderRadius: '8px',
+                      border: '1.5px solid #EADCC9',
+                      backgroundColor: '#FAF6F0',
+                      color: '#2D1A12',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                  <Search size={15} color="#7B5233" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
+                  {materialSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setMaterialSearch('')}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#94A3B8',
+                        cursor: 'pointer',
+                        padding: '2px'
+                      }}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Bộ lọc nhóm vật tư */}
+                <select
+                  value={materialGroupFilter}
+                  onChange={(e) => setMaterialGroupFilter(e.target.value)}
+                  style={{
+                    padding: '7px 12px',
+                    fontSize: '0.82rem',
+                    borderRadius: '8px',
+                    border: '1.5px solid #EADCC9',
+                    backgroundColor: '#FAF6F0',
+                    color: '#2D1A12',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    outline: 'none'
+                  }}
+                >
+                  <option value="ALL">Tất cả các nhóm</option>
+                  <option value="HANG_TRANG">Chỉ Hàng Trắng</option>
+                  <option value="SAU_SON">Chỉ Sau Sơn</option>
+                </select>
+
+                {/* Nút Xuất Excel */}
+                <button
+                  type="button"
+                  onClick={handleExportMaterialBOM}
+                  style={{
+                    padding: '7px 14px',
+                    backgroundColor: '#F8FAFC',
+                    border: '1.5px solid #CBD5E1',
+                    borderRadius: '8px',
+                    color: '#0F172A',
+                    fontWeight: '700',
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s'
+                  }}
+                  title="Xuất danh mục định mức vật tư ra file Excel"
+                >
+                  <FileSpreadsheet size={16} color="#15803D" /> Xuất Excel
+                </button>
+
+                {/* Nút Thêm vật tư mới */}
+                <button
+                  type="button"
+                  disabled={!isEditing}
+                  onClick={() => {
+                    if (!isEditing) return;
+                    setEditingMaterial(null);
+                    setDefaultMaterialGroup('VẬT TƯ HÀNG TRẮNG');
+                    setShowAddMaterialModal(true);
+                  }}
+                  style={{
+                    padding: '7px 16px',
+                    backgroundColor: '#5D3B32',
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: '#FFFFFF',
+                    fontWeight: '700',
+                    fontSize: '0.82rem',
+                    cursor: isEditing ? 'pointer' : 'not-allowed',
+                    opacity: isEditing ? 1 : 0.55,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: isEditing ? '0 3px 8px rgba(93, 59, 50, 0.2)' : 'none'
+                  }}
+                  title={isEditing ? 'Thêm vật tư mới' : 'Bật chế độ Chỉnh sửa để thêm vật tư'}
+                >
+                  <Plus size={16} /> Thêm vật tư mới
+                </button>
+              </div>
+            </div>
+
+            {/* BẢNG CÁC NHÓM VẬT TƯ */}
+            {(() => {
+              // 1. Phân nhóm vật tư
+              const rawGroups = {
+                'VẬT TƯ HÀNG TRẮNG': [],
+                'VẬT TƯ SAU SƠN': []
+              };
+
+              materialRows.forEach(mat => {
+                const gName = (mat.group_type || 'VẬT TƯ HÀNG TRẮNG').toUpperCase();
+                if (!rawGroups[gName]) rawGroups[gName] = [];
+                rawGroups[gName].push(mat);
+              });
+
+              // 2. Lọc theo Group Filter
+              let activeGroupKeys = Object.keys(rawGroups);
+              if (materialGroupFilter === 'HANG_TRANG') {
+                activeGroupKeys = activeGroupKeys.filter(k => k.includes('TRẮNG'));
+              } else if (materialGroupFilter === 'SAU_SON') {
+                activeGroupKeys = activeGroupKeys.filter(k => k.includes('SƠN'));
+              }
+
+              // 3. Render các nhóm
+              return activeGroupKeys.map((gName, gIdx) => {
+                const allGroupItems = rawGroups[gName] || [];
+                
+                // Lọc theo từ khóa tìm kiếm
+                const searchLower = materialSearch.trim().toLowerCase();
+                const filteredItems = allGroupItems.filter(row => {
+                  if (!searchLower) return true;
+                  const nameMatch = (row.material_name || row.name || '').toLowerCase().includes(searchLower);
+                  const codeMatch = (row.material_code || '').toLowerCase().includes(searchLower);
+                  const colorMatch = (row.color || '').toLowerCase().includes(searchLower);
+                  const suppMatch = (row.supplier || '').toLowerCase().includes(searchLower);
+                  const noteMatch = (row.note || '').toLowerCase().includes(searchLower);
+                  return nameMatch || codeMatch || colorMatch || suppMatch || noteMatch;
+                });
+
+                const isHangTrang = gName.includes('TRẮNG');
+                const badgeBg = isHangTrang ? '#EFF6FF' : '#F0FDF4';
+                const badgeColor = isHangTrang ? '#1D4ED8' : '#15803D';
+                const badgeBorder = isHangTrang ? '#BFDBFE' : '#BBF7D0';
+                const headerBarColor = isHangTrang ? '#2563EB' : '#16A34A';
+
+                return (
+                  <div
+                    key={gName || gIdx}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '12px',
+                      border: '1.5px solid #EADCC9',
+                      overflow: 'hidden',
+                      boxShadow: '0 4px 16px rgba(45, 26, 18, 0.04)',
+                      marginBottom: '12px'
+                    }}
+                  >
+                    {/* Header Nhóm */}
+                    <div style={{
+                      padding: '10px 18px',
+                      backgroundColor: '#FAF6F0',
+                      borderBottom: '1.5px solid #EADCC9',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '8px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ width: '8px', height: '18px', borderRadius: '4px', backgroundColor: headerBarColor }} />
+                        <h4 style={{ margin: 0, fontSize: '0.94rem', fontWeight: '800', color: '#2D1A12', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                          {gName}
+                        </h4>
+                        <span style={{
+                          backgroundColor: badgeBg,
+                          color: badgeColor,
+                          borderRadius: '12px',
+                          padding: '2px 10px',
+                          fontSize: '0.75rem',
+                          fontWeight: '800',
+                          border: `1px solid ${badgeBorder}`
+                        }}>
+                          {allGroupItems.length} mục
+                        </span>
+                      </div>
+
+                      {/* Nút thêm nhanh cho nhóm này */}
+                      <button
+                        type="button"
+                        disabled={!isEditing}
+                        onClick={() => {
+                          if (!isEditing) return;
+                          setEditingMaterial(null);
+                          setDefaultMaterialGroup(gName);
+                          setShowAddMaterialModal(true);
+                        }}
+                        style={{
+                          padding: '4px 12px',
+                          backgroundColor: isHangTrang ? '#EFF6FF' : '#F0FDF4',
+                          border: `1px solid ${badgeBorder}`,
+                          borderRadius: '6px',
+                          color: badgeColor,
+                          fontWeight: '700',
+                          fontSize: '0.78rem',
+                          cursor: isEditing ? 'pointer' : 'not-allowed',
+                          opacity: isEditing ? 1 : 0.45,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                        title={isEditing ? `Thêm nhanh vật tư vào ${gName}` : 'Bật chế độ Chỉnh sửa để thêm'}
+                      >
+                        <Plus size={14} /> Thêm vào nhóm này
+                      </button>
+                    </div>
+
+                    {/* Table Nội dung */}
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#6D4C3D', color: '#FFFFFF' }}>
+                            <th style={{ padding: '10px 12px', textAlign: 'center', width: '55px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>STT</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'left', width: '140px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Mã vật tư</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Tên vật tư / Phụ kiện</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'left', width: '150px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Màu sắc / Xi mạ</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'center', width: '110px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Định mức</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'center', width: '90px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Đơn vị</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'left', width: '140px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Nhà cung cấp</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Ghi chú</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'center', width: '85px', fontWeight: '700' }}>Thao tác</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {isFetchingBom ? (
+                            <tr>
+                              <td colSpan={9} style={{ textAlign: 'center', padding: '2.5rem', color: '#7B5233' }}>
+                                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '10px', fontWeight: '700', fontSize: '0.9rem' }}>
+                                  <div style={{
+                                    width: '18px',
+                                    height: '18px',
+                                    border: '2.5px solid #EADCC9',
+                                    borderTop: '2.5px solid #7B5233',
+                                    borderRadius: '50%',
+                                    animation: 'spin 1s linear infinite'
+                                  }}></div>
+                                  Đang tải định mức vật tư...
+                                </div>
+                              </td>
+                            </tr>
+                          ) : filteredItems.length === 0 ? (
+                            <tr>
+                              <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#94A3B8', fontWeight: '600' }}>
+                                {materialSearch ? `Không tìm thấy vật tư nào khớp với từ khóa "${materialSearch}"` : `Chưa có vật tư nào trong nhóm ${gName}. Nhấn "+ Thêm vào nhóm này" để thêm mới.`}
+                              </td>
+                            </tr>
+                          ) : (
+                            filteredItems.map((row, idx) => (
+                              <tr key={row.id || idx} style={{ borderBottom: '1px solid #EADCC9', backgroundColor: idx % 2 === 1 ? '#FAF6F0' : '#FFFFFF' }}>
+                                <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: '700', color: '#2D1A12' }}>
+                                  {row.stt || idx + 1}
+                                </td>
+                                <td style={{ padding: '8px 12px', fontWeight: '800', color: '#7B5233', fontFamily: 'monospace', fontSize: '0.84rem' }}>
+                                  {row.material_code || '---'}
+                                </td>
+                                <td style={{ padding: '8px 12px', fontWeight: '700', color: '#1E293B' }}>
+                                  {row.material_name || row.name || '---'}
+                                </td>
+                                <td style={{ padding: '8px 12px', color: '#475569', fontWeight: '600' }}>
+                                  {row.color ? (
+                                    <span style={{ backgroundColor: '#F1F5F9', color: '#334155', padding: '2px 8px', borderRadius: '4px', fontSize: '0.78rem', border: '1px solid #E2E8F0' }}>
+                                      {row.color}
+                                    </span>
+                                  ) : '---'}
+                                </td>
+                                <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: '900', color: '#2D1A12', fontSize: '0.92rem' }}>
+                                  {row.quota || row.quantity || 1}
+                                </td>
+                                <td style={{ padding: '8px 12px', textAlign: 'center', color: '#475569', fontWeight: '600' }}>
+                                  {row.unit || 'Cái'}
+                                </td>
+                                <td style={{ padding: '8px 12px', color: '#475569' }}>
+                                  {row.supplier || '---'}
+                                </td>
+                                <td style={{ padding: '8px 12px', color: '#64748B' }}>
+                                  {row.note || '---'}
+                                </td>
+                                <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                    <button
+                                      type="button"
+                                      disabled={!isEditing}
+                                      onClick={() => {
+                                        if (!isEditing) return;
+                                        setEditingMaterial(row);
+                                        setDefaultMaterialGroup(row.group_type || gName);
+                                        setShowAddMaterialModal(true);
+                                      }}
+                                      style={{
+                                        border: 'none',
+                                        background: 'transparent',
+                                        color: '#3B82F6',
+                                        cursor: isEditing ? 'pointer' : 'not-allowed',
+                                        opacity: isEditing ? 1 : 0.35,
+                                        padding: '4px'
+                                      }}
+                                      title={isEditing ? 'Chỉnh sửa vật tư' : 'Bật chế độ Chỉnh sửa để sửa'}
+                                    >
+                                      <Sliders size={15} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={!isEditing}
+                                      onClick={() => {
+                                        if (!isEditing) return;
+                                        handleDeleteMaterial(row.id, idx);
+                                      }}
+                                      style={{
+                                        border: 'none',
+                                        background: 'transparent',
+                                        color: '#EF4444',
+                                        cursor: isEditing ? 'pointer' : 'not-allowed',
+                                        opacity: isEditing ? 1 : 0.35,
+                                        padding: '4px'
+                                      }}
+                                      title={isEditing ? 'Xóa vật tư' : 'Bật chế độ Chỉnh sửa để xóa'}
+                                    >
+                                      <Trash2 size={15} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+
+          </div>
         ) : (
-          /* TAB 3 & TAB 4: BẢN VẼ KỸ THUẬT & ĐỊNH MỨC VẬT TƯ TẠM THỜI TRỐNG */
+          /* TAB 3: BẢN VẼ KỸ THUẬT TẠM THỜI TRỐNG */
           <div style={{
             backgroundColor: '#FFFFFF',
             borderRadius: '12px',
@@ -2736,6 +3344,21 @@ const ProductDetailView = () => {
         )}
 
       </div>
+
+      {showAddMaterialModal && (
+        <AddMaterialModal
+          productId={id}
+          editMaterial={editingMaterial}
+          defaultGroupType={defaultMaterialGroup}
+          nextStt={materialRows.length + 1}
+          onClose={() => {
+            setShowAddMaterialModal(false);
+            setEditingMaterial(null);
+          }}
+          onSuccess={fetchProduct}
+        />
+      )}
+
 
       {showAddDetailModal && (
         <AddDetailModal
@@ -2785,6 +3408,16 @@ const ProductDetailView = () => {
         onApply={handleApplyFromProduct}
         currentSku={formData.sku}
       />
+
+      {/* SELECT SHEETS MODAL */}
+      {sheetModal.visible && (
+        <SelectSheetsModal
+          file={sheetModal.file}
+          sheets={sheetModal.sheets}
+          onClose={() => setSheetModal({ visible: false, file: null, sheets: [] })}
+          onConfirm={handleConfirmSheetImport}
+        />
+      )}
     </div>
   );
 };

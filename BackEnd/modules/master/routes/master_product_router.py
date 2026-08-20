@@ -1,17 +1,15 @@
 import os
 import uuid
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from typing import Optional, List, Any
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from typing import List
 from config.database import get_db
 from modules.master.schemas.master_product import MasterProduct, MasterProductCreate, MasterProductUpdate, MasterProductListItem, MasterProductListResponse
 from modules.production.schemas.product import Product as ProductSchema
 from modules.master.controllers import master_product_controller
 
 router = APIRouter()
-
-from fastapi.responses import StreamingResponse
 
 @router.post("/upload-image")
 async def upload_master_product_image(file: UploadFile = File(...)):
@@ -34,17 +32,32 @@ async def upload_master_product_image(file: UploadFile = File(...)):
         
     return {"url": f"/static/uploads/products/{new_filename}"}
 
-@router.post("/import-excel")
-async def import_master_products(file: UploadFile = File(...), db: Session = Depends(get_db)):
+@router.post("/inspect-excel-sheets")
+async def inspect_master_products_excel_sheets_endpoint(file: UploadFile = File(...)):
     """
-    [POST] Nhập dữ liệu sản phẩm mẫu và BOM từ file Excel (Hỗ trợ Streaming Progress).
+    [POST] Quét nhanh các sheet trong file Excel BOM để trả về danh sách Sheet metadata.
+    """
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        raise HTTPException(status_code=400, detail="Vui lòng tải lên file Excel (.xlsx hoặc .xls)")
+    
+    contents = await file.read()
+    return master_product_controller.inspect_master_products_excel_sheets(contents)
+
+@router.post("/import-excel")
+async def import_master_products(
+    file: UploadFile = File(...),
+    sheets: Optional[str] = Form(None),
+    db: Session = Depends(get_db)
+):
+    """
+    [POST] Nhập dữ liệu sản phẩm mẫu và BOM từ file Excel (Hỗ trợ Streaming Progress và chọn Sheet).
     """
     if not file.filename.endswith(('.xlsx', '.xls')):
         raise HTTPException(status_code=400, detail="Vui lòng tải lên file Excel (.xlsx hoặc .xls)")
     
     contents = await file.read()
     return StreamingResponse(
-        master_product_controller.import_master_products_from_excel(db, contents),
+        master_product_controller.import_master_products_from_excel(db, contents, selected_sheets=sheets),
         media_type="text/event-stream",
         headers={
             "X-Accel-Buffering": "no",
@@ -154,6 +167,120 @@ def update_paint_color_sample(sample_id: int, payload: dict, db: Session = Depen
         raise HTTPException(status_code=404, detail="Không tìm thấy mẫu màu sơn để cập nhật")
     return item
 
+# ─────────────────────────────────────────────────────────────────────────────
+# CÁC ROUTE QUẢN LÝ ĐỊNH MỨC VẬT TƯ (KT03.4)
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/all-materials")
+def get_all_materials(
+    product_id: Optional[int] = None,
+    group_type: Optional[str] = None,
+    supplier: Optional[str] = None,
+    q: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy danh sách tất cả định mức vật tư (KT03.4) cho trang quản lý BOM vật tư riêng biệt.
+    """
+    return master_product_controller.get_all_product_materials(
+        db, product_id=product_id, group_type=group_type, supplier=supplier, q=q, skip=skip, limit=limit
+    )
+
+@router.get("/materials-by-product")
+def get_materials_by_product(
+    product_id: Optional[int] = None,
+    sku: Optional[str] = None,
+    name: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Tự động lấy danh sách vật tư theo product_id HOẶC theo trùng khớp Mã SP/Tên SP.
+    """
+    return master_product_controller.get_materials_by_product(
+        db, product_id=product_id, sku=sku, name=name
+    )
+
+@router.post("/material-items")
+def create_standalone_material(payload: dict, db: Session = Depends(get_db)):
+    """
+    [POST] Thêm mới một dòng vật tư từ trang Quản lý BOM vật tư.
+    """
+    return master_product_controller.create_standalone_material(db, payload)
+
+@router.put("/materials-item/{material_id}")
+def update_product_material(material_id: int, payload: dict, db: Session = Depends(get_db)):
+    """
+    [PUT] Cập nhật thông tin dòng vật tư.
+    """
+    item = master_product_controller.update_product_material(db, material_id, payload)
+    if not item:
+        raise HTTPException(status_code=404, detail="Không tìm thấy dòng vật tư để cập nhật")
+    return item
+
+@router.delete("/materials-item/{material_id}")
+def delete_standalone_product_material(material_id: int, db: Session = Depends(get_db)):
+    """
+    [DELETE] Xóa dòng vật tư khỏi hệ thống.
+    """
+    success = master_product_controller.delete_product_material(db, material_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Không tìm thấy dòng vật tư để xóa")
+    return {"message": "Đã xóa dòng vật tư thành công"}
+
+@router.post("/import-material-bom-excel")
+async def import_material_bom_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """
+    [POST] Nhập BOM vật tư từ file Excel tổng hợp (ví dụ BOM KHUNG U CAO SU.xlsx).
+    """
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        raise HTTPException(status_code=400, detail="Vui lòng tải lên file Excel (.xlsx hoặc .xls)")
+    
+    contents = await file.read()
+    return master_product_controller.import_material_boms_from_excel(db, contents)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CÁC ROUTE CÔNG VIỆC KỸ THUẬT VÀ PHỤ TRỢ (KT01, KT03.1, KT03.3)
+# ─────────────────────────────────────────────────────────────────────────────
+@router.delete("/product-details/{detail_id}")
+def delete_standalone_product_detail(detail_id: int, db: Session = Depends(get_db)):
+    """
+    [DELETE] Xóa chi tiết sản phẩm (KT03.1).
+    """
+    success = master_product_controller.delete_product_detail(db, detail_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Không tìm thấy chi tiết sản phẩm để xóa")
+    return {"message": "Đã xóa chi tiết sản phẩm thành công"}
+
+@router.delete("/paint-colors/{sample_id}")
+def delete_standalone_paint_color_sample(sample_id: int, db: Session = Depends(get_db)):
+    """
+    [DELETE] Xóa mẫu màu sơn (KT03.3).
+    """
+    success = master_product_controller.delete_paint_color_sample(db, sample_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Không tìm thấy mẫu màu sơn để xóa")
+    return {"message": "Đã xóa mẫu màu sơn thành công"}
+
+@router.get("/technical-pending-tasks")
+def get_technical_pending_tasks(db: Session = Depends(get_db)):
+    """
+    [GET] Lấy danh sách công việc kỹ thuật tồn đọng cho KT01 Dashboard.
+    """
+    return master_product_controller.get_technical_pending_tasks(db)
+
+@router.post("/technical-pending-tasks")
+def create_technical_pending_task(payload: dict, db: Session = Depends(get_db)):
+    """
+    [POST] Tạo mới một công việc kỹ thuật tồn đọng.
+    """
+    title = payload.get("title", "Công việc mới")
+    assigned_to = payload.get("assigned_to", "Kỹ thuật viên")
+    return master_product_controller.create_technical_pending_task(db, title, assigned_to)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CÁC ROUTE THAO TÁC THEO ID SẢN PHẨM MẪU (/{id})
+# ─────────────────────────────────────────────────────────────────────────────
 @router.get("/{id}", response_model=MasterProduct)
 def read_master_product(id: int, db: Session = Depends(get_db)):
     """
@@ -191,22 +318,6 @@ def produce_product(id: int, quantity: float, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Không tìm thấy sản phẩm mẫu để phân rã")
     return db_product
 
-@router.get("/technical-pending-tasks")
-def get_technical_pending_tasks(db: Session = Depends(get_db)):
-    """
-    [GET] Lấy danh sách công việc kỹ thuật tồn đọng cho KT01 Dashboard.
-    """
-    return master_product_controller.get_technical_pending_tasks(db)
-
-@router.post("/technical-pending-tasks")
-def create_technical_pending_task(payload: dict, db: Session = Depends(get_db)):
-    """
-    [POST] Tạo mới một công việc kỹ thuật tồn đọng.
-    """
-    title = payload.get("title", "Công việc mới")
-    assigned_to = payload.get("assigned_to", "Kỹ thuật viên")
-    return master_product_controller.create_technical_pending_task(db, title, assigned_to)
-
 @router.post("/{id}/drawings")
 def create_technical_drawing(id: int, payload: dict, db: Session = Depends(get_db)):
     """
@@ -220,6 +331,16 @@ def create_paint_color_sample(id: int, payload: dict, db: Session = Depends(get_
     [POST] Thêm mẫu màu sơn (Modal KT03.3).
     """
     return master_product_controller.create_paint_color_sample(db, id, payload)
+
+@router.delete("/{id}/paint-colors/{sample_id}")
+def delete_paint_color_sample_by_id(sample_id: int, id: int, db: Session = Depends(get_db)):
+    """
+    [DELETE] Xóa mẫu màu sơn.
+    """
+    success = master_product_controller.delete_paint_color_sample(db, sample_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Không tìm thấy mẫu màu sơn để xóa")
+    return {"message": "Đã xóa mẫu màu sơn thành công"}
 
 @router.post("/{id}/bom-details")
 def add_bom_detail(id: int, payload: dict, db: Session = Depends(get_db)):
@@ -245,25 +366,31 @@ def create_product_detail(id: int, payload: dict, db: Session = Depends(get_db))
     """
     return master_product_controller.create_product_detail(db, id, payload)
 
-@router.delete("/product-details/{detail_id}")
 @router.delete("/{id}/product-details/{detail_id}")
-def delete_product_detail(detail_id: int, id: int = None, db: Session = Depends(get_db)):
+def delete_product_detail_by_id(detail_id: int, id: int, db: Session = Depends(get_db)):
     """
-    [DELETE] Xóa chi tiết sản phẩm (KT03.1).
+    [DELETE] Xóa chi tiết sản phẩm.
     """
     success = master_product_controller.delete_product_detail(db, detail_id)
     if not success:
         raise HTTPException(status_code=404, detail="Không tìm thấy chi tiết sản phẩm để xóa")
     return {"message": "Đã xóa chi tiết sản phẩm thành công"}
 
-@router.delete("/paint-colors/{sample_id}")
-@router.delete("/{id}/paint-colors/{sample_id}")
-def delete_paint_color_sample(sample_id: int, id: int = None, db: Session = Depends(get_db)):
+@router.post("/{id}/materials")
+def create_product_material(id: int, payload: dict, db: Session = Depends(get_db)):
     """
-    [DELETE] Xóa mẫu màu sơn (KT03.3).
+    [POST] Thêm mới một dòng vật tư (Tab Định mức vật tư).
     """
-    success = master_product_controller.delete_paint_color_sample(db, sample_id)
+    return master_product_controller.create_product_material(db, id, payload)
+
+@router.delete("/{id}/materials-item/{material_id}")
+def delete_product_material_by_id(material_id: int, id: int, db: Session = Depends(get_db)):
+    """
+    [DELETE] Xóa dòng vật tư khỏi sản phẩm.
+    """
+    success = master_product_controller.delete_product_material(db, material_id)
     if not success:
-        raise HTTPException(status_code=404, detail="Không tìm thấy mẫu màu sơn để xóa")
-    return {"message": "Đã xóa mẫu màu sơn thành công"}
+        raise HTTPException(status_code=404, detail="Không tìm thấy dòng vật tư để xóa")
+    return {"message": "Đã xóa dòng vật tư thành công"}
+
 

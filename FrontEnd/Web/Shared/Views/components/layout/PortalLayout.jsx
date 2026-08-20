@@ -1231,7 +1231,7 @@ const PortalLayout = () => {
     }, 5000);
   };
 
-  const startGlobalUpload = async (file, endpoint, onComplete) => {
+  const startGlobalUpload = async (file, endpoint, onComplete, extraFormData = null) => {
     const uploadId = Date.now().toString();
     const newUpload = {
       id: uploadId,
@@ -1240,7 +1240,8 @@ const PortalLayout = () => {
       processed: 0,
       total: 0,
       fileName: file.name,
-      status: 'uploading'
+      status: 'uploading',
+      message: ''
     };
 
     setUploads(prev => [...prev, newUpload]);
@@ -1248,6 +1249,13 @@ const PortalLayout = () => {
 
     const formData = new FormData();
     formData.append('file', file);
+    if (extraFormData && typeof extraFormData === 'object') {
+      Object.keys(extraFormData).forEach(k => {
+        if (extraFormData[k] !== undefined && extraFormData[k] !== null) {
+          formData.append(k, typeof extraFormData[k] === 'object' ? JSON.stringify(extraFormData[k]) : extraFormData[k]);
+        }
+      });
+    }
 
     try {
       const token = localStorage.getItem('token');
@@ -1280,17 +1288,34 @@ const PortalLayout = () => {
           if (!line.trim()) continue;
           try {
             const data = JSON.parse(line);
-            if (data.total !== undefined) updateUpload(uploadId, { total: data.total });
-            if (data.processed !== undefined) {
-              updateUpload(uploadId, { processed: data.processed });
-              setUploads(prev => prev.map(u => {
-                if (u.id === uploadId) {
-                  const p = Math.round((data.processed / (u.total || 1)) * 100);
-                  return { ...u, progress: p > 100 ? 100 : p };
+            const patch = {};
+            if (data.total !== undefined) patch.total = data.total;
+            if (data.total_sheets !== undefined) patch.total_sheets = data.total_sheets;
+            if (data.sheet_index !== undefined) patch.sheet_index = data.sheet_index;
+            if (data.sheet !== undefined) patch.sheet = data.sheet;
+            if (data.processed !== undefined) patch.processed = data.processed;
+            if (data.message) patch.message = data.message;
+            if (Object.keys(patch).length > 0) updateUpload(uploadId, patch);
+
+            setUploads(prev => prev.map(u => {
+              if (u.id === uploadId) {
+                let progress = u.progress;
+                if (data.total_sheets && data.sheet_index) {
+                  const sheetProg = Math.round((data.sheet_index / data.total_sheets) * 100);
+                  progress = Math.min(99, Math.max(u.progress || 0, sheetProg));
+                } else if (data.total && data.processed !== undefined && data.total > 0) {
+                  const itemProg = Math.round((data.processed / data.total) * 100);
+                  progress = Math.min(99, Math.max(u.progress || 0, itemProg));
                 }
-                return u;
-              }));
-            }
+                return { 
+                  ...u, 
+                  ...patch,
+                  progress: data.status === 'completed' ? 100 : (progress || u.progress || 0)
+                };
+              }
+              return u;
+            }));
+
             if (data.status === 'error') {
               updateUpload(uploadId, { status: 'error' });
               showModal("Lỗi", data.message || `Lỗi khi xử lý file ${file.name}`, "error");
@@ -1298,8 +1323,8 @@ const PortalLayout = () => {
               return;
             }
             if (data.status === 'completed') {
-              updateUpload(uploadId, { status: 'completed', progress: 100 });
-              showModal("Thành công", `Đã xử lý xong file ${file.name}`, "success");
+              updateUpload(uploadId, { status: 'completed', progress: 100, message: data.message });
+              showModal("Thành công", data.message || `Đã xử lý xong file ${file.name}`, "success");
               if (onComplete) onComplete(data);
               removeUpload(uploadId);
               return;

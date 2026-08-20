@@ -6,7 +6,7 @@ import re
 import os
 import uuid
 import base64
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 import app.models  # Register all SQLAlchemy ORM models to prevent InvalidRequestError
 from modules.master.models.master_product import MasterProduct
 from modules.master.models.master_category import MasterCategory
@@ -138,12 +138,18 @@ def serialize_material_item(item):
     return {
         "id": item.id,
         "master_product_id": item.master_product_id,
-        "name": getattr(item, 'name', ''),
+        "stt": getattr(item, 'stt', 1),
+        "group_type": getattr(item, 'group_type', 'VẬT TƯ HÀNG TRẮNG') or 'VẬT TƯ HÀNG TRẮNG',
         "material_code": getattr(item, 'material_code', ''),
-        "unit": getattr(item, 'unit', ''),
-        "quantity": getattr(item, 'quantity', 0.0),
-        "note": getattr(item, 'note', '')
+        "material_name": getattr(item, 'material_name', '') or getattr(item, 'name', ''),
+        "color": getattr(item, 'color', '') or '',
+        "quota": float(getattr(item, 'quota', getattr(item, 'quantity', 1.0)) or 1.0),
+        "quantity": float(getattr(item, 'quota', getattr(item, 'quantity', 1.0)) or 1.0),
+        "unit": getattr(item, 'unit', 'Cái') or 'Cái',
+        "supplier": getattr(item, 'supplier', '') or '',
+        "note": getattr(item, 'note', '') or ''
     }
+
 
 def serialize_product_detail_item(item):
     if not item: return None
@@ -208,7 +214,14 @@ def get_master_products(db: Session, skip: int = 0, limit: int = 50, q: str = No
     return {"items": items, "total": total}
 
 def get_master_product(db: Session, master_product_id: int):
-    master = db.query(MasterProduct).filter(MasterProduct.id == master_product_id).first()
+    master = db.query(MasterProduct).options(
+        joinedload(MasterProduct.master_category),
+        selectinload(MasterProduct.master_bom_details),
+        selectinload(MasterProduct.technical_drawings),
+        selectinload(MasterProduct.paint_color_samples),
+        selectinload(MasterProduct.materials),
+        selectinload(MasterProduct.product_details)
+    ).filter(MasterProduct.id == master_product_id).first()
     return to_master_product_dict(master)
 
 def create_master_product(db: Session, master_product: MasterProductCreate):
@@ -332,6 +345,28 @@ def create_master_product(db: Session, master_product: MasterProductCreate):
                 note=pc.get('note', '')
             ))
 
+    # Insert materials if present
+    materials_list = getattr(master_product, 'materials', []) or []
+    for idx, mat in enumerate(materials_list):
+        if isinstance(mat, dict) and (mat.get('material_name') or mat.get('name')):
+            mat_name = mat.get('material_name') or mat.get('name')
+            mat_code = mat.get('material_code') or f"VT-{mat_name[:6].upper()}"
+            db.add(MasterProductMaterial(
+                master_product_id=db_master.id,
+                stt=mat.get('stt', idx + 1),
+                group_type=mat.get('group_type', 'VẬT TƯ HÀNG TRẮNG'),
+                material_code=mat_code,
+                material_name=mat_name,
+                color=mat.get('color', ''),
+                quota=float(mat.get('quota', mat.get('quantity', 1.0)) or 1.0),
+                unit=mat.get('unit', 'Cái'),
+                supplier=mat.get('supplier', ''),
+                note=mat.get('note', '')
+            ))
+
+    db.commit()
+
+
     db.commit()
     db.refresh(db_master)
     return to_master_product_dict(db_master)
@@ -339,7 +374,7 @@ def create_master_product(db: Session, master_product: MasterProductCreate):
 def update_master_product(db: Session, master_product_id: int, master_product: MasterProductUpdate):
     db_master = db.query(MasterProduct).filter(MasterProduct.id == master_product_id).first()
     if db_master:
-        update_data = master_product.model_dump(exclude_unset=True, exclude={'master_bom_details', 'product_details', 'paint_color_samples'})
+        update_data = master_product.model_dump(exclude_unset=True, exclude={'master_bom_details', 'product_details', 'paint_color_samples', 'materials', 'technical_drawings'})
         if 'sku' in update_data:
             update_data['sku'] = clean_and_standardize_sku(update_data['sku'])
         if 'name' in update_data:
@@ -445,9 +480,30 @@ def update_master_product(db: Session, master_product_id: int, master_product: M
                         note=pc.get('note', '')
                     ))
 
+        materials_list = getattr(master_product, 'materials', None)
+        if materials_list is not None and isinstance(materials_list, list):
+            db.query(MasterProductMaterial).filter(MasterProductMaterial.master_product_id == db_master.id).delete(synchronize_session=False)
+            for idx, mat in enumerate(materials_list):
+                if isinstance(mat, dict) and (mat.get('material_name') or mat.get('name')):
+                    mat_name = mat.get('material_name') or mat.get('name')
+                    mat_code = mat.get('material_code') or f"VT-{mat_name[:6].upper()}"
+                    db.add(MasterProductMaterial(
+                        master_product_id=db_master.id,
+                        stt=mat.get('stt', idx + 1),
+                        group_type=mat.get('group_type', 'VẬT TƯ HÀNG TRẮNG'),
+                        material_code=mat_code,
+                        material_name=mat_name,
+                        color=mat.get('color', ''),
+                        quota=float(mat.get('quota', mat.get('quantity', 1.0)) or 1.0),
+                        unit=mat.get('unit', 'Cái'),
+                        supplier=mat.get('supplier', ''),
+                        note=mat.get('note', '')
+                    ))
+
         db.commit()
         db.refresh(db_master)
     return to_master_product_dict(db_master)
+
 
 def delete_master_product(db: Session, master_product_id: int):
     db_master = db.query(MasterProduct).filter(MasterProduct.id == master_product_id).first()
@@ -543,315 +599,489 @@ def parse_color(sku, name, desc=None):
     return None
 
 
-def import_master_products_from_excel(db: Session, file_content: bytes):
-
+def inspect_master_products_excel_sheets(file_content: bytes):
+    """
+    [FAST INSPECTION] Quét nhanh tất cả các sheet trong file Excel BOM để trả về danh sách Sheet metadata.
+    Hỗ trợ người dùng chọn sheet cần upload khi file có nhiều sheet.
+    """
+    import io, openpyxl, json
+    
     def clean_val(val):
-        if pd.isna(val) or str(val).lower() == 'nan': return None
-        return str(val).strip()
+        if val is None: return None
+        s = str(val).strip()
+        if not s or s.lower() == 'nan' or s.lower() == 'none': return None
+        return s
 
     def to_bool(val):
         if not val: return False
-        return str(val).lower() in ['có', 'yes', '1', 'true', 'x']
+        return str(val).strip().lower() in ['có', 'yes', '1', 'true', 'x']
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(file_content), data_only=True, read_only=True)
+        results = []
+        
+        for sname in wb.sheetnames:
+            ws = wb[sname]
+            rows = list(ws.iter_rows(values_only=True))
+            if not rows or len(rows) < 2:
+                continue
+            
+            # Tìm dòng tiêu đề trong 15 dòng đầu
+            h_idx = -1
+            for r_idx in range(min(15, len(rows))):
+                row_str = ' '.join([str(c or '').lower() for c in rows[r_idx]])
+                if any(k in row_str for k in ['mã chi tiết', 'tên chi tiết', 'mã mặt hàng', 'mã sản phẩm']):
+                    h_idx = r_idx
+                    break
+            
+            if h_idx == -1:
+                if len(rows) > 5:
+                    results.append({
+                        "name": sname,
+                        "rows": len(rows),
+                        "product_count": 0,
+                        "products": [],
+                        "color": "",
+                        "brand": "ATLAS",
+                        "description": f"Sheet dữ liệu {sname} ({len(rows)} dòng)",
+                        "is_valid": True
+                    })
+                continue
+
+            headers = [str(c or '').replace('\n', ' ').strip().lower() for c in rows[h_idx]]
+            
+            def get_col_pos(kw_list, default=None):
+                for kw in kw_list:
+                    for i, h in enumerate(headers):
+                        if kw == h: return i
+                for kw in kw_list:
+                    for i, h in enumerate(headers):
+                        if kw in h: return i
+                return default
+
+            c_parent_sku = get_col_pos(['mã mặt hàng', 'mã sp', 'mã sản phẩm'], 0)
+            c_child_sku = get_col_pos(['mã chi tiết'], 4)
+            c_is_fin = get_col_pos(['là thành phẩm c/k', 'là thành phẩm'], 24)
+            c_color = get_col_pos(['màu sắc'], 13)
+            c_brand = get_col_pos(['năng suất mục tiêu', 'danh mục mặt hàng'], 27)
+            
+            prods = []
+            colors = set()
+            brands = set()
+            data_rows = rows[h_idx + 1:]
+            
+            for row in data_rows:
+                if not row or len(row) <= max(c_parent_sku or 0, c_child_sku or 0):
+                    continue
+                p_sku = clean_val(row[c_parent_sku]) if (c_parent_sku is not None and c_parent_sku < len(row)) else None
+                c_sku = clean_val(row[c_child_sku]) if (c_child_sku is not None and c_child_sku < len(row)) else None
+                if not p_sku or not c_sku:
+                    continue
+                
+                is_fin = to_bool(row[c_is_fin]) if (c_is_fin is not None and c_is_fin < len(row)) else False
+                col_val = clean_val(row[c_color]) if (c_color is not None and c_color < len(row)) else None
+                brand_val = clean_val(row[c_brand]) if (c_brand is not None and c_brand < len(row)) else None
+                
+                if col_val: colors.add(col_val)
+                if brand_val: brands.add(brand_val)
+                
+                if is_fin or (p_sku == c_sku and '.' not in p_sku):
+                    p_sku_clean = clean_and_standardize_sku(p_sku)
+                    if p_sku_clean and p_sku_clean not in prods:
+                        prods.append(p_sku_clean)
+                        
+            color_desc = ', '.join(sorted(colors)) if colors else ''
+            brand_desc = ', '.join(sorted(brands)) if brands else 'ATLAS'
+            
+            desc_parts = []
+            if brand_desc: desc_parts.append(f"Dòng {brand_desc}")
+            if color_desc: desc_parts.append(f"Màu {color_desc}")
+            desc = " - ".join(desc_parts) if desc_parts else f"Sheet {sname}"
+            
+            results.append({
+                "name": sname,
+                "rows": len(data_rows),
+                "product_count": len(prods),
+                "products": prods,
+                "color": list(colors)[0] if colors else '',
+                "brand": list(brands)[0] if brands else 'ATLAS',
+                "description": desc,
+                "is_valid": len(prods) > 0 or len(data_rows) > 5
+            })
+            
+        return {
+            "total_sheets": len(results),
+            "sheets": results
+        }
+    except Exception as e:
+        print(f"=== [INSPECT ERROR] {e}")
+        return {
+            "total_sheets": 0,
+            "sheets": [],
+            "error": str(e)
+        }
+
+
+def import_master_products_from_excel(db: Session, file_content: bytes, selected_sheets: Optional[Any] = None):
+    """
+    [MULTI-SHEET STREAMING IMPORT] Nhập dữ liệu Master BOM chuẩn từ file Excel:
+    - Hỗ trợ chọn 1, nhiều hoặc toàn bộ sheet.
+    - Ánh xạ đầy đủ 58 cột thuộc tính kỹ thuật.
+    - Duyệt cây BOM phân cấp đệ quy chính xác (parent_id).
+    - Tự động liên kết Dòng hàng (MasterCategory) và Mẫu màu sơn (paint_color_samples).
+    - Cập nhật thời gian thực qua Server-Sent Events (SSE).
+    """
+    import io, openpyxl, json, re
+    from modules.master.models.master_category import MasterCategory
+    from modules.master.models.master_product_detail import MasterProductDetail
+    from modules.master.models.paint_color_sample import PaintColorSample
+
+    def clean_val(val):
+        if val is None or pd.isna(val): return None
+        s = str(val).strip()
+        if not s or s.lower() == 'nan' or s.lower() == 'none': return None
+        return s
+
+    def to_bool(val):
+        if not val: return False
+        return str(val).strip().lower() in ['có', 'yes', '1', 'true', 'x']
 
     def to_float(val, default=0.0):
-        if pd.isna(val) or val is None: return default
+        if val is None or pd.isna(val): return default
         try:
-            return float(str(val).strip().replace(',', '.'))
+            s = str(val).strip().replace(',', '.')
+            return float(s)
         except Exception:
             return default
 
+    # Parse selected sheets filter
+    target_sheet_filter = None
+    if selected_sheets:
+        if isinstance(selected_sheets, str):
+            try:
+                target_sheet_filter = json.loads(selected_sheets)
+            except Exception:
+                target_sheet_filter = [s.strip() for s in selected_sheets.split(',') if s.strip()]
+        elif isinstance(selected_sheets, (list, set)):
+            target_sheet_filter = list(selected_sheets)
+
     try:
-        # Read without header first to auto-detect header row
-        df_raw = pd.read_excel(io.BytesIO(file_content), header=None)
+        wb = openpyxl.load_workbook(io.BytesIO(file_content), data_only=True)
+        all_sheetnames = wb.sheetnames
 
-        # Tự động dò tìm dòng Tiêu đề (Header row) trong 25 dòng đầu
-        header_row_idx = 0
-        for idx in range(min(25, len(df_raw))):
-            row_vals = [str(v).lower() for v in df_raw.iloc[idx].dropna().values]
-            row_str = ' '.join(row_vals)
-            if any(kw in row_str for kw in ['mã chi tiết', 'tên chi tiết', 'mã mặt hàng', 'mã sản phẩm']):
-                header_row_idx = idx
-                break
+        valid_sheetnames = []
+        for sname in all_sheetnames:
+            if target_sheet_filter is not None:
+                if sname in target_sheet_filter:
+                    valid_sheetnames.append(sname)
+            else:
+                ws = wb[sname]
+                if ws.max_row >= 2:
+                    valid_sheetnames.append(sname)
 
-        df = df_raw.iloc[header_row_idx + 1:].copy()
-        raw_headers = [str(val).strip().lower().replace('\n', ' ') for val in df_raw.iloc[header_row_idx].values]
-        df.columns = raw_headers
-        total_rows_excel = len(df)
-        print(f"=== [START IMPORT] Đang đọc file Excel: {total_rows_excel} dòng (Header ở dòng {header_row_idx})")
-        yield json.dumps({"status": "reading", "total": total_rows_excel}) + "\n"
+        if not valid_sheetnames:
+            yield json.dumps({"status": "error", "message": "Không tìm thấy sheet nào hợp lệ để nhập dữ liệu."}) + "\n"
+            return
 
-        headers = [str(h).strip().lower() for h in df.columns]
-        def get_col_idx(names, default=None):
-            for name in names:
-                for i, h in enumerate(headers):
-                    if name == h: return i
-            for name in names:
-                for i, h in enumerate(headers):
-                    if name in h: return i
-            return default
+        total_sheets = len(valid_sheetnames)
+        yield json.dumps({
+            "status": "reading",
+            "total_sheets": total_sheets,
+            "sheets": valid_sheetnames,
+            "message": f"Bắt đầu nạp {total_sheets} sheet được chọn..."
+        }) + "\n"
 
-        idx_root_code = get_col_idx(['mã mặt hàng gốc', 'mã gốc'], None)
-        idx_root_name = get_col_idx(['tên mặt hàng gốc', 'tên gốc'], None)
-        idx_parent_code = get_col_idx(['mã mặt hàng', 'mã sản phẩm', 'mã sp'], 0)
-        idx_parent_name = get_col_idx(['tên mặt hàng', 'tên sản phẩm', 'tên sp'], 1)
-        idx_unit = get_col_idx(['đvt', 'đơn vị tính'], 5)
-        idx_spec = get_col_idx(['quy cách chi tiết', 'quy cách'], 32)
-        idx_child_code = get_col_idx(['mã chi tiết'], 4)
-        idx_child_name = get_col_idx(['tên chi tiết'], 5)
-        idx_child_unit = get_col_idx(['đvt chi tiết', 'đvt'], 6)
-        idx_child_spec = get_col_idx(['quy cách chi tiết', 'quy cách'], 32)
-        idx_qty = get_col_idx(['sl/ part', 'sl/ set', 'số lượng/ po', 'số lượng', 'sl'], 14)
-        idx_waste = get_col_idx(['tỷ lệ hao hụt', 'hao hụt'], 21)
-        idx_desc = get_col_idx(['ghi chú', 'mô tả'], 20)
-        idx_is_raw = get_col_idx(['vật tư thô', 'là nvl (có, không)', 'là nvl'], 25)
-        idx_exclude = get_col_idx(['loại trừ sản xuất', 'không sản xuất', 'loại trừ', 'không đưa vào qtsx'], 26)
-        idx_in_stage = get_col_idx(['cộng đoạn vào', 'công đoạn vào'], 29)
-        idx_out_stage = get_col_idx(['công đoạn ra', 'cộng đoạn ra'], 28)
+        total_prods_imported = 0
+        total_boms_imported = 0
+        category_cache = {}
 
-        # 1. Làm sạch ban đầu
-        df = df[df.iloc[:, idx_child_code].notna()]
-        df = df[df.iloc[:, idx_child_code].astype(str).str.strip().str.lower() != 'mã chi tiết']
-        
-        # 2. Chuyển sang Dictionary để tối ưu tốc độ
-        df_records = df.to_dict('records')
-        col_names = df.columns.tolist()
-        
-        adj_list = {}
-        info_map = {} 
-        all_child_codes = set()
-        
-        for row in df_records:
-            p_code = clean_val(row[col_names[idx_parent_code]])
-            c_code = clean_val(row[col_names[idx_child_code]])
-            if not c_code or not p_code: continue
-            
-            p_code_std = clean_and_standardize_sku(p_code)
-            c_code_std = clean_and_standardize_sku(c_code)
-            
-            if c_code_std != p_code_std:
-                all_child_codes.add(c_code_std)
-            if p_code_std not in adj_list: adj_list[p_code_std] = []
-            if c_code_std != p_code_std:
-                adj_list[p_code_std].append(row)
-            
-            if p_code_std not in info_map:
-                p_name = clean_val(row[col_names[idx_parent_name]])
-                info_map[p_code_std] = {
-                    'name': clean_and_standardize_name(p_name),
-                    'unit': clean_val(row[col_names[idx_unit]]),
-                    'spec': clean_val(row[col_names[idx_spec]])
+        for sheet_idx, sheet_name in enumerate(valid_sheetnames):
+            ws = wb[sheet_name]
+            if ws.max_row < 2:
+                continue
+
+            # 1. Tìm dòng tiêu đề (Header row)
+            h_row = 1
+            for r in range(1, min(15, ws.max_row + 1)):
+                row_vals = [str(ws.cell(r, c).value or '').lower() for c in range(1, min(ws.max_column + 1, 20))]
+                if any(k in ' '.join(row_vals) for k in ['mã chi tiết', 'tên chi tiết', 'mã mặt hàng', 'mã sản phẩm']):
+                    h_row = r
+                    break
+
+            headers = [str(ws.cell(h_row, c).value or '').replace('\n', ' ').strip().lower() for c in range(1, ws.max_column + 1)]
+
+            def get_c_idx(names, default=None):
+                for name in names:
+                    for i, h in enumerate(headers):
+                        if name == h: return i + 1
+                for name in names:
+                    for i, h in enumerate(headers):
+                        if name in h: return i + 1
+                return default
+
+            c_parent_sku = get_c_idx(['mã mặt hàng', 'mã sp', 'mã sản phẩm'], 1)
+            c_parent_name = get_c_idx(['tên mặt hàng', 'tên sp', 'tên sản phẩm'], 2)
+            c_stt = get_c_idx(['stt'], 3)
+            c_material = get_c_idx(['nguyên liệu'], 4)
+            c_child_sku = get_c_idx(['mã chi tiết'], 5)
+            c_child_name = get_c_idx(['tên chi tiết'], 6)
+            c_unit = get_c_idx(['đvt chi tiết', 'đvt'], 7)
+            c_h = get_c_idx(['dày'], 8)
+            c_w = get_c_idx(['rộng'], 9)
+            c_l = get_c_idx(['dài'], 10)
+            c_raw_h = get_c_idx(['phôi dày'], 11)
+            c_raw_w = get_c_idx(['phôi rộng'], 12)
+            c_raw_l = get_c_idx(['phôi dài'], 13)
+            c_color = get_c_idx(['màu sắc'], 14)
+            c_qty_part = get_c_idx(['sl/ part'], 15)
+            c_qty_set = get_c_idx(['sl/ set'], 17)
+            c_desc = get_c_idx(['ghi chú'], 21)
+            c_waste = get_c_idx(['tỷ lệ hao hụt'], 22)
+            c_is_fin = get_c_idx(['là thành phẩm c/k', 'là thành phẩm'], 25)
+            c_is_raw = get_c_idx(['là nvl c/k', 'là nvl'], 26)
+            c_exclude = get_c_idx(['không đưa vào qtsx'], 27)
+            c_brand = get_c_idx(['năng suất mục tiêu'], 28)
+            c_in_stage = get_c_idx(['công đoạn ra'], 29)
+            c_out_stage = get_c_idx(['công đoạn vào'], 30)
+            c_spec = get_c_idx(['quy cách chi tiết', 'quy cách'], 33)
+            c_cat = get_c_idx(['danh mục mặt hàng'], 34)
+
+            # 2. Đọc toàn bộ dòng trong Sheet
+            records = []
+            root_products_dict = {}
+
+            for r in range(h_row + 1, ws.max_row + 1):
+                c_sku = clean_val(ws.cell(r, c_child_sku).value) if c_child_sku else None
+                p_sku = clean_val(ws.cell(r, c_parent_sku).value) if c_parent_sku else None
+                if not c_sku or not p_sku:
+                    continue
+
+                c_sku_std = clean_and_standardize_sku(c_sku)
+                p_sku_std = clean_and_standardize_sku(p_sku)
+                c_name = clean_and_standardize_name(clean_val(ws.cell(r, c_child_name).value) or c_sku_std)
+                p_name = clean_and_standardize_name(clean_val(ws.cell(r, c_parent_name).value) or p_sku_std)
+                is_fin = to_bool(ws.cell(r, c_is_fin).value) if c_is_fin else False
+
+                spec = clean_val(ws.cell(r, c_spec).value) if c_spec else None
+                h_val = to_float(ws.cell(r, c_h).value) if c_h else 0.0
+                w_val = to_float(ws.cell(r, c_w).value) if c_w else 0.0
+                l_val = to_float(ws.cell(r, c_l).value) if c_l else 0.0
+                if not (h_val and w_val and l_val) and spec:
+                    p_h, p_w, p_l = parse_dimensions(spec)
+                    if not h_val: h_val = p_h
+                    if not w_val: w_val = p_w
+                    if not l_val: l_val = p_l
+
+                raw_h = to_float(ws.cell(r, c_raw_h).value) if c_raw_h else 0.0
+                raw_w = to_float(ws.cell(r, c_raw_w).value) if c_raw_w else 0.0
+                raw_l = to_float(ws.cell(r, c_raw_l).value) if c_raw_l else 0.0
+
+                color = clean_val(ws.cell(r, c_color).value) if c_color else None
+                material = clean_val(ws.cell(r, c_material).value) if c_material else None
+                unit = clean_val(ws.cell(r, c_unit).value) if c_unit else 'Cái'
+                qty_set = to_float(ws.cell(r, c_qty_set).value, 1.0) if c_qty_set else 1.0
+                qty_part = to_float(ws.cell(r, c_qty_part).value, qty_set) if c_qty_part else qty_set
+                waste = to_float(ws.cell(r, c_waste).value, 1.0) if c_waste else 1.0
+                is_raw = to_bool(ws.cell(r, c_is_raw).value) if c_is_raw else False
+                exclude = to_bool(ws.cell(r, c_exclude).value) if c_exclude else False
+                in_stg = clean_stage_name(clean_val(ws.cell(r, c_in_stage).value)) if c_in_stage else None
+                out_stg = clean_stage_name(clean_val(ws.cell(r, c_out_stage).value)) if c_out_stage else None
+                note = clean_val(ws.cell(r, c_desc).value) if c_desc else None
+                brand = clean_val(ws.cell(r, c_brand).value) or 'ATLAS'
+                cat = clean_val(ws.cell(r, c_cat).value) or 'ATLAS'
+                stt_val = clean_val(ws.cell(r, c_stt).value)
+
+                rec = {
+                    'row': r,
+                    'parent_sku': p_sku_std,
+                    'parent_name': p_name,
+                    'child_sku': c_sku_std,
+                    'child_name': c_name,
+                    'stt': stt_val,
+                    'material': material,
+                    'unit': unit or 'Cái',
+                    'length': l_val,
+                    'width': w_val,
+                    'height': h_val,
+                    'raw_length': raw_l,
+                    'raw_width': raw_w,
+                    'raw_height': raw_h,
+                    'color': color,
+                    'qty_part': qty_part,
+                    'qty_set': qty_set,
+                    'waste': waste,
+                    'is_fin': is_fin,
+                    'is_raw': is_raw,
+                    'exclude': exclude,
+                    'in_stage': in_stg,
+                    'out_stage': out_stg,
+                    'spec': spec,
+                    'brand': brand,
+                    'category': cat,
+                    'note': note
                 }
+                records.append(rec)
 
-        # 3. Xác định Root
-        all_parent_codes = set(adj_list.keys())
-        root_codes = list(all_parent_codes - all_child_codes)
-        
-        if idx_root_code is not None:
-            explicit_roots = df.iloc[:, idx_root_code].dropna().unique()
-            if len(explicit_roots) > 0:
-                root_codes = list(set(root_codes) | set([clean_and_standardize_sku(r) for r in explicit_roots]))
+                if is_fin or (p_sku_std == c_sku_std and '.' not in p_sku_std):
+                    if p_sku_std not in root_products_dict:
+                        root_products_dict[p_sku_std] = rec
 
-        print(f"--- [DEBUG] Tìm thấy {len(root_codes)} sản phẩm gốc.")
-        processed_count = 0
-        total_rows = len(df) + len(root_codes)
-        yield json.dumps({"status": "processing", "processed": processed_count, "total": total_rows}) + "\n"
+            if not root_products_dict:
+                # Nếu không tìm thấy is_fin, lấy các root dựa trên hiệu tập hợp
+                all_p = set(r['parent_sku'] for r in records)
+                all_c = set(r['child_sku'] for r in records)
+                r_skus = list(all_p - all_c)
+                for r_sku in r_skus:
+                    r_rec = next((r for r in records if r['parent_sku'] == r_sku), None)
+                    if r_rec:
+                        root_products_dict[r_sku] = r_rec
 
-        # 4. Xóa dữ liệu cũ (Batch)
-        if root_codes:
-            print(f"--- [IMPORT] Đang dọn dẹp dữ liệu cũ...")
-            chunk_size = 2000
-            for i in range(0, len(root_codes), chunk_size):
-                chunk = root_codes[i:i + chunk_size]
-                target_ids = db.query(MasterProduct.id).filter(MasterProduct.sku.in_(chunk)).all()
-                target_ids = [r[0] for r in target_ids]
-                
-                if target_ids:
-                    db.query(MasterBOMDetail).filter(MasterBOMDetail.master_product_id.in_(target_ids)).update({MasterBOMDetail.parent_id: None}, synchronize_session=False)
-                    db.query(MasterBOMDetail).filter(MasterBOMDetail.master_product_id.in_(target_ids)).delete(synchronize_session=False)
-                    db.query(MasterProduct).filter(MasterProduct.id.in_(target_ids)).delete(synchronize_session=False)
+            sheet_prod_count = len(root_products_dict)
+            yield json.dumps({
+                "status": "processing",
+                "sheet": sheet_name,
+                "sheet_index": sheet_idx + 1,
+                "total_sheets": total_sheets,
+                "processed": total_prods_imported,
+                "total": total_prods_imported + sheet_prod_count,
+                "message": f"Đang nạp Sheet [{sheet_name}] ({sheet_idx + 1}/{total_sheets}) - {sheet_prod_count} sản phẩm..."
+            }) + "\n"
+
+            # 3. Nạp danh mục MasterCategory
+            cat_name = 'ATLAS'
+            if records:
+                cat_name = records[0].get('category') or records[0].get('brand') or 'ATLAS'
+
+            if cat_name not in category_cache:
+                cat_obj = db.query(MasterCategory).filter(MasterCategory.name == cat_name).first()
+                if not cat_obj:
+                    cat_obj = MasterCategory(name=cat_name, description=f"Dòng sản phẩm {cat_name} cao cấp", status=1)
+                    db.add(cat_obj)
+                    db.flush()
+                category_cache[cat_name] = cat_obj.id
+
+            cat_id = category_cache[cat_name]
+
+            # 4. Lưu từng sản phẩm Root và Cây BOM
+            for root_sku, r_rec in root_products_dict.items():
+                p_obj = db.query(MasterProduct).filter(MasterProduct.sku == root_sku).first()
+                p_color = r_rec.get('color') or parse_color(root_sku, r_rec['parent_name']) or 'BRO'
+                if not p_obj:
+                    p_obj = MasterProduct(
+                        sku=root_sku,
+                        name=r_rec['parent_name'],
+                        category_id=cat_id,
+                        brand_name=r_rec['brand'],
+                        color=p_color,
+                        specification=r_rec['spec'],
+                        length=r_rec['length'],
+                        width=r_rec['width'],
+                        height=r_rec['height'],
+                        unit=r_rec['unit'] or 'Bộ',
+                        status='Active'
+                    )
+                    db.add(p_obj)
+                    db.flush()
+                else:
+                    p_obj.name = r_rec['parent_name']
+                    p_obj.category_id = cat_id
+                    p_obj.brand_name = r_rec['brand']
+                    p_obj.color = p_color or p_obj.color
+                    p_obj.specification = r_rec['spec']
+                    p_obj.length = r_rec['length']
+                    p_obj.width = r_rec['width']
+                    p_obj.height = r_rec['height']
+                    db.flush()
+
+                # Xóa BOM cũ của sản phẩm này
+                db.query(MasterBOMDetail).filter(MasterBOMDetail.master_product_id == p_obj.id).update({MasterBOMDetail.parent_id: None}, synchronize_session=False)
+                db.query(MasterBOMDetail).filter(MasterBOMDetail.master_product_id == p_obj.id).delete(synchronize_session=False)
+
+                # Lọc danh sách dòng thuộc về sản phẩm này
+                prod_rows = [row for row in records if row['parent_sku'].startswith(root_sku) or row['child_sku'].startswith(root_sku)]
+                prod_rows_sorted = sorted(prod_rows, key=lambda x: x['row'])
+
+                sku_to_bom = {}
+                for row in prod_rows_sorted:
+                    if row['child_sku'] == root_sku:
+                        continue
+
+                    parent_bom_id = None
+                    if row['parent_sku'] in sku_to_bom:
+                        parent_bom_id = sku_to_bom[row['parent_sku']].id
+
+                    bom_item = MasterBOMDetail(
+                        master_product_id=p_obj.id,
+                        parent_id=parent_bom_id,
+                        sku=row['child_sku'],
+                        name=row['child_name'],
+                        unit=row['unit'],
+                        length=row['length'],
+                        width=row['width'],
+                        height=row['height'],
+                        color=row['color'] or p_color,
+                        material=row['material'],
+                        quantity=row['qty_part'],
+                        specification=row['spec'],
+                        waste_ratio=row['waste'],
+                        is_raw_material=row['is_raw'],
+                        exclude_production=row['exclude'],
+                        input_stage=row['in_stage'],
+                        output_stage=row['out_stage'],
+                        description=row['note'],
+                        status='Active'
+                    )
+                    db.add(bom_item)
+                    db.flush()
+                    sku_to_bom[row['child_sku']] = bom_item
+                    total_boms_imported += 1
+
+                # 5. Đồng bộ Mẫu màu sơn (paint_color_samples - KT03.3)
+                pcs = db.query(PaintColorSample).filter(
+                    PaintColorSample.master_product_id == p_obj.id,
+                    PaintColorSample.color_code == p_color
+                ).first()
+                if not pcs and p_color:
+                    db.add(PaintColorSample(
+                        master_product_id=p_obj.id,
+                        color_code=p_color,
+                        color_name=f"Màu sơn {p_color}",
+                        supplier="G7 Paint Standards"
+                    ))
+
+                # 6. Đồng bộ Chi tiết KT (master_product_details - KT03.1)
+                db.query(MasterProductDetail).filter(MasterProductDetail.master_product_id == p_obj.id).delete(synchronize_session=False)
+                for row in prod_rows_sorted:
+                    if row['child_sku'] != root_sku and (row['in_stage'] or row['out_stage']):
+                        db.add(MasterProductDetail(
+                            master_product_id=p_obj.id,
+                            name=row['child_name'],
+                            quantity=row['qty_set'],
+                            unit=row['unit'],
+                            input_stage=row['in_stage'],
+                            output_stage=row['out_stage'],
+                            parent_name=row['parent_name'],
+                            material=row['material']
+                        ))
+
+                total_prods_imported += 1
+
             db.commit()
 
-        # 5. Khởi tạo tất cả Root Products
-        db_roots = []
-        root_obj_map = {}
-        for r_code in root_codes:
-            r_info = info_map.get(r_code, {})
-            r_name = r_info.get('name') or r_code
-            r_name_std = clean_and_standardize_name(r_name)
-            r_spec = r_info.get('spec')
-            if not r_spec:
-                match = re.search(r"(\d+(?:\.\d+)?\s*[*xX]\s*\d+(?:\.\d+)?(?:\s*[*xX]\s*\d+(?:\.\d+)?)?)", r_name_std)
-                if match: r_spec = match.group(1)
-                
-            l, w, h = parse_dimensions(r_spec)
-            root_color = parse_color(r_code, r_name_std)
-            
-            db_root = MasterProduct(
-                sku=r_code, name=r_name_std, unit=r_info.get('unit') or "Bộ",
-                specification=r_spec, length=l, width=w, height=h,
-                color=root_color,
-                status="Active"
-            )
-            db_roots.append(db_root)
-            root_obj_map[r_code] = db_root
-
-        if db_roots:
-            chunk_size = 2000
-            for i in range(0, len(db_roots), chunk_size):
-                chunk = db_roots[i:i + chunk_size]
-                db.add_all(chunk)
-                db.flush()
-                processed_count += len(chunk)
-                yield json.dumps({"status": "processing", "processed": processed_count, "total": total_rows}) + "\n"
-
-        # 6. Global level-by-level BFS
-        current_level = []
-        for r_code in root_codes:
-            db_root = root_obj_map[r_code]
-            current_level.append((r_code, db_root, {r_code}, db_root.id, db_root.color))
-
-        level_index = 0
-        while current_level:
-            print(f"--- [IMPORT] Đang xử lý Level {level_index} với {len(current_level)} nút cha...")
-            next_level = []
-            objects_to_add = []
-            
-            for p_sku, p_db_obj, visited_skus, db_root_id, root_color in current_level:
-                p_db_id = p_db_obj.id if isinstance(p_db_obj, MasterBOMDetail) else None
-                children = adj_list.get(p_sku, [])
-                
-                unique_children = {}
-                for row in children:
-                    c_sku = clean_val(row[col_names[idx_child_code]])
-                    if not c_sku: continue
-                    c_sku_std = clean_and_standardize_sku(c_sku)
-                    if c_sku_std == p_sku: continue
-                    if c_sku_std not in unique_children: unique_children[c_sku_std] = row
-                
-                stage_bridge_parents = {}
-                if isinstance(p_db_obj, MasterBOMDetail) and p_db_obj.input_stage:
-                    parent_in_stage = p_db_obj.input_stage
-                    child_stages = set()
-                    for c_sku, row in unique_children.items():
-                        if c_sku in visited_skus: continue
-                        in_stage = clean_val(row[col_names[idx_in_stage]])
-                        if in_stage:
-                            child_stages.add(in_stage)
-                    
-                    for child_in_stage in child_stages:
-                        if child_in_stage != parent_in_stage:
-                            rank_child = get_stage_rank(child_in_stage)
-                            rank_parent = get_stage_rank(parent_in_stage)
-                            if rank_child > 0 and rank_parent > 0 and rank_child < rank_parent:
-                                factory = None
-                                suffix = ""
-                                for stage_text in [child_in_stage, parent_in_stage]:
-                                    if not factory:
-                                        match = re.search(r'(NM\d+)', stage_text)
-                                        if match:
-                                            factory = match.group(1)
-                                    if not suffix:
-                                        parts = stage_text.split('-', 1)
-                                        if len(parts) > 1:
-                                            stage_part = parts[1].strip()
-                                            for kw in ["Định hình", "Lắp ráp", "Sơn", "Đóng gói"]:
-                                                if kw in stage_part:
-                                                    suff = stage_part.replace(kw, "").strip()
-                                                    if suff:
-                                                        suffix = suff
-                                                        break
-
-                                def get_stage_name_by_rank(r):
-                                    base_stages = {
-                                        1: "Định hình",
-                                        2: "Lắp ráp",
-                                        3: "Sơn",
-                                        4: "Đóng gói"
-                                    }
-                                    return base_stages.get(r, "")
-
-                                last_parent_id = p_db_obj.id
-                                for r in range(rank_parent - 1, rank_child - 1, -1):
-                                    in_stg = child_in_stage if r == rank_child else get_stage_name_by_rank(r)
-                                    out_stg = parent_in_stage if r + 1 == rank_parent else get_stage_name_by_rank(r + 1)
-                                    
-                                    trans_obj = MasterBOMDetail(
-                                        master_product_id=p_db_obj.master_product_id,
-                                        parent_id=last_parent_id,
-                                        sku=p_db_obj.sku,
-                                        name=p_db_obj.name,
-                                        unit=p_db_obj.unit,
-                                        specification=p_db_obj.specification,
-                                        length=p_db_obj.length,
-                                        width=p_db_obj.width,
-                                        height=p_db_obj.height,
-                                        color=p_db_obj.color,
-                                        quantity=p_db_obj.quantity,
-                                        waste_ratio=p_db_obj.waste_ratio,
-                                        is_raw_material=False,
-                                        exclude_production=p_db_obj.exclude_production,
-                                        input_stage=clean_stage_name(in_stg),
-                                        output_stage=clean_stage_name(out_stg),
-                                        status="Active"
-                                    )
-                                    db.add(trans_obj)
-                                    db.flush()
-                                    last_parent_id = trans_obj.id
-                                stage_bridge_parents[child_in_stage] = last_parent_id
-
-                for c_sku, row in unique_children.items():
-                    if c_sku in visited_skus: continue
-                    c_name = clean_val(row[col_names[idx_child_name]]) or c_sku
-                    c_name_std = clean_and_standardize_name(c_name)
-                    c_spec = clean_val(row[col_names[idx_child_spec]])
-                    if not c_spec:
-                        match = re.search(r"(\d+(?:\.\d+)?\s*[*xX]\s*\d+(?:\.\d+)?(?:\s*[*xX]\s*\d+(?:\.\d+)?)?)", c_name_std)
-                        if match: c_spec = match.group(1)
-                    dl, dw, dh = parse_dimensions(c_spec)
-                    
-                    c_desc = clean_val(row[col_names[idx_desc]])
-                    c_color = parse_color(c_sku, c_name_std, c_desc) or root_color
-                    
-                    c_in_stage = clean_stage_name(clean_val(row[col_names[idx_in_stage]]))
-                    c_out_stage = clean_stage_name(clean_val(row[col_names[idx_out_stage]]))
-                    grandchild_parent_id = stage_bridge_parents.get(row[col_names[idx_in_stage]], p_db_id) if idx_in_stage < len(col_names) else p_db_id
-
-                    obj = MasterBOMDetail(
-                        master_product_id=db_root_id, parent_id=grandchild_parent_id,
-                        sku=c_sku, name=c_name_std, unit=clean_val(row[col_names[idx_child_unit]]),
-                        specification=c_spec, length=dl, width=dw, height=dh,
-                        color=c_color,
-                        quantity=to_float(row[col_names[idx_qty]], 1.0),
-                        waste_ratio=to_float(row[col_names[idx_waste]], 0.0),
-                        description=c_desc,
-                        is_raw_material=to_bool(clean_val(row[col_names[idx_is_raw]])),
-                        exclude_production=to_bool(clean_val(row[col_names[idx_exclude]])),
-                        output_stage=c_in_stage,
-                        input_stage=c_out_stage,
-                        status="Active"
-                    )
-                    objects_to_add.append(obj)
-                    next_level.append((c_sku, obj, visited_skus | {c_sku}, db_root_id, root_color))
-
-            if objects_to_add:
-                chunk_size = 2000
-                for i in range(0, len(objects_to_add), chunk_size):
-                    chunk = objects_to_add[i:i + chunk_size]
-                    db.add_all(chunk)
-                    db.flush()
-                    processed_count += len(chunk)
-                    yield json.dumps({"status": "processing", "processed": processed_count, "total": total_rows}) + "\n"
-
-            current_level = next_level
-            level_index += 1
-
-        db.commit()
+        # Đồng bộ toàn bộ dữ liệu phụ trợ
         try:
             sync_bom_data_to_auxiliary_tables(db)
         except Exception as sync_err:
             print(f"=== [SYNC AUX ERROR] {sync_err}")
 
-        yield json.dumps({"status": "completed", "processed": processed_count, "total": total_rows}) + "\n"
+        yield json.dumps({
+            "status": "completed",
+            "total_products": total_prods_imported,
+            "total_bom_items": total_boms_imported,
+            "total_sheets": total_sheets,
+            "message": f"Đã nhập thành công {total_prods_imported} sản phẩm mẫu ({total_boms_imported} chi tiết BOM) từ {total_sheets} sheet!"
+        }) + "\n"
+
     except Exception as exc:
         db.rollback()
         print(f"=== [IMPORT ERROR] {exc}")
@@ -1368,7 +1598,8 @@ def is_raw_sku_code(text: str) -> bool:
     import re
     if re.match(r'^[A-Z0-9]{1,10}(-[A-Z0-9]{1,10})+$', s, re.IGNORECASE):
         return True
-    return False
+_detail_suggestions_cache = {}
+_detail_suggestions_cache_time = 0
 
 def get_detail_suggestions(db: Session, detail_name: Optional[str] = None, parent_name: Optional[str] = None):
     """
@@ -1376,6 +1607,12 @@ def get_detail_suggestions(db: Session, detail_name: Optional[str] = None, paren
     Nếu có `detail_name`, chỉ lọc và trả về danh sách các Thành phẩm thực sự chứa chi tiết đó.
     Nếu có `parent_name`, chỉ trả về các tên chi tiết con của thành phẩm đó.
     """
+    global _detail_suggestions_cache, _detail_suggestions_cache_time
+    import time
+    is_default_query = not detail_name and not parent_name
+    if is_default_query and _detail_suggestions_cache and (time.time() - _detail_suggestions_cache_time < 300):
+        return _detail_suggestions_cache
+
     p_clean = parent_name.strip() if parent_name else None
 
     # Lấy tên chi tiết & meta từ master_product_details, có thể lọc theo parent_name
@@ -1529,7 +1766,11 @@ def get_detail_suggestions(db: Session, detail_name: Optional[str] = None, paren
         root_prods = sorted(list(set(prod_combos + [p for p in parent_names if p.startswith('ADV')])))
         parent_suggestions = sub_assemblies + root_prods
 
-    return {"detail_names": all_names, "parent_names": parent_suggestions, "parent_product_map": parent_product_map, "detail_stage_map": detail_stage_map, "detail_meta_map": detail_meta_map}
+    result = {"detail_names": all_names, "parent_names": parent_suggestions, "parent_product_map": parent_product_map, "detail_stage_map": detail_stage_map, "detail_meta_map": detail_meta_map}
+    if is_default_query:
+        _detail_suggestions_cache = result
+        _detail_suggestions_cache_time = time.time()
+    return result
 
 def get_paint_color_suggestions(db: Session):
     """
@@ -1544,5 +1785,437 @@ def get_paint_color_suggestions(db: Session):
         "color_names": sorted(list(set(names))),
         "suppliers": sorted(list(set(suppliers)))
     }
+
+def serialize_material_item(mat: MasterProductMaterial) -> dict:
+    return {
+        "id": mat.id,
+        "master_product_id": mat.master_product_id,
+        "product_sku": getattr(mat, "product_sku", None) or "---",
+        "product_name": getattr(mat, "product_name", None) or "---",
+        "stt": mat.stt or 1,
+        "group_type": mat.group_type or "VẬT TƯ HÀNG TRẮNG",
+        "material_code": mat.material_code or "",
+        "material_name": mat.material_name or "",
+        "color": mat.color or "",
+        "quota": float(mat.quota) if mat.quota is not None else 1.0,
+        "unit": mat.unit or "Cái",
+        "supplier": mat.supplier or "",
+        "note": mat.note or "",
+        "created_at": str(mat.created_at) if mat.created_at else None
+    }
+
+def create_product_material(db: Session, master_product_id: int, payload: dict):
+    mat_name = payload.get("material_name") or payload.get("name", "Vật tư mới")
+    mat_code = payload.get("material_code") or f"VT-{mat_name[:6].upper()}"
+    group_type = payload.get("group_type") or "VẬT TƯ HÀNG TRẮNG"
+    stt = payload.get("stt", 1)
+    color = payload.get("color", "")
+    quota = float(payload.get("quota", payload.get("quantity", 1.0)) or 1.0)
+    unit = payload.get("unit", "Cái")
+    supplier = payload.get("supplier", "")
+    note = payload.get("note", "")
+    
+    prod = db.query(MasterProduct).filter(MasterProduct.id == master_product_id).first() if master_product_id else None
+
+    mat_obj = MasterProductMaterial(
+        master_product_id=master_product_id,
+        product_sku=prod.sku if prod else payload.get("product_sku"),
+        product_name=prod.name if prod else payload.get("product_name"),
+        stt=stt,
+        group_type=group_type,
+        material_code=mat_code,
+        material_name=mat_name,
+        color=color,
+        quota=quota,
+        unit=unit,
+        supplier=supplier,
+        note=note
+    )
+    db.add(mat_obj)
+    db.commit()
+    db.refresh(mat_obj)
+    return serialize_material_item(mat_obj)
+
+def create_standalone_material(db: Session, payload: dict):
+    prod_id = payload.get("master_product_id") or payload.get("product_id")
+    prod_identifier = payload.get("product_identifier") or payload.get("product_name") or payload.get("product_sku")
+    
+    sku_val = payload.get("product_sku")
+    name_val = payload.get("product_name")
+    
+    if prod_identifier:
+        clean_text = str(prod_identifier).strip()
+        parts = [p.strip() for p in clean_text.split('-', 1)] if '-' in clean_text else [clean_text]
+        if len(parts) > 1:
+            sku_val = parts[0]
+            name_val = parts[1]
+        else:
+            sku_val = clean_text
+            name_val = clean_text
+            
+        # Tìm xem sản phẩm có sẵn trong bảng master_products hay không (nếu có thì liên kết ID, KHÔNG TỰ ĐỘNG TẠO MỚI)
+        matched_prod = db.query(MasterProduct).filter(
+            (MasterProduct.sku.ilike(f"%{clean_text}%")) | 
+            (MasterProduct.name.ilike(f"%{clean_text}%")) |
+            (MasterProduct.sku.ilike(f"%{sku_val}%")) |
+            (MasterProduct.name.ilike(f"%{name_val}%"))
+        ).first()
+        if matched_prod:
+            prod_id = matched_prod.id
+            if not sku_val or sku_val == clean_text:
+                sku_val = matched_prod.sku
+            if not name_val or name_val == clean_text:
+                name_val = matched_prod.name
+
+    mat_name = payload.get("material_name") or payload.get("name", "Vật tư mới")
+    mat_code = payload.get("material_code") or f"VT-{mat_name[:6].upper()}"
+    group_type = payload.get("group_type") or "VẬT TƯ HÀNG TRẮNG"
+    stt = payload.get("stt", 1)
+    color = payload.get("color", "")
+    quota = float(payload.get("quota", payload.get("quantity", 1.0)) or 1.0)
+    unit = payload.get("unit", "Cái")
+    supplier = payload.get("supplier", "")
+    note = payload.get("note", "")
+
+    mat_obj = MasterProductMaterial(
+        master_product_id=int(prod_id) if prod_id else None,
+        product_sku=sku_val,
+        product_name=name_val,
+        stt=stt,
+        group_type=group_type,
+        material_code=mat_code,
+        material_name=mat_name,
+        color=color,
+        quota=quota,
+        unit=unit,
+        supplier=supplier,
+        note=note
+    )
+    db.add(mat_obj)
+    db.commit()
+    db.refresh(mat_obj)
+    return serialize_material_item(mat_obj)
+
+def update_product_material(db: Session, material_id: int, payload: dict):
+    mat_obj = db.query(MasterProductMaterial).filter(MasterProductMaterial.id == material_id).first()
+    if not mat_obj:
+        return None
+        
+    prod_id = payload.get("master_product_id") or payload.get("product_id")
+    prod_identifier = payload.get("product_identifier") or payload.get("product_name") or payload.get("product_sku")
+    
+    if prod_identifier:
+        clean_text = str(prod_identifier).strip()
+        parts = [p.strip() for p in clean_text.split('-', 1)] if '-' in clean_text else [clean_text]
+        if len(parts) > 1:
+            mat_obj.product_sku = parts[0]
+            mat_obj.product_name = parts[1]
+        else:
+            mat_obj.product_sku = clean_text
+            mat_obj.product_name = clean_text
+            
+        matched_prod = db.query(MasterProduct).filter(
+            (MasterProduct.sku.ilike(f"%{clean_text}%")) | 
+            (MasterProduct.name.ilike(f"%{clean_text}%"))
+        ).first()
+        if matched_prod:
+            prod_id = matched_prod.id
+
+    if prod_id:
+        mat_obj.master_product_id = int(prod_id)
+        
+    if "material_name" in payload:
+        mat_obj.material_name = payload.get("material_name")
+    if "name" in payload and not payload.get("material_name"):
+        mat_obj.material_name = payload.get("name")
+    if "material_code" in payload:
+        mat_obj.material_code = payload.get("material_code")
+    if "group_type" in payload:
+        mat_obj.group_type = payload.get("group_type")
+    if "stt" in payload:
+        mat_obj.stt = payload.get("stt")
+    if "color" in payload:
+        mat_obj.color = payload.get("color")
+    if "quota" in payload:
+        mat_obj.quota = float(payload.get("quota") or 1.0)
+    if "quantity" in payload and "quota" not in payload:
+        mat_obj.quota = float(payload.get("quantity") or 1.0)
+    if "unit" in payload:
+        mat_obj.unit = payload.get("unit")
+    if "supplier" in payload:
+        mat_obj.supplier = payload.get("supplier")
+    if "note" in payload:
+        mat_obj.note = payload.get("note")
+        
+    db.commit()
+    db.refresh(mat_obj)
+    return serialize_material_item(mat_obj)
+
+def delete_product_material(db: Session, material_id: int):
+    mat_obj = db.query(MasterProductMaterial).filter(MasterProductMaterial.id == material_id).first()
+    if not mat_obj:
+        return False
+    db.delete(mat_obj)
+    db.commit()
+    return True
+
+def import_material_boms_from_excel(db: Session, file_contents: bytes):
+    import io
+    import openpyxl
+    
+    wb = openpyxl.load_workbook(filename=io.BytesIO(file_contents), data_only=True)
+    total_imported = 0
+    
+    for sheet_name in wb.sheetnames:
+        sheet = wb[sheet_name]
+        clean_sname = sheet_name.strip()
+        
+        # Tìm xem sản phẩm có sẵn trong bảng master_products hay không (nếu có thì liên kết ID, TUYỆT ĐỐI KHÔNG TẠO MỚI SẢN PHẨM VÀO master_products)
+        matched_prod = db.query(MasterProduct).filter(
+            (MasterProduct.sku.ilike(f"%{clean_sname}%")) | 
+            (MasterProduct.name.ilike(f"%{clean_sname}%"))
+        ).first()
+        
+        prod_id = matched_prod.id if matched_prod else None
+        prod_sku = matched_prod.sku if matched_prod else clean_sname
+        prod_name = matched_prod.name if matched_prod else clean_sname
+            
+        current_group = "VẬT TƯ HÀNG TRẮNG"
+        
+        for row_idx, row in enumerate(sheet.iter_rows(values_only=True), start=1):
+            if not row or not any(row):
+                continue
+                
+            first_cell = str(row[0] or '').strip().upper()
+            second_cell = str(row[1] or '').strip().upper() if len(row) > 1 else ''
+            
+            # Check Group Header (HÀNG TRẮNG / SAU SƠN)
+            if "HÀNG TRẮNG" in first_cell or "HANG TRANG" in first_cell or "HÀNG TRẮNG" in second_cell:
+                current_group = "VẬT TƯ HÀNG TRẮNG"
+                continue
+            elif "SAU SƠN" in first_cell or "SAU SON" in first_cell or "SAU SƠN" in second_cell:
+                current_group = "VẬT TƯ SAU SƠN"
+                continue
+                
+            # Skip table headers
+            if any(k in first_cell or k in second_cell for k in ["STT", "TÊN VẬT TƯ", "MÃ VẬT TƯ", "TÊN CHI TIẾT", "MATERIAL"]):
+                continue
+                
+            # Parse material columns
+            stt_val = row[0] if len(row) > 0 else None
+            mat_name = str(row[1] if len(row) > 1 and row[1] is not None else '').strip()
+            if not mat_name:
+                continue
+                
+            mat_code = str(row[2] if len(row) > 2 and row[2] is not None else '').strip()
+            color = str(row[3] if len(row) > 3 and row[3] is not None else '').strip()
+            
+            quota_val = 1.0
+            if len(row) > 4 and row[4] is not None:
+                try:
+                    quota_val = float(str(row[4]).replace(',', '.').strip())
+                except ValueError:
+                    quota_val = 1.0
+                    
+            unit_val = str(row[5] if len(row) > 5 and row[5] is not None else 'Cái').strip()
+            supplier_val = str(row[6] if len(row) > 6 and row[6] is not None else '').strip()
+            note_val = str(row[7] if len(row) > 7 and row[7] is not None else '').strip()
+            
+            if not mat_code:
+                mat_code = f"VT-{mat_name[:6].upper().replace(' ', '')}"
+                
+            db.add(MasterProductMaterial(
+                master_product_id=prod_id,
+                product_sku=prod_sku,
+                product_name=prod_name,
+                stt=int(stt_val) if isinstance(stt_val, (int, float)) else (row_idx),
+                group_type=current_group,
+                material_code=mat_code,
+                material_name=mat_name,
+                color=color,
+                quota=quota_val,
+                unit=unit_val or 'Cái',
+                supplier=supplier_val,
+                note=note_val
+            ))
+            total_imported += 1
+
+    db.commit()
+    return {"status": "success", "imported_count": total_imported}
+
+def get_all_product_materials(
+    db: Session,
+    product_id: Optional[int] = None,
+    group_type: Optional[str] = None,
+    supplier: Optional[str] = None,
+    q: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 50
+):
+    query = db.query(MasterProductMaterial, MasterProduct).join(
+        MasterProduct, MasterProductMaterial.master_product_id == MasterProduct.id, isouter=True
+    )
+
+    if product_id:
+        query = query.filter(MasterProductMaterial.master_product_id == product_id)
+    if group_type:
+        query = query.filter(MasterProductMaterial.group_type.ilike(f"%{group_type}%"))
+    if supplier:
+        query = query.filter(MasterProductMaterial.supplier.ilike(f"%{supplier}%"))
+    if q and q.strip():
+        search_str = f"%{q.strip()}%"
+        query = query.filter(
+            (MasterProductMaterial.material_code.ilike(search_str)) |
+            (MasterProductMaterial.material_name.ilike(search_str)) |
+            (MasterProductMaterial.supplier.ilike(search_str)) |
+            (MasterProductMaterial.color.ilike(search_str)) |
+            (MasterProductMaterial.product_sku.ilike(search_str)) |
+            (MasterProductMaterial.product_name.ilike(search_str)) |
+            (MasterProduct.sku.ilike(search_str)) |
+            (MasterProduct.name.ilike(search_str))
+        )
+
+    total = query.count()
+    results = query.order_by(MasterProductMaterial.group_type.asc(), MasterProductMaterial.stt.asc()).offset(skip).limit(limit).all()
+
+    # Thống kê tổng quan KPI
+    count_ht = db.query(MasterProductMaterial).filter(MasterProductMaterial.group_type.ilike("%TRẮNG%")).count()
+    count_ss = db.query(MasterProductMaterial).filter(MasterProductMaterial.group_type.ilike("%SƠN%")).count()
+    from sqlalchemy import func
+    unique_prods = db.query(func.coalesce(MasterProductMaterial.product_sku, MasterProductMaterial.product_name)).filter(
+        func.coalesce(MasterProductMaterial.product_sku, MasterProductMaterial.product_name) != None,
+        func.coalesce(MasterProductMaterial.product_sku, MasterProductMaterial.product_name) != "---"
+    ).distinct().count()
+
+    items = []
+    for mat, prod in results:
+        m_dict = serialize_material_item(mat)
+        sku_val = mat.product_sku or (prod.sku if prod else "---")
+        name_val = mat.product_name or (prod.name if prod else "---")
+        m_dict["product_sku"] = sku_val
+        m_dict["product_name"] = name_val
+        items.append(m_dict)
+
+    return {
+        "items": items, 
+        "total": total,
+        "summary": {
+            "count_hang_trang": count_ht,
+            "count_sau_son": count_ss,
+            "unique_products": unique_prods
+        }
+    }
+
+def is_hardware_material(mat) -> bool:
+    """
+    Hàm kiểm tra và lọc chính xác các dòng Phụ kiện / Vật tư tiêu hao (Hardware & Consumables),
+    loại bỏ các chi tiết phôi gỗ thô (đã được quản lý ở Tab 1 - BOM Sản phẩm).
+    """
+    name = (mat.material_name or '').strip().lower()
+    spec = (mat.color or '').strip().lower()
+    wood_keywords = [
+        'tấm hông', 'tấm trước', 'tấm sau', 'tấm đáy', 'thành hộc', 'tiền & hậu', 
+        'thanh đỡ', 'thanh dọc', 'thanh ngang', 'bọ bắt', 'bọ góc', 'bọ chặn', 
+        'bọ liên kết', 'ke góc đáy', 'chân trước', 'chân sau', 'khung tủ', 'mặt hộc'
+    ]
+    if any(k in spec for k in wood_keywords) or any(k in name for k in wood_keywords):
+        return False
+    if name == 'cao su' or name == 'gỗ cao su' or name.startswith('gỗ '):
+        return False
+    return True
+
+def get_materials_by_product(db: Session, product_id: Optional[int] = None, sku: Optional[str] = None, name: Optional[str] = None):
+    """
+    Tự động truy vấn Định mức Vật tư theo product_id HOẶC theo sự trùng khớp thông minh của Mã SP (SKU) / Tên SP.
+    Đảm bảo chỉ nạp đúng các phụ kiện/vật tư tiêu hao phục vụ cho cấu trúc BOM chi tiết của sản phẩm.
+    """
+    import re
+
+    # 1. Ưu tiên lấy theo master_product_id nếu đã được liên kết
+    if product_id:
+        materials = db.query(MasterProductMaterial).filter(
+            MasterProductMaterial.master_product_id == product_id
+        ).order_by(MasterProductMaterial.group_type.asc(), MasterProductMaterial.stt.asc()).all()
+        clean_linked = [m for m in materials if is_hardware_material(m)]
+        if clean_linked:
+            return [serialize_material_item(m) for m in clean_linked]
+
+    # 2. Tìm kiếm liên kết thông minh theo mã định danh (SKU / Model token)
+    distinct_skus = [r[0] for r in db.query(MasterProductMaterial.product_sku).filter(
+        MasterProductMaterial.product_sku != None,
+        MasterProductMaterial.product_sku != '---'
+    ).distinct().all() if r[0]]
+
+    target_tokens = []
+    if sku:
+        clean_sku = sku.strip()
+        target_tokens.append(clean_sku)
+        target_tokens.extend(re.findall(r'[0-9]+[A-Za-z]+|[A-Za-z]+[0-9]+', clean_sku))
+    if name:
+        clean_name = name.strip()
+        target_tokens.append(clean_name)
+        target_tokens.extend(re.findall(r'[0-9]+[A-Za-z]+|[A-Za-z]+[0-9]+', clean_name))
+
+    matched_sku = None
+    # So khớp chính xác hoặc đối soát token
+    for d_sku in distinct_skus:
+        d_lower = d_sku.strip().lower()
+        if any(d_lower == t.lower() or d_lower in (sku or '').lower() or d_lower in (name or '').lower() for t in target_tokens):
+            matched_sku = d_sku
+            break
+
+    if matched_sku:
+        raw_mats = db.query(MasterProductMaterial).filter(
+            MasterProductMaterial.product_sku == matched_sku
+        ).all()
+        clean_mats = [m for m in raw_mats if is_hardware_material(m)]
+
+        # Khử trùng lặp theo nhóm và tên vật tư, ưu tiên định mức đầy đủ nhất
+        dedup = {}
+        for m in clean_mats:
+            key = (m.group_type or '', (m.material_name or '').strip().lower())
+            if key not in dedup or (m.quota or 0) > (dedup[key].quota or 0):
+                dedup[key] = m
+
+        result = list(dedup.values())
+        # Sắp xếp Hàng trắng trước, Sau sơn sau
+        result.sort(key=lambda x: (0 if 'TRẮNG' in (x.group_type or '').upper() else 1, x.stt or 999))
+        
+        # Đánh lại số thứ tự STT chuẩn
+        serialized = []
+        ht_idx = 1
+        ss_idx = 1
+        for m in result:
+            m_dict = serialize_material_item(m)
+            if 'TRẮNG' in (m.group_type or '').upper():
+                m_dict['stt'] = ht_idx
+                ht_idx += 1
+            else:
+                m_dict['stt'] = ss_idx
+                ss_idx += 1
+            serialized.append(m_dict)
+            
+        return serialized
+
+    # 3. Fallback tìm kiếm ilike
+    conds = []
+    if sku and sku.strip():
+        conds.append(MasterProductMaterial.product_sku.ilike(f"%{sku.strip()}%"))
+        conds.append(MasterProductMaterial.product_name.ilike(f"%{sku.strip()}%"))
+    if name and name.strip():
+        conds.append(MasterProductMaterial.product_name.ilike(f"%{name.strip()}%"))
+        conds.append(MasterProductMaterial.product_sku.ilike(f"%{name.strip()}%"))
+        
+    if conds:
+        from sqlalchemy import or_
+        materials = db.query(MasterProductMaterial).filter(
+            or_(*conds)
+        ).order_by(MasterProductMaterial.group_type.asc(), MasterProductMaterial.stt.asc()).all()
+        clean_fallback = [m for m in materials if is_hardware_material(m)]
+        return [serialize_material_item(m) for m in clean_fallback]
+    
+    return []
+
+
 
 

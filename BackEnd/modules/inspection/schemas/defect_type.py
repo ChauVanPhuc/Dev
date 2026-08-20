@@ -33,6 +33,9 @@ class DefectTypeBase(BaseModel):
     code: Optional[str] = None
     aql_class: Optional[str] = None
     images: Optional[str] = None
+    root_cause: Optional[str] = None
+    solution: Optional[str] = None
+    capa_reference: Optional[str] = None
 
 class DefectTypeCreate(DefectTypeBase):
     pass

@@ -1,24 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useOutletContext } from 'react-router-dom';
-import api, { getBaseURL } from '@webShared/Services/api.service';
+import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
+import api, { getBaseURL, API_URL } from '@webShared/Services/api.service';
 import { Search, Plus, FileSpreadsheet, FileText, ArrowUpDown, ChevronLeft, ChevronRight, Package, ShoppingBag } from 'lucide-react';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
+import SelectSheetsModal from './modals/SelectSheetsModal';
 
 const ManufactureProducts = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const targetTabQuery = tabParam ? `?tab=${tabParam}` : '';
+
   const { showModal, startGlobalUpload, activeUploads, setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/products');
 
   useEffect(() => {
     if (screenCode && title) {
-      if (setCustomTitle) setCustomTitle(title);
-      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomTitle) setCustomTitle(tabParam === 'materials' ? 'BOM Vật tư sản phẩm' : title);
+      if (setCustomSubtitle) setCustomSubtitle(tabParam === 'materials' ? 'Quản lý danh mục & định mức vật tư phụ kiện sản phẩm' : (subtitle || ''));
       if (setCustomScreenCode) setCustomScreenCode(screenCode);
     }
-  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+  }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode, tabParam]);
+
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState(0);
@@ -39,6 +45,11 @@ const ManufactureProducts = () => {
     message: '',
     type: 'danger',
     onConfirm: () => {}
+  });
+  const [sheetModal, setSheetModal] = useState({
+    visible: false,
+    file: null,
+    sheets: []
   });
 
   useEffect(() => {
@@ -90,16 +101,63 @@ const ManufactureProducts = () => {
     if (!file) return;
 
     try {
-      // Sử dụng hàm upload toàn cục từ Layout
+      // 1. Quét nhanh metadata các sheet trong file Excel
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const token = localStorage.getItem('token');
+      const authHeaders = { 'ngrok-skip-browser-warning': 'true' };
+      if (token && token !== 'null' && token !== 'undefined') {
+        authHeaders['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${API_URL}master-products/inspect-excel-sheets`, {
+        method: 'POST',
+        body: formData,
+        headers: authHeaders
+      });
+
+      if (response.ok) {
+        const inspectRes = await response.json();
+        if (inspectRes && inspectRes.sheets && inspectRes.sheets.length > 1) {
+          // Nhiều sheet: Mở Modal cho người dùng chọn sheet mong muốn
+          setSheetModal({
+            visible: true,
+            file: file,
+            sheets: inspectRes.sheets
+          });
+          return;
+        }
+      }
+
+      // File 1 sheet: Upload trực tiếp
       await startGlobalUpload(
         file, 
         '/master-products/import-excel', 
-        () => fetchProducts() // Refresh danh sách khi xong
+        () => fetchProducts()
       );
     } catch (error) {
       console.error('Lỗi khi chuẩn bị upload:', error);
+      toast('error', 'Không thể xử lý file Excel. Vui lòng kiểm tra lại định dạng file.');
     } finally {
-      e.target.value = ''; // Reset input để có thể chọn lại cùng file nếu cần
+      e.target.value = ''; // Reset input để có thể chọn lại cùng file
+    }
+  };
+
+  const handleConfirmSheetImport = async (selectedSheets) => {
+    const targetFile = sheetModal.file;
+    setSheetModal({ visible: false, file: null, sheets: [] });
+    if (!targetFile) return;
+
+    try {
+      await startGlobalUpload(
+        targetFile,
+        '/master-products/import-excel',
+        () => fetchProducts(),
+        { sheets: JSON.stringify(selectedSheets) }
+      );
+    } catch (error) {
+      console.error('Lỗi upload sheets:', error);
     }
   };
 
@@ -155,7 +213,87 @@ const ManufactureProducts = () => {
   });
 
   return (
-    <div className="manufacture-plan-container">
+    <div className="manufacture-plan-container mgmt-container product-list-unified-container" style={{ width: '100%', maxWidth: '100%' }}>
+      {/* Scoped CSS to enforce Gold Standard viewport layout & sticky bottom pagination */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media (min-width: 769px) {
+          .product-list-unified-container {
+            height: calc(100vh - 68px) !important;
+            max-height: calc(100vh - 68px) !important;
+            min-height: 0 !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 4px !important;
+          }
+          .product-list-unified-container .sticky-top-zone {
+            flex-shrink: 0 !important;
+            flex-grow: 0 !important;
+            margin-bottom: 0 !important;
+          }
+          .product-list-unified-container .admin-list-layout {
+            flex: 1 1 0% !important;
+            height: 100% !important;
+            min-height: 0 !important;
+            max-height: 100% !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          .product-list-unified-container .admin-table-card {
+            flex: 1 1 0% !important;
+            height: 100% !important;
+            min-height: 0 !important;
+            max-height: 100% !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+            margin: 0 !important;
+            border-radius: 12px !important;
+          }
+          .product-list-unified-container .admin-table-scroll {
+            flex: 1 1 0% !important;
+            height: 100% !important;
+            min-height: 0 !important;
+            overflow-x: auto !important;
+            overflow-y: auto !important;
+            display: block !important;
+            position: relative !important;
+            -webkit-overflow-scrolling: touch !important;
+          }
+          .product-list-unified-container .admin-pagination-desktop {
+            flex-shrink: 0 !important;
+            flex-grow: 0 !important;
+            height: 42px !important;
+            min-height: 42px !important;
+            max-height: 42px !important;
+            padding: 0 16px !important;
+            margin-top: auto !important;
+            background: #FFFFFF !important;
+            border-top: 1px solid #EADCC9 !important;
+            z-index: 15 !important;
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+          }
+          .product-list-unified-container table.manufacture-table thead tr th {
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 20 !important;
+            background-color: #FAF6F0 !important;
+            border-bottom: 1px solid #EADCC9 !important;
+            padding: 8px 10px !important;
+            font-size: 0.78rem !important;
+          }
+          .product-list-unified-container table.manufacture-table tbody tr td {
+            padding: 7px 10px !important;
+            font-size: 0.82rem !important;
+            vertical-align: middle !important;
+          }
+        }
+      `}} />
       {/* ── STICKY TOP ZONE ── */}
       <div className="sticky-top-zone">
         {/* Table Toolbar */}
@@ -185,7 +323,7 @@ const ManufactureProducts = () => {
               onClick: () => {}
             }
           ]}
-          onCreate={() => navigate('/admin/products/create')}
+          onCreate={() => navigate(`/admin/products/create${targetTabQuery}`)}
           createLabel="Thêm trực tiếp"
           hasWritePermission={true}
         >
@@ -357,7 +495,8 @@ const ManufactureProducts = () => {
                             zIndex: actionMenuId === product.id ? 30 : 1,
                             cursor: 'pointer'
                           }}
-                          onClick={() => navigate(`/admin/products/${product.id}`)}
+                          onClick={() => navigate(`/admin/products/${product.id}${targetTabQuery}`, { state: { product } })}
+
                         >
                           <td data-label="STT" style={{ textAlign: 'center', fontWeight: '700', color: '#64748b' }}>
                             {String(page * limit + index + 1).padStart(2, '0')}
@@ -425,7 +564,7 @@ const ManufactureProducts = () => {
                                    onClick={(e) => {
                                      e.stopPropagation();
                                      setActionMenuId(null);
-                                     navigate(`/admin/products/${product.id}`);
+                                     navigate(`/admin/products/${product.id}${targetTabQuery}`, { state: { product } });
                                    }}
                                  >
                                    Chi tiết
@@ -533,7 +672,8 @@ const ManufactureProducts = () => {
           <div className="mobile-only manufacture-cards-scroll">
             <div className="manufacture-cards-container">
               {displayedProducts.map((product, idx) => (
-                <div key={product.id} className="plan-mobile-card status-completed card-shadow animate-card-entrance" onClick={() => navigate(`/admin/products/${product.id}`)}>
+                <div key={product.id} className="plan-mobile-card status-completed card-shadow animate-card-entrance" onClick={() => navigate(`/admin/products/${product.id}${targetTabQuery}`, { state: { product } })}>
+
                   <div className="card-header">
                     <span className="card-khsx">{product.name}</span>
                     <span className="status-badge" style={{ backgroundColor: '#ecfdf5', color: '#10b981', border: '1px solid #a7f3d0' }}>
@@ -583,6 +723,16 @@ const ManufactureProducts = () => {
         onConfirm={confirmModal.onConfirm}
         onCancel={() => setConfirmModal(prev => ({ ...prev, visible: false }))}
       />
+
+      {/* Modal Tùy chọn Sheets Import BOM */}
+      {sheetModal.visible && (
+        <SelectSheetsModal
+          file={sheetModal.file}
+          sheets={sheetModal.sheets}
+          onClose={() => setSheetModal({ visible: false, file: null, sheets: [] })}
+          onConfirm={handleConfirmSheetImport}
+        />
+      )}
     </div>
   );
 };

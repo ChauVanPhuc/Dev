@@ -1204,8 +1204,10 @@ export const ROUTE_SUGGESTIONS = {
     { title: 'Giám sát vận chuyển', path: '/admin/order-shipping-monitoring' }
   ],
   'Quản lý kỹ thuật': [
-    { title: 'Bom sản phẩm', path: '/admin/products' }
+    { title: 'Bom sản phẩm', path: '/admin/products' },
+    { title: 'BOM vật tư', path: '/admin/material-boms' }
   ],
+
   'Bảo trì - cơ sở hạ tầng': [
     { title: 'Danh sách thiết bị', path: '/admin/machines' },
     { title: 'Lịch sử bảo trì', path: '/admin/machines/history' },

@@ -163,11 +163,6 @@ const ProductionOrdersView = () => {
 
   const processedOrders = getProcessedOrders(orders);
 
-  // Dynamic header height
-  const isAdminUser = combinedAuth.includes('admin') || combinedAuth.includes('it') || combinedAuth.includes('bgd');
-  const hasStageSelect = isAdminUser || (user?.stageNames && user.stageNames.length > 1);
-  const headerHeight = hasStageSelect ? 92 : 56;
-
   return (
     <Layout>
       <PageHeader title="Thông tin sản xuất" subTitle="CL02: Lệnh sản xuất" />
@@ -175,7 +170,7 @@ const ProductionOrdersView = () => {
       <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, backgroundColor: '#faf6f1', paddingBottom: '56px' }}>
         
         {/* Sticky Toolbar + Tabs (below PageHeader) */}
-        <div style={{ position: 'sticky', top: `${headerHeight}px`, zIndex: 8, backgroundColor: '#faf6f1', borderBottom: '1px solid #e2e8f0' }}>
+        <div style={{ position: 'sticky', top: 0, zIndex: 8, backgroundColor: '#faf6f1', borderBottom: '1px solid #e2e8f0' }}>
           {/* Toolbar */}
           <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', border: '1px solid #cbd5e1', borderRadius: '8px', backgroundColor: '#fff', padding: '0 10px', height: '40px' }}>

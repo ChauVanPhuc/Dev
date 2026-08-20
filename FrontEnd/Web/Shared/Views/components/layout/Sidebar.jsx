@@ -612,17 +612,20 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
                   }} />
                 </div>
 
-                <div style={{ fontSize: '9px', color: '#7B5233', display: 'flex', justifyContent: 'space-between', fontWeight: '700' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <div style={{ fontSize: '9px', color: '#7B5233', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: '700', gap: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0, flex: 1 }} title={upload.message || ''}>
                     {upload.status === 'uploading' && (
-                      <div style={{ width: '8px', height: '8px', border: '1.5px solid #A0301B', borderTopColor: 'transparent', borderRadius: '50%', animation: 'mgmtSpin 0.8s linear infinite' }} />
+                      <div style={{ width: '8px', height: '8px', border: '1.5px solid #A0301B', borderTopColor: 'transparent', borderRadius: '50%', animation: 'mgmtSpin 0.8s linear infinite', flexShrink: 0 }} />
                     )}
-                    <span>
-                      {upload.status === 'uploading' ? 'Đang xử lý...' :
-                        upload.status === 'completed' ? 'Hoàn thành' : 'Lỗi'}
+                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {upload.sheet ? `Sheet [${upload.sheet}]` : (upload.status === 'uploading' ? 'Đang xử lý...' : upload.status === 'completed' ? 'Hoàn thành' : 'Lỗi')}
                     </span>
                   </div>
-                  <span>{upload.processed}/{upload.total || '?'}</span>
+                  <span style={{ flexShrink: 0, color: '#A0301B', fontWeight: '800' }}>
+                    {upload.total_sheets && upload.sheet_index 
+                      ? `${upload.sheet_index}/${upload.total_sheets} sheet` 
+                      : `${upload.processed || 0}/${upload.total || '?'}`}
+                  </span>
                 </div>
               </div>
             ))}

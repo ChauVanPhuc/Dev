@@ -2107,7 +2107,10 @@ def create_defect_type(data: DefectTypeCreate, db: Session = Depends(get_db)):
         is_active=data.is_active,
         code=code_val,
         aql_class=data.aql_class,
-        images=data.images
+        images=data.images,
+        root_cause=data.root_cause,
+        solution=data.solution,
+        capa_reference=data.capa_reference
     )
     db.add(defect)
     db.commit()
@@ -2161,6 +2164,9 @@ async def import_defect_types_from_excel(
                 aql = clean_val(row.get("Phân Loại AQL"))
                 desc = clean_val(row.get("Mô Tả Chi Tiết Tiêu Chuẩn Ghi Nhật Ký"))
                 raw_cat = clean_val(row.get("Phân loại"))
+                root_cause = clean_val(row.get("Nguyên Nhân Chính") or row.get("Nguyên nhân"))
+                solution = clean_val(row.get("Giải Pháp") or row.get("Biện pháp"))
+                capa_ref = clean_val(row.get("CAPA") or row.get("Mã CAPA"))
 
                 if not code or not name:
                     continue
@@ -2180,6 +2186,10 @@ async def import_defect_types_from_excel(
                 defect.description = desc
                 defect.aql_class = aql
                 defect.is_active = True
+                if root_cause: defect.root_cause = root_cause
+                if solution: defect.solution = solution
+                if capa_ref: defect.capa_reference = capa_ref
+
                 if aql in ["Critical", "Major"]:
                     defect.needs_tracking = True
                 
@@ -2265,6 +2275,9 @@ def update_defect_type(defect_id: int, data: DefectTypeCreate, db: Session = Dep
     defect.code = code_val or None
     defect.aql_class = data.aql_class
     defect.images = data.images
+    defect.root_cause = data.root_cause
+    defect.solution = data.solution
+    defect.capa_reference = data.capa_reference
     
     db.commit()
     db.refresh(defect)

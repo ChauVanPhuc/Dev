@@ -53,6 +53,21 @@ const ProductionTransferHistoryView = () => {
     fetchMonths();
   }, []);
 
+  // Fetch parts options whenever selectedMonth changes
+  useEffect(() => {
+    const fetchParts = async () => {
+      try {
+        const resp = await apiClient.get(`/production-v2/parts?month=${selectedMonth || ''}`);
+        const partsList = (resp.data || []).map(p => p.part_name).filter(Boolean);
+        setAvailableParts(partsList);
+      } catch (err) {
+        console.error('Lỗi khi tải danh sách chi tiết:', err);
+        setAvailableParts([]);
+      }
+    };
+    fetchParts();
+  }, [selectedMonth]);
+
   // Fetch transfers list from backend
   useEffect(() => {
     const fetchTransfers = async () => {
@@ -93,7 +108,7 @@ const ProductionTransferHistoryView = () => {
       <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, backgroundColor: '#faf6f1', paddingBottom: '56px' }}>
         
         {/* Sticky Filter Container matching Mockup Image 1 (below PageHeader) */}
-        <div style={{ position: 'sticky', top: `${headerHeight}px`, zIndex: 8, backgroundColor: '#faf6f1', borderBottom: '1px solid #e2e8f0' }}>
+        <div style={{ position: 'sticky', top: 0, zIndex: 8, backgroundColor: '#faf6f1', borderBottom: '1px solid #e2e8f0' }}>
           
           {/* Top Filter Container: 2 Outer Box Selects (Kế hoạch & Chi tiết) */}
           <div style={{ padding: '10px 14px', backgroundColor: '#fff' }}>
@@ -115,7 +130,7 @@ const ProductionTransferHistoryView = () => {
                     onChange={(e) => { setSelectedMonth(parseInt(e.target.value, 10)); setPage(1); }}
                     style={{ flex: 1, border: 'none', background: 'transparent', fontSize: '0.82rem', fontWeight: '700', outline: 'none', color: '#1e293b', cursor: 'pointer' }}
                   >
-                    {(availableMonths.length > 0 ? availableMonths : [{ month: 7 }, { month: 6 }]).map(m => (
+                    {availableMonths.map(m => (
                       <option key={m.plan_id || m.month} value={m.month}>Tháng {m.month}</option>
                     ))}
                   </select>
@@ -132,7 +147,7 @@ const ProductionTransferHistoryView = () => {
                     style={{ flex: 1, border: 'none', background: 'transparent', fontSize: '0.82rem', fontWeight: '700', outline: 'none', color: '#1e293b', cursor: 'pointer' }}
                   >
                     <option value="Tất cả chi tiết">Tất cả chi tiết</option>
-                    {(availableParts.length > 0 ? availableParts : ['Thanh A', 'Thanh B', 'Thanh C']).map(part => (
+                    {availableParts.map(part => (
                       <option key={part} value={part}>{part}</option>
                     ))}
                   </select>

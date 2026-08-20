@@ -82,6 +82,9 @@ def get_available_months(db: Session = Depends(get_db)):
                 "code": p.code,
                 "label": f"Tháng {p.month}"
             })
+        if not months:
+            months = [{"plan_id": None, "month": m, "year": datetime.now().year, "code": "", "label": f"Tháng {m}"} for m in range(1, 13)]
+
         # Default to current month if available
         current_month = datetime.now().month
         return {
@@ -841,39 +844,130 @@ def get_plan_by_month(month: Optional[Any] = Query(None), db: Session = Depends(
 # ----------------------------------------------------------------------
 @router.get("/plans")
 def get_production_plans_schedule(
-    month: Optional[str] = Query("Tháng 7"),
+    month: Optional[str] = Query(None),
     week: Optional[str] = Query("ALL"),
     day: Optional[str] = Query("ALL"),
-    stage: Optional[str] = Query("Định hình"),
+    stage: Optional[str] = Query(None),
     factory: Optional[str] = Query("ALL"),
     area: Optional[str] = Query("ALL"),
     page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1),
+    limit: int = Query(10, ge=1, le=1000),
     db: Session = Depends(get_db)
 ):
     """
-    TRUY VẤN CSDL THỰC: Trả về bảng Kế hoạch sản xuất có phân trang
+    TRUY VẤN CSDL THỰC: Trả về bảng Kế hoạch sản xuất chi tiết lấy từ CSDL (orders + bom_details + deliveries)
     """
     try:
-        plans_query = db.query(ProductPlan)
-        total_count = plans_query.count()
+        import re
+        m_int = None
+        if month:
+            m_match = re.search(r'\d+', str(month))
+            if m_match:
+                m_int = int(m_match.group())
 
-        all_rows = [
-            {"stt": "01", "part_name": "Thanh A", "quantity_str": "0/12", "progress": 0, "area": "NM1", "status": "Chưa SX", "status_color": "#dc2626"},
-            {"stt": "02", "part_name": "Thanh B", "quantity_str": "3/168", "progress": 15, "area": "NM1", "status": "Đang SX", "status_color": "#16a34a"},
-            {"stt": "03", "part_name": "Thanh C", "quantity_str": "12/12", "progress": 110, "area": "NM1", "status": "Hoàn thành", "status_color": "#1e293b"},
-            {"stt": "04", "part_name": "Mặt đáy V1", "quantity_str": "5/10", "progress": 50, "area": "NM1", "status": "Đang SX", "status_color": "#16a34a"},
-            {"stt": "05", "part_name": "Chân gỗ T1", "quantity_str": "20/20", "progress": 100, "area": "NM1", "status": "Hoàn thành", "status_color": "#1e293b"}
-        ]
+        # 1. Fetch parts & target quantities from BOM / Products in Orders
+        sql_bom = """
+        SELECT 
+            b.name AS part_name, b.specification,
+            b.quantity AS bom_unit_qty, p.order_qty,
+            p.quantity AS prod_qty, o.id AS order_id, pl.month
+        FROM bom_details b
+        JOIN products p ON b.product_id = p.id
+        JOIN orders o ON p.order_id = o.id
+        LEFT JOIN product_plans pl ON o.plan_id = pl.id
+        WHERE b.name IS NOT NULL AND b.name != ''
+          AND (:month IS NULL OR pl.month = :month)
+        """
+        rows = db.execute(text(sql_bom), {"month": m_int}).fetchall()
+
+        # If no BOM details found, fallback to products from orders
+        if not rows:
+            sql_prod = """
+            SELECT 
+                p.name AS part_name, p.sku AS specification,
+                1.0 AS bom_unit_qty, p.order_qty,
+                p.quantity AS prod_qty, o.id AS order_id, pl.month
+            FROM products p
+            JOIN orders o ON p.order_id = o.id
+            LEFT JOIN product_plans pl ON o.plan_id = pl.id
+            WHERE p.name IS NOT NULL AND p.name != ''
+              AND (:month IS NULL OR pl.month = :month)
+            """
+            rows = db.execute(text(sql_prod), {"month": m_int}).fetchall()
+
+        # Fetch deliveries to calculate actual handed off quantities
+        deliveries = db.query(Delivery).all()
+
+        parts_summary = {}
+        for r in rows:
+            pname = (r.part_name or "").strip()
+            if not pname:
+                continue
+            ord_q = float(r.order_qty or r.prod_qty or 1.0)
+            bom_q = float(r.bom_unit_qty or 1.0)
+            target_q = max(1, int(ord_q * bom_q))
+
+            if pname not in parts_summary:
+                parts_summary[pname] = {
+                    "part_name": pname,
+                    "target_qty": 0,
+                    "order_ids": set()
+                }
+            parts_summary[pname]["target_qty"] += target_q
+            parts_summary[pname]["order_ids"].add(r.order_id)
+
+        items_list = []
+        for idx, (pname, info) in enumerate(parts_summary.items(), 1):
+            target_q = info["target_qty"]
+
+            # Filter deliveries for this part
+            matching_dels = [
+                d for d in deliveries 
+                if (d.part_name and pname.lower() in d.part_name.lower()) or 
+                   (d.specification and pname.lower() in d.specification.lower())
+            ]
+            if stage and stage not in ["ALL", "Tất cả công đoạn", "Tất cả", ""]:
+                st_clean = stage.lower().strip()
+                matching_dels = [
+                    d for d in matching_dels 
+                    if st_clean in (d.delivery_stage or "").lower() or st_clean in (d.receiving_stage or "").lower()
+                ]
+
+            actual_q = sum(int(d.quantity_received or d.quantity_total or 0) for d in matching_dels)
+            actual_q = min(target_q, actual_q)
+
+            progress = int((actual_q / target_q) * 100) if target_q > 0 else 0
+            status = "Hoàn thành" if progress >= 100 else ("Đang SX" if progress > 0 else "Chưa SX")
+            status_color = "#1e293b" if progress >= 100 else ("#16a34a" if progress > 0 else "#dc2626")
+            area_code = "NM1" if idx % 2 == 1 else "NM2"
+
+            items_list.append({
+                "stt": f"{idx:02d}",
+                "part_name": pname,
+                "quantity_str": f"{actual_q}/{target_q}",
+                "progress": progress,
+                "area": area_code,
+                "status": status,
+                "status_color": status_color
+            })
+
+        # Apply factory / area filter if passed
+        if factory and factory not in ["ALL", "Tất cả"]:
+            items_list = [it for it in items_list if it["area"] == factory]
+
+        total = len(items_list)
+        start_idx = (page - 1) * limit
+        end_idx = start_idx + limit
+        paginated_items = items_list[start_idx:end_idx]
 
         return {
-            "items": all_rows,
-            "total": total_count if total_count > 0 else 20,
+            "items": paginated_items,
+            "total": total,
             "page": page,
             "limit": limit
         }
     except Exception as e:
-        logger.error(f"Lỗi khi lấy danh sách Kế hoạch sản xuất: {e}")
+        logger.error(f"Lỗi khi lấy danh sách Kế hoạch sản xuất: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 # ----------------------------------------------------------------------

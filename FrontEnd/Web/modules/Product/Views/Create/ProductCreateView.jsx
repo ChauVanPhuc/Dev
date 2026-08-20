@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate, useOutletContext } from 'react-router-dom';
+import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Copy,
@@ -16,7 +16,9 @@ import {
   Trash2,
   FileSpreadsheet,
   AlertCircle,
-  X
+  X,
+  Palette,
+  Layers
 } from 'lucide-react';
 import api, { getBaseURL } from '@webShared/Services/api.service';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
@@ -24,6 +26,7 @@ import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import AddComponentModal from '../Detail/modals/AddComponentModal';
 import AddDetailModal from '../Detail/modals/AddDetailModal';
 import AddPaintColorModal from '../Detail/modals/AddPaintColorModal';
+import AddMaterialModal from '../Detail/modals/AddMaterialModal';
 import ConfigInfoModal from '../Detail/modals/ConfigInfoModal';
 import CopyProductModal from '../Detail/modals/CopyProductModal';
 import '@styles/components.css';
@@ -40,6 +43,7 @@ import '@styles/components.css';
  */
 const ProductCreateView = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
 
   const outletContext = useOutletContext() || {};
@@ -48,7 +52,7 @@ const ProductCreateView = () => {
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/products/create');
 
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('bom');
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'bom');
   const [searchTerm, setSearchTerm] = useState('');
   const [activeStage, setActiveStage] = useState('Định hình');
 
@@ -57,11 +61,14 @@ const ProductCreateView = () => {
   const [showAddDetailModal, setShowAddDetailModal] = useState(false);
   const [showAddComponentModal, setShowAddComponentModal] = useState(false);
   const [showAddPaintModal, setShowAddPaintModal] = useState(false);
+  const [showAddMaterialModal, setShowAddMaterialModal] = useState(false);
+  const [editingMaterial, setEditingMaterial] = useState(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [isConfigDropdownOpen, setIsConfigDropdownOpen] = useState(false);
   const [isAddDropdownOpen, setIsAddDropdownOpen] = useState(false);
   const [pasteText, setPasteText] = useState('');
+
 
   // Image Upload Preview State
   const [mainImage, setMainImage] = useState(null);
@@ -113,9 +120,31 @@ const ProductCreateView = () => {
     }
   ]);
 
-  // Tab bổ sung: Chi tiết sản phẩm & Mẫu màu sơn
+  // Tab bổ sung: Chi tiết sản phẩm & Mẫu màu sơn & Định mức vật tư
   const [detailRows, setDetailRows] = useState([]);
   const [paintColorRows, setPaintColorRows] = useState([]);
+  const [materialRows, setMaterialRows] = useState([]);
+
+  // Tự động kéo Định mức Vật tư nếu Tên hoặc Mã Sản phẩm khớp với BOM Vật tư
+  useEffect(() => {
+    const checkMatchingMaterials = async () => {
+      const pSku = (formData.sku || '').trim();
+      const pName = (formData.name || '').trim();
+      if (!pSku && !pName) return;
+
+      try {
+        const matRes = await api.get(`/master-products/materials-by-product?sku=${encodeURIComponent(pSku)}&name=${encodeURIComponent(pName)}`).catch(() => null);
+        if (Array.isArray(matRes) && matRes.length > 0) {
+          setMaterialRows(matRes);
+        }
+      } catch (e) {
+        console.warn('Lỗi kiểm tra BOM vật tư tự động:', e);
+      }
+    };
+
+    const timer = setTimeout(checkMatchingMaterials, 400);
+    return () => clearTimeout(timer);
+  }, [formData.sku, formData.name]);
 
   // Gợi ý tên thành phẩm từ master_product_details
   const [detailSuggestions, setDetailSuggestions] = useState([]);
@@ -347,43 +376,10 @@ const ProductCreateView = () => {
     if (setCustomTitle) setCustomTitle(title);
     if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
     if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
-    if (setHeaderExtra) {
-      setHeaderExtra(
-        <button
-          type="button"
-          onClick={() => navigate('/admin/products')}
-          style={{
-            padding: '7px 16px',
-            backgroundColor: '#FFFFFF',
-            border: '1.5px solid #5D3B32',
-            borderRadius: '8px',
-            color: '#5D3B32',
-            fontWeight: '800',
-            fontSize: '0.85rem',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
-            transition: 'all 0.2s ease'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = '#5D3B32';
-            e.currentTarget.style.color = '#FFFFFF';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = '#FFFFFF';
-            e.currentTarget.style.color = '#5D3B32';
-          }}
-        >
-          <ArrowLeft size={16} /> Quay lại danh sách sản phẩm
-        </button>
-      );
-    }
     return () => {
       if (setHeaderExtra) setHeaderExtra(null);
     };
-  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra, navigate, title, subtitle, screenCode]);
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra, title, subtitle, screenCode]);
 
   // Cập nhật giá trị ô input Form thông tin chung
   const handleInputChange = (field, value) => {
@@ -704,6 +700,22 @@ const ProductCreateView = () => {
       })));
     }
 
+    // 5. Sao chép Định mức vật tư
+    if (Array.isArray(sourceProduct.materials)) {
+      setMaterialRows(sourceProduct.materials.map(m => ({
+        id: m.id || Date.now() + Math.random(),
+        stt: m.stt,
+        group_type: m.group_type,
+        material_code: m.material_code,
+        material_name: m.material_name,
+        color: m.color,
+        quota: m.quota,
+        unit: m.unit,
+        supplier: m.supplier,
+        note: m.note
+      })));
+    }
+
     if (toast) {
       toast('success', `Đã nạp thông tin từ sản phẩm "${sourceProduct.sku} - ${sourceProduct.name}" thành công!`);
     }
@@ -716,6 +728,36 @@ const ProductCreateView = () => {
       return;
     }
     setBomRows(prev => prev.filter(row => row.id !== id));
+  };
+
+  // Xử lý Thêm / Sửa Vật tư mới
+  const handleSaveMaterialSuccess = (matData) => {
+    if (editingMaterial) {
+      setMaterialRows(prev => prev.map(m => (m.id === editingMaterial.id || m.stt === editingMaterial.stt) ? { ...m, ...matData } : m));
+      if (toast) toast('success', 'Đã cập nhật thông tin vật tư');
+    } else {
+      const newMat = {
+        id: Date.now(),
+        stt: matData.stt || (materialRows.length + 1),
+        group_type: matData.group_type || 'VẬT TƯ HÀNG TRẮNG',
+        material_code: matData.material_code || `VT-${Date.now().toString().slice(-6)}`,
+        material_name: matData.material_name,
+        color: matData.color || '',
+        quota: parseFloat(matData.quota) || 1.0,
+        unit: matData.unit || 'Cái',
+        supplier: matData.supplier || '',
+        note: matData.note || ''
+      };
+      setMaterialRows(prev => [...prev, newMat]);
+      if (toast) toast('success', `Đã thêm vật tư "${matData.material_name}"`);
+    }
+    setShowAddMaterialModal(false);
+    setEditingMaterial(null);
+  };
+
+  const handleDeleteMaterial = (matId) => {
+    setMaterialRows(prev => prev.filter(m => m.id !== matId));
+    if (toast) toast('info', 'Đã xóa vật tư');
   };
 
   // Xử lý Dán từ Excel (Paste Modal) thông minh & chính xác
@@ -1007,7 +1049,8 @@ const ProductCreateView = () => {
             description: r.note || ''
           })),
         product_details: detailRows,
-        paint_color_samples: paintColorRows
+        paint_color_samples: paintColorRows,
+        materials: materialRows
       };
 
       const res = await api.post('/master-products/', payload);
@@ -1064,26 +1107,6 @@ const ProductCreateView = () => {
                 }}
               >
                 <Copy size={15} /> Lấy từ sản phẩm khác
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowPasteModal(true)}
-                style={{
-                  padding: '7px 14px',
-                  backgroundColor: '#8D6E63',
-                  border: 'none',
-                  borderRadius: '8px',
-                  color: '#FFFFFF',
-                  fontWeight: '700',
-                  fontSize: '0.82rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <FileSpreadsheet size={15} /> Dán từ Excel
               </button>
 
               <button
@@ -2416,6 +2439,239 @@ const ProductCreateView = () => {
               </div>
             </div>
           </div>
+        ) : activeTab === 'materials' ? (
+          /* TAB: ĐỊNH MỨC VẬT TƯ (BOM PHỤ KIỆN HÀNG TRẮNG & SAU SƠN CHUẨN G7) */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            
+            {/* KPI STATS BAR & ACTION TOOLBAR */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              backgroundColor: '#FFFFFF',
+              borderRadius: '12px',
+              border: '1.5px solid #EADCC9',
+              padding: '12px 20px',
+              boxShadow: '0 4px 16px rgba(45, 26, 18, 0.04)',
+              flexWrap: 'wrap',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#FAF6F0', border: '1px solid #EADCC9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Box size={22} color="#5D3B32" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#7B5233', textTransform: 'uppercase' }}>Tổng phụ kiện vật tư</div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#2D1A12' }}>{materialRows.length} <span style={{ fontSize: '0.8rem', fontWeight: '600', color: '#64748B' }}>mục</span></div>
+                  </div>
+                </div>
+
+                <div style={{ height: '30px', width: '1px', backgroundColor: '#EADCC9' }} />
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Layers size={20} color="#1D4ED8" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#1E40AF', textTransform: 'uppercase' }}>Vật tư Hàng trắng</div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#1E3A8A' }}>
+                      {materialRows.filter(m => (m.group_type || '').toUpperCase().includes('TRẮNG')).length} <span style={{ fontSize: '0.8rem', fontWeight: '600', color: '#64748B' }}>mục</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ height: '30px', width: '1px', backgroundColor: '#EADCC9' }} />
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Palette size={20} color="#15803D" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#166534', textTransform: 'uppercase' }}>Vật tư Sau sơn</div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#14532D' }}>
+                      {materialRows.filter(m => (m.group_type || '').toUpperCase().includes('SƠN')).length} <span style={{ fontSize: '0.8rem', fontWeight: '600', color: '#64748B' }}>mục</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingMaterial(null);
+                    setShowAddMaterialModal(true);
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#5D3B32',
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: '#FFFFFF',
+                    fontWeight: '700',
+                    fontSize: '0.84rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 3px 8px rgba(93, 59, 50, 0.2)'
+                  }}
+                >
+                  <Plus size={16} /> Thêm vật tư mới
+                </button>
+              </div>
+            </div>
+
+            {/* BẢNG CÁC NHÓM VẬT TƯ */}
+            {(() => {
+              const groups = {};
+              materialRows.forEach(mat => {
+                const gName = (mat.group_type || 'VẬT TƯ HÀNG TRẮNG').toUpperCase();
+                if (!groups[gName]) groups[gName] = [];
+                groups[gName].push(mat);
+              });
+
+              const groupKeys = Object.keys(groups);
+              if (groupKeys.length === 0) {
+                groupKeys.push('VẬT TƯ HÀNG TRẮNG', 'VẬT TƯ SAU SƠN');
+              }
+
+              return groupKeys.map((gName, gIdx) => {
+                const items = groups[gName] || [];
+                const isHangTrang = gName.includes('TRẮNG');
+                const badgeBg = isHangTrang ? '#EFF6FF' : '#F0FDF4';
+                const badgeColor = isHangTrang ? '#1D4ED8' : '#15803D';
+
+                return (
+                  <div
+                    key={gName || gIdx}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '12px',
+                      border: '1.5px solid #EADCC9',
+                      overflow: 'hidden',
+                      boxShadow: '0 4px 16px rgba(45, 26, 18, 0.04)',
+                      marginBottom: '12px'
+                    }}
+                  >
+                    {/* Header Nhóm */}
+                    <div style={{
+                      padding: '12px 18px',
+                      backgroundColor: '#FAF6F0',
+                      borderBottom: '1.5px solid #EADCC9',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ width: '8px', height: '18px', borderRadius: '4px', backgroundColor: '#5D3B32' }} />
+                        <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: '800', color: '#2D1A12', textTransform: 'uppercase' }}>
+                          {gName}
+                        </h4>
+                        <span style={{
+                          backgroundColor: badgeBg,
+                          color: badgeColor,
+                          borderRadius: '12px',
+                          padding: '2px 10px',
+                          fontSize: '0.75rem',
+                          fontWeight: '800',
+                          border: `1px solid ${isHangTrang ? '#BFDBFE' : '#BBF7D0'}`
+                        }}>
+                          {items.length} vật tư
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Table Nội dung */}
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#6D4C3D', color: '#FFFFFF' }}>
+                            <th style={{ padding: '10px 12px', textAlign: 'center', width: '55px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>STT</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'left', width: '140px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Mã vật tư</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Tên vật tư / Phụ kiện</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'left', width: '120px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Màu sắc / Xi mạ</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'center', width: '110px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Định mức</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'center', width: '90px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Đơn vị</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'left', width: '140px', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Nhà cung cấp</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.15)', fontWeight: '700' }}>Ghi chú</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'center', width: '80px', fontWeight: '700' }}>Thao tác</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {items.length === 0 ? (
+                            <tr>
+                              <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#94A3B8', fontWeight: '600' }}>
+                                Chưa có vật tư nào trong nhóm {gName}. Nhấn "+ Thêm vật tư mới" để thêm.
+                              </td>
+                            </tr>
+                          ) : (
+                            items.map((row, idx) => (
+                              <tr key={row.id || idx} style={{ borderBottom: '1px solid #EADCC9', backgroundColor: idx % 2 === 1 ? '#FAF6F0' : '#FFFFFF' }}>
+                                <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: '700', color: '#2D1A12' }}>
+                                  {row.stt || idx + 1}
+                                </td>
+                                <td style={{ padding: '8px 12px', fontWeight: '800', color: '#7B5233' }}>
+                                  {row.material_code || '---'}
+                                </td>
+                                <td style={{ padding: '8px 12px', fontWeight: '700', color: '#1E293B' }}>
+                                  {row.material_name || row.name || '---'}
+                                </td>
+                                <td style={{ padding: '8px 12px', color: '#475569', fontWeight: '600' }}>
+                                  {row.color ? (
+                                    <span style={{ backgroundColor: '#F1F5F9', color: '#334155', padding: '2px 8px', borderRadius: '4px', fontSize: '0.78rem' }}>
+                                      {row.color}
+                                    </span>
+                                  ) : '---'}
+                                </td>
+                                <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: '900', color: '#2D1A12', fontSize: '0.9rem' }}>
+                                  {row.quota || row.quantity || 1}
+                                </td>
+                                <td style={{ padding: '8px 12px', textAlign: 'center', color: '#475569', fontWeight: '600' }}>
+                                  {row.unit || 'Cái'}
+                                </td>
+                                <td style={{ padding: '8px 12px', color: '#475569' }}>
+                                  {row.supplier || '---'}
+                                </td>
+                                <td style={{ padding: '8px 12px', color: '#64748B' }}>
+                                  {row.note || '---'}
+                                </td>
+                                <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingMaterial(row);
+                                        setShowAddMaterialModal(true);
+                                      }}
+                                      style={{ border: 'none', background: 'transparent', color: '#3B82F6', cursor: 'pointer', padding: '4px' }}
+                                      title="Chỉnh sửa vật tư"
+                                    >
+                                      <Sliders size={15} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteMaterial(row.id)}
+                                      style={{ border: 'none', background: 'transparent', color: '#EF4444', cursor: 'pointer', padding: '4px' }}
+                                      title="Xóa vật tư"
+                                    >
+                                      <Trash2 size={15} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+
+          </div>
         ) : (
           <div style={{ padding: '30px', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1.5px solid #EADCC9', textAlign: 'center', color: '#6B7280' }}>
             Nội dung tab {activeTab} sẽ được tự động đồng bộ từ cấu trúc BOM sau khi lưu dữ liệu sản phẩm.
@@ -2475,6 +2731,19 @@ const ProductCreateView = () => {
           bomRows={bomRows}
           onClose={() => setShowAddComponentModal(false)}
           onSuccess={handleAddComponentSuccess}
+        />
+      )}
+
+      {/* ADD / EDIT MATERIAL MODAL */}
+      {showAddMaterialModal && (
+        <AddMaterialModal
+          material={editingMaterial}
+          materialRows={materialRows}
+          onClose={() => {
+            setShowAddMaterialModal(false);
+            setEditingMaterial(null);
+          }}
+          onSuccess={handleSaveMaterialSuccess}
         />
       )}
 

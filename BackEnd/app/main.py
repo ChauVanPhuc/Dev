@@ -123,6 +123,21 @@ except Exception:
     # Ignore if column already exists
     pass
 
+# [MIGRATION] Add root_cause, solution, capa_reference columns to defect_types table
+try:
+    with engine.begin() as conn:
+        for _col, _type in [
+            ("root_cause", "NVARCHAR(1000) NULL"),
+            ("solution", "NVARCHAR(1000) NULL"),
+            ("capa_reference", "NVARCHAR(250) NULL")
+        ]:
+            try:
+                conn.execute(text(f"ALTER TABLE defect_types ADD {_col} {_type}"))
+            except Exception:
+                pass
+except Exception:
+    pass
+
 # [MIGRATION] Add missing columns to master_products table
 try:
     with engine.begin() as conn:

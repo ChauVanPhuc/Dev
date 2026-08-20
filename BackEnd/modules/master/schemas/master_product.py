@@ -61,6 +61,8 @@ class MasterProductUpdate(BaseModel):
     master_bom_details: Optional[List[Any]] = None
     product_details: Optional[List[Any]] = None
     paint_color_samples: Optional[List[Any]] = None
+    materials: Optional[List[Any]] = None
+    technical_drawings: Optional[List[Any]] = None
 
 class MasterProductListItem(MasterProductBase):
     """

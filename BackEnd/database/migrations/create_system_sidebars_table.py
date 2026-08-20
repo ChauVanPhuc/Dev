@@ -132,8 +132,10 @@ def upgrade():
                 "title": "Quản lý kỹ thuật", "icon": "Sliders", "sort_order": 8,
                 "children": [
                     {"title": "Bom sản phẩm", "route_path": "/admin/products", "icon": "Box", "sort_order": 1, "permission_key": None},
+                    {"title": "BOM vật tư", "route_path": "/admin/products?tab=materials", "icon": "Layers", "sort_order": 2, "permission_key": None},
                 ]
             },
+
             {
                 "title": "Bảo trì - cơ sở hạ tầng", "icon": "Wrench", "sort_order": 9,
                 "children": [

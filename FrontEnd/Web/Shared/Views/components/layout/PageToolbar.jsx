@@ -110,12 +110,12 @@ const PageToolbar = ({
   }, []);
 
   // Determine which action buttons to show
-  const visibleExtraActions = extraActions.filter(a => !a.requireWrite || hasWritePermission);
+  const visibleExtraActions = (Array.isArray(extraActions) ? extraActions : []).filter(a => !a.requireWrite || hasWritePermission);
   const showOtherBtn = visibleExtraActions.length > 0;
-  const visibleImportActions = importActions.filter(a => !a.requireWrite || hasWritePermission);
+  const visibleImportActions = (Array.isArray(importActions) ? importActions : []).filter(a => !a.requireWrite || hasWritePermission);
   const showImportBtn = visibleImportActions.length > 0;
   const showExportBtn = !!onExport;
-  const showCreateBtn = (!!onCreate || (createActions && createActions.length > 0)) && hasWritePermission;
+  const showCreateBtn = (!!onCreate || (Array.isArray(createActions) && createActions.length > 0)) && hasWritePermission;
 
   return (
     <div className="page-toolbar">
