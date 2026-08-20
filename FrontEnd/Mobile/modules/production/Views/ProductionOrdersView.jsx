@@ -167,18 +167,18 @@ const ProductionOrdersView = () => {
     <Layout>
       <PageHeader title="Thông tin sản xuất" subTitle="CL02: Lệnh sản xuất" />
 
-      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, backgroundColor: '#faf6f1', paddingBottom: '56px' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, backgroundColor: '#faf6f1', position: 'relative' }}>
         
         {/* Sticky Toolbar + Tabs (below PageHeader) */}
-        <div style={{ position: 'sticky', top: 0, zIndex: 8, backgroundColor: '#faf6f1', borderBottom: '1px solid #e2e8f0' }}>
+        <div style={{ position: 'sticky', top: 0, zIndex: 8, backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
           {/* Toolbar */}
-          <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', border: '1px solid #cbd5e1', borderRadius: '8px', backgroundColor: '#fff', padding: '0 10px', height: '40px' }}>
-              <span style={{ fontSize: '0.84rem', color: '#334155', fontWeight: '700', marginRight: '6px' }}>Lệnh sản xuất</span>
+          <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', border: '1px solid #cbd5e1', borderRadius: '10px', backgroundColor: '#f8fafc', padding: '0 10px', height: '38px' }}>
+              <span style={{ fontSize: '0.8rem', color: '#475569', fontWeight: '800', marginRight: '6px', whiteSpace: 'nowrap' }}>Lệnh SX:</span>
               <select
                 value={selectedMonth || ''}
                 onChange={(e) => handleMonthChange(parseInt(e.target.value, 10))}
-                style={{ flex: 1, border: 'none', background: 'transparent', fontSize: '0.84rem', fontWeight: '700', outline: 'none', color: '#1e293b' }}
+                style={{ flex: 1, border: 'none', background: 'transparent', fontSize: '0.84rem', fontWeight: '800', outline: 'none', color: '#1e293b', cursor: 'pointer' }}
               >
                 {availableMonths.map(m => (
                   <option key={m.plan_id} value={m.month}>Tháng {m.month}</option>
@@ -190,41 +190,43 @@ const ProductionOrdersView = () => {
             <button 
               onClick={() => setShowSortModal(true)}
               style={{ 
-                border: hasActiveSort ? '1px solid #f9dcc5' : '1px solid #cbd5e1', 
+                border: hasActiveSort ? '1.5px solid #432818' : '1px solid #cbd5e1', 
                 backgroundColor: hasActiveSort ? '#fdf3ea' : '#fff', 
-                borderRadius: '8px',
+                borderRadius: '10px',
                 cursor: 'pointer', 
                 padding: '8px',
+                height: '38px', width: '38px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center'
               }}
             >
-              <ArrowUpDown size={18} color={hasActiveSort ? '#7c5438' : '#432818'} />
+              <ArrowUpDown size={16} color={hasActiveSort ? '#432818' : '#64748b'} />
             </button>
 
             {/* Filter Button */}
             <button 
               onClick={() => setShowFilter(!showFilter)}
               style={{ 
-                border: hasActiveFilter ? '1px solid #f9dcc5' : '1px solid #cbd5e1', 
+                border: hasActiveFilter ? '1.5px solid #432818' : '1px solid #cbd5e1', 
                 backgroundColor: hasActiveFilter ? '#fdf3ea' : '#fff', 
-                borderRadius: '8px',
+                borderRadius: '10px',
                 cursor: 'pointer', 
                 padding: '8px',
+                height: '38px', width: '38px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center'
               }}
             >
-              <Filter size={18} color={hasActiveFilter ? '#7c5438' : '#432818'} />
+              <Filter size={16} color={hasActiveFilter ? '#432818' : '#64748b'} />
             </button>
           </div>
 
           {/* Expandable Filter Panel */}
           {showFilter && (
             <div style={{
-              padding: '0 14px 12px 14px',
+              padding: '0 14px 10px 14px',
               display: 'flex',
               flexDirection: 'column',
               gap: '8px',
@@ -232,7 +234,7 @@ const ProductionOrdersView = () => {
             }}>
               {/* Search Bar */}
               <div style={{ position: 'relative' }}>
-                <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                 <input
                   type="text"
                   placeholder="Tìm mã PO (APT-0069, FOL-0459...), tên sản phẩm..."
@@ -240,7 +242,7 @@ const ProductionOrdersView = () => {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   style={{
                     width: '100%',
-                    padding: '8px 32px 8px 32px',
+                    padding: '7px 30px 7px 30px',
                     borderRadius: '8px',
                     border: '1px solid #cbd5e1',
                     fontSize: '0.8rem',
@@ -253,7 +255,7 @@ const ProductionOrdersView = () => {
                 {searchQuery && (
                   <button 
                     onClick={() => setSearchQuery('')}
-                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+                    style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
                   >
                     <X size={14} />
                   </button>
@@ -272,12 +274,12 @@ const ProductionOrdersView = () => {
                     key={opt.value}
                     onClick={() => setStatusFilter(opt.value)}
                     style={{
-                      padding: '4px 12px',
-                      borderRadius: '16px',
+                      padding: '4px 10px',
+                      borderRadius: '14px',
                       fontSize: '0.72rem',
                       fontWeight: '800',
                       border: statusFilter === opt.value ? 'none' : '1px solid #cbd5e1',
-                      backgroundColor: statusFilter === opt.value ? 'var(--primary-color)' : '#fff',
+                      backgroundColor: statusFilter === opt.value ? '#432818' : '#fff',
                       color: statusFilter === opt.value ? '#fff' : '#475569',
                       cursor: 'pointer',
                       whiteSpace: 'nowrap'
@@ -291,13 +293,14 @@ const ProductionOrdersView = () => {
           )}
 
           {/* Category Tabs */}
-          <div style={{ display: 'flex', borderTop: '1px solid #e2e8f0', backgroundColor: '#fff', padding: '0 10px', overflowX: 'auto' }}>
+          <div style={{ display: 'flex', borderTop: '1px solid #f1f5f9', backgroundColor: '#fff', padding: '0 8px', overflowX: 'auto' }}>
             {categoriesList.map(cat => {
               const isDisabled = !isFullAccess && (
                 (userFactory === 'NM1' && cat.key !== 'Vanity 1') ||
                 (userFactory === 'NM2' && cat.key !== 'Vanity 2') ||
                 (userFactory === 'NM3' && cat.key !== 'Furniture')
               );
+              const isActive = activeCategory === cat.key;
               return (
                 <button
                   key={cat.key}
@@ -305,23 +308,24 @@ const ProductionOrdersView = () => {
                   onClick={() => !isDisabled && handleCategoryChange(cat.key)}
                   style={{
                     flex: 1,
-                    padding: '12px 4px',
+                    padding: '10px 4px',
                     border: 'none',
                     background: 'none',
-                    fontSize: '0.8rem',
-                    fontWeight: activeCategory === cat.key ? '800' : '600',
-                    color: isDisabled ? '#cbd5e1' : (activeCategory === cat.key ? '#432818' : '#64748b'),
-                    borderBottom: activeCategory === cat.key ? '3px solid #432818' : 'none',
+                    fontSize: '0.78rem',
+                    fontWeight: isActive ? '900' : '600',
+                    color: isDisabled ? '#cbd5e1' : (isActive ? '#432818' : '#64748b'),
+                    borderBottom: isActive ? '2.5px solid #432818' : '2.5px solid transparent',
                     cursor: isDisabled ? 'not-allowed' : 'pointer',
                     whiteSpace: 'nowrap',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '4px'
+                    gap: '4px',
+                    transition: 'all 0.15s ease'
                   }}
                 >
                   <span>{cat.label}</span>
-                  {isDisabled && <Lock size={12} color="#cbd5e1" />}
+                  {isDisabled && <Lock size={11} color="#cbd5e1" />}
                 </button>
               );
             })}
@@ -329,9 +333,9 @@ const ProductionOrdersView = () => {
         </div>
 
         {/* POs Accordion List */}
-        <div style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
           {loading ? (
-            <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Đang tải danh sách Lệnh sản xuất...</div>
+            <div style={{ textAlign: 'center', padding: '40px', color: '#64748b', fontSize: '0.85rem' }}>Đang tải danh sách Lệnh sản xuất...</div>
           ) : processedOrders.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem' }}>
               Không tìm thấy Lệnh sản xuất phù hợp với bộ lọc
@@ -345,58 +349,63 @@ const ProductionOrdersView = () => {
                   style={{
                     backgroundColor: '#fff',
                     borderRadius: '12px',
-                    border: '1px solid #cbd5e1',
+                    border: '1px solid #e2e8f0',
                     overflow: 'hidden',
-                    boxShadow: '0 2px 6px rgba(0,0,0,0.03)'
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
+                    transition: 'border-color 0.15s ease'
                   }}
                 >
                   {/* Accordion Header */}
                   <div
                     onClick={() => toggleExpand(po.po_code)}
                     style={{
-                      padding: '12px 14px',
+                      padding: '11px 12px',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '12px',
+                      gap: '10px',
                       cursor: 'pointer',
-                      userSelect: 'none'
+                      userSelect: 'none',
+                      backgroundColor: isExpanded ? '#fdfaf6' : '#fff'
                     }}
                   >
                     <span
                       onClick={(e) => { e.stopPropagation(); handleOpenDetail(po.po_code); }}
-                      style={{ fontSize: '1.1rem', fontWeight: '900', color: '#1e293b', flexShrink: 0, textDecoration: 'underline' }}
+                      style={{ fontSize: '1.05rem', fontWeight: '900', color: '#432818', flexShrink: 0, textDecoration: 'none', letterSpacing: '-0.2px' }}
                     >
                       {po.po_code}
                     </span>
 
                     {/* Progress bar */}
-                    <div style={{ flex: 1, backgroundColor: '#f1f5f9', height: '12px', borderRadius: '6px', overflow: 'hidden' }}>
-                      <div style={{ width: `${po.overall_progress}%`, backgroundColor: po.progress_color, height: '100%' }} />
+                    <div style={{ flex: 1, backgroundColor: '#f1f5f9', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
+                      <div style={{ width: `${po.overall_progress}%`, backgroundColor: po.progress_color || '#432818', height: '100%', borderRadius: '4px', transition: 'width 0.3s ease' }} />
                     </div>
 
-                    <span style={{ fontSize: '0.95rem', fontWeight: '900', color: '#1e293b', flexShrink: 0 }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: '900', color: '#334155', flexShrink: 0, minWidth: '38px', textAlign: 'right' }}>
                       {po.overall_progress}%
                     </span>
 
-                    {isExpanded ? <ChevronUp size={20} color="#64748b" /> : <ChevronDown size={20} color="#64748b" />}
+                    <div style={{ display: 'flex', alignItems: 'center', color: '#64748b' }}>
+                      {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                    </div>
                   </div>
 
                   {/* Expanded Body: SKU Table */}
                   {isExpanded && (
-                    <div style={{ borderTop: '1px solid #e2e8f0' }}>
+                    <div style={{ borderTop: '1px solid #e2e8f0', overflowX: 'auto' }}>
                       {/* Table Header */}
                       <div style={{
                         display: 'grid',
-                        gridTemplateColumns: '40px 1fr 60px 70px 85px',
+                        gridTemplateColumns: '32px 1fr 50px 65px 80px',
                         backgroundColor: '#432818',
                         color: '#fff',
-                        padding: '8px 10px',
-                        fontSize: '0.75rem',
+                        padding: '7px 8px',
+                        fontSize: '0.72rem',
                         fontWeight: '800',
-                        textAlign: 'center'
+                        textAlign: 'center',
+                        alignItems: 'center'
                       }}>
                         <span>STT</span>
-                        <span style={{ textAlign: 'left' }}>Tên sản phẩm</span>
+                        <span style={{ textAlign: 'left', paddingLeft: '4px' }}>Tên sản phẩm</span>
                         <span>Tiến độ</span>
                         <span>Số lượng</span>
                         <span>Trạng thái</span>
@@ -404,28 +413,53 @@ const ProductionOrdersView = () => {
 
                       {/* Table Rows */}
                       <div>
-                        {po.items.map((item, idx) => (
-                          <div
-                            key={idx}
-                            onClick={() => handleOpenDetail(po.po_code)}
-                            style={{
-                              display: 'grid',
-                              gridTemplateColumns: '40px 1fr 60px 70px 85px',
-                              padding: '10px 10px',
-                              borderBottom: idx < po.items.length - 1 ? '1px solid #f1f5f9' : 'none',
-                              fontSize: '0.8rem',
-                              alignItems: 'center',
-                              textAlign: 'center',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <span style={{ fontWeight: '700', color: '#64748b' }}>{item.stt}</span>
-                            <span style={{ textAlign: 'left', fontWeight: '700', color: '#1e293b' }}>{item.product_name}</span>
-                            <span style={{ fontWeight: '700', color: '#475569' }}>{item.progress}%</span>
-                            <span style={{ fontWeight: '700', color: '#475569' }}>{item.quantity_str}</span>
-                            <span style={{ fontWeight: '800', color: item.status_color }}>{item.status}</span>
-                          </div>
-                        ))}
+                        {po.items.map((item, itemIdx) => {
+                          let badgeBg = '#fef2f2';
+                          let badgeColor = '#dc2626';
+                          if (item.status === 'Hoàn thành') {
+                            badgeBg = '#f0fdf4';
+                            badgeColor = '#16a34a';
+                          } else if (item.status === 'Đang SX') {
+                            badgeBg = '#eff6ff';
+                            badgeColor = '#2563eb';
+                          }
+
+                          return (
+                            <div
+                              key={itemIdx}
+                              onClick={() => handleOpenDetail(po.po_code)}
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: '32px 1fr 50px 65px 80px',
+                                padding: '9px 8px',
+                                borderBottom: itemIdx < po.items.length - 1 ? '1px solid #f1f5f9' : 'none',
+                                backgroundColor: itemIdx % 2 === 0 ? '#fff' : '#fafafa',
+                                fontSize: '0.78rem',
+                                alignItems: 'center',
+                                textAlign: 'center',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <span style={{ fontWeight: '700', color: '#94a3b8' }}>{item.stt}</span>
+                              <span style={{ textAlign: 'left', paddingLeft: '4px', fontWeight: '700', color: '#1e293b', wordBreak: 'break-word' }}>{item.product_name}</span>
+                              <span style={{ fontWeight: '800', color: '#334155' }}>{item.progress}%</span>
+                              <span style={{ fontWeight: '700', color: '#475569' }}>{item.quantity_str}</span>
+                              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                                <span style={{
+                                  padding: '2px 6px',
+                                  borderRadius: '6px',
+                                  fontSize: '0.68rem',
+                                  fontWeight: '800',
+                                  backgroundColor: badgeBg,
+                                  color: badgeColor,
+                                  whiteSpace: 'nowrap'
+                                }}>
+                                  {item.status}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -436,40 +470,42 @@ const ProductionOrdersView = () => {
           )}
         </div>
 
-        {/* Pagination Bar - Fixed at bottom */}
+        {/* Pagination Bar - Fixed inside frame at bottom */}
         {!loading && totalOrders > 0 && (
           <div style={{
-            position: 'fixed',
+            position: 'sticky',
             bottom: 0,
-            left: 0,
-            right: 0,
+            marginTop: 'auto',
+            width: '100%',
+            boxSizing: 'border-box',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '12px',
-            padding: '10px 14px',
+            gap: '10px',
+            padding: '8px 12px',
             backgroundColor: '#fff',
             borderTop: '1px solid #e2e8f0',
+            boxShadow: '0 -2px 8px rgba(0,0,0,0.04)',
             zIndex: 10
           }}>
             <button
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage <= 1}
               style={{
-                width: '36px', height: '36px',
+                width: '32px', height: '32px',
                 border: '1px solid #cbd5e1',
                 borderRadius: '8px',
-                backgroundColor: currentPage <= 1 ? '#f1f5f9' : '#fff',
+                backgroundColor: currentPage <= 1 ? '#f8fafc' : '#fff',
                 cursor: currentPage <= 1 ? 'not-allowed' : 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: currentPage <= 1 ? '#94a3b8' : '#334155',
-                fontSize: '1rem', fontWeight: '700'
+                color: currentPage <= 1 ? '#cbd5e1' : '#334155',
+                fontSize: '0.95rem', fontWeight: '800'
               }}
             >
               ‹
             </button>
 
-            <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: '600' }}>
+            <span style={{ fontSize: '0.8rem', color: '#475569', fontWeight: '600' }}>
               Hiển thị {Math.min((currentPage - 1) * pageSize + 1, totalOrders)} đến{' '}
               <input
                 type="number"
@@ -481,12 +517,12 @@ const ProductionOrdersView = () => {
                   if (val >= 1 && val <= totalPages) setCurrentPage(val);
                 }}
                 style={{
-                  width: '40px', textAlign: 'center',
-                  border: '1.5px solid #c4a882',
+                  width: '34px', textAlign: 'center',
+                  border: '1.5px solid #cbd5e1',
                   borderRadius: '6px',
-                  padding: '4px 2px',
-                  fontSize: '0.82rem',
-                  fontWeight: '700',
+                  padding: '2px 0',
+                  fontSize: '0.8rem',
+                  fontWeight: '800',
                   color: '#1e293b',
                   outline: 'none',
                   margin: '0 2px'
@@ -499,14 +535,14 @@ const ProductionOrdersView = () => {
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage >= totalPages}
               style={{
-                width: '36px', height: '36px',
+                width: '32px', height: '32px',
                 border: '1px solid #cbd5e1',
                 borderRadius: '8px',
-                backgroundColor: currentPage >= totalPages ? '#f1f5f9' : '#fff',
+                backgroundColor: currentPage >= totalPages ? '#f8fafc' : '#fff',
                 cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: currentPage >= totalPages ? '#94a3b8' : '#334155',
-                fontSize: '1rem', fontWeight: '700'
+                color: currentPage >= totalPages ? '#cbd5e1' : '#334155',
+                fontSize: '0.95rem', fontWeight: '800'
               }}
             >
               ›

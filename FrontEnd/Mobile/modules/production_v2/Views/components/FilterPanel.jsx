@@ -4,10 +4,13 @@ import CustomSelect from '@mobile/Shared/Views/components/form/CustomSelect'
 import { STATUS_FILTER_OPTIONS, TICKET_TYPE_OPTIONS, BOM_STAGE_OPTIONS } from '../../constants'
 import { stageService } from '../../services/stageService'
 
+import apiClient from '@shared/services/api'
+
 const DEFAULT_FACTORIES = [
   { value: '', label: 'Tất cả nhà máy' },
-  { value: 'vanity01', label: 'Vanity 01' },
-  { value: 'vanity02', label: 'Vanity 02' },
+  { value: 'NM1', label: 'NM1 - Vaniti Phân Xưởng 1' },
+  { value: 'NM2', label: 'NM2 - Vaniti Phân Xưởng 2' },
+  { value: 'NM3', label: 'NM3 - Furniture nhà máy 3' },
 ]
 
 const FilterPanel = ({ open, filters, onApply, onClose }) => {
@@ -16,6 +19,7 @@ const FilterPanel = ({ open, filters, onApply, onClose }) => {
     { value: '', label: 'Tất cả công đoạn' },
     ...BOM_STAGE_OPTIONS.filter((s) => Boolean(s.value))
   ])
+  const [factoryOptions, setFactoryOptions] = useState(DEFAULT_FACTORIES)
 
   // Đồng bộ state bộ lọc mỗi khi mở popup hoặc khi prop filters thay đổi
   useEffect(() => {
@@ -24,7 +28,7 @@ const FilterPanel = ({ open, filters, onApply, onClose }) => {
     }
   }, [open, filters])
 
-  // Lấy danh sách công đoạn thực tế từ CSDL
+  // Lấy danh sách công đoạn và nhà máy thực tế từ CSDL
   useEffect(() => {
     stageService.getAll()
       .then((data) => {
@@ -34,6 +38,19 @@ const FilterPanel = ({ open, filters, onApply, onClose }) => {
             ...data.map((s) => ({ value: s.name || s.stage_name, label: s.name || s.stage_name }))
           ]
           setStageOptions(opts)
+        }
+      })
+      .catch(() => {})
+
+    apiClient.get('/production-v2/factories')
+      .then((res) => {
+        const facs = res.data || []
+        if (Array.isArray(facs) && facs.length > 0) {
+          const opts = [
+            { value: '', label: 'Tất cả nhà máy' },
+            ...facs.map((f) => ({ value: f.code, label: `${f.code} - ${f.name}` }))
+          ]
+          setFactoryOptions(opts)
         }
       })
       .catch(() => {})
@@ -85,7 +102,7 @@ const FilterPanel = ({ open, filters, onApply, onClose }) => {
 
           <div className="pv2-filter-field">
             <label>Lọc theo nhà máy</label>
-            <CustomSelect value={local.factory || ''} options={DEFAULT_FACTORIES} onChange={(v) => upd('factory', v)} />
+            <CustomSelect value={local.factory || ''} options={factoryOptions} onChange={(v) => upd('factory', v)} />
           </div>
 
           <div className="pv2-filter-field">

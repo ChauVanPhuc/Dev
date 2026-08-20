@@ -102,7 +102,8 @@ const ProductionOrderDetailView = () => {
     {
       header: 'STT',
       key: 'stt',
-      render: (row, idx) => <span style={{ fontWeight: '700', color: '#64748b' }}>{String(idx + 1).padStart(2, '0')}</span>
+      nowrap: true,
+      render: (row, idx) => <span style={{ fontWeight: '700', color: '#64748b' }}>{row?.stt || String((idx ?? 0) + 1).padStart(2, '0')}</span>
     },
     {
       header: 'Tên chi tiết',
@@ -182,7 +183,7 @@ const ProductionOrderDetailView = () => {
       <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, backgroundColor: '#faf6f1', paddingBottom: '56px' }}>
         
         {/* Sticky Toolbar (below PageHeader) */}
-        <div style={{ position: 'sticky', top: `${headerHeight}px`, zIndex: 8, backgroundColor: '#faf6f1', borderBottom: '1px solid #e2e8f0' }}>
+        <div style={{ position: 'sticky', top: 0, zIndex: 8, backgroundColor: '#faf6f1', borderBottom: '1px solid #e2e8f0' }}>
           {/* Toolbar: Select PO & Action Buttons */}
           <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', border: '1px solid #cbd5e1', borderRadius: '8px', backgroundColor: '#fff', padding: '0 10px', height: '40px' }}>
@@ -315,7 +316,7 @@ const ProductionOrderDetailView = () => {
                   key={st.stage_id}
                   title={st.stage_name}
                   progress={st.progress}
-                  defaultOpen={idx === 0}
+                  defaultOpen={processedDetails.length > 0}
                 >
                   <div style={{ padding: '8px' }}>
                     <DataTable columns={tableColumns} data={processedDetails} />

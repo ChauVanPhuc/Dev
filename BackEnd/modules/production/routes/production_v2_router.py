@@ -63,6 +63,45 @@ def read_stages_v2(db: Session = Depends(get_db)):
         return FALLBACK_STAGES
 
 # ----------------------------------------------------------------------
+# 0.1 API: Lấy danh sách Nhà máy từ CSDL (loại bỏ VP - Văn Phòng)
+# ----------------------------------------------------------------------
+@router.get("/factories")
+def get_factories(db: Session = Depends(get_db)):
+    """
+    Trả về danh sách Nhà máy từ bảng hr_factory_structures trong CSDL,
+    tự động loại bỏ 'VP' (Văn Phòng).
+    """
+    try:
+        from modules.hr.models.hr_models import HRFactoryStructure
+        db_factories = db.query(HRFactoryStructure).filter(
+            HRFactoryStructure.structure_code != "VP",
+            ~HRFactoryStructure.structure_name.ilike("%văn phòng%")
+        ).order_by(HRFactoryStructure.id.asc()).all()
+
+        if db_factories:
+            return [
+                {
+                    "id": f.id,
+                    "code": f.structure_code,
+                    "name": f.structure_name
+                }
+                for f in db_factories
+            ]
+
+        return [
+            {"id": 1, "code": "NM1", "name": "Vaniti Phân Xưởng 1"},
+            {"id": 2, "code": "NM2", "name": "Vaniti Phân Xưởng 2"},
+            {"id": 3, "code": "NM3", "name": "Furniture nhà máy 3"}
+        ]
+    except Exception as e:
+        logger.error(f"Lỗi khi lấy danh sách nhà máy: {e}")
+        return [
+            {"id": 1, "code": "NM1", "name": "Vaniti Phân Xưởng 1"},
+            {"id": 2, "code": "NM2", "name": "Vaniti Phân Xưởng 2"},
+            {"id": 3, "code": "NM3", "name": "Furniture nhà máy 3"}
+        ]
+
+# ----------------------------------------------------------------------
 # 0. API: Lấy danh sách Tháng có kế hoạch sản xuất từ CSDL
 # ----------------------------------------------------------------------
 @router.get("/available-months")
@@ -382,34 +421,61 @@ def get_production_order_detail(po_code: Optional[str] = None, po: Optional[str]
         product_ids = [p.id for p in db_order.products] if db_order and db_order.products else []
         db_boms = db.query(BOMDetail).filter(BOMDetail.product_id.in_(product_ids)).all() if product_ids else []
 
-        stage_names = [
-            ("dinh_hinh", "Định hình"),
-            ("lap_rap", "Lắp ráp"),
-            ("son", "Sơn"),
-            ("dong_goi", "Đóng gói"),
-            ("load_cont", "Load cont")
-        ]
+        # Query dynamic stages from DB
+        db_stages = db.query(Stage).filter(Stage.is_active == True).order_by(Stage.sequence.asc(), Stage.id.asc()).all()
+        if not db_stages:
+            db_stages = db.query(Stage).order_by(Stage.sequence.asc(), Stage.id.asc()).all()
 
-        def matches_stage(bom_item, stage_id: str) -> bool:
-            inp = (bom_item.input_stage or "").lower()
-            if stage_id == "dinh_hinh":
-                return any(k in inp for k in ["định hình", "dinh hinh", "nh hnh", "nh hình", "tạo phôi", "to phi"]) or not bom_item.input_stage
-            elif stage_id == "lap_rap":
-                return any(k in inp for k in ["lắp ráp", "lap rap", "lp rp", "chà nhám", "ch nhm"])
-            elif stage_id == "son":
-                return any(k in inp for k in ["sơn", "son", "sn"])
-            elif stage_id == "dong_goi":
-                return any(k in inp for k in ["đóng gói", "dong goi", "ng gi"])
-            elif stage_id == "load_cont":
-                return any(k in inp for k in ["load cont", "kho", "container"])
-            return False
+        if db_stages:
+            stage_list = [{"id": f"stage_{s.id}", "db_id": s.id, "name": s.name, "code": s.code or f"CD{s.id:02d}"} for s in db_stages]
+        else:
+            stage_list = [
+                {"id": "stage_1", "db_id": 1, "name": "Định hình", "code": "CD01"},
+                {"id": "stage_2", "db_id": 2, "name": "Lắp ráp", "code": "CD02"},
+                {"id": "stage_3", "db_id": 3, "name": "Sơn", "code": "CD03"},
+                {"id": "stage_4", "db_id": 4, "name": "Đóng gói", "code": "CD04"},
+                {"id": "stage_5", "db_id": 5, "name": "Load cont", "code": "CD05"}
+            ]
+
+        def get_stage_seq(stage_name_or_code: str) -> int:
+            if not stage_name_or_code:
+                return 0
+            s_str = stage_name_or_code.lower().strip()
+            for idx, st_item in enumerate(stage_list, 1):
+                st_n = st_item["name"].lower().strip()
+                st_c = st_item["code"].lower().strip()
+                if st_n in s_str or s_str in st_n or st_c in s_str:
+                    return idx
+                if ("định hình" in s_str or "dinh hinh" in s_str or "phôi" in s_str) and ("định hình" in st_n or "phôi" in st_n):
+                    return idx
+                if ("lắp ráp" in s_str or "lap rap" in s_str) and ("lắp ráp" in st_n or "nhám" in st_n):
+                    return idx
+                if ("sơn" in s_str or "son" in s_str) and "sơn" in st_n:
+                    return idx
+                if ("đóng gói" in s_str or "dong goi" in s_str) and "đóng gói" in st_n:
+                    return idx
+                if ("load" in s_str or "cont" in s_str or "lưu kho" in s_str or "kho" in s_str) and ("load" in st_n or "kho" in st_n or "cont" in st_n):
+                    return idx
+            return 1
+
+        def matches_stage(bom_item, current_st_idx: int) -> bool:
+            inp_seq = get_stage_seq(bom_item.input_stage) if bom_item.input_stage else 1
+            out_seq = get_stage_seq(bom_item.output_stage) if bom_item.output_stage else len(stage_list)
+
+            if out_seq < inp_seq:
+                out_seq = len(stage_list)
+
+            curr_seq = current_st_idx + 1
+            return inp_seq <= curr_seq <= out_seq
 
         stages = []
         if db_order and db_order.products:
             # Check if there are any BOM details across all products
             has_boms = len(db_boms) > 0
 
-            for st_idx, (st_id, st_name) in enumerate(stage_names):
+            for st_idx, st_obj in enumerate(stage_list):
+                st_id = st_obj["id"]
+                st_name = st_obj["name"]
                 details = []
                 total_ord = 0
                 total_prod = 0
@@ -418,21 +484,21 @@ def get_production_order_detail(po_code: Optional[str] = None, po: Optional[str]
                     # 1. Group and show specific BOM Details
                     for p in db_order.products:
                         prod_q = float(p.order_qty or p.quantity or 1.0)
-                        matching_boms = [b for b in db_boms if b.product_id == p.id and matches_stage(b, st_id)]
+                        matching_boms = [b for b in db_boms if b.product_id == p.id and matches_stage(b, st_idx)]
 
                         for b in matching_boms:
                             bom_unit_qty = float(b.quantity or 1.0)
                             required_qty = max(1, int(prod_q * bom_unit_qty))
-                            part_title = b.sku or b.name or f"Chi tiết {b.id}"
+                            part_title = b.name or b.sku or f"Chi tiết {b.id}"
 
                             # Calculate actual handoff quantity from real deliveries table
                             matching_deliveries = [
                                 d for d in deliveries_query 
                                 if (
-                                    (d.part_name and b.sku.lower() in d.part_name.lower()) or 
-                                    (d.part_name and b.name.lower() in d.part_name.lower()) or 
-                                    (d.specification and b.sku.lower() in d.specification.lower()) or
-                                    (d.specification and b.name.lower() in d.specification.lower())
+                                    (d.part_name and (b.sku or "").lower() in (d.part_name or "").lower()) or 
+                                    (d.part_name and (b.name or "").lower() in (d.part_name or "").lower()) or 
+                                    (d.specification and (b.sku or "").lower() in (d.specification or "").lower()) or
+                                    (d.specification and (b.name or "").lower() in (d.specification or "").lower())
                                 ) and (
                                     (st_name.lower() in (d.delivery_stage or "").lower()) or
                                     (st_name.lower() in (d.receiving_stage or "").lower())
@@ -454,26 +520,26 @@ def get_production_order_detail(po_code: Optional[str] = None, po: Optional[str]
 
                             details.append({
                                 "stt": f"{len(details) + 1:02d}",
-                                "part_name": b.name or b.sku,
+                                "part_name": part_title,
                                 "quantity_str": f"{actual_qty}/{required_qty}",
                                 "progress": prog,
-                                "area": "NM1" if db_order.id % 2 == 1 else "NM2",
+                                "area": "NM2" if "nm2" in (b.input_stage or "").lower() else ("NM3" if "nm3" in (b.input_stage or "").lower() else "NM1"),
                                 "status": st_status,
                                 "status_color": st_color
                             })
                 else:
                     # 2. Fallback to main products if order has no BOM definitions
-                    # Only show main product in stage 1 (dinh_hinh) or if matching deliveries exist for that stage
+                    # Show PO products across main production stages
                     for p_idx, p in enumerate(db_order.products, 1):
                         ord_q = int(p.order_qty or p.quantity or 12)
-                        part_title = p.sku or p.name or f"Chi tiết {p_idx}"
+                        part_title = p.sku or p.name or f"Sản phẩm {p_idx}"
 
                         # Calculate actual handoff quantity from real deliveries table
                         matching_deliveries = [
                             d for d in deliveries_query 
                             if (
-                                (d.part_name and part_title.lower() in d.part_name.lower()) or 
-                                (d.specification and part_title.lower() in d.specification.lower())
+                                (d.part_name and part_title.lower() in (d.part_name or "").lower()) or 
+                                (d.specification and part_title.lower() in (d.specification or "").lower())
                             ) and (
                                 (st_name.lower() in (d.delivery_stage or "").lower()) or
                                 (st_name.lower() in (d.receiving_stage or "").lower())
@@ -482,25 +548,23 @@ def get_production_order_detail(po_code: Optional[str] = None, po: Optional[str]
 
                         actual_qty = sum(int(d.quantity_received or d.quantity_total or 0) for d in matching_deliveries) if matching_deliveries else 0
 
-                        # Only include in details if it's the primary stage (dinh_hinh) or matching deliveries exist
-                        if st_id == 'dinh_hinh' or matching_deliveries:
-                            actual_qty = min(ord_q, actual_qty)
-                            total_ord += ord_q
-                            total_prod += actual_qty
+                        actual_qty = min(ord_q, actual_qty)
+                        total_ord += ord_q
+                        total_prod += actual_qty
 
-                            prog = int((actual_qty / ord_q) * 100) if ord_q > 0 else 0
-                            st_status = "Hoàn thành" if prog >= 100 else ("Đang SX" if prog > 0 else "Chưa SX")
-                            st_color = "#1e293b" if prog >= 100 else ("#16a34a" if prog > 0 else "#dc2626")
+                        prog = int((actual_qty / ord_q) * 100) if ord_q > 0 else 0
+                        st_status = "Hoàn thành" if prog >= 100 else ("Đang SX" if prog > 0 else "Chưa SX")
+                        st_color = "#1e293b" if prog >= 100 else ("#16a34a" if prog > 0 else "#dc2626")
 
-                            details.append({
-                                "stt": f"{p_idx:02d}",
-                                "part_name": part_title,
-                                "quantity_str": f"{actual_qty}/{ord_q}",
-                                "progress": prog,
-                                "area": "NM1" if db_order.id % 2 == 1 else "NM2",
-                                "status": st_status,
-                                "status_color": st_color
-                            })
+                        details.append({
+                            "stt": f"{p_idx:02d}",
+                            "part_name": part_title,
+                            "quantity_str": f"{actual_qty}/{ord_q}",
+                            "progress": prog,
+                            "area": "NM1",
+                            "status": st_status,
+                            "status_color": st_color
+                        })
 
                 st_progress = int((total_prod / total_ord) * 100) if total_ord > 0 else 0
                 st_color = "#16a34a" if st_progress >= 50 else ("#dc2626" if st_progress > 0 else "#cbd5e1")
@@ -515,13 +579,13 @@ def get_production_order_detail(po_code: Optional[str] = None, po: Optional[str]
         else:
             stages = [
                 {
-                    "stage_id": st_id,
-                    "stage_name": st_name,
+                    "stage_id": st_obj["id"],
+                    "stage_name": st_obj["name"],
                     "progress": 0,
                     "progress_color": "#cbd5e1",
                     "details": []
                 }
-                for st_id, st_name in stage_names
+                for st_obj in stage_list
             ]
 
         return {
@@ -938,7 +1002,7 @@ def get_production_plans_schedule(
             progress = int((actual_q / target_q) * 100) if target_q > 0 else 0
             status = "Hoàn thành" if progress >= 100 else ("Đang SX" if progress > 0 else "Chưa SX")
             status_color = "#1e293b" if progress >= 100 else ("#16a34a" if progress > 0 else "#dc2626")
-            area_code = "NM1" if idx % 2 == 1 else "NM2"
+            area_code = "NM1"
 
             items_list.append({
                 "stt": f"{idx:02d}",

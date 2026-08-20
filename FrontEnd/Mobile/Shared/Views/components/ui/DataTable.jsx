@@ -67,7 +67,7 @@ const DataTable = ({ columns, data, onRowClick, stickyHeader = false, stickyTopO
                     }}
                   >
                     {col.render ? (
-                      col.render(row)
+                      col.render(row, rowIndex)
                     ) : col.key === 'status' ? (
                       <span style={{
                         backgroundColor: 

@@ -105,7 +105,7 @@ const ProductionTransferHistoryView = () => {
     <Layout>
       <PageHeader title="Thông tin sản xuất" subTitle="CL05: Lịch sử luân chuyển" />
 
-      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, backgroundColor: '#faf6f1', paddingBottom: '56px' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, backgroundColor: '#faf6f1', position: 'relative' }}>
         
         {/* Sticky Filter Container matching Mockup Image 1 (below PageHeader) */}
         <div style={{ position: 'sticky', top: 0, zIndex: 8, backgroundColor: '#faf6f1', borderBottom: '1px solid #e2e8f0' }}>
@@ -188,7 +188,7 @@ const ProductionTransferHistoryView = () => {
         </div>
 
         {/* Transfers Cards List */}
-        <div style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
           {loading ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Đang tải lịch sử luân chuyển...</div>
           ) : transfers.length === 0 ? (
@@ -287,13 +287,14 @@ const ProductionTransferHistoryView = () => {
           )}
         </div>
 
-        {/* Pagination Bar - Fixed at bottom */}
+        {/* Pagination Bar - Fixed inside frame at bottom */}
         {!loading && total > 0 && (
           <div style={{
-            position: 'fixed',
+            position: 'sticky',
             bottom: 0,
-            left: 0,
-            right: 0,
+            marginTop: 'auto',
+            width: '100%',
+            boxSizing: 'border-box',
             backgroundColor: '#fff',
             padding: '10px 14px',
             borderTop: '1px solid #e2e8f0',

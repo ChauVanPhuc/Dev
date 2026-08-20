@@ -11,6 +11,7 @@ const ProductionPlanScheduleView = () => {
   // Dynamic Options
   const [availableMonths, setAvailableMonths] = useState([]);
   const [availableStages, setAvailableStages] = useState([]);
+  const [availableFactories, setAvailableFactories] = useState([]);
 
   // Filters
   const [month, setMonth] = useState('');
@@ -25,13 +26,14 @@ const ProductionPlanScheduleView = () => {
   const [total, setTotal] = useState(0);
   const pageSize = 10;
 
-  // 1. Fetch available months and stages on mount
+  // 1. Fetch available months, stages, and factories on mount
   useEffect(() => {
     const fetchMetadata = async () => {
       try {
-        const [monthsResp, stagesResp] = await Promise.all([
+        const [monthsResp, stagesResp, factoriesResp] = await Promise.all([
           apiClient.get('/production-v2/available-months'),
-          apiClient.get('/production-v2/stages')
+          apiClient.get('/production-v2/stages'),
+          apiClient.get('/production-v2/factories')
         ]);
 
         const months = monthsResp.data?.months || [];
@@ -46,6 +48,9 @@ const ProductionPlanScheduleView = () => {
 
         const stages = stagesResp.data || [];
         setAvailableStages(stages);
+
+        const factories = factoriesResp.data || [];
+        setAvailableFactories(factories);
       } catch (err) {
         console.error('Lỗi khi tải danh mục Kế hoạch sản xuất:', err);
       }
@@ -158,9 +163,9 @@ const ProductionPlanScheduleView = () => {
                 style={{ height: '36px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 6px', fontSize: '0.8rem', fontWeight: '700', outline: 'none' }}
               >
                 <option value="ALL">Tất cả</option>
-                <option value="NM1">NM1</option>
-                <option value="NM2">NM2</option>
-                <option value="NM3">NM3</option>
+                {availableFactories.map(f => (
+                  <option key={f.id || f.code} value={f.code}>{f.code}</option>
+                ))}
               </select>
             </div>
 
