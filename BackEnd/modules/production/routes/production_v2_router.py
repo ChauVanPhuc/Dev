@@ -928,12 +928,69 @@ def get_production_plans_schedule(
             if m_match:
                 m_int = int(m_match.group())
 
+        # Query dynamic stages from DB for sequence-based range matching
+        from modules.production.models.stages import Stage
+        from modules.master.controllers.master_product_controller import resolve_detail_stages
+        
+        db_stages = db.query(Stage).filter(Stage.is_active == True).order_by(Stage.sequence.asc(), Stage.id.asc()).all()
+        if not db_stages:
+            db_stages = db.query(Stage).order_by(Stage.sequence.asc(), Stage.id.asc()).all()
+
+        if db_stages:
+            stage_list = [{"id": f"stage_{s.id}", "db_id": s.id, "name": s.name, "code": s.code or f"CD{s.id:02d}"} for s in db_stages]
+        else:
+            stage_list = [
+                {"id": "stage_1", "db_id": 1, "name": "Đầu Vào", "code": "CD01"},
+                {"id": "stage_2", "db_id": 2, "name": "Tạo Phôi", "code": "CD02"},
+                {"id": "stage_3", "db_id": 3, "name": "Định Hình", "code": "CD03"},
+                {"id": "stage_4", "db_id": 4, "name": "Lắp Ráp", "code": "CD04"},
+                {"id": "stage_5", "db_id": 5, "name": "Sơn", "code": "CD05"},
+                {"id": "stage_6", "db_id": 6, "name": "Đóng Gói", "code": "CD06"},
+                {"id": "stage_7", "db_id": 7, "name": "Lưu Kho", "code": "CD07"}
+            ]
+
+        def get_stage_seq(stage_name_or_code: str) -> int:
+            if not stage_name_or_code:
+                return 0
+            s_str = stage_name_or_code.lower().strip()
+            for idx, st_item in enumerate(stage_list, 1):
+                st_n = st_item["name"].lower().strip()
+                st_c = st_item["code"].lower().strip()
+                if st_n in s_str or s_str in st_n or st_c in s_str:
+                    return idx
+                if ("định hình" in s_str or "dinh hinh" in s_str) and "định hình" in st_n:
+                    return idx
+                if ("tạo phôi" in s_str or "tao phoi" in s_str or "phôi" in s_str) and "phôi" in st_n:
+                    return idx
+                if ("lắp ráp" in s_str or "lap rap" in s_str) and ("lắp ráp" in st_n or "nhám" in st_n):
+                    return idx
+                if ("sơn" in s_str or "son" in s_str) and "sơn" in st_n:
+                    return idx
+                if ("đóng gói" in s_str or "dong goi" in s_str) and "đóng gói" in st_n:
+                    return idx
+                if ("load" in s_str or "cont" in s_str or "lưu kho" in s_str or "kho" in s_str) and ("kho" in st_n or "cont" in st_n):
+                    return idx
+            return 1
+
+        selected_st_seq = 0
+        if stage and stage.strip().upper() not in ["ALL", "TẤT CẢ", "TẤT CẢ CÔNG ĐOẠN", ""]:
+            selected_st_seq = get_stage_seq(stage)
+
+        stage_map = {}
+        try:
+            for sr in db.execute(text("SELECT DISTINCT name, input_stage, output_stage FROM master_product_details WHERE name IS NOT NULL")).fetchall():
+                if sr[0] and sr[0] not in stage_map:
+                    in_s, out_s = resolve_detail_stages(sr[1], sr[2])
+                    stage_map[sr[0]] = {"input_stage": in_s, "output_stage": out_s}
+        except Exception:
+            pass
+
         # 1. Fetch parts & target quantities from BOM / Products in Orders
         sql_bom = """
         SELECT 
             b.name AS part_name, b.specification,
-            b.quantity AS bom_unit_qty, p.order_qty,
-            p.quantity AS prod_qty, o.id AS order_id, pl.month
+            b.quantity AS bom_unit_qty, b.input_stage, b.output_stage,
+            p.order_qty, p.quantity AS prod_qty, o.id AS order_id, pl.month
         FROM bom_details b
         JOIN products p ON b.product_id = p.id
         JOIN orders o ON p.order_id = o.id
@@ -948,8 +1005,8 @@ def get_production_plans_schedule(
             sql_prod = """
             SELECT 
                 p.name AS part_name, p.sku AS specification,
-                1.0 AS bom_unit_qty, p.order_qty,
-                p.quantity AS prod_qty, o.id AS order_id, pl.month
+                1.0 AS bom_unit_qty, NULL AS input_stage, NULL AS output_stage,
+                p.order_qty, p.quantity AS prod_qty, o.id AS order_id, pl.month
             FROM products p
             JOIN orders o ON p.order_id = o.id
             LEFT JOIN product_plans pl ON o.plan_id = pl.id
@@ -966,6 +1023,24 @@ def get_production_plans_schedule(
             pname = (r.part_name or "").strip()
             if not pname:
                 continue
+
+            # Dynamic stage sequence range check
+            if selected_st_seq > 0:
+                in_st = getattr(r, 'input_stage', None)
+                out_st = getattr(r, 'output_stage', None)
+                if not in_st or not out_st:
+                    master_st = stage_map.get(pname, {})
+                    in_st = in_st or master_st.get("input_stage")
+                    out_st = out_st or master_st.get("output_stage")
+
+                inp_seq = get_stage_seq(in_st) if in_st else 1
+                out_seq = get_stage_seq(out_st) if out_st else len(stage_list)
+                if out_seq < inp_seq:
+                    out_seq = len(stage_list)
+
+                if not (inp_seq <= selected_st_seq <= out_seq):
+                    continue
+
             ord_q = float(r.order_qty or r.prod_qty or 1.0)
             bom_q = float(r.bom_unit_qty or 1.0)
             target_q = max(1, int(ord_q * bom_q))
