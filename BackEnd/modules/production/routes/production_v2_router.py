@@ -488,7 +488,7 @@ def get_production_order_detail(po_code: Optional[str] = None, po: Optional[str]
 
                         for b in matching_boms:
                             bom_unit_qty = float(b.quantity or 1.0)
-                            required_qty = max(1, int(prod_q * bom_unit_qty))
+                            required_qty = int(bom_unit_qty) if bom_unit_qty >= 1.0 else max(1, int(prod_q * bom_unit_qty))
                             part_title = b.name or b.sku or f"Chi tiết {b.id}"
 
                             # Calculate actual handoff quantity from real deliveries table
@@ -831,7 +831,7 @@ def get_parts_by_month(month: Optional[Any] = Query(None), db: Session = Depends
                 continue
             p_qty = float(r.order_qty or r.prod_qty or 1.0)
             b_qty = float(r.bom_unit_qty or 1.0)
-            calc_target = max(1, int(p_qty * b_qty))
+            calc_target = int(b_qty) if b_qty >= 1.0 else max(1, int(p_qty * b_qty))
             spec_str = (r.specification or "Tiêu chuẩn").split("-")[0].strip() or "Tiêu chuẩn"
 
             if name not in parts_map:
@@ -1043,7 +1043,7 @@ def get_production_plans_schedule(
 
             ord_q = float(r.order_qty or r.prod_qty or 1.0)
             bom_q = float(r.bom_unit_qty or 1.0)
-            target_q = max(1, int(ord_q * bom_q))
+            target_q = int(bom_q) if bom_q >= 1.0 else max(1, int(ord_q * bom_q))
 
             if pname not in parts_summary:
                 parts_summary[pname] = {
