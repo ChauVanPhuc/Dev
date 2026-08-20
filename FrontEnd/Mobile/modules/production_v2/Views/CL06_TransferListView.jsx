@@ -4,6 +4,7 @@ import { ArrowDownAZ, Filter, Plus, X, ChevronLeft, ChevronRight, ClipboardX } f
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout'
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader'
 import CustomSelect from '@mobile/Shared/Views/components/form/CustomSelect'
+import MessageModal from '@mobile/Shared/Views/components/feedback/MessageModal'
 import { useTransferController } from '../Controllers/useTransferController'
 import TransferCard from './components/TransferCard'
 import FilterPanel from './components/FilterPanel'
@@ -20,6 +21,18 @@ const CL06_TransferListView = () => {
   const [filterOpen, setFilterOpen] = useState(false)
   const [selectedTicket, setSelectedTicket] = useState(null)
   const [confirming, setConfirming] = useState(false)
+
+  // Message Modal State
+  const [msgModal, setMsgModal] = useState({
+    isOpen: false,
+    type: 'info',
+    title: '',
+    message: ''
+  })
+
+  const showMessage = (type, title, message) => {
+    setMsgModal({ isOpen: true, type, title, message })
+  }
 
   const monthOptions = availableMonths.length > 0
     ? availableMonths.map((m) => ({ value: m.month, label: `Tháng ${m.month}` }))
@@ -50,14 +63,27 @@ const CL06_TransferListView = () => {
   const myPendingCount = myTickets.filter((t) => !isHistoryStatus(t.status)).length
 
   const handleConfirmReceived = async (ticket) => {
+    if (!ticket || ticket.id === undefined || ticket.id === null) {
+      showMessage('error', 'Lỗi dữ liệu', 'Không tìm thấy ID phiếu luân chuyển để xác nhận!')
+      return
+    }
     setConfirming(true)
     try {
-      await confirmTicket(ticket.id, { status: 'Đã nhận' })
-      alert(`Đã xác nhận nhận hàng thành công cho phiếu ${ticket.code || ticket.id}`)
+      await confirmTicket(ticket.id, {
+        user_id: user?.id || 1,
+        sx_receipt: user?.id || 1,
+        quantity_received: Number(ticket.quantity || ticket.quantity_total || 0),
+        status: 'Hoàn Thành'
+      })
       setSelectedTicket(null)
+      showMessage('success', 'Xác nhận thành công', `Đã xác nhận nhận hàng thành công cho phiếu ${ticket.code || `LC${ticket.id}`}`)
       refresh()
     } catch (e) {
-      alert('Lỗi xác nhận nhận hàng: ' + (e.message || 'Không rõ nguyên nhân'))
+      console.error('Lỗi xác nhận nhận hàng:', e)
+      const errDetail = e.response?.data?.detail
+        ? (typeof e.response.data.detail === 'string' ? e.response.data.detail : JSON.stringify(e.response.data.detail))
+        : (e.message || 'Không rõ nguyên nhân')
+      showMessage('error', 'Lỗi xác nhận', errDetail)
     } finally {
       setConfirming(false)
     }
@@ -222,6 +248,14 @@ const CL06_TransferListView = () => {
         filters={filters}
         onApply={(f) => setFilters({ ...f, page: 1 })}
         onClose={() => setFilterOpen(false)}
+      />
+
+      <MessageModal
+        isOpen={msgModal.isOpen}
+        type={msgModal.type}
+        title={msgModal.title}
+        message={msgModal.message}
+        onConfirm={() => setMsgModal((prev) => ({ ...prev, isOpen: false }))}
       />
     </Layout>
   )

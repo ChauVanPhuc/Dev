@@ -24,7 +24,7 @@ const ProductionPlanScheduleView = () => {
   // Pagination
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const pageSize = 10;
+  const pageSize = 50;
 
   // 1. Fetch available months, stages, and factories on mount
   useEffect(() => {

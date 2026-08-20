@@ -123,6 +123,7 @@ def migrate():
 
         create_children = [
             ("Tạo phiếu luân chuyển", "/production_v2/transfer", "MessageSquare"),
+            ("Danh sách luân chuyển", "/production_v2/transfer-list", "ClipboardList"),
             ("Tạo phiếu kiểm tra", "/production_v2/inspection", "MessageSquare"),
         ]
 

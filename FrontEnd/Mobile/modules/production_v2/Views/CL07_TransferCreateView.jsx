@@ -52,7 +52,7 @@ const CL07_TransferCreateView = () => {
     })
     return () => { mounted = false }
   }, [isNew, id])
-  const { ticket, loading, images, addImage, removeImage } = useTransferDetail(isNew ? null : id)
+  const { ticket, loading, images, setImages, addImage, removeImage } = useTransferDetail(isNew ? null : id)
   const { transferFilters } = useProduction_v2Store()
 
   const selectedMonth = transferFilters?.month || (new Date().getMonth() + 1)
@@ -72,16 +72,45 @@ const CL07_TransferCreateView = () => {
   const [palletData, setPalletData] = useState(null)
   const [palletPartProducts, setPalletPartProducts] = useState([])
   const [planName, setPlanName] = useState('Luân chuyển sản xuất')
+  const [planId, setPlanId] = useState(1)
   const [productOptions, setProductOptions] = useState([{ value: '', label: 'Chọn chi tiết' }])
   const [stageOptions, setStageOptions] = useState(
     [{ value: '', label: 'Chọn công đoạn' }]
   )
+  const [palletOpts, setPalletOpts] = useState([{ value: '', label: 'Chọn mã pallet' }])
   const fileRef = useRef()
   const specDropRef = useRef()
 
   const [partsData, setPartsData] = useState([])
   const [specOptions, setSpecOptions] = useState([{ value: '', label: 'Chọn quy cách' }])
   const [specDropdownOpen, setSpecDropdownOpen] = useState(false)
+
+  // Load danh sách mã pallet đã được kiểm tra từ CL09A / StageInspections
+  useEffect(() => {
+    let isMounted = true
+    const fetchInspectedPallets = async () => {
+      try {
+        const res = await apiClient.get('/inspections/pallets')
+        const itemsList = res.data || []
+        if (Array.isArray(itemsList) && itemsList.length > 0 && isMounted) {
+          const opts = [
+            { value: '', label: 'Chọn mã pallet' },
+            ...itemsList.map((p) => {
+              const code = p.palletCode || p.code
+              const prod = p.product ? ` - ${p.product}` : ''
+              const po = p.po ? ` (${p.po})` : ''
+              return { value: code, label: `${code}${prod}${po}` }
+            })
+          ]
+          setPalletOpts(opts)
+        }
+      } catch (err) {
+        console.warn('Lỗi khi lấy danh sách mã pallet từ /inspections/pallets:', err)
+      }
+    }
+    fetchInspectedPallets()
+    return () => { isMounted = false }
+  }, [])
 
   // Click outside đóng dropdown spec
   useEffect(() => {
@@ -110,6 +139,7 @@ const CL07_TransferCreateView = () => {
   useEffect(() => {
     transferService.getPlanByMonth(selectedMonth).then((p) => {
       setPlanName(p.code || p.name || 'Luân chuyển sản xuất')
+      if (p.id) setPlanId(p.id)
     })
   }, [selectedMonth])
 
@@ -266,8 +296,74 @@ const CL07_TransferCreateView = () => {
 
   const selectedSpecs = items.map((it) => it.spec)
 
-  const handlePalletChange = (val) => {
+  const getNextStageName = (currentStage, allStageOpts) => {
+    if (!currentStage || !Array.isArray(allStageOpts)) return ''
+    const validOpts = allStageOpts.filter((o) => o.value)
+    const normCurrent = String(currentStage).toLowerCase().trim()
+    const idx = validOpts.findIndex((o) => {
+      const normVal = String(o.value).toLowerCase().trim()
+      return normVal === normCurrent || normVal.includes(normCurrent) || normCurrent.includes(normVal)
+    })
+    if (idx >= 0 && idx < validOpts.length - 1) {
+      return validOpts[idx + 1].value
+    }
+    return ''
+  }
+
+  const handlePalletChange = async (val) => {
     upd('palletCode', val)
+    if (!val) return
+
+    try {
+      const res = await apiClient.get(`/inspections/pallet/${encodeURIComponent(val)}`)
+      const palletInfo = res.data
+      if (!palletInfo) return
+
+      const detailName = palletInfo.product || ''
+      const specValue = palletInfo.spec || 'Tiêu chuẩn'
+      const fromSt = palletInfo.stage || 'Tạo phôi'
+      const nextSt = getNextStageName(fromSt, stageOptions)
+
+      // Cập nhật thông tin chi tiết và công đoạn (không nạp số lượng và ảnh từ phiếu kiểm tra)
+      setForm((prev) => ({
+        ...prev,
+        palletCode: val,
+        detail: detailName || prev.detail,
+        spec: specValue || prev.spec,
+        totalQty: '0',
+        surplus: '',
+        fromStage: fromSt,
+        toStage: nextSt || prev.toStage,
+      }))
+
+      if (detailName) {
+        const partObj = partsData.find((p) => (p.part_name || p.name) === detailName)
+        if (partObj && Array.isArray(partObj.specs) && partObj.specs.length > 0) {
+          setSpecOptions([
+            { value: '', label: 'Chọn quy cách' },
+            ...partObj.specs.map((s) => ({ value: s.specification, label: s.specification }))
+          ])
+        } else {
+          setSpecOptions([
+            { value: '', label: 'Chọn quy cách' },
+            { value: specValue, label: specValue }
+          ])
+        }
+
+        const targetQty = Number(palletInfo.requiredQty || 0)
+        setItems([
+          {
+            id: String(Date.now()),
+            detail: detailName,
+            spec: specValue,
+            qty: 0,
+            total: targetQty,
+          }
+        ])
+      }
+    } catch (err) {
+      console.warn(`Lỗi khi tải chi tiết mã pallet ${val}:`, err)
+    }
   }
 
   const handleToggleNoPallet = () => {
@@ -349,7 +445,12 @@ const CL07_TransferCreateView = () => {
     setSubmitting(true)
     try {
       if (isNew) {
-        await createTicket({ ...form, items })
+        await createTicket({
+          ...form,
+          items,
+          plan_id: planId,
+          user_id: user?.id || 1
+        })
         showMessage('Thành công', 'Đã tạo phiếu luân chuyển thành công!', 'success', () => {
           navigate(ROUTES.TRANSFER_LIST)
         })
@@ -360,7 +461,11 @@ const CL07_TransferCreateView = () => {
         })
       }
     } catch (e) {
-      showMessage('Lỗi xử lý phiếu', e.message || 'Không thể xử lý phiếu luân chuyển. Vui lòng thử lại.', 'error')
+      console.error('Lỗi khi xử lý phiếu luân chuyển:', e)
+      const errorMsg = e.response?.data?.detail
+        ? (typeof e.response.data.detail === 'string' ? e.response.data.detail : JSON.stringify(e.response.data.detail))
+        : (e.message || 'Không thể xử lý phiếu luân chuyển. Vui lòng thử lại.')
+      showMessage('Lỗi xử lý phiếu', errorMsg, 'error')
     } finally {
       setSubmitting(false)
     }

@@ -78,7 +78,8 @@ const Sidebar = () => {
             route_path: '#',
             icon: 'MessageSquare',
             children: [
-              { id: 'sub-pv2-2', title: 'Tạo phiếu luân chuyển', route_path: '/production_v2/transfer', icon: 'MessageSquare' },
+              { id: 'sub-pv2-1', title: 'Tạo phiếu luân chuyển', route_path: '/production_v2/transfer', icon: 'MessageSquare' },
+              { id: 'sub-pv2-2', title: 'Danh sách luân chuyển', route_path: '/production_v2/transfer-list', icon: 'ClipboardList' },
               { id: 'sub-pv2-4', title: 'Tạo phiếu kiểm tra', route_path: '/production_v2/inspection', icon: 'MessageSquare' }
             ]
           };
@@ -88,6 +89,25 @@ const Sidebar = () => {
           } else {
             items.push(prodV2Group);
           }
+        } else {
+          // If "Khởi tạo phiếu" exists, ensure "Danh sách luân chuyển" is in its children if missing
+          items = items.map(item => {
+            if (item.title === 'Khởi tạo phiếu' || item.id === 'prod-info-v2-menu') {
+              const children = item.children ? [...item.children] : [];
+              const hasList = children.some(c => c.route_path === '/production_v2/transfer-list' || c.title === 'Danh sách luân chuyển');
+              if (!hasList) {
+                const insertIdx = children.findIndex(c => c.route_path === '/production_v2/transfer');
+                const listSub = { id: 'sub-pv2-2', title: 'Danh sách luân chuyển', route_path: '/production_v2/transfer-list', icon: 'ClipboardList' };
+                if (insertIdx !== -1) {
+                  children.splice(insertIdx + 1, 0, listSub);
+                } else {
+                  children.unshift(listSub);
+                }
+              }
+              return { ...item, children };
+            }
+            return item;
+          });
         }
 
         setMenuList(items)
@@ -111,7 +131,8 @@ const Sidebar = () => {
             route_path: '#',
             icon: 'MessageSquare',
             children: [
-              { id: 'sub-pv2-2', title: 'Tạo phiếu luân chuyển', route_path: '/production_v2/transfer', icon: 'MessageSquare' },
+              { id: 'sub-pv2-1', title: 'Tạo phiếu luân chuyển', route_path: '/production_v2/transfer', icon: 'MessageSquare' },
+              { id: 'sub-pv2-2', title: 'Danh sách luân chuyển', route_path: '/production_v2/transfer-list', icon: 'ClipboardList' },
               { id: 'sub-pv2-4', title: 'Tạo phiếu kiểm tra', route_path: '/production_v2/inspection', icon: 'MessageSquare' }
             ]
           },

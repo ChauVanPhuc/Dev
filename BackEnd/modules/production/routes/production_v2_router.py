@@ -409,13 +409,8 @@ def get_production_order_detail(po_code: Optional[str] = None, po: Optional[str]
         all_pos = all_pos[:29]
         all_pos.insert(0, po_code)
 
-        # Query actual handoff tickets from deliveries table for this order/plan
-        deliveries_query = db.query(Delivery).filter(
-            or_(
-                Delivery.order_id == db_order.id,
-                Delivery.plan_id == db_order.plan_id
-            )
-        ).all() if db_order else []
+        # Query actual handoff tickets from deliveries table
+        deliveries_query = db.query(Delivery).all()
 
         # Query BOM Details for products in this order
         product_ids = [p.id for p in db_order.products] if db_order and db_order.products else []
@@ -500,8 +495,7 @@ def get_production_order_detail(po_code: Optional[str] = None, po: Optional[str]
                                     (d.specification and (b.sku or "").lower() in (d.specification or "").lower()) or
                                     (d.specification and (b.name or "").lower() in (d.specification or "").lower())
                                 ) and (
-                                    (st_name.lower() in (d.delivery_stage or "").lower()) or
-                                    (st_name.lower() in (d.receiving_stage or "").lower())
+                                    st_name.lower() in (d.delivery_stage or "").lower()
                                 )
                             ]
 
@@ -541,8 +535,7 @@ def get_production_order_detail(po_code: Optional[str] = None, po: Optional[str]
                                 (d.part_name and part_title.lower() in (d.part_name or "").lower()) or 
                                 (d.specification and part_title.lower() in (d.specification or "").lower())
                             ) and (
-                                (st_name.lower() in (d.delivery_stage or "").lower()) or
-                                (st_name.lower() in (d.receiving_stage or "").lower())
+                                st_name.lower() in (d.delivery_stage or "").lower()
                             )
                         ]
 
@@ -896,11 +889,11 @@ def get_plan_by_month(month: Optional[Any] = Query(None), db: Session = Depends(
         if m_int is not None:
             plan = db.query(ProductPlan).filter(ProductPlan.month == m_int).order_by(ProductPlan.id.desc()).first()
             if plan:
-                return {"code": plan.code or "", "name": plan.name or "", "month": plan.month, "year": plan.year}
-        return {"code": "", "name": f"Tháng {m_int}", "month": m_int, "year": None}
+                return {"id": plan.id, "code": plan.code or "", "name": plan.name or "", "month": plan.month, "year": plan.year}
+        return {"id": 1, "code": "", "name": f"Tháng {m_int}", "month": m_int, "year": None}
     except Exception as e:
         logger.error(f"Lỗi lấy KHSX theo tháng: {e}", exc_info=True)
-        return {"code": "", "name": "Luân chuyển sản xuất", "month": None, "year": None}
+        return {"id": 1, "code": "", "name": "Luân chuyển sản xuất", "month": None, "year": None}
 
 # ----------------------------------------------------------------------
 # 4. CL04: Kế hoạch sản xuất từ CSDL
@@ -914,7 +907,7 @@ def get_production_plans_schedule(
     factory: Optional[str] = Query("ALL"),
     area: Optional[str] = Query("ALL"),
     page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=1000),
+    limit: int = Query(50, ge=1, le=1000),
     db: Session = Depends(get_db)
 ):
     """
@@ -1058,7 +1051,7 @@ def get_production_plans_schedule(
         for idx, (pname, info) in enumerate(parts_summary.items(), 1):
             target_q = info["target_qty"]
 
-            # Filter deliveries for this part
+            # Filter deliveries for this part name
             matching_dels = [
                 d for d in deliveries 
                 if (d.part_name and pname.lower() in d.part_name.lower()) or 
@@ -1132,7 +1125,7 @@ def get_production_transfers(
         skip = (page - 1) * limit
         query = db.query(Delivery)
 
-        completed_statuses = ["Hoàn thành", "Đã nhận", "Hoàn Thành QC", "Đã hủy", "done", "cancelled"]
+        completed_statuses = ["Hoàn thành", "Hoàn Thành", "Đã nhận", "Hoàn Thành QC", "Đã hủy", "done", "cancelled"]
 
         if tab in ["history", "transfer_history"]:
             query = query.filter(Delivery.status.in_(completed_statuses))

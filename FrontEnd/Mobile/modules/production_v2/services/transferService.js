@@ -47,12 +47,49 @@ export const transferService = {
   },
 
   async create(payload) {
-    const res = await apiClient.post('/deliveries/', payload)
+    if (payload instanceof FormData) {
+      const res = await apiClient.post('/deliveries/', payload)
+      return res.data
+    }
+
+    const formData = new FormData()
+    formData.append('plan_id', payload.plan_id || payload.planId || 1)
+    formData.append('delivery_stage', payload.fromStage || payload.delivery_stage || 'Tạo phôi')
+    formData.append('receiving_stage', payload.toStage || payload.receiving_stage || 'Định hình')
+    formData.append('user_id', payload.user_id || payload.userId || 1)
+    
+    const items = Array.isArray(payload.items) ? payload.items : []
+    const totalQty = items.reduce((sum, item) => sum + (Number(item.qty) || 0), 0) || Number(payload.totalQty) || 0
+    formData.append('quantity', totalQty)
+    formData.append('residual', Number(payload.surplus) || 0)
+    formData.append('status', payload.status || 'Chờ Nhận Hàng')
+    
+    const mainPartName = payload.detail || items[0]?.detail || payload.palletCode || 'Chi tiết sản xuất'
+    const mainSpec = payload.spec || items[0]?.spec || 'Tiêu chuẩn'
+    
+    formData.append('part_name', mainPartName)
+    formData.append('specification', mainSpec)
+    formData.append('note', payload.note || '')
+    formData.append('details', JSON.stringify(items))
+
+    if (Array.isArray(payload.files)) {
+      payload.files.forEach((file) => formData.append('files', file))
+    }
+
+    const res = await apiClient.post('/deliveries/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
     return res.data
   },
 
-  async confirm(id, quantities) {
-    const res = await apiClient.patch(`/deliveries/${id}/confirm/`, quantities)
+  async confirm(id, payload = {}) {
+    const formattedPayload = {
+      user_id: payload.user_id || payload.userId || 1,
+      sx_receipt: payload.sx_receipt || payload.user_id || payload.userId || 1,
+      quantity_received: Number(payload.quantity_received || payload.quantity || 0),
+      status: payload.status || 'Hoàn Thành'
+    }
+    const res = await apiClient.patch(`/deliveries/${id}/confirm`, formattedPayload)
     return res.data
   },
 

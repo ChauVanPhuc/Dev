@@ -96,5 +96,5 @@ export const useTransferDetail = (id) => {
 
   const removeImage = (idx) => setImages((prev) => prev.filter((_, i) => i !== idx))
 
-  return { ticket, loading, error, images, addImage, removeImage }
+  return { ticket, loading, error, images, setImages, addImage, removeImage }
 }

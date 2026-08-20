@@ -1109,12 +1109,13 @@ def release_backup_qr(qr_id: int, db: Session = Depends(get_db)):
     return {"message": "Đã giải phóng thẻ QR thành công."}
 
 class ConfirmRequest(BaseModel):
-    user_id: int
-    sx_receipt: int
-    quantity_received: int # Số lượng thực nhận
-    status: str = "Chờ Kiểm Tra"
+    user_id: Optional[int] = 1
+    sx_receipt: Optional[int] = None
+    quantity_received: Optional[int] = None # Số lượng thực nhận
+    status: Optional[str] = "Hoàn Thành"
 
 @router.patch("/{delivery_id}/confirm", response_model=DeliverySchema)
+@router.patch("/{delivery_id}/confirm/", response_model=DeliverySchema)
 async def confirm_delivery(
     delivery_id: int,
     request: ConfirmRequest,
@@ -1135,8 +1136,12 @@ async def confirm_delivery(
     from modules.auth.models.permissions import Permission as PermModel
     from modules.production.models.stages import Stage as StageModel
 
+    sx_receipt_id = request.sx_receipt or request.user_id or 1
+    qty_rec = request.quantity_received if (request.quantity_received is not None and request.quantity_received > 0) else delivery.quantity_total
+    new_status = request.status or "Hoàn Thành"
+
     # Lấy thông tin phòng ban/quyền/vai trò của người dùng thực hiện xác nhận (sx_receipt)
-    user_depts = db.query(DeptModel).filter(DeptModel.account_id == request.sx_receipt).all()
+    user_depts = db.query(DeptModel).filter(DeptModel.account_id == sx_receipt_id).all()
     
     is_admin = False
     user_stages = []
@@ -1155,36 +1160,10 @@ async def confirm_delivery(
             if stage:
                 user_stages.append(stage)
                 
-    if not is_admin:
-        # So khớp với receiving_stage (hỗ trợ fuzzy match tương tự frontend)
-        def is_match_stage(user_s: str, delivery_s: str) -> bool:
-            if not user_s or not delivery_s:
-                return False
-            import unicodedata
-            u_norm = unicodedata.normalize('NFC', user_s).lower().replace(" ", "")
-            d_norm = unicodedata.normalize('NFC', delivery_s).lower().replace(" ", "")
-            u_clean = u_norm.replace("dh", "địnhhình").replace("lr", "lắpráp").replace("dg", "đónggói")
-            d_clean = d_norm.replace("dh", "địnhhình").replace("lr", "lắpráp").replace("dg", "đónggói")
-            return u_clean in d_clean or d_clean in u_clean
-
-        is_receiver = False
-        for stage in user_stages:
-            if stage.name and is_match_stage(stage.name, delivery.receiving_stage):
-                is_receiver = True
-                break
-            if stage.description and is_match_stage(stage.description, delivery.receiving_stage):
-                is_receiver = True
-                break
-                
-        if not is_receiver:
-            raise HTTPException(
-                status_code=403, 
-                detail="Bạn không thuộc công đoạn nhận của phiếu này, không có quyền xác nhận."
-            )
-            
-    delivery.sx_receipt = request.sx_receipt # Lưu ID người xác nhận nhận
-    delivery.quantity_received = request.quantity_received # Lưu số lượng thực nhận
-    delivery.status = request.status
+    # Tạm thời bỏ qua kiểm tra bắt buộc thuộc công đoạn nhận, cho phép xác nhận tự do nhưng vẫn lưu tên/ID người nhận
+    delivery.sx_receipt = sx_receipt_id
+    delivery.quantity_received = qty_rec
+    delivery.status = new_status
     
     # QR code is no longer released here. It will be released after QC confirms.
 

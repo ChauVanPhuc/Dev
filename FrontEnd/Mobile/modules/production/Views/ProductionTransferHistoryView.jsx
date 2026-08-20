@@ -2,28 +2,93 @@ import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, X, Info } from 'lucide-react';
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout';
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader';
+import CustomSelect from '@mobile/Shared/Views/components/form/CustomSelect';
+import MessageModal from '@mobile/Shared/Views/components/feedback/MessageModal';
 import useAuthStore from '@modules/auth/Models/authModel';
 import apiClient from '@shared/services/api';
 
 const ProductionTransferHistoryView = () => {
+  const { user } = useAuthStore();
   const [transfers, setTransfers] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Message Modal State
+  const [msgModal, setMsgModal] = useState({
+    isOpen: false,
+    type: 'info',
+    title: '',
+    message: ''
+  });
+
+  const showMessage = (type, title, message) => {
+    setMsgModal({ isOpen: true, type, title, message });
+  };
 
   // Filters matching Mockup: Kế hoạch & Chi tiết
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [availableMonths, setAvailableMonths] = useState([]);
   const [selectedPart, setSelectedPart] = useState('Tất cả chi tiết');
   const [availableParts, setAvailableParts] = useState([]);
+
+  const monthOptions = availableMonths.map((m) => ({
+    value: m.month,
+    label: `Tháng ${m.month}`
+  }));
+
+  const partOptions = [
+    { value: 'Tất cả chi tiết', label: 'Tất cả chi tiết' },
+    ...availableParts.map((p) => ({ value: p, label: p }))
+  ];
   
   const [activeTab, setActiveTab] = useState('transfer'); // "transfer" | "inspection"
   const [selectedDetailItem, setSelectedDetailItem] = useState(null); // Detail Popup Modal State
+  const [confirming, setConfirming] = useState(false);
 
   // Pagination
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const pageSize = 10;
 
-  const { user } = useAuthStore();
+  const handleConfirmInModal = async (item) => {
+    if (!item || item.id === undefined || item.id === null) {
+      showMessage('error', 'Lỗi dữ liệu', 'Không tìm thấy ID phiếu luân chuyển!');
+      return;
+    }
+    setConfirming(true);
+    try {
+      const ticketId = item.id;
+      await apiClient.patch(`/deliveries/${ticketId}/confirm`, {
+        user_id: user?.id || 1,
+        sx_receipt: user?.id || 1,
+        quantity_received: Number(item.quantity || 0),
+        status: 'Hoàn Thành'
+      });
+      setSelectedDetailItem(null);
+      showMessage('success', 'Xác nhận thành công', `Đã xác nhận nhận hàng thành công cho phiếu ${item.code || `LC${ticketId}`}`);
+      
+      // Refresh transfer list
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: pageSize.toString(),
+        tab: activeTab
+      });
+      if (selectedMonth) params.append('month', selectedMonth.toString());
+      if (selectedPart && selectedPart !== 'Tất cả chi tiết') params.append('part_name', selectedPart);
+
+      const resp = await apiClient.get(`/production-v2/transfers?${params.toString()}`);
+      setTransfers(resp.data?.items || []);
+      setTotal(resp.data?.total || 0);
+    } catch (e) {
+      console.error('Lỗi xác nhận nhận hàng:', e);
+      const errDetail = e.response?.data?.detail
+        ? (typeof e.response.data.detail === 'string' ? e.response.data.detail : JSON.stringify(e.response.data.detail))
+        : (e.message || 'Không rõ nguyên nhân');
+      showMessage('error', 'Lỗi xác nhận', errDetail);
+    } finally {
+      setConfirming(false);
+    }
+  };
+
   const userRoleStr = (user?.role_name || user?.role_description || '').toLowerCase();
   const userDeptStr = (user?.department_name || user?.permission_name || '').toLowerCase();
   const combinedAuth = `${userRoleStr} | ${userDeptStr}`;
@@ -122,36 +187,25 @@ const ProductionTransferHistoryView = () => {
               backgroundColor: '#fff'
             }}>
               {/* Box 1: Kế hoạch */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
                 <label style={{ fontSize: '0.8rem', fontWeight: '800', color: '#334155' }}>Kế hoạch</label>
-                <div style={{ border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 8px', height: '36px', display: 'flex', alignItems: 'center', backgroundColor: '#fff' }}>
-                  <select
-                    value={selectedMonth || ''}
-                    onChange={(e) => { setSelectedMonth(parseInt(e.target.value, 10)); setPage(1); }}
-                    style={{ flex: 1, border: 'none', background: 'transparent', fontSize: '0.82rem', fontWeight: '700', outline: 'none', color: '#1e293b', cursor: 'pointer' }}
-                  >
-                    {availableMonths.map(m => (
-                      <option key={m.plan_id || m.month} value={m.month}>Tháng {m.month}</option>
-                    ))}
-                  </select>
-                </div>
+                <CustomSelect
+                  value={selectedMonth}
+                  options={monthOptions}
+                  onChange={(val) => { setSelectedMonth(parseInt(val, 10)); setPage(1); }}
+                  style={{ height: '36px', minHeight: '36px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: '700' }}
+                />
               </div>
 
               {/* Box 2: Chi tiết */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
                 <label style={{ fontSize: '0.8rem', fontWeight: '800', color: '#334155' }}>Chi tiết</label>
-                <div style={{ border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 8px', height: '36px', display: 'flex', alignItems: 'center', backgroundColor: '#fff' }}>
-                  <select
-                    value={selectedPart}
-                    onChange={(e) => { setSelectedPart(e.target.value); setPage(1); }}
-                    style={{ flex: 1, border: 'none', background: 'transparent', fontSize: '0.82rem', fontWeight: '700', outline: 'none', color: '#1e293b', cursor: 'pointer' }}
-                  >
-                    <option value="Tất cả chi tiết">Tất cả chi tiết</option>
-                    {availableParts.map(part => (
-                      <option key={part} value={part}>{part}</option>
-                    ))}
-                  </select>
-                </div>
+                <CustomSelect
+                  value={selectedPart}
+                  options={partOptions}
+                  onChange={(val) => { setSelectedPart(val); setPage(1); }}
+                  style={{ height: '36px', minHeight: '36px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: '700' }}
+                />
               </div>
             </div>
           </div>
@@ -457,27 +511,56 @@ const ProductionTransferHistoryView = () => {
 
             </div>
 
-            {/* Close Button */}
-            <button
-              onClick={() => setSelectedDetailItem(null)}
-              style={{
-                width: '100%',
-                marginTop: '20px',
-                padding: '12px',
-                backgroundColor: 'var(--primary-color)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '12px',
-                fontWeight: '800',
-                fontSize: '0.9rem',
-                cursor: 'pointer'
-              }}
-            >
-              Đóng cửa sổ
-            </button>
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+              <button
+                onClick={() => setSelectedDetailItem(null)}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  backgroundColor: '#f1f5f9',
+                  color: '#475569',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '12px',
+                  fontWeight: '800',
+                  fontSize: '0.9rem',
+                  cursor: 'pointer'
+                }}
+              >
+                Đóng cửa sổ
+              </button>
+              {['Chờ Nhận Hàng', 'Chờ Xác Nhận'].some(s => String(selectedDetailItem.status || '').toLowerCase().includes(s.toLowerCase())) && (
+                <button
+                  disabled={confirming}
+                  onClick={() => handleConfirmInModal(selectedDetailItem)}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    backgroundColor: 'var(--primary-color)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '12px',
+                    fontWeight: '800',
+                    fontSize: '0.9rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {confirming ? 'Đang lưu...' : 'Xác nhận nhận hàng'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
+
+      {/* Premium Alert Modal */}
+      <MessageModal
+        isOpen={msgModal.isOpen}
+        type={msgModal.type}
+        title={msgModal.title}
+        message={msgModal.message}
+        onConfirm={() => setMsgModal(prev => ({ ...prev, isOpen: false }))}
+      />
     </Layout>
   );
 };
