@@ -105,6 +105,7 @@ const UserCreate = () => {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
@@ -261,7 +262,7 @@ const UserCreate = () => {
             initialPerms[scr.key] = ['none'];
           });
         });
-        initialResolvedPerms.current = JSON.parse(JSON.stringify(initialPerms));
+        initialBaselineDefaults.current = JSON.parse(JSON.stringify(initialPerms));
         setScreenPermissions(initialPerms);
       } catch (err) {
         console.error('Lỗi khi tải dữ liệu khởi tạo:', err);
@@ -890,11 +891,12 @@ const UserCreate = () => {
       });
 
       setSuccess(true);
+      toast('success', 'Tạo mới tài khoản và phân quyền thành công!');
       setToastMessage('Tạo mới tài khoản và phân quyền thành công!');
       setTimeout(() => {
         setToastMessage(null);
         navigate('/admin/users');
-      }, 2000);
+      }, 1500);
     } catch (err) {
       console.error('Lỗi khi tạo tài khoản:', err);
       let detail = err.response?.data?.detail;

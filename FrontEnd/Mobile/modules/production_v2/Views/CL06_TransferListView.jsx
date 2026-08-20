@@ -183,19 +183,19 @@ const CL06_TransferListView = () => {
             <div className="pv2-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #eee', paddingBottom: 6 }}>
                 <span style={{ color: '#666' }}>Thời gian lập:</span>
-                <strong>{selectedTicket.time_str || '16:40 | 22/1/2026'}</strong>
+                <strong>{selectedTicket.time_str || selectedTicket.created_at || '—'}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #eee', paddingBottom: 6 }}>
                 <span style={{ color: '#666' }}>Công đoạn:</span>
-                <strong>{selectedTicket.route_str || 'Định hình 1 - Lắp ráp 1'}</strong>
+                <strong>{selectedTicket.route_str || (selectedTicket.delivery_stage ? `${selectedTicket.delivery_stage} - ${selectedTicket.receiving_stage || ''}` : '—')}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #eee', paddingBottom: 6 }}>
                 <span style={{ color: '#666' }}>Chi tiết sản phẩm:</span>
-                <strong style={{ color: '#4a240e' }}>{selectedTicket.part_name || 'Thanh A'}</strong>
+                <strong style={{ color: '#4a240e' }}>{selectedTicket.part_name || selectedTicket.product || '—'}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #eee', paddingBottom: 6 }}>
                 <span style={{ color: '#666' }}>Số lượng bàn giao:</span>
-                <strong style={{ color: '#c85a1e', fontSize: 16 }}>{selectedTicket.quantity || 134} Cái</strong>
+                <strong style={{ color: '#c85a1e', fontSize: 16 }}>{selectedTicket.quantity || 0} Cái</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 6 }}>
                 <span style={{ color: '#666' }}>Trạng thái:</span>

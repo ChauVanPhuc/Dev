@@ -105,12 +105,6 @@ export const TICKET_TYPE_OPTIONS = [
   { value: 'V2', label: 'V2' },
 ]
 
-export const MOCK_FACTORIES = [
-  { value: '', label: 'Tất cả nhà máy' },
-  { value: 'vanity01', label: 'Vanity 01' },
-  { value: 'vanity02', label: 'Vanity 02' },
-]
-
 export const STANDARD_BOM_STAGES = [
   'Đầu vào',
   'Tạo Phôi',
@@ -132,130 +126,13 @@ export const BOM_STAGE_OPTIONS = [
   { value: 'Lưu Kho', label: 'Lưu Kho' },
 ]
 
-export const MOCK_STAGES = [
-  { value: '', label: 'Tất cả công đoạn' },
-  { value: 'Đầu vào', label: 'Đầu vào' },
-  { value: 'Tạo Phôi', label: 'Tạo Phôi' },
-  { value: 'Định Hình', label: 'Định Hình' },
-  { value: 'Lắp Ráp', label: 'Lắp Ráp' },
-  { value: 'Sơn', label: 'Sơn' },
-  { value: 'Đóng Gói', label: 'Đóng Gói' },
-  { value: 'Lưu Kho', label: 'Lưu Kho' },
-]
-
-export const MOCK_STAGE_OPTIONS = [
-  { value: 'Đầu vào', label: 'Đầu vào' },
-  { value: 'Tạo Phôi', label: 'Tạo Phôi' },
-  { value: 'Định Hình', label: 'Định Hình' },
-  { value: 'Lắp Ráp', label: 'Lắp Ráp' },
-  { value: 'Sơn', label: 'Sơn' },
-  { value: 'Đóng Gói', label: 'Đóng Gói' },
-  { value: 'Lưu Kho', label: 'Lưu Kho' },
-]
-
-export const MOCK_PALLETS = [
-  { value: 'SD19U0', label: 'SD19U0', totalQty: 134 },
-  { value: 'SD20A1', label: 'SD20A1', totalQty: 98 },
-  { value: 'DA7819', label: 'DA7819', totalQty: 200 },
-]
-
-export const MOCK_PRODUCTS = [
-  { value: 'thanh_a', label: 'Thanh A', specs: [{ value: '1', label: 'QC-01' }, { value: '2', label: 'QC-02' }] },
-  { value: 'thanh_b', label: 'Thanh B', specs: [{ value: '3', label: 'QC-03' }] },
-]
-
-export const MOCK_PO_OPTIONS = [
-  { value: 'APT007', label: 'APT007' },
-  { value: 'APT008', label: 'APT008' },
-  { value: 'APT009', label: 'APT009' },
-]
-
-export const MOCK_PARAMETER_OPTIONS = [
+export const DEFAULT_PARAMETER_OPTIONS = [
   { value: 'do_am', label: 'Độ ẩm' },
   { value: 'nhiet_do', label: 'Nhiệt độ' },
   { value: 'anh_sang', label: 'Ánh sáng' },
-]
-
-export const MOCK_PROCESS_OPTIONS = [
-  { value: 'quy_trinh_1', label: 'Quy trình 1' },
-  { value: 'quy_trinh_2', label: 'Quy trình 2' },
-]
-
-export const MOCK_AREA_OPTIONS = [
-  { value: 'khu_a', label: 'Khu A' },
-  { value: 'khu_b', label: 'Khu B' },
-  { value: 'khu_c', label: 'Khu C' },
-]
-
-export const MOCK_STAFF_OPTIONS = [
-  { value: 'nva', label: 'Nguyễn Văn A' },
-  { value: 'nvb', label: 'Nguyễn Văn B' },
-  { value: 'ttc', label: 'Trần Thị C' },
-]
-
-export const MOCK_TRANSFER_TICKETS = [
-  {
-    id: 1, code: 'LC01', version: 'V1', status: 'pending',
-    fromStage: 'Định hình 1', toStage: 'Lắp ráp 1',
-    date: '22/1/2026', time: '16:40', creator: 'Nguyễn Văn A',
-    poCode: 'APT007', palletCode: 'SD19U0', totalQty: 134,
-    items: [
-      { id: 1, detail: 'Thanh A', spec: '1', qty: 0, total: 40 },
-      { id: 2, detail: 'Thanh A', spec: '2', qty: 12, total: 40 },
-    ],
-  },
-  {
-    id: 2, code: 'LC03', version: 'V2', status: 'pending',
-    fromStage: 'Lắp ráp 1', toStage: 'Định hình 1',
-    date: '22/1/2026', time: '16:45', creator: 'Nguyễn Văn A',
-    poCode: 'APT008', palletCode: 'SD20A1', totalQty: 98,
-    items: [
-      { id: 1, detail: 'Thanh A', spec: '1', qty: 5, total: 50 },
-    ],
-  },
-  {
-    id: 3, code: 'LC04', version: 'V1', status: 'delivering',
-    fromStage: 'Định hình', toStage: 'Đóng gói',
-    date: '22/1/2026', time: '17:00', creator: 'Nguyễn Văn A',
-    poCode: 'APT009', palletCode: 'SD19U0', totalQty: 134,
-    items: [
-      { id: 1, detail: 'Thanh A', spec: '1', qty: 0, total: 40 },
-      { id: 2, detail: 'Thanh A', spec: '2', qty: 12, total: 40 },
-    ],
-  },
-]
-
-export const MOCK_INSPECTION_TICKETS = [
-  {
-    id: 1, code: 'KT01', status: 'pending',
-    poCode: 'APT007', date: '22/1/2026', time: '16:40',
-    creator: 'Nguyễn Văn A', stage: 'Định hình',
-    mode: 'first_sample',
-  },
-  {
-    id: 2, code: 'KT03', status: 'pending',
-    poCode: 'APT008', date: '22/1/2026', time: '16:45',
-    creator: 'Nguyễn Văn A', stage: 'Lắp ráp 1',
-    mode: 're_inspect',
-  },
-  {
-    id: 3, code: 'KT04', status: 'delivering',
-    poCode: 'APT009', date: '22/1/2026', time: '17:00',
-    creator: 'Nguyễn Văn A', stage: 'Đóng gói',
-    mode: 'first_sample',
-  },
-]
-
-export const MOCK_INSPECTION_STEPS = [
-  { id: 1, step: 1, description: 'Kiểm tra bề mặt', standard: 'Không có vết nứt', qty: 10, result: 'pass' },
-  { id: 2, step: 2, description: 'Kiểm tra kích thước', standard: '±0.5mm', qty: 10, result: 'fail' },
-]
-
-export const MOCK_ERROR_TYPES = [
-  { value: 'nut_tet', label: 'Nứt tét' },
-  { value: 'bong_trom', label: 'Bong trốc' },
-  { value: 'bien_dang', label: 'Biến dạng' },
-  { value: 'mau_sac', label: 'Màu sắc sai' },
+  { value: 'do_bong', label: 'Độ bóng sơn' },
+  { value: 'do_day', label: 'Độ dày màng sơn' },
 ]
 
 export const PAGE_SIZE = 10
+

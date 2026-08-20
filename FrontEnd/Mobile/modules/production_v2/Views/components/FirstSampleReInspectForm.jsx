@@ -49,11 +49,21 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
   } = formState
 
   const isReInspect = mode === INSPECT_MODES.RE_INSPECT
+  const hasStage = Boolean(stage)
+  const hasPo = Boolean(po)
+  const hasProduct = Boolean(product || (selectedProducts && selectedProducts.length > 0))
+
+  const isPoDisabled = readOnly || isReInspect || !hasStage
+  const isProductDisabled = readOnly || isReInspect || !hasStage || !hasPo
+  const isSpecDisabled = readOnly || isReInspect || !hasStage || !hasPo || !hasProduct
+  const isSampleQtyDisabled = readOnly || !hasStage || !hasPo || !hasProduct
+
+  const poPlaceholder = !hasStage ? 'Chọn công đoạn trước' : 'Chọn PO'
+  const productPlaceholder = !hasStage ? 'Chọn công đoạn trước' : (!hasPo ? 'Chọn PO trước' : 'Chọn sản phẩm...')
+  const specPlaceholder = !hasStage ? 'Chọn công đoạn trước' : (!hasPo ? 'Chọn PO trước' : (!hasProduct ? 'Chọn sản phẩm trước' : 'Chọn quy cách...'))
 
   return (
     <>
-
-
       <div className="pv2-field-row pv2-field-row--2col">
         <div className="pv2-field">
           <label>Chọn PO <span className="pv2-req">*</span></label>
@@ -61,8 +71,8 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
             value={po}
             options={poOptions}
             onChange={setPo}
-            disabled={readOnly || isReInspect}
-            placeholder="—"
+            disabled={isPoDisabled}
+            placeholder={poPlaceholder}
           />
         </div>
         <div className="pv2-field">
@@ -86,17 +96,17 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
               values={selectedProducts}
               options={productOptions.filter((o) => Boolean(o.value))}
               onChange={handleMultiProductChange}
-              placeholder="Chọn sản phẩm..."
+              placeholder={productPlaceholder}
               required
-              disabled={readOnly || isReInspect}
+              disabled={isProductDisabled}
             />
           ) : (
             <CustomSelect
               value={product}
               options={productOptions}
               onChange={handleProductChange}
-              disabled={readOnly || isReInspect}
-              placeholder="—"
+              disabled={isProductDisabled}
+              placeholder={productPlaceholder}
             />
           )}
         </div>
@@ -107,16 +117,16 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
               values={selectedSpecs}
               options={specOptions.filter((o) => Boolean(o.value))}
               onChange={handleMultiSpecChange}
-              placeholder="Chọn quy cách..."
-              disabled={readOnly || isReInspect}
+              placeholder={specPlaceholder}
+              disabled={isSpecDisabled}
             />
           ) : (
             <CustomSelect
               value={spec}
               options={specOptions}
               onChange={setSpec}
-              disabled={readOnly || isReInspect}
-              placeholder="—"
+              disabled={isSpecDisabled}
+              placeholder={specPlaceholder}
             />
           )}
         </div>
@@ -131,11 +141,11 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
           <label>SL mẫu <span className="pv2-req">*</span></label>
           <input
             type="number"
-            className={`pv2-input ${readOnly ? 'pv2-input--disabled' : ''}`}
+            className={`pv2-input ${isSampleQtyDisabled ? 'pv2-input--disabled' : ''}`}
             value={sampleQty}
             onChange={(e) => setSampleQty(e.target.value)}
             placeholder={requiredQty ? String(Math.max(1, Math.ceil(Number(requiredQty) * 0.05))) : ''}
-            disabled={readOnly}
+            disabled={isSampleQtyDisabled}
           />
         </div>
         <div className="pv2-field">

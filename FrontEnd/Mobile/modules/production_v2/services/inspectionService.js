@@ -1,21 +1,8 @@
 import apiClient from '@shared/services/api'
-import { MOCK_INSPECTION_TICKETS, MOCK_INSPECTION_STEPS, PAGE_SIZE } from '../constants'
-
-const USE_MOCK = false
-
-const delay = (ms = 400) => new Promise((r) => setTimeout(r, ms))
+import { PAGE_SIZE } from '../constants'
 
 export const inspectionService = {
   async getList({ tab, month, stage, poCode, product, sort, page = 1 } = {}) {
-    if (USE_MOCK) {
-      await delay()
-      let data = [...MOCK_INSPECTION_TICKETS]
-      if (tab === 'pending') data = data.filter((t) => t.status === 'pending' || t.status === 'delivering')
-      else data = data.filter((t) => t.status === 'done' || t.status === 'cancelled')
-      const total = data.length
-      const items = data.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-      return { items, total, total_pending: MOCK_INSPECTION_TICKETS.filter((t) => t.status === 'pending').length, page, pageSize: PAGE_SIZE }
-    }
     const params = new URLSearchParams()
     if (tab) params.append('tab', tab)
     if (month) params.append('month', month)
@@ -29,23 +16,19 @@ export const inspectionService = {
       const res = await apiClient.get(`/inspections/?${params.toString()}`)
       return res.data
     } catch (e) {
-      let data = [...MOCK_INSPECTION_TICKETS]
-      if (tab === 'pending') data = data.filter((t) => t.status === 'pending' || t.status === 'delivering')
-      else data = data.filter((t) => t.status === 'done' || t.status === 'cancelled')
-      return { items: data.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), total: data.length, total_pending: 0, page, pageSize: PAGE_SIZE }
+      console.warn('[inspectionService.getList] error:', e)
+      return { items: [], total: 0, total_pending: 0, page, pageSize: PAGE_SIZE }
     }
   },
 
   async getById(id) {
-    if (USE_MOCK) {
-      await delay()
-      return MOCK_INSPECTION_TICKETS.find((t) => t.code === id || t.id === Number(id)) || null
-    }
+    if (!id || id === 'NEW') return null
     try {
       const res = await apiClient.get(`/inspections/${id}/`)
       return res.data
     } catch (e) {
-      return MOCK_INSPECTION_TICKETS.find((t) => t.code === id || t.id === Number(id)) || null
+      console.warn('[inspectionService.getById] error:', e)
+      return null
     }
   },
 
@@ -66,9 +49,12 @@ export const inspectionService = {
                 step_no: s.step_no || idx + 1,
                 title: s.title || `Bước ${idx + 1}`,
                 content: s.content || '',
+                images: Array.isArray(s.images) ? s.images : [],
                 sub_steps: Array.isArray(s.sub_steps) ? s.sub_steps.map((sub, si) => ({
                   id: sub.id || si + 1,
-                  title: sub.title || sub.content || ''
+                  title: sub.title || sub.content || '',
+                  content: sub.content || '',
+                  images: Array.isArray(sub.images) ? sub.images : []
                 })) : []
               }))
             }
@@ -98,13 +84,59 @@ export const inspectionService = {
     return null
   },
 
-  async getProcessGuides() {
+  async getProcessGuides(stageName = '') {
     try {
-      // Lấy trực tiếp 100% từ /inspection-guides (Quản lý bộ Hướng dẫn kiểm tra tại Web Admin /admin/inspection-guides)
-      const res = await apiClient.get('/inspection-guides')
-      const guides = res?.data !== undefined ? res.data : res
+      const [guidesRes, stagesRes] = await Promise.allSettled([
+        apiClient.get('/inspection-guides'),
+        apiClient.get('/stages').catch(() => apiClient.get('/stages/'))
+      ])
+
+      const guides = guidesRes.status === 'fulfilled' ? (guidesRes.value?.data !== undefined ? guidesRes.value.data : guidesRes.value) : []
+      const stages = stagesRes.status === 'fulfilled' ? (stagesRes.value?.data !== undefined ? stagesRes.value.data : stagesRes.value) : []
+
+      const stagesList = Array.isArray(stages) ? stages : (stages?.items || [])
+      const stageMap = {}
+      stagesList.forEach(s => {
+        if (s.id && s.name) stageMap[s.id] = s.name.toLowerCase().trim()
+      })
+
+      let currentStageId = null
+      if (stageName && typeof stageName === 'string') {
+        const stLower = stageName.toLowerCase().trim()
+        const foundStage = stagesList.find(s => (s.name || '').toLowerCase().trim() === stLower || stLower.includes((s.name || '').toLowerCase().trim()) || (s.name || '').toLowerCase().trim().includes(stLower))
+        if (foundStage) currentStageId = foundStage.id
+      }
+
       if (Array.isArray(guides) && guides.length > 0) {
-        return guides.map((g) => ({
+        let filtered = guides
+        if (stageName && typeof stageName === 'string' && stageName.trim()) {
+          const stLower = stageName.toLowerCase().trim()
+
+          filtered = guides.filter((g) => {
+            const assignments = g.assignments || []
+            // If guide has no assignments configured in Web Admin, do not display
+            if (assignments.length === 0) {
+              return false
+            }
+
+            // Check if any assignment matches current stage or applies to all stages
+            return assignments.some(a => {
+              if (a.stage_id === null || a.stage_id === undefined) {
+                return true
+              }
+              if (currentStageId && a.stage_id === currentStageId) {
+                return true
+              }
+              const assignedStageName = stageMap[a.stage_id] || ''
+              if (assignedStageName && (stLower.includes(assignedStageName) || assignedStageName.includes(stLower))) {
+                return true
+              }
+              return false
+            })
+          })
+        }
+
+        return filtered.map((g) => ({
           id: String(g.id),
           code: g.code,
           name: g.name
@@ -118,28 +150,16 @@ export const inspectionService = {
   },
 
   async create(payload) {
-    if (USE_MOCK) {
-      await delay(600)
-      return { id: Date.now(), code: `KT${String(Date.now()).slice(-3)}`, ...payload }
-    }
-    const res = await import('@shared/services/api').then((m) => m.default.post('/inspections/', payload))
+    const res = await apiClient.post('/inspections/', payload)
     return res.data
   },
 
   async confirm(id, data) {
-    if (USE_MOCK) {
-      await delay(500)
-      return { success: true }
-    }
-    const res = await import('@shared/services/api').then((m) => m.default.patch(`/inspections/${id}/confirm/`, data))
+    const res = await apiClient.patch(`/inspections/${id}/confirm/`, data)
     return res.data
   },
 
   async uploadImage(file) {
-    if (USE_MOCK) {
-      await delay(800)
-      return { url: URL.createObjectURL(file) }
-    }
     try {
       const form = new FormData()
       form.append('image', file)
@@ -155,14 +175,13 @@ export const inspectionService = {
   },
 
   async getLastResult(mode, productId, poCode) {
-    if (USE_MOCK) {
-      await delay(300)
-      return { sampleQty: 134, errorQty: 2, result: 'pass' }
+    try {
+      const res = await apiClient.get(`/inspections/last-result/?mode=${mode}&product=${encodeURIComponent(productId || '')}&po=${encodeURIComponent(poCode || '')}`)
+      return res.data
+    } catch (e) {
+      console.warn('[inspectionService.getLastResult] error:', e)
+      return null
     }
-    const res = await import('@shared/services/api').then((m) =>
-      m.default.get(`/inspections/last-result/?mode=${mode}&product=${productId}&po=${poCode}`)
-    )
-    return res.data
   },
 
   async generatePalletCode(prefix = 'DA') {
@@ -211,13 +230,13 @@ export const inspectionService = {
       const unique = Array.from(new Set(pallets))
       if (unique.length > 0) return unique
     } catch (e) {}
-    return ['DA7819', 'DA7820', 'DA7821', 'DA7822']
+    return []
   },
 
   async getTicketsByPallet(palletCode, limit = 3) {
     if (!palletCode) return []
     try {
-      const res = await apiClient.get(`/inspections/by-pallet?pallet_code=${palletCode}&limit=${limit}`)
+      const res = await apiClient.get(`/inspections/by-pallet?pallet_code=${encodeURIComponent(palletCode)}&limit=${limit}`)
       if (Array.isArray(res.data)) return res.data.slice(0, limit)
     } catch (e) {
       console.warn('[inspectionService.getTicketsByPallet] fallback filter:', e)
@@ -228,56 +247,7 @@ export const inspectionService = {
       const matched = items.filter((i) => (i.palletCode || i.pallet_code) === palletCode)
       if (matched.length > 0) return matched.slice(0, limit)
     } catch (e) {}
-
-    return [
-      {
-        id: 101,
-        code: 'KT527147',
-        palletCode,
-        mode: 'first_sample',
-        stage: 'Định hình',
-        po: 'PO-2026-088',
-        product: 'Khung inox 304',
-        spec: 'Kích thước: 1200x800mm',
-        sampleQty: 134,
-        errorQty: 2,
-        result: 'fail',
-        creator: 'QCKTDV',
-        created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-        errors: [{ id: 1, name: 'Sứt góc / nứt tét', qty: 2 }]
-      },
-      {
-        id: 100,
-        code: 'KT527145',
-        palletCode,
-        mode: 're_inspect',
-        stage: 'Định hình',
-        po: 'PO-2026-088',
-        product: 'Khung inox 304',
-        spec: 'Kích thước: 1200x800mm',
-        sampleQty: 134,
-        errorQty: 1,
-        result: 'fail',
-        creator: 'QCKTDV',
-        created_at: new Date(Date.now() - 3600000 * 24).toISOString(),
-        errors: [{ id: 1, name: 'Sứt góc / nứt tét', qty: 1 }]
-      },
-      {
-        id: 99,
-        code: 'KT527140',
-        palletCode,
-        mode: 'first_sample',
-        stage: 'Định hình',
-        po: 'PO-2026-088',
-        product: 'Khung inox 304',
-        spec: 'Kích thước: 1200x800mm',
-        sampleQty: 134,
-        errorQty: 0,
-        result: 'pass',
-        creator: 'QCKTDV',
-        created_at: new Date(Date.now() - 3600000 * 48).toISOString(),
-        errors: []
-      }
-    ].slice(0, limit)
+    return []
   },
 }
+

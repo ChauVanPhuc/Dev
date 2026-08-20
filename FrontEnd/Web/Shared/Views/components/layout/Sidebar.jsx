@@ -65,7 +65,12 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
   const isBlocked = (item) => {
     let key = item.route_path || item.permission_key || `sb_${item.id}`;
     if (!key) return false;
-    const perm = activePermissions[key] || (item.permission_key ? activePermissions[item.permission_key] : undefined);
+    let perm = activePermissions[key] || (item.permission_key ? activePermissions[item.permission_key] : undefined);
+
+    // Fallback: nếu chưa cấu hình riêng cho SOS/CTQ, kế thừa quyền từ inspection-guides
+    if (perm === undefined && (item.route_path === '/admin/sos-guides' || item.route_path === '/admin/ctq-guides')) {
+      perm = activePermissions['/admin/inspection-guides'] || activePermissions['inspection-guides'];
+    }
 
     // 1. Kiểm tra chặn rõ ràng (Explicit block)
     if (perm === 'none') return true;

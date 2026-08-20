@@ -376,7 +376,7 @@ const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, 
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap'
                 }}>
-                  {palletCode || 'DA7819'}
+                  {palletCode || '—'}
                 </span>
               </div>
             </div>

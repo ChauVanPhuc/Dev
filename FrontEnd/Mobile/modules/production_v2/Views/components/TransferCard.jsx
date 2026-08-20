@@ -1,11 +1,10 @@
-const TransferCard = ({ ticket, onClick }) => {
+const TransferCard = ({ ticket, onClick, isSelected = false }) => {
   const code = ticket.code || `LC${ticket.id}`
-  const timeStr = ticket.time_str || (ticket.time && ticket.date ? `${ticket.time} | ${ticket.date}` : '16:40 | 22/1/2026')
-  const routeStr = ticket.route_str || (ticket.fromStage && ticket.toStage ? `${ticket.fromStage} - ${ticket.toStage}` : 'Định hình 1 - Lắp ráp 1')
+  const timeStr = ticket.time_str || (ticket.time && ticket.date ? `${ticket.time} | ${ticket.date}` : ticket.created_at || '—')
+  const routeStr = ticket.route_str || (ticket.fromStage && ticket.toStage ? `${ticket.fromStage} - ${ticket.toStage}` : (ticket.delivery_stage ? `${ticket.delivery_stage} - ${ticket.receiving_stage || ''}` : '—'))
   const versionStr = ticket.version_badge || ticket.version || 'V1'
   const isV2 = versionStr === 'V2'
   const statusStr = ticket.status || 'Chờ xác nhận'
-  const isSelected = ticket.code === 'LC03'
 
   return (
     <div className={`pv2-card ${isSelected ? 'pv2-card--selected' : ''}`} onClick={onClick}>

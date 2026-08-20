@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import useAuthStore from '@modules/auth/Models/authModel'
+import apiClient from '@shared/services/api'
 import { useInspectionController, useInspectionDetail } from './useInspectionController'
 import {
   INSPECT_MODES,
@@ -8,7 +9,7 @@ import {
   MODE_TO_ROUTE,
   ROUTES,
   BOM_STAGE_OPTIONS,
-  MOCK_PARAMETER_OPTIONS,
+  DEFAULT_PARAMETER_OPTIONS,
 } from '../constants'
 import { stageService } from '../services/stageService'
 import { orderService } from '../services/orderService'
@@ -102,7 +103,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
   const readOnly = !isNew
 
   const user = useAuthStore((state) => state.user)
-  const creatorName = user?.full_name || user?.username || 'Nguyễn Văn A'
+  const creatorName = user?.full_name || user?.username || ''
   const { createTicket, confirmTicket } = useInspectionController()
   const { ticket, loading, steps, setSteps, images, setImages, addImage, removeImage, loadGuide, getLastResult } =
     useInspectionDetail(isNew ? null : id)
@@ -121,7 +122,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
   const [errors, setErrors] = useState(initErrors())
 
   const [parameter, setParameter] = useState('do_am')
-  const [parameterOptions, setParameterOptions] = useState(MOCK_PARAMETER_OPTIONS)
+  const [parameterOptions, setParameterOptions] = useState(DEFAULT_PARAMETER_OPTIONS)
   const [paramStage, setParamStage] = useState('')
   const [paramPo, setParamPo] = useState('')
   const [paramProduct, setParamProduct] = useState('')
@@ -133,24 +134,26 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
   const [area, setArea] = useState('')
 
   const [staff, setStaff] = useState('')
+  const [staffOptions, setStaffOptions] = useState([{ value: '', label: 'Chọn nhân sự' }])
   const [answers, setAnswers] = useState(['', '', ''])
   const [showAnswers, setShowAnswers] = useState([false, false, false])
+  const [qaQuestions, setQaQuestions] = useState([
+    { q: 'Quy trình vận hành máy & kiểm tra an toàn', answer: 'Tuân thủ bảng hướng dẫn an toàn lao động và checklist thiết bị trước khi chạy máy.' },
+    { q: 'Cách xử lý khi phát hiện lỗi không phù hợp', answer: 'Cách ly lô hàng, gắn biển nhận diện và lập phiếu báo cáo sự không phù hợp cho QC.' },
+    { q: 'Tiêu chuẩn kích thước và độ dung sai cho phép', answer: 'Kiểm tra theo đúng bản vẽ kỹ thuật chi tiết đính kèm đơn hàng.' },
+  ])
   const [qaResult, setQaResult] = useState('pass')
   const [stageOptions, setStageOptions] = useState(BOM_STAGE_OPTIONS)
   const [processOptions, setProcessOptions] = useState([{ value: '', label: 'Chọn quy trình' }])
-  const [poOptions, setPoOptions] = useState([{ value: '', label: 'Chọn PO' }])
-  const [productOptions, setProductOptions] = useState([{ value: '', label: 'Chọn sản phẩm' }])
-  const [specOptions, setSpecOptions] = useState([{ value: '', label: 'Chọn quy cách' }])
+  const [poOptions, setPoOptions] = useState([{ value: '', label: 'Vui lòng chọn công đoạn trước' }])
+  const [productOptions, setProductOptions] = useState([{ value: '', label: 'Vui lòng chọn công đoạn trước' }])
+  const [specOptions, setSpecOptions] = useState([{ value: '', label: 'Vui lòng chọn công đoạn trước' }])
   const [bomData, setBomData] = useState([])
   const [requiredQty, setRequiredQty] = useState('')
 
   const [guideVisible, setGuideVisible] = useState(false)
   const [palletCode, setPalletCode] = useState('')
-  const [palletOptions, setPalletOptions] = useState([
-    { value: 'DA7819', label: 'DA7819' },
-    { value: 'DA7820', label: 'DA7820' },
-    { value: 'DA7821', label: 'DA7821' }
-  ])
+  const [palletOptions, setPalletOptions] = useState([])
   const [recentTickets, setRecentTickets] = useState([])
   const [isRecentModalOpen, setIsRecentModalOpen] = useState(false)
   const [autoTicketCode, setAutoTicketCode] = useState(() => `KT${String(Date.now()).slice(-4)}${Math.floor(10 + Math.random() * 90)}`)
@@ -495,16 +498,19 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
         setStageOptions(BOM_STAGE_OPTIONS)
       })
 
-    inspectionService.getProcessGuides()
-      .then((data) => {
-        const opts = (data || []).map((g) => ({
-          value: String(g.id),
-          label: g.code ? `${g.code} - ${g.name}` : g.name
-        }))
-        setProcessOptions([{ value: '', label: 'Chọn quy trình' }, ...opts])
+    apiClient.get('/accounts/?limit=500')
+      .then((res) => {
+        const list = res.data?.items || res.data || []
+        if (Array.isArray(list) && list.length > 0) {
+          const opts = list.map((u) => ({
+            value: u.full_name || u.username,
+            label: u.full_name ? `${u.full_name} (${u.username})` : u.username
+          }))
+          setStaffOptions([{ value: '', label: 'Chọn nhân sự' }, ...opts])
+        }
       })
-      .catch(() => {
-        setProcessOptions([{ value: '', label: 'Chọn quy trình' }])
+      .catch((err) => {
+        console.warn('[useInspectionFormBase] Lỗi tải danh sách nhân sự:', err)
       })
 
     if (isNew) {
@@ -519,8 +525,34 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
   }, [isNew])
 
   useEffect(() => {
+    if (stage && isNew) {
+      setArea(stage)
+    }
+  }, [stage, isNew])
+
+  useEffect(() => {
+    const activeStage = stage || area || paramStage
+    inspectionService.getProcessGuides(activeStage)
+      .then((data) => {
+        const opts = (data || []).map((g) => ({
+          value: String(g.id),
+          label: g.code ? `${g.code} - ${g.name}` : g.name
+        }))
+        setProcessOptions([{ value: '', label: 'Chọn quy trình' }, ...opts])
+      })
+      .catch(() => {
+        setProcessOptions([{ value: '', label: 'Chọn quy trình' }])
+      })
+  }, [stage, area, paramStage])
+
+  useEffect(() => {
     const activeStage = stage || paramStage
-    if (activeStage === 'Đầu vào') {
+    if (!activeStage) {
+      setPoOptions([{ value: '', label: 'Vui lòng chọn công đoạn trước' }])
+      return
+    }
+    const isIncoming = activeStage.toLowerCase().includes('đầu vào') || activeStage.toLowerCase().includes('nhập kho')
+    if (isIncoming) {
       orderService.getPurchaseOrders()
         .then((poCodes) => {
           const opts = poCodes.map((code) => ({ value: code, label: code }))
@@ -628,20 +660,39 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
   }, [ticket])
 
   useEffect(() => {
+    const activeStage = stage || paramStage
     const activePo = po || paramPo
+
+    if (!activeStage) {
+      if (isNew) {
+        setProduct('')
+        setParamProduct('')
+        setSpec('')
+        setSelectedProducts([])
+        setSelectedSpecs([])
+        setBomData([])
+        setRequiredQty('')
+        setProductOptions([{ value: '', label: 'Vui lòng chọn công đoạn trước' }])
+        setSpecOptions([{ value: '', label: 'Vui lòng chọn công đoạn trước' }])
+      }
+      return
+    }
+
     if (!activePo) {
       if (isNew) {
         setProduct('')
         setParamProduct('')
         setSpec('')
-        setProductOptions([{ value: '', label: 'Chọn sản phẩm' }])
-        setSpecOptions([{ value: '', label: 'Chọn quy cách' }])
+        setSelectedProducts([])
+        setSelectedSpecs([])
         setBomData([])
         setRequiredQty('')
+        setProductOptions([{ value: '', label: 'Vui lòng chọn PO trước' }])
+        setSpecOptions([{ value: '', label: 'Vui lòng chọn PO trước' }])
       }
       return
     }
-    const activeStage = stage || paramStage
+
     orderService.getBom(activePo, activeStage)
       .then((data) => {
         const bomList = data || []
@@ -650,6 +701,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
         
         if (bomList.length === 0) {
           setProductOptions([{ value: '', label: 'Không có chi tiết cho công đoạn này' }])
+          setSpecOptions([{ value: '', label: 'Không có quy cách' }])
         } else {
           setProductOptions([{ value: '', label: 'Chọn sản phẩm' }, ...opts])
         }
@@ -952,8 +1004,8 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
         showMessage('Thiếu thông tin', 'Vui lòng chọn Quy trình trước khi tiếp tục.', 'warning')
         return
       }
-      if (!area) {
-        showMessage('Thiếu thông tin', 'Vui lòng chọn Khu vực kiểm tra trước khi tiếp tục.', 'warning')
+      if (!stage && !area) {
+        showMessage('Thiếu thông tin', 'Vui lòng chọn Công đoạn trước khi tiếp tục.', 'warning')
         return
       }
     } else if (mode === INSPECT_MODES.QA) {
@@ -1144,8 +1196,74 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     }
   }
 
-  const setStageWithDirty = (val) => { setStage(val); setIsDirty(true); }
-  const setPoWithDirty = (val) => { setPo(val); setIsDirty(true); }
+  const handleStageChange = (newStage) => {
+    if (readOnly) return
+    setIsDirty(true)
+    setStage(newStage)
+    setParamStage(newStage)
+    setArea(newStage)
+    setProcess('')
+
+    setPo('')
+    setParamPo('')
+    setProduct('')
+    setParamProduct('')
+    setSelectedProducts([])
+    setSpec('')
+    setSelectedSpecs([])
+    setRequiredQty('')
+    setSampleQty('')
+    setParamSample('')
+    setErrorQty('0')
+    setParamPass('')
+    setParamFail('')
+    setBomData([])
+
+    if (!newStage) {
+      setPoOptions([{ value: '', label: 'Vui lòng chọn công đoạn trước' }])
+      setProductOptions([{ value: '', label: 'Vui lòng chọn công đoạn trước' }])
+      setSpecOptions([{ value: '', label: 'Vui lòng chọn công đoạn trước' }])
+    } else {
+      setProductOptions([{ value: '', label: 'Vui lòng chọn PO trước' }])
+      setSpecOptions([{ value: '', label: 'Vui lòng chọn PO trước' }])
+    }
+  }
+
+  const handleAreaChange = (newArea) => {
+    if (readOnly) return
+    setIsDirty(true)
+    setArea(newArea)
+    setStage(newArea)
+    setParamStage(newArea)
+    setProcess('')
+  }
+
+  const handlePoChange = (newPo) => {
+    if (readOnly) return
+    setIsDirty(true)
+    setPo(newPo)
+    setParamPo(newPo)
+
+    setProduct('')
+    setParamProduct('')
+    setSelectedProducts([])
+    setSpec('')
+    setSelectedSpecs([])
+    setRequiredQty('')
+    setSampleQty('')
+    setParamSample('')
+    setErrorQty('0')
+    setParamPass('')
+    setParamFail('')
+
+    if (!newPo) {
+      const activeStage = stage || paramStage
+      setProductOptions([{ value: '', label: !activeStage ? 'Vui lòng chọn công đoạn trước' : 'Vui lòng chọn PO trước' }])
+      setSpecOptions([{ value: '', label: !activeStage ? 'Vui lòng chọn công đoạn trước' : 'Vui lòng chọn PO trước' }])
+      setBomData([])
+    }
+  }
+
   const setResultWithDirty = (val) => { setResult(val); setIsDirty(true); }
   const setProductWithDirty = (val) => { setProduct(val); setIsDirty(true); }
   const setSpecWithDirty = (val) => { setSpec(val); setIsDirty(true); }
@@ -1154,8 +1272,6 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
   const setNoteWithDirty = (val) => { setNote(val); setIsDirty(true); }
   const setErrorsWithDirty = (val) => { setErrors(val); setIsDirty(true); }
   const setParameterWithDirty = (val) => { setParameter(val); setIsDirty(true); }
-  const setParamStageWithDirty = (val) => { setParamStage(val); setIsDirty(true); }
-  const setParamPoWithDirty = (val) => { setParamPo(val); setIsDirty(true); }
   const setParamProductWithDirty = (val) => { setParamProduct(val); setIsDirty(true); }
   const setParamSampleWithDirty = (val) => { setParamSample(val); setIsDirty(true); }
   const setProcessWithDirty = (val) => { setProcess(val); setIsDirty(true); }
@@ -1187,9 +1303,11 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     modeOptions: INSPECT_MODE_OPTIONS,
     handleModeChange,
     stage,
-    setStage: setStageWithDirty,
+    setStage: handleStageChange,
+    handleStageChange,
     po,
-    setPo: setPoWithDirty,
+    setPo: handlePoChange,
+    handlePoChange,
     result,
     setResult: setResultWithDirty,
     product,
@@ -1209,11 +1327,11 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     parameterOptions,
     setParameterOptions,
     paramStage,
-    setParamStage: setParamStageWithDirty,
-    handleParamStageChange: (val) => { setParamStage(val); setStage(val); setIsDirty(true); },
+    setParamStage: handleStageChange,
+    handleParamStageChange: handleStageChange,
     paramPo,
-    setParamPo: setParamPoWithDirty,
-    handleParamPoChange: (val) => { setParamPo(val); setPo(val); setParamProduct(''); setProduct(''); setIsDirty(true); },
+    setParamPo: handlePoChange,
+    handleParamPoChange: handlePoChange,
     paramProduct,
     setParamProduct: setParamProductWithDirty,
     handleParamProductChange: (val) => { setParamProduct(val); setProduct(val); setIsDirty(true); },
@@ -1226,9 +1344,14 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     process,
     setProcess: setProcessWithDirty,
     area,
-    setArea: setAreaWithDirty,
+    setArea: handleAreaChange,
+    handleAreaChange,
     staff,
     setStaff: setStaffWithDirty,
+    staffOptions,
+    setStaffOptions,
+    qaQuestions,
+    setQaQuestions,
     answers,
     setAnswers: setAnswersWithDirty,
     showAnswers,
@@ -1266,7 +1389,10 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     fileRef,
     isFailedResult,
     handleStepResultChange,
-    isIncomingStage: stage === 'Đầu vào' || paramStage === 'Đầu vào',
+    isIncomingStage: Boolean(
+      (stage && (stage.toLowerCase().includes('đầu vào') || stage.toLowerCase().includes('nhập kho'))) ||
+      (paramStage && (paramStage.toLowerCase().includes('đầu vào') || paramStage.toLowerCase().includes('nhập kho')))
+    ),
     selectedProducts,
     setSelectedProducts,
     selectedSpecs,

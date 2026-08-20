@@ -150,7 +150,7 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
                   <CustomSelect
                     value={formState.stage}
                     options={formState.stageOptions}
-                    onChange={formState.setStage}
+                    onChange={formState.handleStageChange || formState.setStage}
                     disabled={readOnly}
                   />
                 </div>

@@ -53,6 +53,17 @@ const CL09C_ParameterView = () => {
     handleMultiProductChange,
   } = formState
 
+  const hasStage = Boolean(paramStage)
+  const hasPo = Boolean(paramPo)
+  const hasProduct = Boolean(paramProduct || (selectedProducts && selectedProducts.length > 0))
+
+  const isPoDisabled = readOnly || !hasStage
+  const isProductDisabled = readOnly || !hasStage || !hasPo
+  const isSampleDisabled = readOnly || !hasStage || !hasPo || !hasProduct
+
+  const poPlaceholder = !hasStage ? 'Chọn công đoạn trước' : 'Chọn PO'
+  const productPlaceholder = !hasStage ? 'Chọn công đoạn trước' : (!hasPo ? 'Chọn PO trước' : 'Chọn sản phẩm...')
+
   return (
     <InspectionFormShell
       title="Kiểm tra thông số"
@@ -89,7 +100,8 @@ const CL09C_ParameterView = () => {
                 value={paramPo}
                 options={poOptions}
                 onChange={handleParamPoChange}
-                disabled={readOnly}
+                disabled={isPoDisabled}
+                placeholder={poPlaceholder}
               />
             </div>
             <div className="pv2-field">
@@ -99,16 +111,17 @@ const CL09C_ParameterView = () => {
                   values={selectedProducts}
                   options={productOptions.filter((o) => Boolean(o.value))}
                   onChange={handleMultiProductChange}
-                  placeholder="Chọn sản phẩm..."
+                  placeholder={productPlaceholder}
                   required
-                  disabled={readOnly}
+                  disabled={isProductDisabled}
                 />
               ) : (
                 <CustomSelect
                   value={paramProduct}
                   options={productOptions}
                   onChange={handleParamProductChange}
-                  disabled={readOnly}
+                  disabled={isProductDisabled}
+                  placeholder={productPlaceholder}
                 />
               )}
             </div>
@@ -119,11 +132,11 @@ const CL09C_ParameterView = () => {
               <label>SL mẫu <span className="pv2-req">*</span></label>
               <input
                 type="number"
-                className={`pv2-input ${readOnly ? 'pv2-input--disabled' : ''}`}
+                className={`pv2-input ${isSampleDisabled ? 'pv2-input--disabled' : ''}`}
                 value={paramSample}
                 onChange={(e) => setParamSample(e.target.value)}
                 placeholder="0"
-                disabled={readOnly}
+                disabled={isSampleDisabled}
               />
             </div>
             <div className="pv2-field">

@@ -66,6 +66,11 @@ const stripHtml = (html) => {
   return (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
 };
 
+const getTypeLabel = (type) => {
+  const found = INSPECTION_TYPE_OPTIONS.find(o => o.value === type);
+  return found ? (found.badge || found.label) : (type || 'Chưa rõ');
+};
+
 const InspectionGuideManagementView = ({ docType }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -96,12 +101,30 @@ const InspectionGuideManagementView = ({ docType }) => {
   const [guides, setGuides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [stagesMap, setStagesMap] = useState({});
 
   // Filters & View State
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all, active, inactive
   const [typeFilter, setTypeFilter] = useState('all');
   const [viewMode, setViewMode] = useState('table'); // 'table' | 'grid'
+
+  useEffect(() => {
+    const fetchStages = async () => {
+      try {
+        const res = await api.get('/stages/').catch(() => api.get('/stages'));
+        const list = Array.isArray(res) ? res : (res?.items || []);
+        const map = {};
+        list.forEach(s => {
+          map[s.id] = s.name || s.stage_name;
+        });
+        setStagesMap(map);
+      } catch (err) {
+        console.warn('Lỗi tải danh sách công đoạn:', err);
+      }
+    };
+    fetchStages();
+  }, []);
 
   // Modals state
   const [previewGuide, setPreviewGuide] = useState(null);
@@ -738,10 +761,11 @@ const InspectionGuideManagementView = ({ docType }) => {
               }}>
                 <th style={{ padding: '12px 16px', textAlign: 'left', width: 140, backgroundColor: '#FAF8F6', position: 'sticky', top: 0, zIndex: 10 }}>Mã tài liệu</th>
                 <th style={{ padding: '12px 16px', textAlign: 'left', backgroundColor: '#FAF8F6', position: 'sticky', top: 0, zIndex: 10 }}>Tên tài liệu & Mô tả</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', width: 220, backgroundColor: '#FAF8F6', position: 'sticky', top: 0, zIndex: 10 }}>Quy mô các bước</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', width: 200, backgroundColor: '#FAF8F6', position: 'sticky', top: 0, zIndex: 10 }}>Loại phiếu áp dụng</th>
-                <th style={{ padding: '12px 16px', textAlign: 'center', width: 140, backgroundColor: '#FAF8F6', position: 'sticky', top: 0, zIndex: 10 }}>Trạng thái</th>
-                <th style={{ padding: '12px 16px', textAlign: 'center', width: 140, backgroundColor: '#FAF8F6', position: 'sticky', top: 0, zIndex: 10 }}>Thao tác</th>
+                <th style={{ padding: '12px 16px', textAlign: 'left', width: 180, backgroundColor: '#FAF8F6', position: 'sticky', top: 0, zIndex: 10 }}>Quy mô các bước</th>
+                <th style={{ padding: '12px 16px', textAlign: 'left', width: 170, backgroundColor: '#FAF8F6', position: 'sticky', top: 0, zIndex: 10 }}>Loại phiếu áp dụng</th>
+                <th style={{ padding: '12px 16px', textAlign: 'left', width: 170, backgroundColor: '#FAF8F6', position: 'sticky', top: 0, zIndex: 10 }}>Công đoạn áp dụng</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', width: 130, backgroundColor: '#FAF8F6', position: 'sticky', top: 0, zIndex: 10 }}>Trạng thái</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', width: 120, backgroundColor: '#FAF8F6', position: 'sticky', top: 0, zIndex: 10 }}>Thao tác</th>
               </tr>
             </thead>
             <tbody>
@@ -879,6 +903,47 @@ const InspectionGuideManagementView = ({ docType }) => {
                               {getTypeLabel(a.inspection_type)}
                             </span>
                           ))}
+                          {g.assignments.length > 2 && (
+                            <span style={{
+                              padding: '2px 6px',
+                              borderRadius: 4,
+                              backgroundColor: '#E2E8F0',
+                              color: '#475569',
+                              fontSize: 10.5,
+                              fontWeight: 700
+                            }}>
+                              +{g.assignments.length - 2}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Công đoạn áp dụng */}
+                    <td style={{ padding: '14px 18px' }}>
+                      {(!g.assignments || g.assignments.length === 0) ? (
+                        <span style={{ fontSize: 12, color: '#9CA3AF', fontStyle: 'italic' }}>Chưa gán</span>
+                      ) : (
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          {g.assignments.slice(0, 2).map((a, aIdx) => {
+                            const stageText = a.stage_id ? (stagesMap[a.stage_id] || `CĐ #${a.stage_id}`) : 'Tất cả CĐ';
+                            return (
+                              <span
+                                key={a.id || aIdx}
+                                style={{
+                                  padding: '2px 8px',
+                                  borderRadius: 4,
+                                  backgroundColor: a.stage_id ? '#FEF3C7' : '#F1F5F9',
+                                  color: a.stage_id ? '#92400E' : '#475569',
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  border: a.stage_id ? '1px solid #FDE68A' : 'none'
+                                }}
+                              >
+                                {stageText}
+                              </span>
+                            );
+                          })}
                           {g.assignments.length > 2 && (
                             <span style={{
                               padding: '2px 6px',

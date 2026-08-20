@@ -19,6 +19,12 @@ const cleanTextSummary = (str) => {
   return String(cleaned).replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
+const resolveImgUrl = (img) => {
+  if (!img) return ''
+  if (typeof img === 'string') return getFullImageUrl(img)
+  return getFullImageUrl(img.image_url || img.url || img.path || '')
+}
+
 const InspectionStepsTable = ({ steps = [], onStepChange, sampleQty, disabled = false, mode = '', processSelected = '' }) => {
   const [selectedStepModal, setSelectedStepModal] = useState(null)
   const [selectedImage, setSelectedImage] = useState(null)
@@ -148,9 +154,30 @@ const InspectionStepsTable = ({ steps = [], onStepChange, sampleQty, disabled = 
                     )}
 
                     {hasImages && (
-                      <span className="pv2-sop-img-badge" title="Có ảnh mẫu SOP">
-                        <ImageIcon size={11} /> {step.images.length}
-                      </span>
+                      <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }} onClick={(e) => e.stopPropagation()}>
+                        {step.images.map((img, imgIdx) => (
+                          <div
+                            key={img.id || imgIdx}
+                            style={{
+                              width: '46px',
+                              height: '46px',
+                              borderRadius: '6px',
+                              overflow: 'hidden',
+                              border: '1.5px solid #d1d5db',
+                              cursor: 'pointer',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                            }}
+                            onClick={() => setSelectedImage(resolveImgUrl(img))}
+                            title="Bấm để phóng to ảnh tiêu chuẩn SOP"
+                          >
+                            <img
+                              src={resolveImgUrl(img)}
+                              alt="Ảnh bước SOP"
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </td>
 
@@ -248,19 +275,22 @@ const InspectionStepsTable = ({ steps = [], onStepChange, sampleQty, disabled = 
                     <span>Ảnh tiêu chuẩn SOP ({selectedStepModal.images.length})</span>
                   </div>
                   <div className="pv2-sop-modal-images-grid">
-                    {selectedStepModal.images.map((img, imgIdx) => (
-                      <div
-                        key={img.id || imgIdx}
-                        className="pv2-sop-modal-thumb-box"
-                        onClick={() => setSelectedImage(getFullImageUrl(img.image_url))}
-                      >
-                        <img src={getFullImageUrl(img.image_url)} alt="Ảnh tiêu chuẩn" />
-                        <div className="pv2-sop-modal-thumb-overlay">
-                          <Eye size={16} />
-                          <span>Xem ảnh</span>
+                    {selectedStepModal.images.map((img, imgIdx) => {
+                      const imgUrl = resolveImgUrl(img)
+                      return (
+                        <div
+                          key={img.id || imgIdx}
+                          className="pv2-sop-modal-thumb-box"
+                          onClick={() => setSelectedImage(imgUrl)}
+                        >
+                          <img src={imgUrl} alt="Ảnh tiêu chuẩn" />
+                          <div className="pv2-sop-modal-thumb-overlay">
+                            <Eye size={16} />
+                            <span>Xem ảnh</span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               )}

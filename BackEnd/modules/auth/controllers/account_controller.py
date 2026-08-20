@@ -282,15 +282,21 @@ def resolve_permissions_by_params(
         if not key:
             key = item.permission_key or f"sb_{item.id}"
             
-        # Tìm nhóm cha
-        parent_title = ""
-        if item.parent_id:
-            parent = next((p for p in sidebar_items if p.id == item.parent_id), None)
-            parent_title = parent.title if parent else ""
-        else:
-            parent_title = item.title or ""
+        # Tìm danh sách tất cả các nhóm cha (bao gồm nhóm cha trực tiếp và nhóm gốc)
+        parent_titles = set()
+        curr_parent_id = item.parent_id
+        while curr_parent_id:
+            p_obj = next((p for p in sidebar_items if p.id == curr_parent_id), None)
+            if p_obj:
+                if p_obj.title:
+                    parent_titles.add(p_obj.title)
+                curr_parent_id = p_obj.parent_id
+            else:
+                break
+        if not parent_titles and item.title:
+            parent_titles.add(item.title)
         
-        all_screens_dict[key] = parent_title
+        all_screens_dict[key] = parent_titles
         
     ALL_SCREENS = list(all_screens_dict.keys())
     
@@ -358,13 +364,13 @@ def resolve_permissions_by_params(
         allowed_screens = ALL_SCREENS
     else:
         # Lọc dựa trên nhóm menu cha trong Sidebar DB
-        sx_parent_groups = {"Quản lý sản xuất", "KPI", "Quản lý KPI", "Thông tin sản xuất", "Báo cáo công việc", "Hồ sơ ISO", "Quy trình nghiệp vụ", "Kế hoạch & Sản xuất"}
-        qlcl_parent_groups = {"Quản lý chất lượng", "KPI", "Quản lý KPI", "Phiếu kiểm tra", "Báo cáo CAPA", "Tạo CTQ, SOS", "Cảnh báo lỗi", "Góp ý", "QC & Chất lượng"}
+        sx_parent_groups = {"Quản lý sản xuất", "KPI", "Quản lý KPI", "Thông tin sản xuất", "Báo cáo công việc", "Hồ sơ ISO", "Quy trình nghiệp vụ", "Kế hoạch & Sản xuất", "Tài liệu ban hành"}
+        qlcl_parent_groups = {"Quản lý chất lượng", "KPI", "Quản lý KPI", "Phiếu kiểm tra", "Báo cáo CAPA", "Tạo CTQ, SOS", "Cảnh báo lỗi", "Góp ý", "QC & Chất lượng", "Tài liệu ban hành"}
         
         target_groups = sx_parent_groups if role_name == "Sx" else (qlcl_parent_groups if role_name == "QLCL" else set())
         
-        for screen, parent_title in all_screens_dict.items():
-            if parent_title in target_groups:
+        for screen, p_titles in all_screens_dict.items():
+            if any(t in target_groups for t in p_titles):
                 allowed_screens.append(screen)
         
     level = permission_level
@@ -488,6 +494,14 @@ def resolve_user_permissions(user, db: Session) -> dict:
     if user.screen_permissions:
         try:
             overrides = json.loads(user.screen_permissions)
+            
+            # Đồng bộ tự động cho nhóm Tài liệu ban hành: nếu có inspection-guides thì tự động áp dụng cho SOS và CTQ nếu chưa ghi đè riêng
+            if "/admin/inspection-guides" in overrides:
+                if "/admin/sos-guides" not in overrides:
+                    overrides["/admin/sos-guides"] = overrides["/admin/inspection-guides"]
+                if "/admin/ctq-guides" not in overrides:
+                    overrides["/admin/ctq-guides"] = overrides["/admin/inspection-guides"]
+
             legacy_rank_map = {
                 "none": [],
                 "read": ["read"],

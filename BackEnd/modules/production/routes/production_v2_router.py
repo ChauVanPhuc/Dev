@@ -601,10 +601,9 @@ def get_order_bom(
 
             def is_matching_stage(bom_item) -> bool:
                 in_st = clean_st(bom_item.input_stage)
-                out_st = clean_st(bom_item.output_stage)
-                if not in_st and not out_st:
+                if not in_st:
                     return True
-                return check_single_stage(in_st) or check_single_stage(out_st)
+                return check_single_stage(in_st)
 
             matched_boms = [b for b in boms if is_matching_stage(b)]
             if matched_boms:

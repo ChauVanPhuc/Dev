@@ -34,15 +34,9 @@ const CL09D_ProcessView = () => {
     >
       {({ renderImageUploadArea }) => (
         <>
-          <div className="pv2-field-row pv2-field-row--2col" style={{ marginBottom: 12 }}>
-            <div className="pv2-field">
-              <label>Chọn quy trình <span className="pv2-req">*</span></label>
-              <CustomSelect value={process} options={processOptions} onChange={setProcess} disabled={readOnly} />
-            </div>
-            <div className="pv2-field">
-              <label>Chọn khu vực kiểm tra <span className="pv2-req">*</span></label>
-              <CustomSelect value={area} options={stageOptions.map(o => o.value === '' ? { value: '', label: 'Chọn khu vực' } : o)} onChange={setArea} disabled={readOnly} />
-            </div>
+          <div className="pv2-field" style={{ marginBottom: 12 }}>
+            <label>Chọn quy trình <span className="pv2-req">*</span></label>
+            <CustomSelect value={process} options={processOptions} onChange={setProcess} disabled={readOnly} />
           </div>
 
           <div className="pv2-field" style={{ marginBottom: 12 }}>

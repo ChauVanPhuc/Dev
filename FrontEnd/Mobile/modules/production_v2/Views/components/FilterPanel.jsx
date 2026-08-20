@@ -1,12 +1,21 @@
 import { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 import CustomSelect from '@mobile/Shared/Views/components/form/CustomSelect'
-import { STATUS_FILTER_OPTIONS, TICKET_TYPE_OPTIONS, MOCK_FACTORIES, MOCK_STAGES } from '../../constants'
+import { STATUS_FILTER_OPTIONS, TICKET_TYPE_OPTIONS, BOM_STAGE_OPTIONS } from '../../constants'
 import { stageService } from '../../services/stageService'
+
+const DEFAULT_FACTORIES = [
+  { value: '', label: 'Tất cả nhà máy' },
+  { value: 'vanity01', label: 'Vanity 01' },
+  { value: 'vanity02', label: 'Vanity 02' },
+]
 
 const FilterPanel = ({ open, filters, onApply, onClose }) => {
   const [local, setLocal] = useState({ ...filters })
-  const [stageOptions, setStageOptions] = useState(MOCK_STAGES)
+  const [stageOptions, setStageOptions] = useState(() => [
+    { value: '', label: 'Tất cả công đoạn' },
+    ...BOM_STAGE_OPTIONS.filter((s) => Boolean(s.value))
+  ])
 
   // Đồng bộ state bộ lọc mỗi khi mở popup hoặc khi prop filters thay đổi
   useEffect(() => {
@@ -29,6 +38,7 @@ const FilterPanel = ({ open, filters, onApply, onClose }) => {
       })
       .catch(() => {})
   }, [])
+
 
   const upd = (k, v) => setLocal((p) => ({ ...p, [k]: v }))
 
@@ -75,7 +85,7 @@ const FilterPanel = ({ open, filters, onApply, onClose }) => {
 
           <div className="pv2-filter-field">
             <label>Lọc theo nhà máy</label>
-            <CustomSelect value={local.factory || ''} options={MOCK_FACTORIES} onChange={(v) => upd('factory', v)} />
+            <CustomSelect value={local.factory || ''} options={DEFAULT_FACTORIES} onChange={(v) => upd('factory', v)} />
           </div>
 
           <div className="pv2-filter-field">

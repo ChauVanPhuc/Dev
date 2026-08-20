@@ -1,9 +1,5 @@
 import apiClient from '@shared/services/api'
-import { MOCK_TRANSFER_TICKETS, PAGE_SIZE } from '../constants'
-
-const USE_MOCK = false
-
-const delay = (ms = 400) => new Promise((r) => setTimeout(r, ms))
+import { PAGE_SIZE } from '../constants'
 
 export const transferService = {
   async getAvailableMonths() {
@@ -11,24 +7,13 @@ export const transferService = {
       const res = await apiClient.get('/production-v2/available-months')
       return res.data || { months: [], default_month: new Date().getMonth() + 1 }
     } catch (e) {
-      console.warn('Lỗi khi tải danh sách tháng từ Backend, dùng dữ liệu mặc định:', e)
-      return { months: [{ month: 7, label: 'Tháng 7' }, { month: 6, label: 'Tháng 6' }], default_month: 7 }
+      console.warn('Lỗi khi tải danh sách tháng từ Backend:', e)
+      const currentM = new Date().getMonth() + 1
+      return { months: [{ month: currentM, label: `Tháng ${currentM}` }], default_month: currentM }
     }
   },
 
   async getList({ tab = 'pending', month, part_name, status, factory, stage, type, page = 1, limit = PAGE_SIZE }) {
-    if (USE_MOCK) {
-      await delay()
-      let data = [...MOCK_TRANSFER_TICKETS]
-      if (tab === 'pending') data = data.filter((t) => t.status === 'pending' || t.status === 'delivering' || t.status === 'Chờ xác nhận')
-      else data = data.filter((t) => t.status === 'done' || t.status === 'cancelled' || t.status === 'Đã nhận' || t.status === 'Hoàn thành')
-      if (status) data = data.filter((t) => t.status === status)
-      if (type) data = data.filter((t) => t.version === type)
-      const total = data.length
-      const items = data.slice((page - 1) * limit, page * limit)
-      return { items, total, page, pageSize: limit, available_parts: ['Thanh A', 'Thanh B', 'Thanh C'] }
-    }
-
     try {
       const params = new URLSearchParams({
         page: page.toString(),
@@ -42,46 +27,33 @@ export const transferService = {
       const res = await apiClient.get(`/production-v2/transfers?${params.toString()}`)
       const items = res.data?.items || []
       const total = res.data?.total || items.length
-      const available_parts = res.data?.available_parts || ['Thanh A', 'Thanh B', 'Thanh C']
+      const available_parts = res.data?.available_parts || []
       return { items, total, page, pageSize: limit, available_parts }
     } catch (err) {
-      console.warn('Backend API /production-v2/transfers lỗi, fallback mock data:', err)
-      let data = [...MOCK_TRANSFER_TICKETS]
-      if (tab === 'pending') data = data.filter((t) => t.status === 'pending' || t.status === 'delivering' || t.status === 'Chờ xác nhận')
-      else data = data.filter((t) => t.status === 'done' || t.status === 'cancelled' || t.status === 'Đã nhận' || t.status === 'Hoàn thành')
-      const total = data.length
-      const items = data.slice((page - 1) * limit, page * limit)
-      return { items, total, page, pageSize: limit, available_parts: ['Thanh A', 'Thanh B', 'Thanh C'] }
+      console.warn('Backend API /production-v2/transfers lỗi:', err)
+      return { items: [], total: 0, page, pageSize: limit, available_parts: [] }
     }
   },
 
   async getById(id) {
+    if (!id || id === 'NEW') return null
     try {
       const res = await apiClient.get(`/deliveries/${id}/`)
       return res.data
     } catch (e) {
-      return MOCK_TRANSFER_TICKETS.find((t) => t.code === id || t.id === Number(id)) || null
+      console.warn('[transferService.getById] error:', e)
+      return null
     }
   },
 
   async create(payload) {
-    try {
-      const res = await apiClient.post('/deliveries/', payload)
-      return res.data
-    } catch (e) {
-      await delay(500)
-      return { id: Date.now(), code: `LC${String(Date.now()).slice(-3)}`, ...payload }
-    }
+    const res = await apiClient.post('/deliveries/', payload)
+    return res.data
   },
 
   async confirm(id, quantities) {
-    try {
-      const res = await apiClient.patch(`/deliveries/${id}/confirm/`, quantities)
-      return res.data
-    } catch (e) {
-      await delay(400)
-      return { success: true }
-    }
+    const res = await apiClient.patch(`/deliveries/${id}/confirm/`, quantities)
+    return res.data
   },
 
   async getNextCode() {
@@ -134,3 +106,4 @@ export const transferService = {
     }
   },
 }
+

@@ -1,15 +1,7 @@
 import CustomSelect from '@mobile/Shared/Views/components/form/CustomSelect'
 import { useInspectionFormBase } from '../Controllers/useInspectionFormBase'
 import InspectionFormShell from './components/InspectionFormShell'
-import { INSPECT_MODES, MOCK_STAFF_OPTIONS } from '../constants'
-
-const staffOpts = [{ value: '', label: 'Chọn nhân sự' }, ...MOCK_STAFF_OPTIONS]
-
-const MOCK_QUESTIONS = [
-  { q: 'Câu hỏi 1', answer: 'Đáp án câu 1...' },
-  { q: 'Câu hỏi 2', answer: 'Đáp án câu 2...' },
-  { q: 'Câu hỏi 3', answer: 'Đáp án câu 3...' },
-]
+import { INSPECT_MODES } from '../constants'
 
 const CL09E_QAView = () => {
   const formState = useInspectionFormBase(INSPECT_MODES.QA)
@@ -21,6 +13,8 @@ const CL09E_QAView = () => {
     handleModeChange,
     staff,
     setStaff,
+    staffOptions,
+    qaQuestions,
     answers,
     setAnswers,
     showAnswers,
@@ -28,6 +22,8 @@ const CL09E_QAView = () => {
     qaResult,
     setQaResult,
   } = formState
+
+  const questionsList = qaQuestions || []
 
   return (
     <InspectionFormShell
@@ -39,13 +35,13 @@ const CL09E_QAView = () => {
         <>
           <div className="pv2-field" style={{ marginBottom: 12 }}>
             <label>Tên nhân sự <span className="pv2-req">*</span></label>
-            <CustomSelect value={staff} options={staffOpts} onChange={setStaff} disabled={readOnly} />
+            <CustomSelect value={staff} options={staffOptions || []} onChange={setStaff} disabled={readOnly} />
           </div>
 
-          {MOCK_QUESTIONS.map((q, i) => (
+          {questionsList.map((q, i) => (
             <div key={i} className="pv2-field" style={{ marginBottom: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <label>{q.q}:</label>
+                <label>{q.q || `Câu hỏi ${i + 1}`}:</label>
                 <button type="button" className="pv2-link-underline" onClick={() => setShowAnswers((prev) => prev.map((v, idx) => (idx === i ? !v : v)))}>
                   {showAnswers[i] ? 'Ẩn đáp án' : 'Xem đáp án'}
                 </button>
@@ -54,9 +50,10 @@ const CL09E_QAView = () => {
               <textarea
                 className={`pv2-textarea ${readOnly ? 'pv2-input--disabled' : ''}`}
                 rows={2}
-                value={answers[i]}
+                value={answers[i] || ''}
                 onChange={(e) => setAnswers((prev) => prev.map((v, idx) => (idx === i ? e.target.value : v)))}
                 disabled={readOnly}
+                placeholder="Nhập câu trả lời hoặc ghi nhận đánh giá..."
               />
             </div>
           ))}
