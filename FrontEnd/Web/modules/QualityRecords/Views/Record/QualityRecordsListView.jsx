@@ -724,11 +724,6 @@ const QualityRecordsListView = () => {
             });
             applyDefaultBorders(sheetQC, 5, qcData.length + 4, qcCols.length);
             for (let r = 5; r <= qcData.length + 4; r++) {
-                sheetQC.getCell(r, 1).alignment = { horizontal: 'center' };
-                sheetQC.getCell(r, 2).alignment = { horizontal: 'center' };
-                sheetQC.getCell(r, 3).alignment = { horizontal: 'center' };
-                sheetQC.getCell(r, 5).alignment = { horizontal: 'right' };
-                sheetQC.getCell(r, 6).alignment = { horizontal: 'right' };
                 sheetQC.getCell(r, 7).alignment = { horizontal: 'center' };
                 sheetQC.getCell(r, 8).alignment = { horizontal: 'center' };
                 sheetQC.getCell(r, 9).alignment = { horizontal: 'center' };
@@ -746,7 +741,7 @@ const QualityRecordsListView = () => {
     };
 
     return (
-        <div className="quality-records-container">
+        <div className="gold-layout">
             <style dangerouslySetInnerHTML={{
                 __html: `
                 .quality-records-container {
@@ -898,14 +893,8 @@ const QualityRecordsListView = () => {
                     border-radius: 12px;
                     border: 1px solid #EADCC9;
                     display: flex;
-                    flex-direction: column;
+                    justify: space-between;
                     align-items: center;
-                    gap: 0.5rem;
-                    position: sticky;
-                    bottom: 0;
-                    z-index: 100;
-                    box-shadow: 0 -4px 12px rgba(123, 82, 51, 0.08);
-                    margin-top: 1.5rem;
                 }
                 @media (min-width: 1024px) {
                     .qr-pagination-container {
@@ -952,119 +941,124 @@ const QualityRecordsListView = () => {
                 }
             `}} />
 
-            <PageToolbar
-                searchValue={searchTerm}
-                onSearchChange={(val) => { setSearchTerm(val); setCurrentPage(1); }}
-                searchPlaceholder="Tìm kiếm theo Mã PO..."
-                showSort={true}
-                sortOptions={[
-                    { value: 'none', label: 'Sắp xếp: Mặc định' },
-                    { value: 'po_asc', label: 'Mã PO (A-Z)' },
-                    { value: 'po_desc', label: 'Mã PO (Z-A)' },
-                    { value: 'qty_asc', label: 'Sản lượng (Tăng dần)' },
-                    { value: 'qty_desc', label: 'Sản lượng (Giảm dần)' }
-                ]}
-                sortValue={sortBy}
-                onSortChange={(val) => { setSortBy(val); setCurrentPage(1); }}
-                showFilter={true}
-                isFilterOpen={isFilterBarOpen}
-                onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
-                activeFiltersCount={(statusFilter !== 'all' ? 1 : 0) + (selectedMonth ? 1 : 0) + (filterProduct !== 'all' ? 1 : 0)}
-                onExport={() => setShowExportModal(true)}
-                isExporting={isExporting}
-                hasWritePermission={true}
-            />
+            {/* ── STICKY TOP ZONE ── */}
+            <div className="sticky-top-zone">
+                <PageToolbar
+                    searchValue={searchTerm}
+                    onSearchChange={(val) => { setSearchTerm(val); setCurrentPage(1); }}
+                    searchPlaceholder="Tìm kiếm theo Mã PO..."
+                    showSort={true}
+                    sortOptions={[
+                        { value: 'none', label: 'Sắp xếp: Mặc định' },
+                        { value: 'po_asc', label: 'Mã PO (A-Z)' },
+                        { value: 'po_desc', label: 'Mã PO (Z-A)' },
+                        { value: 'qty_asc', label: 'Sản lượng (Tăng dần)' },
+                        { value: 'qty_desc', label: 'Sản lượng (Giảm dần)' }
+                    ]}
+                    sortValue={sortBy}
+                    onSortChange={(val) => { setSortBy(val); setCurrentPage(1); }}
+                    showFilter={true}
+                    isFilterOpen={isFilterBarOpen}
+                    onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
+                    activeFiltersCount={(statusFilter !== 'all' ? 1 : 0) + (selectedMonth ? 1 : 0) + (filterProduct !== 'all' ? 1 : 0)}
+                    onExport={() => setShowExportModal(true)}
+                    isExporting={isExporting}
+                    hasWritePermission={true}
+                />
 
-            {/* INLINE EXPANDABLE FILTER BAR */}
-            {isFilterBarOpen && (
-                <div className="filter-inline-bar">
-                    {/* Lọc Trạng thái */}
-                    <div className="filter-field-group">
-                        <label className="filter-field-label">Trạng thái dữ liệu</label>
-                        <select
-                            value={statusFilter}
-                            onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
-                        >
-                            <option value="all">Tất cả trạng thái</option>
-                            <option value="has_data">Đã có dữ liệu</option>
-                            <option value="no_data">Chưa có dữ liệu</option>
-                        </select>
-                    </div>
-
-                    {/* Chọn tháng */}
-                    <div className="filter-field-group">
-                        <label className="filter-field-label">Chọn tháng</label>
-                        <select
-                            value={selectedMonth}
-                            onChange={handleMonthChange}
-                        >
-                            {monthOptions.length > 0 ? monthOptions.map(m => (
-                                <option key={m.key} value={m.key}>
-                                    {m.label}
-                                </option>
-                            )) : <option value="">Đang tải kế hoạch...</option>}
-                        </select>
-                    </div>
-
-                    {/* Sản phẩm */}
-                    <div className="filter-field-group">
-                        <label className="filter-field-label">Sản phẩm</label>
-                        <select
-                            value={filterProduct}
-                            onChange={(e) => { setFilterProduct(e.target.value); setCurrentPage(1); }}
-                        >
-                            <option value="all">Tất cả sản phẩm</option>
-                            {uniqueProductNames.map(name => (
-                                <option key={name} value={name}>{name}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* Hiển thị số dòng */}
-                    <div className="filter-field-group">
-                        <label className="filter-field-label">Hiển thị số dòng</label>
-                        <select
-                            value={itemsPerPage}
-                            onChange={(e) => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
-                        >
-                            <option value={15}>15 dòng</option>
-                            <option value={30}>30 dòng</option>
-                            <option value={50}>50 dòng</option>
-                            <option value={100}>100 dòng</option>
-                        </select>
-                    </div>
-
-                    {(statusFilter !== 'all' || filterProduct !== 'all' || itemsPerPage !== 15 || searchTerm || sortBy !== 'none') && (
+                {/* INLINE EXPANDABLE FILTER BAR */}
+                {isFilterBarOpen && (
+                    <div className="filter-inline-bar">
+                        {/* KHSX Tháng */}
                         <div className="filter-field-group">
-                            <button
-                                type="button"
-                                className="page-btn"
-                                onClick={() => {
-                                    setStatusFilter('all');
-                                    setFilterProduct('all');
-                                    setItemsPerPage(15);
-                                    setSearchTerm('');
-                                    setSortBy('none');
-                                    setCurrentPage(1);
-                                }}
-                                style={{
-                                    height: '36px',
-                                    padding: '0 12px',
-                                    fontSize: '0.8rem',
-                                    backgroundColor: '#FAF6F0',
-                                    color: '#7B5233',
-                                    border: '1px solid #EADCC9',
-                                    borderRadius: '6px',
-                                    cursor: 'pointer',
-                                    fontWeight: '600'
-                                }}
+                            <label className="filter-field-label">Tháng / KHSX</label>
+                            <select
+                                className="qr-khsx-select"
+                                value={selectedMonth}
+                                onChange={handleMonthChange}
                             >
-                                Xóa bộ lọc
-                            </button>
+                                <option value="">Tất cả KHSX</option>
+                                {monthOptions.map(m => (
+                                    <option key={m.key} value={m.key}>
+                                        {m.label} ({m.name || `Kế hoạch ${m.month}/${m.year}`})
+                                    </option>
+                                ))}
+                            </select>
                         </div>
-                    )}
-                </div>
-            )}
+
+                        {/* Trạng thái dữ liệu */}
+                        <div className="filter-field-group">
+                            <label className="filter-field-label">Trạng thái dữ liệu</label>
+                            <select
+                                value={statusFilter}
+                                onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+                            >
+                                <option value="all">Tất cả PO</option>
+                                <option value="has_data">Đã có dữ liệu chất lượng</option>
+                                <option value="no_data">Chưa có dữ liệu chất lượng</option>
+                            </select>
+                        </div>
+
+                        {/* Tên sản phẩm */}
+                        <div className="filter-field-group">
+                            <label className="filter-field-label">Tên Sản Phẩm</label>
+                            <select
+                                value={filterProduct}
+                                onChange={(e) => { setFilterProduct(e.target.value); setCurrentPage(1); }}
+                            >
+                                <option value="all">Tất cả sản phẩm</option>
+                                {uniqueProductNames.map(p => (
+                                    <option key={p} value={p}>{p}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Hiển thị số dòng */}
+                        <div className="filter-field-group">
+                            <label className="filter-field-label">Hiển thị số dòng</label>
+                            <select
+                                value={itemsPerPage}
+                                onChange={(e) => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
+                            >
+                                <option value={15}>15 dòng</option>
+                                <option value={30}>30 dòng</option>
+                                <option value={50}>50 dòng</option>
+                                <option value={100}>100 dòng</option>
+                            </select>
+                        </div>
+
+                        {(statusFilter !== 'all' || filterProduct !== 'all' || itemsPerPage !== 15 || searchTerm || sortBy !== 'none') && (
+                            <div className="filter-field-group">
+                                <button
+                                    type="button"
+                                    className="page-btn"
+                                    onClick={() => {
+                                        setStatusFilter('all');
+                                        setFilterProduct('all');
+                                        setItemsPerPage(15);
+                                        setSearchTerm('');
+                                        setSortBy('none');
+                                        setCurrentPage(1);
+                                    }}
+                                    style={{
+                                        height: '36px',
+                                        padding: '0 12px',
+                                        fontSize: '0.8rem',
+                                        backgroundColor: '#FAF6F0',
+                                        color: '#7B5233',
+                                        border: '1px solid #EADCC9',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        fontWeight: '600'
+                                    }}
+                                >
+                                    Xóa bộ lọc
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
 
             {/* Bảng dữ liệu */}
             <div className="admin-list-layout" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

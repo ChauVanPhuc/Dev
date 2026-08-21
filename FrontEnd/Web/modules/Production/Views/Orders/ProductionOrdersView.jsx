@@ -187,8 +187,10 @@ const ProductionOrdersView = () => {
   };
 
   return (
-    <div className="mgmt-container">
-      <div className="mgmt-main">
+    <div className="gold-layout">
+
+      {/* ── STICKY TOP ZONE ── */}
+      <div className="sticky-top-zone">
         <PageToolbar
           searchValue={searchTerm}
           onSearchChange={(val) => { setSearchTerm(val); setPage(1); }}
@@ -285,6 +287,7 @@ const ProductionOrdersView = () => {
             </div>
           </div>
         )}
+      </div>
 
         <div className="admin-list-layout">
           <div className="mgmt-table card admin-table-card">
@@ -437,7 +440,6 @@ const ProductionOrdersView = () => {
 
           </div>
         </div>
-      </div>
     </div>
   );
 };

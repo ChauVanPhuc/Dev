@@ -685,10 +685,10 @@ const UserManagement = () => {
   const totalPages = Math.ceil(total / pageSize);
 
   return (
-    <div className="mgmt-container">
-      {/* ── Phần nội dung chính ── */}
-      <div className="mgmt-main">
+    <div className="gold-layout">
 
+      {/* ── STICKY TOP ZONE ── */}
+      <div className="sticky-top-zone">
         {/* ── Thanh công cụ (Toolbar) ── */}
         <PageToolbar
           searchValue={searchTerm}
@@ -830,6 +830,7 @@ const UserManagement = () => {
             )}
           </div>
         )}
+      </div>
 
         {/* ── Bảng dữ liệu ── */}
         <div className="admin-list-layout">
@@ -1218,8 +1219,8 @@ const UserManagement = () => {
             </button>
           </div>
         )}
-      </div>
-      <style>{`
+
+        <style dangerouslySetInnerHTML={{ __html: `
         .matrix-select-dropdown {
           width: 100%;
           padding: 6px 12px;
@@ -1287,7 +1288,7 @@ const UserManagement = () => {
             width: 100% !important;
           }
         }
-      `}</style>
+      `}} />
       <BeautifulConfirmModal
         visible={confirmDeleteModal.show}
         title="Xác nhận xóa tài khoản"

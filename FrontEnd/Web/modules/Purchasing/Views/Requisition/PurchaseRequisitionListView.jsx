@@ -267,7 +267,7 @@ const PurchaseRequisitionListView = () => {
   };
 
   return (
-    <div className="manufacture-plan-container mgmt-container pr-unified-container" style={{ width: '100%', maxWidth: '100%' }}>
+    <div className="gold-layout">
 
       {/* Dynamic CSS override for Super Compact Table & Clean ERP View with Full Scroll Support */}
       <style dangerouslySetInnerHTML={{ __html: `

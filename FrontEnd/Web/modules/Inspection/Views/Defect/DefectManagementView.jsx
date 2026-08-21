@@ -29,7 +29,7 @@ const DefectAnalytics = ({ stage }) => {
   useEffect(() => {
     const fetchAllRecords = async () => {
       try {
-        const res = await api.get('/inspections/daily?limit=1000');
+        const res = await api.get('/inspections/daily?limit=0');
         if (Array.isArray(res)) setAllDailyRecords(res);
       } catch (err) {
         console.error("Error fetching all daily records for filter options:", err);
@@ -1600,12 +1600,12 @@ const DefectManagement = () => {
 
                               {/* Cột 7: % Tỷ lệ lỗi (Tháng / All) */}
                               <td style={{ textAlign: 'center', whiteSpace: 'nowrap', verticalAlign: 'middle', padding: '2px 4px' }}>
-                                <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '1px', alignItems: 'flex-start', fontSize: '0.68rem' }}>
+                                <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-start', fontSize: '0.68rem' }}>
                                   <div 
-                                    title={`Tháng này: ${defect.monthly_count || 0} lỗi (${defect.monthly_rate || 0}% tổng số lỗi tháng)`}
+                                    title={`Tỷ lệ lỗi trong Tháng: ${defect.monthly_count || 0} sản phẩm lỗi (${defect.monthly_rate || 0}% tổng số lỗi tháng)`}
                                     style={{ display: 'flex', alignItems: 'center', gap: '2px' }}
                                   >
-                                    <span style={{ color: '#888', fontSize: '0.62rem', fontWeight: 'bold' }}>T:</span>
+                                    <span style={{ color: '#7B5233', fontSize: '0.62rem', fontWeight: '800' }} title="Tỷ lệ lỗi Tháng">Tháng:</span>
                                     <span style={{ 
                                       fontWeight: '700', 
                                       fontSize: '0.68rem',
@@ -1621,10 +1621,10 @@ const DefectManagement = () => {
                                     )}
                                   </div>
                                   <div 
-                                    title={`Toàn thời gian: ${defect.all_time_count || 0} lỗi (${defect.all_time_rate || 0}% tổng số lỗi toàn bộ)`}
+                                    title={`Tỷ lệ lỗi Toàn thời gian (All-time): ${defect.all_time_count || 0} sản phẩm lỗi (${defect.all_time_rate || 0}% tổng số lỗi toàn bộ)`}
                                     style={{ display: 'flex', alignItems: 'center', gap: '2px' }}
                                   >
-                                    <span style={{ color: '#888', fontSize: '0.62rem', fontWeight: 'bold' }}>A:</span>
+                                    <span style={{ color: '#64748b', fontSize: '0.62rem', fontWeight: '800' }} title="Tỷ lệ lỗi Toàn thời gian">All:</span>
                                     <span style={{ 
                                       fontWeight: '600', 
                                       fontSize: '0.68rem',

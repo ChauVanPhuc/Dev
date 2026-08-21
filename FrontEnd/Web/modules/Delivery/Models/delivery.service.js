@@ -4,13 +4,12 @@ import api from '@webShared/Services/api.service';
 
 const deliveryService = {
 
-  getAllDeliveries: (skip = 0, limit = 100, year = null, month = null) => {
-    let url = `/deliveries/?skip=${skip}`;
-    if (limit !== null && limit !== undefined && limit > 0) {
-      url += `&limit=${limit}`;
-    }
+  getAllDeliveries: (page = 1, limit = 100, year = null, month = null, status = null, search = null) => {
+    let url = `/deliveries/?page=${page}&limit=${limit}`;
     if (year) url += `&year=${year}`;
     if (month) url += `&month=${month}`;
+    if (status) url += `&status=${encodeURIComponent(status)}`;
+    if (search) url += `&search=${encodeURIComponent(search)}`;
     return api.get(url);
   },
 
@@ -39,6 +38,12 @@ const deliveryService = {
   getInputInspectionResult: (planId, partName) => {
 
     return api.get(`/inspections/plan/${planId}/part?part_name=${encodeURIComponent(partName)}`);
+
+  },
+
+  getInspectionByPallet: (palletCode) => {
+
+    return api.get(`/inspections/pallet/${encodeURIComponent(palletCode)}`);
 
   },
 

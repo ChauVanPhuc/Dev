@@ -172,8 +172,15 @@ const ProductionOrderCreateView = () => {
   };
 
   const mapStagePairToFactory = (fromName, toName, targetFactory, allStages = stageOptions) => {
-    const sFrom = mapStageToFactory(fromName, targetFactory, allStages, false, '');
-    const sTo = mapStageToFactory(toName, targetFactory, allStages, true, sFrom);
+    let sFrom = mapStageToFactory(fromName, targetFactory, allStages, false, '');
+    let sTo = mapStageToFactory(toName, targetFactory, allStages, true, sFrom);
+    if (sFrom === sTo) {
+      const targetStages = getStagesForFactory(targetFactory, allStages);
+      const idx = targetStages.findIndex(s => s === sFrom);
+      if (idx >= 0 && idx + 1 < targetStages.length) {
+        sTo = targetStages[idx + 1];
+      }
+    }
     return { stageFrom: sFrom, stageTo: sTo };
   };
 
@@ -1410,7 +1417,7 @@ const ProductionOrderCreateView = () => {
                             <td style={{ padding: '8px 10px', fontWeight: '700', color: '#5D3B32' }}>{det.type}</td>
                             <td style={{ padding: '8px 10px' }}>
                               <select
-                                value={det.stageFrom}
+                                value={currentFactoryStages.includes(det.stageFrom) ? det.stageFrom : mapStageToFactory(det.stageFrom, currentFactory, currentFactoryStages)}
                                 onChange={(e) => handleUpdateDetStage(det.id, 'stageFrom', e.target.value)}
                                 style={{ padding: '3px 6px', border: '1px solid #EADCC9', borderRadius: '4px', fontSize: '0.8rem' }}
                               >
@@ -1421,12 +1428,22 @@ const ProductionOrderCreateView = () => {
                             </td>
                             <td style={{ padding: '8px 10px' }}>
                               <select
-                                value={det.stageTo}
+                                value={(() => {
+                                  const fromVal = currentFactoryStages.includes(det.stageFrom) ? det.stageFrom : mapStageToFactory(det.stageFrom, currentFactory, currentFactoryStages);
+                                  let toVal = currentFactoryStages.includes(det.stageTo) ? det.stageTo : mapStageToFactory(det.stageTo, currentFactory, currentFactoryStages, true, fromVal);
+                                  if (toVal === fromVal) {
+                                    const idx = currentFactoryStages.findIndex(s => s === fromVal);
+                                    if (idx >= 0 && idx + 1 < currentFactoryStages.length) {
+                                      toVal = currentFactoryStages[idx + 1];
+                                    }
+                                  }
+                                  return toVal;
+                                })()}
                                 onChange={(e) => handleUpdateDetStage(det.id, 'stageTo', e.target.value)}
                                 style={{ padding: '3px 6px', border: '1px solid #EADCC9', borderRadius: '4px', fontSize: '0.8rem' }}
                               >
                                 {currentFactoryStages
-                                  .filter(stg => stg !== det.stageFrom)
+                                  .filter(stg => stg !== (currentFactoryStages.includes(det.stageFrom) ? det.stageFrom : mapStageToFactory(det.stageFrom, currentFactory, currentFactoryStages)))
                                   .map(stg => (
                                     <option key={`to-${stg}`} value={stg}>{stg}</option>
                                   ))}

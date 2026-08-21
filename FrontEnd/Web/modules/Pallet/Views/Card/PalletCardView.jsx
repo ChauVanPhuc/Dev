@@ -154,112 +154,115 @@ const ExceptionDeliveries = () => {
     };
 
     return (
-        <div className="manufacture-plan-container" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
+        <div className="gold-layout" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
             
-            {/* Thống Kê Tổng Quan */}
-            <div className="stats-grid five-cols animate-card-entrance" style={{ marginBottom: '8px', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '8px' }}>
-                {[
-                    { id: 'ALL', label: 'TỔNG SỐ NGOẠI LỆ', value: stats.total, iconBg: '#FAF6F0', iconColor: '#7B5233', themeColor: '#7B5233', activeBg: '#FAF6F0', Icon: Layers },
-                    { id: 'LECH_THIEU', label: 'LỆCH THIỆU', value: stats.lechThieu, iconBg: '#FFF1F2', iconColor: '#EF4444', themeColor: '#EF4444', activeBg: '#FFF5F6', Icon: ArrowDownRight },
-                    { id: 'LECH_THUA', label: 'LỆCH THỪA', value: stats.lechThua, iconBg: '#EBF5FF', iconColor: '#3B82F6', themeColor: '#3B82F6', activeBg: '#F4F9FF', Icon: ArrowUpRight },
-                    { id: 'TRA_HANG', label: 'TRẢ HÀNG QC', value: stats.traHang, iconBg: '#FFFBEB', iconColor: '#D97706', themeColor: '#D97706', activeBg: '#FFFDF5', Icon: Undo2 },
-                    { id: 'LOI_QC', label: 'LỖI ĐÁNH GIÁ QC', value: stats.loiQC, iconBg: '#F5F3FF', iconColor: '#8B5CF6', themeColor: '#8B5CF6', activeBg: '#FAF8FF', Icon: AlertCircle },
-                ].map((stat) => {
-                    const isActive = filterType === stat.id;
-                    return (
-                        <div 
-                            key={stat.id} 
-                            onClick={() => { setFilterType(stat.id); setCurrentPage(1); }}
-                            className="kpi-card"
-                            style={{ 
-                                background: isActive ? stat.activeBg : '#fff', 
-                                border: '1px solid ' + (isActive ? stat.themeColor : '#E2E8F0'),
-                                padding: '8px 12px', 
-                                borderRadius: '10px', 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                gap: '8px',
-                                boxShadow: isActive ? `0 0 0 2px ${stat.themeColor}20` : '0 1px 2px rgba(0,0,0,0.01)',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s'
-                            }}
-                        >
-                            <div style={{
-                                width: '32px', 
-                                height: '32px', 
-                                borderRadius: '8px',
-                                backgroundColor: stat.iconBg,
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                justifyContent: 'center',
-                                color: stat.iconColor, 
-                                flexShrink: 0
-                            }}>
-                                <stat.Icon size={18} />
-                            </div>
-                            <div>
-                                <div style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: '700', letterSpacing: '0.05em' }}>{stat.label}</div>
-                                <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0F172A', lineHeight: '1.2' }}>
-                                    {new Intl.NumberFormat('vi-VN').format(stat.value)}
+            {/* ── STICKY TOP ZONE ── */}
+            <div className="sticky-top-zone">
+                {/* Thống Kê Tổng Quan */}
+                <div className="stats-grid five-cols animate-card-entrance" style={{ marginBottom: '8px', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '8px' }}>
+                    {[
+                        { id: 'ALL', label: 'TỔNG SỐ NGOẠI LỆ', value: stats.total, iconBg: '#FAF6F0', iconColor: '#7B5233', themeColor: '#7B5233', activeBg: '#FAF6F0', Icon: Layers },
+                        { id: 'LECH_THIEU', label: 'LỆCH THIỆU', value: stats.lechThieu, iconBg: '#FFF1F2', iconColor: '#EF4444', themeColor: '#EF4444', activeBg: '#FFF5F6', Icon: ArrowDownRight },
+                        { id: 'LECH_THUA', label: 'LỆCH THỪA', value: stats.lechThua, iconBg: '#EBF5FF', iconColor: '#3B82F6', themeColor: '#3B82F6', activeBg: '#F4F9FF', Icon: ArrowUpRight },
+                        { id: 'TRA_HANG', label: 'TRẢ HÀNG QC', value: stats.traHang, iconBg: '#FFFBEB', iconColor: '#D97706', themeColor: '#D97706', activeBg: '#FFFDF5', Icon: Undo2 },
+                        { id: 'LOI_QC', label: 'LỖI ĐÁNH GIÁ QC', value: stats.loiQC, iconBg: '#F5F3FF', iconColor: '#8B5CF6', themeColor: '#8B5CF6', activeBg: '#FAF8FF', Icon: AlertCircle },
+                    ].map((stat) => {
+                        const isActive = filterType === stat.id;
+                        return (
+                            <div 
+                                key={stat.id} 
+                                onClick={() => { setFilterType(stat.id); setCurrentPage(1); }}
+                                className="kpi-card"
+                                style={{ 
+                                    background: isActive ? stat.activeBg : '#fff', 
+                                    border: '1px solid ' + (isActive ? stat.themeColor : '#E2E8F0'),
+                                    padding: '8px 12px', 
+                                    borderRadius: '10px', 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: '8px',
+                                    boxShadow: isActive ? `0 0 0 2px ${stat.themeColor}20` : '0 1px 2px rgba(0,0,0,0.01)',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s'
+                                }}
+                            >
+                                <div style={{
+                                    width: '32px', 
+                                    height: '32px', 
+                                    borderRadius: '8px',
+                                    backgroundColor: stat.iconBg,
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center',
+                                    color: stat.iconColor, 
+                                    flexShrink: 0
+                                }}>
+                                    <stat.Icon size={18} />
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: '700', letterSpacing: '0.05em' }}>{stat.label}</div>
+                                    <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0F172A', lineHeight: '1.2' }}>
+                                        {new Intl.NumberFormat('vi-VN').format(stat.value)}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    );
-                })}
+                        );
+                    })}
+                </div>
+
+                {/* Bộ Lọc & Tìm Kiếm */}
+                <PageToolbar
+                  searchValue={searchQuery}
+                  onSearchChange={(val) => { setSearchQuery(val); setCurrentPage(1); }}
+                  searchPlaceholder="Tìm phiếu ngoại lệ, linh kiện..."
+                  showFilter={true}
+                  isFilterOpen={isFilterBarOpen}
+                  onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
+                  activeFiltersCount={filterType !== 'ALL' ? 1 : 0}
+                  hasWritePermission={true}
+                  extraActions={[
+                    {
+                      label: 'Làm mới dữ liệu',
+                      icon: <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />,
+                      onClick: fetchData
+                    }
+                  ]}
+                />
+
+                {/* INLINE EXPANDABLE FILTER BAR */}
+                {isFilterBarOpen && (
+                  <div className="filter-inline-bar">
+                    {/* Loại ngoại lệ */}
+                    <div className="filter-field-group">
+                      <label className="filter-field-label">Loại ngoại lệ</label>
+                      <select 
+                        value={filterType}
+                        onChange={(e) => { setFilterType(e.target.value); setCurrentPage(1); }}
+                      >
+                        <option value="ALL">Tất cả ngoại lệ</option>
+                        <option value="LECH_THIEU">Lệch Thiếu (Nhận &lt; Giao)</option>
+                        <option value="LECH_THUA">Lệch Thừa (Giao &lt; Nhận)</option>
+                        <option value="TRA_HANG">Trả Hàng QC</option>
+                        <option value="LOI_QC">Lỗi Đánh Giá QC</option>
+                      </select>
+                    </div>
+
+                    {/* Hiển thị số dòng */}
+                    <div className="filter-field-group">
+                      <label className="filter-field-label">Hiển thị số dòng</label>
+                      <select 
+                        value={itemsPerPage} 
+                        onChange={(e) => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
+                      >
+                        <option value={15}>15 dòng</option>
+                        <option value={30}>30 dòng</option>
+                        <option value={50}>50 dòng</option>
+                        <option value={100}>100 dòng</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
             </div>
-
-            {/* Bộ Lọc & Tìm Kiếm */}
-            <PageToolbar
-              searchValue={searchQuery}
-              onSearchChange={(val) => { setSearchQuery(val); setCurrentPage(1); }}
-              searchPlaceholder="Tìm phiếu ngoại lệ, linh kiện..."
-              showFilter={true}
-              isFilterOpen={isFilterBarOpen}
-              onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
-              activeFiltersCount={filterType !== 'ALL' ? 1 : 0}
-              hasWritePermission={true}
-              extraActions={[
-                {
-                  label: 'Làm mới dữ liệu',
-                  icon: <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />,
-                  onClick: fetchData
-                }
-              ]}
-            />
-
-            {/* INLINE EXPANDABLE FILTER BAR */}
-            {isFilterBarOpen && (
-              <div className="filter-inline-bar">
-                {/* Loại ngoại lệ */}
-                <div className="filter-field-group">
-                  <label className="filter-field-label">Loại ngoại lệ</label>
-                  <select 
-                    value={filterType}
-                    onChange={(e) => { setFilterType(e.target.value); setCurrentPage(1); }}
-                  >
-                    <option value="ALL">Tất cả ngoại lệ</option>
-                    <option value="LECH_THIEU">Lệch Thiếu (Nhận &lt; Giao)</option>
-                    <option value="LECH_THUA">Lệch Thừa (Giao &lt; Nhận)</option>
-                    <option value="TRA_HANG">Trả Hàng QC</option>
-                    <option value="LOI_QC">Lỗi Đánh Giá QC</option>
-                  </select>
-                </div>
-
-                {/* Hiển thị số dòng */}
-                <div className="filter-field-group">
-                  <label className="filter-field-label">Hiển thị số dòng</label>
-                  <select 
-                    value={itemsPerPage} 
-                    onChange={(e) => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
-                  >
-                    <option value={15}>15 dòng</option>
-                    <option value={30}>30 dòng</option>
-                    <option value={50}>50 dòng</option>
-                    <option value={100}>100 dòng</option>
-                  </select>
-                </div>
-              </div>
-            )}
 
             {/* Nội Dung Bảng */}
             <div className="admin-list-layout">

@@ -238,9 +238,12 @@ def get_production_orders(
     Tham số month: Lọc theo tháng kế hoạch sản xuất (product_plans.month).
     """
     try:
-        # 1. Normalize Role & Permission Scope
-        role_clean = (user_role or "").strip().lower()
-        factory_clean = (user_factory or "").strip().upper()
+        role_clean = user_role.strip().lower() if isinstance(user_role, str) else ""
+        factory_clean = user_factory.strip().upper() if isinstance(user_factory, str) else ""
+        category_clean = category.strip() if isinstance(category, str) else "Tất cả"
+        search_clean = search.strip() if isinstance(search, str) else None
+        page_val = page if isinstance(page, int) else 1
+        limit_val = limit if isinstance(limit, int) else 10
 
         is_full_access = any(r in role_clean for r in ['qa', 'quan ly', 'manager', 'bgd', 'admin', 'it', 'lead']) or not role_clean
 
@@ -252,6 +255,35 @@ def get_production_orders(
             query = query.join(ProductPlan, Order.plan_id == ProductPlan.id).filter(ProductPlan.month == month)
 
         db_orders = query.all()
+
+        # [PERF OPTIMIZATION] Batch load all deliveries in 1 single query instead of N queries in loop
+        order_ids = [o.id for o in db_orders]
+        plan_ids = [o.plan_id for o in db_orders if o.plan_id]
+
+        from collections import defaultdict
+        deliveries_by_order = defaultdict(list)
+        deliveries_by_plan = defaultdict(list)
+
+        if order_ids or plan_ids:
+            all_deliveries = db.query(
+                Delivery.order_id,
+                Delivery.plan_id,
+                Delivery.part_name,
+                Delivery.specification,
+                Delivery.quantity_received,
+                Delivery.quantity_total
+            ).filter(
+                or_(
+                    Delivery.order_id.in_(order_ids),
+                    Delivery.plan_id.in_(plan_ids)
+                )
+            ).all()
+
+            for d in all_deliveries:
+                if d.order_id:
+                    deliveries_by_order[d.order_id].append(d)
+                if d.plan_id:
+                    deliveries_by_plan[d.plan_id].append(d)
 
         orders_list = []
         seen_pos = set()
@@ -267,13 +299,8 @@ def get_production_orders(
                 cat_type = "Vanity 1" if idx % 3 == 0 else ("Vanity 2" if idx % 3 == 1 else "Furniture")
                 factory_code = "NM1" if cat_type == "Vanity 1" else ("NM2" if cat_type == "Vanity 2" else "NM3")
 
-                # Query actual delivery handoff tickets from deliveries table for this order
-                deliveries_query = db.query(Delivery).filter(
-                    or_(
-                        Delivery.order_id == o.id,
-                        Delivery.plan_id == o.plan_id
-                    )
-                ).all()
+                # Get pre-fetched deliveries from batch dictionary
+                deliveries_query = deliveries_by_order.get(o.id, []) or (deliveries_by_plan.get(o.plan_id, []) if o.plan_id else [])
 
                 # Items breakdown
                 items = []
@@ -334,26 +361,26 @@ def get_production_orders(
             orders_list = [o for o in orders_list if o["category"] == allowed_cat]
 
         # 4. Filter by selected category tab
-        if category and category != "Tất cả":
-            orders_list = [o for o in orders_list if o["category"] == category]
+        if category_clean and category_clean != "Tất cả":
+            orders_list = [o for o in orders_list if o["category"] == category_clean]
 
         # 5. Filter by search query
-        if search:
-            s = search.lower()
+        if search_clean:
+            s = search_clean.lower()
             orders_list = [o for o in orders_list if s in o["po_code"].lower() or any(s in item["product_name"].lower() for item in o["items"])]
 
         # 6. Pagination: slice after all filters
         total = len(orders_list)
-        total_pages = max(1, (total + limit - 1) // limit)
-        start_idx = (page - 1) * limit
-        end_idx = start_idx + limit
+        total_pages = max(1, (total + limit_val - 1) // limit_val)
+        start_idx = (page_val - 1) * limit_val
+        end_idx = start_idx + limit_val
         paginated_orders = orders_list[start_idx:end_idx]
 
         return {
             "orders": paginated_orders,
             "total": total,
-            "page": page,
-            "limit": limit,
+            "page": page_val,
+            "limit": limit_val,
             "total_pages": total_pages,
             "is_full_access": is_full_access
         }

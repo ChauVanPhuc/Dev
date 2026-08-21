@@ -2,7 +2,7 @@ import os
 import uuid
 import datetime
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks, Query
 from fastapi.responses import FileResponse
 from sqlalchemy import or_, func, and_
 from sqlalchemy.orm import Session
@@ -411,13 +411,34 @@ async def create_delivery(
             
         allocate_delivery_fifo(db, new_delivery.id, plan_id, part_name, quantity, specification, allowed_order_ids=allowed_order_ids)
 
-        # 4. Cập nhật thẻ QR dự phòng
+        # 4. Cập nhật thẻ QR dự phòng & Sinh mã Pallet tự động nếu chưa có
         if backup_qr:
             from modules.system.models.backup_qr import BackupQRCode
             b_qr = db.query(BackupQRCode).filter(BackupQRCode.code == backup_qr).first()
             if b_qr:
                 b_qr.status = "Đang Sử Dụng"
                 b_qr.current_delivery_id = new_delivery.id
+        else:
+            try:
+                from modules.inspection.routes.inspection_routes import generate_unique_pallet_code
+                gen_res = generate_unique_pallet_code("DA", db)
+                auto_pallet_code = gen_res.get("palletCode")
+                if auto_pallet_code:
+                    new_delivery.backup_qr = auto_pallet_code
+                    # Tạo bản ghi PalletCard tương ứng
+                    from modules.delivery.models.pallet_card import PalletCard
+                    pallet_card = PalletCard(
+                        pallet_code=auto_pallet_code,
+                        khsx_code=str(plan_id),
+                        detail_name=part_name,
+                        quantity_plan=quantity,
+                        quantity_actual=quantity,
+                        status=1,
+                        created_at=datetime.datetime.now()
+                    )
+                    db.add(pallet_card)
+            except Exception as pe:
+                print(f"Lỗi tự động cấp mã Pallet cho phiếu giao: {pe}")
 
         # 5. Xử lý Ảnh
         for file in files:
@@ -522,23 +543,80 @@ def get_available_dates(db: Session = Depends(get_db)):
         
     return sorted_mapping
 
-@router.get("/", response_model=List[DeliveryDashboardResponse])
+@router.get("/")
 def get_all_deliveries(
-    skip: int = 0,
-    limit: Optional[int] = 100,
+    page: int = Query(1, ge=1),
+    limit: int = Query(100, ge=1, le=500),
+    skip: Optional[int] = None,
     year: Optional[int] = None,
     month: Optional[int] = None,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """
-    [GET] Lấy toàn bộ danh sách phiếu bàn giao phục vụ Dashboard.
-    Kết hợp join bảng Account để lấy tên người giao và người nhận.
+    [GET] Lấy danh sách phiếu bàn giao với phân trang Server-Side và con số thống kê thực tế từ CSDL.
     """
     from sqlalchemy.orm import aliased
     Sender = aliased(AccountModel)
     Receiver = aliased(AccountModel)
 
-    query = db.query(
+    # 1. Base Query
+    base_query = db.query(DeliveryModel)
+
+    if year is not None and month is not None:
+        start_date = datetime.datetime(year, month, 1, 0, 0, 0)
+        if month == 12:
+            end_date = datetime.datetime(year + 1, 1, 1, 0, 0, 0)
+        else:
+            end_date = datetime.datetime(year, month + 1, 1, 0, 0, 0)
+        base_query = base_query.filter(DeliveryModel.created_at >= start_date, DeliveryModel.created_at < end_date)
+    elif year is not None:
+        start_date = datetime.datetime(year, 1, 1, 0, 0, 0)
+        end_date = datetime.datetime(year + 1, 1, 1, 0, 0, 0)
+        base_query = base_query.filter(DeliveryModel.created_at >= start_date, DeliveryModel.created_at < end_date)
+
+    # 2. Calculate true STATS from Database across all records matching month/year
+    total_count = base_query.count()
+    completed_count = base_query.filter(DeliveryModel.status.in_(["Hoàn thành", "Đã Nhận Hàng"])).count()
+    pending_count = base_query.filter(DeliveryModel.status.in_(["Chờ Nhận Hàng", "Chờ Xác Nhận", "Chờ kiểm tra", "Chờ Kiểm Tra"])).count()
+    error_count = base_query.filter(
+        or_(
+            DeliveryModel.quantity_returned > 0,
+            DeliveryModel.status.in_(["Lỗi", "Từ chối", "Trả lại", "Trả Lại"])
+        )
+    ).count()
+
+    # 3. Filter query for items
+    filtered_query = base_query
+    if status and status != "all" and status != "Tất cả":
+        if status in ["completed", "Hoàn thành"]:
+            filtered_query = filtered_query.filter(DeliveryModel.status.in_(["Hoàn thành", "Đã Nhận Hàng"]))
+        elif status in ["pending", "Chờ Nhận Hàng"]:
+            filtered_query = filtered_query.filter(DeliveryModel.status.in_(["Chờ Nhận Hàng", "Chờ Xác Nhận", "Chờ kiểm tra", "Chờ Kiểm Tra"]))
+        elif status in ["error", "Lỗi"]:
+            filtered_query = filtered_query.filter(
+                or_(
+                    DeliveryModel.quantity_returned > 0,
+                    DeliveryModel.status.in_(["Lỗi", "Từ chối", "Trả lại", "Trả Lại"])
+                )
+            )
+
+    if search and search.strip():
+        s = f"%{search.strip()}%"
+        filtered_query = filtered_query.filter(
+            or_(
+                DeliveryModel.part_name.like(s),
+                DeliveryModel.delivery_stage.like(s),
+                DeliveryModel.receiving_stage.like(s),
+                DeliveryModel.note.like(s)
+            )
+        )
+
+    filtered_total = filtered_query.count()
+
+    # 4. Join Sender/Receiver for paginated items
+    items_query = db.query(
         DeliveryModel.id,
         DeliveryModel.delivery_stage,
         DeliveryModel.receiving_stage,
@@ -561,25 +639,73 @@ def get_all_deliveries(
 
     if year is not None and month is not None:
         start_date = datetime.datetime(year, month, 1, 0, 0, 0)
-        if month == 12:
-            end_date = datetime.datetime(year + 1, 1, 1, 0, 0, 0)
-        else:
-            end_date = datetime.datetime(year, month + 1, 1, 0, 0, 0)
-        query = query.filter(DeliveryModel.created_at >= start_date, DeliveryModel.created_at < end_date)
+        end_date = datetime.datetime(year + 1, 1, 1, 0, 0, 0) if month == 12 else datetime.datetime(year, month + 1, 1, 0, 0, 0)
+        items_query = items_query.filter(DeliveryModel.created_at >= start_date, DeliveryModel.created_at < end_date)
     elif year is not None:
-        start_date = datetime.datetime(year, 1, 1, 0, 0, 0)
-        end_date = datetime.datetime(year + 1, 1, 1, 0, 0, 0)
-        query = query.filter(DeliveryModel.created_at >= start_date, DeliveryModel.created_at < end_date)
+        items_query = items_query.filter(DeliveryModel.created_at >= datetime.datetime(year, 1, 1), DeliveryModel.created_at < datetime.datetime(year + 1, 1, 1))
 
-    query = query.order_by(DeliveryModel.id.desc())
+    if status and status != "all" and status != "Tất cả":
+        if status in ["completed", "Hoàn thành"]:
+            items_query = items_query.filter(DeliveryModel.status.in_(["Hoàn thành", "Đã Nhận Hàng"]))
+        elif status in ["pending", "Chờ Nhận Hàng"]:
+            items_query = items_query.filter(DeliveryModel.status.in_(["Chờ Nhận Hàng", "Chờ Xác Nhận", "Chờ kiểm tra", "Chờ Kiểm Tra"]))
+        elif status in ["error", "Lỗi"]:
+            items_query = items_query.filter(
+                or_(
+                    DeliveryModel.quantity_returned > 0,
+                    DeliveryModel.status.in_(["Lỗi", "Từ chối", "Trả lại", "Trả Lại"])
+                )
+            )
 
-    if skip > 0:
-        query = query.offset(skip)
-    if limit is not None and limit > 0:
-        query = query.limit(limit)
+    if search and search.strip():
+        s = f"%{search.strip()}%"
+        items_query = items_query.filter(
+            or_(
+                DeliveryModel.part_name.like(s),
+                DeliveryModel.delivery_stage.like(s),
+                DeliveryModel.receiving_stage.like(s),
+                DeliveryModel.note.like(s)
+            )
+        )
 
-    results = query.all()
-    return results
+    items_query = items_query.order_by(DeliveryModel.id.desc())
+
+    offset_val = skip if (skip is not None and skip > 0) else (page - 1) * limit
+    paginated_items = items_query.offset(offset_val).limit(limit).all()
+    total_pages = max(1, (filtered_total + limit - 1) // limit)
+
+    result_items = []
+    for row in paginated_items:
+        result_items.append({
+            "id": row.id,
+            "delivery_stage": row.delivery_stage,
+            "receiving_stage": row.receiving_stage,
+            "part_name": row.part_name,
+            "specification": row.specification,
+            "quantity_total": row.quantity_total,
+            "quantity_received": row.quantity_received,
+            "quantity_returned": row.quantity_returned,
+            "status": row.status,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "note": row.note,
+            "residual": row.residual or 0,
+            "sx_delivery_name": row.sx_delivery_name,
+            "sx_receipt_name": row.sx_receipt_name
+        })
+
+    return {
+        "items": result_items,
+        "total": filtered_total,
+        "page": page,
+        "limit": limit,
+        "total_pages": total_pages,
+        "stats": {
+            "total": total_count,
+            "completed": completed_count,
+            "pending": pending_count,
+            "error": error_count
+        }
+    }
 
 
 @router.get("/exceptions", response_model=List[DeliveryDashboardResponse])

@@ -76,35 +76,37 @@ const ProductionPlansView = () => {
   );
 
   return (
-    <div style={{ padding: '20px 24px', backgroundColor: '#FAF6F0', minHeight: 'calc(100vh - 110px)', fontFamily: 'Inter, sans-serif' }}>
+    <div className="gold-layout">
       {/* Action Toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ position: 'relative', width: '320px', background: '#FFF', borderRadius: '8px', border: '1.5px solid #EADCC9' }}>
-            <Search size={18} color="#9CA3AF" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
-            <input
-              type="text"
-              placeholder="Tìm kiếm kế hoạch sản xuất..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{ width: '100%', padding: '9px 12px 9px 38px', border: 'none', outline: 'none', background: 'transparent', fontSize: '0.88rem' }}
-            />
+      <div className="sticky-top-zone">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ position: 'relative', width: '320px', background: '#FFF', borderRadius: '8px', border: '1.5px solid #EADCC9' }}>
+              <Search size={18} color="#9CA3AF" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+              <input
+                type="text"
+                placeholder="Tìm kiếm kế hoạch sản xuất..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{ width: '100%', padding: '9px 12px 9px 38px', border: 'none', outline: 'none', background: 'transparent', fontSize: '0.88rem' }}
+              />
+            </div>
+            <button onClick={fetchPlans} title="Tải lại dữ liệu API" style={{ padding: '9px 12px', background: '#FFF', border: '1.5px solid #EADCC9', borderRadius: '8px', color: '#5D3B32', cursor: 'pointer' }}>
+              <RefreshCw size={18} className={loading ? 'spin' : ''} />
+            </button>
           </div>
-          <button onClick={fetchPlans} title="Tải lại dữ liệu API" style={{ padding: '9px 12px', background: '#FFF', border: '1.5px solid #EADCC9', borderRadius: '8px', color: '#5D3B32', cursor: 'pointer' }}>
-            <RefreshCw size={18} className={loading ? 'spin' : ''} />
-          </button>
-        </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button style={{ padding: '9px 16px', background: '#FFF', border: '1.5px solid #EADCC9', borderRadius: '8px', color: '#5D3B32', fontWeight: '600', cursor: 'pointer' }}>
-            Xuất Excel
-          </button>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            style={{ padding: '9px 20px', background: '#5D3B32', border: 'none', borderRadius: '8px', color: '#FFF', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            <Plus size={18} /> Thêm kế hoạch
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button style={{ padding: '9px 16px', background: '#FFF', border: '1.5px solid #EADCC9', borderRadius: '8px', color: '#5D3B32', fontWeight: '600', cursor: 'pointer' }}>
+              Xuất Excel
+            </button>
+            <button
+              onClick={() => setIsModalOpen(true)}
+              style={{ padding: '9px 20px', background: '#5D3B32', border: 'none', borderRadius: '8px', color: '#FFF', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Plus size={18} /> Thêm kế hoạch
+            </button>
+          </div>
         </div>
       </div>
 

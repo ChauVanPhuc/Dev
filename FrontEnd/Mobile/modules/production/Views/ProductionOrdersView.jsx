@@ -370,17 +370,30 @@ const ProductionOrdersView = () => {
                   >
                     <span
                       onClick={(e) => { e.stopPropagation(); handleOpenDetail(po.po_code); }}
-                      style={{ fontSize: '1.05rem', fontWeight: '900', color: '#432818', flexShrink: 0, textDecoration: 'none', letterSpacing: '-0.2px' }}
+                      style={{ 
+                        fontSize: '1.02rem', 
+                        fontWeight: '900', 
+                        color: '#432818', 
+                        flexShrink: 0, 
+                        width: '128px',
+                        minWidth: '128px',
+                        textDecoration: 'none', 
+                        letterSpacing: '-0.2px',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}
+                      title={po.po_code}
                     >
                       {po.po_code}
                     </span>
 
                     {/* Progress bar */}
                     <div style={{ flex: 1, backgroundColor: '#f1f5f9', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
-                      <div style={{ width: `${po.overall_progress}%`, backgroundColor: po.progress_color || '#432818', height: '100%', borderRadius: '4px', transition: 'width 0.3s ease' }} />
+                      <div style={{ width: `${po.overall_progress}%`, backgroundColor: po.progress_color || '#16a34a', height: '100%', borderRadius: '4px', transition: 'width 0.3s ease' }} />
                     </div>
 
-                    <span style={{ fontSize: '0.85rem', fontWeight: '900', color: '#334155', flexShrink: 0, minWidth: '38px', textAlign: 'right' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: '900', color: '#334155', flexShrink: 0, width: '42px', minWidth: '42px', textAlign: 'right' }}>
                       {po.overall_progress}%
                     </span>
 

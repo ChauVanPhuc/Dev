@@ -3285,4 +3285,95 @@ tbody tr:nth-child(10) { animation-delay: 0.3s !important; }
 }
 
 
-
+/* ═══════════════════════════════════════════════════════════════════════════
+   GOLD STANDARD LAYOUT — Viewport-locked Table + Sticky Header + Sticky Pagination
+   Usage: Add className="gold-layout" to the outermost container div.
+   Required children structure:
+     .gold-layout
+       > .sticky-top-zone        (PageToolbar + FilterBar)
+       > .admin-list-layout      (Table area)
+           > .admin-table-card   (Card wrapper)
+               > .admin-table-scroll  (Scrollable table)
+               > .admin-pagination-desktop  (Sticky bottom pagination)
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (min-width: 769px) {
+  .gold-layout {
+    height: calc(100vh - 68px) !important;
+    max-height: calc(100vh - 68px) !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 4px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .gold-layout > .sticky-top-zone {
+    flex-shrink: 0 !important;
+    flex-grow: 0 !important;
+    margin-bottom: 0 !important;
+  }
+  .gold-layout > .admin-list-layout,
+  .gold-layout > .admin-list-layout-wrapper > .admin-list-layout {
+    flex: 1 1 0% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .gold-layout .admin-table-card {
+    flex: 1 1 0% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    margin: 0 !important;
+    border-radius: 12px !important;
+  }
+  .gold-layout .admin-table-scroll {
+    flex: 1 1 0% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+    display: block !important;
+    position: relative !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+  .gold-layout .admin-pagination-desktop {
+    flex-shrink: 0 !important;
+    flex-grow: 0 !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    max-height: 42px !important;
+    padding: 0 16px !important;
+    margin-top: auto !important;
+    background: #FFFFFF !important;
+    border-top: 1px solid #EADCC9 !important;
+    z-index: 15 !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+  }
+  .gold-layout table.data-table thead tr th,
+  .gold-layout .admin-table-scroll table thead th {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 20 !important;
+    background-color: #FAF6F0 !important;
+    border-bottom: 1px solid #EADCC9 !important;
+    padding: 8px 10px !important;
+    font-size: 0.78rem !important;
+  }
+  .gold-layout table.data-table tbody tr td {
+    padding: 7px 10px !important;
+    font-size: 0.82rem !important;
+    vertical-align: middle !important;
+  }
+}

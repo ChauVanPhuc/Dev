@@ -293,29 +293,31 @@ const PaintColorManagementView = ({ isEmbedded = false }) => {
   const totalPages = Math.ceil(total / pageSize) || 1;
 
   return (
-    <div className="mgmt-container" style={{ padding: isEmbedded ? 0 : undefined, minHeight: isEmbedded ? 'auto' : undefined, maxWidth: '100%' }}>
+    <div className="gold-layout" style={{ padding: isEmbedded ? 0 : undefined, minHeight: isEmbedded ? 'auto' : undefined, maxWidth: '100%' }}>
       <div className="mgmt-main" style={{ boxShadow: isEmbedded ? 'none' : undefined, border: isEmbedded ? 'none' : undefined, padding: isEmbedded ? '20px' : undefined, borderRadius: isEmbedded ? '16px' : undefined }}>
 
-        {/* ── PageToolbar (Chuẩn 100% theo Trang Gốc UserManagement) ── */}
-        <PageToolbar
-          searchValue={searchTerm}
-          onSearchChange={(val) => { setSearchTerm(val); setCurrentPage(1); }}
-          searchPlaceholder="Nhập mã màu sơn, tên màu, nhà cung cấp..."
-          showFilter={true}
-          isFilterOpen={showFilterPanel}
-          onFilterToggle={() => setShowFilterPanel(!showFilterPanel)}
-          activeFiltersCount={activeFiltersCount}
-          onSync={handleSyncBom}
-          isSyncing={syncing}
-          syncLabel="Đồng bộ từ BOM"
-          onCreate={handleOpenCreate}
-          createLabel="Tạo mới"
-          hasWritePermission={true}
-        />
+        {/* ── STICKY TOP ZONE ── */}
+        <div className="sticky-top-zone">
+          {/* ── PageToolbar ── */}
+          <PageToolbar
+            searchValue={searchTerm}
+            onSearchChange={(val) => { setSearchTerm(val); setCurrentPage(1); }}
+            searchPlaceholder="Nhập mã màu sơn, tên màu, nhà cung cấp..."
+            showFilter={true}
+            isFilterOpen={showFilterPanel}
+            onFilterToggle={() => setShowFilterPanel(!showFilterPanel)}
+            activeFiltersCount={activeFiltersCount}
+            onSync={handleSyncBom}
+            isSyncing={syncing}
+            syncLabel="Đồng bộ từ BOM"
+            onCreate={handleOpenCreate}
+            createLabel="Tạo mới"
+            hasWritePermission={true}
+          />
 
-        {/* ── INLINE EXPANDABLE FILTER BAR (Chuẩn 100% Trang Gốc UserManagement) ── */}
-        {showFilterPanel && (
-          <div className="filter-inline-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', padding: '14px 20px', backgroundColor: '#FAF6F0', borderRadius: '12px', border: '1.5px solid #EADCC9', marginBottom: '16px', alignItems: 'flex-end' }}>
+          {/* ── INLINE EXPANDABLE FILTER BAR ── */}
+          {showFilterPanel && (
+            <div className="filter-inline-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', padding: '14px 20px', backgroundColor: '#FAF6F0', borderRadius: '12px', border: '1.5px solid #EADCC9', marginBottom: '16px', alignItems: 'flex-end' }}>
 
             {/* Lọc theo Sản phẩm mẫu */}
             <div className="filter-field-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -393,7 +395,8 @@ const PaintColorManagementView = ({ isEmbedded = false }) => {
               </div>
             )}
           </div>
-        )}
+          )}
+        </div>
 
         {/* ── Bảng dữ liệu ── */}
         <div className="admin-list-layout">

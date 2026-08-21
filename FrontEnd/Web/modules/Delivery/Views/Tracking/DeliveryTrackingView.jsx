@@ -6,10 +6,11 @@ import {
     ArrowUpRight, ArrowDownRight, ChevronLeft, ChevronRight,
     ChevronDown, X, User, Calendar, 
     MapPin, Activity, CheckCircle2, AlertCircle, 
-    Undo2, Droplet, Maximize2, FileSpreadsheet, Layers, Info
+    Undo2, Droplet, Maximize2, FileSpreadsheet, Layers, Info, Plus
 } from 'lucide-react';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
+import { API_ROOT } from '@webShared/Services/api.service';
 
 // Import custom hook
 import { useDeliveryTracking } from './hooks/useDeliveryTracking';
@@ -74,6 +75,12 @@ const DeliveryTrackingView = () => {
     i,
     img,
     inputQcDetail,
+    isInputQcModalOpen,
+    inputQcSaving,
+    inputQcFormData,
+    handleOpenAddInputModal,
+    handleCloseInputQcModal,
+    handleSaveInputInspection,
     inputQcImages,
     isCritical,
     isDetailModalOpen,
@@ -104,6 +111,7 @@ const DeliveryTrackingView = () => {
     pending,
     planText,
     qcDetail,
+    palletQcDetail,
     qcEndDefectsHtml,
     qcEndHtml,
     qcEndInspectedDateStr,
@@ -155,11 +163,13 @@ const DeliveryTrackingView = () => {
     targetPartName,
     targetPlanId,
     toast,
+    totalCount,
+    totalPages,
     years,
   } = tracker;
 
     return (
-        <div className="manufacture-plan-container">
+        <div className="gold-layout">
             
             {/* ── STICKY TOP ZONE (Desktop: filters + stats-grid; Mobile: stats-strip + filters) ── */}
             <div className="sticky-top-zone">
@@ -341,7 +351,7 @@ const DeliveryTrackingView = () => {
                                     <tr><td colSpan="13" style={{ padding: '50px', textAlign: 'center', color: '#757575' }}>Đang tải dữ liệu...</td></tr>
                                 ) : filteredDeliveries.length === 0 ? (
                                     <tr><td colSpan="13" style={{ padding: '50px', textAlign: 'center', color: '#757575' }}>Không có dữ liệu bàn giao.</td></tr>
-                                ) : filteredDeliveries.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((row, idx) => {
+                                ) : filteredDeliveries.map((row, idx) => {
                                     const statusInfo = getStatusStyle(row.status);
                                     return (
                                         <tr 
@@ -423,7 +433,7 @@ const DeliveryTrackingView = () => {
                     {/* Pagination */}
                     <div className="admin-pagination-desktop">
                         <div style={{ fontSize: '14px', color: '#424242' }}>
-                            Hiển thị <b>{filteredDeliveries.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}-{Math.min(currentPage * itemsPerPage, filteredDeliveries.length)}</b> trên <b>{filteredDeliveries.length}</b> kết quả
+                            Hiển thị <b>{totalCount > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}-{Math.min(currentPage * itemsPerPage, totalCount)}</b> trên <b>{totalCount}</b> kết quả
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <button 
@@ -434,7 +444,6 @@ const DeliveryTrackingView = () => {
                                 &lt; Trước
                             </button>
                             {(() => {
-                                const totalPages = Math.ceil(filteredDeliveries.length / itemsPerPage) || 1;
                                 const maxVisible = 5;
                                 let start = Math.max(1, currentPage - 2);
                                 let end = Math.min(totalPages, start + maxVisible - 1);
@@ -456,8 +465,8 @@ const DeliveryTrackingView = () => {
                             })()}
                             <button 
                                 className="page-btn"
-                                onClick={() => setCurrentPage(prev => Math.min(Math.ceil(filteredDeliveries.length / itemsPerPage) || 1, prev + 1))}
-                                disabled={currentPage >= (Math.ceil(filteredDeliveries.length / itemsPerPage) || 1)}
+                                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                disabled={currentPage >= totalPages}
                             >
                                 Sau &gt;
                             </button>
@@ -845,378 +854,489 @@ const DeliveryTrackingView = () => {
                             ) : modalTab === 'qc_end' ? (
                                 <div>
                                     {/* Tab QC inspection results */}
-                                    {!qcDetail || !qcDetail.qc_info ? (
-                                        <div style={{ 
-                                            background: '#FAF6F0', 
-                                            border: '2px dashed #EADCC9', 
-                                            borderRadius: '16px', 
-                                            padding: '40px', 
-                                            textAlign: 'center',
-                                            display: 'flex',
-                                            flexDirection: 'column',
-                                            alignItems: 'center',
-                                            gap: '15px'
-                                        }}>
-                                            <AlertCircle size={48} color="#D97706" />
-                                            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', color: '#5D4037' }}>
-                                                Chưa có thông tin kiểm định chất lượng (QC)
-                                            </h3>
-                                            <p style={{ margin: 0, fontSize: '13px', color: '#8D6E63', maxWidth: '450px', lineHeight: '1.5' }}>
-                                                Phiếu này chưa được QC tiếp nhận đo đạc chất lượng hoặc đang trong quá trình kiểm tra. Các số liệu độ ẩm, độ cong, kích thước và ảnh lỗi sẽ xuất hiện tại đây sau khi lưu.
-                                            </p>
-                                        </div>
-                                    ) : (
-                                        <div>
-                                            {/* 1. QC General Info */}
-                                            <div style={{ 
-                                                display: 'grid', 
-                                                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-                                                gap: '16px', 
-                                                marginBottom: '24px',
-                                                background: 'white',
-                                                padding: '16px',
-                                                borderRadius: '12px',
-                                                border: '1px solid #EADCC9'
-                                            }}>
-                                                {[
-                                                    { label: 'Người kiểm định QC', value: deliveryDetail?.qc_receipt_name || 'N/A', icon: <User size={16} color="#8D6E63" /> },
-                                                    { label: 'Thời gian kiểm định', value: qcDetail.qc_info.created_at ? new Date(qcDetail.qc_info.created_at).toLocaleString('vi-VN') : '---', icon: <Calendar size={16} color="#8D6E63" /> },
-                                                    { 
-                                                        label: 'KẾT LUẬN QC CHUNG', 
-                                                        value: (deliveryDetail?.quantity_returned > 0 || deliveryDetail?.status === 'Lỗi' || deliveryDetail?.status === 'Từ chối') ? 'KHÔNG ĐẠT / TRẢ HÀNG' : 'ĐẠT CHẤT LƯỢNG', 
-                                                        color: (deliveryDetail?.quantity_returned > 0 || deliveryDetail?.status === 'Lỗi' || deliveryDetail?.status === 'Từ chối') ? '#C62828' : '#2E7D32',
-                                                        icon: <Activity size={16} color="#8D6E63" /> 
-                                                    },
-                                                ].map((item, idx) => (
-                                                    <div key={idx} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                                                        <div style={{ marginTop: '3px' }}>{item.icon}</div>
-                                                        <div>
-                                                            <div style={{ fontSize: '11px', color: '#8D6E63', fontWeight: '700', textTransform: 'uppercase' }}>{item.label}</div>
-                                                            <div style={{ fontSize: '13px', color: item.color || '#2D1A12', fontWeight: '800', marginTop: '2px' }}>{item.value}</div>
+                                    {(() => {
+                                        const palletCode = palletQcDetail?.palletCode || deliveryDetail?.backup_qr || selectedDelivery?.backup_qr || deliveryDetail?.pallet_code;
+                                        const hasQcData = Boolean(
+                                            qcDetail?.qc_info || 
+                                            palletQcDetail || 
+                                            (deliveryDetail && (
+                                                (deliveryDetail.quantity_returned > 0) ||
+                                                (deliveryDetail.quantity_error > 0) ||
+                                                (deliveryDetail.qc_receipt_name && deliveryDetail.qc_receipt_name !== '---' && deliveryDetail.qc_receipt_name !== 'N/A') ||
+                                                (deliveryDetail.note && deliveryDetail.note.toLowerCase().includes('lỗi'))
+                                            ))
+                                        );
+
+                                        if (!hasQcData) {
+                                            return (
+                                                <div style={{ 
+                                                    background: '#FAF6F0', 
+                                                    border: '2px dashed #EADCC9', 
+                                                    borderRadius: '16px', 
+                                                    padding: '40px', 
+                                                    textAlign: 'center',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    alignItems: 'center',
+                                                    gap: '15px'
+                                                }}>
+                                                    <AlertCircle size={48} color="#D97706" />
+                                                    <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', color: '#5D4037' }}>
+                                                        Chưa có thông tin kiểm định chất lượng (QC)
+                                                    </h3>
+                                                    <p style={{ margin: 0, fontSize: '13px', color: '#8D6E63', maxWidth: '450px', lineHeight: '1.5' }}>
+                                                        Phiếu này chưa phát sinh thông tin lỗi hoặc đang trong quá trình đo đạc kiểm tra tại xưởng.
+                                                    </p>
+                                                </div>
+                                            );
+                                        }
+
+                                        const inspectorName = palletQcDetail?.inspector || deliveryDetail?.qc_receipt_name || qcDetail?.qc_info?.inspector_name || 'Nội bộ QC';
+                                        const inspectedTime = qcDetail?.qc_info?.created_at 
+                                            ? new Date(qcDetail.qc_info.created_at).toLocaleString('vi-VN') 
+                                            : (deliveryDetail?.created_at ? new Date(deliveryDetail.created_at).toLocaleString('vi-VN') : '---');
+                                        const isFail = (deliveryDetail?.quantity_returned > 0 || deliveryDetail?.status === 'Lỗi' || deliveryDetail?.status === 'Từ chối' || palletQcDetail?.conclusion === 'fail');
+                                        const qcNote = deliveryDetail?.note || qcDetail?.qc_info?.note || 'Không có ghi chú kiểm định.';
+
+                                        let qcImagesList = [];
+                                        if (qcDetail?.images && Array.isArray(qcDetail.images)) {
+                                            qcImagesList = [...qcDetail.images];
+                                        }
+                                        if (palletQcDetail?.images && Array.isArray(palletQcDetail.images)) {
+                                            palletQcDetail.images.forEach(img => {
+                                                if (!qcImagesList.some(existing => existing.image_path === img.image_path)) {
+                                                    qcImagesList.push(img);
+                                                }
+                                            });
+                                        }
+                                        if (deliveryDetail?.images && Array.isArray(deliveryDetail.images)) {
+                                            deliveryDetail.images.forEach(img => {
+                                                const path = typeof img === 'string' ? img : (img.image_path || img.url);
+                                                if (path && !qcImagesList.some(existing => (existing.image_path || existing) === path)) {
+                                                    qcImagesList.push({ image_path: path, description: 'QC_Handover' });
+                                                }
+                                            });
+                                        }
+
+                                        return (
+                                            <div>
+                                                {/* Pallet Code Header Badge */}
+                                                {palletCode && (
+                                                    <div style={{
+                                                        background: '#FAF6F0',
+                                                        border: '1px solid #EADCC9',
+                                                        borderRadius: '12px',
+                                                        padding: '10px 16px',
+                                                        marginBottom: '16px',
+                                                        display: 'flex',
+                                                        justify: 'space-between',
+                                                        alignItems: 'center'
+                                                    }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                            <span style={{ fontSize: '12px', fontWeight: '800', color: '#7B5233', textTransform: 'uppercase' }}>🏷️ Mã Pallet / QR Dự Phòng:</span>
+                                                            <span style={{ fontSize: '14px', fontWeight: '900', color: '#2D1A12', fontFamily: 'monospace' }}>
+                                                                {palletCode}
+                                                            </span>
                                                         </div>
+                                                        {palletQcDetail?.stage && (
+                                                            <span style={{ fontSize: '12px', background: '#E2E8F0', padding: '2px 8px', borderRadius: '6px', fontWeight: '700', color: '#475569' }}>
+                                                                Công đoạn: {palletQcDetail.stage}
+                                                            </span>
+                                                        )}
                                                     </div>
-                                                ))}
-                                                <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '10px', alignItems: 'flex-start', borderTop: '1px solid #FAF6F0', paddingTop: '10px' }}>
-                                                    <div style={{ marginTop: '2px' }}><Info size={16} color="#8D6E63" /></div>
-                                                    <div>
-                                                        <div style={{ fontSize: '11px', color: '#8D6E63', fontWeight: '700', textTransform: 'uppercase' }}>Ghi chú kiểm định QC</div>
-                                                        <div style={{ fontSize: '13px', color: '#5D4037', fontWeight: '600', fontStyle: 'italic', marginTop: '2px' }}>
-                                                            {qcDetail.qc_info.note || 'Không có ghi chú kiểm định chất lượng.'}
+                                                )}
+
+                                                {/* 1. QC General Info */}
+                                                <div style={{ 
+                                                    display: 'grid', 
+                                                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+                                                    gap: '16px', 
+                                                    marginBottom: '20px',
+                                                    background: 'white',
+                                                    padding: '16px',
+                                                    borderRadius: '12px',
+                                                    border: '1px solid #EADCC9'
+                                                }}>
+                                                    {[
+                                                        { label: 'Người kiểm định QC', value: inspectorName, icon: <User size={16} color="#8D6E63" /> },
+                                                        { label: 'Thời gian kiểm định', value: inspectedTime, icon: <Calendar size={16} color="#8D6E63" /> },
+                                                        { 
+                                                            label: 'KẾT LUẬN QC CHUNG', 
+                                                            value: isFail ? 'KHÔNG ĐẠT / TRẢ HÀNG' : 'ĐẠT CHẤT LƯỢNG', 
+                                                            color: isFail ? '#C62828' : '#2E7D32',
+                                                            icon: <Activity size={16} color="#8D6E63" /> 
+                                                        },
+                                                    ].map((item, idx) => (
+                                                        <div key={idx} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                                                            <div style={{ marginTop: '3px' }}>{item.icon}</div>
+                                                            <div>
+                                                                <div style={{ fontSize: '11px', color: '#8D6E63', fontWeight: '700', textTransform: 'uppercase' }}>{item.label}</div>
+                                                                <div style={{ fontSize: '13px', color: item.color || '#2D1A12', fontWeight: '800', marginTop: '2px' }}>{item.value}</div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+
+                                                    {/* Quantities summary strip */}
+                                                    <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '16px', flexWrap: 'wrap', background: '#FFF8E1', padding: '10px 14px', borderRadius: '8px', border: '1px solid #FFE082' }}>
+                                                        <span style={{ fontSize: '12px', color: '#5D4037' }}>SL Thực kiểm: <b>{deliveryDetail?.quantity_inspection || deliveryDetail?.quantity_total || selectedDelivery?.quantity_total || 0}</b></span>
+                                                        <span style={{ fontSize: '12px', color: '#2E7D32' }}>SL Nhận (OK): <b>{deliveryDetail?.quantity_received || selectedDelivery?.quantity_received || 0}</b></span>
+                                                        <span style={{ fontSize: '12px', color: '#C62828' }}>SL Lỗi: <b>{deliveryDetail?.quantity_error || 0}</b></span>
+                                                        <span style={{ fontSize: '12px', color: '#D97706' }}>SL Trả lại: <b>{deliveryDetail?.quantity_returned || 0}</b></span>
+                                                    </div>
+
+                                                    <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '10px', alignItems: 'flex-start', borderTop: '1px solid #FAF6F0', paddingTop: '10px' }}>
+                                                        <div style={{ marginTop: '2px' }}><Info size={16} color="#8D6E63" /></div>
+                                                        <div>
+                                                            <div style={{ fontSize: '11px', color: '#8D6E63', fontWeight: '700', textTransform: 'uppercase' }}>Ghi chú kiểm định QC / Lý do trả</div>
+                                                            <div style={{ fontSize: '13px', color: '#5D4037', fontWeight: '600', fontStyle: 'italic', marginTop: '2px' }}>
+                                                                {qcNote}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
-                                            </div>
 
-                                            {/* 2. Detailed QC Items Checklists */}
-                                            <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '800', color: '#5D4037', borderLeft: '4px solid #7B5233', paddingLeft: '8px' }}>
-                                                CHI TIẾT CÁC HẠNG MỤC KIỂM TRA ĐẦU CUỐI
-                                            </h4>
-                                            
-                                            {(() => {
-                                                let results = {};
-                                                try {
-                                                    results = typeof qcDetail.qc_info.results_json === 'string' 
-                                                        ? JSON.parse(qcDetail.qc_info.results_json) 
-                                                        : (qcDetail.qc_info.results_json || {});
-                                                } catch (e) {
-                                                    // Thầm lặng bỏ qua lỗi parse kết quả kiểm định
-                                                }
+                                                {/* 2. Detailed QC Items Checklists (Form 8 tiêu chí nếu có) */}
+                                                {qcDetail?.qc_info?.results_json && (
+                                                    <>
+                                                        <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '800', color: '#5D4037', borderLeft: '4px solid #7B5233', paddingLeft: '8px' }}>
+                                                            CHI TIẾT CÁC HẠNG MỤC KIỂM TRA ĐẦU CUỐI
+                                                        </h4>
+                                                        
+                                                        {(() => {
+                                                            let results = {};
+                                                            try {
+                                                                results = typeof qcDetail.qc_info.results_json === 'string' 
+                                                                    ? JSON.parse(qcDetail.qc_info.results_json) 
+                                                                    : (qcDetail.qc_info.results_json || {});
+                                                            } catch (e) {}
 
-                                                const getPassBadge = (isPass) => {
-                                                    if (isPass === null || isPass === undefined) return <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '10px', background: '#F5F5F5', color: '#757575', fontWeight: '700' }}>CHƯA KIỂM</span>;
-                                                    return isPass ? (
-                                                        <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '10px', background: '#E8F5E9', color: '#2E7D32', fontWeight: '800' }}>ĐẠT</span>
-                                                    ) : (
-                                                        <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '10px', background: '#FFEBEE', color: '#C62828', fontWeight: '800' }}>HỎNG/LỖI</span>
-                                                    );
-                                                };
+                                                            const getPassBadge = (isPass) => {
+                                                                if (isPass === null || isPass === undefined) return <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '10px', background: '#F5F5F5', color: '#757575', fontWeight: '700' }}>CHƯA KIỂM</span>;
+                                                                return isPass ? (
+                                                                    <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '10px', background: '#E8F5E9', color: '#2E7D32', fontWeight: '800' }}>ĐẠT</span>
+                                                                ) : (
+                                                                    <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '10px', background: '#FFEBEE', color: '#C62828', fontWeight: '800' }}>HỎNG/LỖI</span>
+                                                                );
+                                                            };
 
-                                                return (
-                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-                                                        {/* Moisture */}
-                                                        <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EADCC9', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #FAF6F0', paddingBottom: '6px' }}>
-                                                                <span style={{ fontSize: '13px', fontWeight: '800', color: '#5D4037', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                                    <Droplet size={14} color="#7B5233" />
-                                                                    1. Độ ẩm (Moisture)
-                                                                </span>
-                                                                {getPassBadge(results.moisture?.is_pass)}
-                                                            </div>
-                                                            <div style={{ fontSize: '12px', color: '#424242' }}>
-                                                                Độ ẩm tối thiểu đo được: <b>{results.moisture?.min ? `${results.moisture.min}%` : '---'}</b>
-                                                            </div>
-                                                            <div style={{ fontSize: '12px', color: '#424242' }}>
-                                                                Độ ẩm tối đa đo được: <b>{results.moisture?.max ? `${results.moisture.max}%` : '---'}</b>
-                                                            </div>
-                                                        </div>
+                                                            return (
+                                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+                                                                    {/* Moisture */}
+                                                                    <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EADCC9', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #FAF6F0', paddingBottom: '6px' }}>
+                                                                            <span style={{ fontSize: '13px', fontWeight: '800', color: '#5D4037', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                                <Droplet size={14} color="#7B5233" />
+                                                                                1. Độ ẩm (Moisture)
+                                                                            </span>
+                                                                            {getPassBadge(results.moisture?.is_pass)}
+                                                                        </div>
+                                                                        <div style={{ fontSize: '12px', color: '#424242' }}>
+                                                                            Độ ẩm tối thiểu: <b>{results.moisture?.min ? `${results.moisture.min}%` : '---'}</b> | Tối đa: <b>{results.moisture?.max ? `${results.moisture.max}%` : '---'}</b>
+                                                                        </div>
+                                                                    </div>
 
-                                                        {/* Bend */}
-                                                        <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EADCC9', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #FAF6F0', paddingBottom: '6px' }}>
-                                                                <span style={{ fontSize: '13px', fontWeight: '800', color: '#5D4037', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                                    <Activity size={14} color="#7B5233" />
-                                                                    2. Độ cong vênh (Bend)
-                                                                </span>
-                                                                {getPassBadge(results.bend?.is_pass)}
-                                                            </div>
-                                                            <div style={{ fontSize: '12px', color: '#424242' }}>
-                                                                Độ cong tối thiểu: <b>{results.bend?.min ? `${results.bend.min} mm` : '---'}</b>
-                                                            </div>
-                                                            <div style={{ fontSize: '12px', color: '#424242' }}>
-                                                                Độ cong tối đa: <b>{results.bend?.max ? `${results.bend.max} mm` : '---'}</b>
-                                                            </div>
-                                                        </div>
+                                                                    {/* Bend */}
+                                                                    <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EADCC9', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #FAF6F0', paddingBottom: '6px' }}>
+                                                                            <span style={{ fontSize: '13px', fontWeight: '800', color: '#5D4037', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                                <Activity size={14} color="#7B5233" />
+                                                                                2. Độ cong vênh (Bend)
+                                                                            </span>
+                                                                            {getPassBadge(results.bend?.is_pass)}
+                                                                        </div>
+                                                                        <div style={{ fontSize: '12px', color: '#424242' }}>
+                                                                            Độ cong tối thiểu: <b>{results.bend?.min ? `${results.bend.min} mm` : '---'}</b> | Tối đa: <b>{results.bend?.max ? `${results.bend.max} mm` : '---'}</b>
+                                                                        </div>
+                                                                    </div>
 
-                                                        {/* Size */}
-                                                        <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EADCC9', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #FAF6F0', paddingBottom: '6px' }}>
-                                                                <span style={{ fontSize: '13px', fontWeight: '800', color: '#5D4037', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                                    <Maximize2 size={14} color="#7B5233" />
-                                                                    3. Kích thước (Size check)
-                                                                </span>
-                                                                {getPassBadge(results.size?.is_pass)}
-                                                            </div>
-                                                            <div style={{ fontSize: '12px', color: '#424242' }}>
-                                                                Chiều Dài: <b>{results.size?.long ? `${results.size.long} mm` : '---'}</b> | Chiều Rộng: <b>{results.size?.wide ? `${results.size.wide} mm` : '---'}</b>
-                                                            </div>
-                                                            <div style={{ fontSize: '12px', color: '#424242' }}>
-                                                                Chiều Dày: <b>{results.size?.thick ? `${results.size.thick} mm` : '---'}</b>
-                                                            </div>
-                                                        </div>
+                                                                    {/* Size */}
+                                                                    <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EADCC9', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #FAF6F0', paddingBottom: '6px' }}>
+                                                                            <span style={{ fontSize: '13px', fontWeight: '800', color: '#5D4037', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                                <Maximize2 size={14} color="#7B5233" />
+                                                                                3. Kích thước (Size check)
+                                                                            </span>
+                                                                            {getPassBadge(results.size?.is_pass)}
+                                                                        </div>
+                                                                        <div style={{ fontSize: '12px', color: '#424242' }}>
+                                                                            Dài: <b>{results.size?.long ? `${results.size.long} mm` : '---'}</b> | Rộng: <b>{results.size?.wide ? `${results.size.wide} mm` : '---'}</b> | Dày: <b>{results.size?.thick ? `${results.size.thick} mm` : '---'}</b>
+                                                                        </div>
+                                                                    </div>
 
-                                                        {/* Structure */}
-                                                        <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #EADCC9', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #FAF6F0', paddingBottom: '6px' }}>
-                                                                <span style={{ fontSize: '13px', fontWeight: '800', color: '#5D4037', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                                    <Layers size={14} color="#7B5233" />
-                                                                    4. Kết cấu sản phẩm
-                                                                </span>
-                                                                {getPassBadge(results.structure?.is_pass)}
-                                                            </div>
-                                                            <div style={{ fontSize: '12px', color: '#424242' }}>
-                                                                Độ cong góc: <b>{results.structure?.bend ? `${results.structure.bend} mm` : '---'}</b>
-                                                            </div>
-                                                            <div style={{ fontSize: '12px', color: '#424242' }}>
-                                                                Mặt Rộng: <b>{results.structure?.wide ? `${results.structure.wide} mm` : '---'}</b> | Mặt Cao: <b>{results.structure?.high ? `${results.structure.high} mm` : '---'}</b>
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Visual & Others */}
-                                                        {[
-                                                            { label: '5. Bám dính sơn (Visual)', isPass: results.visual?.is_pass },
-                                                            { label: '6. Bộ phụ kiện đi kèm (Accessories)', isPass: results.accessories?.is_pass },
-                                                            { label: '7. Ngoại quan bề mặt (Visual Ext)', isPass: results.visual_ext?.is_pass },
-                                                            { label: '8. Tính năng sản phẩm (Functional)', isPass: results.functional?.is_pass },
-                                                        ].map((extraCheck, ecIdx) => (
-                                                            <div key={ecIdx} style={{ background: 'white', borderRadius: '12px', border: '1px solid #EADCC9', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                                <span style={{ fontSize: '13px', fontWeight: '800', color: '#5D4037', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                                    <CheckCircle2 size={14} color="#7B5233" />
-                                                                    {extraCheck.label}
-                                                                </span>
-                                                                {getPassBadge(extraCheck.isPass)}
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                );
-                                            })()}
-
-                                            {/* 3. QC Evidence Images */}
-                                            <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '800', color: '#5D4037', borderLeft: '4px solid #7B5233', paddingLeft: '8px' }}>
-                                                ẢNH MINH CHỨNG KIỂM ĐỊNH (QC)
-                                            </h4>
-                                            <div style={{ 
-                                                display: 'flex', 
-                                                gap: '12px', 
-                                                flexWrap: 'wrap', 
-                                                background: 'white', 
-                                                padding: '16px', 
-                                                borderRadius: '12px', 
-                                                border: '1px solid #EADCC9' 
-                                            }}>
-                                                {!qcDetail.images || qcDetail.images.length === 0 ? (
-                                                    <span style={{ fontSize: '13px', color: '#9E9E9E', fontStyle: 'italic' }}>Không có hình ảnh lỗi / kiểm QC nào được đính kèm.</span>
-                                                ) : (
-                                                    qcDetail.images.map((img, imgIdx) => {
-                                                        const url = `${API_ROOT}${img.image_path.replace(/^\//, '')}`;
-                                                        return (
-                                                            <div 
-                                                                key={imgIdx} 
-                                                                onClick={() => setActiveImage(url)}
-                                                                style={{ 
-                                                                    width: '120px', 
-                                                                    height: '90px', 
-                                                                    borderRadius: '8px', 
-                                                                    overflow: 'hidden', 
-                                                                    border: '1px solid #EADCC9', 
-                                                                    cursor: 'zoom-in',
-                                                                    position: 'relative',
-                                                                    transition: 'transform 0.2s'
-                                                                }}
-                                                                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                                                                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                                                            >
-                                                                <img src={url} alt={img.description || 'QC Proof'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(198,40,40,0.85)', color: 'white', fontSize: '9px', textAlign: 'center', padding: '2px 0', fontWeight: '700' }}>
-                                                                    {getCategoryLabel(img.description)}
+                                                                    {/* Structure & Others */}
+                                                                    {[
+                                                                        { label: '4. Kết cấu sản phẩm', isPass: results.structure?.is_pass },
+                                                                        { label: '5. Bám dính sơn (Visual)', isPass: results.visual?.is_pass },
+                                                                        { label: '6. Bộ phụ kiện đi kèm (Accessories)', isPass: results.accessories?.is_pass },
+                                                                        { label: '7. Ngoại quan bề mặt (Visual Ext)', isPass: results.visual_ext?.is_pass },
+                                                                        { label: '8. Tính năng sản phẩm (Functional)', isPass: results.functional?.is_pass },
+                                                                    ].map((extraCheck, ecIdx) => (
+                                                                        <div key={ecIdx} style={{ background: 'white', borderRadius: '12px', border: '1px solid #EADCC9', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                            <span style={{ fontSize: '13px', fontWeight: '800', color: '#5D4037', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                                <CheckCircle2 size={14} color="#7B5233" />
+                                                                                {extraCheck.label}
+                                                                            </span>
+                                                                            {getPassBadge(extraCheck.isPass)}
+                                                                        </div>
+                                                                    ))}
                                                                 </div>
-                                                            </div>
-                                                        );
-                                                    })
+                                                            );
+                                                        })()}
+                                                    </>
                                                 )}
+
+                                                {/* 3. QC Evidence Images */}
+                                                <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '800', color: '#5D4037', borderLeft: '4px solid #7B5233', paddingLeft: '8px' }}>
+                                                    ẢNH MINH CHỨNG KIỂM ĐỊNH (QC)
+                                                </h4>
+                                                <div style={{ 
+                                                    display: 'flex', 
+                                                    gap: '12px', 
+                                                    flexWrap: 'wrap', 
+                                                    background: 'white', 
+                                                    padding: '16px', 
+                                                    borderRadius: '12px', 
+                                                    border: '1px solid #EADCC9' 
+                                                }}>
+                                                    {qcImagesList.length === 0 ? (
+                                                        <span style={{ fontSize: '13px', color: '#9E9E9E', fontStyle: 'italic' }}>Không có hình ảnh lỗi / kiểm QC nào được đính kèm.</span>
+                                                    ) : (
+                                                        qcImagesList.map((img, imgIdx) => {
+                                                            const rawPath = typeof img === 'string' ? img : (img?.image_path || img?.url || '');
+                                                            if (!rawPath) return null;
+                                                            const root = API_ROOT ? (API_ROOT.endsWith('/') ? API_ROOT : `${API_ROOT}/`) : '/';
+                                                            const url = rawPath.startsWith('http') ? rawPath : `${root}${rawPath.replace(/^\//, '')}`;
+                                                            return (
+                                                                <div 
+                                                                    key={imgIdx} 
+                                                                    onClick={() => setActiveImage(url)}
+                                                                    style={{ 
+                                                                        width: '120px', 
+                                                                        height: '90px', 
+                                                                        borderRadius: '8px', 
+                                                                        overflow: 'hidden', 
+                                                                        border: '1px solid #EADCC9', 
+                                                                        cursor: 'zoom-in',
+                                                                        position: 'relative',
+                                                                        transition: 'transform 0.2s'
+                                                                    }}
+                                                                    onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                                                                    onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                                                                >
+                                                                    <img src={url} alt="QC Proof" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(198,40,40,0.85)', color: 'white', fontSize: '9px', textAlign: 'center', padding: '2px 0', fontWeight: '700' }}>
+                                                                        {getCategoryLabel(img.description || 'Ảnh QC')}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })
+                                                    )}
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        );
+                                    })()}
                                 </div>
                             ) : (
                                 <div>
-                                    {/* Tab QC inspection results (Đầu vào) */}
-                                    {!inputQcDetail ? (
-                                        <div style={{ 
-                                            background: '#FAF6F0', 
-                                            border: '2px dashed #EADCC9', 
-                                            borderRadius: '16px', 
-                                            padding: '40px', 
-                                            textAlign: 'center',
-                                            display: 'flex',
-                                            flexDirection: 'column',
-                                            alignItems: 'center',
-                                            gap: '15px'
-                                        }}>
-                                            <AlertCircle size={48} color="#D97706" />
-                                            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', color: '#5D4037' }}>
-                                                Chưa có thông tin kiểm định đầu vào
-                                            </h3>
-                                            <p style={{ margin: 0, fontSize: '13px', color: '#8D6E63', maxWidth: '450px', lineHeight: '1.5' }}>
-                                                Chi tiết này chưa thực hiện kiểm tra kích thước đầu vào (MB2.4) trước khi giao hàng.
-                                            </p>
-                                        </div>
-                                    ) : (
-                                        <div>
-                                            {/* 1. Inbound QC General Info */}
-                                            <div style={{ 
-                                                display: 'grid', 
-                                                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-                                                gap: '16px', 
-                                                marginBottom: '24px',
-                                                background: 'white',
-                                                padding: '20px',
-                                                borderRadius: '16px',
-                                                border: '1px solid #EADCC9'
-                                            }}>
-                                                {[
-                                                    { label: 'Người kiểm định QC', value: inputQcDetail.inspector_name || 'N/A', icon: <User size={16} color="#8D6E63" /> },
-                                                    { label: 'Thời gian kiểm định', value: inputQcDetail.inspected_at ? new Date(inputQcDetail.inspected_at).toLocaleString('vi-VN') : '---', icon: <Calendar size={16} color="#8D6E63" /> },
-                                                    { label: 'Công đoạn kiểm', value: inputQcDetail.stage || '---', icon: <Layers size={16} color="#8D6E63" /> },
-                                                    { label: 'Mã Cont', value: inputQcDetail.cont_name || '---', icon: <MapPin size={16} color="#8D6E63" /> },
-                                                    { label: 'Quy cách kỹ thuật', value: inputQcDetail.specification || '---', icon: <Info size={16} color="#8D6E63" /> },
-                                                    { 
-                                                        label: 'KẾT LUẬN QC ĐẦU VÀO', 
-                                                        value: inputQcDetail.result || 'CHƯA RÕ', 
-                                                        color: inputQcDetail.result === 'Đạt' ? '#2E7D32' : '#C62828',
-                                                        icon: <Activity size={16} color="#8D6E63" /> 
-                                                    },
-                                                ].map((item, idx) => (
-                                                    <div key={idx} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                                                        <div style={{ marginTop: '3px' }}>{item.icon}</div>
-                                                        <div>
-                                                            <div style={{ fontSize: '11px', color: '#8D6E63', fontWeight: '700', textTransform: 'uppercase' }}>{item.label}</div>
-                                                            <div style={{ fontSize: '13px', color: item.color || '#2D1A12', fontWeight: '800', marginTop: '2px' }}>{item.value}</div>
-                                                        </div>
+                                    {/* Tab QC inspection results (Đầu vào / MB2.4) */}
+                                    {(() => {
+                                        const palletCode = palletQcDetail?.palletCode || deliveryDetail?.backup_qr || selectedDelivery?.backup_qr || deliveryDetail?.pallet_code;
+                                        const inputData = inputQcDetail || (palletQcDetail && palletQcDetail.last_inspection ? palletQcDetail.last_inspection : null);
+                                        const currentStage = (deliveryDetail?.delivery_stage || selectedDelivery?.delivery_stage || '').toLowerCase();
+
+                                        if (!inputData) {
+                                            const isInitialStage = currentStage.includes('phôi') || currentStage.includes('đầu vào') || currentStage.includes('sơ chế') || currentStage.includes('định hình') || currentStage.includes('mb2.4');
+                                            
+                                            return (
+                                                <div style={{ 
+                                                    background: '#FAF6F0', 
+                                                    border: '2px dashed #EADCC9', 
+                                                    borderRadius: '16px', 
+                                                    padding: '40px', 
+                                                    textAlign: 'center',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    alignItems: 'center',
+                                                    gap: '15px'
+                                                }}>
+                                                    {isInitialStage ? (
+                                                        <>
+                                                            <AlertCircle size={48} color="#D97706" />
+                                                            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', color: '#5D4037' }}>
+                                                                Chưa có thông tin kiểm định phôi (MB2.4)
+                                                            </h3>
+                                                            <p style={{ margin: 0, fontSize: '13px', color: '#8D6E63', maxWidth: '480px', lineHeight: '1.5' }}>
+                                                                Chi tiết này chưa được nhân viên đo đạc kích thước & độ ẩm phôi gỗ trước khi lập phiếu giao.
+                                                            </p>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Info size={48} color="#2563EB" />
+                                                            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', color: '#1E3A8A' }}>
+                                                                Thừa hưởng kết quả kiểm soát phôi đầu vào
+                                                            </h3>
+                                                            <p style={{ margin: 0, fontSize: '13px', color: '#3B82F6', maxWidth: '500px', lineHeight: '1.5' }}>
+                                                                Công đoạn <b>{deliveryDetail?.delivery_stage || selectedDelivery?.delivery_stage || 'hiện tại'}</b> thừa hưởng chỉ số kỹ thuật và kết quả kiểm định chất lượng phôi từ các công đoạn sơ chế phôi ban đầu.
+                                                            </p>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            );
+                                        }
+
+                                        return (
+                                            <div>
+                                                {/* Pallet Code Banner */}
+                                                <div style={{
+                                                    background: '#FAF6F0',
+                                                    border: '1px solid #EADCC9',
+                                                    borderRadius: '12px',
+                                                    padding: '10px 16px',
+                                                    marginBottom: '16px',
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center'
+                                                }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                        <span style={{ fontSize: '12px', fontWeight: '800', color: '#7B5233', textTransform: 'uppercase' }}>🏷️ Mã Pallet Phôi / Thẻ QR:</span>
+                                                        <span style={{ fontSize: '14px', fontWeight: '900', color: '#2D1A12', fontFamily: 'monospace' }}>
+                                                            {palletCode || 'Chưa có mã Pallet'}
+                                                        </span>
                                                     </div>
-                                                ))}
-                                                <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '10px', alignItems: 'flex-start', borderTop: '1px solid #FAF6F0', paddingTop: '10px' }}>
-                                                    <div style={{ marginTop: '2px' }}><Info size={16} color="#8D6E63" /></div>
-                                                    <div>
-                                                        <div style={{ fontSize: '11px', color: '#8D6E63', fontWeight: '700', textTransform: 'uppercase' }}>Ghi chú kiểm định QC</div>
-                                                        <div style={{ fontSize: '13px', color: '#5D4037', fontWeight: '600', fontStyle: 'italic', marginTop: '2px' }}>
-                                                            {inputQcDetail.note || 'Không có ghi chú kiểm định chất lượng.'}
+                                                    <span style={{ fontSize: '12px', background: '#DBEAFE', padding: '2px 8px', borderRadius: '6px', fontWeight: '700', color: '#1E40AF' }}>
+                                                        MB2.4 Kiểm Phôi Đầu Vào
+                                                    </span>
+                                                </div>
+
+                                                {/* 1. Inbound QC General Info */}
+                                                <div style={{ 
+                                                    display: 'grid', 
+                                                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+                                                    gap: '16px', 
+                                                    marginBottom: '24px',
+                                                    background: 'white',
+                                                    padding: '20px',
+                                                    borderRadius: '16px',
+                                                    border: '1px solid #EADCC9'
+                                                }}>
+                                                    {[
+                                                        { label: 'Người kiểm định QC', value: inputData.inspector_name || inputData.inspector || 'N/A', icon: <User size={16} color="#8D6E63" /> },
+                                                        { label: 'Thời gian kiểm định', value: inputData.inspected_at ? new Date(inputData.inspected_at).toLocaleString('vi-VN') : '---', icon: <Calendar size={16} color="#8D6E63" /> },
+                                                        { label: 'Công đoạn kiểm', value: inputData.stage || deliveryDetail?.delivery_stage || '---', icon: <Layers size={16} color="#8D6E63" /> },
+                                                        { label: 'Mã Cont / Lô', value: inputData.cont_name || '---', icon: <MapPin size={16} color="#8D6E63" /> },
+                                                        { label: 'Quy cách kỹ thuật', value: inputData.specification || '---', icon: <Info size={16} color="#8D6E63" /> },
+                                                        { 
+                                                            label: 'KẾT LUẬN QC ĐẦU VÀO', 
+                                                            value: inputData.result || 'Đạt', 
+                                                            color: (inputData.result === 'Đạt' || inputData.result === 'pass') ? '#2E7D32' : '#C62828',
+                                                            icon: <Activity size={16} color="#8D6E63" /> 
+                                                        },
+                                                    ].map((item, idx) => (
+                                                        <div key={idx} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                                                            <div style={{ marginTop: '3px' }}>{item.icon}</div>
+                                                            <div>
+                                                                <div style={{ fontSize: '11px', color: '#8D6E63', fontWeight: '700', textTransform: 'uppercase' }}>{item.label}</div>
+                                                                <div style={{ fontSize: '13px', color: item.color || '#2D1A12', fontWeight: '800', marginTop: '2px' }}>{item.value}</div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                    <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '10px', alignItems: 'flex-start', borderTop: '1px solid #FAF6F0', paddingTop: '10px' }}>
+                                                        <div style={{ marginTop: '2px' }}><Info size={16} color="#8D6E63" /></div>
+                                                        <div>
+                                                            <div style={{ fontSize: '11px', color: '#8D6E63', fontWeight: '700', textTransform: 'uppercase' }}>Ghi chú kiểm định phôi</div>
+                                                            <div style={{ fontSize: '13px', color: '#5D4037', fontWeight: '600', fontStyle: 'italic', marginTop: '2px' }}>
+                                                                {inputData.note || 'Không có ghi chú kiểm định chất lượng.'}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
-                                            </div>
- 
-                                            {/* 2. Measured Dimensions check */}
-                                            <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '800', color: '#5D4037', borderLeft: '4px solid #7B5233', paddingLeft: '8px' }}>
-                                                KÍCH THƯỚC ĐO ĐẠC ĐẦU VÀO
-                                            </h4>
-                                            
-                                            {(() => {
-                                                let length = inputQcDetail.measured_length;
-                                                let width = inputQcDetail.measured_width;
-                                                let height = inputQcDetail.measured_height;
+     
+                                                {/* 2. Measured Dimensions check */}
+                                                <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '800', color: '#5D4037', borderLeft: '4px solid #7B5233', paddingLeft: '8px' }}>
+                                                    KÍCH THƯỚC ĐO ĐẠC ĐẦU VÀO (MB2.4)
+                                                </h4>
                                                 
-                                                if ((!length && !width && !height) && inputQcDetail.specification) {
-                                                    const parts = inputQcDetail.specification.split(/[*x]/).map(p => p.trim());
-                                                    if (parts.length === 3) {
-                                                        height = parts[0];
-                                                        width = parts[1];
-                                                        length = parts[2];
+                                                {(() => {
+                                                    let length = inputData.measured_length;
+                                                    let width = inputData.measured_width;
+                                                    let height = inputData.measured_height;
+                                                    
+                                                    if ((!length && !width && !height) && inputData.specification) {
+                                                        const parts = inputData.specification.split(/[*x]/).map(p => p.trim());
+                                                        if (parts.length === 3) {
+                                                            height = parts[0];
+                                                            width = parts[1];
+                                                            length = parts[2];
+                                                        }
                                                     }
-                                                }
-                                                
-                                                return (
-                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-                                                        {[
-                                                            { label: 'Chiều Dài', value: length ? `${length} mm` : '---' },
-                                                            { label: 'Chiều Rộng', value: width ? `${width} mm` : '---' },
-                                                            { label: 'Chiều Dầy (Cao)', value: height ? `${height} mm` : '---' }
-                                                        ].map((dim, dimIdx) => (
-                                                            <div key={dimIdx} style={{ background: 'white', borderRadius: '12px', border: '1px solid #EADCC9', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                                <div style={{ fontSize: '13px', fontWeight: '800', color: '#5D4037' }}>
-                                                                    {dim.label}
+                                                    
+                                                    return (
+                                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+                                                            {[
+                                                                { label: 'Chiều Dài', value: length ? `${length} mm` : '---' },
+                                                                { label: 'Chiều Rộng', value: width ? `${width} mm` : '---' },
+                                                                { label: 'Chiều Dầy (Cao)', value: height ? `${height} mm` : '---' }
+                                                            ].map((dim, dimIdx) => (
+                                                                <div key={dimIdx} style={{ background: 'white', borderRadius: '12px', border: '1px solid #EADCC9', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#5D4037' }}>
+                                                                        {dim.label}
+                                                                    </div>
+                                                                    <div style={{ fontSize: '18px', fontWeight: '900', color: '#7B5233' }}>
+                                                                        {dim.value}
+                                                                    </div>
                                                                 </div>
-                                                                <div style={{ fontSize: '18px', fontWeight: '900', color: '#7B5233' }}>
-                                                                    {dim.value}
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                );
-                                            })()}
+                                                            ))}
+                                                        </div>
+                                                    );
+                                                })()}
 
-                                            {/* 3. Proof Images */}
-                                            <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '800', color: '#5D4037', borderLeft: '4px solid #7B5233', paddingLeft: '8px' }}>
-                                                ẢNH MINH CHỨNG KIỂM ĐẦU VÀO
-                                            </h4>
-                                            <div style={{ 
-                                                display: 'flex', 
-                                                gap: '12px', 
-                                                flexWrap: 'wrap', 
-                                                background: 'white', 
-                                                padding: '16px', 
-                                                borderRadius: '12px', 
-                                                border: '1px solid #EADCC9' 
-                                            }}>
-                                                {[inputQcDetail.image_path_1, inputQcDetail.image_path_2, inputQcDetail.image_path_3].filter(Boolean).length === 0 ? (
-                                                    <span style={{ fontSize: '13px', color: '#9E9E9E', fontStyle: 'italic' }}>Không có hình ảnh kiểm định nào được đính kèm.</span>
-                                                ) : (
-                                                    [inputQcDetail.image_path_1, inputQcDetail.image_path_2, inputQcDetail.image_path_3].filter(Boolean).map((imgUrl, imgIdx) => {
-                                                        const url = `${API_ROOT}${imgUrl.replace(/^\//, '')}`;
-                                                        return (
-                                                            <div 
-                                                                key={imgIdx} 
-                                                                onClick={() => setActiveImage(url)}
-                                                                style={{ 
-                                                                    width: '120px', 
-                                                                    height: '90px', 
-                                                                    borderRadius: '8px', 
-                                                                    overflow: 'hidden', 
-                                                                    border: '1px solid #EADCC9', 
-                                                                    cursor: 'zoom-in',
-                                                                    position: 'relative',
-                                                                    transition: 'transform 0.2s'
-                                                                }}
-                                                                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                                                                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                                                            >
-                                                                <img src={url} alt={`QC Input Proof ${imgIdx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                            </div>
-                                                        );
-                                                    })
-                                                )}
+                                                {/* 3. Proof Images */}
+                                                <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '800', color: '#5D4037', borderLeft: '4px solid #7B5233', paddingLeft: '8px' }}>
+                                                    ẢNH MINH CHỨNG KIỂM ĐẦU VÀO
+                                                </h4>
+                                                <div style={{ 
+                                                    display: 'flex', 
+                                                    gap: '12px', 
+                                                    flexWrap: 'wrap', 
+                                                    background: 'white', 
+                                                    padding: '16px', 
+                                                    borderRadius: '12px', 
+                                                    border: '1px solid #EADCC9' 
+                                                }}>
+                                                    {(() => {
+                                                        const validImages = [inputData.image_path_1, inputData.image_path_2, inputData.image_path_3].filter(img => typeof img === 'string' && img.trim() !== '');
+                                                        if (validImages.length === 0) {
+                                                            return <span style={{ fontSize: '13px', color: '#9E9E9E', fontStyle: 'italic' }}>Không có hình ảnh kiểm định nào được đính kèm.</span>;
+                                                        }
+                                                        const root = API_ROOT ? (API_ROOT.endsWith('/') ? API_ROOT : `${API_ROOT}/`) : '/';
+                                                        return validImages.map((imgUrl, imgIdx) => {
+                                                            const url = imgUrl.startsWith('http') ? imgUrl : `${root}${imgUrl.replace(/^\//, '')}`;
+                                                            return (
+                                                                <div 
+                                                                    key={imgIdx} 
+                                                                    onClick={() => setActiveImage(url)}
+                                                                    style={{ 
+                                                                        width: '120px', 
+                                                                        height: '90px', 
+                                                                        borderRadius: '8px', 
+                                                                        overflow: 'hidden', 
+                                                                        border: '1px solid #EADCC9', 
+                                                                        cursor: 'zoom-in',
+                                                                        position: 'relative',
+                                                                        transition: 'transform 0.2s'
+                                                                    }}
+                                                                    onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                                                                    onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                                                                >
+                                                                    <img src={url} alt={`QC Input Proof ${imgIdx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                                </div>
+                                                            );
+                                                        });
+                                                    })()}
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        );
+                                    })()}
                                 </div>
                             )}
                         </div>

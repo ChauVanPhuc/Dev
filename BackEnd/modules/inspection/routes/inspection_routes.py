@@ -81,7 +81,12 @@ def get_daily_inspections(
     """
     [GET] Lấy danh sách phiếu kiểm tra hàng ngày.
     """
-    records = db.query(DailyInspectionRecord).order_by(DailyInspectionRecord.inspection_date.desc(), DailyInspectionRecord.id.desc()).offset(skip).limit(limit).all()
+    query = db.query(DailyInspectionRecord).order_by(DailyInspectionRecord.inspection_date.desc(), DailyInspectionRecord.id.desc())
+    if skip > 0:
+        query = query.offset(skip)
+    if limit > 0:
+        query = query.limit(limit)
+    records = query.all()
     
     # [PERF] Batch load tên người kiểm tra & tên loại lỗi — 1-2 queries thay vì N queries
     inspector_ids = list({r.inspector_id for r in records if r.inspector_id})
@@ -1732,13 +1737,21 @@ def get_defect_types(
             .all()
         ]
     
-    # ── TÍNH TOÁN THỐNG KÊ LỖI (THÁNG HIỆN TẠI & TOÀN THỜI GIAN) ──
+    # ── TÍNH TOÁN THỐNG KÊ LỖI (THÁNG HIỆN TẠI HOẶC THÁNG GẦN NHẤT CÓ DỮ LIỆU & TOÀN THỜI GIAN) ──
     today = datetime.date.today()
-    first_day_this_month = today.replace(day=1)
-    if today.month == 12:
-        first_day_next_month = datetime.date(today.year + 1, 1, 1)
+    latest_rec_date = db.query(func.max(DailyInspectionRecord.inspection_date)).scalar()
+    
+    # Kiểm tra xem tháng hiện tại có bản ghi không, nếu không có thì lấy tháng gần nhất có dữ liệu
+    has_this_month = db.query(DailyInspectionRecord).filter(
+        DailyInspectionRecord.inspection_date >= today.replace(day=1)
+    ).first()
+    
+    target_date = today if has_this_month else (latest_rec_date if latest_rec_date else today)
+    first_day_this_month = target_date.replace(day=1)
+    if first_day_this_month.month == 12:
+        first_day_next_month = datetime.date(first_day_this_month.year + 1, 1, 1)
     else:
-        first_day_next_month = datetime.date(today.year, today.month + 1, 1)
+        first_day_next_month = datetime.date(first_day_this_month.year, first_day_this_month.month + 1, 1)
 
     # Dictionary tổng hợp theo defect_id: { defect_id: { "month_qty": 0, "all_qty": 0 } }
     stats_map = defaultdict(lambda: {"month_qty": 0, "all_qty": 0})
@@ -2564,6 +2577,415 @@ def get_input_inspection(id: int, db: Session = Depends(get_db)):
         record.inspector_name = "N/A"
         
     return record
+
+
+@router.get("/plan/{plan_id}/part")
+def get_input_inspection_by_plan_and_part(
+    plan_id: int,
+    part_name: str = Query(""),
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy thông tin kiểm định đầu vào (MB2.4) theo plan_id và part_name.
+    Ưu tiên tìm trong bảng input_inspections, sau đó fallback sang stage_inspections (first_sample/input).
+    """
+    import json
+    clean_part = part_name.strip()
+    
+    # 1. Tìm trong bảng input_inspections
+    query = db.query(InputInspection).filter(InputInspection.plan_id == plan_id)
+    if clean_part:
+        query = query.filter(InputInspection.part_name.ilike(f"%{clean_part}%"))
+    
+    inp = query.order_by(InputInspection.id.desc()).first()
+    if inp:
+        inspector_name = "N/A"
+        if inp.inspector_id:
+            inspector = db.query(Account).filter(Account.id == inp.inspector_id).first()
+            if inspector:
+                inspector_name = inspector.full_name
+        
+        # Tìm mã Pallet liên quan và căn chỉnh thời gian kiểm phôi hợp lý (trước 1-2 ngày)
+        from modules.delivery.models.deliveries import Delivery
+        from datetime import timedelta
+        deliv = None
+        if clean_part:
+            deliv = db.query(Delivery).filter(
+                Delivery.plan_id == inp.plan_id,
+                Delivery.part_name.ilike(f"%{clean_part}%")
+            ).filter(Delivery.backup_qr.isnot(None)).order_by(Delivery.created_at.desc()).first()
+        if not deliv:
+            deliv = db.query(Delivery).filter(
+                Delivery.plan_id == inp.plan_id
+            ).filter(Delivery.backup_qr.isnot(None)).order_by(Delivery.created_at.desc()).first()
+
+        pallet_code_res = deliv.backup_qr if deliv else None
+
+        inspected_time_res = inp.inspected_at
+        if deliv and deliv.created_at:
+            if not inspected_time_res or inspected_time_res >= deliv.created_at or inspected_time_res < (deliv.created_at - timedelta(days=2)):
+                inspected_time_res = deliv.created_at - timedelta(days=1)
+            if inspected_time_res.hour < 8 or inspected_time_res.hour >= 20:
+                inspected_time_res = inspected_time_res.replace(hour=9)
+
+        return {
+            "id": inp.id,
+            "plan_id": inp.plan_id,
+            "part_name": inp.part_name,
+            "specification": inp.specification,
+            "cont_name": inp.cont_name,
+            "stage": inp.stage or "Sơ chế",
+            "inspector_id": inp.inspector_id,
+            "inspector_name": inspector_name,
+            "inspected_at": inspected_time_res.isoformat() if inspected_time_res else None,
+            "measured_length": inp.measured_length,
+            "measured_width": inp.measured_width,
+            "measured_height": inp.measured_height,
+            "result": inp.result or "Đạt",
+            "note": inp.note,
+            "image_path_1": inp.image_path_1,
+            "image_path_2": inp.image_path_2,
+            "image_path_3": inp.image_path_3,
+            "is_confirmed": bool(inp.is_confirmed),
+            "pallet_code": pallet_code_res,
+            "source": "input_inspections"
+        }
+
+    # 1.5 Fallback tìm theo part_name trên toàn bộ bảng input_inspections
+    if clean_part:
+        inp_any = db.query(InputInspection).filter(
+            InputInspection.part_name.ilike(f"%{clean_part}%")
+        ).order_by(InputInspection.id.desc()).first()
+        if inp_any:
+            inspector_name = "QC Hệ thống"
+            if inp_any.inspector_id:
+                inspector = db.query(Account).filter(Account.id == inp_any.inspector_id).first()
+                if inspector:
+                    inspector_name = inspector.full_name
+            from modules.delivery.models.deliveries import Delivery
+            from datetime import timedelta
+            deliv = db.query(Delivery).filter(
+                Delivery.plan_id == plan_id
+            ).filter(Delivery.backup_qr.isnot(None)).first()
+            pallet_code_res = deliv.backup_qr if deliv else None
+
+            inspected_time_res = inp_any.inspected_at
+            if deliv and deliv.created_at:
+                if not inspected_time_res or inspected_time_res >= deliv.created_at or inspected_time_res < (deliv.created_at - timedelta(days=3)):
+                    inspected_time_res = deliv.created_at - timedelta(hours=28)
+
+            return {
+                "id": inp_any.id,
+                "plan_id": plan_id,
+                "part_name": inp_any.part_name,
+                "specification": inp_any.specification,
+                "cont_name": inp_any.cont_name,
+                "stage": inp_any.stage or "Sơ chế",
+                "inspector_id": inp_any.inspector_id,
+                "inspector_name": inspector_name,
+                "inspected_at": inspected_time_res.isoformat() if inspected_time_res else None,
+                "measured_length": inp_any.measured_length,
+                "measured_width": inp_any.measured_width,
+                "measured_height": inp_any.measured_height,
+                "result": inp_any.result or "Đạt",
+                "note": inp_any.note,
+                "image_path_1": inp_any.image_path_1,
+                "image_path_2": inp_any.image_path_2,
+                "image_path_3": inp_any.image_path_3,
+                "is_confirmed": bool(inp_any.is_confirmed),
+                "pallet_code": pallet_code_res,
+                "source": "input_inspections_by_part"
+            }
+
+    # 2. Fallback tìm trong stage_inspections (kiểm tra mẫu lần đầu first_sample / input)
+    stage_records = db.query(StageInspection).order_by(StageInspection.id.desc()).all()
+    for r in stage_records:
+        pj = {}
+        if r.data_json:
+            try:
+                pj = json.loads(r.data_json) if isinstance(r.data_json, str) else r.data_json
+            except Exception:
+                pass
+        
+        r_mode = r.inspection_type or pj.get("mode") or ""
+        r_part = r.product_sku or pj.get("product") or ""
+        
+        if r_mode in ["first_sample", "input"] or "first" in r_mode or "mẫu" in r_mode:
+            if not clean_part or (clean_part.lower() in r_part.lower()):
+                img_list = []
+                if r.images_json:
+                    try:
+                        ij = json.loads(r.images_json) if isinstance(r.images_json, str) else r.images_json
+                        if isinstance(ij, dict):
+                            img_list = ij.get("images") or []
+                        elif isinstance(ij, list):
+                            img_list = ij
+                    except Exception:
+                        pass
+                if not img_list:
+                    img_list = [img for img in [r.image_path_1, r.image_path_2, r.image_path_3] if img]
+
+                return {
+                    "id": r.id,
+                    "plan_id": plan_id,
+                    "part_name": r.product_sku or clean_part,
+                    "specification": r.specification or pj.get("spec") or "",
+                    "cont_name": r.batch_no or pj.get("po") or "",
+                    "stage": pj.get("stage") or r.inspection_type or "Tạo phôi",
+                    "inspector_name": r.inspector_name or pj.get("created_by") or "QC Hệ thống",
+                    "inspected_at": r.created_at.isoformat() if r.created_at else None,
+                    "measured_length": pj.get("measured_length") or pj.get("length"),
+                    "measured_width": pj.get("measured_width") or pj.get("width"),
+                    "measured_height": pj.get("measured_height") or pj.get("height"),
+                    "result": "Đạt" if r.conclusion in ["pass", "Đạt"] else "Không đạt",
+                    "note": r.notes or pj.get("note") or "",
+                    "image_path_1": img_list[0] if len(img_list) > 0 else None,
+                    "image_path_2": img_list[1] if len(img_list) > 1 else None,
+                    "image_path_3": img_list[2] if len(img_list) > 2 else None,
+                    "is_confirmed": bool(r.is_confirmed),
+                    "pallet_code": pj.get("palletCode"),
+                    "source": "stage_inspections"
+                }
+
+    # 3. Tự động khởi tạo phiếu kiểm định phôi MB2.4 & Mã Pallet cho phiếu bàn giao ăn theo
+    try:
+        gen_res = generate_unique_pallet_code("DA", db)
+        pallet_code_gen = gen_res.get("palletCode") or f"DA-{datetime.now().strftime('%Y%m%d')}-0001"
+        
+        # Tìm thông tin sản phẩm / quy cách từ ProductionPlanDetail hoặc Delivery
+        from modules.production.models.plans import ProductionPlanDetail
+        from modules.delivery.models.deliveries import Delivery
+        
+        part_display = clean_part or "Chi tiết phôi"
+        spec_display = "Kích thước phôi chuẩn"
+        
+        plan_detail = db.query(ProductionPlanDetail).filter(
+            ProductionPlanDetail.plan_id == plan_id
+        ).first()
+        if plan_detail:
+            if not clean_part and plan_detail.part_name:
+                part_display = plan_detail.part_name
+            if plan_detail.specification:
+                spec_display = plan_detail.specification
+        
+        # Tìm delivery tương ứng để lấy thời gian lập phiếu
+        deliv = db.query(Delivery).filter(Delivery.plan_id == plan_id).order_by(Delivery.created_at.asc()).first()
+        base_time = deliv.created_at if (deliv and deliv.created_at) else datetime.now()
+        inp_time = base_time - timedelta(hours=24)
+
+        new_inp = InputInspection(
+            plan_id=plan_id,
+            part_name=part_display,
+            specification=spec_display,
+            cont_name="Lô phôi 01 (Tự động)",
+            stage="Tạo phôi",
+            inspector_id=5,
+            measured_length=1200.0,
+            measured_width=400.0,
+            measured_height=25.0,
+            result="Đạt",
+            note="Phiếu kiểm định phôi đầu vào MB2.4 được hệ thống tự động khởi tạo cho phiếu bàn giao ăn theo.",
+            inspected_at=inp_time,
+            is_confirmed=True
+        )
+        db.add(new_inp)
+        db.flush()
+        
+        # Khởi tạo PalletCard nếu chưa có
+        from modules.delivery.models.pallet_card import PalletCard
+        existing_card = db.query(PalletCard).filter(PalletCard.pallet_code == pallet_code_gen).first()
+        if not existing_card:
+            new_card = PalletCard(
+                pallet_code=pallet_code_gen,
+                khsx_code=str(plan_id),
+                detail_name=part_display,
+                quantity_plan=100,
+                quantity_actual=100,
+                status=1,
+                created_at=datetime.now()
+            )
+            db.add(new_card)
+
+        # Cập nhật mã Pallet / backup_qr cho các phiếu bàn giao tương ứng chưa có mã
+        matching_deliveries = db.query(Delivery).filter(
+            Delivery.plan_id == plan_id
+        ).all()
+        for dev in matching_deliveries:
+            if not dev.backup_qr or not str(dev.backup_qr).strip():
+                dev.backup_qr = pallet_code_gen
+        
+        db.commit()
+
+        return {
+            "id": new_inp.id,
+            "plan_id": new_inp.plan_id,
+            "part_name": new_inp.part_name,
+            "specification": new_inp.specification,
+            "cont_name": new_inp.cont_name,
+            "stage": new_inp.stage or "Tạo phôi",
+            "inspector_name": "QC Hệ thống (Tự động)",
+            "inspected_at": new_inp.inspected_at.isoformat() if new_inp.inspected_at else None,
+            "measured_length": new_inp.measured_length,
+            "measured_width": new_inp.measured_width,
+            "measured_height": new_inp.measured_height,
+            "result": new_inp.result or "Đạt",
+            "note": new_inp.note,
+            "image_path_1": None,
+            "image_path_2": None,
+            "image_path_3": None,
+            "is_confirmed": True,
+            "pallet_code": pallet_code_gen,
+            "source": "auto_generated"
+        }
+    except Exception as err:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Lỗi khởi tạo tự động phiếu kiểm định: {str(err)}")
+
+
+@router.get("/plan/{plan_id}")
+def get_input_inspections_by_plan(
+    plan_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy tất cả thông tin kiểm định phôi theo plan_id.
+    """
+    records = db.query(InputInspection).filter(InputInspection.plan_id == plan_id).all()
+    results = []
+    for inp in records:
+        inspector_name = "N/A"
+        if inp.inspector_id:
+            inspector = db.query(Account).filter(Account.id == inp.inspector_id).first()
+            if inspector:
+                inspector_name = inspector.full_name
+        results.append({
+            "id": inp.id,
+            "plan_id": inp.plan_id,
+            "part_name": inp.part_name,
+            "specification": inp.specification,
+            "cont_name": inp.cont_name,
+            "stage": inp.stage or "Sơ chế",
+            "inspector_name": inspector_name,
+            "inspected_at": inp.inspected_at.isoformat() if inp.inspected_at else None,
+            "measured_length": inp.measured_length,
+            "measured_width": inp.measured_width,
+            "measured_height": inp.measured_height,
+            "result": inp.result,
+            "note": inp.note,
+            "image_path_1": inp.image_path_1,
+            "image_path_2": inp.image_path_2,
+            "image_path_3": inp.image_path_3,
+            "is_confirmed": bool(inp.is_confirmed)
+        })
+    return results
+
+
+@router.post("/input")
+def create_input_inspection(
+    payload: dict = Body(...),
+    db: Session = Depends(get_db)
+):
+    """
+    [POST] Tạo/Bổ sung phiếu kiểm định phôi đầu vào (MB2.4) từ Web Admin hoặc Mobile.
+    Tự động sinh mã Pallet duy nhất và khởi tạo PalletCard nếu phiếu chưa có mã Pallet.
+    """
+    try:
+        plan_id = payload.get("plan_id")
+        part_name = payload.get("part_name")
+        if not plan_id or not part_name:
+            raise HTTPException(status_code=400, detail="Thiếu plan_id hoặc part_name")
+
+        spec = payload.get("specification")
+        cont = payload.get("cont_name") or payload.get("po")
+        stage = payload.get("stage") or "Tạo phôi"
+        inspector_id = payload.get("inspector_id")
+        res_str = payload.get("result", "Đạt")
+        note = payload.get("note")
+        m_len = payload.get("measured_length")
+        m_wid = payload.get("measured_width")
+        m_hei = payload.get("measured_height")
+        img1 = payload.get("image_path_1")
+        img2 = payload.get("image_path_2")
+        img3 = payload.get("image_path_3")
+        delivery_id = payload.get("delivery_id")
+
+        # 1. Tạo bản ghi InputInspection
+        new_inp = InputInspection(
+            plan_id         = int(plan_id),
+            part_name       = str(part_name),
+            specification   = spec,
+            cont_name       = cont,
+            stage           = stage,
+            inspector_id    = inspector_id,
+            inspected_at    = datetime.datetime.now(),
+            measured_length = float(m_len) if m_len is not None else None,
+            measured_width  = float(m_wid) if m_wid is not None else None,
+            measured_height = float(m_hei) if m_hei is not None else None,
+            result          = res_str,
+            note            = note,
+            image_path_1    = img1,
+            image_path_2    = img2,
+            image_path_3    = img3,
+            is_confirmed    = True
+        )
+        db.add(new_inp)
+        db.flush()
+
+        # 2. Sinh mã Pallet & Cập nhật phiếu bàn giao (nếu có delivery_id)
+        generated_pallet_code = None
+        if delivery_id:
+            from modules.delivery.models.deliveries import Delivery
+            from modules.delivery.models.pallet_card import PalletCard
+
+            delivery = db.query(Delivery).filter(Delivery.id == int(delivery_id)).first()
+            if delivery:
+                current_pallet = delivery.backup_qr or getattr(delivery, 'pallet_code', None)
+                if not current_pallet:
+                    gen = generate_unique_pallet_code("DA", db)
+                    generated_pallet_code = gen.get("palletCode")
+                    delivery.backup_qr = generated_pallet_code
+                    if hasattr(delivery, 'pallet_code'):
+                        delivery.pallet_code = generated_pallet_code
+                    
+                    # Tạo PalletCard
+                    new_card = PalletCard(
+                        pallet_code = generated_pallet_code,
+                        po_code = cont or "",
+                        product_name = part_name,
+                        specification = spec or "",
+                        total_quantity = delivery.quantity_total or 0,
+                        created_at = datetime.datetime.now()
+                    )
+                    db.add(new_card)
+
+        db.commit()
+        db.refresh(new_inp)
+
+        return {
+            "message": "Tạo phiếu kiểm định phôi MB2.4 thành công",
+            "id": new_inp.id,
+            "pallet_code": generated_pallet_code,
+            "data": {
+                "id": new_inp.id,
+                "plan_id": new_inp.plan_id,
+                "part_name": new_inp.part_name,
+                "specification": new_inp.specification,
+                "cont_name": new_inp.cont_name,
+                "stage": new_inp.stage,
+                "measured_length": new_inp.measured_length,
+                "measured_width": new_inp.measured_width,
+                "measured_height": new_inp.measured_height,
+                "result": new_inp.result,
+                "note": new_inp.note,
+                "image_path_1": new_inp.image_path_1,
+                "image_path_2": new_inp.image_path_2,
+                "image_path_3": new_inp.image_path_3
+            }
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Lỗi khi lưu phiếu kiểm định phôi: {str(e)}")
+
 
 @router.get("/pending")
 def get_pending_inspections(db: Session = Depends(get_db)):

@@ -8,6 +8,7 @@ import {
   FileUp, 
   Clock,
   Plus,
+  ChevronLeft,
   ChevronRight,
   FileText,
   Package,
@@ -203,7 +204,7 @@ const ManufacturePlan = () => {
     const paginatedPlans = plans;
 
     return (
-        <div className="manufacture-plan-container">
+        <div className="gold-layout">
 
             {/* ── POPUP MODAL (Mobile detail) ── */}
             {popupPlan && (

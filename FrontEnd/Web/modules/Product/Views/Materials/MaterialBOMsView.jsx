@@ -299,7 +299,7 @@ const MaterialBOMsView = ({ isEmbedded = false }) => {
   const totalPages = Math.ceil(total / pageSize) || 1;
 
   return (
-    <div className="manufacture-plan-container mgmt-container material-bom-unified-container" style={{ width: '100%', maxWidth: '100%', padding: isEmbedded ? 0 : undefined }}>
+    <div className="gold-layout">
       {/* Dynamic CSS override for Super Compact Table & Clean ERP View with Full Scroll & Fixed Pagination Support */}
       <style dangerouslySetInnerHTML={{ __html: `
         @media (min-width: 769px) {

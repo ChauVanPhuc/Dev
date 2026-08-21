@@ -125,7 +125,7 @@ const Orders = () => {
     const totalPages = Math.ceil(totalCount / itemsPerPage) || 1;
 
     return (
-        <div className="manufacture-plan-container">
+        <div className="gold-layout">
             
             {/* ── STICKY TOP ZONE (Desktop: stats-grid; Mobile: stats-strip + toolbar) ── */}
             <div className="sticky-top-zone">

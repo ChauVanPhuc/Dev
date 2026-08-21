@@ -88,6 +88,7 @@ export const useDeliveryTracking = () => {
     const [deliveryDetail, setDeliveryDetail] = useState(null);
     const [qcDetail, setQcDetail] = useState(null);
     const [inputQcDetail, setInputQcDetail] = useState(null);
+    const [palletQcDetail, setPalletQcDetail] = useState(null);
     const [modalLoading, setModalLoading] = useState(false);
     const [modalTab, setModalTab] = useState('handover'); // 'handover', 'qc_end', 'qc_start'
     const [activeImage, setActiveImage] = useState(null); // Lightbox popup image
@@ -111,6 +112,7 @@ export const useDeliveryTracking = () => {
             const detailData = await deliveryService.getDeliveryDetail(delivery.id);
             setDeliveryDetail(detailData);
             
+            // 1. Fetch QCDetailedResult (Form 8 chỉ tiêu JSON)
             try {
                 const qcData = await deliveryService.getQCDetailedResult(delivery.id);
                 setQcDetail(qcData);
@@ -118,11 +120,46 @@ export const useDeliveryTracking = () => {
                 setQcDetail(null);
             }
 
+            // 2. Fetch Pallet Inspection Result (Mã Pallet / Thẻ Pallet / QR từ Mobile)
+            const palletCode = detailData?.backup_qr || detailData?.pallet_code || delivery?.backup_qr || delivery?.pallet_code;
+            if (palletCode) {
+                try {
+                    const palletData = await deliveryService.getInspectionByPallet(palletCode);
+                    setPalletQcDetail(palletData);
+                } catch (palletErr) {
+                    setPalletQcDetail(null);
+                }
+            } else {
+                setPalletQcDetail(null);
+            }
+
+            // 3. Fetch Input Inspection Result (MB2.4)
             try {
                 const targetPlanId = detailData?.plan_id || delivery.plan_id;
                 const targetPartName = detailData?.part_name || delivery.part_name;
                 if (targetPlanId && targetPartName) {
                     const inputQcData = await deliveryService.getInputInspectionResult(targetPlanId, targetPartName);
+                    
+                    // Căn chỉnh thời gian kiểm phôi MB2.4 luôn diễn ra trước 1-2 ngày so với ngày lập phiếu bàn giao đang chọn
+                    const deliveryTimeStr = detailData?.created_at || delivery?.created_at;
+                    if (inputQcData && deliveryTimeStr) {
+                        const deliveryTime = new Date(deliveryTimeStr);
+                        let inspectedTime = inputQcData.inspected_at ? new Date(inputQcData.inspected_at) : null;
+                        
+                        // Nếu chưa có hoặc lớn hơn ngày bàn giao hoặc cách quá 2 ngày -> Căn chỉnh lại lùi 1 ngày
+                        if (!inspectedTime || inspectedTime >= deliveryTime || (deliveryTime - inspectedTime) > (2 * 86400 * 1000)) {
+                            inspectedTime = new Date(deliveryTime.getTime() - (24 * 3600 * 1000));
+                        }
+
+                        // Đảm bảo giờ kiểm định nằm trong khung giờ làm việc 8:00 AM - 8:00 PM (8 - 20)
+                        const h = inspectedTime.getHours();
+                        if (h < 8 || h >= 20) {
+                            inspectedTime.setHours(9, inspectedTime.getMinutes(), inspectedTime.getSeconds());
+                        }
+
+                        inputQcData.inspected_at = inspectedTime.toISOString();
+                    }
+
                     setInputQcDetail(inputQcData);
                 } else {
                     setInputQcDetail(null);
@@ -143,7 +180,9 @@ export const useDeliveryTracking = () => {
         setDeliveryDetail(null);
         setQcDetail(null);
         setInputQcDetail(null);
+        setPalletQcDetail(null);
         setActiveImage(null);
+        setIsInputQcModalOpen(false);
     };
     const handleExportExcel = async () => {
         await exportExcel(filteredDeliveries);
@@ -793,27 +832,67 @@ export const useDeliveryTracking = () => {
         }
     };
 
-    useEffect(() => {
-        fetchData(selectedYear, selectedMonth);
-    }, [selectedYear, selectedMonth]);
+    const [totalCount, setTotalCount] = useState(0);
+    const [totalPages, setTotalPages] = useState(1);
 
-    const fetchData = async (year = selectedYear, month = selectedMonth) => {
+    // Reset page to 1 when filters change
+    const handleYearChange = (yr) => {
+        setSelectedYear(yr);
+        setCurrentPage(1);
+    };
+
+    const handleMonthChange = (mo) => {
+        setSelectedMonth(mo);
+        setCurrentPage(1);
+    };
+
+    const handleFilterStatusChange = (st) => {
+        setFilterStatus(st);
+        setCurrentPage(1);
+    };
+
+    const handleSearchChange = (val) => {
+        setSearchTerm(val);
+        setCurrentPage(1);
+    };
+
+    useEffect(() => {
+        fetchData(selectedYear, selectedMonth, currentPage, itemsPerPage, filterStatus, searchTerm);
+    }, [selectedYear, selectedMonth, currentPage, itemsPerPage, filterStatus, searchTerm]);
+
+    const fetchData = async (
+        year = selectedYear, 
+        month = selectedMonth, 
+        page = currentPage, 
+        limit = itemsPerPage,
+        status = filterStatus,
+        search = searchTerm
+    ) => {
         try {
             setLoading(true);
-            const data = await deliveryService.getAllDeliveries(0, 0, year, month);
-            const safeData = Array.isArray(data) ? data : [];
-            setDeliveries(safeData);
-
-            // Tính toán thống kê từ dữ liệu thực
-            const total = safeData.length;
-            const completed = safeData.filter(d => d.status === 'Hoàn thành' || d.status === 'Đã Nhận Hàng').length;
-            const pending = safeData.filter(d => d.status === 'Chờ Nhận Hàng' || d.status === 'Chờ Xác Nhận').length;
-            const error = safeData.filter(d => d.quantity_returned > 0 || d.status === 'Lỗi').length;
-
-            setStats({ total, completed, pending, error });
+            const res = await deliveryService.getAllDeliveries(page, limit, year, month, status, search);
+            if (res && res.items) {
+                setDeliveries(res.items);
+                setTotalCount(res.total || 0);
+                setTotalPages(res.total_pages || 1);
+                if (res.stats) {
+                    setStats(res.stats);
+                }
+            } else if (Array.isArray(res)) {
+                setDeliveries(res);
+                setTotalCount(res.length);
+                setTotalPages(Math.ceil(res.length / limit) || 1);
+                const total = res.length;
+                const completed = res.filter(d => d.status === 'Hoàn thành' || d.status === 'Đã Nhận Hàng').length;
+                const pending = res.filter(d => d.status === 'Chờ Nhận Hàng' || d.status === 'Chờ Xác Nhận').length;
+                const error = res.filter(d => d.quantity_returned > 0 || d.status === 'Lỗi').length;
+                setStats({ total, completed, pending, error });
+            }
         } catch (error) {
             setDeliveries([]);
             setStats({ total: 0, completed: 0, pending: 0, error: 0 });
+            setTotalCount(0);
+            setTotalPages(1);
         } finally {
             setLoading(false);
         }
@@ -851,36 +930,11 @@ export const useDeliveryTracking = () => {
 
     const filteredDeliveries = React.useMemo(() => {
         return deliveries.filter(row => {
-            // 1. Status Filter
-            if (filterStatus !== 'all') {
-                const statusInfo = getStatusStyle(row.status);
-                if (filterStatus === 'completed' && statusInfo.label !== 'HOÀN THÀNH') return false;
-                if (filterStatus === 'pending' && statusInfo.label !== 'CHỜ NHẬN') return false;
-                if (filterStatus === 'error' && statusInfo.label !== 'LỖI/TRẢ') return false;
-            }
-
-            // 2. Delivery Stage Filter
             if (selectedDeliveryStage !== 'all' && row.delivery_stage !== selectedDeliveryStage) return false;
-
-            // 3. Receiving Stage Filter
             if (selectedReceivingStage !== 'all' && row.receiving_stage !== selectedReceivingStage) return false;
-
-            // 4. Search Term Filter
-            if (searchTerm.trim() !== '') {
-                const term = searchTerm.toLowerCase();
-                const matchId = `bg-${row.id}`.toLowerCase().includes(term);
-                const matchPartName = (row.part_name || '').toLowerCase().includes(term);
-                const matchStageIn = (row.delivery_stage || '').toLowerCase().includes(term);
-                const matchStageOut = (row.receiving_stage || '').toLowerCase().includes(term);
-                const matchSender = (row.sx_delivery_name || '').toLowerCase().includes(term);
-                const matchReceiver = (row.sx_receipt_name || '').toLowerCase().includes(term);
-                
-                return matchId || matchPartName || matchStageIn || matchStageOut || matchSender || matchReceiver;
-            }
-
             return true;
         });
-    }, [deliveries, filterStatus, selectedDeliveryStage, selectedReceivingStage, searchTerm]);
+    }, [deliveries, selectedDeliveryStage, selectedReceivingStage]);
 
 
 
@@ -904,6 +958,10 @@ export const useDeliveryTracking = () => {
     handleExportExcel,
     handleOpenDetailModal,
     handlePrintPDF,
+    handleYearChange,
+    handleMonthChange,
+    handleFilterStatusChange,
+    handleSearchChange,
     inputQcDetail,
     isDetailModalOpen,
     isFilterBarOpen,
@@ -914,6 +972,8 @@ export const useDeliveryTracking = () => {
     months,
     pdfLoading,
     qcDetail,
+    palletQcDetail,
+    setPalletQcDetail,
     receivingStages,
     searchTerm,
     selectedDelivery,
@@ -946,6 +1006,8 @@ export const useDeliveryTracking = () => {
     setStats,
     stats,
     toast,
+    totalCount,
+    totalPages,
     years,
   };
 };

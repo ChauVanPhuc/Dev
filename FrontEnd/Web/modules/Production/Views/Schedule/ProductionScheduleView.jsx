@@ -26,35 +26,37 @@ const ProductionScheduleView = () => {
   ];
 
   return (
-    <div style={{ padding: '24px', backgroundColor: '#FAF6F0', minHeight: 'calc(100vh - 110px)', fontFamily: 'Inter, sans-serif' }}>
+    <div className="gold-layout">
       {/* Factory selector tabs */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          {['Factory1', 'Factory2'].map((fac, idx) => (
-            <button
-              key={fac}
-              onClick={() => setActiveFactory(fac)}
-              style={{
-                padding: '10px 20px',
-                borderRadius: '10px',
-                border: 'none',
-                backgroundColor: activeFactory === fac ? '#5D3B32' : '#FFFFFF',
-                color: activeFactory === fac ? '#FFFFFF' : '#5D3B32',
-                fontWeight: '800',
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
-                transition: 'all 0.2s'
-              }}
-            >
-              {fac === 'Factory1' ? 'Nhà máy 1 (Gỗ tự nhiên)' : 'Nhà máy 2 (Gỗ công nghiệp)'}
-            </button>
-          ))}
-        </div>
+      <div className="sticky-top-zone">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            {['Factory1', 'Factory2'].map((fac, idx) => (
+              <button
+                key={fac}
+                onClick={() => setActiveFactory(fac)}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  backgroundColor: activeFactory === fac ? '#5D3B32' : '#FFFFFF',
+                  color: activeFactory === fac ? '#FFFFFF' : '#5D3B32',
+                  fontWeight: '800',
+                  fontSize: '0.9rem',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {fac === 'Factory1' ? 'Nhà máy 1 (Gỗ tự nhiên)' : 'Nhà máy 2 (Gỗ công nghiệp)'}
+              </button>
+            ))}
+          </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#FFF', padding: '6px 14px', borderRadius: '10px', border: '1.5px solid #EADCC9' }}>
-          <Clock size={16} color="#7B5233" />
-          <span style={{ fontSize: '0.85rem', fontWeight: '700', color: '#2D1A12' }}>Tháng 08 / 2026</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#FFF', padding: '6px 14px', borderRadius: '10px', border: '1.5px solid #EADCC9' }}>
+            <Clock size={16} color="#7B5233" />
+            <span style={{ fontSize: '0.85rem', fontWeight: '700', color: '#2D1A12' }}>Tháng 08 / 2026</span>
+          </div>
         </div>
       </div>
 
