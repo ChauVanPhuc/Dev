@@ -31,7 +31,7 @@ const CustomSelect = ({
 
   // Đồng bộ inputValue khi prop `value` thay đổi từ bên ngoài (Dành cho allowCustomInput)
   useEffect(() => {
-    if (selectedOption) {
+    if (selectedOption && selectedOption.value !== '' && selectedOption.value !== null && selectedOption.value !== undefined) {
       const labelStr = String(selectedOption.label || selectedOption.value || '')
       const dashIndex = labelStr.indexOf(' - ')
       const codePart = dashIndex !== -1 ? labelStr.substring(0, dashIndex).toUpperCase() : String(selectedOption.value || labelStr).toUpperCase()
@@ -88,15 +88,19 @@ const CustomSelect = ({
     }
   }, [isOpen, value])
 
-  // Lọc danh sách theo từ khóa nhập
+  // Lọc danh sách theo từ khóa nhập (tự động bỏ option rỗng khi allowCustomInput)
+  const availableOptions = allowCustomInput
+    ? options.filter((opt) => opt.value !== '' && opt.value !== null && opt.value !== undefined)
+    : options
+
   const filteredOptions = allowCustomInput && inputValue
-    ? options.filter((opt) => {
+    ? availableOptions.filter((opt) => {
         const term = inputValue.toLowerCase().trim()
         const labelStr = String(opt.label || '').toLowerCase()
         const valStr = String(opt.value || '').toLowerCase()
         return labelStr.includes(term) || valStr.includes(term)
       })
-    : options
+    : availableOptions
 
   const handleInputChange = (e) => {
     const val = e.target.value.toUpperCase()

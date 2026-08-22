@@ -44,6 +44,7 @@ class DefectType(DefectTypeBase):
     id: int
     is_tracked_by_me: bool = False # Personalized QC tracking status
     client_defects: List[ClientDefect] = []
+    target_month: Optional[int] = None
     monthly_count: Optional[int] = 0
     monthly_rate: Optional[float] = 0.0 # % tỷ lệ lỗi trong tháng (trên tổng SP kiểm tra)
     monthly_defect_share: Optional[float] = 0.0 # % tỷ trọng trong tổng số lỗi tháng này

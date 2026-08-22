@@ -46,6 +46,7 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
     selectedSpecs,
     handleMultiProductChange,
     handleMultiSpecChange,
+    samplingRule,
   } = formState
 
   const isReInspect = mode === INSPECT_MODES.RE_INSPECT
@@ -58,7 +59,7 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
   const isSpecDisabled = readOnly || isReInspect || !hasStage || !hasPo || !hasProduct
   const isSampleQtyDisabled = readOnly || !hasStage || !hasPo || !hasProduct
 
-  const poPlaceholder = !hasStage ? 'Chọn công đoạn trước' : 'Chọn PO'
+  const poPlaceholder = !hasStage ? 'Chọn công đoạn trước' : 'Nhập hoặc chọn PO...'
   const productPlaceholder = !hasStage ? 'Chọn công đoạn trước' : (!hasPo ? 'Chọn PO trước' : 'Chọn sản phẩm...')
   const specPlaceholder = !hasStage ? 'Chọn công đoạn trước' : (!hasPo ? 'Chọn PO trước' : (!hasProduct ? 'Chọn sản phẩm trước' : 'Chọn quy cách...'))
 
@@ -73,6 +74,7 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
             onChange={setPo}
             disabled={isPoDisabled}
             placeholder={poPlaceholder}
+            allowCustomInput={true}
           />
         </div>
         <div className="pv2-field">
@@ -141,10 +143,12 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
           <label>SL mẫu <span className="pv2-req">*</span></label>
           <input
             type="number"
+            min="1"
+            max={samplingRule?.sample_size || requiredQty || undefined}
             className={`pv2-input ${isSampleQtyDisabled ? 'pv2-input--disabled' : ''}`}
             value={sampleQty}
             onChange={(e) => setSampleQty(e.target.value)}
-            placeholder={requiredQty ? String(Math.max(1, Math.ceil(Number(requiredQty) * 0.05))) : ''}
+            placeholder={samplingRule?.sample_size ? String(samplingRule.sample_size) : ''}
             disabled={isSampleQtyDisabled}
           />
         </div>
@@ -153,6 +157,25 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
           <input type="number" className="pv2-input pv2-input--disabled" value={errorQty} onChange={(e) => setErrorQty(e.target.value)} disabled />
         </div>
       </div>
+
+      {samplingRule && (
+        <div style={{
+          margin: '4px 0 12px 0',
+          padding: '6px 12px',
+          backgroundColor: '#FFFBEB',
+          border: '1px solid #FDE68A',
+          borderRadius: '8px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          fontSize: '11px',
+          color: '#92400E',
+          fontWeight: '600'
+        }}>
+          <span>📏 Mốc AQL ({samplingRule.sample_rate_desc})</span>
+          <span>Nặng ≤ <strong>{samplingRule.major_ac}</strong> | Nhẹ ≤ <strong>{samplingRule.minor_ac}</strong></span>
+        </div>
+      )}
 
       <div className="pv2-section-title">Hướng dẫn kiểm tra</div>
       <InspectionStepsTable steps={steps} onStepChange={handleStepResultChange} sampleQty={sampleQty} disabled={readOnly} />

@@ -13,6 +13,7 @@ import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
 import PaintColorManagementView from '@modules/Product/Views/PaintColors/PaintColorManagementView';
 import ProductDetailsManagementView from '@modules/Product/Views/Details/ProductDetailsManagementView';
+import QCSamplingConfigView from '@modules/Inspection/Views/Config/QCSamplingConfigView';
 import '@styles/components.css';
 
 import * as Icons from 'lucide-react';
@@ -152,7 +153,7 @@ export default function SystemConfigView() {
 
   // Load Data based on active Left Menu Tab
   const loadData = async () => {
-    if (activeTab === 'paint_color' || activeTab === 'product_detail') {
+    if (activeTab === 'paint_color' || activeTab === 'product_detail' || activeTab === 'qc_sampling') {
       setDataList([]);
       setLoading(false);
       return;
@@ -1288,6 +1289,7 @@ export default function SystemConfigView() {
               { id: 'category', label: 'Dòng hàng', icon: Tag },
               { id: 'stage', label: 'Công đoạn SX', icon: Factory },
               { id: 'defect_category', label: 'Phân nhóm lỗi QC', icon: AlertOctagon },
+              { id: 'qc_sampling', label: 'Quy tắc lấy mẫu QC', icon: Sliders },
               { id: 'customer', label: 'Khách hàng', icon: Contact }
             ].map(tab => {
               const IconComp = tab.icon;
@@ -1383,6 +1385,8 @@ export default function SystemConfigView() {
             <PaintColorManagementView isEmbedded={true} />
           ) : activeTab === 'product_detail' ? (
             <ProductDetailsManagementView isEmbedded={true} />
+          ) : activeTab === 'qc_sampling' ? (
+            <QCSamplingConfigView isEmbedded={true} />
           ) : (
             <>
               {/* Right Header & Search tool */}

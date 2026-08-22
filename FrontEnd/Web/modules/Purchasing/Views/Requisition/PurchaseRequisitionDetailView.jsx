@@ -31,6 +31,45 @@ const formatMoneyDisplay = (val) => {
   return `$${num.toLocaleString()}`;
 };
 
+const parseDimensionsFromText = (text) => {
+  if (!text) return null;
+  const match = String(text).match(/(\d+(?:\.\d+)?)\s*[*xX×]\s*(\d+(?:\.\d+)?)\s*[*xX×]\s*(\d+(?:\.\d+)?)/);
+  if (match) {
+    const t = parseFloat(match[1]);
+    const w = parseFloat(match[2]);
+    const l = parseFloat(match[3]);
+    if (t > 0 && w > 0 && l > 0) return { t, w, l };
+  }
+  return null;
+};
+
+const getM3PieceConversion = (item) => {
+  if (!item) return null;
+  const unitStr = (item.unit || '').toLowerCase();
+  const isM3 = unitStr.includes('m3') || unitStr.includes('m³') || unitStr.includes('mét khối') || unitStr.includes('met khoi');
+  if (!isM3) return null;
+
+  if (item.converted_quantity && Number(item.converted_quantity) > 0) {
+    return {
+      pieces: Math.round(Number(item.converted_quantity)),
+      unitLabel: item.converted_unit || 'cái'
+    };
+  }
+
+  const dims = parseDimensionsFromText(item.name || item.item_name || item.code || item.item_code);
+  const qty = Number(item.quantity || 0);
+  if (dims && qty > 0) {
+    const vSingle = (dims.t * dims.w * dims.l) / 1000000000;
+    if (vSingle > 0) {
+      return {
+        pieces: Math.round(qty / vSingle),
+        unitLabel: 'cái'
+      };
+    }
+  }
+  return null;
+};
+
 const PurchaseRequisitionDetailView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -137,6 +176,8 @@ const PurchaseRequisitionDetailView = () => {
             name: it.item_name || it.name || 'Sản phẩm',
             quantity: it.quantity || 1,
             unit: it.unit || 'bộ',
+            converted_quantity: it.converted_quantity || 0,
+            converted_unit: it.converted_unit || '',
             price: it.unit_price || it.price || 0,
             total: it.subtotal_vnd || it.total || ((it.quantity || 1) * (it.unit_price || it.price || 0))
           })));
@@ -696,7 +737,22 @@ const PurchaseRequisitionDetailView = () => {
                           }}
                           style={{ width: '80px', padding: '4px 8px', textAlign: 'right', borderRadius: '4px', border: '1px solid #CBD5E1', fontWeight: '700' }}
                         />
-                      ) : qtyVal.toLocaleString()}
+                      ) : (
+                        <div>
+                          <div>{qtyVal.toLocaleString()}</div>
+                          {(() => {
+                            const conv = getM3PieceConversion(item);
+                            if (conv) {
+                              return (
+                                <div style={{ fontSize: '0.72rem', color: '#059669', fontWeight: '700', marginTop: '1px' }}>
+                                  (= {conv.pieces.toLocaleString()} {conv.unitLabel})
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </div>
+                      )}
                     </td>
                     <td style={{ color: '#475569' }}>{item.unit || 'Bộ'}</td>
                     <td style={{ textAlign: 'right', color: '#475569' }}>

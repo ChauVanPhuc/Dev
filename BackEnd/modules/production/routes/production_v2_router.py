@@ -6,6 +6,7 @@ from sqlalchemy import func, or_, text
 from typing import List, Optional, Any
 from datetime import datetime, timedelta
 import logging
+import re
 
 import app.models  # Ensures all ORM models are registered
 from config.database import get_db
@@ -19,7 +20,7 @@ from modules.notification.models.notifications import Notification as Notificati
 from modules.kpi.models.kpi import KPI
 from modules.inspection.models.daily_inspection import DailyInspectionRecord, DailyInspectionDefect
 from modules.inspection.models.defect_type import DefectType
-from modules.inspection.models.stage_inspection import StageInspection
+
 from modules.delivery.models.pallet_card import PalletCard
 from modules.purchasing.models.purchase_requisition import PurchaseRequisition
 from modules.production.models.bom_detail import BOMDetail
@@ -712,12 +713,52 @@ def get_order_bom(
                         parts_map[name]["specs_map"][spec] = 0
                     parts_map[name]["specs_map"][spec] += qty
 
+        def extract_spec_from_name_and_content(name: str, item_code: str = "", content: str = "") -> str:
+            content_str = (content or "").strip()
+            if content_str and content_str != item_code and content_str.lower() != "tiêu chuẩn":
+                return content_str
+                
+            if not name:
+                return item_code or "Tiêu chuẩn"
+                
+            # 1. 3D Dimensions: e.g. 18*42*1636, 18x42x1636
+            m3d = re.search(r'(\d+(?:\.\d+)?\s*[*xX×]\s*\d+(?:\.\d+)?\s*[*xX×]\s*\d+(?:\.\d+)?(?:\s*mm|\s*cm)?)', name)
+            if m3d:
+                return m3d.group(1).replace(' ', '')
+                
+            # 2. Hardware Model & Size: e.g. 5018-350mm, 5018-350
+            m_hw = re.search(r'(\b\d{3,5}\s*[-–—*xX×]\s*\d{2,4}(?:mm|cm)?\b)', name)
+            if m_hw:
+                return m_hw.group(1).replace(' ', '')
+                
+            # 3. 2D Dimensions: e.g. 295*540, 295x540
+            m2d = re.search(r'(\d+(?:\.\d+)?\s*[*xX×]\s*\d+(?:\.\d+)?(?:\s*mm|\s*cm)?)', name)
+            if m2d:
+                return m2d.group(1).replace(' ', '')
+
+            # 4. Threaded / Screw / Dowel: e.g. M8x40, Ø10x50, D10x50
+            m_bolt = re.search(r'([MØOD]?\d+(?:\.\d+)?\s*[*xX×-]\s*\d+(?:\.\d+)?(?:\s*mm)?)', name, re.IGNORECASE)
+            if m_bolt:
+                return m_bolt.group(1).replace(' ', '')
+
+            # 5. Model code with dash: e.g. SS10-350
+            m_code = re.search(r'(\b[A-Z0-9]{2,6}\s*[-–—]\s*\d{2,4}(?:mm|cm)?\b)', name, re.IGNORECASE)
+            if m_code:
+                return m_code.group(1).replace(' ', '')
+
+            # 6. Single size with unit: e.g. 350mm, 500mm
+            m_unit = re.search(r'(\b\d+(?:\.\d+)?\s*(?:mm|cm|m)\b)', name, re.IGNORECASE)
+            if m_unit:
+                return m_unit.group(1).replace(' ', '')
+                
+            return item_code or "Tiêu chuẩn"
+
         # Fallback to products if order has no BOM entries
         if not parts_map and order and order.products:
             for p in order.products:
                 name = p.sku or p.name or f"Sản phẩm {p.id}"
                 qty = int(p.order_qty or p.quantity or 1)
-                spec = "Tiêu chuẩn"
+                spec = extract_spec_from_name_and_content(name, getattr(p, 'sku', '') or '')
                 parts_map[name] = {
                     "part_name": name,
                     "total_qty": qty,
@@ -736,11 +777,17 @@ def get_order_bom(
             if pr and pr.items:
                 for item in pr.items:
                     name = item.item_name or item.item_code or "Mặt hàng"
-                    qty = int(item.quantity or 1)
-                    content_str = (item.content or "").strip()
-                    spec = content_str if content_str else "Tiêu chuẩn"
+                    unit = item.unit or ""
+                    unit_clean = unit.lower().strip()
+                    is_m3 = "m3" in unit_clean or "mét khối" in unit_clean or "met khoi" in unit_clean
+                    if is_m3:
+                        qty = float(item.converted_quantity) if (item.converted_quantity and float(item.converted_quantity) > 0) else float(item.quantity or 1)
+                    else:
+                        qty = float(item.quantity) if (item.quantity and float(item.quantity) > 0) else float(item.converted_quantity or 1)
+
+                    spec = extract_spec_from_name_and_content(name, item.item_code or "", item.content or "")
                     if name not in parts_map:
-                        parts_map[name] = {"part_name": name, "total_qty": 0, "specs_map": {}}
+                        parts_map[name] = {"part_name": name, "total_qty": 0, "unit": unit, "specs_map": {}}
                     parts_map[name]["total_qty"] += qty
                     parts_map[name]["specs_map"][spec] = parts_map[name]["specs_map"].get(spec, 0) + qty
 
@@ -749,6 +796,7 @@ def get_order_bom(
             {
                 "part_name": data["part_name"],
                 "total_qty": data["total_qty"],
+                "unit": data.get("unit", ""),
                 "specs": [{"specification": k, "qty": v} for k, v in data["specs_map"].items()]
             }
             for _, data in parts_map.items()

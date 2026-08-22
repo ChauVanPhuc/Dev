@@ -189,7 +189,7 @@ export const inspectionService = {
     return { palletCode: `${prefix}${uniqueSuffix}`, success: true }
   },
 
-  async generateTicketCode(prefix = 'KT') {
+  async generateTicketCode(prefix = 'DA') {
     const uniqueSuffix = String(Date.now()).slice(-4) + String(Math.floor(10 + Math.random() * 90))
     return { ticketCode: `${prefix}${uniqueSuffix}`, success: true }
   },
@@ -219,7 +219,8 @@ export const inspectionService = {
   async getPallets() {
     try {
       const res = await apiClient.get('/inspections/pallets')
-      if (Array.isArray(res.data) && res.data.length > 0) return res.data
+      const data = res?.data !== undefined ? res.data : res
+      if (Array.isArray(data) && data.length > 0) return data
     } catch (e) {
       console.warn('[inspectionService.getPallets] fallback to list filter:', e)
     }
@@ -237,7 +238,8 @@ export const inspectionService = {
     if (!palletCode) return []
     try {
       const res = await apiClient.get(`/inspections/by-pallet?pallet_code=${encodeURIComponent(palletCode)}&limit=${limit}`)
-      if (Array.isArray(res.data)) return res.data.slice(0, limit)
+      const data = res?.data !== undefined ? res.data : res
+      if (Array.isArray(data)) return data.slice(0, limit)
     } catch (e) {
       console.warn('[inspectionService.getTicketsByPallet] fallback filter:', e)
     }

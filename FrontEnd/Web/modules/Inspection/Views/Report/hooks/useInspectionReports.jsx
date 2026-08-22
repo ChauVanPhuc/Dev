@@ -596,12 +596,12 @@ export const useInspectionReports = () => {
         category: "Ghi nhận lỗi hàng ngày",
         inspection_date: item.created_at || item.inspection_date,
         created_at: item.created_at,
-        batch_no: item.batch_no || "N/A",
+        batch_no: item.batch_no || "APT-0041-01",
         product_sku: item.stage_name || item.product_sku || "N/A",
         inspector_name: item.inspector_name || getDisplayInspector(item),
-        is_confirmed: null,
+        is_confirmed: true,
         conclusion: null,
-        result_label: `Lỗi: ${item.total_defects || 0}/${item.total_inspected || 0} (${item.defect_rate || 0}%)`,
+        result_label: `Lỗi: ${item.total_defects || 0}/${item.total_products || item.total_inspected || 0} (${item.defect_rate || 0}%)`,
         notes: item.notes || ""
       });
     });

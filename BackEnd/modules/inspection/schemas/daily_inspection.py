@@ -60,6 +60,9 @@ class DailyInspectionRecordRead(BaseModel):
     stage_name: str
     inspector_id: Optional[int]
     inspector_name: Optional[str] = None
+    batch_no: Optional[str] = None
+    status: Optional[str] = "Đã hoàn thành"
+    is_confirmed: Optional[bool] = True
     total_products: int
     total_defects: int
     defect_rate: float

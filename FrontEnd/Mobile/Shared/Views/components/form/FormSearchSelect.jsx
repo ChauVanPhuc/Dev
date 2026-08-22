@@ -12,6 +12,7 @@ const FormSearchSelect = ({
   options = [],
   placeholder = 'Chọn chi tiết...',
   readOnly = false,
+  disabled = false,
   required = false,
   alignMenu = 'left'
 }) => {
@@ -19,6 +20,7 @@ const FormSearchSelect = ({
   const [searchTerm, setSearchTerm] = useState('')
   const containerRef = useRef(null)
   const searchInputRef = useRef(null)
+  const isFieldDisabled = readOnly || disabled
 
   // Đóng dropdown khi click ra ngoài
   useEffect(() => {
@@ -43,15 +45,17 @@ const FormSearchSelect = ({
     if (!searchTerm) return options
     const s = searchTerm.toLowerCase().trim()
     return options.filter(opt => 
-      opt.label.toLowerCase().includes(s) || 
-      opt.value.toString().toLowerCase().includes(s)
+      String(opt.label || '').toLowerCase().includes(s) || 
+      String(opt.value || '').toLowerCase().includes(s)
     )
   }, [options, searchTerm])
 
-  const selectedOption = useMemo(() => options.find(opt => opt.value === value), [options, value])
+  const selectedOption = useMemo(() => options.find(opt => String(opt.value) === String(value)), [options, value])
 
   const handleSelect = (val) => {
-    onChange({ target: { value: val } })
+    if (typeof onChange === 'function') {
+      onChange(val)
+    }
     setIsOpen(false)
     setSearchTerm('')
   }
@@ -76,18 +80,18 @@ const FormSearchSelect = ({
 
       {/* Ô hiển thị giá trị đã chọn */}
       <div
-        onClick={() => !readOnly && setIsOpen(!isOpen)}
+        onClick={() => !isFieldDisabled && setIsOpen(!isOpen)}
         style={{
           minHeight: '42px',
           height: 'auto',
           padding: '8px 12px',
           borderRadius: '10px',
           border: `1px solid ${isOpen ? 'var(--primary-color)' : '#cbd5e1'}`,
-          backgroundColor: readOnly ? '#f8fafc' : '#ffffff',
+          backgroundColor: isFieldDisabled ? '#f8fafc' : '#ffffff',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          cursor: readOnly ? 'default' : 'pointer',
+          cursor: isFieldDisabled ? 'not-allowed' : 'pointer',
           transition: 'all 0.2s ease',
           boxShadow: isOpen ? '0 0 0 3px rgba(var(--primary-rgb), 0.1)' : 'none',
           width: '100%',
@@ -114,20 +118,21 @@ const FormSearchSelect = ({
       {isOpen && (
         <div style={{
           position: 'absolute',
-          top: 'calc(100% + 6px)',
-          ...(alignMenu === 'right' 
-            ? { right: 0, left: 'auto', minWidth: '220px' } 
-            : { left: 0, right: 0 }
-          ),
+          top: 'calc(100% + 4px)',
+          left: alignRight ? 'auto' : 0,
+          right: alignRight ? 0 : 'auto',
+          minWidth: '100%',
+          width: 'max-content',
+          maxWidth: 'min(320px, calc(100vw - 28px))',
           backgroundColor: '#fff',
           borderRadius: '12px',
-          boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)',
-          border: '1px solid #e2e8f0',
-          zIndex: 1000,
+          boxShadow: '0 10px 25px -5px rgba(0,0,0,0.15), 0 8px 10px -6px rgba(0,0,0,0.1)',
+          border: '1.5px solid #a3998e',
+          zIndex: 9999,
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
-          maxHeight: '350px'
+          maxHeight: '280px'
         }}>
           {/* Ô Input tìm kiếm bên trong dropdown */}
           <div style={{ padding: '10px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#f8fafc' }}>

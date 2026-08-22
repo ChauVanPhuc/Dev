@@ -58,18 +58,11 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
             onClick={() => fileRef.current?.click()}
           >
             <span className="pv2-plus-icon">+</span> Thêm ảnh kiểm tra
-            {isFailedResult && (
-              <span className="pv2-req-inline"> * (Bắt buộc khi có lỗi)</span>
-            )}
           </button>
         ) : (
           <span style={{ fontSize: 13, fontWeight: 700, color: '#334155' }}>
             📸 Hình ảnh đính kèm ({images.length})
           </span>
-        )}
-
-        {!readOnly && isFailedResult && images.length === 0 && (
-          <span className="pv2-req-tag">⚠️ Cần đính kèm ảnh</span>
         )}
         {!readOnly && images.length > 0 && (
           <span className="pv2-req-tag-ok">✓ Đã chọn {images.length} ảnh</span>

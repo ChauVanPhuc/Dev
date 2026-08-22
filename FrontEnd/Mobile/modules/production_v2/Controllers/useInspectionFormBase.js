@@ -23,6 +23,78 @@ const compactSpec = (spec) => {
   return firstPart || spec
 }
 
+const parseDimensionsFromText = (text) => {
+  if (!text) return null
+  const match = String(text).match(/(\d+(?:\.\d+)?)\s*[*xX×]\s*(\d+(?:\.\d+)?)\s*[*xX×]\s*(\d+(?:\.\d+)?)/)
+  if (match) {
+    const t = parseFloat(match[1])
+    const w = parseFloat(match[2])
+    const l = parseFloat(match[3])
+    if (t > 0 && w > 0 && l > 0) return { t, w, l }
+  }
+  return null
+}
+
+const parseDimensionStringFromText = (text) => {
+  if (!text) return null
+  const str = String(text)
+  
+  // 1. 3D Dimensions: e.g. 18*42*1636, 18x42x1636
+  const m3d = str.match(/(\d+(?:\.\d+)?\s*[*xX×]\s*\d+(?:\.\d+)?\s*[*xX×]\s*\d+(?:\.\d+)?(?:\s*mm|\s*cm)?)/i)
+  if (m3d) return m3d[1].replace(/\s*/g, '')
+
+  // 2. Hardware Model & Size: e.g. 5018-350mm, 5018-350
+  const mHw = str.match(/(\b\d{3,5}\s*[-–—*xX×]\s*\d{2,4}(?:mm|cm)?\b)/i)
+  if (mHw) return mHw[1].replace(/\s*/g, '')
+
+  // 3. 2D Dimensions: e.g. 295*540, 295x540
+  const m2d = str.match(/(\d+(?:\.\d+)?\s*[*xX×]\s*\d+(?:\.\d+)?(?:\s*mm|\s*cm)?)/i)
+  if (m2d) return m2d[1].replace(/\s*/g, '')
+
+  // 4. Threaded / Screw / Dowel: e.g. M8x40, Ø10x50, D10x50
+  const mBolt = str.match(/([MØOD]?\d+(?:\.\d+)?\s*[*xX×-]\s*\d+(?:\.\d+)?(?:\s*mm)?)/i)
+  if (mBolt) return mBolt[1].replace(/\s*/g, '')
+
+  // 5. Model code with dash: e.g. SS10-350
+  const mCode = str.match(/(\b[A-Z0-9]{2,6}\s*[-–—]\s*\d{2,4}(?:mm|cm)?\b)/i)
+  if (mCode) return mCode[1].replace(/\s*/g, '')
+
+  // 6. Single size with unit: e.g. 350mm, 500mm
+  const mUnit = str.match(/(\b\d+(?:\.\d+)?\s*(?:mm|cm|m)\b)/i)
+  if (mUnit) return mUnit[1].replace(/\s*/g, '')
+
+  return null
+}
+
+const getEffectiveSpec = (specRaw, partName) => {
+  const cSpec = compactSpec(specRaw)
+  if (cSpec && cSpec !== 'Tiêu chuẩn') return cSpec
+  const dimStr = parseDimensionStringFromText(partName)
+  if (dimStr) return dimStr
+  return cSpec || 'Tiêu chuẩn'
+}
+
+const convertQuantityToPiecesIfNeeded = (partNameOrSpec, rawQty, unit = '') => {
+  if (rawQty === undefined || rawQty === null || rawQty === '') return rawQty
+  const qty = Number(rawQty)
+  if (isNaN(qty) || qty <= 0) return rawQty
+
+  const unitStr = String(unit).toLowerCase()
+  const isM3Unit = unitStr.includes('m3') || unitStr.includes('m³') || unitStr.includes('mét khối') || unitStr.includes('met khoi')
+
+  if (!isM3Unit) return qty
+
+  const dims = parseDimensionsFromText(partNameOrSpec)
+  if (dims) {
+    const vSingle = (dims.t * dims.w * dims.l) / 1000000000
+    if (vSingle > 0) {
+      const pieces = Math.round(qty / vSingle)
+      if (pieces > 0) return pieces
+    }
+  }
+  return qty
+}
+
 const parseCTQStage = (description) => {
   if (!description) return 'Chung'
   const match = description.match(/^\[Công đoạn:\s*([^\]]+)\]\s*(.*)$/i)
@@ -150,13 +222,14 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
   const [specOptions, setSpecOptions] = useState([{ value: '', label: 'Vui lòng chọn công đoạn trước' }])
   const [bomData, setBomData] = useState([])
   const [requiredQty, setRequiredQty] = useState('')
+  const [samplingRule, setSamplingRule] = useState(null)
 
   const [guideVisible, setGuideVisible] = useState(false)
   const [palletCode, setPalletCode] = useState('')
   const [palletOptions, setPalletOptions] = useState([])
   const [recentTickets, setRecentTickets] = useState([])
   const [isRecentModalOpen, setIsRecentModalOpen] = useState(false)
-  const [autoTicketCode, setAutoTicketCode] = useState(() => `KT${String(Date.now()).slice(-4)}${Math.floor(10 + Math.random() * 90)}`)
+  const [autoTicketCode, setAutoTicketCode] = useState(() => `DA${String(Date.now()).slice(-4)}${Math.floor(10 + Math.random() * 90)}`)
   const [confirmErrModal, setConfirmErrModal] = useState(false)
   const [finishModal, setFinishModal] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -192,7 +265,13 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     inspectionService.getPallets()
       .then((list) => {
         if (Array.isArray(list) && list.length > 0) {
-          setPalletOptions(list.map((p) => (typeof p === 'string' ? { value: p, label: p } : p)))
+          const formatted = list.map((p) => {
+            if (typeof p === 'string') return { value: p, label: p }
+            const code = p.palletCode || p.pallet_code || p.value || ''
+            const labelStr = p.label || (p.product ? `${code} (${p.po || ''} - ${p.product})` : code)
+            return { value: code, label: labelStr }
+          })
+          setPalletOptions(formatted)
         }
       })
       .catch((e) => console.warn('[useInspectionFormBase] getPallets error:', e))
@@ -209,13 +288,18 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
 
       if (Array.isArray(tickets) && tickets.length > 0) {
         const origin = tickets[0]
-        if (origin.po) {
-          setPo(origin.po)
-          setParamPo(origin.po)
-        }
         if (origin.stage) {
           setStage(origin.stage)
           setParamStage(origin.stage)
+        }
+        if (origin.po) {
+          setPo(origin.po)
+          setParamPo(origin.po)
+          setPoOptions((prev) => {
+            const next = [...prev]
+            if (!next.some((o) => o.value === origin.po)) next.push({ value: origin.po, label: origin.po })
+            return next
+          })
         }
         if (origin.product) {
           setProduct(origin.product)
@@ -243,7 +327,10 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
             return next
           })
         }
-        if (origin.requiredQty) setRequiredQty(String(origin.requiredQty))
+        if (origin.requiredQty) {
+          const cQty = convertQuantityToPiecesIfNeeded(origin.product || origin.spec, origin.requiredQty)
+          setRequiredQty(String(cQty))
+        }
         if (origin.sampleQty) {
           setSampleQty(String(origin.sampleQty))
           setParamSample(String(origin.sampleQty))
@@ -556,20 +643,20 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
       orderService.getPurchaseOrders()
         .then((poCodes) => {
           const opts = poCodes.map((code) => ({ value: code, label: code }))
-          setPoOptions([{ value: '', label: 'Chọn PO' }, ...opts])
+          setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }, ...opts])
         })
         .catch(() => {
-          setPoOptions([{ value: '', label: 'Chọn PO' }])
+          setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }])
         })
     } else {
       orderService.getAll()
         .then((res) => {
           const orders = res.orders || []
           const opts = orders.map((o) => ({ value: o.po_code, label: o.po_code }))
-          setPoOptions([{ value: '', label: 'Chọn PO' }, ...opts])
+          setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }, ...opts])
         })
         .catch(() => {
-          setPoOptions([{ value: '', label: 'Chọn PO' }])
+          setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }])
         })
     }
   }, [stage, paramStage])
@@ -726,18 +813,21 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
             let totalQtySum = 0
             matchedParts.forEach(part => {
               if (Array.isArray(part.specs)) allSpecs.push(...part.specs)
-              if (part.total_qty) totalQtySum += Number(part.total_qty)
+              if (part.total_qty) {
+                const cQty = convertQuantityToPiecesIfNeeded(part.part_name || combinedName, part.total_qty, part.unit)
+                totalQtySum += Number(cQty)
+              }
             })
             
-            const specOpts = allSpecs.map((s) => ({ value: compactSpec(s.specification), label: compactSpec(s.specification) }))
+            const specOpts = allSpecs.map((s) => {
+              const val = getEffectiveSpec(s.specification, combinedName)
+              return { value: val, label: val }
+            })
             const uniqueSpecOpts = Array.from(new Set(specOpts.map((s) => s.value))).map((val) => ({ value: val, label: val }))
             setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...uniqueSpecOpts])
             
             if (totalQtySum > 0) {
               setRequiredQty(String(totalQtySum))
-              const calcSample = Math.max(1, Math.ceil(totalQtySum * 0.05))
-              setSampleQty(String(calcSample))
-              setParamSample(String(calcSample))
             }
           } else {
             const matchedPart = bomList[0]
@@ -747,21 +837,22 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
             setSelectedProducts([pName])
             
             const firstSpecs = matchedPart.specs || []
-            const specOpts = firstSpecs.map((s) => ({ value: compactSpec(s.specification), label: compactSpec(s.specification) }))
-            setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...specOpts])
-            if (firstSpecs.length > 0) {
-              const sVal = compactSpec(firstSpecs[0].specification)
-              setSpec(sVal)
-              setSelectedSpecs([sVal])
-            } else {
-              setSpec('')
-              setSelectedSpecs([])
+            let specOpts = firstSpecs.map((s) => {
+              const val = getEffectiveSpec(s.specification, pName)
+              return { value: val, label: val }
+            })
+            if (specOpts.length === 0) {
+              const effSpec = getEffectiveSpec('', pName)
+              specOpts = [{ value: effSpec, label: effSpec }]
             }
+            setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...specOpts])
+            const sVal = specOpts[0]?.value || getEffectiveSpec('', pName)
+            setSpec(sVal)
+            setSelectedSpecs([sVal])
+
             if (matchedPart.total_qty) {
-              setRequiredQty(String(matchedPart.total_qty))
-              const calcSample = Math.max(1, Math.ceil(Number(matchedPart.total_qty) * 0.05))
-              setSampleQty(String(calcSample))
-              setParamSample(String(calcSample))
+              const cQty = convertQuantityToPiecesIfNeeded(matchedPart.part_name, matchedPart.total_qty, matchedPart.unit)
+              setRequiredQty(String(cQty))
             } else {
               setRequiredQty('')
             }
@@ -788,6 +879,31 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
         }
       })
   }, [po, paramPo, stage, paramStage, isNew])
+
+  // Tự động tra cứu mốc lấy mẫu AQL từ Database theo tổng SL lô hàng N (requiredQty)
+  useEffect(() => {
+    const lotSize = Number(requiredQty)
+    if (!lotSize || lotSize <= 0) {
+      setSamplingRule(null)
+      return
+    }
+
+    apiClient.get(`/inspections/qc-sampling/lookup?lot_size=${lotSize}`)
+      .then((res) => {
+        const resData = res.data || res
+        if (resData && resData.rule) {
+          setSamplingRule(resData.rule)
+          if (resData.rule.sample_size) {
+            const calculatedSample = String(resData.rule.sample_size)
+            setSampleQty(calculatedSample)
+            setParamSample(calculatedSample)
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn('Lỗi tra cứu mốc lấy mẫu AQL:', err)
+      })
+  }, [requiredQty])
 
   // Tự động tính SL đạt = SL mẫu - Tổng SL lỗi (SL không đạt) & Cập nhật Kết quả (Đạt/Không đạt)
   useEffect(() => {
@@ -862,16 +978,22 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     const part = bomData.find((p) => p.part_name === partName)
     if (part) {
       const firstSpecs = part.specs || []
-      const specOpts = firstSpecs.map((s) => ({ value: compactSpec(s.specification), label: compactSpec(s.specification) }))
-      setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...specOpts])
-      if (firstSpecs.length > 0) {
-        setSpec(compactSpec(firstSpecs[0].specification))
-      } else {
-        setSpec('')
+      let specOpts = firstSpecs.map((s) => {
+        const val = getEffectiveSpec(s.specification, partName)
+        return { value: val, label: val }
+      })
+      if (specOpts.length === 0) {
+        const effSpec = getEffectiveSpec('', partName)
+        specOpts = [{ value: effSpec, label: effSpec }]
       }
+      setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...specOpts])
+      const sVal = specOpts[0]?.value || getEffectiveSpec('', partName)
+      setSpec(sVal)
+
       if (part.total_qty) {
-        setRequiredQty(String(part.total_qty))
-        const calcSample = Math.max(1, Math.ceil(Number(part.total_qty) * 0.05))
+        const cQty = convertQuantityToPiecesIfNeeded(part.part_name, part.total_qty, part.unit)
+        setRequiredQty(String(cQty))
+        const calcSample = Math.max(1, Math.ceil(Number(cQty) * 0.05))
         setSampleQty(String(calcSample))
       } else {
         setRequiredQty('')
@@ -900,11 +1022,21 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
         allSpecs.push(...part.specs)
       }
       if (part.total_qty) {
-        totalQtySum += Number(part.total_qty)
+        const cQty = convertQuantityToPiecesIfNeeded(part.part_name, part.total_qty, part.unit)
+        totalQtySum += Number(cQty)
       }
     })
 
-    const specOpts = allSpecs.map((s) => ({ value: compactSpec(s.specification), label: compactSpec(s.specification) }))
+    let specOpts = allSpecs.map((s) => {
+      const val = getEffectiveSpec(s.specification, combinedStr)
+      return { value: val, label: val }
+    })
+    if (specOpts.length === 0) {
+      selectedParts.forEach((p) => {
+        const effSpec = getEffectiveSpec('', p.part_name)
+        if (effSpec) specOpts.push({ value: effSpec, label: effSpec })
+      })
+    }
     const uniqueSpecOpts = Array.from(new Set(specOpts.map((s) => s.value))).map((val) => ({ value: val, label: val }))
     setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...uniqueSpecOpts])
 
@@ -961,6 +1093,17 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
   const handleCreatePallet = async () => {
     if (readOnly) return
     try {
+      const activeStage = (mode === INSPECT_MODES.PARAMETER ? paramStage : (mode === INSPECT_MODES.PROCESS ? area : stage)) || ''
+      const activePo = (mode === INSPECT_MODES.PARAMETER ? paramPo : po) || ''
+
+      const stLower = activeStage.toLowerCase().trim()
+      const isPoAsPalletStage = ['lắp ráp', 'lap rap', 'sơn', 'son', 'đóng gói', 'dong goi'].some(keyword => stLower.includes(keyword))
+
+      if (isPoAsPalletStage && activePo) {
+        setPalletCode(activePo)
+        return
+      }
+
       const res = await inspectionService.generatePalletCode('DA')
       if (res && res.palletCode) {
         setPalletCode(res.palletCode)
@@ -1013,18 +1156,6 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
         showMessage('Thiếu thông tin', 'Vui lòng chọn Tên nhân sự trước khi tiếp tục.', 'warning')
         return
       }
-    }
-
-    if (isFailedResult && images.length === 0) {
-      showMessage(
-        'Thiếu ảnh bằng chứng',
-        'Vui lòng chụp hoặc tải lên ít nhất 1 ảnh bằng chứng/lỗi khi có hạng mục Không đạt.',
-        'warning',
-        () => {
-          if (fileRef.current) fileRef.current.click()
-        }
-      )
-      return
     }
 
     showConfirm({
@@ -1143,7 +1274,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     result: mode === INSPECT_MODES.QA ? qaResult : (result || ticket?.conclusion || ticket?.result || 'pass'),
     product: mode === INSPECT_MODES.PARAMETER ? (paramProduct || '—') : (product || ticket?.product_name || ticket?.detail_name || ticket?.product || '—'),
     spec: compactSpec(spec || ticket?.specification || ticket?.spec) || '—',
-    needQty: requiredQty || ticket?.quantity_plan || ticket?.required_qty || sampleQty || '—',
+    needQty: convertQuantityToPiecesIfNeeded(product || spec || ticket?.product_name || ticket?.detail_name, requiredQty || ticket?.quantity_plan || ticket?.required_qty || sampleQty) || '—',
     sampleQty: (mode === INSPECT_MODES.PARAMETER ? paramSample : (sampleQty || ticket?.sample_qty || ticket?.sampleQty)) || '—',
     errorQty: (mode === INSPECT_MODES.PARAMETER ? paramFail : (errorQty || ticket?.error_qty || ticket?.errorQty)) || '0',
   }
@@ -1267,13 +1398,33 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
   const setResultWithDirty = (val) => { setResult(val); setIsDirty(true); }
   const setProductWithDirty = (val) => { setProduct(val); setIsDirty(true); }
   const setSpecWithDirty = (val) => { setSpec(val); setIsDirty(true); }
-  const setSampleQtyWithDirty = (val) => { setSampleQty(val); setIsDirty(true); }
+  const setSampleQtyWithDirty = (val) => {
+    let num = Number(val)
+    const maxAllowed = samplingRule?.sample_size || Number(requiredQty) || 0
+    if (maxAllowed > 0 && num > maxAllowed) {
+      num = maxAllowed
+    }
+    const finalVal = val === '' ? '' : String(isNaN(num) || num < 0 ? 0 : num)
+    setSampleQty(finalVal)
+    setParamSample(finalVal)
+    setIsDirty(true)
+  }
   const setErrorQtyWithDirty = (val) => { setErrorQty(val); setIsDirty(true); }
   const setNoteWithDirty = (val) => { setNote(val); setIsDirty(true); }
   const setErrorsWithDirty = (val) => { setErrors(val); setIsDirty(true); }
   const setParameterWithDirty = (val) => { setParameter(val); setIsDirty(true); }
   const setParamProductWithDirty = (val) => { setParamProduct(val); setIsDirty(true); }
-  const setParamSampleWithDirty = (val) => { setParamSample(val); setIsDirty(true); }
+  const setParamSampleWithDirty = (val) => {
+    let num = Number(val)
+    const maxAllowed = samplingRule?.sample_size || Number(requiredQty) || 0
+    if (maxAllowed > 0 && num > maxAllowed) {
+      num = maxAllowed
+    }
+    const finalVal = val === '' ? '' : String(isNaN(num) || num < 0 ? 0 : num)
+    setSampleQty(finalVal)
+    setParamSample(finalVal)
+    setIsDirty(true)
+  }
   const setProcessWithDirty = (val) => { setProcess(val); setIsDirty(true); }
   const setAreaWithDirty = (val) => { setArea(val); setIsDirty(true); }
   const setStaffWithDirty = (val) => { setStaff(val); setIsDirty(true); }
@@ -1365,6 +1516,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     specOptions,
     bomData,
     requiredQty,
+    samplingRule,
     guideVisible,
     setGuideVisible,
     palletCode,

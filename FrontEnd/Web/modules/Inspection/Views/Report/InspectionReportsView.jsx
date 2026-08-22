@@ -216,7 +216,7 @@ const InspectionReportsView = () => {
   } = reports;
 
   return (
-    <div className="quality-records-container">
+    <div className="gold-layout">
       <style dangerouslySetInnerHTML={{ __html: `
         .inspection-tabs {
           display: flex;
@@ -371,145 +371,148 @@ const InspectionReportsView = () => {
         }
       `}} />
 
-      {/* TOOLBAR: Search & Filters */}
-      <PageToolbar
-        title={title}
-        subtitle={subtitle}
-        screenCode={screenCode}
-        searchValue={stageSearch}
-        onSearchChange={(val) => {
-          setStageSearch(val);
-          setUnifiedPage(1);
-        }}
-        searchPlaceholder="Tìm PO, sản phẩm, QC, phân loại..."
-        showSort={true}
-        sortOptions={[
-          { value: 'date_desc', label: 'Ngày: Mới nhất' },
-          { value: 'date_asc', label: 'Ngày: Cũ nhất' },
-          { value: 'po_asc', label: 'Mã PO: A-Z' },
-          { value: 'po_desc', label: 'Mã PO: Z-A' }
-        ]}
-        sortValue={stageSort}
-        onSortChange={(val) => {
-          setStageSort(val);
-          setUnifiedPage(1);
-        }}
-        showFilter={true}
-        isFilterOpen={isFilterBarOpen}
-        onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
-        activeFiltersCount={
-          (stageTypeFilter !== 'all' ? 1 : 0) +
-          (stageStatusFilter !== 'all' ? 1 : 0) +
-          (stageStartDate ? 1 : 0) +
-          (stageEndDate ? 1 : 0)
-        }
-        onExport={() => setShowExportModal(true)}
-        hasWritePermission={true}
-      />
+      {/* ── STICKY TOP ZONE ── */}
+      <div className="sticky-top-zone">
+        {/* TOOLBAR: Search & Filters */}
+        <PageToolbar
+          title={title}
+          subtitle={subtitle}
+          screenCode={screenCode}
+          searchValue={stageSearch}
+          onSearchChange={(val) => {
+            setStageSearch(val);
+            setUnifiedPage(1);
+          }}
+          searchPlaceholder="Tìm PO, sản phẩm, QC, phân loại..."
+          showSort={true}
+          sortOptions={[
+            { value: 'date_desc', label: 'Ngày: Mới nhất' },
+            { value: 'date_asc', label: 'Ngày: Cũ nhất' },
+            { value: 'po_asc', label: 'Mã PO: A-Z' },
+            { value: 'po_desc', label: 'Mã PO: Z-A' }
+          ]}
+          sortValue={stageSort}
+          onSortChange={(val) => {
+            setStageSort(val);
+            setUnifiedPage(1);
+          }}
+          showFilter={true}
+          isFilterOpen={isFilterBarOpen}
+          onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
+          activeFiltersCount={
+            (stageTypeFilter !== 'all' ? 1 : 0) +
+            (stageStatusFilter !== 'all' ? 1 : 0) +
+            (stageStartDate ? 1 : 0) +
+            (stageEndDate ? 1 : 0)
+          }
+          onExport={() => setShowExportModal(true)}
+          hasWritePermission={true}
+        />
 
-      {/* INLINE EXPANDABLE FILTER BAR */}
-      {isFilterBarOpen && (
-        <div className="filter-inline-bar">
-          <div className="filter-field-group">
-            <label className="filter-field-label">Phân loại</label>
-            <select
-              value={stageTypeFilter}
-              onChange={(e) => {
-                setStageTypeFilter(e.target.value);
-                setUnifiedPage(1);
-              }}
-            >
-              <option value="all">Tất cả</option>
-              <option value="stage">Kiểm tra công đoạn</option>
-              <option value="input">Kiểm tra đầu vào (IQC)</option>
-              <option value="process">Kiểm tra quy trình</option>
-              <option value="daily">Ghi nhận lỗi hàng ngày</option>
-            </select>
+        {/* INLINE EXPANDABLE FILTER BAR */}
+        {isFilterBarOpen && (
+          <div className="filter-inline-bar">
+            <div className="filter-field-group">
+              <label className="filter-field-label">Phân loại</label>
+              <select
+                value={stageTypeFilter}
+                onChange={(e) => {
+                  setStageTypeFilter(e.target.value);
+                  setUnifiedPage(1);
+                }}
+              >
+                <option value="all">Tất cả</option>
+                <option value="stage">Kiểm tra công đoạn</option>
+                <option value="input">Kiểm tra đầu vào (IQC)</option>
+                <option value="process">Kiểm tra quy trình</option>
+                <option value="daily">Ghi nhận lỗi hàng ngày</option>
+              </select>
+            </div>
+
+            <div className="filter-field-group">
+              <label className="filter-field-label">Kết luận</label>
+              <select
+                value={stageStatusFilter}
+                onChange={(e) => {
+                  setStageStatusFilter(e.target.value);
+                  setUnifiedPage(1);
+                }}
+              >
+                <option value="all">Tất cả</option>
+                <option value="pass">Đạt (Pass)</option>
+                <option value="fail">Lỗi (Fail)</option>
+              </select>
+            </div>
+
+            <div className="filter-field-group">
+              <label className="filter-field-label">Từ ngày</label>
+              <input 
+                type="date"
+                value={stageStartDate}
+                onChange={(e) => {
+                  setStageStartDate(e.target.value);
+                  setUnifiedPage(1);
+                }}
+                className="filter-dropdown-input"
+              />
+            </div>
+
+            <div className="filter-field-group">
+              <label className="filter-field-label">Đến ngày</label>
+              <input 
+                type="date"
+                value={stageEndDate}
+                onChange={(e) => {
+                  setStageEndDate(e.target.value);
+                  setUnifiedPage(1);
+                }}
+                className="filter-dropdown-input"
+              />
+            </div>
+
+            <div className="filter-field-group">
+              <label className="filter-field-label">Hiển thị</label>
+              <select
+                value={unifiedLimit}
+                onChange={(e) => {
+                  setUnifiedLimit(parseInt(e.target.value));
+                  setUnifiedPage(1);
+                }}
+              >
+                <option value={15}>15 dòng</option>
+                <option value={30}>30 dòng</option>
+                <option value={50}>50 dòng</option>
+                <option value={100}>100 dòng</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+              <button 
+                onClick={handleResetFilters}
+                style={{
+                  height: '36px',
+                  padding: '0 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #EADCC9',
+                  backgroundColor: '#fff',
+                  color: '#7B5233',
+                  fontSize: '0.8rem',
+                  fontWeight: '700',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                <RotateCcw size={14} /> Xóa lọc
+              </button>
+            </div>
           </div>
+        )}
+      </div>
 
-          <div className="filter-field-group">
-            <label className="filter-field-label">Kết luận</label>
-            <select
-              value={stageStatusFilter}
-              onChange={(e) => {
-                setStageStatusFilter(e.target.value);
-                setUnifiedPage(1);
-              }}
-            >
-              <option value="all">Tất cả</option>
-              <option value="pass">Đạt (Pass)</option>
-              <option value="fail">Lỗi (Fail)</option>
-            </select>
-          </div>
-
-          <div className="filter-field-group">
-            <label className="filter-field-label">Từ ngày</label>
-            <input 
-              type="date"
-              value={stageStartDate}
-              onChange={(e) => {
-                setStageStartDate(e.target.value);
-                setUnifiedPage(1);
-              }}
-              className="filter-dropdown-input"
-            />
-          </div>
-
-          <div className="filter-field-group">
-            <label className="filter-field-label">Đến ngày</label>
-            <input 
-              type="date"
-              value={stageEndDate}
-              onChange={(e) => {
-                setStageEndDate(e.target.value);
-                setUnifiedPage(1);
-              }}
-              className="filter-dropdown-input"
-            />
-          </div>
-
-          <div className="filter-field-group">
-            <label className="filter-field-label">Hiển thị</label>
-            <select
-              value={unifiedLimit}
-              onChange={(e) => {
-                setUnifiedLimit(parseInt(e.target.value));
-                setUnifiedPage(1);
-              }}
-            >
-              <option value={15}>15 dòng</option>
-              <option value={30}>30 dòng</option>
-              <option value={50}>50 dòng</option>
-              <option value={100}>100 dòng</option>
-            </select>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-            <button 
-              onClick={handleResetFilters}
-              style={{
-                height: '36px',
-                padding: '0 12px',
-                borderRadius: '8px',
-                border: '1px solid #EADCC9',
-                backgroundColor: '#fff',
-                color: '#7B5233',
-                fontSize: '0.8rem',
-                fontWeight: '700',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                cursor: 'pointer'
-              }}
-            >
-              <RotateCcw size={14} /> Xóa lọc
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* MAIN CONTENT AREA */}
-      <div className="admin-list-layout" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* ── MAIN CONTENT AREA ── */}
+      <div className="admin-list-layout">
         {filterPending24h && (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '8px', marginBottom: '16px', color: '#EF4444', fontWeight: '600', fontSize: '0.9rem' }}>
             <span>⚠️ Đang hiển thị danh sách phiếu chưa xác nhận trong 24 giờ qua.</span>
@@ -523,7 +526,7 @@ const InspectionReportsView = () => {
             </button>
           </div>
         )}
-        <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0 }}>
+        <div className="mgmt-table card admin-table-card">
           
           {loading ? (
             <div style={{ padding: '4rem', textAlign: 'center', backgroundColor: '#fff', borderRadius: '12px' }}>
@@ -578,13 +581,9 @@ const InspectionReportsView = () => {
                           <td style={{ fontWeight: '700' }}>{item.product_sku || '---'}</td>
                           <td>{item.inspector_name || 'N/A'}</td>
                           <td style={{ textAlign: 'center' }}>
-                            {isDaily ? (
-                              <span style={{ color: '#9CA3AF', fontSize: '0.85rem' }}>---</span>
-                            ) : (
-                              <span className={`status-badge ${item.is_confirmed ? 'pass' : 'fail'}`} style={{ backgroundColor: item.is_confirmed ? '#ECFDF5' : '#FEF2F2', color: item.is_confirmed ? '#10B981' : '#EF4444', borderColor: item.is_confirmed ? '#A7F3D0' : '#FCA5A5' }}>
-                                {item.is_confirmed ? 'Đã xác nhận' : 'Chưa'}
-                              </span>
-                            )}
+                            <span className={`status-badge ${item.is_confirmed ? 'pass' : 'fail'}`} style={{ backgroundColor: item.is_confirmed ? '#ECFDF5' : '#FEF2F2', color: item.is_confirmed ? '#10B981' : '#EF4444', borderColor: item.is_confirmed ? '#A7F3D0' : '#FCA5A5' }}>
+                              {item.is_confirmed ? (isDaily ? 'Đã hoàn thành' : 'Đã xác nhận') : 'Chưa'}
+                            </span>
                           </td>
                           <td style={{ textAlign: 'center' }}>
                             {isDaily ? (
@@ -631,11 +630,9 @@ const InspectionReportsView = () => {
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
                         <span style={{ fontWeight: 'bold', color: '#8D6E63' }}>Mã: #{item.id}</span>
                         <div style={{ display: 'flex', gap: '6px' }}>
-                          {!isDaily && (
-                            <span className={`status-badge ${item.is_confirmed ? 'pass' : 'fail'}`} style={{ backgroundColor: item.is_confirmed ? '#ECFDF5' : '#FEF2F2', color: item.is_confirmed ? '#10B981' : '#EF4444', borderColor: item.is_confirmed ? '#A7F3D0' : '#FCA5A5' }}>
-                              {item.is_confirmed ? 'ĐÃ XN' : 'CHƯA XN'}
-                            </span>
-                          )}
+                          <span className={`status-badge ${item.is_confirmed ? 'pass' : 'fail'}`} style={{ backgroundColor: item.is_confirmed ? '#ECFDF5' : '#FEF2F2', color: item.is_confirmed ? '#10B981' : '#EF4444', borderColor: item.is_confirmed ? '#A7F3D0' : '#FCA5A5' }}>
+                            {item.is_confirmed ? (isDaily ? 'HOÀN THÀNH' : 'ĐÃ XN') : 'CHƯA XN'}
+                          </span>
                           <span className={`status-badge ${isDaily ? 'fail' : (isPass ? 'pass' : 'fail')}`}>
                             {isDaily ? 'LỖI' : (isPass ? 'ĐẠT' : 'LỖI')}
                           </span>
@@ -682,14 +679,23 @@ const InspectionReportsView = () => {
                     </button>
                     {(() => {
                       const pages = [];
-                      const maxVisible = 5;
-                      let start = Math.max(1, unifiedPage - Math.floor(maxVisible / 2));
-                      let end = Math.min(totalUnifiedPages, start + maxVisible - 1);
-                      if (end - start + 1 < maxVisible) {
-                        start = Math.max(1, end - maxVisible + 1);
+                      const delta = 2;
+                      for (let i = 1; i <= totalUnifiedPages; i++) {
+                        if (i === 1 || i === totalUnifiedPages || (i >= unifiedPage - delta && i <= unifiedPage + delta)) {
+                          pages.push(i);
+                        } else if (pages[pages.length - 1] !== '...') {
+                          pages.push('...');
+                        }
                       }
-                      for (let p = start; p <= end; p++) {
-                        pages.push(
+                      return pages.map((p, idx) => {
+                        if (p === '...') {
+                          return (
+                            <span key={`ell-${idx}`} style={{ padding: '0 4px', color: '#8D6E63', fontWeight: '700' }}>
+                              ...
+                            </span>
+                          );
+                        }
+                        return (
                           <button
                             key={p}
                             className={`page-btn ${unifiedPage === p ? 'active' : ''}`}
@@ -698,14 +704,12 @@ const InspectionReportsView = () => {
                             {p}
                           </button>
                         );
-                      }
-                      return pages;
+                      });
                     })()}
                     <button 
                       className="page-btn" 
                       onClick={() => setUnifiedPage(prev => Math.min(prev + 1, totalUnifiedPages))} 
-                      disabled={unifiedPage === totalUnifiedPages}
-                      style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #EADCC9', backgroundColor: '#FAF6F0', color: '#7B5233', cursor: unifiedPage === totalUnifiedPages ? 'not-allowed' : 'pointer', opacity: unifiedPage === totalUnifiedPages ? 0.5 : 1 }}
+                      disabled={unifiedPage >= totalUnifiedPages}
                     >
                       <ChevronRight size={14} />
                     </button>
@@ -717,6 +721,19 @@ const InspectionReportsView = () => {
 
         </div>
       </div>
+
+      {/* Mobile Sticky Pagination */}
+      {totalUnifiedPages > 1 && (
+        <div className="pagination-mobile-sticky mobile-only">
+          <button className="page-btn" onClick={() => setUnifiedPage(prev => Math.max(prev - 1, 1))} disabled={unifiedPage === 1}>
+            <ChevronLeft size={16} />
+          </button>
+          <span style={{ fontWeight: '700', fontSize: '0.9rem', color: '#7B5233' }}>Trang {unifiedPage} / {totalUnifiedPages || 1}</span>
+          <button className="page-btn" onClick={() => setUnifiedPage(prev => Math.min(prev + 1, totalUnifiedPages))} disabled={unifiedPage >= totalUnifiedPages}>
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      )}
 
       {/* EXPORT OPTIONS MODAL */}
       {showExportModal && (

@@ -552,6 +552,7 @@ def get_all_deliveries(
     month: Optional[int] = None,
     status: Optional[str] = None,
     search: Optional[str] = None,
+    order_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     """
@@ -563,6 +564,9 @@ def get_all_deliveries(
 
     # 1. Base Query
     base_query = db.query(DeliveryModel)
+
+    if order_id is not None:
+        base_query = base_query.filter(DeliveryModel.order_id == order_id)
 
     if year is not None and month is not None:
         start_date = datetime.datetime(year, month, 1, 0, 0, 0)
@@ -618,6 +622,7 @@ def get_all_deliveries(
     # 4. Join Sender/Receiver for paginated items
     items_query = db.query(
         DeliveryModel.id,
+        DeliveryModel.order_id,
         DeliveryModel.delivery_stage,
         DeliveryModel.receiving_stage,
         DeliveryModel.part_name,
@@ -636,6 +641,9 @@ def get_all_deliveries(
     ).outerjoin(
         Receiver, DeliveryModel.sx_receipt == Receiver.id
     )
+
+    if order_id is not None:
+        items_query = items_query.filter(DeliveryModel.order_id == order_id)
 
     if year is not None and month is not None:
         start_date = datetime.datetime(year, month, 1, 0, 0, 0)
@@ -678,6 +686,7 @@ def get_all_deliveries(
     for row in paginated_items:
         result_items.append({
             "id": row.id,
+            "order_id": row.order_id,
             "delivery_stage": row.delivery_stage,
             "receiving_stage": row.receiving_stage,
             "part_name": row.part_name,

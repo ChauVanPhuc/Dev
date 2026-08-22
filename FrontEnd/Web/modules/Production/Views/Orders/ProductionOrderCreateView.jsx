@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useOutletContext, useNavigate, useParams, useLocation } from 'react-router-dom';
 import {
   Pencil, Download, Upload, Send, ChevronDown, Eye, Plus, ArrowRight
@@ -211,6 +211,7 @@ const ProductionOrderCreateView = () => {
   const [resolvedRoutingData, setResolvedRoutingData] = useState(null);
   const [loadingRouting, setLoadingRouting] = useState(false);
   const [customScheduleRows, setCustomScheduleRows] = useState([]);
+  const [orderDeliveries, setOrderDeliveries] = useState([]);
 
   const toISODate = (val) => {
     if (!val) return '';
@@ -457,6 +458,26 @@ const ProductionOrderCreateView = () => {
             }
           }
         }
+
+        // Fetch real handover delivery records for this order to compute accurate component progress
+        try {
+          const params = { limit: 500 };
+          if (editingOrderId) params.order_id = editingOrderId;
+
+          const delsRes = await api.get('/deliveries/', { params }).catch(() => null);
+          const delsList = Array.isArray(delsRes) ? delsRes : (delsRes?.deliveries || delsRes?.items || []);
+          
+          let matchedDels = delsList;
+          if (!editingOrderId) {
+            matchedDels = delsList.filter(d => 
+              (item?.code && d.po_code && String(d.po_code).toLowerCase().includes(String(item.code).toLowerCase())) ||
+              (item?.order_code && d.po_code && String(d.po_code).toLowerCase().includes(String(item.order_code).toLowerCase()))
+            );
+          }
+          setOrderDeliveries(matchedDels);
+        } catch (delErr) {
+          console.warn('Lỗi nạp danh sách phiếu bàn giao:', delErr);
+        }
       } catch (err) {
         console.warn('Lỗi lấy chi tiết Lệnh sản xuất:', err);
       } finally {
@@ -465,6 +486,134 @@ const ProductionOrderCreateView = () => {
     };
     fetchOrderDetail();
   }, [editingOrderId, location.state, uniqueFactories]);
+
+  // Compute dynamic handover quantity display for BOM items (e.g., 524/3600, 430/3600)
+  const getBomQtyDisplay = useCallback((det) => {
+    if (!det) return '0/0';
+
+    let planned = 0;
+    if (typeof det.quantity === 'number') {
+      planned = det.quantity;
+    } else if (typeof det.quantity === 'string') {
+      const parts = det.quantity.split('/');
+      planned = parseInt(parts[parts.length - 1] || '0', 10);
+    }
+    if (!planned || planned <= 0) {
+      const targetProd = (orderProducts || []).find(p => p && p.productCode === (det.parentCode || selectedProductCode));
+      planned = targetProd ? (targetProd.totalQty || targetProd.orderQty) : 100;
+    }
+
+    if (!orderDeliveries || orderDeliveries.length === 0) {
+      return `${det.actual_qty || 0}/${planned}`;
+    }
+
+    const pCode = String(det.parentCode || selectedProductCode || '').toLowerCase();
+    const targetProd = (orderProducts || []).find(p => p && String(p.productCode || '').toLowerCase() === pCode);
+    const pName = String(targetProd?.productName || '').toLowerCase();
+    const cCode = String(det.compCode || '').toLowerCase();
+    const cName = String(det.compName || '').toLowerCase();
+
+    const normalizeStageKey = (stgStr) => {
+      const s = String(stgStr || '').toLowerCase();
+      if (s.includes('cnc') || s.includes('ván') || s.includes('cắt') || s.includes('phôi')) return 'phôi';
+      if (s.includes('khoan') || s.includes('tiện') || s.includes('chỉ') || s.includes('hình') || s.includes('mộng')) return 'định hình';
+      if (s.includes('ráp') || s.includes('khung')) return 'lắp ráp';
+      if (s.includes('sơn') || s.includes('pu')) return 'sơn';
+      if (s.includes('hậu') || s.includes('gói') || s.includes('đóng gói')) return 'đóng gói';
+      if (s.includes('kho')) return 'kho';
+      return s;
+    };
+
+    const stgFromKey = normalizeStageKey(det.stageFrom);
+    const stgToKey = normalizeStageKey(det.stageTo);
+
+    const prodDels = orderDeliveries.filter(d => {
+      if (!d) return false;
+      const dPart = String(d.part_name || '').toLowerCase();
+      const dSpec = String(d.specification || '').toLowerCase();
+
+      return (pCode && (dSpec.includes(pCode) || pCode.includes(dSpec) || dPart.includes(pCode))) ||
+             (cCode && (dSpec.includes(cCode) || cCode.includes(dSpec) || dPart.includes(cCode))) ||
+             (pName && (dPart.includes(pName) || pName.includes(dPart))) ||
+             (cName && (dPart.includes(cName) || cName.includes(dPart)));
+    });
+
+    // 1. Strict Pair Match (delivery_stage matches stageFrom AND receiving_stage matches stageTo)
+    let matchingDels = prodDels.filter(d => {
+      const dFrom = String(d.delivery_stage || '').toLowerCase();
+      const dTo = String(d.receiving_stage || '').toLowerCase();
+      return stgFromKey && stgToKey && dFrom.includes(stgFromKey) && dTo.includes(stgToKey);
+    });
+
+    // 2. Fallback to Destination Stage Match (receiving_stage matches stageTo)
+    if (matchingDels.length === 0 && stgToKey) {
+      matchingDels = prodDels.filter(d => {
+        const dTo = String(d.receiving_stage || '').toLowerCase();
+        return dTo.includes(stgToKey);
+      });
+    }
+
+    // 3. Final Fallback to Source Stage Match (delivery_stage matches stageFrom)
+    if (matchingDels.length === 0 && stgFromKey) {
+      matchingDels = prodDels.filter(d => {
+        const dFrom = String(d.delivery_stage || '').toLowerCase();
+        return dFrom.includes(stgFromKey);
+      });
+    }
+
+    const actualProdQty = matchingDels.reduce((sum, d) => sum + (Number(d.quantity_received) || Number(d.quantity_total) || 0), 0);
+    const prodTotal = targetProd ? (targetProd.orderQty || targetProd.totalQty || 3600) : 3600;
+    const effectiveProdQty = Math.min(prodTotal, actualProdQty);
+    const ratio = (planned > 0 && prodTotal > 0) ? (planned / prodTotal) : 1;
+    const actualCompQty = Math.round(effectiveProdQty * ratio);
+
+    return `${actualCompQty}/${planned}`;
+  }, [orderDeliveries, orderProducts, selectedProductCode]);
+
+
+  const renderBomQtyCell = useCallback((det) => {
+    const rawDisplay = getBomQtyDisplay(det);
+    if (!rawDisplay || rawDisplay === '0/0') return '0 / 0';
+
+    const parts = rawDisplay.split('/');
+    const actual = parseInt(parts[0] || '0', 10);
+    const planned = parseInt(parts[1] || '0', 10);
+
+    const formatNum = (num) => new Intl.NumberFormat('vi-VN').format(num);
+    const pct = planned > 0 ? Math.min(100, Math.round((actual / planned) * 100)) : 0;
+
+    let badgeBg = '#F1F5F9';
+    let badgeColor = '#64748B';
+    let barBg = '#94A3B8';
+
+    if (pct >= 100) {
+      badgeBg = '#DCFCE7';
+      badgeColor = '#15803D';
+      barBg = '#22C55E';
+    } else if (pct > 0) {
+      badgeBg = '#DBEAFE';
+      badgeColor = '#1D4ED8';
+      barBg = '#3B82F6';
+    }
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', padding: '2px 0' }}>
+        <div style={{ fontWeight: '800', color: '#1E3A8A', fontSize: '0.84rem' }}>
+          {formatNum(actual)} / {formatNum(planned)}
+        </div>
+        <div style={{ width: '100%', maxWidth: '100px', backgroundColor: '#E2E8F0', borderRadius: '4px', height: '5px', overflow: 'hidden' }}>
+          <div style={{ width: `${pct}%`, backgroundColor: barBg, height: '100%', borderRadius: '4px', transition: 'width 0.3s ease-in-out' }} />
+        </div>
+        <span style={{ fontSize: '0.68rem', fontWeight: '700', padding: '1px 6px', borderRadius: '8px', backgroundColor: badgeBg, color: badgeColor, display: 'inline-block' }}>
+          {pct >= 100 ? '100% Hoàn thành' : `${pct}%`}
+        </span>
+      </div>
+    );
+  }, [getBomQtyDisplay]);
+
+
+
+
 
   const handleSelectPurchaseRequisition = async (reqObj) => {
     if (!reqObj) return;
@@ -1451,7 +1600,7 @@ const ProductionOrderCreateView = () => {
                             </td>
                             <td style={{ padding: '8px 10px', fontWeight: '800', color: '#2D1A12' }}>{det.compCode}</td>
                             <td style={{ padding: '8px 10px', fontWeight: '600' }}>{det.compName}</td>
-                            <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800' }}>{det.quantity}</td>
+                            <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: '#1E3A8A' }}>{renderBomQtyCell(det)}</td>
                             <td style={{ padding: '8px 10px', textAlign: 'center' }}>{det.unit}</td>
                             <td style={{ padding: '8px 10px', color: '#64748B' }}>{det.material}</td>
                             <td style={{ padding: '8px 10px', color: '#64748B' }}>{det.spec}</td>

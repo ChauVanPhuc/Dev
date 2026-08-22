@@ -21,6 +21,7 @@ from sqlalchemy import func, case
 from modules.purchasing.models.purchase_requisition import PurchaseRequisition
 from modules.purchasing.models.purchase_order_item import PurchaseOrderItem
 from shared.utils.timezone import get_vietnam_time
+from shared.utils.m3_converter import calculate_pieces_from_m3
 
 
 def safe_float(val, default=0.0):
@@ -131,10 +132,10 @@ async def process_purchasing_excel(contents: bytes, db: Session, default_order_t
 
         col_po_date = find_col(["ngày po", "ngay po", "ngày đặt", "ngày chứng từ", "order date", "po date"])
         col_po_code = find_col(["mã po", "ma po", "sô chứng từ", "số chứng từ", "so chung tu", "số po đối tác", "mã đơn mua", "mã đơn", "po no"])
-        col_supp_code = find_col(["mã ncc", "ma ncc", "mã đối tác", "mã khách hàng", "mã kh", "supplier code", "cust code"])
-        col_supp_name = find_col(["tên ncc", "ten ncc", "tên đối tác", "tên khách", "supplier name", "customer"])
-        col_item_code = find_col(["mã mặt hàng", "ma mat hang", "mã hàng", "mã sp", "item code", "part no", "product code"])
-        col_item_name = find_col(["tên mặt hàng", "ten mat hang", "tên hàng", "tên sp", "item name", "description"])
+        col_supp_code = find_col(["mã ncc", "ma ncc", "mã đối tác", "mã khách hàng", "mã khách", "ma khach", "mã kh", "supplier code", "cust code"])
+        col_supp_name = find_col(["tên ncc", "ten ncc", "tên đối tác", "tên khách hàng", "tên khách", "ten khach", "supplier name", "customer"])
+        col_item_code = find_col(["mã vthhtp", "ma vthhtp", "mã mặt hàng", "ma mat hang", "mã hàng", "mã sp", "item code", "part no", "product code"])
+        col_item_name = find_col(["tên vthhtp", "ten vthhtp", "tên mh tiếng anh", "tên mặt hàng", "ten mat hang", "tên hàng", "tên sp", "item name", "description"])
         col_order_code = find_col(["mã đơn hàng", "ma don hang", "order no"])
         col_unit = find_col(["đvt", "dvt", "đơn vị", "unit"])
         col_conv_unit = find_col(["đvcđ", "dvcd", "đơn vị chuyển đổi"])
@@ -152,7 +153,7 @@ async def process_purchasing_excel(contents: bytes, db: Session, default_order_t
         col_total_tax_vnd = find_col(["sau thuế", "sau thue", "total after tax"])
         col_grand_total_vnd = find_col(["tổng tiền vnđ", "tổng tiền vnd", "tổng tiền", "tong tien", "grand total", "total"])
 
-        col_subtotal_usd = find_col(["tổng tiền($)", "thành tiền ngoại tệ", "ngoại tệ thành tiền"])
+        col_subtotal_usd = find_col(["tt ngoại tệ", "tt ngoai te", "tổng tiền($)", "thành tiền ngoại tệ", "ngoại tệ thành tiền"])
         col_delivery_date = find_col(["ngày giao", "ngay giao", "yêu cầu giao", "delivery date", "req date"])
         col_status = find_col(["trạng thái", "trang thai", "status"])
         col_creator = find_col(["người tạo", "nguoi tao", "creator", "created by"])
@@ -281,6 +282,17 @@ async def process_purchasing_excel(contents: bytes, db: Session, default_order_t
                 is_pallet = bool(is_pallet_val and str(is_pallet_val).strip().lower() == "true")
                 unit_val = safe_str(get_cell(row, col_unit), max_len=50) if col_unit is not None else ("Pallet" if is_pallet else "Bộ")
 
+                conv_unit_val = safe_str(get_cell(row, col_conv_unit), max_len=50) if col_conv_unit is not None else None
+                conv_qty_val = safe_float(get_cell(row, col_conv_qty)) if col_conv_qty is not None else 0.0
+
+                # Tự động quy đổi m3 sang Số lượng Cái/Tấm dựa trên quy cách kích thước nếu chưa có
+                if (not conv_qty_val or conv_qty_val <= 0) and unit_val and any(u in unit_val.lower() for u in ("m3", "m³", "mét khối", "met khoi")):
+                    calc_res = calculate_pieces_from_m3(item_name or item_code, qty)
+                    if calc_res:
+                        conv_qty_val = float(calc_res["pieces"])
+                        if not conv_unit_val:
+                            conv_unit_val = "Cái"
+
                 poi = PurchaseOrderItem(
                     requisition_id=pr.id,
                     po_date=curr_po_date,
@@ -291,9 +303,9 @@ async def process_purchasing_excel(contents: bytes, db: Session, default_order_t
                     item_name=item_name or item_code,
                     order_code=safe_str(get_cell(row, col_order_code), max_len=100) or curr_po_code,
                     unit=unit_val,
-                    converted_unit=safe_str(get_cell(row, col_conv_unit), max_len=50) if col_conv_unit is not None else None,
+                    converted_unit=conv_unit_val,
                     quantity=qty,
-                    converted_quantity=safe_float(get_cell(row, col_conv_qty)) if col_conv_qty is not None else 0.0,
+                    converted_quantity=conv_qty_val,
                     unit_price=price,
                     converted_unit_price=safe_float(get_cell(row, col_conv_price)) if col_conv_price is not None else 0.0,
                     currency=curr_currency or "VND",

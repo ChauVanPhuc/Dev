@@ -225,7 +225,7 @@ const InspectionDetailView = () => {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Phiếu Kiểm Tra QC - #${item.id}</title>
+        <title>Phiếu Kiểm Tra QC - #${item.ticket_code || 'DA' + String(item.id).padStart(3, '0')}</title>
         <style>
           body { font-family: 'Segoe UI', Arial, sans-serif; margin: 20px; color: #1e293b; }
           .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #7B5233; padding-bottom: 12px; margin-bottom: 20px; }
@@ -257,7 +257,7 @@ const InspectionDetailView = () => {
           </div>
           <div style="text-align: right;">
             <div style="font-size: 16px; font-weight: bold; color: #7B5233;">PHIẾU KIỂM TRA CHẤT LƯỢNG</div>
-            <div style="font-size: 12px; color: #64748b;">Mã phiếu: QC-${item.id} | Ngày: ${new Date(dateVal).toLocaleDateString('vi-VN')}</div>
+            <div style="font-size: 12px; color: #64748b;">Mã phiếu: ${item.ticket_code || 'DA' + String(item.id).padStart(3, '0')} | Ngày: ${new Date(dateVal).toLocaleDateString('vi-VN')}</div>
           </div>
         </div>
 

@@ -51,6 +51,7 @@ const CL09C_ParameterView = () => {
     isIncomingStage,
     selectedProducts,
     handleMultiProductChange,
+    samplingRule,
   } = formState
 
   const hasStage = Boolean(paramStage)
@@ -61,7 +62,7 @@ const CL09C_ParameterView = () => {
   const isProductDisabled = readOnly || !hasStage || !hasPo
   const isSampleDisabled = readOnly || !hasStage || !hasPo || !hasProduct
 
-  const poPlaceholder = !hasStage ? 'Chọn công đoạn trước' : 'Chọn PO'
+  const poPlaceholder = !hasStage ? 'Chọn công đoạn trước' : 'Nhập hoặc chọn PO...'
   const productPlaceholder = !hasStage ? 'Chọn công đoạn trước' : (!hasPo ? 'Chọn PO trước' : 'Chọn sản phẩm...')
 
   return (
@@ -102,6 +103,7 @@ const CL09C_ParameterView = () => {
                 onChange={handleParamPoChange}
                 disabled={isPoDisabled}
                 placeholder={poPlaceholder}
+                allowCustomInput={true}
               />
             </div>
             <div className="pv2-field">
@@ -132,10 +134,12 @@ const CL09C_ParameterView = () => {
               <label>SL mẫu <span className="pv2-req">*</span></label>
               <input
                 type="number"
+                min="1"
+                max={samplingRule?.sample_size || requiredQty || undefined}
                 className={`pv2-input ${isSampleDisabled ? 'pv2-input--disabled' : ''}`}
                 value={paramSample}
                 onChange={(e) => setParamSample(e.target.value)}
-                placeholder="0"
+                placeholder={samplingRule?.sample_size ? String(samplingRule.sample_size) : '0'}
                 disabled={isSampleDisabled}
               />
             </div>
@@ -148,6 +152,25 @@ const CL09C_ParameterView = () => {
               <input type="number" className="pv2-input pv2-input--disabled" value={paramFail} onChange={(e) => setParamFail(e.target.value)} disabled />
             </div>
           </div>
+
+          {samplingRule && (
+            <div style={{
+              margin: '4px 0 12px 0',
+              padding: '6px 12px',
+              backgroundColor: '#FFFBEB',
+              border: '1px solid #FDE68A',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontSize: '11px',
+              color: '#92400E',
+              fontWeight: '600'
+            }}>
+              <span>📏 Mốc AQL ({samplingRule.sample_rate_desc})</span>
+              <span>Nặng ≤ <strong>{samplingRule.major_ac}</strong> | Nhẹ ≤ <strong>{samplingRule.minor_ac}</strong></span>
+            </div>
+          )}
 
           <button type="button" className="pv2-btn-dark-pill" onClick={() => setGuideVisible((v) => !v)}>
             👁 Xem hướng dẫn kiểm tra

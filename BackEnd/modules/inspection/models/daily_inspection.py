@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Date, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, Date, ForeignKey, Boolean
 from sqlalchemy.dialects.mssql import NVARCHAR
 from sqlalchemy.orm import relationship
 from config.database import Base
@@ -11,6 +11,9 @@ class DailyInspectionRecord(Base):
     inspection_date = Column(Date, default=datetime.date.today)
     stage_name = Column(NVARCHAR(100), nullable=False)
     inspector_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
+    batch_no = Column(NVARCHAR(100), nullable=True)
+    status = Column(NVARCHAR(50), default="Đã hoàn thành")
+    is_confirmed = Column(Boolean, default=True)
     total_products = Column(Integer, default=0)
     total_defects = Column(Integer, default=0)
     defect_rate = Column(Float, default=0.0)

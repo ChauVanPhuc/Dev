@@ -1,7 +1,4 @@
-import pytest
-from datetime import datetime, timedelta
 from modules.inspection.models.input_inspection import InputInspection
-from modules.inspection.models.stage_inspection import StageInspection
 
 def test_pending_inspections_and_confirmation(client, db_session):
     # 1. Tạo dữ liệu mẫu trong vòng 24 giờ qua (chưa xác nhận)
@@ -16,13 +13,13 @@ def test_pending_inspections_and_confirmation(client, db_session):
         inspected_at=now - timedelta(hours=2)
     )
     # Phiếu công đoạn chưa xác nhận trong 24h
-    stage_pending = StageInspection(
+    stage_pending = InputInspection(
         inspection_type="dau-vao",
         batch_no="PO-12345",
         product_sku="SKU-ABC",
         conclusion="pass",
         is_confirmed=False,
-        created_at=now - timedelta(hours=4)
+        inspected_at=now - timedelta(hours=4)
     )
     
     # Phiếu đầu vào đã xác nhận (không được xuất hiện trong pending)
@@ -35,13 +32,13 @@ def test_pending_inspections_and_confirmation(client, db_session):
     )
     
     # Phiếu công đoạn quá 24h (không được xuất hiện trong pending)
-    stage_old = StageInspection(
+    stage_old = InputInspection(
         inspection_type="do-am",
         batch_no="PO-OLD",
         product_sku="SKU-OLD",
         conclusion="pass",
         is_confirmed=False,
-        created_at=now - timedelta(hours=25)
+        inspected_at=now - timedelta(hours=25)
     )
 
     db_session.add(input_pending)

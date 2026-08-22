@@ -3361,6 +3361,12 @@ tbody tr:nth-child(10) { animation-delay: 0.3s !important; }
     justify-content: space-between !important;
     align-items: center !important;
   }
+  .gold-layout table.data-table,
+  .gold-layout .admin-table-scroll table {
+    border-collapse: collapse !important;
+    border-spacing: 0 !important;
+    width: 100% !important;
+  }
   .gold-layout table.data-table thead tr th,
   .gold-layout .admin-table-scroll table thead th {
     position: sticky !important;
@@ -3371,9 +3377,21 @@ tbody tr:nth-child(10) { animation-delay: 0.3s !important; }
     padding: 8px 10px !important;
     font-size: 0.78rem !important;
   }
-  .gold-layout table.data-table tbody tr td {
+  .gold-layout table.data-table tbody tr,
+  .gold-layout .admin-table-scroll table tbody tr {
+    border-bottom: 1px solid #EADCC9 !important;
+    background-color: #FFFFFF !important;
+    transition: background-color 0.15s ease !important;
+  }
+  .gold-layout table.data-table tbody tr:hover,
+  .gold-layout .admin-table-scroll table tbody tr:hover {
+    background-color: #FAF6F0 !important;
+  }
+  .gold-layout table.data-table tbody tr td,
+  .gold-layout .admin-table-scroll table tbody tr td {
     padding: 7px 10px !important;
     font-size: 0.82rem !important;
     vertical-align: middle !important;
+    border-top: none !important;
   }
 }

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_, or_, Date, cast, case
 from config.database import get_db
 from modules.inspection.models.input_inspection import InputInspection
+from modules.inspection.models.daily_inspection import DailyInspectionRecord, DailyInspectionDefect
 from modules.inspection.schemas.input_inspection import InputInspection as InspectionSchema, InputInspectionRead
 from modules.inspection.models.defect_type import DefectType, ClientDefect, DefectGlossary
 from modules.inspection.models.defect_category import DefectCategory
@@ -25,8 +26,6 @@ from modules.inspection.schemas.daily_inspection import (
     TrendItem,
     DistributionItem
 )
-from modules.inspection.models.daily_inspection import DailyInspectionRecord, DailyInspectionDefect
-from modules.inspection.models.stage_inspection import StageInspection
 from modules.inspection.schemas.stage_inspection import StageInspectionCreate, StageInspectionRead
 from modules.auth.models.accounts import Account
 from modules.auth.models.departments import Department
@@ -102,17 +101,18 @@ def get_daily_inspections(
         if r.inspector_id and r.inspector_id in name_map:
             r.inspector_name = name_map[r.inspector_id]
         else:
-            # Tra cứu fallback từ phiếu stage_inspections trong ngày ở công đoạn này
-            stage_rec = db.query(StageInspection.inspector_name).filter(
-                StageInspection.data_json.like(f'%"stage": "{r.stage_name}"%'),
-                cast(StageInspection.inspection_date, Date) == r.inspection_date,
-                StageInspection.inspector_name.isnot(None),
-                StageInspection.inspector_name != ''
-            ).first()
-            if stage_rec and stage_rec[0]:
-                r.inspector_name = stage_rec[0]
-            else:
-                r.inspector_name = default_qc_name
+            stage_str = str(r.stage_name or '').strip()
+            factory = 1
+            if '1' in stage_str: factory = 1
+            elif '2' in stage_str: factory = 2
+            elif '3' in stage_str: factory = 3
+            is_shaping = any(k in stage_str for k in ['Định Hình', 'Lắp Ráp', 'Tạo Phôi', 'Mộc', 'Phôi'])
+            if factory == 1: fallback_id = 44 if is_shaping else 45
+            elif factory == 2: fallback_id = 46 if is_shaping else 47
+            else: fallback_id = 48 if is_shaping else 49
+            
+            r.inspector_id = fallback_id
+            r.inspector_name = name_map.get(fallback_id, "QC Chuyên Trách")
     return records
 
 @router.get("/inbound", response_model=List[InputInspectionRead])
@@ -140,7 +140,7 @@ def get_all_inbound_inspections(
             r.inspector_name = "N/A"
     return records
 
-def sync_defects_to_daily_inspection(stage_name: str, defects_list: list, inspector_name: str, db: Session, inspected_qty: int = 0):
+def sync_defects_to_daily_inspection(stage_name: str, defects_list: list, inspector_name: str, db: Session, inspected_qty: int = 0, batch_no: Optional[str] = None):
     import json
     if not stage_name:
         return
@@ -150,28 +150,47 @@ def sync_defects_to_daily_inspection(stage_name: str, defects_list: list, inspec
     def extract_defect_info(d):
         if not isinstance(d, dict):
             return None, 0
-        raw_id = d.get('defect_id') or d.get('defectId') or d.get('id')
-        qty = d.get('quantity', 1)
+
+        raw_id = d.get('defect_id') or d.get('defectId')
+        if not raw_id and d.get('id'):
+            try:
+                int(d.get('id'))
+                raw_id = d.get('id')
+            except (ValueError, TypeError):
+                pass
+
+        qty = d.get('quantity')
+        if qty is None:
+            qty = d.get('qty', 1)
         try:
             qty = int(qty)
         except (ValueError, TypeError):
             qty = 1
-        
+
+        valid_defect_ids = set(r[0] for r in db.query(DefectType.id).all())
         defect_id = None
         if raw_id:
             try:
-                defect_id = int(raw_id)
+                candidate_id = int(raw_id)
+                if candidate_id in valid_defect_ids:
+                    defect_id = candidate_id
             except (ValueError, TypeError):
                 pass
-        
+
         if not defect_id:
-            # Tìm theo defect_name hoặc name hoặc code
+            d_code = (d.get('code') or '').strip()
+            if d_code:
+                found_d = db.query(DefectType.id).filter(DefectType.code.ilike(d_code)).first()
+                if found_d:
+                    defect_id = found_d[0]
+
+        if not defect_id:
             d_name = (d.get('defect_name') or d.get('name') or '').strip()
             if d_name:
                 found_d = db.query(DefectType.id).filter(DefectType.name.ilike(d_name)).first()
                 if found_d:
                     defect_id = found_d[0]
-                    
+
         return defect_id, qty
 
     extracted = [extract_defect_info(d) for d in (defects_list or [])]
@@ -181,7 +200,7 @@ def sync_defects_to_daily_inspection(stage_name: str, defects_list: list, inspec
     if total_added_defects <= 0 and inspected_qty <= 0:
         return
 
-    # Tìm Account ID dựa trên inspector_name
+    # Tìm Account ID dựa trên inspector_name hoặc map theo công đoạn QC
     found_inspector_id = None
     if inspector_name and inspector_name.strip():
         acc = db.query(Account).filter(
@@ -192,6 +211,17 @@ def sync_defects_to_daily_inspection(stage_name: str, defects_list: list, inspec
         ).first()
         if acc:
             found_inspector_id = acc.id
+
+    if not found_inspector_id:
+        stage_str = str(stage_name or '').strip()
+        factory = 1
+        if '1' in stage_str: factory = 1
+        elif '2' in stage_str: factory = 2
+        elif '3' in stage_str: factory = 3
+        is_shaping = any(k in stage_str for k in ['Định Hình', 'Lắp Ráp', 'Tạo Phôi', 'Mộc', 'Phôi'])
+        if factory == 1: found_inspector_id = 44 if is_shaping else 45
+        elif factory == 2: found_inspector_id = 46 if is_shaping else 47
+        else: found_inspector_id = 48 if is_shaping else 49
 
     # 1. Tìm hoặc tạo bản ghi DailyInspectionRecord trong ngày ở công đoạn này
     daily_rec = db.query(DailyInspectionRecord).filter(
@@ -204,6 +234,9 @@ def sync_defects_to_daily_inspection(stage_name: str, defects_list: list, inspec
             inspection_date = today,
             stage_name      = stage_name,
             inspector_id    = found_inspector_id,
+            batch_no        = batch_no,
+            status          = "Đã hoàn thành",
+            is_confirmed    = True,
             total_products  = inspected_qty,
             total_defects   = total_added_defects,
             defect_rate     = round((total_added_defects / inspected_qty * 100), 2) if inspected_qty > 0 else 0.0
@@ -213,6 +246,10 @@ def sync_defects_to_daily_inspection(stage_name: str, defects_list: list, inspec
     else:
         if not daily_rec.inspector_id and found_inspector_id:
             daily_rec.inspector_id = found_inspector_id
+        if batch_no and not daily_rec.batch_no:
+            daily_rec.batch_no = batch_no
+        daily_rec.status = "Đã hoàn thành"
+        daily_rec.is_confirmed = True
         if inspected_qty > 0:
             daily_rec.total_products = (daily_rec.total_products or 0) + inspected_qty
         daily_rec.total_defects = (daily_rec.total_defects or 0) + total_added_defects
@@ -312,22 +349,44 @@ async def create_stage_inspection(
         default_acc = db.query(Account.full_name).filter(Account.is_active == True).first()
         final_inspector_name = default_acc[0] if default_acc else "QC Hệ thống"
 
+    # Extract relational columns from data_json
+    parsed_data = {}
+    if data_json:
+        try:
+            parsed_data = json.loads(data_json) if isinstance(data_json, str) else data_json
+        except Exception:
+            pass
+    
+    extracted_pallet = parsed_data.get('palletCode') or parsed_data.get('pallet_code') or batch_no
+    extracted_stage = parsed_data.get('stage') or inspection_type
+    extracted_req_qty = parsed_data.get('requiredQty') or parsed_data.get('required_qty')
+    extracted_sample_qty = parsed_data.get('sampleQty') or parsed_data.get('sample_qty')
+    extracted_error_qty = parsed_data.get('errorQty') or parsed_data.get('error_qty') or 0
+
     try:
-        new_record = StageInspection(
+        new_record = InputInspection(
             inspection_type = str(inspection_type),
             batch_no        = batch_no,
             product_sku     = product_sku,
+            part_name       = product_sku or str(extracted_stage or 'Chi tiết QC'),
             specification   = specification,
             inspector_name  = final_inspector_name,
-            conclusion      = conclusion,
-            notes           = notes,
+            conclusion      = conclusion or "pass",
+            result          = conclusion or "pass",
+            note            = notes,
+            pallet_code     = str(extracted_pallet).strip().upper() if extracted_pallet else None,
+            stage           = str(extracted_stage).strip() if extracted_stage else None,
+            required_qty    = int(extracted_req_qty) if extracted_req_qty and str(extracted_req_qty).isdigit() else 0,
+            sample_qty      = int(extracted_sample_qty) if extracted_sample_qty and str(extracted_sample_qty).isdigit() else 0,
+            error_qty       = int(extracted_error_qty) if extracted_error_qty and str(extracted_error_qty).isdigit() else 0,
             data_json       = data_json,
             image_path_1    = image_paths[0] if len(image_paths) > 0 else None,
             image_path_2    = image_paths[1] if len(image_paths) > 1 else None,
-            image_path_3    = image_paths[2] if len(image_paths) > 2 else None,
-            images_json     = images_json
+            image_path_3    = image_paths[2] if len(image_paths) > 2 else None
         )
         db.add(new_record)
+        db.flush()
+        new_record.ticket_code = f"DA{new_record.id:03d}"
         
         # Đồng bộ lỗi nếu có defects trong data_json
         if data_json:
@@ -348,7 +407,7 @@ async def create_stage_inspection(
                         }
                         stage_name = stage_map.get(inspection_type, 'Phôi gỗ')
 
-                    defects_list = parsed_data.get('defects', [])
+                    defects_list = parsed_data.get('errors') or parsed_data.get('defects') or []
                     inspected_qty = parsed_data.get('sample_qty') or parsed_data.get('inspected_qty') or (len(parsed_data.get('samples', [])) if isinstance(parsed_data.get('samples'), list) and len(parsed_data.get('samples')) > 0 else 0) or parsed_data.get('total_qty', 0)
 
                     if stage_name and (isinstance(defects_list, list) and len(defects_list) > 0 or inspected_qty > 0):
@@ -369,17 +428,17 @@ async def create_stage_inspection(
 def test_sync():
     return {"status": "ok", "message": "Backend code is synced"}
 
-@router.get("/stage/{id}", response_model=StageInspectionRead)
+@router.get("/stage/{id}", response_model=InputInspectionRead)
 def get_stage_inspection(id: int, db: Session = Depends(get_db)):
     """
     [GET] Lấy chi tiết một phiếu kiểm tra công đoạn.
     """
-    record = db.query(StageInspection).filter(StageInspection.id == id).first()
+    record = db.query(InputInspection).filter(InputInspection.id == id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu kiểm tra")
     return record
 
-@router.put("/stage/{id}", response_model=StageInspectionRead)
+@router.put("/stage/{id}", response_model=InputInspectionRead)
 def update_stage_inspection(
     id: int,
     data: StageInspectionCreate,
@@ -390,7 +449,7 @@ def update_stage_inspection(
     """
     return do_update_stage(id, data, db)
 
-@router.post("/stage/{id}", response_model=StageInspectionRead)
+@router.post("/stage/{id}", response_model=InputInspectionRead)
 def update_stage_inspection_post(
     id: int,
     data: StageInspectionCreate,
@@ -402,7 +461,7 @@ def update_stage_inspection_post(
     return do_update_stage(id, data, db)
 
 def do_update_stage(id: int, data: StageInspectionCreate, db: Session):
-    record = db.query(StageInspection).filter(StageInspection.id == id).first()
+    record = db.query(InputInspection).filter(InputInspection.id == id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu kiểm tra")
     
@@ -415,7 +474,6 @@ def do_update_stage(id: int, data: StageInspectionCreate, db: Session):
         record.notes           = data.notes
         record.data_json       = data.data_json
         record.images_json     = data.images_json
-        record.updated_at      = datetime.datetime.now()
         
         # Đồng bộ lỗi nếu có defects trong data_json
         if data.data_json:
@@ -436,7 +494,7 @@ def do_update_stage(id: int, data: StageInspectionCreate, db: Session):
                         }
                         stage_name = stage_map.get(data.inspection_type, 'Phôi gỗ')
 
-                    defects_list = parsed_data.get('defects', [])
+                    defects_list = parsed_data.get('errors') or parsed_data.get('defects') or []
                     inspected_qty = parsed_data.get('sample_qty') or parsed_data.get('inspected_qty') or (len(parsed_data.get('samples', [])) if isinstance(parsed_data.get('samples'), list) and len(parsed_data.get('samples')) > 0 else 0) or parsed_data.get('total_qty', 0)
 
                     if stage_name and (isinstance(defects_list, list) and len(defects_list) > 0 or inspected_qty > 0):
@@ -451,7 +509,7 @@ def do_update_stage(id: int, data: StageInspectionCreate, db: Session):
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Lỗi khi cập nhật phiếu kiểm tra: {str(e)}")
 
-@router.get("/stage", response_model=List[StageInspectionRead])
+@router.get("/stage", response_model=List[InputInspectionRead])
 def get_stage_inspections(
     skip: int = 0,
     limit: int = 100,
@@ -467,25 +525,26 @@ def get_stage_inspections(
     Hỗ trợ filter theo batch_no, product_sku, month/year, và tìm kiếm text.
     """
     import json
-    query = db.query(StageInspection)
+    query = db.query(InputInspection)
     if batch_no:
-        query = query.filter(StageInspection.batch_no == batch_no)
+        query = query.filter(InputInspection.batch_no == batch_no)
     if product_sku:
-        query = query.filter(StageInspection.product_sku == product_sku)
+        query = query.filter(InputInspection.product_sku == product_sku)
     if month and year:
         from sqlalchemy import extract
         query = query.filter(
-            extract('month', StageInspection.inspection_date) == month,
-            extract('year', StageInspection.inspection_date) == year
+            extract('month', InputInspection.inspected_at) == month,
+            extract('year', InputInspection.inspected_at) == year
         )
     if search:
         search_term = f"%{search}%"
         query = query.filter(
-            (StageInspection.batch_no.ilike(search_term)) |
-            (StageInspection.product_sku.ilike(search_term)) |
-            (StageInspection.inspector_name.ilike(search_term))
+            (InputInspection.batch_no.ilike(search_term)) |
+            (InputInspection.product_sku.ilike(search_term)) |
+            (InputInspection.inspector_name.ilike(search_term))
         )
-    records = query.order_by(StageInspection.created_at.desc(), StageInspection.id.desc()).offset(skip).limit(limit).all()
+    records = query.order_by(InputInspection.id.desc()).offset(skip).limit(limit).all()
+
     
     for r in records:
         if not r.inspector_name or not r.inspector_name.strip():
@@ -522,42 +581,57 @@ def get_inspections_list(
     from sqlalchemy import extract
 
     # Tạo query lọc theo các điều kiện chung (Tháng, Công đoạn, PO, Sản phẩm)
-    base_query = db.query(StageInspection)
+    base_query = db.query(InputInspection)
     if month and int(month) > 0:
-        base_query = base_query.filter(extract('month', StageInspection.created_at) == int(month))
+        base_query = base_query.filter(extract('month', InputInspection.inspected_at) == int(month))
     if stage and stage not in ["ALL", "Tất cả công đoạn", ""]:
         base_query = base_query.filter(
             or_(
-                StageInspection.inspection_type.ilike(f"%{stage}%"),
-                StageInspection.data_json.ilike(f"%{stage}%")
+                InputInspection.stage.ilike(f"%{stage}%"),
+                InputInspection.inspection_type.ilike(f"%{stage}%"),
+                InputInspection.data_json.ilike(f"%{stage}%")
             )
         )
     if po_code and po_code != "ALL":
-        base_query = base_query.filter(StageInspection.batch_no.ilike(f"%{po_code}%"))
+        base_query = base_query.filter(
+            or_(
+                InputInspection.batch_no.ilike(f"%{po_code}%"),
+                InputInspection.cont_name.ilike(f"%{po_code}%")
+            )
+        )
     if product and product not in ["ALL", "Tất cả sản phẩm", ""]:
-        base_query = base_query.filter(StageInspection.product_sku.ilike(f"%{product}%"))
+        base_query = base_query.filter(
+            or_(
+                InputInspection.product_sku.ilike(f"%{product}%"),
+                InputInspection.part_name.ilike(f"%{product}%")
+            )
+        )
 
     # Đếm số phiếu Chờ kiểm tra theo đúng bộ lọc đang chọn
     total_pending = base_query.filter(
-        or_(StageInspection.is_confirmed == False, StageInspection.is_confirmed.is_(None))
+        or_(InputInspection.is_confirmed == False, InputInspection.is_confirmed.is_(None))
     ).count()
 
     query = base_query
     if tab in ["pending", "transfer"]:
-        query = query.filter(or_(StageInspection.is_confirmed == False, StageInspection.is_confirmed.is_(None)))
+        query = query.filter(or_(InputInspection.is_confirmed == False, InputInspection.is_confirmed.is_(None)))
     elif tab in ["done", "history", "completed"]:
-        query = query.filter(StageInspection.is_confirmed == True)
-        query = query.filter(StageInspection.batch_no.ilike(f"%{po_code}%"))
-    if product and product not in ["ALL", "Tất cả sản phẩm", ""]:
-        query = query.filter(StageInspection.product_sku.ilike(f"%{product}%"))
+        query = query.filter(InputInspection.is_confirmed == True)
+        if po_code and po_code != "ALL":
+            query = query.filter(
+                or_(
+                    InputInspection.batch_no.ilike(f"%{po_code}%"),
+                    InputInspection.cont_name.ilike(f"%{po_code}%")
+                )
+            )
 
     total_count = query.count()
     skip = (page - 1) * limit
 
     if sort == "asc":
-        records = query.order_by(StageInspection.created_at.asc(), StageInspection.id.asc()).offset(skip).limit(limit).all()
+        records = query.order_by(InputInspection.inspected_at.asc(), InputInspection.id.asc()).offset(skip).limit(limit).all()
     else:
-        records = query.order_by(StageInspection.created_at.desc(), StageInspection.id.desc()).offset(skip).limit(limit).all()
+        records = query.order_by(InputInspection.inspected_at.desc(), InputInspection.id.desc()).offset(skip).limit(limit).all()
 
     items = []
     for r in records:
@@ -568,47 +642,38 @@ def get_inspections_list(
             except Exception:
                 pass
 
-        img_list = []
-        if r.images_json:
-            try:
-                ij = json.loads(r.images_json) if isinstance(r.images_json, str) else r.images_json
-                if isinstance(ij, dict):
-                    img_list = ij.get("images") or ij.get("Ảnh kiểm tra mẫu") or []
-                elif isinstance(ij, list):
-                    img_list = ij
-            except Exception:
-                pass
-        if not img_list:
-            img_list = [img for img in [r.image_path_1, r.image_path_2, r.image_path_3] if img]
+        img_list = [img for img in [r.image_path_1, r.image_path_2, r.image_path_3] if img]
+        if not img_list and data_dict.get("images"):
+            img_list = data_dict.get("images")
 
-        stage_name = data_dict.get("stage") or r.inspection_type
-        sample_qty = data_dict.get("sampleQty", 0)
-        error_qty = data_dict.get("errorQty", 0)
+        stage_name = r.stage or data_dict.get("stage") or r.inspection_type or "QC"
+        sample_qty = r.sample_qty or data_dict.get("sampleQty", 0)
+        error_qty = r.error_qty or data_dict.get("errorQty", 0)
+        t_code = r.ticket_code or f"DA{r.id:03d}"
 
         items.append({
             "id": r.id,
-            "code": f"KT{r.id:03d}",
-            "time_str": r.created_at.strftime("%H:%M | %d/%m/%Y") if r.created_at else "",
-            "time": r.created_at.strftime("%H:%M") if r.created_at else "",
-            "date": r.created_at.strftime("%d/%m/%Y") if r.created_at else "",
-            "mode": r.inspection_type or "input",
+            "code": t_code,
+            "ticket_code": t_code,
+            "time_str": r.inspected_at.strftime("%H:%M | %d/%m/%Y") if r.inspected_at else "",
+            "time": r.inspected_at.strftime("%H:%M") if r.inspected_at else "",
+            "date": r.inspected_at.strftime("%d/%m/%Y") if r.inspected_at else "",
+            "mode": r.inspection_type or "first_sample",
             "stage": stage_name,
-            "po": r.batch_no or "",
-            "poCode": r.batch_no or "",
-            "product": r.product_sku or "",
+            "po": r.batch_no or r.cont_name or "",
+            "poCode": r.batch_no or r.cont_name or "",
+            "product": r.product_sku or r.part_name or "",
             "spec": r.specification or "",
-            "result": r.conclusion or "pass",
+            "result": r.conclusion or r.result or "pass",
             "sampleQty": sample_qty,
             "errorQty": error_qty,
-            "note": r.notes or "",
+            "note": r.note or "",
             "images": img_list,
-            "errors": data_dict.get("errors", []),
-            "palletCode": data_dict.get("palletCode") or "",
-            "requiredQty": data_dict.get("requiredQty") or "",
+            "requiredQty": r.required_qty or data_dict.get("requiredQty") or "",
             "creator": r.inspector_name or data_dict.get("created_by") or "QC",
             "status": "done" if r.is_confirmed else "pending",
             "is_confirmed": bool(r.is_confirmed),
-            "created_at": r.created_at.isoformat() if r.created_at else ""
+            "created_at": r.inspected_at.isoformat() if r.inspected_at else ""
         })
 
     return {
@@ -622,9 +687,9 @@ def get_inspections_list(
 
 @router.get("/pallets")
 @router.get("/pallets/")
-def get_inspected_pallets_list(
-    limit: int = Query(200, ge=1),
+def get_pallet_list(
     search: Optional[str] = Query(None),
+    limit: int = Query(100),
     db: Session = Depends(get_db)
 ):
     """
@@ -632,43 +697,95 @@ def get_inspected_pallets_list(
     Phục vụ dropdown chọn mã Pallet khi thực hiện Kiểm tra lại (RE_INSPECT).
     """
     import json
-    records = db.query(StageInspection).filter(
-        StageInspection.data_json.ilike('%"palletCode"%')
-    ).order_by(StageInspection.id.desc()).limit(1000).all()
-
     pallets_map = {}
+
+    # 1. Pallets from InputInspection (Consolidated Relational Columns)
+    records = db.query(InputInspection).order_by(InputInspection.id.desc()).limit(1000).all()
     for r in records:
-        if not r.data_json:
-            continue
-        try:
-            pj = json.loads(r.data_json) if isinstance(r.data_json, str) else r.data_json
-            if not isinstance(pj, dict):
-                continue
-            p_code = pj.get("palletCode")
-            if not p_code or not str(p_code).strip():
-                continue
-            clean_code = str(p_code).strip().upper()
-            
-            if clean_code not in pallets_map:
-                pallets_map[clean_code] = {
-                    "palletCode": clean_code,
-                    "po": r.batch_no or pj.get("po") or "",
-                    "product": r.product_sku or pj.get("product") or "",
-                    "spec": r.specification or pj.get("spec") or "",
-                    "stage": pj.get("stage") or r.inspection_type or "",
-                    "conclusion": r.conclusion or pj.get("result") or "pass",
-                    "sampleQty": pj.get("sampleQty") or 0,
-                    "errorQty": pj.get("errorQty") or 0,
-                    "inspectionCount": 1,
-                    "lastInspectionId": r.id,
-                    "lastInspectionCode": f"KT{r.id:03d}",
-                    "lastInspectionAt": r.created_at.strftime("%H:%M | %d/%m/%Y") if r.created_at else "",
-                    "label": f"{clean_code} - {r.product_sku or pj.get('product') or ''} - {r.batch_no or ''}".strip(' -')
+        clean_code = (r.pallet_code or r.batch_no or "").strip().upper()
+        if not clean_code:
+            pj = {}
+            if r.data_json:
+                try:
+                    pj = json.loads(r.data_json) if isinstance(r.data_json, str) else r.data_json
+                    if isinstance(pj, dict):
+                        p_code = pj.get("palletCode") or pj.get("pallet_code")
+                        if p_code and str(p_code).strip():
+                            clean_code = str(p_code).strip().upper()
+                except Exception:
+                    pass
+
+        if clean_code and clean_code not in pallets_map:
+            t_code = r.ticket_code or f"DA{r.id:03d}"
+            pallets_map[clean_code] = {
+                "palletCode": clean_code,
+                "po": r.batch_no or "",
+                "product": r.product_sku or "",
+                "spec": r.specification or "",
+                "stage": r.stage_name or r.inspection_type or "",
+                "conclusion": r.conclusion or "pass",
+                "sampleQty": r.sample_qty or 0,
+                "errorQty": r.error_qty or 0,
+                "inspectionCount": 1,
+                "lastInspectionId": r.id,
+                "lastInspectionCode": t_code,
+                "lastInspectionAt": r.created_at.strftime("%H:%M | %d/%m/%Y") if r.created_at else "",
+                "label": f"{clean_code} - {r.product_sku or ''} - {r.batch_no or ''}".strip(' -')
+            }
+        elif clean_code and clean_code in pallets_map:
+            pallets_map[clean_code]["inspectionCount"] += 1
+
+    # 2. Pallets from PalletCard table
+    try:
+        from modules.delivery.models.pallet_card import PalletCard as PalletCardModel
+        cards = db.query(PalletCardModel).filter(PalletCardModel.pallet_code.isnot(None)).order_by(PalletCardModel.id.desc()).limit(500).all()
+        for c in cards:
+            code = (c.pallet_code or "").strip().upper()
+            if code and code not in pallets_map:
+                prod_name = c.detail_name or c.product_code or ""
+                po_val = c.po_code or c.khsx_code or ""
+                qty_val = c.quantity_actual or c.quantity_plan or 0
+                pallets_map[code] = {
+                    "palletCode": code,
+                    "po": po_val,
+                    "product": prod_name,
+                    "spec": c.specification or "",
+                    "stage": "Tạo phôi",
+                    "conclusion": "pass",
+                    "sampleQty": qty_val,
+                    "errorQty": 0,
+                    "inspectionCount": 0,
+                    "lastInspectionId": None,
+                    "lastInspectionCode": "",
+                    "lastInspectionAt": c.created_at.strftime("%H:%M | %d/%m/%Y") if c.created_at else "",
+                    "label": f"{code} - {prod_name} - {po_val}".strip(' -')
                 }
-            else:
-                pallets_map[clean_code]["inspectionCount"] += 1
-        except Exception:
-            pass
+    except Exception as err:
+        print(f"[get_pallet_list] PalletCard fetch error: {err}")
+
+    # 3. Pallets from InputInspection table
+    try:
+        inputs = db.query(InputInspection).order_by(InputInspection.id.desc()).limit(300).all()
+        for inp in inputs:
+            code = (inp.cont_name or f"IQC-{inp.id}").strip().upper()
+            if code and code not in pallets_map:
+                pallets_map[code] = {
+                    "palletCode": code,
+                    "po": inp.cont_name or "",
+                    "product": inp.part_name or "",
+                    "spec": inp.specification or "",
+                    "stage": inp.stage or "Nhập Kho/Đầu Vào",
+                    "conclusion": inp.result or "pass",
+                    "sampleQty": 1,
+                    "errorQty": 0,
+                    "inspectionCount": 1,
+                    "lastInspectionId": inp.id,
+                    "lastInspectionCode": f"DA_INP_{inp.id}",
+                    "lastInspectionAt": inp.inspected_at.strftime("%H:%M | %d/%m/%Y") if inp.inspected_at else "",
+                    "label": f"{code} - {inp.part_name or ''}".strip(' -')
+                }
+    except Exception as err:
+        print(f"[get_pallet_list] InputInspection fetch error: {err}")
 
     results = list(pallets_map.values())
     if search and search.strip():
@@ -678,6 +795,21 @@ def get_inspected_pallets_list(
             if st in p["palletCode"].lower() or st in p["po"].lower() or st in p["product"].lower() or st in p["stage"].lower()
         ]
     return results[:limit]
+
+
+@router.get("/by-pallet")
+@router.get("/by-pallet/")
+def get_by_pallet(
+    pallet_code: Optional[str] = Query(None),
+    limit: int = Query(3),
+    db: Session = Depends(get_db)
+):
+    if not pallet_code:
+        return []
+    details = get_pallet_inspection_details(pallet_code=pallet_code, db=db)
+    if isinstance(details, dict) and "history" in details:
+        return details.get("history") or []
+    return []
 
 
 @router.get("/pallet/{pallet_code}")
@@ -691,31 +823,140 @@ def get_pallet_inspection_details(
     Tự động nạp vào form khi chọn/nhập Mã Pallet ở chế độ Kiểm tra lại.
     """
     import json
+    from sqlalchemy import or_, cast, String
     clean_code = pallet_code.strip()
-    records = db.query(StageInspection).filter(
-        StageInspection.data_json.ilike(f'%"{clean_code}"%')
-    ).order_by(StageInspection.id.desc()).all()
+    records = db.query(InputInspection).filter(
+        or_(
+            InputInspection.pallet_code == clean_code,
+            InputInspection.ticket_code == clean_code,
+            InputInspection.batch_no == clean_code,
+            InputInspection.cont_name == clean_code,
+            InputInspection.data_json.ilike(f'%"{clean_code}"%')
+        )
+    ).order_by(InputInspection.id.desc()).all()
 
     if not records:
-        # Fallback tìm từ bảng pallet_cards
-        from modules.delivery.models.pallet_card import PalletCard as PalletCardModel
-        card = db.query(PalletCardModel).filter(PalletCardModel.pallet_code == clean_code).first()
-        if card:
-            return {
-                "palletCode": clean_code,
-                "po": card.po_code or "",
-                "product": card.product_name or "",
-                "spec": card.specification or "",
-                "stage": "Tạo phôi",
-                "requiredQty": card.total_quantity or "",
-                "sampleQty": card.total_quantity or "",
-                "errorQty": 0,
-                "conclusion": "pass",
-                "inspectionCount": 0,
-                "history": [],
-                "last_inspection": None
-            }
-        raise HTTPException(status_code=404, detail=f"Không tìm thấy dữ liệu kiểm tra cho mã pallet {clean_code}")
+        # 1. Fallback tìm từ bảng pallet_cards
+        try:
+            from modules.delivery.models.pallet_card import PalletCard as PalletCardModel
+            card = db.query(PalletCardModel).filter(
+                or_(
+                    PalletCardModel.pallet_code == clean_code,
+                    PalletCardModel.po_code == clean_code,
+                    PalletCardModel.khsx_code == clean_code
+                )
+            ).first()
+            if card:
+                p_name = card.detail_name or card.product_code or ""
+                po_name = card.po_code or card.khsx_code or ""
+                q_val = card.quantity_actual or card.quantity_plan or 0
+                hist_item = {
+                    "id": card.id,
+                    "code": card.pallet_code or clean_code,
+                    "mode": "pallet_card",
+                    "po": po_name,
+                    "product": p_name,
+                    "spec": card.specification or "",
+                    "stage": "Tạo phôi",
+                    "requiredQty": q_val,
+                    "sampleQty": q_val,
+                    "errorQty": 0,
+                    "conclusion": "pass",
+                    "notes": "Lấy từ thẻ Pallet bàn giao",
+                    "images": [],
+                    "steps": [],
+                    "inspector_name": "System",
+                    "created_at": card.created_at.strftime("%H:%M | %d/%m/%Y") if card.created_at else ""
+                }
+                return {
+                    "palletCode": card.pallet_code or clean_code,
+                    "po": po_name,
+                    "product": p_name,
+                    "spec": card.specification or "",
+                    "stage": "Tạo phôi",
+                    "requiredQty": q_val,
+                    "sampleQty": q_val,
+                    "errorQty": 0,
+                    "conclusion": "pass",
+                    "notes": "Lấy từ thẻ Pallet bàn giao",
+                    "steps": [],
+                    "errors": [],
+                    "images": [],
+                    "inspectionCount": 1,
+                    "last_inspection": hist_item,
+                    "history": [hist_item]
+                }
+        except Exception as err:
+            print(f"[get_pallet_inspection_details] PalletCard error: {err}")
+
+        # 2. Fallback tìm từ bảng input_inspections
+        try:
+            inp = db.query(InputInspection).filter(
+                or_(
+                    InputInspection.cont_name == clean_code,
+                    InputInspection.part_name == clean_code,
+                    cast(InputInspection.id, String) == clean_code.replace("DA", "").replace("KT", "")
+                )
+            ).first()
+            if inp:
+                hist_item = {
+                    "id": inp.id,
+                    "code": f"DA_INP_{inp.id}",
+                    "mode": "input_qc",
+                    "po": inp.cont_name or "",
+                    "product": inp.part_name or "",
+                    "spec": inp.specification or "",
+                    "stage": inp.stage or "Nhập Kho/Đầu Vào",
+                    "requiredQty": 1,
+                    "sampleQty": 1,
+                    "errorQty": 0,
+                    "conclusion": inp.result or "pass",
+                    "notes": inp.note or "",
+                    "images": [img for img in [inp.image_path_1, inp.image_path_2, inp.image_path_3] if img],
+                    "steps": [],
+                    "inspector_name": "QC",
+                    "created_at": inp.inspected_at.strftime("%H:%M | %d/%m/%Y") if inp.inspected_at else ""
+                }
+                return {
+                    "palletCode": clean_code,
+                    "po": inp.cont_name or "",
+                    "product": inp.part_name or "",
+                    "spec": inp.specification or "",
+                    "stage": inp.stage or "Nhập Kho/Đầu Vào",
+                    "requiredQty": 1,
+                    "sampleQty": 1,
+                    "errorQty": 0,
+                    "conclusion": inp.result or "pass",
+                    "notes": inp.note or "",
+                    "steps": [],
+                    "errors": [],
+                    "images": [img for img in [inp.image_path_1, inp.image_path_2, inp.image_path_3] if img],
+                    "inspectionCount": 1,
+                    "last_inspection": hist_item,
+                    "history": [hist_item]
+                }
+        except Exception as err:
+            print(f"[get_pallet_inspection_details] InputInspection error: {err}")
+
+        # Fallback an toàn nếu không thấy ở đâu: trả về object rỗng hợp lệ (tránh HTTP 500/404 crash)
+        return {
+            "palletCode": clean_code,
+            "po": "",
+            "product": "",
+            "spec": "",
+            "stage": "",
+            "requiredQty": "",
+            "sampleQty": "",
+            "errorQty": 0,
+            "conclusion": "pass",
+            "notes": "",
+            "steps": [],
+            "errors": [],
+            "images": [],
+            "inspectionCount": 0,
+            "last_inspection": None,
+            "history": []
+        }
 
     history = []
     first_record = records[0]
@@ -744,29 +985,37 @@ def get_pallet_inspection_details(
                     img_list = ij
             except Exception:
                 pass
-        if not img_list:
-            img_list = [img for img in [r.image_path_1, r.image_path_2, r.image_path_3] if img]
+        img_list = [img for img in [r.image_path_1, r.image_path_2, r.image_path_3] if img]
+        if not img_list and pj.get("images"):
+            img_list = pj.get("images")
+
+        t_code = r.ticket_code or f"DA{r.id:03d}"
 
         history.append({
             "id": r.id,
-            "code": f"KT{r.id:03d}",
-            "mode": r.inspection_type,
-            "conclusion": r.conclusion or pj.get("result") or "pass",
-            "sampleQty": pj.get("sampleQty") or 0,
-            "errorQty": pj.get("errorQty") or 0,
+            "code": t_code,
+            "mode": r.inspection_type or "first_sample",
+            "po": r.batch_no or r.cont_name or pj.get("po") or "",
+            "product": r.product_sku or r.part_name or pj.get("product") or "",
+            "spec": r.specification or pj.get("spec") or "",
+            "stage": r.stage or pj.get("stage") or r.inspection_type or "",
+            "requiredQty": r.required_qty or pj.get("requiredQty") or "",
+            "conclusion": r.conclusion or r.result or pj.get("result") or "pass",
+            "sampleQty": r.sample_qty or pj.get("sampleQty") or 0,
+            "errorQty": r.error_qty or pj.get("errorQty") or 0,
             "errors": pj.get("errors") or pj.get("defects") or [],
-            "notes": r.notes or pj.get("notes") or pj.get("note") or "",
+            "notes": r.note or pj.get("notes") or pj.get("note") or "",
             "images": img_list,
             "steps": pj.get("steps", []),
             "inspector_name": r.inspector_name or pj.get("created_by") or "QC",
-            "created_at": r.created_at.strftime("%H:%M | %d/%m/%Y") if r.created_at else ""
+            "created_at": r.inspected_at.strftime("%H:%M | %d/%m/%Y") if r.inspected_at else ""
         })
 
     last_ins = history[0] if history else None
 
     first_images = (first_parsed.get("images") if isinstance(first_parsed.get("images"), list) else None) or (last_ins.get("images") if last_ins else [])
     first_errors = (first_parsed.get("errors") if isinstance(first_parsed.get("errors"), list) else None) or (first_parsed.get("defects") if isinstance(first_parsed.get("defects"), list) else None) or (last_ins.get("errors") if last_ins else [])
-    first_notes = first_record.notes or first_parsed.get("notes") or first_parsed.get("note") or (last_ins.get("notes") if last_ins else "")
+    first_notes = first_record.note or first_parsed.get("notes") or first_parsed.get("note") or (last_ins.get("notes") if last_ins else "")
 
     for h in history:
         if not first_errors and h.get("errors"):
@@ -777,15 +1026,15 @@ def get_pallet_inspection_details(
             first_notes = h.get("notes")
 
     return {
-        "palletCode": clean_code,
-        "po": first_record.batch_no or first_parsed.get("po") or "",
-        "product": first_record.product_sku or first_parsed.get("product") or "",
+        "palletCode": first_record.pallet_code or clean_code,
+        "po": first_record.batch_no or first_record.cont_name or first_parsed.get("po") or "",
+        "product": first_record.product_sku or first_record.part_name or first_parsed.get("product") or "",
         "spec": first_record.specification or first_parsed.get("spec") or "",
-        "stage": first_parsed.get("stage") or first_record.inspection_type or "",
-        "requiredQty": first_parsed.get("requiredQty") or "",
-        "sampleQty": first_parsed.get("sampleQty") or "",
-        "errorQty": first_parsed.get("errorQty") or (len(first_errors) if first_errors else 0),
-        "conclusion": first_record.conclusion or "pass",
+        "stage": first_record.stage or first_parsed.get("stage") or first_record.inspection_type or "",
+        "requiredQty": first_record.required_qty or first_parsed.get("requiredQty") or "",
+        "sampleQty": first_record.sample_qty or first_parsed.get("sampleQty") or "",
+        "errorQty": first_record.error_qty if first_record.error_qty is not None else (first_parsed.get("errorQty") or (len(first_errors) if first_errors else 0)),
+        "conclusion": first_record.conclusion or first_record.result or "pass",
         "notes": first_notes,
         "steps": first_parsed.get("steps") or [],
         "errors": first_errors,
@@ -809,38 +1058,38 @@ def get_last_inspection_result(
     [GET] Lấy kết quả kiểm tra gần nhất theo mã pallet, mode, product, po.
     """
     import json
-    query = db.query(StageInspection)
+    query = db.query(InputInspection)
     if pallet_code and str(pallet_code).strip():
         clean_code = str(pallet_code).strip()
-        query = query.filter(StageInspection.data_json.ilike(f'%"{clean_code}"%'))
+        query = query.filter((InputInspection.pallet_code == clean_code) | (InputInspection.data_json.ilike(f'%"{clean_code}"%')))
     else:
         if mode:
-            query = query.filter(StageInspection.inspection_type == mode)
+            query = query.filter(InputInspection.inspection_type == mode)
         if po:
-            query = query.filter(StageInspection.batch_no == po)
+            query = query.filter(InputInspection.batch_no == po)
         if product:
-            query = query.filter(StageInspection.product_sku == product)
+            query = query.filter(InputInspection.product_sku == product)
 
-    last_rec = query.order_by(StageInspection.id.desc()).first()
+    last_rec = query.order_by(InputInspection.id.desc()).first()
     if last_rec:
-        sample_qty = 0
-        error_qty = 0
+        sample_qty = last_rec.sample_qty or 0
+        error_qty = last_rec.error_qty or 0
         errors_list = []
-        stage_name = ""
-        req_qty = ""
+        stage_name = last_rec.stage or ""
+        req_qty = last_rec.required_qty or ""
         steps_list = []
-        pallet_c = pallet_code or ""
+        pallet_c = last_rec.pallet_code or pallet_code or ""
         if last_rec.data_json:
             try:
                 pj = json.loads(last_rec.data_json) if isinstance(last_rec.data_json, str) else last_rec.data_json
-                sample_qty = pj.get("sampleQty", 0)
-                error_qty = pj.get("errorQty", 0)
-                errors_list = pj.get("errors", [])
-                stage_name = pj.get("stage", "")
-                req_qty = pj.get("requiredQty", "")
-                steps_list = pj.get("steps", [])
-                if not pallet_c:
-                    pallet_c = pj.get("palletCode", "")
+                if isinstance(pj, dict):
+                    if not sample_qty: sample_qty = pj.get("sampleQty", 0)
+                    if not error_qty: error_qty = pj.get("errorQty", 0)
+                    errors_list = pj.get("errors", [])
+                    if not stage_name: stage_name = pj.get("stage", "")
+                    if not req_qty: req_qty = pj.get("requiredQty", "")
+                    steps_list = pj.get("steps", [])
+                    if not pallet_c: pallet_c = pj.get("palletCode", "")
             except Exception:
                 pass
 
@@ -859,7 +1108,7 @@ def get_last_inspection_result(
 
         return {
             "id": last_rec.id,
-            "code": f"KT{last_rec.id:03d}",
+            "code": last_rec.ticket_code or f"DA{last_rec.id:03d}",
             "palletCode": pallet_c,
             "po": last_rec.batch_no or "",
             "product": last_rec.product_sku or "",
@@ -871,10 +1120,10 @@ def get_last_inspection_result(
             "result": last_rec.conclusion or "pass",
             "errors": errors_list,
             "steps": steps_list,
-            "notes": last_rec.notes or "",
+            "notes": last_rec.note or "",
             "images": img_list,
             "inspector_name": last_rec.inspector_name or "",
-            "created_at": last_rec.created_at.strftime("%H:%M | %d/%m/%Y") if last_rec.created_at else ""
+            "created_at": (last_rec.inspected_at or last_rec.created_at).strftime("%H:%M | %d/%m/%Y") if (last_rec.inspected_at or last_rec.created_at) else ""
         }
     return {"sampleQty": 0, "errorQty": 0, "result": "pass", "errors": [], "images": []}
 
@@ -887,7 +1136,7 @@ def generate_unique_pallet_code(
 ):
     """
     [GET] Sinh mã Pallet duy nhất, đảm bảo KHÔNG trùng lặp với bất kỳ mã nào trong CSDL
-    (bao gồm bảng pallet_cards và stage_inspections).
+    (bao gồm bảng pallet_cards và input_inspections).
     """
     import random
     import json
@@ -905,16 +1154,19 @@ def generate_unique_pallet_code(
     except Exception:
         pass
 
-    # 2. Từ bảng stage_inspections (data_json chứa palletCode)
+    # 2. Từ bảng input_inspections (pallet_code hoặc data_json chứa palletCode)
     try:
-        records = db.query(StageInspection.data_json).filter(StageInspection.data_json.ilike('%"palletCode"%')).all()
+        records = db.query(InputInspection.pallet_code, InputInspection.data_json).all()
         for r in records:
             if r[0]:
+                existing_codes.add(str(r[0]).strip().upper())
+            if r[1]:
                 try:
-                    pj = json.loads(r[0]) if isinstance(r[0], str) else r[0]
-                    p_code = pj.get("palletCode")
-                    if p_code:
-                        existing_codes.add(str(p_code).strip().upper())
+                    pj = json.loads(r[1]) if isinstance(r[1], str) else r[1]
+                    if isinstance(pj, dict):
+                        p_code = pj.get("palletCode")
+                        if p_code:
+                            existing_codes.add(str(p_code).strip().upper())
                 except Exception:
                     pass
     except Exception:
@@ -1003,14 +1255,25 @@ async def create_inspection(
             "created_by": creator
         }
 
-        new_stage = StageInspection(
+        # Sinh mã ticket code DAxxx
+        t_seq = db.query(func.max(InputInspection.id)).scalar() or 0
+        t_code = f"DA{t_seq + 1:03d}"
+
+        new_stage = InputInspection(
+            ticket_code     = t_code,
+            pallet_code     = pallet_code_val,
             inspection_type = mode,
             batch_no        = po,
             product_sku     = product,
+            part_name       = product,
             specification   = spec,
+            stage           = stage,
+            sample_qty      = sample_qty,
+            error_qty       = error_qty,
             inspector_name  = creator,
             conclusion      = result,
-            notes           = note,
+            result          = "Đạt" if result in ["pass", "Đạt"] else "Không đạt",
+            note            = note,
             data_json       = json.dumps(data_json_obj, ensure_ascii=False),
             image_path_1    = img1,
             image_path_2    = img2,
@@ -1186,7 +1449,7 @@ def confirm_inspection_ticket(
     """
     [PATCH/POST] Xác nhận hoàn thành phiếu kiểm tra QC.
     """
-    rec = db.query(StageInspection).filter(StageInspection.id == id).first()
+    rec = db.query(InputInspection).filter(InputInspection.id == id).first()
     if not rec:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu kiểm tra")
     rec.is_confirmed = True
@@ -1564,9 +1827,9 @@ def get_inspections_by_plan(plan_id: int, stage: Optional[str] = None, db: Sessi
 
     stage_inspections = []
     if po_codes:
-        query_stage = db.query(StageInspection).filter(
-            StageInspection.inspection_type == 'mau-dau-tien',
-            StageInspection.batch_no.in_(po_codes)
+        query_stage = db.query(InputInspection).filter(
+            InputInspection.inspection_type == 'mau-dau-tien',
+            InputInspection.batch_no.in_(po_codes)
         )
         raw_stages = query_stage.all()
         
@@ -1737,16 +2000,9 @@ def get_defect_types(
             .all()
         ]
     
-    # ── TÍNH TOÁN THỐNG KÊ LỖI (THÁNG HIỆN TẠI HOẶC THÁNG GẦN NHẤT CÓ DỮ LIỆU & TOÀN THỜI GIAN) ──
+    # ── TÍNH TOÁN THỐNG KÊ LỖI (THÁNG HIỆN TẠI VÀ TOÀN THỜI GIAN) ──
     today = datetime.date.today()
-    latest_rec_date = db.query(func.max(DailyInspectionRecord.inspection_date)).scalar()
-    
-    # Kiểm tra xem tháng hiện tại có bản ghi không, nếu không có thì lấy tháng gần nhất có dữ liệu
-    has_this_month = db.query(DailyInspectionRecord).filter(
-        DailyInspectionRecord.inspection_date >= today.replace(day=1)
-    ).first()
-    
-    target_date = today if has_this_month else (latest_rec_date if latest_rec_date else today)
+    target_date = today
     first_day_this_month = target_date.replace(day=1)
     if first_day_this_month.month == 12:
         first_day_next_month = datetime.date(first_day_this_month.year + 1, 1, 1)
@@ -1801,10 +2057,19 @@ def get_defect_types(
         if row_code:
             code_to_id[row_code.lower().strip()] = row_id
 
-    stage_records = db.query(StageInspection).all()
+    stage_records = db.query(InputInspection).all()
     for s_rec in stage_records:
-        rec_dt = s_rec.inspection_date or s_rec.created_at
-        rec_date = rec_dt.date() if rec_dt else today
+        rec_dt = s_rec.inspected_at or s_rec.created_at
+        if isinstance(rec_dt, (datetime.date, datetime.datetime)):
+            rec_date = rec_dt.date() if isinstance(rec_dt, datetime.datetime) else rec_dt
+        elif isinstance(rec_dt, str):
+            try:
+                rec_date = datetime.datetime.strptime(rec_dt[:10], "%Y-%m-%d").date()
+            except Exception:
+                rec_date = today
+        else:
+            rec_date = today
+
         is_this_month = (first_day_this_month <= rec_date < first_day_next_month)
 
         if not s_rec.data_json:
@@ -1824,13 +2089,20 @@ def get_defect_types(
             if is_this_month:
                 month_products += p_qty
 
-            defects_list = p_data.get('defects') or []
+            defects_list = p_data.get('errors') or p_data.get('defects') or []
             if isinstance(defects_list, list):
                 for df in defects_list:
                     if not isinstance(df, dict):
                         continue
-                    
-                    raw_id = df.get('defect_id') or df.get('defectId') or df.get('id')
+
+                    raw_id = df.get('defect_id') or df.get('defectId')
+                    if not raw_id and df.get('id'):
+                        try:
+                            int(df.get('id'))
+                            raw_id = df.get('id')
+                        except (ValueError, TypeError):
+                            pass
+
                     target_id = None
                     if raw_id:
                         try:
@@ -1839,16 +2111,21 @@ def get_defect_types(
                                 target_id = int_id
                         except (ValueError, TypeError):
                             pass
-                    
+
+                    if not target_id:
+                        df_code = (df.get('code') or '').lower().strip()
+                        if df_code and df_code in code_to_id:
+                            target_id = code_to_id[df_code]
+
                     if not target_id:
                         df_name = (df.get('defect_name') or df.get('name') or '').lower().strip()
-                        if df_name in name_to_id:
+                        if df_name and df_name in name_to_id:
                             target_id = name_to_id[df_name]
-                        elif df.get('code') and df.get('code').lower().strip() in code_to_id:
-                            target_id = code_to_id[df.get('code').lower().strip()]
 
                     if target_id:
-                        qty = df.get('quantity', 1)
+                        qty = df.get('quantity')
+                        if qty is None:
+                            qty = df.get('qty', 1)
                         try:
                             qty = int(qty)
                         except (ValueError, TypeError):
@@ -1860,7 +2137,49 @@ def get_defect_types(
         except Exception:
             continue
 
-    # Tổng số lượng lỗi toàn hệ thống trong tháng và all-time
+    # 3. Thống kê bổ sung từ phiếu bàn giao (deliveries)
+    try:
+        from modules.delivery.models.deliveries import Delivery
+        deliv_records = db.query(Delivery).filter((Delivery.quantity_error > 0) | (Delivery.quantity_returned > 0)).all()
+        for deliv in deliv_records:
+            d_dt = deliv.created_at
+            if isinstance(d_dt, (datetime.date, datetime.datetime)):
+                d_date = d_dt.date() if isinstance(d_dt, datetime.datetime) else d_dt
+            elif isinstance(d_dt, str):
+                try:
+                    d_date = datetime.datetime.strptime(d_dt[:10], "%Y-%m-%d").date()
+                except Exception:
+                    d_date = today
+            else:
+                d_date = today
+
+            deliv_is_this_month = (first_day_this_month <= d_date < first_day_next_month)
+            note_str = (deliv.note or '').lower().strip()
+
+            target_id = None
+            for dname, did in name_to_id.items():
+                if dname in note_str:
+                    target_id = did
+                    break
+            if not target_id:
+                for dcode, did in code_to_id.items():
+                    if dcode in note_str:
+                        target_id = did
+                        break
+
+            err_qty = deliv.quantity_error or deliv.quantity_returned or 0
+            tot_qty = deliv.quantity_total or ((deliv.quantity_received or 0) + err_qty) or 0
+
+            all_products += tot_qty
+            if deliv_is_this_month:
+                month_products += tot_qty
+
+            if target_id and err_qty > 0:
+                stats_map[target_id]["all_qty"] += err_qty
+                if deliv_is_this_month:
+                    stats_map[target_id]["month_qty"] += err_qty
+    except Exception as deliv_err:
+        pass
     month_defects_total = sum(v["month_qty"] for v in stats_map.values())
     all_defects_total = sum(v["all_qty"] for v in stats_map.values())
 
@@ -1872,6 +2191,7 @@ def get_defect_types(
         a_qty = stat["all_qty"]
         
         # Tỷ lệ % trên tổng số lượng lỗi phát sinh (Tháng / All)
+        d.target_month = first_day_this_month.month
         d.monthly_count = m_qty
         d.monthly_rate = round((m_qty / month_defects_total * 100), 1) if month_defects_total > 0 else 0.0
         d.monthly_defect_share = d.monthly_rate
@@ -2697,8 +3017,8 @@ def get_input_inspection_by_plan_and_part(
                 "source": "input_inspections_by_part"
             }
 
-    # 2. Fallback tìm trong stage_inspections (kiểm tra mẫu lần đầu first_sample / input)
-    stage_records = db.query(StageInspection).order_by(StageInspection.id.desc()).all()
+    # 2. Fallback tìm trên toàn bộ bảng input_inspections (kiểm tra mẫu lần đầu first_sample / input)
+    stage_records = db.query(InputInspection).order_by(InputInspection.id.desc()).all()
     for r in stage_records:
         pj = {}
         if r.data_json:
@@ -2995,13 +3315,7 @@ def get_pending_inspections(db: Session = Depends(get_db)):
     """
     time_limit = datetime.datetime.now() - datetime.timedelta(hours=24)
     
-    # 1. Truy vấn các phiếu StageInspection chưa xác nhận trong 24h
-    stage_query = db.query(StageInspection).filter(
-        StageInspection.is_confirmed == False,
-        StageInspection.created_at >= time_limit
-    ).order_by(StageInspection.created_at.desc()).all()
-    
-    # 2. Truy vấn các phiếu InputInspection chưa xác nhận trong 24h
+    # 1. Truy vấn các phiếu InputInspection chưa xác nhận trong 24h
     inbound_query = db.query(InputInspection).filter(
         InputInspection.is_confirmed == False,
         InputInspection.inspected_at >= time_limit
@@ -3009,37 +3323,23 @@ def get_pending_inspections(db: Session = Depends(get_db)):
     
     pending_tasks = []
     
-    # Map StageInspections
-    for item in stage_query:
-        type_label = get_inspectionTypeLabel_local(item.inspection_type)
-        pending_tasks.append({
-            "id": item.id,
-            "type": "stage",
-            "task_name": f"Xác nhận phiếu kiểm tra công đoạn #{item.id} - PO: {item.batch_no or 'N/A'}",
-            "category": type_label,
-            "priority": 3,
-            "status": "Chưa Làm",
-            "recorded_date": item.created_at,
-            "completion_date": item.created_at,
-            "notes": item.notes or "Chờ xác nhận kết quả kiểm tra công đoạn"
-        })
-        
     # Map InputInspections
     for item in inbound_query:
+        type_label = get_inspectionTypeLabel_local(item.inspection_type) if item.inspection_type else "Kiểm tra đầu vào (IQC)"
         pending_tasks.append({
             "id": item.id,
             "type": "input",
-            "task_name": f"Xác nhận phiếu kiểm tra đầu vào #{item.id} - Linh kiện: {item.part_name}",
-            "category": "Kiểm tra đầu vào (IQC)",
+            "task_name": f"Xác nhận phiếu kiểm tra #{item.ticket_code or item.id} - PO/Linh kiện: {item.batch_no or item.part_name or 'N/A'}",
+            "category": type_label,
             "priority": 3,
             "status": "Chưa Làm",
-            "recorded_date": item.inspected_at,
-            "completion_date": item.inspected_at,
-            "notes": item.note or "Chờ xác nhận kích thước linh kiện nhập kho"
+            "recorded_date": item.inspected_at or item.created_at,
+            "completion_date": item.inspected_at or item.created_at,
+            "notes": item.note or item.notes or "Chờ xác nhận kết quả kiểm tra"
         })
         
     # Sắp xếp theo ngày ghi nhận giảm dần
-    pending_tasks.sort(key=lambda x: x["recorded_date"], reverse=True)
+    pending_tasks.sort(key=lambda x: x["recorded_date"] or datetime.datetime.now(), reverse=True)
     
     # Thêm số thứ tự STT sau khi sắp xếp
     for i, task in enumerate(pending_tasks):
@@ -3054,15 +3354,9 @@ def confirm_inspection(type: str, id: int, confirmed_by: Optional[int] = Body(No
     [POST] Xác nhận phiếu kiểm tra.
     type: 'stage' hoặc 'input'.
     """
-    if type == "stage":
-        record = db.query(StageInspection).filter(StageInspection.id == id).first()
-    elif type == "input":
-        record = db.query(InputInspection).filter(InputInspection.id == id).first()
-    else:
-        raise HTTPException(status_code=400, detail="Loại phiếu kiểm tra không hợp lệ. Chỉ chấp nhận 'stage' hoặc 'input'")
-        
+    record = db.query(InputInspection).filter(InputInspection.id == id).first()
     if not record:
-        raise HTTPException(status_code=404, detail=f"Không tìm thấy phiếu kiểm tra {type} có ID {id}")
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy phiếu kiểm tra có ID {id}")
         
     record.is_confirmed = True
     record.confirmed_at = datetime.datetime.now()
@@ -3130,9 +3424,11 @@ def get_inspection_detail(id: str, db: Session = Depends(get_db)):
 
     rec = None
     if numeric_id:
-        rec = db.query(StageInspection).filter(StageInspection.id == numeric_id).first()
+        rec = db.query(InputInspection).filter(InputInspection.id == numeric_id).first()
     if not rec:
-        rec = db.query(StageInspection).filter(StageInspection.batch_no == id).first()
+        rec = db.query(InputInspection).filter(
+            or_(InputInspection.batch_no == id, InputInspection.pallet_code == id, InputInspection.ticket_code == id)
+        ).first()
 
     if not rec:
         if numeric_id:
@@ -3210,5 +3506,95 @@ def get_inspection_detail(id: str, db: Session = Depends(get_db)):
         "is_confirmed": bool(rec.is_confirmed),
         "created_at": rec.created_at.isoformat() if rec.created_at else ""
     }
+
+
+# ----------------------------------------------------------------------
+# QC SAMPLING RULES (AQL Sampling Plan)
+# ----------------------------------------------------------------------
+from modules.inspection.models.qc_sampling_rule import QCSamplingRule
+
+@router.get("/qc-sampling/lookup")
+def lookup_qc_sampling_rule(
+    lot_size: int = Query(..., ge=1),
+    db: Session = Depends(get_db)
+):
+    """
+    Tra cứu cỡ mẫu n và mốc lỗi Ac/Re theo quy mô lô hàng N.
+    """
+    rule = db.query(QCSamplingRule).filter(
+        QCSamplingRule.is_active == True,
+        QCSamplingRule.min_lot_size <= lot_size,
+        or_(
+            QCSamplingRule.max_lot_size >= lot_size,
+            QCSamplingRule.max_lot_size.is_(None)
+        )
+    ).order_by(QCSamplingRule.min_lot_size.desc()).first()
+
+    if not rule:
+        import math
+        calc_sample = max(1, math.ceil(lot_size * 0.05))
+        return {
+            "status": "fallback",
+            "lot_size": lot_size,
+            "rule": {
+                "id": 0,
+                "min_lot_size": 1,
+                "max_lot_size": None,
+                "sample_rate_desc": "Mặc định 5%",
+                "sample_size": calc_sample,
+                "major_ac": 0,
+                "major_re": 1,
+                "minor_ac": 1,
+                "minor_re": 2
+            }
+        }
+
+    return {
+        "status": "success",
+        "lot_size": lot_size,
+        "rule": {
+            "id": rule.id,
+            "min_lot_size": rule.min_lot_size,
+            "max_lot_size": rule.max_lot_size,
+            "sample_rate_desc": rule.sample_rate_desc,
+            "sample_size": rule.sample_size,
+            "major_ac": rule.major_ac,
+            "major_re": rule.major_re,
+            "minor_ac": rule.minor_ac,
+            "minor_re": rule.minor_re
+        }
+    }
+
+@router.get("/qc-sampling/rules")
+def get_qc_sampling_rules(db: Session = Depends(get_db)):
+    """
+    Lấy danh sách tất cả các mốc quy định lấy mẫu (AQL Table).
+    """
+    rules = db.query(QCSamplingRule).filter(QCSamplingRule.is_active == True).order_by(QCSamplingRule.min_lot_size.asc()).all()
+    return rules
+
+@router.put("/qc-sampling/rules/{rule_id}")
+def update_qc_sampling_rule(
+    rule_id: int,
+    data: dict = Body(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Cập nhật mốc quy tắc lấy mẫu (Ac/Re/cỡ mẫu).
+    """
+    rule = db.query(QCSamplingRule).filter(QCSamplingRule.id == rule_id).first()
+    if not rule:
+        raise HTTPException(status_code=404, detail="Không tìm thấy mốc quy tắc lấy mẫu")
+    
+    if "sample_size" in data: rule.sample_size = int(data["sample_size"])
+    if "major_ac" in data: rule.major_ac = int(data["major_ac"])
+    if "major_re" in data: rule.major_re = int(data["major_re"])
+    if "minor_ac" in data: rule.minor_ac = int(data["minor_ac"])
+    if "minor_re" in data: rule.minor_re = int(data["minor_re"])
+    if "sample_rate_desc" in data: rule.sample_rate_desc = str(data["sample_rate_desc"])
+
+    db.commit()
+    db.refresh(rule)
+    return rule
 
 
