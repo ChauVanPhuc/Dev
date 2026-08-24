@@ -813,21 +813,32 @@ def get_order_bom(
 @router.get("/orders-by-part")
 def get_orders_by_part(
     part_name: Optional[str] = Query(None),
+    part_names: Optional[str] = Query(None),
     specification: Optional[str] = Query(None),
     pallet_code: Optional[str] = Query(None),
     month: Optional[int] = Query(None),
-    limit: int = Query(20, ge=1, le=100),
+    months: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db)
 ):
     """
     TRUY VẤN CSDL THỰC: Trả về danh sách đơn hàng (PO), Khách hàng, Mã SKU, 
     tiến độ giao hàng Lệnh sản xuất và kết quả kiểm tra mẫu đầu tiên của mã Pallet.
-    Dùng để điền PO, Khách hàng, Mã sản phẩm, Số lượng và QC test trên Thẻ Pallet.
+    Hỗ trợ tra cứu cho 1 hoặc NHIỀU chi tiết cùng lúc (chuỗi phân cách dấu phẩy).
     """
     try:
         clean_pallet = (pallet_code or "").strip()
-        clean_part = (part_name or "").strip()
+        raw_parts = part_names or part_name or ""
+        part_list = [p.strip() for p in raw_parts.split(",") if p.strip()]
         clean_spec = (specification or "").strip()
+
+        month_list = []
+        if months:
+            for m_part in str(months).split(","):
+                m_m = re.search(r'\d+', m_part)
+                if m_m: month_list.append(int(m_m.group()))
+        elif month is not None:
+            month_list.append(month)
 
         # 1. Nếu có mã Pallet nhưng chưa có part_name, tự động tra cứu từ input_inspections
         qc_test_info = {
@@ -847,8 +858,8 @@ def get_orders_by_part(
             ).order_by(InputInspection.id.desc()).first()
 
             if inp_rec:
-                if not clean_part:
-                    clean_part = inp_rec.part_name or ""
+                if not part_list and inp_rec.part_name:
+                    part_list = [p.strip() for p in inp_rec.part_name.split(",") if p.strip()]
                 if not clean_spec:
                     clean_spec = inp_rec.specification or ""
                 
@@ -864,49 +875,60 @@ def get_orders_by_part(
                     "inspected_at": inp_rec.inspected_at.strftime("%d/%m/%Y") if inp_rec.inspected_at else None
                 }
 
-        # 2. Truy vấn danh sách PO, Khách hàng, SKU theo chi tiết
+        # 2. Truy vấn danh sách PO, Khách hàng, SKU theo các chi tiết
         query = db.query(Order, Product, BOMDetail, ProductPlan). \
             join(Product, Product.order_id == Order.id). \
             join(BOMDetail, BOMDetail.product_id == Product.id). \
             outerjoin(ProductPlan, ProductPlan.id == Order.plan_id)
 
-        if clean_part:
-            query = query.filter(func.lower(BOMDetail.name).like(f"%{clean_part.lower()}%"))
-        if clean_spec and clean_spec != 'Tiêu chuẩn':
+        if part_list:
+            if len(part_list) == 1:
+                query = query.filter(func.lower(BOMDetail.name).like(f"%{part_list[0].lower()}%"))
+            else:
+                query = query.filter(or_(*[func.lower(BOMDetail.name).like(f"%{p.lower()}%") for p in part_list]))
+
+        if clean_spec and clean_spec != 'Tiêu chuẩn' and not clean_spec.endswith('quy cách đã chọn'):
             query = query.filter(func.lower(BOMDetail.specification).like(f"%{clean_spec.lower()}%"))
-        if month is not None:
-            query = query.filter(ProductPlan.month == month)
+
+        if month_list:
+            query = query.filter(ProductPlan.month.in_(month_list))
 
         rows = query.limit(limit).all()
 
-        # Fallback nếu không có kết quả với spec, thử tìm chỉ theo part_name
-        if not rows and clean_part and clean_spec:
+        # Fallback nếu lọc theo spec không ra kết quả (khi có nhiều chi tiết)
+        if not rows and part_list and clean_spec:
             query_fb = db.query(Order, Product, BOMDetail, ProductPlan). \
                 join(Product, Product.order_id == Order.id). \
                 join(BOMDetail, BOMDetail.product_id == Product.id). \
-                outerjoin(ProductPlan, ProductPlan.id == Order.plan_id). \
-                filter(func.lower(BOMDetail.name).like(f"%{clean_part.lower()}%"))
-            if month is not None:
-                query_fb = query_fb.filter(ProductPlan.month == month)
+                outerjoin(ProductPlan, ProductPlan.id == Order.plan_id)
+            if len(part_list) == 1:
+                query_fb = query_fb.filter(func.lower(BOMDetail.name).like(f"%{part_list[0].lower()}%"))
+            else:
+                query_fb = query_fb.filter(or_(*[func.lower(BOMDetail.name).like(f"%{p.lower()}%") for p in part_list]))
+            if month_list:
+                query_fb = query_fb.filter(ProductPlan.month.in_(month_list))
             rows = query_fb.limit(limit).all()
 
         # 3. Tính toán tổng nhu cầu theo Lệnh sản xuất và tiến độ đã giao
         total_plan_demand = 0
-        plan_id_found = None
+        plan_ids_found = set()
         for o, p, b, plan in rows:
             prod_q = float(p.order_qty or p.quantity or 1.0)
             bom_q = float(b.quantity or 1.0)
             total_plan_demand += max(1, int(prod_q * bom_q))
-            if plan and not plan_id_found:
-                plan_id_found = plan.id
+            if plan:
+                plan_ids_found.add(plan.id)
 
         already_delivered_total = 0
-        if clean_part:
-            deliv_q = db.query(func.coalesce(func.sum(Delivery.quantity_total), 0)).filter(
-                Delivery.part_name.ilike(f"%{clean_part}%")
-            )
-            if plan_id_found:
-                deliv_q = deliv_q.filter(Delivery.plan_id == plan_id_found)
+        if part_list:
+            deliv_q = db.query(func.coalesce(func.sum(Delivery.quantity_total), 0))
+            if len(part_list) == 1:
+                deliv_q = deliv_q.filter(Delivery.part_name.ilike(f"%{part_list[0]}%"))
+            else:
+                deliv_q = deliv_q.filter(or_(*[Delivery.part_name.ilike(f"%{p}%") for p in part_list]))
+            if plan_ids_found:
+                deliv_q = deliv_q.filter(Delivery.plan_id.in_(list(plan_ids_found)))
+            deliv_q = deliv_q.filter(or_(Delivery.status.is_(None), ~Delivery.status.in_(['Đã hủy', 'cancelled'])))
             already_delivered_total = int(deliv_q.scalar() or 0)
 
         remaining_total = max(0, total_plan_demand - already_delivered_total)
@@ -927,7 +949,7 @@ def get_orders_by_part(
                 "product_sku": p.sku or p.name or 'SKU-STANDARD',
                 "product_name": p.name or '',
                 "order_qty": int(p.order_qty or p.quantity or 0),
-                "part_name": b.name or clean_part,
+                "part_name": b.name or raw_parts or "Chi tiết",
                 "specification": b.specification or clean_spec or 'Tiêu chuẩn',
                 "part_qty_needed": target,
                 "total_plan_qty": total_plan_demand,
@@ -948,7 +970,7 @@ def get_orders_by_part(
                 "product_sku": "OSLO-BUFFET-1800",
                 "product_name": "Sản phẩm tiêu chuẩn",
                 "order_qty": 40,
-                "part_name": clean_part or "Chi tiết",
+                "part_name": raw_parts or "Chi tiết",
                 "specification": clean_spec or "Tiêu chuẩn",
                 "part_qty_needed": 40,
                 "total_plan_qty": 40,
@@ -964,6 +986,7 @@ def get_orders_by_part(
     except Exception as e:
         logger.error(f"Lỗi khi lấy đơn hàng theo chi tiết: {e}", exc_info=True)
         return []
+        return []
 
 # ----------------------------------------------------------------------
 # 3.6: Lấy danh sách Chi tiết (parts) theo Tháng từ CSDL
@@ -972,35 +995,91 @@ def get_orders_by_part(
 # 3.6: Lấy danh sách Chi tiết (parts) theo Tháng từ CSDL
 # ----------------------------------------------------------------------
 @router.get("/parts")
-def get_parts_by_month(month: Optional[Any] = Query(None), db: Session = Depends(get_db)):
+def get_parts_by_month(
+    month: Optional[Any] = Query(None),
+    months: Optional[str] = Query(None),
+    department_id: Optional[int] = Query(None),
+    department_name: Optional[str] = Query(None),
+    stage: Optional[str] = Query(None),
+    exclude_completed: bool = Query(False),
+    db: Session = Depends(get_db)
+):
     """
     Trả về danh sách Chi tiết sản phẩm từ bom_details (BOM đơn hàng).
-    Chỉ lọc chi tiết thuộc đơn hàng thực tế, kèm input_stage và output_stage động từ master_product_details.
+    Hỗ trợ lọc theo 1 tháng hoặc danh sách nhiều tháng (ví dụ 5 tháng: months='6,7,8,9,10').
+    Hỗ trợ lọc theo Bộ phận / Công đoạn của người dùng và tự động loại bỏ chi tiết đã giao đủ (exclude_completed).
     """
     try:
         import re
         from modules.master.controllers.master_product_controller import resolve_detail_stages
+        from modules.auth.models.departments import Department
 
-        m_int = None
-        if month is not None:
+        month_list = []
+        if months:
+            for m_part in str(months).split(","):
+                m_match = re.search(r'\d+', m_part)
+                if m_match:
+                    month_list.append(int(m_match.group()))
+        elif month is not None:
             m_match = re.search(r'\d+', str(month))
             if m_match:
-                m_int = int(m_match.group())
+                month_list.append(int(m_match.group()))
 
-        # 1. Lấy chi tiết từ bom_details (BOM đơn hàng thực tế)
-        sql = """
+        # 1. Xác định danh sách công đoạn được phép theo Bộ phận / Stage
+        allowed_stages = []
+        if stage and str(stage).strip():
+            allowed_stages.append(str(stage).strip())
+
+        if department_id:
+            dept = db.query(Department).filter(Department.id == department_id).first()
+            if dept:
+                d_name = (dept.name or "").lower()
+                d_code = (dept.code or "").lower()
+                if "iqc" in d_code or "nhập kho" in d_name or "đầu vào" in d_name:
+                    allowed_stages.extend(["Nhập Kho/Đầu Vào", "Tạo Phôi", "Đầu Vào", "IQC"])
+                elif "pqc1" in d_code or "định hình" in d_name or "lắp ráp" in d_name:
+                    allowed_stages.extend(["Tạo Phôi", "Định Hình", "Lắp Ráp", "PQC1"])
+                elif "pqc2" in d_code or "sơn" in d_name or "đóng gói" in d_name:
+                    allowed_stages.extend(["Lắp Ráp", "Sơn", "Đóng Gói", "PQC2"])
+                elif "fqc" in d_code or "final" in d_name or "lưu kho" in d_name:
+                    allowed_stages.extend(["Đóng Gói", "Lưu Kho", "FQC"])
+                if dept.input_stage: allowed_stages.append(dept.input_stage)
+                if dept.output_stage: allowed_stages.append(dept.output_stage)
+
+        if department_name and not allowed_stages:
+            d_name = str(department_name).lower()
+            if "iqc" in d_name or "nhập kho" in d_name or "đầu vào" in d_name:
+                allowed_stages.extend(["Nhập Kho/Đầu Vào", "Tạo Phôi", "Đầu Vào", "IQC"])
+            elif "pqc1" in d_name or "định hình" in d_name or "lắp ráp" in d_name:
+                allowed_stages.extend(["Tạo Phôi", "Định Hình", "Lắp Ráp", "PQC1"])
+            elif "pqc2" in d_name or "sơn" in d_name or "đóng gói" in d_name:
+                allowed_stages.extend(["Lắp Ráp", "Sơn", "Đóng Gói", "PQC2"])
+            elif "fqc" in d_name or "final" in d_name or "lưu kho" in d_name:
+                allowed_stages.extend(["Đóng Gói", "Lưu Kho", "FQC"])
+
+        # 2. Lấy chi tiết từ bom_details (BOM đơn hàng thực tế)
+        month_filter_sql = ""
+        params = {}
+        if month_list:
+            placeholders = ", ".join([f":m_{i}" for i in range(len(month_list))])
+            month_filter_sql = f"AND pl.month IN ({placeholders})"
+            for i, mv in enumerate(month_list):
+                params[f"m_{i}"] = mv
+
+        sql = f"""
         SELECT 
             b.name AS part_name, b.specification,
             b.quantity AS bom_unit_qty, p.order_qty,
-            p.quantity AS prod_qty, pl.month
+            p.quantity AS prod_qty, pl.month,
+            b.input_stage, b.output_stage
         FROM bom_details b
         JOIN products p ON b.product_id = p.id
         JOIN orders o ON p.order_id = o.id
         LEFT JOIN product_plans pl ON o.plan_id = pl.id
         WHERE b.name IS NOT NULL AND b.name != ''
-          AND (:month IS NULL OR pl.month = :month)
+          {month_filter_sql}
         """
-        rows = db.execute(text(sql), {"month": m_int}).fetchall()
+        rows = db.execute(text(sql), params).fetchall()
 
         parts_map = {}
         for r in rows:
@@ -1013,14 +1092,28 @@ def get_parts_by_month(month: Optional[Any] = Query(None), db: Session = Depends
             spec_str = (r.specification or "Tiêu chuẩn").split("-")[0].strip() or "Tiêu chuẩn"
 
             if name not in parts_map:
-                parts_map[name] = {"part_name": name, "total_qty": 0, "specs_map": {}}
+                parts_map[name] = {
+                    "part_name": name,
+                    "total_qty": 0,
+                    "specs_map": {},
+                    "input_stage": r.input_stage or "",
+                    "output_stage": r.output_stage or ""
+                }
             parts_map[name]["total_qty"] += calc_target
             if spec_str not in parts_map[name]["specs_map"]:
                 parts_map[name]["specs_map"][spec_str] = 0
             parts_map[name]["specs_map"][spec_str] += calc_target
 
-        # 1.5. Lấy số lượng đã bàn giao lũy kế từ bảng deliveries
-        delivered_sql = """
+        # 3. Lấy số lượng đã bàn giao lũy kế từ bảng deliveries
+        deliv_month_filter_sql = ""
+        deliv_params = {}
+        if month_list:
+            placeholders = ", ".join([f":dm_{i}" for i in range(len(month_list))])
+            deliv_month_filter_sql = f"AND (pl.month IN ({placeholders}) OR MONTH(d.created_at) IN ({placeholders}))"
+            for i, mv in enumerate(month_list):
+                deliv_params[f"dm_{i}"] = mv
+
+        delivered_sql = f"""
         SELECT 
             d.part_name,
             d.specification,
@@ -1028,11 +1121,11 @@ def get_parts_by_month(month: Optional[Any] = Query(None), db: Session = Depends
         FROM deliveries d
         LEFT JOIN product_plans pl ON d.plan_id = pl.id
         WHERE d.part_name IS NOT NULL
-          AND (:month IS NULL OR pl.month = :month OR MONTH(d.created_at) = :month)
+          {deliv_month_filter_sql}
           AND (d.status IS NULL OR d.status NOT IN ('Đã hủy', 'cancelled'))
         GROUP BY d.part_name, d.specification
         """
-        deliv_rows = db.execute(text(delivered_sql), {"month": m_int}).fetchall()
+        deliv_rows = db.execute(text(delivered_sql), deliv_params).fetchall()
         deliv_map = {}
         for dr in deliv_rows:
             p_n = (dr.part_name or "").strip()
@@ -1043,7 +1136,7 @@ def get_parts_by_month(month: Optional[Any] = Query(None), db: Session = Depends
             deliv_map[p_n]["total_delivered"] += qty_d
             deliv_map[p_n]["specs_delivered"][p_s] = deliv_map[p_n]["specs_delivered"].get(p_s, 0) + qty_d
 
-        # 2. Truy vấn công đoạn giao nhận động từ DB
+        # 4. Truy vấn công đoạn giao nhận động từ DB
         stage_map = {}
         try:
             for sr in db.execute(text(
@@ -1064,17 +1157,38 @@ def get_parts_by_month(month: Optional[Any] = Query(None), db: Session = Depends
         except Exception:
             pass
 
-        # 4. Build kết quả với số lượng còn lại chính xác
+        # 5. Build kết quả với số lượng còn lại chính xác và lọc theo Bộ phận / Hoàn thành
         result = []
         for name, data in parts_map.items():
+            stages = stage_map.get(name, {})
+            in_stage = data.get("input_stage") or stages.get("input_stage", "")
+            out_stage = data.get("output_stage") or stages.get("output_stage", "")
+
+            # Lọc theo bộ phận nếu có allowed_stages
+            if allowed_stages:
+                matches_dept = any(
+                    st.lower() in in_stage.lower() or st.lower() in out_stage.lower()
+                    for st in allowed_stages
+                ) if (in_stage or out_stage) else True
+
+                if not matches_dept:
+                    continue
+
             gross_total = data["total_qty"]
             delivered_total = deliv_map.get(name, {}).get("total_delivered", 0)
             remaining_total = max(0, gross_total - delivered_total)
+
+            # Nếu loại bỏ hoàn thành mà chi tiết này đã hết nhu cầu bàn giao
+            if exclude_completed and remaining_total <= 0:
+                continue
 
             specs_list = []
             for s, gross_q in data["specs_map"].items():
                 delivered_spec = deliv_map.get(name, {}).get("specs_delivered", {}).get(s, 0)
                 remaining_spec = max(0, gross_q - delivered_spec)
+                if exclude_completed and remaining_spec <= 0:
+                    continue
+
                 specs_list.append({
                     "specification": s,
                     "target_qty": remaining_spec,
@@ -1083,7 +1197,9 @@ def get_parts_by_month(month: Optional[Any] = Query(None), db: Session = Depends
                     "remaining_qty": remaining_spec
                 })
 
-            stages = stage_map.get(name, {})
+            if exclude_completed and not specs_list:
+                continue
+
             result.append({
                 "part_name": name,
                 "total_qty": remaining_total,
@@ -1097,13 +1213,14 @@ def get_parts_by_month(month: Optional[Any] = Query(None), db: Session = Depends
                     "delivered_qty": delivered_total,
                     "remaining_qty": remaining_total
                 }],
-                "input_stage": stages.get("input_stage", ""),
-                "output_stage": stages.get("output_stage", "")
+                "input_stage": in_stage,
+                "output_stage": out_stage
             })
 
         return sorted(result, key=lambda x: x["part_name"])
     except Exception as e:
         logger.error(f"Lỗi khi lấy danh sách chi tiết: {e}", exc_info=True)
+        return []
         return []
 
 # ----------------------------------------------------------------------

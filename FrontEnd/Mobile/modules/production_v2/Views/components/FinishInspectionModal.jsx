@@ -328,8 +328,7 @@ const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, 
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                gap: '12px',
-                padding: '0 4px',
+                gap: '10px',
                 width: '100%',
                 boxSizing: 'border-box'
               }}>
@@ -340,16 +339,16 @@ const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, 
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '8px',
+                    gap: '6px',
                     backgroundColor: creating ? '#64748b' : '#3b2314',
                     color: '#ffffff',
                     border: 'none',
                     borderRadius: '10px',
-                    padding: '10px 16px',
-                    fontSize: '14px',
+                    padding: '10px 14px',
+                    fontSize: '13px',
                     fontWeight: '700',
                     cursor: creating ? 'not-allowed' : 'pointer',
-                    boxShadow: '0 4px 10px rgba(59, 35, 20, 0.25)',
+                    boxShadow: '0 4px 10px rgba(59, 35, 20, 0.2)',
                     transition: 'all 0.2s ease',
                     flexShrink: 0,
                     whiteSpace: 'nowrap'
@@ -357,27 +356,38 @@ const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, 
                 >
                   {creating ? (
                     <>
-                      <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Đang tạo...
+                      <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Đang tạo...
                     </>
                   ) : (
                     <>
-                      <ShoppingCart size={16} /> Tạo mã pallet
+                      <ShoppingCart size={15} /> Tạo mã pallet
                     </>
                   )}
                 </button>
 
-                <span style={{
-                  fontSize: '28px',
-                  fontWeight: '900',
-                  color: '#2b1810',
-                  letterSpacing: '0.5px',
-                  textAlign: 'right',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap'
+                <div style={{
+                  flex: 1,
+                  padding: '8px 10px',
+                  background: '#fbf5ed',
+                  border: '1.5px dashed #d4a574',
+                  borderRadius: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minWidth: 0
                 }}>
-                  {palletCode || '—'}
-                </span>
+                  <span style={{
+                    fontSize: '16px',
+                    fontWeight: '800',
+                    color: '#2b1810',
+                    letterSpacing: '0.3px',
+                    textAlign: 'center',
+                    wordBreak: 'break-word',
+                    lineHeight: '1.2'
+                  }}>
+                    {palletCode || '—'}
+                  </span>
+                </div>
               </div>
             </div>
           )}

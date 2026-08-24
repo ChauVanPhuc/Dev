@@ -118,17 +118,46 @@ export const transferService = {
     }
   },
 
-  async getOrdersByPart({ part_name, specification, month }) {
+  async getOrdersByPart({ part_name, part_names, specification, pallet_code, month, months } = {}) {
     try {
       const params = new URLSearchParams()
-      if (part_name) params.append('part_name', part_name)
+      const partsParam = part_names || part_name
+      if (partsParam) {
+        params.append('part_names', Array.isArray(partsParam) ? partsParam.join(',') : String(partsParam))
+      }
       if (specification) params.append('specification', specification)
-      const m = month ? String(month).match(/\d+/) : null
-      if (m) params.append('month', m[0])
+      if (pallet_code) params.append('pallet_code', pallet_code)
+      if (months) {
+        params.append('months', Array.isArray(months) ? months.join(',') : String(months))
+      } else if (month) {
+        const m = String(month).match(/\d+/)
+        if (m) params.append('month', m[0])
+      }
       const res = await apiClient.get(`/production-v2/orders-by-part?${params.toString()}`)
       return res.data || []
     } catch (e) {
       console.warn('Lỗi lấy đơn hàng theo chi tiết:', e)
+      return []
+    }
+  },
+
+  async getParts({ month, months, department_id, department_name, stage, exclude_completed = false } = {}) {
+    try {
+      const params = new URLSearchParams()
+      if (months) {
+        params.append('months', Array.isArray(months) ? months.join(',') : String(months))
+      } else if (month) {
+        params.append('month', String(month))
+      }
+      if (department_id) params.append('department_id', String(department_id))
+      if (department_name) params.append('department_name', String(department_name))
+      if (stage) params.append('stage', String(stage))
+      if (exclude_completed) params.append('exclude_completed', 'true')
+
+      const res = await apiClient.get(`/production-v2/parts?${params.toString()}`)
+      return res.data || []
+    } catch (e) {
+      console.warn('Lỗi lấy danh sách Chi tiết từ /production-v2/parts:', e)
       return []
     }
   },
@@ -146,4 +175,5 @@ export const transferService = {
     }
   },
 }
+
 

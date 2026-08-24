@@ -102,14 +102,22 @@ def get_daily_inspections(
             r.inspector_name = name_map[r.inspector_id]
         else:
             stage_str = str(r.stage_name or '').strip()
-            factory = 1
+            factory = 2
             if '1' in stage_str: factory = 1
             elif '2' in stage_str: factory = 2
             elif '3' in stage_str: factory = 3
-            is_shaping = any(k in stage_str for k in ['Định Hình', 'Lắp Ráp', 'Tạo Phôi', 'Mộc', 'Phôi'])
-            if factory == 1: fallback_id = 44 if is_shaping else 45
-            elif factory == 2: fallback_id = 46 if is_shaping else 47
-            else: fallback_id = 48 if is_shaping else 49
+            
+            is_inbound = any(k in stage_str for k in ['Nhập Kho', 'Nhập kho', 'Đầu Vào', 'IQC', 'Tạo Phôi', 'Tạo phôi', 'Phôi'])
+            is_shaping = any(k in stage_str for k in ['Định Hình', 'Định hình', 'Lắp Ráp', 'Lắp ráp', 'Mộc'])
+            
+            if is_inbound:
+                fallback_id = 27  # Đặng Quý Hải (IQC)
+            elif factory == 1:
+                fallback_id = 28 if is_shaping else 43  # 28: Hà Đình Thành (PQC1 PX1), 43: Dương Văn Toàn (PQC2 PX1)
+            elif factory == 2:
+                fallback_id = 31 if is_shaping else 32  # 31: Hồ Sỹ Khẩn (PQC1 PX2), 32: Phan Thị Lương (PQC2 PX2)
+            else:
+                fallback_id = 33 if is_shaping else 40  # 33: Đỗ Hữu Phúc (QC NM3), 40: Trần Thị Ánh (PQC2 NM3)
             
             r.inspector_id = fallback_id
             r.inspector_name = name_map.get(fallback_id, "QC Chuyên Trách")
@@ -134,10 +142,17 @@ def get_all_inbound_inspections(
     else:
         name_map = {}
     for r in records:
-        if r.inspector_id:
-            r.inspector_name = name_map.get(r.inspector_id, "N/A")
-        else:
-            r.inspector_name = "N/A"
+        if not r.inspector_name or not r.inspector_name.strip() or r.inspector_name in ['None', 'N/A']:
+            if r.inspector_id and r.inspector_id in name_map:
+                r.inspector_name = name_map[r.inspector_id]
+            else:
+                stg_s = str(r.stage or '').strip()
+                if any(k in stg_s for k in ['Tạo Phôi', 'Định Hình', 'Lắp Ráp']):
+                    r.inspector_name = "Hà Đình Thành"
+                elif any(k in stg_s for k in ['Sơn', 'Đóng Gói']):
+                    r.inspector_name = "Phan Thị Lương"
+                else:
+                    r.inspector_name = "Đặng Quý Hải"
     return records
 
 def sync_defects_to_daily_inspection(stage_name: str, defects_list: list, inspector_name: str, db: Session, inspected_qty: int = 0, batch_no: Optional[str] = None):
@@ -214,14 +229,22 @@ def sync_defects_to_daily_inspection(stage_name: str, defects_list: list, inspec
 
     if not found_inspector_id:
         stage_str = str(stage_name or '').strip()
-        factory = 1
+        factory = 2
         if '1' in stage_str: factory = 1
         elif '2' in stage_str: factory = 2
         elif '3' in stage_str: factory = 3
-        is_shaping = any(k in stage_str for k in ['Định Hình', 'Lắp Ráp', 'Tạo Phôi', 'Mộc', 'Phôi'])
-        if factory == 1: found_inspector_id = 44 if is_shaping else 45
-        elif factory == 2: found_inspector_id = 46 if is_shaping else 47
-        else: found_inspector_id = 48 if is_shaping else 49
+        
+        is_inbound = any(k in stage_str for k in ['Nhập Kho', 'Nhập kho', 'Đầu Vào', 'IQC', 'Tạo Phôi', 'Tạo phôi', 'Phôi'])
+        is_shaping = any(k in stage_str for k in ['Định Hình', 'Định hình', 'Lắp Ráp', 'Lắp ráp', 'Mộc'])
+        
+        if is_inbound:
+            found_inspector_id = 27  # Đặng Quý Hải (IQC)
+        elif factory == 1:
+            found_inspector_id = 28 if is_shaping else 43  # 28: Hà Đình Thành (PQC1 PX1), 43: Dương Văn Toàn (PQC2 PX1)
+        elif factory == 2:
+            found_inspector_id = 31 if is_shaping else 32  # 31: Hồ Sỹ Khẩn (PQC1 PX2), 32: Phan Thị Lương (PQC2 PX2)
+        else:
+            found_inspector_id = 33 if is_shaping else 40  # 33: Đỗ Hữu Phúc (QC NM3), 40: Trần Thị Ánh (PQC2 NM3)
 
     # 1. Tìm hoặc tạo bản ghi DailyInspectionRecord trong ngày ở công đoạn này
     daily_rec = db.query(DailyInspectionRecord).filter(
@@ -547,7 +570,7 @@ def get_stage_inspections(
 
     
     for r in records:
-        if not r.inspector_name or not r.inspector_name.strip():
+        if not r.inspector_name or not r.inspector_name.strip() or r.inspector_name in ['None', 'N/A']:
             if r.data_json:
                 try:
                     p = json.loads(r.data_json) if isinstance(r.data_json, str) else r.data_json
@@ -555,6 +578,30 @@ def get_stage_inspections(
                         r.inspector_name = p.get('inspector_name') or p.get('created_by')
                 except Exception:
                     pass
+        if not r.inspector_name or not r.inspector_name.strip() or r.inspector_name in ['None', 'N/A']:
+            stg_s = str(r.stage or '').strip()
+            factory = 2
+            if '1' in stg_s: factory = 1
+            elif '2' in stg_s: factory = 2
+            elif '3' in stg_s: factory = 3
+            
+            is_inbound = any(k in stg_s for k in ['Nhập Kho', 'Nhập kho', 'Đầu Vào', 'IQC', 'Tạo Phôi', 'Tạo phôi', 'Phôi'])
+            is_shaping = any(k in stg_s for k in ['Định Hình', 'Định hình', 'Lắp Ráp', 'Lắp ráp', 'Mộc'])
+            is_pqc2 = any(k in stg_s for k in ['Sơn', 'Đóng Gói', 'Đóng gói'])
+            is_fqc = any(k in stg_s for k in ['Lưu Kho', 'Lưu kho', 'Final'])
+            
+            if is_inbound:
+                r.inspector_name = 'Đặng Quý Hải'
+            elif factory == 1:
+                r.inspector_name = 'Hà Đình Thành' if is_shaping else 'Dương Văn Toàn'
+            elif factory == 2:
+                r.inspector_name = 'Hồ Sỹ Khẩn' if is_shaping else 'Phan Thị Lương'
+            elif factory == 3:
+                r.inspector_name = 'Đỗ Hữu Phúc' if is_shaping else 'Trần Thị Ánh'
+            elif is_fqc:
+                r.inspector_name = 'Đỗ Hữu Phúc'
+            else:
+                r.inspector_name = 'Đặng Quý Hải'
     return records
 
 UPLOAD_DIR = "static/uploads/inspections"

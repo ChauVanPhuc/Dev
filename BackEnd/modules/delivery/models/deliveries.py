@@ -15,7 +15,7 @@ class Delivery(Base):
     id = Column(Integer, primary_key=True, index=True)
     delivery_stage = Column(NVARCHAR(50))     # Công đoạn giao
     receiving_stage = Column(NVARCHAR(50))    # Công đoạn nhận
-    note = Column(NVARCHAR(500))              # Ghi chú phiếu giao
+    note = Column(NVARCHAR(None), nullable=True) # Ghi chú phiếu giao
     created_at = Column(DateTime, default=get_vietnam_time) # Thời gian tạo
     residual = Column(Integer, default=0)     # Số lượng còn dư/tổng
     status = Column(NVARCHAR(50))             # Trạng thái phiếu (Chờ xác nhận, Đã nhận...)
@@ -25,10 +25,10 @@ class Delivery(Base):
     sx_receipt = Column(Integer, default=0)   # ID người công đoạn nhận xác nhận
 
     # Tên chi tiết (Part/Element) được giao, thay thế cho việc chia nhỏ vào delivery_details
-    part_name = Column(NVARCHAR(250), nullable=True)
+    part_name = Column(NVARCHAR(None), nullable=True)
     
     # [NEW] Quy cách (Specification)
-    specification = Column(NVARCHAR(250), nullable=True)
+    specification = Column(NVARCHAR(None), nullable=True)
     
     # [NEW] ID Đơn hàng được gán linh kiện này (Dùng cho cơ chế rót hàng tự động)
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=True)

@@ -2590,10 +2590,14 @@ tbody tr:nth-child(10) { animation-delay: 0.3s !important; }
 }
 
 @media (max-width: 768px) {
-    /* mobile overrides already defined in manufacture-plan-container block */
     .sticky-top-zone {
-        padding: 0 !important;
-        gap: 0 !important;
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 50 !important;
+        background-color: #FAF7F2 !important;
+        padding: 8px 12px 6px !important;
+        margin-bottom: 4px !important;
+        box-shadow: 0 2px 8px rgba(45, 26, 18, 0.05) !important;
     }
 }
 

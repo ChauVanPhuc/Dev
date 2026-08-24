@@ -438,6 +438,107 @@ const ProductionOrdersView = () => {
               )}
             </div>
 
+            {/* Mobile Cards View - Scrollable */}
+            <div className="mobile-only manufacture-cards-scroll" style={{ padding: '12px' }}>
+              <div className="manufacture-cards-container" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {loading && currentItems.length === 0 ? (
+                  <div style={{ padding: '2rem', textAlign: 'center', color: '#94A3B8' }}>
+                    Đang tải dữ liệu lệnh sản xuất...
+                  </div>
+                ) : currentItems.length === 0 ? (
+                  <div style={{ padding: '2rem', textAlign: 'center', color: '#94A3B8' }}>
+                    Chưa có dữ liệu lệnh sản xuất phù hợp
+                  </div>
+                ) : (
+                  currentItems.map((item, index) => {
+                    const priorityColor = item.priority === 'Cao' ? '#EF4444' : item.priority === 'Bình thường' ? '#D97706' : '#64748B';
+                    const priorityBg = item.priority === 'Cao' ? '#FEF2F2' : item.priority === 'Bình thường' ? '#FFFBEB' : '#F1F5F9';
+                    const statusColor = item.status === 'Hoàn thành' ? '#10B981' : item.status === 'Đang sản xuất' ? '#3B82F6' : '#D97706';
+                    const statusBg = item.status === 'Hoàn thành' ? '#ECFDF5' : item.status === 'Đang sản xuất' ? '#EFF6FF' : '#FFFBEB';
+
+                    return (
+                      <div
+                        key={item.id || index}
+                        onClick={() => handleOpenOrderDetail(item)}
+                        style={{
+                          backgroundColor: '#FFFFFF',
+                          borderRadius: '12px',
+                          border: '1.5px solid #EADCC9',
+                          padding: '14px 16px',
+                          boxShadow: '0 2px 8px rgba(45,26,18,0.06)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: '800', fontSize: '1.05rem', color: '#2D1A12' }}>{item.code}</span>
+                          <span style={{
+                            padding: '3px 10px',
+                            borderRadius: '12px',
+                            fontSize: '0.75rem',
+                            fontWeight: '700',
+                            backgroundColor: statusBg,
+                            color: statusColor,
+                            border: `1px solid ${statusColor}40`
+                          }}>
+                            {item.status}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#475569' }}>
+                          <span>Đơn hàng: <strong style={{ color: '#1E293B' }}>{item.orderNo}</strong></span>
+                          <span style={{
+                            padding: '2px 8px',
+                            borderRadius: '10px',
+                            fontSize: '0.72rem',
+                            fontWeight: '700',
+                            backgroundColor: priorityBg,
+                            color: priorityColor
+                          }}>
+                            {item.priority}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '0.82rem', color: '#64748B', paddingTop: '6px', borderTop: '1px dashed #E2E8F0' }}>
+                          <div>Số SP: <strong style={{ color: '#1E293B' }}>{item.totalProducts}</strong></div>
+                          <div>SL KH: <strong style={{ color: '#2D1A12', fontSize: '0.9rem' }}>{item.planQty}</strong></div>
+                          <div>Bắt đầu: <span>{toDisplayDate(item.startDate) || '---'}</span></div>
+                          <div>Kết thúc: <span>{toDisplayDate(item.endDate) || '---'}</span></div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Pagination Mobile - Sticky */}
+            <div className="pagination-mobile-sticky mobile-only" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: '#FFFFFF', borderTop: '1px solid #EADCC9' }}>
+              <button
+                type="button"
+                className="page-btn"
+                onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                disabled={page === 1}
+                style={{ padding: '6px 14px', borderRadius: '8px', border: '1px solid #D1D5DB', backgroundColor: '#F8FAFC', fontWeight: '700', color: '#5D3B32', cursor: page === 1 ? 'not-allowed' : 'pointer' }}
+              >
+                Trước
+              </button>
+              <span style={{ fontWeight: '700', fontSize: '0.85rem', color: '#7B5233' }}>
+                Trang {page} / {totalPages || 1}
+              </span>
+              <button
+                type="button"
+                className="page-btn"
+                onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}
+                disabled={page >= totalPages || totalPages <= 1}
+                style={{ padding: '6px 14px', borderRadius: '8px', border: '1px solid #D1D5DB', backgroundColor: '#F8FAFC', fontWeight: '700', color: '#5D3B32', cursor: page >= totalPages ? 'not-allowed' : 'pointer' }}
+              >
+                Sau
+              </button>
+            </div>
+
           </div>
         </div>
     </div>

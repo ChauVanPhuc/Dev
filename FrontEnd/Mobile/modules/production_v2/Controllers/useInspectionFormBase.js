@@ -1202,6 +1202,9 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     setFinishModal(false)
     setSubmitting(true)
     try {
+      const finalPalletCode = (modalData && typeof modalData === 'object' && modalData.palletCode !== undefined)
+        ? modalData.palletCode
+        : (palletCode || '')
       const activeStage = mode === INSPECT_MODES.PARAMETER ? paramStage : (mode === INSPECT_MODES.PROCESS ? area : stage)
       const activePo = mode === INSPECT_MODES.PARAMETER ? paramPo : po
       const activeProduct = mode === INSPECT_MODES.PARAMETER ? paramProduct : product
@@ -1250,7 +1253,9 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
         'Hoàn thành kiểm tra',
         mode === INSPECT_MODES.PROCESS
           ? 'Đã lưu phiếu kiểm tra quy trình thành công!'
-          : `Đã lưu phiếu kiểm tra thành công cho mã Pallet: ${finalPalletCode}!`,
+          : (finalPalletCode
+              ? `Đã lưu phiếu kiểm tra thành công cho mã Pallet: ${finalPalletCode}!`
+              : 'Đã lưu phiếu kiểm tra thành công!'),
         'success',
         () => {
           setIsDirty(false)

@@ -12,10 +12,10 @@ class DeliveryDetails(Base):
     __tablename__ = "delivery_details"
 
     id = Column(Integer, primary_key=True, index=True)
-    part_name = Column(NVARCHAR(50))      # Tên linh kiện/chi tiết bàn giao
+    part_name = Column(NVARCHAR(None), nullable=True)      # Tên linh kiện/chi tiết bàn giao
     quantity = Column(Integer, default=0)    # Số lượng bàn giao thực tế
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=True) # ID đơn hàng liên kết
-    element_name = Column(NVARCHAR(100), nullable=True) # Tên bộ phận/Element
+    element_name = Column(NVARCHAR(None), nullable=True) # Tên bộ phận/Element
 
     # Liên kết với bảng Deliveries (Khóa ngoại)
     delivery_id = Column(Integer, ForeignKey("deliveries.id"))

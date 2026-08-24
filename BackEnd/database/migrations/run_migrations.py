@@ -25,6 +25,9 @@ from database.migrations.seed_positions import run_migration as run_seed_positio
 from database.migrations.set_department_names import run_migration as run_set_department_names_migration
 from database.migrations.fix_hr_screens import run_migration as run_fix_hr_screens_migration
 from database.migrations.restructure_mobile_sidebar import run_migration as run_restructure_mobile_sidebar_migration
+from database.migrations.update_worker_accounts_to_sx import run as run_worker_accounts_migration
+from database.migrations.update_reports_inspectors_to_qlcl import run as run_reports_inspectors_migration
+from database.migrations.fix_reports_stages_and_inspectors_migration import run as run_fix_reports_stages_migration
 
 def run_allocation_method_migration():
     """Add allocation_method column to delivery_returns table"""
@@ -204,6 +207,9 @@ if __name__ == "__main__":
         run_set_department_names_migration()
         run_fix_hr_screens_migration()
         run_restructure_mobile_sidebar_migration()
+        run_worker_accounts_migration()
+        run_reports_inspectors_migration()
+        run_fix_reports_stages_migration()
         print("-" * 50)
         print("[SUCCESS] All migrations completed successfully!")
     except Exception as e:
