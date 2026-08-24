@@ -27,7 +27,7 @@ const CustomSelect = ({
   const selectedOption = options.find((opt) => String(opt.value) === String(value))
   const displayLabel = selectedOption
     ? selectedOption.label
-    : inputValue || placeholder || (options[0]?.label || 'Chọn...')
+    : (value ? String(value) : (inputValue || placeholder || (options[0]?.label || 'Chọn...')))
 
   // Đồng bộ inputValue khi prop `value` thay đổi từ bên ngoài (Dành cho allowCustomInput)
   useEffect(() => {

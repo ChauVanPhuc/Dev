@@ -92,45 +92,25 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
 
       <div className="pv2-field-row pv2-field-row--2col">
         <div className="pv2-field">
-          <label>Sản phẩm <span className="pv2-req">*</span></label>
-          {isIncomingStage ? (
-            <FormMultiSearchSelect
-              values={selectedProducts}
-              options={productOptions.filter((o) => Boolean(o.value))}
-              onChange={handleMultiProductChange}
-              placeholder={productPlaceholder}
-              required
-              disabled={isProductDisabled}
-            />
-          ) : (
-            <CustomSelect
-              value={product}
-              options={productOptions}
-              onChange={handleProductChange}
-              disabled={isProductDisabled}
-              placeholder={productPlaceholder}
-            />
-          )}
+          <label>Chi tiết / Sản phẩm <span className="pv2-req">*</span></label>
+          <FormMultiSearchSelect
+            values={selectedProducts}
+            options={productOptions.filter((o) => Boolean(o.value))}
+            onChange={handleMultiProductChange}
+            placeholder={productPlaceholder}
+            required
+            disabled={isProductDisabled}
+          />
         </div>
         <div className="pv2-field">
-          <label>Quy cách</label>
-          {isIncomingStage ? (
-            <FormMultiSearchSelect
-              values={selectedSpecs}
-              options={specOptions.filter((o) => Boolean(o.value))}
-              onChange={handleMultiSpecChange}
-              placeholder={specPlaceholder}
-              disabled={isSpecDisabled}
-            />
-          ) : (
-            <CustomSelect
-              value={spec}
-              options={specOptions}
-              onChange={setSpec}
-              disabled={isSpecDisabled}
-              placeholder={specPlaceholder}
-            />
-          )}
+          <label>Quy cách <span className="pv2-req">*</span></label>
+          <FormMultiSearchSelect
+            values={selectedSpecs}
+            options={specOptions.filter((o) => Boolean(o.value))}
+            onChange={handleMultiSpecChange}
+            placeholder={specPlaceholder}
+            disabled={isSpecDisabled}
+          />
         </div>
       </div>
 

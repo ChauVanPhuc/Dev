@@ -192,7 +192,7 @@ const ProductionTransferHistoryView = () => {
                 <CustomSelect
                   value={selectedMonth}
                   options={monthOptions}
-                  onChange={(val) => { setSelectedMonth(parseInt(val, 10)); setPage(1); }}
+                  onChange={(val) => { setSelectedMonth(parseInt(val, 10)); setSelectedPart('Tất cả chi tiết'); setPage(1); }}
                   style={{ height: '36px', minHeight: '36px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: '700' }}
                 />
               </div>
@@ -385,134 +385,268 @@ const ProductionTransferHistoryView = () => {
       {selectedDetailItem && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 20000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
           {/* Backdrop */}
-          <div onClick={() => setSelectedDetailItem(null)} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)' }} />
+          <div onClick={() => setSelectedDetailItem(null)} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }} />
           
           {/* Modal Container */}
           <div style={{
             position: 'relative',
             width: '100%',
-            maxWidth: '480px',
+            maxWidth: '520px',
             backgroundColor: '#fff',
             borderTopLeftRadius: '24px',
             borderTopRightRadius: '24px',
-            padding: '20px',
+            padding: '20px 18px',
             paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)',
-            boxShadow: '0 -10px 25px rgba(0,0,0,0.15)',
+            boxShadow: '0 -10px 30px rgba(0,0,0,0.2)',
             animation: 'slideUp 0.25s ease-out',
-            maxHeight: '85vh',
+            maxHeight: '90vh',
             overflowY: 'auto'
           }}>
             {/* Modal Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px', borderBottom: '1.5px solid #f1f5f9', paddingBottom: '12px' }}>
               <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: '900', color: '#432818', margin: 0 }}>
-                  {selectedDetailItem.is_inspection ? 'Chi tiết phiếu QC Kiểm Tra' : 'Chi tiết phiếu Bàn Giao'} [{selectedDetailItem.code}]
-                </h3>
-                <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: '600' }}>{selectedDetailItem.time_str}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <h3 style={{ fontSize: '1.12rem', fontWeight: '900', color: '#432818', margin: 0 }}>
+                    {selectedDetailItem.is_inspection ? 'Phiếu QC Kiểm Tra' : 'Phiếu Luân Chuyển Bàn Giao'} [{selectedDetailItem.code}]
+                  </h3>
+                  {selectedDetailItem.mode && (
+                    <span style={{ fontSize: '0.7rem', fontWeight: '800', backgroundColor: '#fef3c7', color: '#92400e', padding: '2px 8px', borderRadius: '6px' }}>
+                      {selectedDetailItem.mode === 'first_sample' ? 'Mẫu lần đầu' : selectedDetailItem.mode}
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: '600', marginTop: '3px' }}>
+                  🕒 {selectedDetailItem.time_str} • 📍 {selectedDetailItem.route_str}
+                </div>
               </div>
-              <button onClick={() => setSelectedDetailItem(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px' }}>
-                <X size={20} />
+              <button onClick={() => setSelectedDetailItem(null)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', cursor: 'pointer', color: '#475569', padding: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <X size={18} />
               </button>
             </div>
 
             {/* Status Badge Banner */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#faf6f1', padding: '10px 14px', borderRadius: '12px', marginBottom: '16px', border: '1px solid #f1f5f9' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: '700', color: '#334155' }}>Trạng thái xử lý:</span>
-              <span style={{ fontSize: '0.85rem', fontWeight: '900', color: selectedDetailItem.status_color }}>
-                {selectedDetailItem.status}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              backgroundColor: selectedDetailItem.error_qty > 0 ? '#fef2f2' : '#f0fdf4',
+              padding: '10px 14px',
+              borderRadius: '12px',
+              marginBottom: '14px',
+              border: `1.5px solid ${selectedDetailItem.error_qty > 0 ? '#fecaca' : '#bbf7d0'}`
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '0.9rem' }}>{selectedDetailItem.error_qty > 0 ? '❌' : '✅'}</span>
+                <span style={{ fontSize: '0.84rem', fontWeight: '800', color: '#334155' }}>Kết luận chất lượng:</span>
+              </div>
+              <span style={{ fontSize: '0.88rem', fontWeight: '900', color: selectedDetailItem.status_color }}>
+                {selectedDetailItem.status} {selectedDetailItem.error_qty > 0 ? `(${selectedDetailItem.error_qty} lỗi)` : '(Đạt tiêu chuẩn)'}
               </span>
             </div>
 
-            {/* Main Info Grid */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.84rem' }}>
+            {/* Content Sections */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.84rem' }}>
               
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
-                <span style={{ color: '#64748b', fontWeight: '600' }}>Tên chi tiết:</span>
-                <span style={{ fontWeight: '800', color: '#1e293b' }}>{selectedDetailItem.part_name}</span>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
-                <span style={{ color: '#64748b', fontWeight: '600' }}>Quy cách:</span>
-                <span style={{ fontWeight: '700', color: '#334155' }}>{selectedDetailItem.specification}</span>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
-                <span style={{ color: '#64748b', fontWeight: '600' }}>Công đoạn giao:</span>
-                <span style={{ fontWeight: '700', color: '#334155' }}>{selectedDetailItem.delivery_stage}</span>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
-                <span style={{ color: '#64748b', fontWeight: '600' }}>Công đoạn nhận:</span>
-                <span style={{ fontWeight: '700', color: '#334155' }}>{selectedDetailItem.receiving_stage}</span>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
-                <span style={{ color: '#64748b', fontWeight: '600' }}>Người bàn giao:</span>
-                <span style={{ fontWeight: '800', color: selectedDetailItem.sender_name === 'Chưa phân công' ? '#94a3b8' : '#1e293b' }}>
-                  {selectedDetailItem.sender_name}
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
-                <span style={{ color: '#64748b', fontWeight: '600' }}>Người tiếp nhận:</span>
-                <span style={{ fontWeight: '800', color: selectedDetailItem.receiver_name === 'Chưa tiếp nhận' ? '#94a3b8' : '#1e293b' }}>
-                  {selectedDetailItem.receiver_name}
-                </span>
-              </div>
-
-              {selectedDetailItem.is_inspection && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
-                  <span style={{ color: '#64748b', fontWeight: '600' }}>Người kiểm tra QC:</span>
-                  <span style={{ fontWeight: '800', color: selectedDetailItem.inspector_name === 'Chưa kiểm tra QC' ? '#94a3b8' : '#1e40af' }}>
-                    {selectedDetailItem.inspector_name}
-                  </span>
+              {/* Box 1: Thông tin Lô hàng & Đơn hàng */}
+              <div style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#432818', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  📦 Thông tin Lô hàng & Chi tiết:
                 </div>
-              )}
-
-              {/* Quantities Section */}
-              <div style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', marginTop: '4px' }}>
-                <div style={{ fontSize: '0.82rem', fontWeight: '800', color: '#432818', marginBottom: '8px' }}>Số lượng sản xuất & QC:</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                  <div style={{ backgroundColor: '#fff', padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: '600' }}>Số lượng giao:</div>
-                    <div style={{ fontSize: '1rem', fontWeight: '900', color: 'var(--accent-color)' }}>{selectedDetailItem.quantity}</div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '0.74rem', fontWeight: '600', display: 'block' }}>Mã PO (Đơn hàng):</span>
+                    <span style={{ fontWeight: '800', color: '#1e293b' }}>{selectedDetailItem.po_code || '-'}</span>
                   </div>
-                  <div style={{ backgroundColor: '#fff', padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: '600' }}>Số lượng thực nhận:</div>
-                    <div style={{ fontSize: '1rem', fontWeight: '900', color: '#16a34a' }}>{selectedDetailItem.received_qty}</div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '0.74rem', fontWeight: '600', display: 'block' }}>Mã Pallet / Thùng:</span>
+                    <span style={{ fontWeight: '800', color: '#1e293b' }}>{selectedDetailItem.pallet_code || '-'}</span>
                   </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <span style={{ color: '#64748b', fontSize: '0.74rem', fontWeight: '600', display: 'block' }}>Tên chi tiết / Sản phẩm:</span>
+                    <span style={{ fontWeight: '800', color: '#0f172a', fontSize: '0.88rem' }}>{selectedDetailItem.part_name}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '0.74rem', fontWeight: '600', display: 'block' }}>Quy cách:</span>
+                    <span style={{ fontWeight: '700', color: '#334155' }}>{selectedDetailItem.specification}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '0.74rem', fontWeight: '600', display: 'block' }}>
+                      {selectedDetailItem.is_inspection ? 'Người kiểm tra QC:' : 'Người bàn giao:'}
+                    </span>
+                    <span style={{ fontWeight: '800', color: '#1e40af' }}>
+                      {selectedDetailItem.is_inspection ? selectedDetailItem.inspector_name : selectedDetailItem.sender_name}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Box 2: Số lượng kiểm tra & Bàn giao */}
+              <div style={{ backgroundColor: '#fff', padding: '12px', borderRadius: '12px', border: '1.5px solid #cbd5e1' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#432818', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  📊 Thống kê Số lượng:
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: selectedDetailItem.is_inspection ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)', gap: '6px' }}>
                   {selectedDetailItem.is_inspection && (
-                    <>
-                      <div style={{ backgroundColor: '#fff', padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
-                        <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: '600' }}>Số lượng lỗi:</div>
-                        <div style={{ fontSize: '1rem', fontWeight: '900', color: selectedDetailItem.error_qty > 0 ? '#dc2626' : '#16a34a' }}>{selectedDetailItem.error_qty}</div>
-                      </div>
-                      <div style={{ backgroundColor: '#fff', padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
-                        <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: '600' }}>Số lượng trả:</div>
-                        <div style={{ fontSize: '1rem', fontWeight: '900', color: selectedDetailItem.returned_qty > 0 ? '#dc2626' : '#16a34a' }}>{selectedDetailItem.returned_qty}</div>
-                      </div>
-                    </>
+                    <div style={{ backgroundColor: '#f8fafc', padding: '8px 6px', borderRadius: '8px', textAlign: 'center', border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600' }}>SL Lô:</div>
+                      <div style={{ fontSize: '0.98rem', fontWeight: '900', color: '#475569' }}>{selectedDetailItem.lot_qty || selectedDetailItem.quantity}</div>
+                    </div>
+                  )}
+                  <div style={{ backgroundColor: '#f8fafc', padding: '8px 6px', borderRadius: '8px', textAlign: 'center', border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600' }}>
+                      {selectedDetailItem.is_inspection ? 'Thực kiểm:' : 'SL Giao:'}
+                    </div>
+                    <div style={{ fontSize: '0.98rem', fontWeight: '900', color: 'var(--accent-color)' }}>{selectedDetailItem.quantity}</div>
+                  </div>
+                  <div style={{ backgroundColor: '#f0fdf4', padding: '8px 6px', borderRadius: '8px', textAlign: 'center', border: '1px solid #bbf7d0' }}>
+                    <div style={{ fontSize: '0.7rem', color: '#166534', fontWeight: '600' }}>
+                      {selectedDetailItem.is_inspection ? 'SL Đạt:' : 'Thực nhận:'}
+                    </div>
+                    <div style={{ fontSize: '0.98rem', fontWeight: '900', color: '#16a34a' }}>{selectedDetailItem.received_qty}</div>
+                  </div>
+                  <div style={{ backgroundColor: selectedDetailItem.error_qty > 0 ? '#fef2f2' : '#f8fafc', padding: '8px 6px', borderRadius: '8px', textAlign: 'center', border: `1px solid ${selectedDetailItem.error_qty > 0 ? '#fecaca' : '#e2e8f0'}` }}>
+                    <div style={{ fontSize: '0.7rem', color: selectedDetailItem.error_qty > 0 ? '#991b1b' : '#64748b', fontWeight: '600' }}>SL Lỗi:</div>
+                    <div style={{ fontSize: '0.98rem', fontWeight: '900', color: selectedDetailItem.error_qty > 0 ? '#dc2626' : '#16a34a' }}>{selectedDetailItem.error_qty}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Box 3: DANH SÁCH LỖI CHI TIẾT (Defects Breakdown) */}
+              <div style={{
+                backgroundColor: selectedDetailItem.defects && selectedDetailItem.defects.length > 0 ? '#fff' : '#f8fafc',
+                padding: '12px',
+                borderRadius: '12px',
+                border: `1.5px solid ${selectedDetailItem.defects && selectedDetailItem.defects.length > 0 ? '#fca5a5' : '#e2e8f0'}`
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: '800', color: selectedDetailItem.defects && selectedDetailItem.defects.length > 0 ? '#991b1b' : '#432818', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    ⚠️ Chi tiết Lỗi phát sinh:
+                  </div>
+                  {selectedDetailItem.defects && selectedDetailItem.defects.length > 0 && (
+                    <span style={{ fontSize: '0.72rem', fontWeight: '800', backgroundColor: '#fee2e2', color: '#b91c1c', padding: '2px 8px', borderRadius: '6px' }}>
+                      {selectedDetailItem.defects.length} loại lỗi
+                    </span>
                   )}
                 </div>
+
+                {selectedDetailItem.defects && selectedDetailItem.defects.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {selectedDetailItem.defects.map((df, dfIdx) => (
+                      <div
+                        key={dfIdx}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          backgroundColor: '#fef2f2',
+                          padding: '8px 12px',
+                          borderRadius: '8px',
+                          borderLeft: '4px solid #dc2626'
+                        }}
+                      >
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontWeight: '800', color: '#1e293b' }}>
+                              [{df.code || 'ERR'}] {df.name || 'Lỗi kiểm tra'}
+                            </span>
+                            {df.isQA && (
+                              <span style={{ fontSize: '0.65rem', fontWeight: '800', backgroundColor: '#e0e7ff', color: '#4338ca', padding: '1px 5px', borderRadius: '4px' }}>
+                                QA Track
+                              </span>
+                            )}
+                            {df.isCTQ && (
+                              <span style={{ fontSize: '0.65rem', fontWeight: '800', backgroundColor: '#fee2e2', color: '#b91c1c', padding: '1px 5px', borderRadius: '4px' }}>
+                                CTQ
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#dc2626' }}>
+                            {df.quantity} <span style={{ fontSize: '0.7rem', fontWeight: '600' }}>sp</span>
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '0.8rem', color: '#16a34a', fontWeight: '700', padding: '6px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>✅</span> Không ghi nhận lỗi phát sinh. Mẫu đạt tiêu chuẩn chất lượng.
+                  </div>
+                )}
               </div>
 
-              {/* Extra Info: Moisture & Note */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px', marginTop: '6px' }}>
-                <span style={{ color: '#64748b', fontWeight: '600' }}>Độ ẩm cho phép:</span>
-                <span style={{ fontWeight: '700', color: '#334155' }}>{selectedDetailItem.moisture_min}% - {selectedDetailItem.moisture_max}%</span>
+              {/* Box 4: HÌNH ẢNH MINH CHỨNG / ẢNH LỖI (Photos Gallery) */}
+              <div style={{ backgroundColor: '#fff', padding: '12px', borderRadius: '12px', border: '1.5px solid #cbd5e1' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#432818', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  📷 Hình ảnh minh chứng / Ảnh lỗi hiện trường:
+                </div>
+                {selectedDetailItem.images && selectedDetailItem.images.length > 0 ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                    {selectedDetailItem.images.map((imgUrl, imgIdx) => (
+                      <div
+                        key={imgIdx}
+                        onClick={() => window.open(imgUrl, '_blank')}
+                        style={{
+                          position: 'relative',
+                          aspectRatio: '1 / 1',
+                          borderRadius: '8px',
+                          overflow: 'hidden',
+                          border: '1.5px solid #cbd5e1',
+                          cursor: 'pointer',
+                          backgroundColor: '#f8fafc'
+                        }}
+                      >
+                        <img
+                          src={imgUrl}
+                          alt={`Minh chứng ${imgIdx + 1}`}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          onError={(e) => { e.target.style.display = 'none'; }}
+                        />
+                        <div style={{
+                          position: 'absolute',
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          backgroundColor: 'rgba(0,0,0,0.6)',
+                          color: '#fff',
+                          fontSize: '0.65rem',
+                          textAlign: 'center',
+                          padding: '2px 0',
+                          fontWeight: '700'
+                        }}>
+                          Ảnh {imgIdx + 1} (Xem)
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '0.78rem', color: '#94a3b8', fontStyle: 'italic', padding: '6px 0' }}>
+                    Chưa đính kèm hình ảnh minh chứng.
+                  </div>
+                )}
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span style={{ color: '#64748b', fontWeight: '600' }}>Ghi chú:</span>
-                <span style={{ fontWeight: '600', color: '#334155', backgroundColor: '#f8fafc', padding: '8px 10px', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
-                  {selectedDetailItem.note}
-                </span>
+              {/* Box 5: Thông số kỹ thuật & Ghi chú */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '6px' }}>
+                  <span style={{ color: '#64748b', fontWeight: '600' }}>Độ ẩm / Thông số:</span>
+                  <span style={{ fontWeight: '700', color: '#334155' }}>
+                    {selectedDetailItem.parameter ? `${selectedDetailItem.parameter} (Đạt: ${selectedDetailItem.param_pass ?? selectedDetailItem.received_qty})` : `${selectedDetailItem.moisture_min}% - ${selectedDetailItem.moisture_max}%`}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                  <span style={{ color: '#64748b', fontWeight: '600' }}>Ghi chú kiểm tra:</span>
+                  <span style={{ fontWeight: '600', color: '#334155', backgroundColor: '#f8fafc', padding: '8px 10px', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
+                    {selectedDetailItem.note || 'Không có ghi chú'}
+                  </span>
+                </div>
               </div>
 
             </div>
 
             {/* Action Buttons */}
-            <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '18px' }}>
               <button
                 onClick={() => setSelectedDetailItem(null)}
                 style={{
@@ -529,25 +663,34 @@ const ProductionTransferHistoryView = () => {
               >
                 Đóng cửa sổ
               </button>
-              {['Chờ Nhận Hàng', 'Chờ Xác Nhận'].some(s => String(selectedDetailItem.status || '').toLowerCase().includes(s.toLowerCase())) && (
-                <button
-                  disabled={confirming}
-                  onClick={() => handleConfirmInModal(selectedDetailItem)}
-                  style={{
-                    flex: 1,
-                    padding: '12px',
-                    backgroundColor: 'var(--primary-color)',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '12px',
-                    fontWeight: '800',
-                    fontSize: '0.9rem',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {confirming ? 'Đang lưu...' : 'Xác nhận nhận hàng'}
-                </button>
-              )}
+              {!selectedDetailItem.is_inspection && (() => {
+                const sLower = String(selectedDetailItem.status || '').toLowerCase().trim()
+                const isCompletedOrReturned = ['hoàn thành', 'đã nhận', 'trả lại', 'đã hủy', 'done', 'cancelled'].some((k) => sLower.includes(k))
+                const isPendingState = ['chờ', 'pending', ''].some((k) => sLower.includes(k)) || sLower === 'chưa xác nhận'
+                const canConfirm = !isCompletedOrReturned && isPendingState
+
+                if (!canConfirm) return null
+
+                return (
+                  <button
+                    disabled={confirming}
+                    onClick={() => handleConfirmInModal(selectedDetailItem)}
+                    style={{
+                      flex: 1,
+                      padding: '12px',
+                      backgroundColor: 'var(--primary-color)',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '12px',
+                      fontWeight: '800',
+                      fontSize: '0.9rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {confirming ? 'Đang lưu...' : 'Xác nhận nhận hàng'}
+                  </button>
+                )
+              })()}
             </div>
           </div>
         </div>

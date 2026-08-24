@@ -1025,13 +1025,127 @@ def get_pallet_inspection_details(
         if not first_notes and h.get("notes"):
             first_notes = h.get("notes")
 
+    from modules.delivery.models.deliveries import Delivery
+    from modules.delivery.models.delivery_details import DeliveryDetails as DeliveryDetailsModel
+    p_codes = [clean_code]
+    if first_record and first_record.pallet_code:
+        p_codes.append(first_record.pallet_code)
+
+    # 1. Tổng hợp số lượng đã bàn giao nhóm theo từng part_name riêng biệt từ bảng delivery_details
+    part_delivered_map = {}
+    total_already_delivered = 0
+    try:
+        deliv_details_rows = db.query(
+            DeliveryDetailsModel.part_name,
+            func.coalesce(func.sum(DeliveryDetailsModel.quantity), 0)
+        ).join(
+            Delivery, DeliveryDetailsModel.delivery_id == Delivery.id
+        ).filter(
+            Delivery.backup_qr.in_(p_codes)
+        ).filter(
+            or_(Delivery.status.is_(None), ~Delivery.status.in_(["Đã hủy", "cancelled"]))
+        ).group_by(DeliveryDetailsModel.part_name).all()
+
+        for d_name, d_qty in deliv_details_rows:
+            if d_name:
+                clean_d = d_name.strip()
+                part_delivered_map[clean_d] = part_delivered_map.get(clean_d, 0) + int(d_qty or 0)
+                total_already_delivered += int(d_qty or 0)
+    except Exception as err:
+        print(f"[get_pallet_inspection_details] Error querying DeliveryDetails: {err}")
+
+    # Fallback cho các phiếu cũ chưa có ở bảng delivery_details
+    if not part_delivered_map:
+        try:
+            deliv_rows = db.query(
+                Delivery.part_name,
+                func.coalesce(func.sum(Delivery.quantity_total), 0)
+            ).filter(
+                Delivery.backup_qr.in_(p_codes)
+            ).filter(
+                or_(Delivery.status.is_(None), ~Delivery.status.in_(["Đã hủy", "cancelled"]))
+            ).group_by(Delivery.part_name).all()
+
+            for d_name, d_qty in deliv_rows:
+                if d_name and "," not in d_name:
+                    clean_d = d_name.strip()
+                    part_delivered_map[clean_d] = part_delivered_map.get(clean_d, 0) + int(d_qty or 0)
+                total_already_delivered += int(d_qty or 0)
+        except Exception:
+            pass
+
+    # 2. Xử lý danh sách chi tiết và quy cách của Pallet
+    parts_raw = first_record.product_sku or first_record.part_name or first_parsed.get("product") or ""
+    parts_array = [p.strip() for p in parts_raw.split(",") if p.strip()] if "," in parts_raw else ([parts_raw] if parts_raw else [])
+
+    specs_raw = first_record.specification or first_parsed.get("spec") or ""
+    specs_array = [s.strip() for s in specs_raw.split(",") if s.strip()] if "," in specs_raw else ([specs_raw] if specs_raw else [])
+
+    parts_details_saved = first_parsed.get("parts_details") or []
+    part_plan_map = {}
+    if isinstance(parts_details_saved, list):
+        for pd in parts_details_saved:
+            if isinstance(pd, dict) and pd.get("part_name"):
+                part_plan_map[pd["part_name"].strip()] = int(pd.get("plan_qty") or 0)
+
+    base_required_qty = first_parsed.get("requiredQty") or first_record.required_qty or 50
+    try:
+        base_required_qty = int(base_required_qty)
+        if base_required_qty <= 0 and first_parsed.get("requiredQty"):
+            base_required_qty = int(first_parsed.get("requiredQty"))
+    except (ValueError, TypeError):
+        base_required_qty = 50
+    if base_required_qty <= 0:
+        base_required_qty = 50
+
+    num_parts = max(1, len(parts_array))
+
+    inspected_details = []
+    for i, p_name in enumerate(parts_array):
+        # 1. Lấy định mức gốc của chi tiết này
+        if part_plan_map.get(p_name) and part_plan_map[p_name] > 0:
+            part_plan_qty = part_plan_map[p_name]
+        elif p_name == 'APT9-42-MNB':
+            part_plan_qty = 21
+        elif p_name in ('APT9-48-MNB', 'APT9-60D-MNB'):
+            part_plan_qty = 23
+        else:
+            part_plan_qty = max(1, int(base_required_qty // num_parts)) if num_parts > 1 else base_required_qty
+
+        # 2. Lấy số lượng đã giao của riêng chi tiết này
+        deliv_p = part_delivered_map.get(p_name, 0)
+        if deliv_p == 0:
+            for d_k, d_v in part_delivered_map.items():
+                if p_name.lower() == d_k.lower() or (p_name.lower() in d_k.lower() and "," not in d_k):
+                    deliv_p += d_v
+
+        rem_p = max(0, part_plan_qty - deliv_p)
+        spec_p = specs_array[i] if i < len(specs_array) else (specs_array[0] if specs_array else "Tiêu chuẩn")
+        if spec_p.startswith("[") and ("]" not in spec_p or spec_p.strip() == "[APT9"):
+            spec_p = "Tiêu chuẩn"
+        inspected_details.append({
+            "part_name": p_name,
+            "specification": spec_p,
+            "plan_qty": part_plan_qty,
+            "delivered_qty": deliv_p,
+            "remaining_qty": rem_p
+        })
+
+    remaining_pallet_qty = max(0, base_required_qty - total_already_delivered)
+
     return {
         "palletCode": first_record.pallet_code or clean_code,
         "po": first_record.batch_no or first_record.cont_name or first_parsed.get("po") or "",
         "product": first_record.product_sku or first_record.part_name or first_parsed.get("product") or "",
+        "inspected_parts": parts_array,
+        "inspected_specs": specs_array,
+        "inspected_details": inspected_details,
         "spec": first_record.specification or first_parsed.get("spec") or "",
         "stage": first_record.stage or first_parsed.get("stage") or first_record.inspection_type or "",
-        "requiredQty": first_record.required_qty or first_parsed.get("requiredQty") or "",
+        "requiredQty": remaining_pallet_qty,
+        "plan_qty": base_required_qty,
+        "delivered_qty": total_already_delivered,
+        "remaining_qty": remaining_pallet_qty,
         "sampleQty": first_record.sample_qty or first_parsed.get("sampleQty") or "",
         "errorQty": first_record.error_qty if first_record.error_qty is not None else (first_parsed.get("errorQty") or (len(first_errors) if first_errors else 0)),
         "conclusion": first_record.conclusion or first_record.result or "pass",
@@ -2043,143 +2157,6 @@ def get_defect_types(
             DailyInspectionRecord.inspection_date < first_day_next_month
         ).scalar() or 0
 
-    all_products = db.query(func.sum(DailyInspectionRecord.total_products)).scalar() or 0
-
-    # 2. Thống kê bổ sung từ StageInspection (Kiểm tra công đoạn, nhập kho...)
-    name_to_id = {}
-    code_to_id = {}
-    all_defect_objs = db.query(DefectType.id, DefectType.name, DefectType.code).all()
-    id_set = set()
-    for row_id, row_name, row_code in all_defect_objs:
-        id_set.add(row_id)
-        if row_name:
-            name_to_id[row_name.lower().strip()] = row_id
-        if row_code:
-            code_to_id[row_code.lower().strip()] = row_id
-
-    stage_records = db.query(InputInspection).all()
-    for s_rec in stage_records:
-        rec_dt = s_rec.inspected_at or s_rec.created_at
-        if isinstance(rec_dt, (datetime.date, datetime.datetime)):
-            rec_date = rec_dt.date() if isinstance(rec_dt, datetime.datetime) else rec_dt
-        elif isinstance(rec_dt, str):
-            try:
-                rec_date = datetime.datetime.strptime(rec_dt[:10], "%Y-%m-%d").date()
-            except Exception:
-                rec_date = today
-        else:
-            rec_date = today
-
-        is_this_month = (first_day_this_month <= rec_date < first_day_next_month)
-
-        if not s_rec.data_json:
-            continue
-        try:
-            p_data = json.loads(s_rec.data_json) if isinstance(s_rec.data_json, str) else s_rec.data_json
-            if not isinstance(p_data, dict):
-                continue
-
-            p_qty = p_data.get('total_qty') or p_data.get('sample_qty') or p_data.get('inspected_qty') or 0
-            try:
-                p_qty = int(p_qty)
-            except (ValueError, TypeError):
-                p_qty = 0
-
-            all_products += p_qty
-            if is_this_month:
-                month_products += p_qty
-
-            defects_list = p_data.get('errors') or p_data.get('defects') or []
-            if isinstance(defects_list, list):
-                for df in defects_list:
-                    if not isinstance(df, dict):
-                        continue
-
-                    raw_id = df.get('defect_id') or df.get('defectId')
-                    if not raw_id and df.get('id'):
-                        try:
-                            int(df.get('id'))
-                            raw_id = df.get('id')
-                        except (ValueError, TypeError):
-                            pass
-
-                    target_id = None
-                    if raw_id:
-                        try:
-                            int_id = int(raw_id)
-                            if int_id in id_set:
-                                target_id = int_id
-                        except (ValueError, TypeError):
-                            pass
-
-                    if not target_id:
-                        df_code = (df.get('code') or '').lower().strip()
-                        if df_code and df_code in code_to_id:
-                            target_id = code_to_id[df_code]
-
-                    if not target_id:
-                        df_name = (df.get('defect_name') or df.get('name') or '').lower().strip()
-                        if df_name and df_name in name_to_id:
-                            target_id = name_to_id[df_name]
-
-                    if target_id:
-                        qty = df.get('quantity')
-                        if qty is None:
-                            qty = df.get('qty', 1)
-                        try:
-                            qty = int(qty)
-                        except (ValueError, TypeError):
-                            qty = 1
-                        if qty > 0:
-                            stats_map[target_id]["all_qty"] += qty
-                            if is_this_month:
-                                stats_map[target_id]["month_qty"] += qty
-        except Exception:
-            continue
-
-    # 3. Thống kê bổ sung từ phiếu bàn giao (deliveries)
-    try:
-        from modules.delivery.models.deliveries import Delivery
-        deliv_records = db.query(Delivery).filter((Delivery.quantity_error > 0) | (Delivery.quantity_returned > 0)).all()
-        for deliv in deliv_records:
-            d_dt = deliv.created_at
-            if isinstance(d_dt, (datetime.date, datetime.datetime)):
-                d_date = d_dt.date() if isinstance(d_dt, datetime.datetime) else d_dt
-            elif isinstance(d_dt, str):
-                try:
-                    d_date = datetime.datetime.strptime(d_dt[:10], "%Y-%m-%d").date()
-                except Exception:
-                    d_date = today
-            else:
-                d_date = today
-
-            deliv_is_this_month = (first_day_this_month <= d_date < first_day_next_month)
-            note_str = (deliv.note or '').lower().strip()
-
-            target_id = None
-            for dname, did in name_to_id.items():
-                if dname in note_str:
-                    target_id = did
-                    break
-            if not target_id:
-                for dcode, did in code_to_id.items():
-                    if dcode in note_str:
-                        target_id = did
-                        break
-
-            err_qty = deliv.quantity_error or deliv.quantity_returned or 0
-            tot_qty = deliv.quantity_total or ((deliv.quantity_received or 0) + err_qty) or 0
-
-            all_products += tot_qty
-            if deliv_is_this_month:
-                month_products += tot_qty
-
-            if target_id and err_qty > 0:
-                stats_map[target_id]["all_qty"] += err_qty
-                if deliv_is_this_month:
-                    stats_map[target_id]["month_qty"] += err_qty
-    except Exception as deliv_err:
-        pass
     month_defects_total = sum(v["month_qty"] for v in stats_map.values())
     all_defects_total = sum(v["all_qty"] for v in stats_map.values())
 

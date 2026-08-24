@@ -1014,36 +1014,56 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     setParamProduct(combinedStr)
 
     const selectedParts = bomData.filter((p) => partNamesArray.includes(p.part_name))
-    let allSpecs = []
+    let specOpts = []
     let totalQtySum = 0
+    let autoSelectedSpecs = []
 
     selectedParts.forEach((part) => {
-      if (Array.isArray(part.specs)) {
-        allSpecs.push(...part.specs)
+      const partSpecs = (Array.isArray(part.specs) && part.specs.length > 0)
+        ? part.specs
+        : [{ specification: 'Tiêu chuẩn' }]
+
+      partSpecs.forEach((s) => {
+        const rawSpec = s.specification || 'Tiêu chuẩn'
+        const displayLabel = selectedParts.length > 1
+          ? `[${part.part_name}] ${rawSpec}`
+          : rawSpec
+        const val = selectedParts.length > 1
+          ? `[${part.part_name}] ${rawSpec}`
+          : rawSpec
+
+        specOpts.push({
+          value: val,
+          label: displayLabel,
+          partName: part.part_name,
+          rawSpec
+        })
+      })
+
+      // Tự động chọn quy cách ăn theo chi tiết
+      if (partSpecs.length >= 1) {
+        const firstVal = selectedParts.length > 1
+          ? `[${part.part_name}] ${partSpecs[0].specification || 'Tiêu chuẩn'}`
+          : (partSpecs[0].specification || 'Tiêu chuẩn')
+        autoSelectedSpecs.push(firstVal)
       }
+
       if (part.total_qty) {
         const cQty = convertQuantityToPiecesIfNeeded(part.part_name, part.total_qty, part.unit)
         totalQtySum += Number(cQty)
       }
     })
 
-    let specOpts = allSpecs.map((s) => {
-      const val = getEffectiveSpec(s.specification, combinedStr)
-      return { value: val, label: val }
-    })
-    if (specOpts.length === 0) {
-      selectedParts.forEach((p) => {
-        const effSpec = getEffectiveSpec('', p.part_name)
-        if (effSpec) specOpts.push({ value: effSpec, label: effSpec })
-      })
-    }
-    const uniqueSpecOpts = Array.from(new Set(specOpts.map((s) => s.value))).map((val) => ({ value: val, label: val }))
-    setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...uniqueSpecOpts])
+    setSpecOptions(specOpts)
+    setSelectedSpecs(autoSelectedSpecs)
+    setSpec(autoSelectedSpecs.join(', '))
 
     if (totalQtySum > 0) {
       setRequiredQty(String(totalQtySum))
       const calcSample = Math.max(1, Math.ceil(totalQtySum * 0.05))
       setSampleQty(String(calcSample))
+    } else {
+      setRequiredQty('')
     }
   }
 
@@ -1188,7 +1208,18 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
       const activeResult = mode === INSPECT_MODES.QA ? qaResult : result
       const activeSampleQty = mode === INSPECT_MODES.PARAMETER ? paramSample : sampleQty
       const activeErrorQty = mode === INSPECT_MODES.PARAMETER ? paramFail : errorQty
-      const finalPalletCode = mode === INSPECT_MODES.PROCESS ? '' : (modalData?.palletCode || palletCode)
+      const partsDetails = (selectedProducts && selectedProducts.length > 0)
+        ? selectedProducts.map((pName, i) => {
+            const partObj = bomData.find((b) => b.part_name === pName)
+            const cQty = partObj?.total_qty ? convertQuantityToPiecesIfNeeded(pName, partObj.total_qty, partObj.unit) : 0
+            const matchedSpec = selectedSpecs[i] || spec || 'Tiêu chuẩn'
+            return {
+              part_name: pName,
+              specification: matchedSpec,
+              plan_qty: Number(cQty) || 0
+            }
+          })
+        : [{ part_name: activeProduct, specification: compactSpec(spec), plan_qty: Number(requiredQty || sampleQty) || 0 }]
 
       await createTicket({
         mode,
@@ -1205,6 +1236,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
         images,
         creator: creatorName,
         palletCode: finalPalletCode,
+        parts_details: partsDetails,
         parameter,
         paramPass,
         process,

@@ -54,7 +54,12 @@ export const useTransferController = () => {
     return result
   }
 
-  const pendingCount = tickets.filter((t) => !['done', 'Hoàn thành'].includes(t.status)).length
+  const isProcessedStatus = (status) => {
+    const s = String(status || '').toLowerCase().trim()
+    return ['hoàn thành', 'đã nhận', 'trả lại', 'đã trả lại', 'đã hủy', 'done', 'cancelled', 'returned', 'rejected'].some((k) => s.includes(k))
+  }
+
+  const pendingCount = tickets.filter((t) => !isProcessedStatus(t.status)).length
 
   const totalPages = Math.ceil(total / 10)
   const setPage = (page) => setTransferFilters({ page })

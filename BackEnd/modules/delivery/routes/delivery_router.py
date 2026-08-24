@@ -409,7 +409,32 @@ async def create_delivery(
         else:
             new_delivery.order_id = None
             
-        allocate_delivery_fifo(db, new_delivery.id, plan_id, part_name, quantity, specification, allowed_order_ids=allowed_order_ids)
+        # 3.1. Lưu từng mặt hàng chi tiết từ payload `details`
+        import json
+        saved_items_count = 0
+        if details:
+            try:
+                parsed_details = json.loads(details) if isinstance(details, str) else details
+                if isinstance(parsed_details, list) and len(parsed_details) > 0:
+                    for it in parsed_details:
+                        p_name = it.get("detail") or it.get("part_name") or part_name
+                        p_qty = int(it.get("qty") or it.get("quantity") or 0)
+                        p_spec = it.get("spec") or it.get("specification") or ""
+                        p_oid = it.get("order_id")
+                        if p_qty > 0:
+                            db.add(DeliveryDetailsModel(
+                                delivery_id=new_delivery.id,
+                                part_name=p_name,
+                                quantity=p_qty,
+                                element_name=p_spec,
+                                order_id=p_oid
+                            ))
+                            saved_items_count += 1
+            except Exception as de:
+                print(f"[create_delivery] Error parsing items details: {de}")
+
+        if saved_items_count == 0:
+            allocate_delivery_fifo(db, new_delivery.id, plan_id, part_name, quantity, specification, allowed_order_ids=allowed_order_ids)
 
         # 4. Cập nhật thẻ QR dự phòng & Sinh mã Pallet tự động nếu chưa có
         if backup_qr:
@@ -1247,7 +1272,9 @@ class ConfirmRequest(BaseModel):
     user_id: Optional[int] = 1
     sx_receipt: Optional[int] = None
     quantity_received: Optional[int] = None # Số lượng thực nhận
+    quantity_error: Optional[int] = None # Số lượng lỗi khi trả hàng
     status: Optional[str] = "Hoàn Thành"
+    note: Optional[str] = None
 
 @router.patch("/{delivery_id}/confirm", response_model=DeliverySchema)
 @router.patch("/{delivery_id}/confirm/", response_model=DeliverySchema)
@@ -1258,49 +1285,29 @@ async def confirm_delivery(
     db: Session = Depends(get_db)
 ):
     """
-    [PATCH] Xác nhận việc nhận hàng.
-    Cập nhật số lượng thực nhận và trạng thái phiếu.
+    [PATCH] Xác nhận việc nhận hàng hoặc Trả lại hàng.
+    Cập nhật số lượng thực nhận, số lượng lỗi, lý do và trạng thái phiếu.
     """
     delivery = db.query(Delivery).filter(Delivery.id == delivery_id).first()
     if not delivery:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu bàn giao này.")
     
-    # Kiểm tra phân quyền: Chỉ người dùng thuộc công đoạn nhận (receiving_stage) hoặc có quyền Admin/IT/BGD mới được phép xác nhận.
-    from modules.auth.models.departments import Department as DeptModel
-    from modules.auth.models.role import Role as RoleModel
-    from modules.auth.models.permissions import Permission as PermModel
-    from modules.production.models.stages import Stage as StageModel
-
     sx_receipt_id = request.sx_receipt or request.user_id or 1
-    qty_rec = request.quantity_received if (request.quantity_received is not None and request.quantity_received > 0) else delivery.quantity_total
     new_status = request.status or "Hoàn Thành"
 
-    # Lấy thông tin phòng ban/quyền/vai trò của người dùng thực hiện xác nhận (sx_receipt)
-    user_depts = db.query(DeptModel).filter(DeptModel.account_id == sx_receipt_id).all()
-    
-    is_admin = False
-    user_stages = []
-    
-    for dept in user_depts:
-        if dept.role_id:
-            role = db.query(RoleModel).filter(RoleModel.id == dept.role_id).first()
-            if role and role.name and any(kw in role.name.lower() for kw in ["admin", "it", "bgd"]):
-                is_admin = True
-        if dept.permission_id:
-            perm = db.query(PermModel).filter(PermModel.id == dept.permission_id).first()
-            if perm and perm.name and "admin" in perm.name.lower():
-                is_admin = True
-        if dept.stage_id:
-            stage = db.query(StageModel).filter(StageModel.id == dept.stage_id).first()
-            if stage:
-                user_stages.append(stage)
-                
-    # Tạm thời bỏ qua kiểm tra bắt buộc thuộc công đoạn nhận, cho phép xác nhận tự do nhưng vẫn lưu tên/ID người nhận
     delivery.sx_receipt = sx_receipt_id
-    delivery.quantity_received = qty_rec
     delivery.status = new_status
-    
-    # QR code is no longer released here. It will be released after QC confirms.
+    if request.note:
+        delivery.note = request.note
+
+    if new_status in ["Chờ nhận hàng trả lại", "Chờ xác nhận trả hàng", "Trả lại", "Trả Lại", "Từ chối", "Lỗi"]:
+        qty_err = request.quantity_error if (request.quantity_error is not None and request.quantity_error > 0) else (delivery.quantity_error or delivery.quantity_total or 1)
+        delivery.quantity_error = qty_err
+        delivery.quantity_returned = qty_err
+        delivery.quantity_received = 0
+    else:
+        qty_rec = request.quantity_received if (request.quantity_received is not None and request.quantity_received >= 0) else delivery.quantity_total
+        delivery.quantity_received = qty_rec
 
     db.commit()
     db.refresh(delivery)

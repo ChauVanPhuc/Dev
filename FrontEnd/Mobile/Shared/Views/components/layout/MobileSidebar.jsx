@@ -39,86 +39,39 @@ const Sidebar = () => {
         const response = await apiClient.get('/system/sidebar?platform=Mobile')
         let items = Array.isArray(response.data) ? [...response.data] : [];
 
-        // Ensure "Lập báo cáo" menu item
-        const hasReportItem = items.some(i => i.route_path === '/quick-report-list' || i.title === 'Lập báo cáo');
-        if (!hasReportItem) {
-          items.push({
-            id: 'quick-report-menu',
-            title: 'Lập báo cáo',
-            route_path: '/quick-report-list',
-            icon: 'FileText',
-            is_active: true
-          });
+        if (items && items.length > 0) {
+          setMenuList(items);
+        } else {
+          throw new Error('Empty sidebar list from server');
         }
-
-        // Ensure "Thông tin sản xuất" has subitems according to Mockup 2
-        items = items.map(item => {
-          if (item.title === 'Thông tin sản xuất' || item.route_path === '/production/orders') {
-            return {
-              ...item,
-              title: 'Thông tin sản xuất',
-              route_path: '#',
-              icon: 'Users',
-              children: [
-                { id: 'sub-prod-1', title: 'Lệnh sản xuất', route_path: '/production/orders', icon: 'Users' },
-                { id: 'sub-prod-2', title: 'Kế hoạch sản xuất', route_path: '/production/plans', icon: 'Users' },
-                { id: 'sub-prod-3', title: 'Lịch sử luân chuyển', route_path: '/production/transfers', icon: 'Users' }
-              ]
-            };
-          }
-          return item;
-        });
-
-        // Ensure "Khởi tạo phiếu" menu item (CL06-CL09)
-        const hasProdV2Item = items.some(i => i.title === 'Khởi tạo phiếu' || i.id === 'prod-info-v2-menu');
-        if (!hasProdV2Item) {
-          const prodV2Group = {
-            id: 'prod-info-v2-menu',
+      } catch (err) {
+        console.error('Failed to load Mobile sidebar, using default structured menu:', err)
+        setMenuList([
+          {
+            id: 'm-home',
+            title: 'Trang chủ',
+            route_path: '/dashboard',
+            icon: 'LayoutGrid',
+            is_active: true
+          },
+          {
+            id: 'm-create-ticket',
             title: 'Khởi tạo phiếu',
             route_path: '#',
             icon: 'MessageSquare',
+            is_active: true,
             children: [
               { id: 'sub-pv2-1', title: 'Tạo phiếu luân chuyển', route_path: '/production_v2/transfer', icon: 'MessageSquare' },
-              { id: 'sub-pv2-2', title: 'Danh sách luân chuyển', route_path: '/production_v2/transfer-list', icon: 'ClipboardList' },
-              { id: 'sub-pv2-4', title: 'Tạo phiếu kiểm tra', route_path: '/production_v2/inspection', icon: 'MessageSquare' }
+              { id: 'sub-pv2-2', title: 'Danh sách luân chuyển', route_path: '/production_v2/transfer-list', icon: 'MessageSquare' },
+              { id: 'sub-pv2-3', title: 'Tạo phiếu kiểm tra', route_path: '/production_v2/inspection', icon: 'MessageSquare' }
             ]
-          };
-          const prodIdx = items.findIndex(i => i.title === 'Thông tin sản xuất');
-          if (prodIdx !== -1) {
-            items.splice(prodIdx + 1, 0, prodV2Group);
-          } else {
-            items.push(prodV2Group);
-          }
-        } else {
-          // If "Khởi tạo phiếu" exists, ensure "Danh sách luân chuyển" is in its children if missing
-          items = items.map(item => {
-            if (item.title === 'Khởi tạo phiếu' || item.id === 'prod-info-v2-menu') {
-              const children = item.children ? [...item.children] : [];
-              const hasList = children.some(c => c.route_path === '/production_v2/transfer-list' || c.title === 'Danh sách luân chuyển');
-              if (!hasList) {
-                const insertIdx = children.findIndex(c => c.route_path === '/production_v2/transfer');
-                const listSub = { id: 'sub-pv2-2', title: 'Danh sách luân chuyển', route_path: '/production_v2/transfer-list', icon: 'ClipboardList' };
-                if (insertIdx !== -1) {
-                  children.splice(insertIdx + 1, 0, listSub);
-                } else {
-                  children.unshift(listSub);
-                }
-              }
-              return { ...item, children };
-            }
-            return item;
-          });
-        }
-
-        setMenuList(items)
-      } catch (err) {
-        console.error('Failed to load Mobile sidebar:', err)
-        setMenuList([
+          },
           {
-            id: 'prod-info-menu',
+            id: 'm-prod-info',
             title: 'Thông tin sản xuất',
             route_path: '#',
             icon: 'Users',
+            is_active: true,
             children: [
               { id: 'sub-prod-1', title: 'Lệnh sản xuất', route_path: '/production/orders', icon: 'Users' },
               { id: 'sub-prod-2', title: 'Kế hoạch sản xuất', route_path: '/production/plans', icon: 'Users' },
@@ -126,17 +79,31 @@ const Sidebar = () => {
             ]
           },
           {
-            id: 'prod-info-v2-menu',
-            title: 'Khởi tạo phiếu',
+            id: 'm-report-group',
+            title: 'Lập báo cáo',
             route_path: '#',
-            icon: 'MessageSquare',
+            icon: 'Bell',
+            is_active: true,
             children: [
-              { id: 'sub-pv2-1', title: 'Tạo phiếu luân chuyển', route_path: '/production_v2/transfer', icon: 'MessageSquare' },
-              { id: 'sub-pv2-2', title: 'Danh sách luân chuyển', route_path: '/production_v2/transfer-list', icon: 'ClipboardList' },
-              { id: 'sub-pv2-4', title: 'Tạo phiếu kiểm tra', route_path: '/production_v2/inspection', icon: 'MessageSquare' }
+              { id: 'sub-rep-1', title: 'Theo dõi CAPA', route_path: '/capa-list', icon: 'Bell' },
+              { id: 'sub-rep-2', title: 'Tạo báo cáo nhanh', route_path: '/quick-report-create', icon: 'Bell' },
+              { id: 'sub-rep-3', title: 'Lịch sử báo cáo', route_path: '/quick-report-list', icon: 'Bell' }
             ]
           },
-          { id: 'quick-report-menu', title: 'Lập báo cáo', route_path: '/quick-report-list', icon: 'FileText', is_active: true }
+          {
+            id: 'm-violation',
+            title: 'Báo cáo vi phạm',
+            route_path: '/awards',
+            icon: 'LayoutGrid',
+            is_active: true
+          },
+          {
+            id: 'm-hr-kpi',
+            title: 'Đánh giá nhân sự',
+            route_path: '/kpi-staff',
+            icon: 'Heart',
+            is_active: true
+          }
         ])
       } finally {
         setLoading(false)

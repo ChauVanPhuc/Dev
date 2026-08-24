@@ -164,8 +164,9 @@ const ErrorTrendRow = ({
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 8,
+        gap: 6,
         marginBottom: 8,
+        width: '100%',
         position: 'relative',
       }}
       ref={dropdownRef}
@@ -174,31 +175,36 @@ const ErrorTrendRow = ({
         <div
           style={{
             flex: 1,
-            height: 38,
+            minWidth: 0,
+            height: 36,
             backgroundColor: '#f8fafc',
             border: '1px solid #e2e8f0',
             borderRadius: 8,
-            padding: '0 12px',
+            padding: '0 10px',
             display: 'flex',
             alignItems: 'center',
-            justify: 'space-between',
+            justifyContent: 'space-between',
+            gap: 6,
             color: '#334155',
-            fontSize: 13,
+            fontSize: 12.5,
             fontWeight: 500,
           }}
         >
-          <span>{displayCode ? `[${displayCode}] ${displayName}` : displayName}</span>
+          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {displayCode ? `[${displayCode}] ${displayName}` : displayName}
+          </span>
           {isCTQ ? (
             <span
               style={{
-                backgroundColor: '#fee2e2',
-                color: '#b91c1c',
-                border: '1px solid #f87171',
-                padding: '2px 8px',
-                borderRadius: 12,
-                fontSize: 10,
+                backgroundColor: '#fef2f2',
+                color: '#dc2626',
+                border: '1px solid #fecaca',
+                padding: '2px 6px',
+                borderRadius: 999,
+                fontSize: 9.5,
                 fontWeight: 800,
-                letterSpacing: '0.4px',
+                letterSpacing: '0.2px',
+                flexShrink: 0,
               }}
             >
               CTQ
@@ -206,14 +212,15 @@ const ErrorTrendRow = ({
           ) : isQA ? (
             <span
               style={{
-                backgroundColor: '#fff7ed',
-                color: '#c2410c',
-                border: '1px solid #fdba74',
-                padding: '2px 8px',
-                borderRadius: 12,
-                fontSize: 10,
+                backgroundColor: '#fffbeb',
+                color: '#b45309',
+                border: '1px solid #fde68a',
+                padding: '2px 6px',
+                borderRadius: 999,
+                fontSize: 9.5,
                 fontWeight: 700,
-                letterSpacing: '0.3px',
+                letterSpacing: '0.2px',
+                flexShrink: 0,
               }}
             >
               QA Track
@@ -221,61 +228,63 @@ const ErrorTrendRow = ({
           ) : null}
         </div>
       ) : (
-        <div style={{ flex: 1, position: 'relative' }}>
+        <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
           {/* Ô Chọn thiết kế hiện đại (Combobox Box) */}
           <div
             onClick={() => !disabled && setIsOpen((prev) => !prev)}
             style={{
-              height: 38,
+              height: 36,
               backgroundColor: '#ffffff',
-              border: `1.5px solid ${isOpen ? '#7B5233' : isCTQ ? '#f87171' : isQA ? '#fca5a5' : '#cbd5e1'}`,
+              border: `1px solid ${isOpen ? '#b45309' : '#cbd5e1'}`,
               borderRadius: 8,
-              padding: '0 10px 0 12px',
+              padding: '0 8px 0 10px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              gap: 8,
+              gap: 4,
               cursor: 'pointer',
-              boxShadow: isOpen ? '0 0 0 3px rgba(123, 82, 51, 0.12)' : '0 1px 2px rgba(0, 0, 0, 0.04)',
+              boxShadow: isOpen ? '0 0 0 2px rgba(180, 83, 9, 0.12)' : '0 1px 2px rgba(0, 0, 0, 0.02)',
               transition: 'all 0.15s ease',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden', flex: 1, minWidth: 0 }}>
               {displayName ? (
                 <span
                   style={{
-                    fontSize: 13,
+                    fontSize: 12.5,
                     fontWeight: 600,
                     color: '#1e293b',
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
+                    display: 'block',
+                    width: '100%',
                   }}
                 >
                   {displayCode ? (
-                    <strong style={{ color: '#4B301E', marginRight: 4 }}>[{displayCode}]</strong>
+                    <strong style={{ color: '#b45309', marginRight: 4 }}>[{displayCode}]</strong>
                   ) : null}
                   {displayName}
                 </span>
               ) : (
-                <span style={{ fontSize: 13, color: '#94a3b8' }}>-- Chọn loại lỗi từ danh mục --</span>
+                <span style={{ fontSize: 12, color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>-- Chọn lỗi --</span>
               )}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-              {/* Badge CTQ hoặc QA Track NẰM BÊN PHẢI */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+              {/* Badge CTQ hoặc QA Track */}
               {isCTQ ? (
                 <span
                   style={{
-                    backgroundColor: '#fee2e2',
-                    color: '#b91c1c',
-                    border: '1px solid #f87171',
-                    padding: '2px 8px',
-                    borderRadius: 12,
-                    fontSize: 10,
+                    backgroundColor: '#fef2f2',
+                    color: '#dc2626',
+                    border: '1px solid #fecaca',
+                    padding: '2px 6px',
+                    borderRadius: 999,
+                    fontSize: 9.5,
                     fontWeight: 800,
-                    letterSpacing: '0.4px',
-                    boxShadow: '0 1px 2px rgba(185, 28, 28, 0.15)',
+                    letterSpacing: '0.2px',
+                    flexShrink: 0,
                   }}
                 >
                   CTQ
@@ -283,23 +292,25 @@ const ErrorTrendRow = ({
               ) : isQA ? (
                 <span
                   style={{
-                    backgroundColor: '#fff7ed',
-                    color: '#c2410c',
-                    border: '1px solid #fdba74',
-                    padding: '2px 8px',
-                    borderRadius: 12,
-                    fontSize: 10,
+                    backgroundColor: '#fffbeb',
+                    color: '#b45309',
+                    border: '1px solid #fde68a',
+                    padding: '2px 6px',
+                    borderRadius: 999,
+                    fontSize: 9.5,
                     fontWeight: 700,
-                    letterSpacing: '0.4px',
+                    letterSpacing: '0.2px',
+                    flexShrink: 0,
                   }}
                 >
                   QA Track
                 </span>
               ) : null}
               <ChevronDown
-                size={16}
+                size={14}
                 style={{
-                  color: isOpen ? '#7B5233' : '#64748b',
+                  color: '#64748b',
+                  flexShrink: 0,
                   transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
                   transition: 'transform 0.2s ease',
                 }}
@@ -467,13 +478,16 @@ const ErrorTrendRow = ({
       <div
         className="pv2-stepper"
         style={{
-          height: 38,
+          width: 86,
+          flexShrink: 0,
+          height: 36,
           display: 'flex',
           alignItems: 'center',
-          backgroundColor: '#f8fafc',
+          backgroundColor: '#ffffff',
           border: '1px solid #cbd5e1',
           borderRadius: 8,
           overflow: 'hidden',
+          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.02)',
         }}
       >
         {!disabled && (
@@ -482,29 +496,31 @@ const ErrorTrendRow = ({
             className="pv2-stepper-btn"
             onClick={() => onChange && onChange({ ...row, qty: Math.max(0, (row.qty || 0) - 1) })}
             style={{
-              width: 32,
+              width: 28,
               height: '100%',
               border: 'none',
-              backgroundColor: '#f1f5f9',
+              borderRight: '1px solid #f1f5f9',
+              backgroundColor: '#f8fafc',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              color: '#475569',
+              color: '#64748b',
+              transition: 'background-color 0.15s ease',
             }}
           >
-            <Minus size={14} />
+            <Minus size={13} />
           </button>
         )}
         <span
           className="pv2-stepper-val"
           style={{
-            minWidth: 32,
+            minWidth: 28,
             textAlign: 'center',
-            fontWeight: 700,
+            fontWeight: 800,
             fontSize: 13,
-            color: '#1e293b',
-            padding: '0 4px',
+            color: Number(row.qty) > 0 ? '#b45309' : '#475569',
+            padding: '0 2px',
           }}
         >
           {row.qty || 0}
@@ -515,18 +531,20 @@ const ErrorTrendRow = ({
             className="pv2-stepper-btn"
             onClick={() => onChange && onChange({ ...row, qty: (row.qty || 0) + 1 })}
             style={{
-              width: 32,
+              width: 28,
               height: '100%',
               border: 'none',
-              backgroundColor: '#4a240e',
+              borderLeft: '1px solid #f1f5f9',
+              backgroundColor: '#f8fafc',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              color: '#ffffff',
+              color: '#b45309',
+              transition: 'background-color 0.15s ease',
             }}
           >
-            <Plus size={14} />
+            <Plus size={13} />
           </button>
         )}
       </div>
@@ -537,18 +555,23 @@ const ErrorTrendRow = ({
           type="button"
           onClick={onRemove}
           style={{
-            background: 'none',
-            border: 'none',
+            width: 32,
+            height: 32,
+            background: '#fef2f2',
+            border: '1px solid #fee2e2',
             color: '#ef4444',
             cursor: 'pointer',
-            padding: 4,
+            padding: 0,
             display: 'flex',
             alignItems: 'center',
-            borderRadius: 6,
+            justifyContent: 'center',
+            borderRadius: 8,
+            flexShrink: 0,
+            transition: 'all 0.15s ease',
           }}
           title="Xóa dòng lỗi này"
         >
-          <Trash2 size={16} />
+          <Trash2 size={14} />
         </button>
       )}
     </div>

@@ -222,11 +222,41 @@ const CL07_TransferCreateView = () => {
     recalculateQtyAndSurplus(items)
   }, [items, recalculateQtyAndSurplus])
 
+  const [palletInspectedParts, setPalletInspectedParts] = useState([])
+  const [currentPalletInfo, setCurrentPalletInfo] = useState(null)
+
   const handleDetailChange = (detailName) => {
+    if (!detailName) {
+      upd('detail', '')
+      setItems([])
+      return
+    }
+
+    const fallbackTargetQty = Number(currentPalletInfo?.remaining_qty ?? currentPalletInfo?.requiredQty ?? 40)
+
+    if (detailName === 'ALL' && palletInspectedParts.length > 0) {
+      const newItems = palletInspectedParts.map((pName, i) => {
+        const partObj = partsData.find((p) => (p.part_name || p.name) === pName)
+        const matchedIns = (currentPalletInfo?.inspected_details || []).find((d) => d.part_name === pName)
+        const specVal = matchedIns?.specification || currentPalletInfo?.inspected_specs?.[i] || partObj?.specs?.[0]?.specification || 'Tiêu chuẩn'
+        const targetQty = Number(partObj?.specs?.[0]?.target_qty || partObj?.remaining_qty || matchedIns?.remaining_qty || matchedIns?.plan_qty || fallbackTargetQty)
+        return {
+          id: String(Date.now() + i),
+          detail: pName,
+          spec: specVal,
+          qty: 0,
+          total: targetQty
+        }
+      })
+      setItems(newItems)
+      upd('detail', 'ALL')
+      return
+    }
+
     upd('detail', detailName)
-    if (!detailName) return
 
     const partObj = partsData.find((p) => (p.part_name || p.name) === detailName)
+    const matchedIns = (currentPalletInfo?.inspected_details || []).find((d) => d.part_name === detailName)
     let newSpecOpts = [{ value: '', label: 'Chọn quy cách' }]
 
     if (partObj && Array.isArray(partObj.specs) && partObj.specs.length > 0) {
@@ -235,9 +265,10 @@ const CL07_TransferCreateView = () => {
         ...partObj.specs.map((s) => ({ value: s.specification, label: s.specification }))
       ]
     } else {
+      const fallbackSpec = matchedIns?.specification || currentPalletInfo?.spec || form.spec || 'Tiêu chuẩn'
       newSpecOpts = [
         { value: '', label: 'Chọn quy cách' },
-        { value: 'Tiêu chuẩn', label: 'Tiêu chuẩn' }
+        { value: fallbackSpec, label: fallbackSpec }
       ]
     }
 
@@ -256,8 +287,8 @@ const CL07_TransferCreateView = () => {
     if (newSpecOpts.length === 2) {
       const singleSpec = newSpecOpts[1].value
       upd('spec', singleSpec)
-      const target = partObj?.specs?.[0]?.target_qty || partObj?.total_qty || 40
-      const newItems = [{ id: '1', detail: detailName, spec: singleSpec, qty: 0, total: Number(target) }]
+      const target = Number(partObj?.specs?.[0]?.target_qty || partObj?.remaining_qty || matchedIns?.remaining_qty || matchedIns?.plan_qty || fallbackTargetQty)
+      const newItems = [{ id: '1', detail: detailName, spec: singleSpec, qty: 0, total: target }]
       setItems(newItems)
     } else {
       // Nhiều quy cách → reset bảng, chờ user chọn từng cái
@@ -271,6 +302,8 @@ const CL07_TransferCreateView = () => {
     if (!specValue || !form.detail) return
 
     const exists = items.some((it) => it.spec === specValue && it.detail === form.detail)
+    const matchedIns = (currentPalletInfo?.inspected_details || []).find((d) => d.part_name === form.detail)
+    const fallbackTargetQty = Number(matchedIns?.remaining_qty ?? currentPalletInfo?.remaining_qty ?? currentPalletInfo?.requiredQty ?? 40)
 
     if (exists) {
       // Bỏ tick → xóa dòng
@@ -280,7 +313,7 @@ const CL07_TransferCreateView = () => {
       // Tick → thêm dòng mới
       const partObj = partsData.find((p) => (p.part_name || p.name) === form.detail)
       const specObj = partObj?.specs?.find((s) => s.specification === specValue)
-      const target = Number(specObj?.target_qty) || Number(partObj?.total_qty) || 40
+      const target = Number(specObj?.target_qty || specObj?.remaining_qty) || Number(partObj?.remaining_qty || partObj?.total_qty || matchedIns?.remaining_qty) || fallbackTargetQty
 
       const newItem = {
         id: String(Date.now()),
@@ -312,45 +345,76 @@ const CL07_TransferCreateView = () => {
 
   const handlePalletChange = async (val) => {
     upd('palletCode', val)
-    if (!val) return
+    if (!val) {
+      setPalletInspectedParts([])
+      setCurrentPalletInfo(null)
+      return
+    }
 
     try {
       const res = await apiClient.get(`/inspections/pallet/${encodeURIComponent(val)}`)
       const palletInfo = res.data
       if (!palletInfo) return
 
-      const detailName = palletInfo.product || ''
-      const specValue = palletInfo.spec || 'Tiêu chuẩn'
+      setCurrentPalletInfo(palletInfo)
+
+      let inspectedList = []
+      if (Array.isArray(palletInfo.inspected_parts) && palletInfo.inspected_parts.length > 0) {
+        inspectedList = palletInfo.inspected_parts
+      } else if (palletInfo.product) {
+        inspectedList = palletInfo.product.includes(',')
+          ? palletInfo.product.split(',').map((p) => p.trim()).filter(Boolean)
+          : [palletInfo.product.trim()]
+      }
+
+      setPalletInspectedParts(inspectedList)
+
       const fromSt = palletInfo.stage || 'Tạo phôi'
       const nextSt = getNextStageName(fromSt, stageOptions)
 
-      // Cập nhật thông tin chi tiết và công đoạn (không nạp số lượng và ảnh từ phiếu kiểm tra)
-      setForm((prev) => ({
-        ...prev,
-        palletCode: val,
-        detail: detailName || prev.detail,
-        spec: specValue || prev.spec,
-        totalQty: '0',
-        surplus: '',
-        fromStage: fromSt,
-        toStage: nextSt || prev.toStage,
-      }))
+      if (inspectedList.length > 1) {
+        // Pallet có nhiều chi tiết -> mặc định chọn hết tất cả các dòng chi tiết của Pallet
+        const newItems = inspectedList.map((pName, i) => {
+          const partObj = partsData.find((p) => (p.part_name || p.name) === pName)
+          const matchedIns = (palletInfo.inspected_details || []).find((d) => d.part_name === pName)
+          const specVal = matchedIns?.specification || palletInfo.inspected_specs?.[i] || partObj?.specs?.[0]?.specification || 'Tiêu chuẩn'
+          const targetQty = Number(partObj?.specs?.[0]?.target_qty || partObj?.remaining_qty || matchedIns?.remaining_qty || matchedIns?.plan_qty || 24)
+          return {
+            id: String(Date.now() + i),
+            detail: pName,
+            spec: specVal,
+            qty: 0,
+            total: targetQty
+          }
+        })
+        setItems(newItems)
+        setForm((prev) => ({
+          ...prev,
+          palletCode: val,
+          detail: inspectedList.join(', '),
+          spec: `${inspectedList.length} quy cách đã chọn`,
+          totalQty: '0',
+          surplus: '',
+          fromStage: fromSt,
+          toStage: nextSt || prev.toStage,
+        }))
+      } else if (inspectedList.length === 1) {
+        const detailName = inspectedList[0]
+        const matchedIns = (palletInfo.inspected_details || [])[0]
+        const specValue = matchedIns?.specification || palletInfo.inspected_specs?.[0] || palletInfo.spec || 'Tiêu chuẩn'
+        setForm((prev) => ({
+          ...prev,
+          palletCode: val,
+          detail: detailName,
+          spec: specValue,
+          totalQty: '0',
+          surplus: '',
+          fromStage: fromSt,
+          toStage: nextSt || prev.toStage,
+        }))
 
-      if (detailName) {
         const partObj = partsData.find((p) => (p.part_name || p.name) === detailName)
-        if (partObj && Array.isArray(partObj.specs) && partObj.specs.length > 0) {
-          setSpecOptions([
-            { value: '', label: 'Chọn quy cách' },
-            ...partObj.specs.map((s) => ({ value: s.specification, label: s.specification }))
-          ])
-        } else {
-          setSpecOptions([
-            { value: '', label: 'Chọn quy cách' },
-            { value: specValue, label: specValue }
-          ])
-        }
-
-        const targetQty = Number(palletInfo.requiredQty || 0)
+        const targetQty = Number(partObj?.specs?.[0]?.target_qty || partObj?.remaining_qty || matchedIns?.remaining_qty || palletInfo.remaining_qty || 40)
         setItems([
           {
             id: String(Date.now()),
@@ -395,34 +459,62 @@ const CL07_TransferCreateView = () => {
   const handleOpenPallet = async () => {
     const partName = form.detail || items[0]?.detail || ''
     const spec = items.length === 1 ? items[0]?.spec : (form.spec || items.map((it) => it.spec).filter(Boolean).join(', ') || '')
-    const matching = partName
-      ? await transferService.getOrdersByPart({
+    let matching = []
+    try {
+      matching = await transferService.getOrdersByPart({
+        part_name: partName,
+        specification: items.length === 1 ? spec : undefined,
+        pallet_code: form.palletCode,
+        month: selectedMonth
+      })
+      if (!matching || matching.length === 0) {
+        matching = await transferService.getOrdersByPart({
           part_name: partName,
-          specification: items.length === 1 ? spec : undefined
+          pallet_code: form.palletCode
         })
-      : []
-    const partProducts = matching.map((m) => ({
-      order_id: m.product_sku,
-      order_code: m.po_code,
-      customer: m.customer,
+      }
+    } catch (err) {
+      console.warn('Lỗi getOrdersByPart:', err)
+    }
+
+    const firstMatch = (matching && matching[0]) || {}
+
+    const partProducts = (matching || []).map((m) => ({
+      order_id: m.order_id || m.product_sku || m.po_code,
+      order_code: m.po_code || '',
+      customer: m.customer || '',
       prod_sku: m.product_sku || `${m.part_name}${m.specification ? ' - ' + m.specification : ''}`,
       part_qty_needed: m.part_qty_needed || m.order_qty || 0,
       delivered: 0
     }))
+
+    const totalQty = items.reduce((sum, it) => sum + Number(it.qty || 0), 0) || Number(form.totalQty) || 0
+    const totalPlanDemand = firstMatch.total_plan_qty || partProducts.reduce((sum, p) => sum + (p.part_qty_needed || 0), 0) || 40
+
     const data = {
       id: ticketCode,
-      qr_code: ticketCode,
-      plan_name: planName,
-      part_name: matching[0]?.part_name || partName || '---',
-      specification: matching[0]?.specification || spec || '',
-      quantity: items.reduce((sum, it) => sum + Number(it.qty || 0), 0),
+      qr_code: form.palletCode || ticketCode,
+      backup_qr: form.palletCode || ticketCode,
+      plan_name: planName || firstMatch.plan_name || `KHSX Tháng ${selectedMonth}`,
+      customer: firstMatch.customer || 'Khách hàng',
+      order_code: firstMatch.po_code || (matching.length > 0 ? Array.from(new Set(matching.map((m) => m.po_code).filter(Boolean))).join(', ') : 'APT-0075-01'),
+      product_sku: firstMatch.product_sku || 'OSLO-BUFFET-1800',
+      part_name: firstMatch.part_name || partName || 'Chi tiết',
+      specification: firstMatch.specification || spec || '1800*480*820',
+      quantity: totalQty,
+      total_plan_qty: totalPlanDemand,
+      already_delivered: firstMatch.already_delivered || 0,
+      remaining_qty: firstMatch.remaining_qty !== undefined ? firstMatch.remaining_qty : Math.max(0, totalPlanDemand - totalQty),
       residual: Number(form.surplus) || 0,
-      delivery_stage: form.fromStage || '',
-      receiving_stage: form.toStage || '',
+      delivery_stage: form.fromStage || 'Nhập Kho/Đầu Vào',
+      receiving_stage: form.toStage || 'Tạo Phôi',
       note: form.note || '',
       created_at: new Date(),
-      user_name: creatorName,
-      qc_status: 'Chưa test'
+      user_name: creatorName || 'Administrator',
+      qc_status: firstMatch.qc_status || 'Đạt (Mẫu lần đầu)',
+      qc_inspector: firstMatch.qc_inspector || 'QC',
+      moisture_min: 8,
+      moisture_max: 12
     }
     setPalletPartProducts(partProducts)
     setPalletData(data)
@@ -545,10 +637,21 @@ const CL07_TransferCreateView = () => {
 
             <div className="pv2-field-row pv2-field-row--2col">
               <div className="pv2-field">
-                <label>Chi tiết <span className="pv2-req">*</span></label>
+                <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>Chi tiết <span className="pv2-req">*</span></span>
+                  {!noPallet && Boolean(form.palletCode) && (
+                    <span style={{ fontSize: '0.72rem', color: '#b45309', fontWeight: 700 }}>
+                      Mục đã kiểm tra
+                    </span>
+                  )}
+                </label>
                 <CustomSelect
                   value={form.detail}
-                  options={[{ value: '', label: 'Chọn chi tiết' }, ...productOptions]}
+                  options={
+                    (!noPallet && Boolean(form.palletCode) && palletInspectedParts.length > 0)
+                      ? palletInspectedParts.map((p) => ({ value: p, label: p }))
+                      : [{ value: '', label: 'Chọn chi tiết' }, ...productOptions]
+                  }
                   onChange={(v) => handleDetailChange(v)}
                 />
               </div>

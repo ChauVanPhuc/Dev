@@ -69,6 +69,7 @@ export const transferService = {
     
     formData.append('part_name', mainPartName)
     formData.append('specification', mainSpec)
+    formData.append('backup_qr', payload.palletCode || payload.pallet_code || '')
     formData.append('note', payload.note || '')
     formData.append('details', JSON.stringify(items))
 
@@ -86,8 +87,10 @@ export const transferService = {
     const formattedPayload = {
       user_id: payload.user_id || payload.userId || 1,
       sx_receipt: payload.sx_receipt || payload.user_id || payload.userId || 1,
-      quantity_received: Number(payload.quantity_received || payload.quantity || 0),
-      status: payload.status || 'Hoàn Thành'
+      quantity_received: payload.quantity_received !== undefined ? Number(payload.quantity_received) : Number(payload.quantity || 0),
+      quantity_error: payload.quantity_error !== undefined ? Number(payload.quantity_error) : undefined,
+      status: payload.status || 'Hoàn Thành',
+      note: payload.note || undefined
     }
     const res = await apiClient.patch(`/deliveries/${id}/confirm`, formattedPayload)
     return res.data
