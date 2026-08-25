@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartFlow - Báo Cáo & Demo Hệ Thống Quản Lý Sản Xuất & QLCL</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #1F4E79;
+            --primary-light: #2A6496;
+            --accent: #D97706;
+            --accent-light: #F59E0B;
+            --bg: #0F172A;
+            --card-bg: #1E293B;
+            --card-border: #334155;
+            --text: #F8FAFC;
+            --text-muted: #94A3B8;
+            --success: #10B981;
+            --danger: #EF4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            user-select: none;
+        }
+
+        /* Top Navigation Bar */
+        .topbar {
+            height: 60px;
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--card-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 30px;
+            z-index: 100;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 700;
+            font-size: 18px;
+            color: #FFF;
+        }
+
+        .brand-badge {
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            color: #FFF;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .slide-counter {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--accent-light);
+            background: rgba(217, 119, 6, 0.15);
+            padding: 6px 14px;
+            border-radius: 20px;
+            border: 1px solid rgba(217, 119, 6, 0.3);
+        }
+
+        /* Presentation Container */
+        .presentation {
+            flex: 1;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px 40px;
+        }
+
+        .slide {
+            position: absolute;
+            width: 92%;
+            max-width: 1280px;
+            height: 82vh;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 20px;
+            padding: 45px 55px;
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(20px) scale(0.98);
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            overflow-y: auto;
+        }
+
+        .slide.active {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(0) scale(1);
+        }
+
+        /* Slide Typography */
+        .slide-header {
+            margin-bottom: 25px;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+        }
+
+        .slide-title {
+            font-size: 28px;
+            font-weight: 800;
+            color: #FFF;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .slide-subtitle {
+            font-size: 14px;
+            color: var(--text-muted);
+            font-weight: 400;
+            margin-top: 4px;
+        }
+
+        .slide-category {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+
+        .slide-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Grid Layouts */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+
+        .grid-4 {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+        }
+
+        /* Interactive Feature Card */
+        .card {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--card-border);
+            border-radius: 14px;
+            padding: 22px;
+            transition: all 0.2s ease;
+        }
+
+        .card:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+
+        .card-header {
+            font-size: 16px;
+            font-weight: 700;
+            color: #FFF;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-body {
+            font-size: 13.5px;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .badge-blue { background: rgba(31, 78, 121, 0.4); color: #60A5FA; border: 1px solid #2563EB; }
+        .badge-green { background: rgba(16, 185, 129, 0.15); color: #34D399; border: 1px solid #059669; }
+        .badge-amber { background: rgba(217, 119, 6, 0.15); color: #FBBF24; border: 1px solid #D97706; }
+        .badge-red { background: rgba(239, 68, 68, 0.15); color: #F87171; border: 1px solid #DC2626; }
+
+        /* Step Timeline */
+        .timeline {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: relative;
+            margin: 30px 0;
+            padding: 0 10px;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            top: 25px;
+            left: 40px;
+            right: 40px;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary), var(--accent), var(--success));
+            z-index: 1;
+        }
+
+        .timeline-step {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            width: 150px;
+        }
+
+        .step-circle {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: var(--card-bg);
+            border: 3px solid var(--primary-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 18px;
+            color: #FFF;
+            margin-bottom: 12px;
+            box-shadow: 0 0 15px rgba(31, 78, 121, 0.5);
+        }
+
+        .step-label {
+            font-size: 13px;
+            font-weight: 700;
+            color: #FFF;
+            margin-bottom: 4px;
+        }
+
+        .step-desc {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* Tables */
+        .table-custom {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            text-align: left;
+        }
+
+        .table-custom th {
+            background: rgba(31, 78, 121, 0.6);
+            color: #FFF;
+            padding: 10px 14px;
+            font-weight: 600;
+            border-bottom: 2px solid var(--card-border);
+        }
+
+        .table-custom td {
+            padding: 10px 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            color: var(--text-muted);
+        }
+
+        .table-custom tr:nth-child(even) {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .table-custom tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        /* Flow diagram box */
+        .flow-box {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px dashed var(--accent);
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+        }
+
+        .flow-node {
+            text-align: center;
+            padding: 12px 20px;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        .flow-arrow {
+            color: var(--accent);
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        /* Bottom Controls */
+        .controls {
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 40px;
+            border-top: 1px solid var(--card-border);
+            background: rgba(15, 23, 42, 0.9);
+        }
+
+        .btn {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            color: #FFF;
+            padding: 8px 18px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background: var(--primary);
+            border-color: var(--primary-light);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            border: none;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, var(--primary-light), var(--accent));
+        }
+
+        .key-hint {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .key-badge {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- TOP BAR -->
+    <div class="topbar">
+        <div class="brand">
+            <span>🏭 SmartFlow 4.0</span>
+            <span class="brand-badge">Báo Cáo & Demo</span>
+        </div>
+        <div class="slide-counter" id="slideIndicator">Slide 1 / 11</div>
+    </div>
+
+    <!-- PRESENTATION CONTAINER -->
+    <div class="presentation">
+
+        <!-- SLIDE 1: Title -->
+        <div class="slide active" id="slide-1">
+            <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;">
+                <div class="badge badge-amber" style="font-size: 14px; padding: 6px 16px; margin-bottom: 20px;">DỰ ÁN CHUYỂN ĐỔI SỐ SẢN XUẤT GỖ NỘI THẤT</div>
+                <h1 style="font-size: 44px; font-weight: 800; color: #FFF; margin-bottom: 15px; letter-spacing: -0.5px;">
+                    HỆ THỐNG SMARTFLOW 4.0
+                </h1>
+                <h3 style="font-size: 20px; font-weight: 400; color: var(--text-muted); max-width: 800px; line-height: 1.6; margin-bottom: 40px;">
+                    Quản lý toàn diện chuỗi sản xuất: Từ Đơn bán hàng (PO) ➜ Lệnh Sản Xuất ➜ Bàn giao luân chuyển xưởng ➜ Nghiệm thu QC & Báo cáo thời gian thực
+                </h3>
+
+                <div class="grid-3" style="width: 100%; max-width: 900px; text-align: left;">
+                    <div class="card">
+                        <div class="card-header">🎙️ Người Trình Bày</div>
+                        <div class="card-body" style="color: #FFF; font-weight: 600;">[Nhóm Phát Triển Dự Án / Kế Hoạch SX]</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">🤝 Hỗ Trợ Kỹ Thuật</div>
+                        <div class="card-body" style="color: #FFF; font-weight: 600;">Phòng QLCL & Đội Ngũ Lập Trình</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">📅 Ngày Thực Hiện</div>
+                        <div class="card-body" style="color: #FFF; font-weight: 600;">24/08/2026 (PX1, PX2, NM3)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 2: Agenda -->
+        <div class="slide" id="slide-2">
+            <div class="slide-header">
+                <div>
+                    <div class="slide-category">Nội Dung Báo Cáo</div>
+                    <div class="slide-title">📋 Agenda / Nội Dung Trình Bày</div>
+                </div>
+            </div>
+            <div class="slide-body">
+                <div class="grid-2">
+                    <div class="card">
+                        <div class="card-header"><span class="badge badge-blue">01</span> Bản Đồ Use Cases & Phân Hệ</div>
+                        <div class="card-body">Các tính năng chính trên Web Admin (Kinh doanh, Kỹ thuật, SX, QLCL) và Mobile App tại hiện trường xưởng.</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><span class="badge badge-blue">02</span> Dòng Chảy Quy Trình End-to-End</div>
+                        <div class="card-body">Luồng dữ liệu khép kín từ Đơn PO khách hàng Atlas ➜ Bóc tách BOM Lệnh SX ➜ Bàn giao chuyền ➜ Báo cáo.</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><span class="badge badge-green">03</span> Luồng Chuẩn (Happy Case)</div>
+                        <div class="card-body">Kịch bản bàn giao 3 bên lý tưởng (SX Giao ➜ QC Duyệt Đạt ➜ SX Nhận hàng) ghi nhận sản lượng tự động.</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><span class="badge badge-red">04</span> Luồng Dự Phòng & Xử Lý Sự Cố</div>
+                        <div class="card-body">Phiếu trả hàng lỗi về CĐ trước, giải pháp Mã QR Pallet dự phòng khi mất mạng, Phiếu ngoại lệ.</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><span class="badge badge-amber">05</span> Bộ Tiêu Chuẩn HDKT / SOS / CTQ</div>
+                        <div class="card-body">Số hóa 21 mã lỗi G7, hướng dẫn đo kiểm QC, thao tác chuẩn công nhân, điểm kiểm soát trọng yếu.</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><span class="badge badge-blue">06</span> Kế Hoạch Triển Khai & Go-Live</div>
+                        <div class="card-body">Lộ trình 4 giai đoạn áp dụng từ thí điểm Phân Xưởng 1 đến mở rộng toàn diện PX2 và Nhà Máy 3.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 3: Use Cases -->
+        <div class="slide" id="slide-3">
+            <div class="slide-header">
+                <div>
+                    <div class="slide-category">Kiến Trúc Chức Năng</div>
+                    <div class="slide-title">👥 Bản Đồ Use Cases & Vai Trò Hệ Thống</div>
+                </div>
+            </div>
+            <div class="slide-body">
+                <div class="grid-2">
+                    <div class="card" style="border-left: 4px solid #3B82F6;">
+                        <div class="card-header">💻 Web Admin (Quản Trị & Điều Hành)</div>
+                        <div class="card-body" style="display: flex; flex-direction: column; gap: 8px;">
+                            <div>• <strong>Kỹ thuật (R&D):</strong> Khai báo BOM sản phẩm, quy cách linh kiện, màu sơn <code>(/admin/products)</code>.</div>
+                            <div>• <strong>Kinh doanh (Sale):</strong> Tạo đơn bán hàng PO đối tác Atlas, THP <code>(/admin/purchase-requisitions)</code>.</div>
+                            <div>• <strong>Kế hoạch SX:</strong> Lập Lệnh SX tự động kéo BOM từ PO <code>(/admin/production-orders)</code>.</div>
+                            <div>• <strong>Quản lý QLCL:</strong> Ban hành HDKT/SOS/CTQ, Giám sát báo cáo QC <code>(/admin/reports)</code>.</div>
+                            <div>• <strong>Quản trị viên:</strong> Cấu hình Nhà máy, Dòng hàng, Khách hàng, AQL <code>(/admin/system-config)</code>.</div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="border-left: 4px solid #10B981;">
+                        <div class="card-header">📱 Mobile App (Hiện Trường Xưởng & QC)</div>
+                        <div class="card-body" style="display: flex; flex-direction: column; gap: 8px;">
+                            <div>• <strong>Công nhân SX Giao:</strong> Tạo phiếu bàn giao luân chuyển, chụp ảnh pallet <code>(/transfer)</code>.</div>
+                            <div>• <strong>Nhân viên QC Chuyền:</strong> Kiểm đếm SL thực nhận, ghi nhận SL lỗi, duyệt phiếu <code>(/transfer-list)</code>.</div>
+                            <div>• <strong>Công nhân SX Nhận:</strong> Xác nhận nhận bán thành phẩm vào công đoạn tiếp theo.</div>
+                            <div>• <strong>QC Kiểm định:</strong> Tạo phiếu đo kích thước, ghi nhận mã lỗi G7, chụp ảnh lỗi <code>(/inspection)</code>.</div>
+                            <div>• <strong>Tổ trưởng:</strong> Tạo phiếu báo cáo sự cố nhanh tại chuyền <code>(/quick-report-create)</code>.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 4: Workflow -->
+        <div class="slide" id="slide-4">
+            <div class="slide-header">
+                <div>
+                    <div class="slide-category">Quy Trình Hoạt Động</div>
+                    <div class="slide-title">🔄 Quy Trình Tổng Thể End-to-End</div>
+                </div>
+            </div>
+            <div class="slide-body">
+                <div class="timeline">
+                    <div class="timeline-step">
+                        <div class="step-circle">1</div>
+                        <div class="step-label">PO Bán Hàng</div>
+                        <div class="step-desc">Tạo đơn PO từ khách hàng Atlas</div>
+                    </div>
+                    <div class="timeline-step">
+                        <div class="step-circle">2</div>
+                        <div class="step-label">Lệnh Sản Xuất</div>
+                        <div class="step-desc">Chọn PO ➜ Tự động nhân BOM</div>
+                    </div>
+                    <div class="timeline-step">
+                        <div class="step-circle">3</div>
+                        <div class="step-label">Bàn Giao Xưởng</div>
+                        <div class="step-desc">Tạo phiếu luân chuyển qua App</div>
+                    </div>
+                    <div class="timeline-step">
+                        <div class="step-circle">4</div>
+                        <div class="step-label">QC Xác Nhận</div>
+                        <div class="step-desc">Đếm số lượng & duyệt 3 bên</div>
+                    </div>
+                    <div class="timeline-step">
+                        <div class="step-circle">5</div>
+                        <div class="step-label">Kiểm Tra QC</div>
+                        <div class="step-desc">Đo kích thước & Ghi mã lỗi G7</div>
+                    </div>
+                    <div class="timeline-step">
+                        <div class="step-circle">6</div>
+                        <div class="step-label">Báo Cáo Realtime</div>
+                        <div class="step-desc">Tổng hợp dashboard /reports</div>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 10px;">
+                    <div class="card-header">💡 Điểm Đột Phá: Cơ chế Tự Động Kéo Định Mức BOM</div>
+                    <div class="card-body">
+                        Khi Kế hoạch lập Lệnh SX tại <code>/admin/production-orders/create</code>, chỉ cần chọn Số PO, hệ thống sẽ tự động bóc tách: 100 Tủ Vanity ➜ Cần 105 Mặt bàn, 420 Chân tủ, 210 Hộc kéo (đã tính bù hao 5%). Công nhân chỉ việc chọn đúng linh kiện trên điện thoại để bàn giao.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 5: Happy Case -->
+        <div class="slide" id="slide-5">
+            <div class="slide-header">
+                <div>
+                    <div class="slide-category">Kịch Bản Thực Tế</div>
+                    <div class="slide-title">✅ Luồng Chuẩn (Happy Case): Bàn Giao & Duyệt Đạt 100%</div>
+                </div>
+            </div>
+            <div class="slide-body">
+                <div class="flow-box">
+                    <div class="flow-node">
+                        <div class="badge badge-blue">BƯỚC 1: SX GIAO</div>
+                        <div>Tổ Tạo Phôi 1</div>
+                        <div style="font-size: 11px; color: var(--text-muted);">thuy.ntt tạo phiếu giao 100 Mặt bàn</div>
+                    </div>
+                    <div class="flow-arrow">➔</div>
+                    <div class="flow-node">
+                        <div class="badge badge-amber">BƯỚC 2: QC KIỂM ĐẾM</div>
+                        <div>QC Đặng Quý Hải (IQC)</div>
+                        <div style="font-size: 11px; color: var(--text-muted);">Kiểm tra: 100 Đạt, 0 Lỗi ➜ Duyệt Đạt</div>
+                    </div>
+                    <div class="flow-arrow">➔</div>
+                    <div class="flow-node">
+                        <div class="badge badge-green">BƯỚC 3: SX NHẬN</div>
+                        <div>Tổ Định Hình 1</div>
+                        <div style="font-size: 11px; color: var(--text-muted);">tinh.bt bấm "Xác nhận nhận hàng"</div>
+                    </div>
+                </div>
+
+                <div class="grid-3" style="margin-top: 10px;">
+                    <div class="card">
+                        <div class="card-header">📦 Cập Nhật Tồn Kho</div>
+                        <div class="card-body">Tồn kho công đoạn Tạo Phôi tự động giảm 100 cái, tồn kho Định Hình tự động tăng 100 cái.</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">📊 Tiến Độ Lệnh SX</div>
+                        <div class="card-body">Thanh tiến độ đơn hàng APT-0041-01 trên Web Admin tự động cập nhật đạt 100% công đoạn phôi.</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">🔒 Minh Bạch 3 Bên</div>
+                        <div class="card-body">Lịch sử phiếu ghi nhận rõ thời gian (giờ:phút:giây) và tài khoản của cả 3 người tham gia.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 6: Fallback & Edge cases -->
+        <div class="slide" id="slide-6">
+            <div class="slide-header">
+                <div>
+                    <div class="slide-category">Xử Lý Sự Cố</div>
+                    <div class="slide-title">⚠️ Luồng Dự Phòng Thay Thế & Xử Lý Hàng Lỗi</div>
+                </div>
+            </div>
+            <div class="slide-body">
+                <div class="grid-3">
+                    <div class="card" style="border-top: 4px solid var(--danger);">
+                        <div class="card-header">🔄 1. Phát Hiện Hàng Lỗi</div>
+                        <div class="card-body">
+                            <p><strong>Tình huống:</strong> Giao 100 Mặt bàn, QC phát hiện 2 tấm bị nứt thớ.</p>
+                            <p style="margin-top: 8px;"><strong>Xử lý:</strong></p>
+                            <div>• QC nhận 98 cái vào Định Hình.</div>
+                            <div>• QC bấm nút đỏ <strong>"Tạo phiếu trả hàng"</strong> gửi 2 cái lỗi <code>APP-001</code> về Tạo Phôi.</div>
+                            <div>• Tổ Tạo Phôi nhận lại hàng lỗi để xẻ bù.</div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="border-top: 4px solid var(--accent);">
+                        <div class="card-header">📶 2. Mất Mạng / Sự Cố Wifi</div>
+                        <div class="card-body">
+                            <p><strong>Tình huống:</strong> Mạng xưởng bị gián đoạn, không gửi được phiếu online.</p>
+                            <p style="margin-top: 8px;"><strong>Xử lý:</strong></p>
+                            <div>• Sử dụng hệ thống <strong>QR Dự Phòng <code>(/admin/backup-qrs)</code></strong> & Thẻ Pallet cứng.</div>
+                            <div>• Ghi nhận mã lô offline ➜ Tự động đồng bộ đối soát khi có mạng trở lại.</div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="border-top: 4px solid #8B5CF6;">
+                        <div class="card-header">⚡ 3. Chuyển Giao Bất Thường</div>
+                        <div class="card-body">
+                            <p><strong>Tình huống:</strong> Hàng gia công ngoài, hoặc điều chuyển khẩn cấp giữa PX1 và NM3.</p>
+                            <p style="margin-top: 8px;"><strong>Xử lý:</strong></p>
+                            <div>• Sử dụng phân hệ <strong>Phiếu Ngoại Lệ <code>(/admin/exception-deliveries)</code></strong> có phê duyệt đặc biệt từ Trưởng phòng SX.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 7: Standards HDKT, SOS, CTQ -->
+        <div class="slide" id="slide-7">
+            <div class="slide-header">
+                <div>
+                    <div class="slide-category">Kỹ Thuật & Tiêu Chuẩn</div>
+                    <div class="slide-title">📖 Bộ Tiêu Chuẩn HDKT, SOS, CTQ & 21 Mã Lỗi G7</div>
+                </div>
+            </div>
+            <div class="slide-body">
+                <div class="grid-4">
+                    <div class="card">
+                        <div class="card-header">📋 HDKT</div>
+                        <div class="badge badge-blue">Hướng Dẫn Kiểm Tra</div>
+                        <div class="card-body">Quy trình đo kiểm 3 bước: Đo kích thước cơ khí (+/- 0.5mm), kiểm tra độ phẳng bàn đá, đo độ bóng sơn.</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">📄 SOS</div>
+                        <div class="badge badge-green">Thao Tác Chuẩn</div>
+                        <div class="card-body">Chỉ dẫn trực quan bằng hình ảnh cho công nhân: Chà nhám cữ P180 ➜ P240, vệ sinh thổi bụi trước khi chuyển tổ.</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">⚠️ CTQ</div>
+                        <div class="badge badge-red">Kiểm Soát Trọng Yếu</div>
+                        <div class="card-body">Cảnh báo điểm hiểm yếu: Mối ghép góc 45 độ khung cánh, độ lệch màu mặt cánh tủ Vanity dưới đèn chuẩn D65.</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">🏷️ 21 Mã Lỗi G7</div>
+                        <div class="badge badge-amber">Từ Điển Mã Lỗi</div>
+                        <div class="card-body">Phân nhóm chuẩn: Ngoại quan (APP-001..13), Kết cấu (STR-001..04), Vật liệu (MAT-001..04) kèm nguyên nhân gốc & giải pháp.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 8: Reports -->
+        <div class="slide" id="slide-8">
+            <div class="slide-header">
+                <div>
+                    <div class="slide-category">Giám Sát Chất Lượng</div>
+                    <div class="slide-title">📊 Báo Cáo QC Thời Gian Thực (/admin/reports)</div>
+                </div>
+            </div>
+            <div class="slide-body">
+                <table class="table-custom">
+                    <thead>
+                        <tr>
+                            <th>Công Đoạn</th>
+                            <th>Phân Xưởng</th>
+                            <th>Người Kiểm QC</th>
+                            <th>Bộ Phận</th>
+                            <th>Tổng SL</th>
+                            <th>Lỗi</th>
+                            <th>Tỷ Lệ %</th>
+                            <th>Chi Tiết Mã Lỗi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Tạo Phôi 1</strong></td>
+                            <td>PX1</td>
+                            <td>Đặng Quý Hải</td>
+                            <td>IQC</td>
+                            <td>100</td>
+                            <td>1</td>
+                            <td><span style="color: #34D399;">1.0%</span></td>
+                            <td>[APP-001] Nứt tét (SL: 1)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Định Hình 1</strong></td>
+                            <td>PX1</td>
+                            <td>Hà Đình Thành</td>
+                            <td>PQC1</td>
+                            <td>100</td>
+                            <td>2</td>
+                            <td><span style="color: #FBBF24;">2.0%</span></td>
+                            <td>[STR-002] Trầy xước (SL: 2)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Lắp Ráp 1</strong></td>
+                            <td>PX1</td>
+                            <td>Nguyễn Văn Tiến</td>
+                            <td>PQC1</td>
+                            <td>95</td>
+                            <td>0</td>
+                            <td><span style="color: #34D399;">0.0%</span></td>
+                            <td>— (Đạt chuẩn)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Sơn 1</strong></td>
+                            <td>PX1</td>
+                            <td>Dương Văn Toàn</td>
+                            <td>PQC2</td>
+                            <td>95</td>
+                            <td>1</td>
+                            <td><span style="color: #34D399;">1.05%</span></td>
+                            <td>[APP-004] Bụi sơn (SL: 1)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Định Hình 2</strong></td>
+                            <td>PX2</td>
+                            <td>Hồ Sỹ Khẩn</td>
+                            <td>PQC1</td>
+                            <td>80</td>
+                            <td>2</td>
+                            <td><span style="color: #F87171;">2.5%</span></td>
+                            <td>[APP-007] Sứt mẻ (SL: 2)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- SLIDE 9: Implementation Plan -->
+        <div class="slide" id="slide-9">
+            <div class="slide-header">
+                <div>
+                    <div class="slide-category">Lộ Trình Triển Khai</div>
+                    <div class="slide-title">🚀 Kế Hoạch Triển Khai 4 Giai Đoạn</div>
+                </div>
+            </div>
+            <div class="slide-body">
+                <div class="grid-4">
+                    <div class="card" style="border-top: 4px solid #60A5FA;">
+                        <div class="badge badge-blue">GIAI ĐOẠN 1 (TUẦN 1-2)</div>
+                        <div class="card-header">Thiết Lập Chuẩn</div>
+                        <div class="card-body">
+                            <div>• Cấu hình Master Data.</div>
+                            <div>• Khai báo 21 Mã lỗi G7.</div>
+                            <div>• Ban hành HDKT, SOS, CTQ.</div>
+                            <div>• Chuẩn hóa tài khoản QC & SX.</div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="border-top: 4px solid #34D399;">
+                        <div class="badge badge-green">GIAI ĐOẠN 2 (TUẦN 3-4)</div>
+                        <div class="card-header">Thí Điểm PX1</div>
+                        <div class="card-body">
+                            <div>• Chạy thử nghiệm Lệnh SX APT.</div>
+                            <div>• Đào tạo công nhân PX1 dùng app.</div>
+                            <div>• Vận hành bàn giao 3 bên & QC.</div>
+                            <div>• Tinh chỉnh giao diện theo góp ý.</div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="border-top: 4px solid #FBBF24;">
+                        <div class="badge badge-amber">GIAI ĐOẠN 3 (TUẦN 5-6)</div>
+                        <div class="card-header">Mở Rộng PX2 & NM3</div>
+                        <div class="card-body">
+                            <div>• Triển khai Phân Xưởng 2.</div>
+                            <div>• Triển khai Nhà Máy 3 & FQC.</div>
+                            <div>• Đào tạo quét Thẻ Pallet QR.</div>
+                            <div>• Kích hoạt quy trình Trả hàng lỗi.</div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="border-top: 4px solid #A78BFA;">
+                        <div class="badge badge-blue">GIAI ĐOẠN 4 (TUẦN 7-8)</div>
+                        <div class="card-header">Go-Live Toàn Diện</div>
+                        <div class="card-body">
+                            <div>• Cắt bỏ hoàn toàn sổ sách giấy.</div>
+                            <div>• 100% vận hành trên SmartFlow.</div>
+                            <div>• Họp giao ban dựa trên /reports.</div>
+                            <div>• Đánh giá KPI chất lượng tự động.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 10: Comparison -->
+        <div class="slide" id="slide-10">
+            <div class="slide-header">
+                <div>
+                    <div class="slide-category">Hiệu Quả Dự Án</div>
+                    <div class="slide-title">🎯 So Sánh Trước & Sau Khi Ứng Dụng SmartFlow</div>
+                </div>
+            </div>
+            <div class="slide-body">
+                <table class="table-custom">
+                    <thead>
+                        <tr>
+                            <th style="width: 25%;">Hạng Mục Vận Hành</th>
+                            <th style="width: 37%; background: rgba(239, 68, 68, 0.3);">Trước Khi Có SmartFlow (Thủ Công)</th>
+                            <th style="width: 38%; background: rgba(16, 185, 129, 0.3);">Sau Khi Có SmartFlow (Số Hóa)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Bàn giao hàng giữa các tổ</strong></td>
+                            <td>Ghi sổ tay, đếm vo, dễ thất thoát và tranh cãi số lượng khi hụt hàng.</td>
+                            <td>Tạo phiếu app 3 bên (SX Giao ➜ QC ➜ SX Nhận), minh bạch 100% từng chi tiết.</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Xử lý hàng hư lỗi</strong></td>
+                            <td>Hàng lỗi lẫn lộn trên pallet, khó truy xuất tổ nào làm hư để trừ sản lượng.</td>
+                            <td>Tạo phiếu trả hàng ngay tại trạm, trừ tồn kho tức thì, gắn mã lỗi G7 rõ ràng.</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Tiêu chuẩn kỹ thuật</strong></td>
+                            <td>Tài liệu giấy cất trong tủ văn phòng, công nhân xưởng ít khi xem được.</td>
+                            <td>HDKT, SOS, CTQ hiển thị trực quan kèm ảnh mẫu ngay trên màn hình điện thoại.</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Báo cáo chất lượng cuối ngày</strong></td>
+                            <td>QC mất 2-3 tiếng cuối ca tổng hợp sổ tay nhập lại Excel, dễ sai sót.</td>
+                            <td>Báo cáo tự động tổng hợp tức thì theo thời gian thực chỉ sau 1 cú nhấp chuột.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- SLIDE 11: Q&A -->
+        <div class="slide" id="slide-11">
+            <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;">
+                <div class="badge badge-green" style="font-size: 16px; padding: 8px 24px; margin-bottom: 25px;">KẾT THÚC BÁO CÁO</div>
+                <h1 style="font-size: 48px; font-weight: 800; color: #FFF; margin-bottom: 20px;">
+                    HỎI ĐÁP (Q&A) & CẢM ƠN
+                </h1>
+                <p style="font-size: 18px; color: var(--text-muted); max-width: 650px; line-height: 1.6; margin-bottom: 40px;">
+                    Trân trọng cảm ơn Ban Giám Đốc và các Phòng Ban đã lắng nghe buổi báo cáo demo hệ thống SmartFlow!
+                </p>
+                <div style="display: flex; gap: 20px;">
+                    <div class="card" style="padding: 15px 30px; text-align: center;">
+                        <div style="font-size: 12px; color: var(--text-muted);">TRUY CẬP WEB ADMIN</div>
+                        <div style="color: #60A5FA; font-weight: bold; margin-top: 4px;">localhost:3000/admin</div>
+                    </div>
+                    <div class="card" style="padding: 15px 30px; text-align: center;">
+                        <div style="font-size: 12px; color: var(--text-muted);">ỨNG DỤNG MOBILE</div>
+                        <div style="color: #34D399; font-weight: bold; margin-top: 4px;">SmartFlow Mobile App</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- BOTTOM CONTROLS -->
+    <div class="controls">
+        <div class="key-hint">
+            Dùng phím <span class="key-badge">←</span> <span class="key-badge">→</span> hoặc phím cách <span class="key-badge">Space</span> để chuyển Slide
+        </div>
+        <div style="display: flex; gap: 12px;">
+            <button class="btn" id="btnPrev">◀ Slide Trước</button>
+            <button class="btn btn-primary" id="btnNext">Slide Tiếp ▶</button>
+            <button class="btn" id="btnFullscreen">⛶ Toàn Màn Hình</button>
+        </div>
+    </div>
+
+    <script>
+        let currentSlide = 1;
+        const totalSlides = 11;
+
+        const indicator = document.getElementById('slideIndicator');
+        const btnPrev = document.getElementById('btnPrev');
+        const btnNext = document.getElementById('btnNext');
+        const btnFullscreen = document.getElementById('btnFullscreen');
+
+        function updateSlide(newSlide) {
+            if (newSlide < 1 || newSlide > totalSlides) return;
+            
+            document.getElementById(`slide-${currentSlide}`).classList.remove('active');
+            currentSlide = newSlide;
+            document.getElementById(`slide-${currentSlide}`).classList.add('active');
+            
+            indicator.innerText = `Slide ${currentSlide} / ${totalSlides}`;
+            btnPrev.disabled = (currentSlide === 1);
+            btnNext.disabled = (currentSlide === totalSlides);
+        }
+
+        btnPrev.addEventListener('click', () => updateSlide(currentSlide - 1));
+        btnNext.addEventListener('click', () => updateSlide(currentSlide + 1));
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+                updateSlide(currentSlide + 1);
+            } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+                updateSlide(currentSlide - 1);
+            }
+        });
+
+        btnFullscreen.addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        });
+    </script>
+</body>
+</html>
