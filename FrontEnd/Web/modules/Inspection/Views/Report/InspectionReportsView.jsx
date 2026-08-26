@@ -598,8 +598,7 @@ const InspectionReportsView = () => {
                       <th>Công đoạn</th>
                       <th>Người kiểm QC</th>
                       <th style={{ width: '110px', textAlign: 'center' }}>Xác nhận</th>
-                      <th style={{ width: '120px', textAlign: 'center' }}>Tỷ lệ lỗi (%)</th>
-                      <th style={{ width: '130px', textAlign: 'center' }}>Kết quả</th>
+                      <th style={{ width: '140px', textAlign: 'center' }}>Kết quả</th>
                       <th style={{ width: '90px', textAlign: 'center' }}>Thao tác</th>
                     </tr>
                   </thead>
@@ -634,40 +633,7 @@ const InspectionReportsView = () => {
                             </span>
                           </td>
                           <td style={{ textAlign: 'center' }}>
-                            <span style={{ 
-                              fontWeight: '700', 
-                              color: hasDefect ? '#D97706' : '#10B981',
-                              backgroundColor: hasDefect ? '#FEF3C7' : '#ECFDF5',
-                              padding: '3px 8px',
-                              borderRadius: '12px',
-                              fontSize: '0.8rem',
-                              border: `1px solid ${hasDefect ? '#FDE68A' : '#A7F3D0'}`
-                            }}>
-                              {(item.defect_rate || 0).toFixed(2)}%
-                            </span>
-                          </td>
-                          <td style={{ textAlign: 'center' }}>
-                            {isDaily ? (
-                              <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-                                <span className="status-badge fail" style={{ padding: '3px 8px' }}>
-                                  Lỗi
-                                </span>
-                                {(item.defect_rate > 0) && (
-                                  <span style={{ 
-                                    fontSize: '0.72rem', 
-                                    fontWeight: '700', 
-                                    color: '#D97706', 
-                                    backgroundColor: '#FEF3C7', 
-                                    padding: '1px 6px', 
-                                    borderRadius: '6px', 
-                                    border: '1px solid #FDE68A',
-                                    lineHeight: '1.2'
-                                  }}>
-                                    {(item.defect_rate || 0).toFixed(2)}%
-                                  </span>
-                                )}
-                              </div>
-                            ) : isPass ? (
+                            {!hasDefect ? (
                               <span className="status-badge pass" style={{ padding: '3px 10px' }}>
                                 Đạt
                               </span>
@@ -728,22 +694,11 @@ const InspectionReportsView = () => {
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
                         <span style={{ fontWeight: 'bold', color: '#8D6E63' }}>Mã: #{item.id}</span>
                         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                          <span style={{ 
-                            fontWeight: '700', 
-                            color: hasDefect ? '#D97706' : '#10B981',
-                            backgroundColor: hasDefect ? '#FEF3C7' : '#ECFDF5',
-                            padding: '2px 6px',
-                            borderRadius: '8px',
-                            fontSize: '0.75rem',
-                            border: `1px solid ${hasDefect ? '#FDE68A' : '#A7F3D0'}`
-                          }}>
-                            {(item.defect_rate || 0).toFixed(2)}%
-                          </span>
                           <span className={`status-badge ${item.is_confirmed ? 'pass' : 'fail'}`} style={{ backgroundColor: item.is_confirmed ? '#ECFDF5' : '#FEF2F2', color: item.is_confirmed ? '#10B981' : '#EF4444', borderColor: item.is_confirmed ? '#A7F3D0' : '#FCA5A5' }}>
                             {item.is_confirmed ? (isDaily ? 'HOÀN THÀNH' : 'ĐÃ XN') : 'CHƯA XN'}
                           </span>
-                          <span className={`status-badge ${isDaily ? 'fail' : (isPass ? 'pass' : 'fail')}`}>
-                            {isDaily ? 'LỖI' : (isPass ? 'ĐẠT' : 'KHÔNG ĐẠT')}
+                          <span className={`status-badge ${hasDefect ? 'fail' : 'pass'}`}>
+                            {hasDefect ? `KHÔNG ĐẠT (${(item.defect_rate || 0).toFixed(2)}%)` : 'ĐẠT'}
                           </span>
                         </div>
                       </div>
