@@ -185,7 +185,10 @@ const InspectionReportsView = () => {
     setStageSort,
     setStageStartDate,
     setStageStatusFilter,
+    stageStageFilter,
+    setStageStageFilter,
     setStageTypeFilter,
+    uniqueStages,
     showExportModal,
     sizeVal,
     sortedDefects,
@@ -401,6 +404,7 @@ const InspectionReportsView = () => {
           onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
           activeFiltersCount={
             (stageTypeFilter !== 'all' ? 1 : 0) +
+            (stageStageFilter !== 'all' ? 1 : 0) +
             (stageStatusFilter !== 'all' ? 1 : 0) +
             (stageStartDate ? 1 : 0) +
             (stageEndDate ? 1 : 0)
@@ -411,41 +415,63 @@ const InspectionReportsView = () => {
 
         {/* INLINE EXPANDABLE FILTER BAR */}
         {isFilterBarOpen && (
-          <div className="filter-inline-bar">
-            <div className="filter-field-group">
-              <label className="filter-field-label">Phân loại</label>
+          <div className="filter-inline-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end', backgroundColor: '#FFFDF9', border: '1px solid #EADCC9', borderRadius: '12px', padding: '14px 16px', marginBottom: '16px' }}>
+            <div className="filter-field-group" style={{ minWidth: '160px' }}>
+              <label className="filter-field-label" style={{ fontWeight: '700', color: '#7B5233', fontSize: '0.82rem', marginBottom: '4px', display: 'block' }}>Phân loại</label>
               <select
                 value={stageTypeFilter}
                 onChange={(e) => {
                   setStageTypeFilter(e.target.value);
                   setUnifiedPage(1);
                 }}
+                className="filter-dropdown-input"
+                style={{ width: '100%', height: '36px', borderRadius: '8px', border: '1px solid #EADCC9', padding: '0 10px', backgroundColor: '#fff', color: '#2D1A12', fontSize: '0.88rem' }}
               >
                 <option value="all">Tất cả</option>
-                <option value="stage">Kiểm tra công đoạn</option>
-                <option value="input">Kiểm tra đầu vào (IQC)</option>
+                <option value="stage">Kiểm tra lại</option>
+                <option value="input">Kiểm tra mẫu đầu tiên</option>
                 <option value="process">Kiểm tra quy trình</option>
                 <option value="daily">Ghi nhận lỗi hàng ngày</option>
               </select>
             </div>
 
-            <div className="filter-field-group">
-              <label className="filter-field-label">Kết luận</label>
+            <div className="filter-field-group" style={{ minWidth: '150px' }}>
+              <label className="filter-field-label" style={{ fontWeight: '700', color: '#7B5233', fontSize: '0.82rem', marginBottom: '4px', display: 'block' }}>Công đoạn</label>
+              <select
+                value={stageStageFilter}
+                onChange={(e) => {
+                  setStageStageFilter(e.target.value);
+                  setUnifiedPage(1);
+                }}
+                className="filter-dropdown-input"
+                style={{ width: '100%', height: '36px', borderRadius: '8px', border: '1px solid #EADCC9', padding: '0 10px', backgroundColor: '#fff', color: '#2D1A12', fontSize: '0.88rem' }}
+              >
+                <option value="all">Tất cả công đoạn</option>
+                {uniqueStages && uniqueStages.map(st => (
+                  <option key={st} value={st}>{st}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="filter-field-group" style={{ minWidth: '130px' }}>
+              <label className="filter-field-label" style={{ fontWeight: '700', color: '#7B5233', fontSize: '0.82rem', marginBottom: '4px', display: 'block' }}>Kết luận</label>
               <select
                 value={stageStatusFilter}
                 onChange={(e) => {
                   setStageStatusFilter(e.target.value);
                   setUnifiedPage(1);
                 }}
+                className="filter-dropdown-input"
+                style={{ width: '100%', height: '36px', borderRadius: '8px', border: '1px solid #EADCC9', padding: '0 10px', backgroundColor: '#fff', color: '#2D1A12', fontSize: '0.88rem' }}
               >
                 <option value="all">Tất cả</option>
                 <option value="pass">Đạt (Pass)</option>
-                <option value="fail">Lỗi (Fail)</option>
+                <option value="fail">Không đạt (Fail)</option>
               </select>
             </div>
 
-            <div className="filter-field-group">
-              <label className="filter-field-label">Từ ngày</label>
+            <div className="filter-field-group" style={{ minWidth: '135px' }}>
+              <label className="filter-field-label" style={{ fontWeight: '700', color: '#7B5233', fontSize: '0.82rem', marginBottom: '4px', display: 'block' }}>Từ ngày</label>
               <input 
                 type="date"
                 value={stageStartDate}
@@ -454,11 +480,12 @@ const InspectionReportsView = () => {
                   setUnifiedPage(1);
                 }}
                 className="filter-dropdown-input"
+                style={{ width: '100%', height: '36px', borderRadius: '8px', border: '1px solid #EADCC9', padding: '0 10px', backgroundColor: '#fff', color: '#2D1A12', fontSize: '0.88rem' }}
               />
             </div>
 
-            <div className="filter-field-group">
-              <label className="filter-field-label">Đến ngày</label>
+            <div className="filter-field-group" style={{ minWidth: '135px' }}>
+              <label className="filter-field-label" style={{ fontWeight: '700', color: '#7B5233', fontSize: '0.82rem', marginBottom: '4px', display: 'block' }}>Đến ngày</label>
               <input 
                 type="date"
                 value={stageEndDate}
@@ -467,17 +494,20 @@ const InspectionReportsView = () => {
                   setUnifiedPage(1);
                 }}
                 className="filter-dropdown-input"
+                style={{ width: '100%', height: '36px', borderRadius: '8px', border: '1px solid #EADCC9', padding: '0 10px', backgroundColor: '#fff', color: '#2D1A12', fontSize: '0.88rem' }}
               />
             </div>
 
-            <div className="filter-field-group">
-              <label className="filter-field-label">Hiển thị</label>
+            <div className="filter-field-group" style={{ minWidth: '110px' }}>
+              <label className="filter-field-label" style={{ fontWeight: '700', color: '#7B5233', fontSize: '0.82rem', marginBottom: '4px', display: 'block' }}>Hiển thị</label>
               <select
                 value={unifiedLimit}
                 onChange={(e) => {
                   setUnifiedLimit(parseInt(e.target.value));
                   setUnifiedPage(1);
                 }}
+                className="filter-dropdown-input"
+                style={{ width: '100%', height: '36px', borderRadius: '8px', border: '1px solid #EADCC9', padding: '0 10px', backgroundColor: '#fff', color: '#2D1A12', fontSize: '0.88rem' }}
               >
                 <option value={15}>15 dòng</option>
                 <option value={30}>30 dòng</option>
@@ -486,23 +516,36 @@ const InspectionReportsView = () => {
               </select>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', marginLeft: 'auto' }}>
               <button 
                 onClick={handleResetFilters}
                 style={{
                   height: '36px',
-                  padding: '0 12px',
+                  padding: '0 14px',
                   borderRadius: '8px',
-                  border: '1px solid #EADCC9',
-                  backgroundColor: '#fff',
+                  border: '1.5px solid #EADCC9',
+                  backgroundColor: '#FAF6F0',
                   color: '#7B5233',
-                  fontSize: '0.8rem',
+                  fontSize: '0.82rem',
                   fontWeight: '700',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '4px',
-                  cursor: 'pointer'
+                  gap: '6px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                 }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#7B5233';
+                  e.currentTarget.style.color = '#FFFFFF';
+                  e.currentTarget.style.borderColor = '#7B5233';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#FAF6F0';
+                  e.currentTarget.style.color = '#7B5233';
+                  e.currentTarget.style.borderColor = '#EADCC9';
+                }}
+                title="Xóa toàn bộ bộ lọc và đặt lại mặc định"
               >
                 <RotateCcw size={14} /> Xóa lọc
               </button>
@@ -605,13 +648,47 @@ const InspectionReportsView = () => {
                           </td>
                           <td style={{ textAlign: 'center' }}>
                             {isDaily ? (
-                              <span style={{ fontWeight: '700', color: '#EF4444', fontSize: '0.85rem' }}>
-                                {item.result_label}
+                              <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                                <span className="status-badge fail" style={{ padding: '3px 8px' }}>
+                                  Lỗi
+                                </span>
+                                {(item.defect_rate > 0) && (
+                                  <span style={{ 
+                                    fontSize: '0.72rem', 
+                                    fontWeight: '700', 
+                                    color: '#D97706', 
+                                    backgroundColor: '#FEF3C7', 
+                                    padding: '1px 6px', 
+                                    borderRadius: '6px', 
+                                    border: '1px solid #FDE68A',
+                                    lineHeight: '1.2'
+                                  }}>
+                                    {(item.defect_rate || 0).toFixed(2)}%
+                                  </span>
+                                )}
+                              </div>
+                            ) : isPass ? (
+                              <span className="status-badge pass" style={{ padding: '3px 10px' }}>
+                                Đạt
                               </span>
                             ) : (
-                              <span className={`status-badge ${isPass ? 'pass' : 'fail'}`}>
-                                {isPass ? 'Đạt' : 'Lỗi'}
-                              </span>
+                              <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                                <span className="status-badge fail" style={{ padding: '3px 8px' }}>
+                                  Không đạt
+                                </span>
+                                <span style={{ 
+                                  fontSize: '0.72rem', 
+                                  fontWeight: '700', 
+                                  color: '#D97706', 
+                                  backgroundColor: '#FEF3C7', 
+                                  padding: '1px 6px', 
+                                  borderRadius: '6px', 
+                                  border: '1px solid #FDE68A',
+                                  lineHeight: '1.2'
+                                }}>
+                                  {(item.defect_rate || 0).toFixed(2)}%
+                                </span>
+                              </div>
                             )}
                           </td>
                           <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
@@ -666,7 +743,7 @@ const InspectionReportsView = () => {
                             {item.is_confirmed ? (isDaily ? 'HOÀN THÀNH' : 'ĐÃ XN') : 'CHƯA XN'}
                           </span>
                           <span className={`status-badge ${isDaily ? 'fail' : (isPass ? 'pass' : 'fail')}`}>
-                            {isDaily ? 'LỖI' : (isPass ? 'ĐẠT' : 'LỖI')}
+                            {isDaily ? 'LỖI' : (isPass ? 'ĐẠT' : 'KHÔNG ĐẠT')}
                           </span>
                         </div>
                       </div>

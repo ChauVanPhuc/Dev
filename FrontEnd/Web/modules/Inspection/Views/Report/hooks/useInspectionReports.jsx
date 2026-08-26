@@ -29,17 +29,21 @@ import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 export const getInspectionTypeLabel = (type) => {
   switch (type) {
     case 'dau-vao':
-    case 'nhap-kho': return 'Nhập kho';
+    case 'nhap-kho':
+    case 'mau-dau-tien':
+    case 'input': return 'Kiểm tra mẫu đầu tiên';
+    case 'cong-doan':
+    case 'stage': return 'Kiểm tra lại';
     case 'do-am': return 'Độ ẩm';
     case 'kich-thuoc': return 'Kích thước';
     case 'ngoai-quan': return 'Ngoại quan';
     case 'chuc-nang': return 'Chức năng';
-    case 'cong-doan': return 'Công đoạn';
     case 'bam-dinh': return 'Bám dính';
     case 'sau-dong-goi': return 'Sau đóng gói';
     case 'phu-kien': return 'Phụ kiện';
-    case 'quy-trinh': return 'Quy trình';
-    case 'mau-dau-tien': return 'Mẫu đầu tiên';
+    case 'quy-trinh':
+    case 'process': return 'Kiểm tra quy trình';
+    case 'daily': return 'Ghi nhận lỗi hàng ngày';
     default: return type || 'N/A';
   }
 };
@@ -82,6 +86,7 @@ export const useInspectionReports = () => {
   const [stageSearch, setStageSearch] = useState('');
   const [stageTypeFilter, setStageTypeFilter] = useState('all');
   const [stageStatusFilter, setStageStatusFilter] = useState('all');
+  const [stageStageFilter, setStageStageFilter] = useState('all');
   const [stageStartDate, setStageStartDate] = useState('');
   const [stageEndDate, setStageEndDate] = useState('');
   const [stageSort, setStageSort] = useState('date_desc');
@@ -109,6 +114,17 @@ export const useInspectionReports = () => {
 
   const [unifiedPage, setUnifiedPage] = useState(1);
   const [unifiedLimit, setUnifiedLimit] = useState(15);
+
+  const handleResetFilters = () => {
+    setStageSearch('');
+    setStageTypeFilter('all');
+    setStageStatusFilter('all');
+    setStageStageFilter('all');
+    setStageStartDate('');
+    setStageEndDate('');
+    setStageSort('date_desc');
+    setUnifiedPage(1);
+  };
 
   const getDisplayInspector = (item) => {
     if (!item) return 'N/A';
@@ -551,19 +567,35 @@ export const useInspectionReports = () => {
     return result;
   }, [dailyInspections, dailySearch, dailyStartDate, dailyEndDate, dailySort]);
 
+  // Unique stages for filter dropdown
+  const uniqueStages = useMemo(() => {
+    const sSet = new Set();
+    stageInspections.forEach(i => {
+      const st = i.stage || i.stage_name;
+      if (st && st !== 'N/A') sSet.add(st);
+    });
+    dailyInspections.forEach(i => {
+      const st = i.stage_name || i.stage;
+      if (st && st !== 'N/A') sSet.add(st);
+    });
+    const standardStages = ['Nhập Kho', 'Tạo Phôi', 'Định Hình', 'Lắp Ráp', 'Sơn', 'Đóng Gói', 'Lưu Kho', 'QC Final'];
+    standardStages.forEach(st => sSet.add(st));
+    return Array.from(sSet).filter(Boolean).sort();
+  }, [stageInspections, dailyInspections]);
+
   // --- FILTERING & SORTING UNIFIED LIST (Stage, Inbound, Process, Daily) ---
   const filteredUnifiedList = useMemo(() => {
     let list = [];
     
     // 1. Stage Inspections
     stageInspections.forEach(item => {
-      let cat = "Kiểm tra công đoạn";
+      let cat = "Kiểm tra lại";
       let typeLabel = "stage";
       if (item.inspection_type === 'quy-trinh') {
         cat = "Kiểm tra quy trình";
         typeLabel = "process";
-      } else if (item.inspection_type === 'mau-dau-tien') {
-        cat = "Kiểm tra đầu vào";
+      } else if (item.inspection_type === 'mau-dau-tien' || item.inspection_type === 'dau-vao' || item.inspection_type === 'nhap-kho') {
+        cat = "Kiểm tra mẫu đầu tiên";
         typeLabel = "input";
       }
       
@@ -650,6 +682,14 @@ export const useInspectionReports = () => {
         return item.conclusion === stageStatusFilter;
       });
     }
+
+    // Stage (Công đoạn) filter
+    if (stageStageFilter !== 'all') {
+      list = list.filter(item => {
+        const itemStage = (item.stage || item.stage_name || '').toLowerCase();
+        return itemStage.includes(stageStageFilter.toLowerCase());
+      });
+    }
     
     // Date range filter
     if (stageStartDate) {
@@ -675,7 +715,7 @@ export const useInspectionReports = () => {
     }
     
     return list;
-  }, [stageInspections, dailyInspections, filterPending24h, stageSearch, stageTypeFilter, stageStatusFilter, stageStartDate, stageEndDate, stageSort]);
+  }, [stageInspections, dailyInspections, filterPending24h, stageSearch, stageTypeFilter, stageStatusFilter, stageStageFilter, stageStartDate, stageEndDate, stageSort]);
 
   const paginatedUnifiedList = useMemo(() => {
     const startIdx = (unifiedPage - 1) * unifiedLimit;
@@ -756,28 +796,6 @@ export const useInspectionReports = () => {
     e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 24 24" fill="none" stroke="%2394a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>';
   };
 
-  // Reset all filters
-  const handleResetFilters = () => {
-    setStageSearch('');
-    setStageTypeFilter('all');
-    setStageStatusFilter('all');
-    setStageStartDate('');
-    setStageEndDate('');
-    setStagePage(1);
-
-    setInboundSearch('');
-    setInboundStatusFilter('all');
-    setInboundStartDate('');
-    setInboundEndDate('');
-    setInboundPage(1);
-
-    setDailySearch('');
-    setDailyStartDate('');
-    setDailyEndDate('');
-    setDailyPage(1);
-  };
-
-
   // ----------------------------------------------------
   // EXPORT LOGIC: EXCEL FORMATTING HELPERS
   // ----------------------------------------------------
@@ -813,6 +831,9 @@ export const useInspectionReports = () => {
   };
 
   const styleTableHeaderRow = (worksheet, rowNumber, columnsCount) => {
+    worksheet.views = [
+      { state: 'frozen', ySplit: rowNumber }
+    ];
     const row = worksheet.getRow(rowNumber);
     row.height = 26;
     for (let c = 1; c <= columnsCount; c++) {
@@ -1934,7 +1955,10 @@ export const useInspectionReports = () => {
     stageSort,
     stageStartDate,
     stageStatusFilter,
+    stageStageFilter,
+    setStageStageFilter,
     stageTypeFilter,
+    uniqueStages,
     styleTableHeaderRow,
     subtitle,
     title,
