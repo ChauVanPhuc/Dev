@@ -8,6 +8,7 @@ export const ROUTES = {
   INSPECTION_PARAMETER: '/production_v2/inspection/parameter',
   INSPECTION_PROCESS: '/production_v2/inspection/process',
   INSPECTION_QA: '/production_v2/inspection/qa',
+  INSPECTION_DAILY: '/production_v2/inspection/daily',
 }
 
 export const PERMISSIONS = {
@@ -52,6 +53,7 @@ export const INSPECT_MODES = {
   PARAMETER: 'parameter',
   PROCESS: 'process',
   QA: 'qa',
+  DAILY: 'daily',
 }
 
 export const MODE_TO_ROUTE = {
@@ -60,6 +62,7 @@ export const MODE_TO_ROUTE = {
   parameter: ROUTES.INSPECTION_PARAMETER,
   process: ROUTES.INSPECTION_PROCESS,
   qa: ROUTES.INSPECTION_QA,
+  daily: ROUTES.INSPECTION_DAILY,
 }
 
 export const INSPECT_MODE_OPTIONS = [
@@ -68,6 +71,7 @@ export const INSPECT_MODE_OPTIONS = [
   { value: 'parameter', label: 'Kiểm tra thông số' },
   { value: 'process', label: 'Kiểm tra quy trình' },
   { value: 'qa', label: 'Vấn đáp' },
+  { value: 'daily', label: 'Ghi nhận lỗi hằng ngày' },
 ]
 
 export const INSPECT_RESULT = {

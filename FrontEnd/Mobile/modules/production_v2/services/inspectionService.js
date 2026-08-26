@@ -150,6 +150,32 @@ export const inspectionService = {
   },
 
   async create(payload) {
+    if (payload && (payload.mode === 'daily' || payload.mode === 'DAILY')) {
+      const defects = (payload.errors || [])
+        .filter(e => (e.defectId || e.defect_id || e.id) && Number(e.qty) > 0)
+        .map(e => ({
+          defect_id: Number(e.defectId || e.defect_id || e.id),
+          quantity: Number(e.qty) || 0
+        }))
+      
+      const totalDefects = defects.reduce((sum, d) => sum + d.quantity, 0)
+      const totalProducts = Number(payload.sampleQty || payload.total_products || payload.requiredQty) || 100
+      const defectRate = totalProducts > 0 ? Number(((totalDefects / totalProducts) * 100).toFixed(2)) : 0
+
+      const dailyBody = {
+        inspection_date: new Date().toISOString().split('T')[0],
+        stage_name: payload.stage || payload.stage_name || 'Nhập Kho',
+        inspector_id: payload.inspector_id || payload.inspectorId || null,
+        batch_no: payload.po || payload.batch_no || null,
+        pallet_code: payload.palletCode || payload.pallet_code || null,
+        total_products: totalProducts,
+        total_defects: totalDefects,
+        defect_rate: defectRate,
+        defects: defects
+      }
+      const res = await apiClient.post('/inspections/daily', dailyBody)
+      return res.data
+    }
     const res = await apiClient.post('/inspections/', payload)
     return res.data
   },

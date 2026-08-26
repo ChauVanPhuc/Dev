@@ -121,7 +121,7 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
                   disabled={readOnly}
                 />
               </div>
-              {formState.mode === INSPECT_MODES.RE_INSPECT || formState.mode === INSPECT_MODES.PARAMETER ? (
+              {formState.mode === INSPECT_MODES.RE_INSPECT ? (
                 <div className="pv2-field">
                   <label style={{ fontSize: '13.5px', fontWeight: '700', color: '#4a240e', marginBottom: '4px', display: 'block' }}>
                     Mã pallet <span className="pv2-req">*</span>
@@ -141,10 +141,11 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
                     Công đoạn <span className="pv2-req">*</span>
                   </label>
                   <CustomSelect
-                    value={formState.stage}
+                    value={formState.stage || formState.paramStage}
                     options={formState.stageOptions}
-                    onChange={formState.handleStageChange || formState.setStage}
+                    onChange={formState.handleParamStageChange || formState.handleStageChange || formState.setStage}
                     disabled={readOnly}
+                    placeholder="Chọn công đoạn..."
                   />
                 </div>
               )}

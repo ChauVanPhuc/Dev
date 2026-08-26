@@ -54,6 +54,7 @@ import CL09B_ReInspectView from '@modules/production_v2/Views/CL09B_ReInspectVie
 import CL09C_ParameterView from '@modules/production_v2/Views/CL09C_ParameterView'
 import CL09D_ProcessView from '@modules/production_v2/Views/CL09D_ProcessView'
 import CL09E_QAView from '@modules/production_v2/Views/CL09E_QAView'
+import CL09F_DailyInspectionView from '@modules/production_v2/Views/CL09F_DailyInspectionView'
 
 /**
  * Component xử lý nút Back vật lý của Android
@@ -159,6 +160,8 @@ function App() {
             <Route path="/production_v2/inspection/process/:id" element={<CL09D_ProcessView />} />
             <Route path="/production_v2/inspection/qa" element={<CL09E_QAView />} />
             <Route path="/production_v2/inspection/qa/:id" element={<CL09E_QAView />} />
+            <Route path="/production_v2/inspection/daily" element={<CL09F_DailyInspectionView />} />
+            <Route path="/production_v2/inspection/daily/:id" element={<CL09F_DailyInspectionView />} />
             <Route path="/production_v2/inspection" element={<Navigate to="/production_v2/inspection/first-sample" replace />} />
             <Route path="/production_v2/inspection/:id" element={<Navigate to="/production_v2/inspection/first-sample" replace />} />
           </Route>

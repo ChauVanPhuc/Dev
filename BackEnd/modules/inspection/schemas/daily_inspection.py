@@ -10,6 +10,8 @@ class DailyInspectionRecordCreate(BaseModel):
     inspection_date: Optional[date] = None
     stage_name: str
     inspector_id: Optional[int] = None
+    batch_no: Optional[str] = None
+    pallet_code: Optional[str] = None
     total_products: int
     total_defects: int
     defect_rate: float
@@ -61,6 +63,7 @@ class DailyInspectionRecordRead(BaseModel):
     inspector_id: Optional[int]
     inspector_name: Optional[str] = None
     batch_no: Optional[str] = None
+    pallet_code: Optional[str] = None
     status: Optional[str] = "Đã hoàn thành"
     is_confirmed: Optional[bool] = True
     total_products: int

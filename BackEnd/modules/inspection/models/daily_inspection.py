@@ -12,6 +12,7 @@ class DailyInspectionRecord(Base):
     stage_name = Column(NVARCHAR(100), nullable=False)
     inspector_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
     batch_no = Column(NVARCHAR(100), nullable=True)
+    pallet_code = Column(NVARCHAR(100), nullable=True)
     status = Column(NVARCHAR(50), default="Đã hoàn thành")
     is_confirmed = Column(Boolean, default=True)
     total_products = Column(Integer, default=0)

@@ -47,6 +47,8 @@ def create_daily_inspection(
             inspection_date = data.inspection_date or datetime.date.today(),
             stage_name      = data.stage_name,
             inspector_id    = data.inspector_id,
+            batch_no        = data.batch_no,
+            pallet_code     = data.pallet_code,
             total_products  = data.total_products,
             total_defects   = data.total_defects,
             defect_rate     = data.defect_rate

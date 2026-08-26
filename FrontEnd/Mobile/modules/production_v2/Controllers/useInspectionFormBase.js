@@ -1437,9 +1437,11 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
   const setSpecWithDirty = (val) => { setSpec(val); setIsDirty(true); }
   const setSampleQtyWithDirty = (val) => {
     let num = Number(val)
-    const maxAllowed = samplingRule?.sample_size || Number(requiredQty) || 0
-    if (maxAllowed > 0 && num > maxAllowed) {
-      num = maxAllowed
+    if (mode !== INSPECT_MODES.DAILY) {
+      const maxAllowed = samplingRule?.sample_size || Number(requiredQty) || 0
+      if (maxAllowed > 0 && num > maxAllowed) {
+        num = maxAllowed
+      }
     }
     const finalVal = val === '' ? '' : String(isNaN(num) || num < 0 ? 0 : num)
     setSampleQty(finalVal)
