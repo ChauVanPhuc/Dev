@@ -141,7 +141,7 @@ with engine.connect() as conn:
 
                 # Chọn tuyến công đoạn theo trọng số
                 route_choice = random.choices(STAGE_ROUTES, weights=[r['weight'] for r in STAGE_ROUTES])[0]
-                d_stage = f"{route_choice['from']} {f_suffix}" if route_choice['from'] != 'Nhập Kho' else f"Nhập Kho {f_suffix}"
+                d_stage = route_choice['from'] if route_choice['from'] == 'Nhập Kho' else f"{route_choice['from']} {f_suffix}"
                 r_stage = f"{route_choice['to']} {f_suffix}"
 
                 # Gán đúng CÔNG NHÂN

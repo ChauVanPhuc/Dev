@@ -567,15 +567,22 @@ export const useInspectionReports = () => {
     return result;
   }, [dailyInspections, dailySearch, dailyStartDate, dailyEndDate, dailySort]);
 
+  const normalizeStage = (st) => {
+    if (!st || st === 'N/A' || st === '---') return 'N/A';
+    let s = String(st).trim();
+    if (/^Nhập Kho(\s*\d+|\s*NM\d+|\s*\/Đầu Vào)?$/i.test(s)) return 'Nhập Kho';
+    return s;
+  };
+
   // Unique stages for filter dropdown
   const uniqueStages = useMemo(() => {
     const sSet = new Set();
     stageInspections.forEach(i => {
-      const st = i.stage || i.stage_name;
+      const st = normalizeStage(i.stage || i.stage_name);
       if (st && st !== 'N/A') sSet.add(st);
     });
     dailyInspections.forEach(i => {
-      const st = i.stage_name || i.stage;
+      const st = normalizeStage(i.stage_name || i.stage);
       if (st && st !== 'N/A') sSet.add(st);
     });
     const standardStages = ['Nhập Kho', 'Tạo Phôi', 'Định Hình', 'Lắp Ráp', 'Sơn', 'Đóng Gói', 'Lưu Kho', 'QC Final'];
@@ -603,6 +610,7 @@ export const useInspectionReports = () => {
       const eQty = item.error_qty || 0;
       const isPass = item.conclusion === 'pass';
       const dRate = isPass ? 0 : (sQty > 0 ? (eQty / sQty) * 100 : 0);
+      const stName = normalizeStage(item.stage || item.stage_name || item.product_sku);
 
       list.push({
         id: item.id,
@@ -612,8 +620,8 @@ export const useInspectionReports = () => {
         inspection_date: item.inspection_date,
         created_at: item.created_at,
         batch_no: item.batch_no,
-        stage: item.stage || item.stage_name || "N/A",
-        product_sku: item.stage || item.stage_name || item.product_sku || "N/A",
+        stage: stName,
+        product_sku: stName,
         inspector_name: item.inspector_name || getDisplayInspector(item),
         is_confirmed: item.is_confirmed,
         confirmed_at: item.confirmed_at,
@@ -630,6 +638,7 @@ export const useInspectionReports = () => {
     // 2. Daily Inspections
     dailyInspections.forEach(item => {
       const dRate = Number(item.defect_rate || 0);
+      const stName = normalizeStage(item.stage_name || item.stage || item.product_sku);
       list.push({
         id: item.id,
         raw_item: item,
@@ -638,8 +647,8 @@ export const useInspectionReports = () => {
         inspection_date: item.created_at || item.inspection_date,
         created_at: item.created_at,
         batch_no: item.batch_no || "APT-0041-01",
-        stage: item.stage_name || item.stage || "N/A",
-        product_sku: item.stage_name || item.stage || item.product_sku || "N/A",
+        stage: stName,
+        product_sku: stName,
         inspector_name: item.inspector_name || getDisplayInspector(item),
         is_confirmed: true,
         conclusion: null,
