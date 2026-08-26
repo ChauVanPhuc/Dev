@@ -18,6 +18,8 @@ class ProductBase(BaseModel):
     unit_price: Optional[float] = 0.0
     total_foreign_currency: Optional[float] = 0.0
     total_vnd: Optional[float] = 0.0
+    description: Optional[str] = None
+    factory: Optional[str] = None
 
 class ProductOut(ProductBase):
     id: int

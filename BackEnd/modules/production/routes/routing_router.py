@@ -19,6 +19,11 @@ def create_team(data: ProductionTeamCreate, db: Session = Depends(get_db)):
     """Tạo mới một Tổ sản xuất"""
     return routing_controller.create_team(db, data)
 
+@router.put("/teams/{team_id}")
+def update_team(team_id: str, data: ProductionTeamCreate, db: Session = Depends(get_db)):
+    """Cập nhật thông tin một Tổ sản xuất"""
+    return routing_controller.update_team(db, team_id, data)
+
 @router.post("/teams/sync-from-system")
 def sync_teams(db: Session = Depends(get_db)):
     """Đồng bộ / Khởi tạo Master Data các Tổ sản xuất chuẩn theo từng Nhà máy từ Hệ thống"""

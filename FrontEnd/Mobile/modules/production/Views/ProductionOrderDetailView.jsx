@@ -316,7 +316,7 @@ const ProductionOrderDetailView = () => {
                   key={st.stage_id}
                   title={st.stage_name}
                   progress={st.progress}
-                  defaultOpen={processedDetails.length > 0}
+                  defaultOpen={false}
                 >
                   <div style={{ padding: '8px' }}>
                     <DataTable columns={tableColumns} data={processedDetails} />

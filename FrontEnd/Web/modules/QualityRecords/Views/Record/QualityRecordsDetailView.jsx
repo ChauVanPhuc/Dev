@@ -118,6 +118,10 @@ const QualityRecordsDetailView = () => {
     };
 
     const styleTableHeaderRow = (worksheet, rowNumber, columnsCount) => {
+        // Luôn cố định (Freeze Panes) các dòng tiêu đề phía trên để khi cuộn dữ liệu tiêu đề không bị trôi
+        worksheet.views = [
+            { state: 'frozen', ySplit: rowNumber }
+        ];
         const row = worksheet.getRow(rowNumber);
         row.height = 26;
         for (let c = 1; c <= columnsCount; c++) {

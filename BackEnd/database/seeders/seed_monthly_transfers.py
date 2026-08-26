@@ -11,10 +11,13 @@ Phân bổ chính xác:
 
 import sys
 import os
+import io
 import random
 from datetime import datetime, timedelta
 
-sys.stdout.reconfigure(encoding='utf-8')
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 import app.models  # Ensures all ORM models are registered
@@ -87,13 +90,20 @@ def run_seeder():
 
         # 3. Định nghĩa mô hình Tỷ lệ trả lại theo Công đoạn
         # Tỷ lệ: Định hình 5%, Lắp Ráp 30%, Sơn 30%, Đóng gói 20%, Final 5%, Khác 10%
+        # Trả lại khi chuyển giao giữa các công đoạn:
+        # - Lắp Ráp từ chối nhận từ Định Hình (trả lại Định Hình): 30%
+        # - Sơn từ chối nhận từ Lắp Ráp (trả lại Lắp Ráp): 30%
+        # - Đóng Gói từ chối nhận từ Sơn (trả lại Sơn): 20%
+        # - Định Hình từ chối nhận từ Tạo Phôi (trả lại Tạo Phôi): 5%
+        # - Final (Lưu Kho) từ chối nhận từ Đóng Gói: 5%
+        # - Khác (Tạo Phôi từ chối nhận từ Nhập Kho): 10%
         stage_return_weights = [
-            ("Lắp Ráp", "Định Hình 1", "Lắp Ráp 1", 30),
-            ("Sơn", "Lắp Ráp 1", "Sơn 1", 30),
-            ("Đóng Gói", "Sơn 1", "Đóng Gói 1", 20),
-            ("Khác", "Nhập Kho 1", "Tạo Phôi 1", 10),
-            ("Định Hình", "Tạo Phôi 1", "Định Hình 1", 5),
-            ("Final", "Đóng Gói 1", "Lưu Kho 1", 5)
+            ("Lắp Ráp", "Định Hình", "Lắp Ráp", 30),
+            ("Sơn", "Lắp Ráp", "Sơn", 30),
+            ("Đóng Gói", "Sơn", "Đóng Gói", 20),
+            ("Khác", "Nhập Kho", "Tạo Phôi", 10),
+            ("Định Hình", "Tạo Phôi", "Định Hình", 5),
+            ("Final", "Đóng Gói", "Lưu Kho", 5)
         ]
         
         stages_population = []
@@ -103,9 +113,9 @@ def run_seeder():
         # 4. Định nghĩa mô hình Tỷ lệ Loại Lỗi
         # Nứt tét 25%, Không đồng màu 20%, Lệch màu 15%, Cong vênh 10%, Lỗi khác 30%
         other_defects = [
-            "Trầy xước bề mặt", "Chảy sơn màng", "Bong tróc sơn", "Bụi sơn bám", 
-            "Cấn móp góc", "Sứt mẻ cạnh", "Lắp ráp lệch khung", "Lồi đinh mặt",
-            "Phồng rộp ván", "Lỗ kim bề mặt"
+            "Trầy xước", "Chảy sơn", "Bong Tróc", "Bụi sơn", 
+            "Cấn móp", "Sứt mẻ", "Lắp ráp lệch", "Lồi đinh",
+            "Phồng rộp", "Lỗ kim"
         ]
         
         defect_weights = (
@@ -116,7 +126,12 @@ def run_seeder():
             other_defects * 3  # 10 * 3 = 30%
         )
 
-        # 5. Xóa dữ liệu cũ nếu có để nạp mới hoàn toàn
+        # 5. Xóa dữ liệu cũ trong deliveries và các bảng phụ thuộc để nạp mới hoàn toàn
+        db.execute(text("DELETE FROM delivery_details"))
+        db.execute(text("DELETE FROM delivery_images"))
+        db.execute(text("DELETE FROM delivery_qc"))
+        db.execute(text("DELETE FROM delivery_returns"))
+        db.commit()
         deleted_cnt = db.query(Delivery).delete()
         db.commit()
         print(f"[THÔNG BÁO] Đã dọn dẹp {deleted_cnt} bản ghi cũ trong bảng deliveries.")
@@ -164,26 +179,32 @@ def run_seeder():
 
                 if is_returned:
                     # Lấy luân chuyển công đoạn theo tỷ lệ trả lại
-                    stage_key, del_stage, rec_stage = random.choice(stages_population)
+                    stage_key, del_base, rec_base = random.choice(stages_population)
+                    del_stage = f"{del_base} {factory_id}"
+                    rec_stage = f"{rec_base} {factory_id}"
+                    
                     # Lấy loại lỗi theo tỷ lệ
                     defect_name = random.choice(defect_weights)
                     
                     status = "Trả lại"
                     qty_total = random.randint(50, 500)
-                    qty_returned = random.randint(5, int(qty_total * 0.4))  # Trả lại 5-40% số lượng
+                    qty_returned = random.randint(5, max(6, int(qty_total * 0.4)))  # Trả lại 5-40% số lượng
                     qty_error = qty_returned
                     qty_received = qty_total - qty_returned
                     note = f"Trả lại do phát sinh lỗi: {defect_name}. Yêu cầu khắc phục công đoạn {del_stage}."
                 else:
                     # Phiếu hoàn thành bình thường
-                    stages_normal = [
-                        ("Tạo Phôi 1", "Định Hình 1"),
-                        ("Định Hình 1", "Lắp Ráp 1"),
-                        ("Lắp Ráp 1", "Sơn 1"),
-                        ("Sơn 1", "Đóng Gói 1"),
-                        ("Đóng Gói 1", "Lưu Kho 1")
+                    stages_normal_base = [
+                        ("Tạo Phôi", "Định Hình"),
+                        ("Định Hình", "Lắp Ráp"),
+                        ("Lắp Ráp", "Sơn"),
+                        ("Sơn", "Đóng Gói"),
+                        ("Đóng Gói", "Lưu Kho")
                     ]
-                    del_stage, rec_stage = random.choice(stages_normal)
+                    del_base, rec_base = random.choice(stages_normal_base)
+                    del_stage = f"{del_base} {factory_id}"
+                    rec_stage = f"{rec_base} {factory_id}"
+                    
                     status = "Hoàn thành"
                     qty_total = random.randint(50, 500)
                     qty_returned = 0

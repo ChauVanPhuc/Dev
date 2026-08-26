@@ -30,12 +30,12 @@ export const qualityService = {
 
     // Lấy lịch sử bàn giao theo Kế hoạch
     getHandoverHistoryByPlan: async (planId) => {
-        return await api.get(`/deliveries/history?plan_id=${planId}&limit=100000`);
+        return await api.get(`/deliveries/plan/${planId}?limit=100000`);
     },
 
     // Lấy lịch sử kiểm tra đầu vào theo Kế hoạch
     getInboundHistoryByPlan: async (planId) => {
-        return await api.get(`/inspections/plan/${planId}`);
+        return await api.get(`/inspections/inbound/plan/${planId}`);
     },
 
     // Lấy lịch sử QC kiểm tra theo Kế hoạch

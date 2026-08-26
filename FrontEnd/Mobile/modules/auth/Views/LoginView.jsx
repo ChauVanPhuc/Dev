@@ -24,7 +24,7 @@ const Login = () => {
 
   const fromPath = location.state?.from?.pathname
     ? (location.state.from.pathname + (location.state.from.search || ''))
-    : '/delivery-info';
+    : '/production/orders';
 
   const [formData, setFormData] = useState({
     username: '',

@@ -46,6 +46,8 @@ class Product(ProductBase):
     """Schema hiển thị thông tin sản phẩm đầy đủ từ database."""
     id: int
     created_at: datetime
+    factory: Optional[str] = None
+    bom_details: List[BOMDetail] = []
 
     class Config:
         from_attributes = True

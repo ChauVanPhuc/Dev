@@ -150,6 +150,15 @@ const ProductionRoutingView = () => {
   const [productRowsPerPage, setProductRowsPerPage] = useState(15);
 
   useEffect(() => {
+    const handleWindowClick = () => {
+      setOpenActionMenuSku(null);
+      setActionMenuTeamId(null);
+    };
+    window.addEventListener('click', handleWindowClick);
+    return () => window.removeEventListener('click', handleWindowClick);
+  }, []);
+
+  useEffect(() => {
     setProductPage(0);
   }, [selectedRoutingId, productSearchTerm, productScopeFilter, productCategoryFilter]);
 
@@ -434,6 +443,13 @@ const ProductionRoutingView = () => {
     const result = uniqueFacs.map((fac, idx) => {
       // Find all teams belonging to this factory
       const facTeams = sourceTeams.filter(t => {
+        const facs = (t.factories && t.factories.length > 0)
+          ? t.factories
+          : (t.factory ? t.factory.split(',').map(f => f.trim()) : []);
+        
+        if (facs.length > 0) {
+          return facs.some(fItem => fItem === fac || (fItem.includes('1') && fac.includes('1')) || (fItem.includes('2') && fac.includes('2')) || (fItem.includes('3') && fac.includes('3')));
+        }
         let tFac = t.factory;
         if (tFac === fac) return true;
         if (tFac && (tFac.includes('1') && fac.includes('1') || tFac.includes('2') && fac.includes('2') || tFac.includes('3') && fac.includes('3'))) return true;
@@ -445,30 +461,45 @@ const ProductionRoutingView = () => {
       const stageGroups = stagesToUse.map(stg => {
         const sName = stg.name || stg.stage_name;
         const sId = stg.id;
+        const sNameLower = sName.toLowerCase();
         
         const matchedTeams = facTeams.filter(t => {
-          const tStageId = t.stageId ?? t.stage_id;
-          const tStageName = t.stageName || t.stage_name;
+          const stgs = (t.stages && t.stages.length > 0)
+            ? t.stages
+            : (t.stageName ? t.stageName.split(',').map(s => s.trim()) : []);
+          
+          // 1. If explicit stages list exists -> ONLY match according to the stages list!
+          if (stgs.length > 0) {
+            return stgs.some(stgItem => {
+              const sItemLower = stgItem.toLowerCase().trim();
+              if (sItemLower === sNameLower) return true;
+              if (sNameLower.includes('nhập kho') && (sItemLower === 'nhập kho' || sItemLower === 'đầu vào' || sItemLower === 'nhập kho/đầu vào')) return true;
+              if (sNameLower.includes('tạo phôi') && (sItemLower === 'tạo phôi' || sItemLower === 'phôi')) return true;
+              if (sNameLower.includes('định hình') && sItemLower === 'định hình') return true;
+              if (sNameLower.includes('lắp ráp') && sItemLower === 'lắp ráp') return true;
+              if (sNameLower.includes('sơn') && sItemLower === 'sơn') return true;
+              if (sNameLower.includes('đóng gói') && sItemLower === 'đóng gói') return true;
+              if (sNameLower.includes('lưu kho') && (sItemLower === 'lưu kho' || sItemLower === 'thành phẩm' || sItemLower === 'kho thành phẩm')) return true;
+              return false;
+            });
+          }
 
-          // Priority 1: match on explicit Stage ID
+          // 2. If no stages list, fallback to stageId
+          const tStageId = t.stageId ?? t.stage_id;
           if (tStageId != null && tStageId !== '') {
             return Number(tStageId) === Number(sId);
           }
-          // Priority 2: match on explicit Stage Name
-          if (tStageName) {
-            return tStageName.trim().toLowerCase() === sName.trim().toLowerCase();
-          }
 
-          // Fuzzy fallback only when both stageId and stageName are missing
+          // 3. Last fallback: fuzzy matching by team name
           const tText = `${t.teamCode || ''} ${t.teamName || ''}`.toLowerCase();
-          const sLower = sName.toLowerCase();
-          if ((sLower.includes('nhập kho') || sLower.includes('đầu vào')) && (tText.includes('nhap') || tText.includes('nhập') || tText.includes('dau vao') || tText.includes('vật tư'))) return true;
-          if ((sLower.includes('phôi') || sLower.includes('phoi')) && (tText.includes('phoi') || tText.includes('phôi') || tText.includes('xẻ'))) return true;
-          if (sLower.includes('định hình') && (tText.includes('dinhhinh') || tText.includes('định hình') || tText.includes('cnc') || tText.includes('nẹp') || tText.includes('khoan') || tText.includes('uốn') || tText.includes('bào') || tText.includes('phay'))) return true;
-          if (sLower.includes('lắp ráp') && (tText.includes('laprap') || tText.includes('lắp ráp') || tText.includes('lắp') || tText.includes('hàn') || tText.includes('module') || tText.includes('nệm') || tText.includes('nem') || tText.includes('han'))) return true;
-          if (sLower.includes('sơn') && (tText.includes('son') || tText.includes('sơn') || tText.includes('sontd'))) return true;
-          if (sLower.includes('đóng gói') && (tText.includes('donggoi') || tText.includes('đóng gói') || tText.includes('gói') || tText.includes('pallet') || tText.includes('pe') || tText.includes('bọc màng'))) return true;
-          if ((sLower.includes('lưu kho') || sLower.includes('thành phẩm')) && (tText.includes('luukho') || tText.includes('lưu kho') || tText.includes('thành phẩm') || tText.includes('kho-tp'))) return true;
+          if ((sNameLower.includes('nhập kho') || sNameLower.includes('đầu vào')) && (tText.includes('nhap') || tText.includes('đầu vào') || tText.includes('vật tư') || tText.includes('nguyên liệu'))) return true;
+          if (sNameLower.includes('tạo phôi') && (tText.includes('phoi') || tText.includes('phôi'))) return true;
+          if (sNameLower.includes('định hình') && (tText.includes('dinhhinh') || tText.includes('định hình') || tText.includes('cnc') || tText.includes('nẹp'))) return true;
+          if (sNameLower.includes('lắp ráp') && (tText.includes('laprap') || tText.includes('lắp ráp') || tText.includes('lắp'))) return true;
+          if (sNameLower.includes('sơn') && (tText.includes('son') || tText.includes('sơn'))) return true;
+          if (sNameLower.includes('đóng gói') && (tText.includes('donggoi') || tText.includes('đóng gói') || tText.includes('gói'))) return true;
+          if (sNameLower.includes('lưu kho') && (tText.includes('luukho') || tText.includes('lưu kho') || tText.includes('thành phẩm'))) return true;
+
           return false;
         });
 
@@ -517,12 +548,21 @@ const ProductionRoutingView = () => {
   const filteredTeamsForTab = useMemo(() => {
     const source = teamsList.length > 0 ? teamsList : currentRoutingTeams;
     return source.filter(t => {
-      const matchFactory = selectedTeamFactoryFilter === 'ALL' || t.factory === selectedTeamFactoryFilter;
+      // Multi-factory match
+      const facs = t.factories && t.factories.length > 0 ? t.factories : (t.factory ? t.factory.split(',').map(f => f.trim()) : []);
+      const matchFactory = selectedTeamFactoryFilter === 'ALL' ||
+        t.factory === selectedTeamFactoryFilter ||
+        facs.includes(selectedTeamFactoryFilter) ||
+        (t.factory && t.factory.includes(selectedTeamFactoryFilter));
       if (!matchFactory) return false;
 
+      // Multi-stage match
+      const stgs = t.stages && t.stages.length > 0 ? t.stages : (t.stageName ? t.stageName.split(',').map(s => s.trim()) : []);
       const matchStage = selectedTeamStageFilter === 'ALL' ||
         (t.stageId && String(t.stageId) === String(selectedTeamStageFilter)) ||
-        (t.stageName && t.stageName === selectedTeamStageFilter);
+        (t.stageName && t.stageName === selectedTeamStageFilter) ||
+        stgs.includes(selectedTeamStageFilter) ||
+        (t.stageName && t.stageName.includes(selectedTeamStageFilter));
       if (!matchStage) return false;
 
       if (teamSearchQuery.trim()) {
@@ -554,12 +594,18 @@ const ProductionRoutingView = () => {
 
     return uniqueFacs.map((facName, idx) => {
       const facNodes = (validPipelineNodes || []).filter(n => {
+        const matchingTeam = teamsList.find(t => (t.teamCode && t.teamCode === n.teamCode) || (t.numericId && Number(t.numericId) === Number(n.teamId)));
+        const facs = (matchingTeam?.factories && matchingTeam.factories.length > 0)
+          ? matchingTeam.factories
+          : (matchingTeam?.factory ? matchingTeam.factory.split(',').map(f => f.trim()) : (n.factory ? n.factory.split(',').map(f => f.trim()) : []));
+
+        if (facs.length > 0) {
+          return facs.some(fItem => fItem === facName || (fItem.includes('1') && facName.includes('1')) || (fItem.includes('2') && facName.includes('2')) || (fItem.includes('3') && facName.includes('3')));
+        }
         const nFac = n.factory;
         if (nFac === facName) return true;
-        if (nFac === 'Nhà máy 1' && facName.includes('1')) return true;
-        if (nFac === 'Nhà máy 2' && facName.includes('2')) return true;
-        if (nFac === 'Nhà máy 3' && facName.includes('3')) return true;
-        if (nFac === 'Nhà máy 4' && facName.includes('4')) return true;
+        if (nFac && (nFac.includes('1') && facName.includes('1') || nFac.includes('2') && facName.includes('2') || nFac.includes('3') && facName.includes('3'))) return true;
+        if (n.teamCode && (n.teamCode.includes('NM1') && facName.includes('1') || n.teamCode.includes('NM2') && facName.includes('2') || n.teamCode.includes('NM3') && facName.includes('3'))) return true;
         return false;
       });
       return {
@@ -568,13 +614,31 @@ const ProductionRoutingView = () => {
         nodes: facNodes
       };
     });
-  }, [factoryStructures, validPipelineNodes]);
+  }, [factoryStructures, validPipelineNodes, teamsList]);
 
   // Gom cụm các mắt xích theo Công đoạn để hiển thị chuỗi quy trình cực kỳ trực quan
   const factoryPipelineStageClusters = useMemo(() => {
+    const stageOrderMap = {
+      'nhập kho': 1, 'đầu vào': 1,
+      'tạo phôi': 2, 'phôi': 2,
+      'định hình': 3,
+      'lắp ráp': 4,
+      'sơn': 5,
+      'đóng gói': 6,
+      'lưu kho': 7, 'thành phẩm': 7
+    };
+
+    const getStageOrder = (stgName, stgId) => {
+      if (stgId && typeof stgId === 'number' && stgId >= 1 && stgId <= 7) return stgId;
+      const lower = (stgName || '').toLowerCase();
+      for (const [k, v] of Object.entries(stageOrderMap)) {
+        if (lower.includes(k)) return v;
+      }
+      return 99;
+    };
+
     return factoryPipelineGroups.map(fg => {
-      const clusters = [];
-      let currentCluster = null;
+      const clusterMap = new Map();
 
       (fg.nodes || []).forEach((node, nodeIdx) => {
         const matchingTeam = teamsList.find(t => (t.teamCode && t.teamCode === node.teamCode) || (t.numericId && Number(t.numericId) === Number(node.teamId)));
@@ -582,17 +646,20 @@ const ProductionRoutingView = () => {
         const officialStageId = matchingTeam?.stageId ?? node.stageId;
         const normalizedNode = { ...node, stageName: officialStageName, stageId: officialStageId, originalIndex: nodeIdx };
 
-        if (!currentCluster || currentCluster.stageName !== officialStageName) {
-          currentCluster = {
+        const clusterKey = officialStageName;
+        if (!clusterMap.has(clusterKey)) {
+          clusterMap.set(clusterKey, {
             stageId: officialStageId,
             stageName: officialStageName,
-            nodes: [normalizedNode]
-          };
-          clusters.push(currentCluster);
-        } else {
-          currentCluster.nodes.push(normalizedNode);
+            stageOrder: getStageOrder(officialStageName, officialStageId),
+            nodes: []
+          });
         }
+        clusterMap.get(clusterKey).nodes.push(normalizedNode);
       });
+
+      // Sort clusters by their logical manufacturing process order (1 -> 7)
+      const clusters = Array.from(clusterMap.values()).sort((a, b) => a.stageOrder - b.stageOrder);
 
       return {
         factory: fg.factory,
@@ -636,12 +703,16 @@ const ProductionRoutingView = () => {
   });
 
   const [showAddTeamModal, setShowAddTeamModal] = useState(false);
+  const [actionMenuTeamId, setActionMenuTeamId] = useState(null);
+  const [isFactoryComboboxOpen, setIsFactoryComboboxOpen] = useState(false);
+  const [isStageComboboxOpen, setIsStageComboboxOpen] = useState(false);
   const [isStageDropdownOpen, setIsStageDropdownOpen] = useState(false);
   const [newTeamForm, setNewTeamForm] = useState({
-    factory: '',
+    editingTeamId: null,
+    factories: ['Vaniti Phân Xưởng 1'],
+    selectedStages: ['Nhập Kho/Đầu Vào'],
     teamCode: 'TO-NM1-501',
     teamName: '',
-    selectedStages: [],
     members: 10,
     desc: ''
   });
@@ -728,18 +799,24 @@ const ProductionRoutingView = () => {
 
         let loadedTeams = [];
         if (Array.isArray(rawTeams) && rawTeams.length > 0) {
-          loadedTeams = rawTeams.map((t, idx) => ({
-            id: t.id ? String(t.id) : (t.team_code || `team-${idx}`),
-            numericId: t.id,
-            teamCode: t.team_code,
-            teamName: t.team_name,
-            factory: t.factory,
-            stageId: t.stage_id,
-            stageName: t.stage_name,
-            members: t.members_count || 10,
-            desc: t.description || '',
-            color: t.color || (t.factory === 'Nhà máy 1' ? '#4A2E27' : t.factory === 'Nhà máy 2' ? '#5D3B32' : '#6D4C3D')
-          }));
+          loadedTeams = rawTeams.map((t, idx) => {
+            const rawFacs = t.factories_list || t.factories || (t.factory ? t.factory.split(',').map(f => f.trim()) : []);
+            const rawStages = t.stages_list || t.stages || (t.stage_name ? t.stage_name.split(',').map(s => s.trim()) : []);
+            return {
+              id: t.id ? String(t.id) : (t.team_code || `team-${idx}`),
+              numericId: t.id,
+              teamCode: t.team_code,
+              teamName: t.team_name,
+              factory: t.factory,
+              factories: rawFacs,
+              stageId: t.stage_id,
+              stageName: t.stage_name,
+              stages: rawStages,
+              members: t.members_count || 10,
+              desc: t.description || '',
+              color: t.color || getFactoryColor(rawFacs[0] || t.factory)
+            };
+          });
 
           setTeamsList(loadedTeams);
         }
@@ -1163,28 +1240,48 @@ const ProductionRoutingView = () => {
   };
 
   const handleOpenAddTeamModal = () => {
-    // Lấy nhà máy đầu tiên từ CSDL cấu hình, fallback hardcoded nếu chưa có
-    const defaultFac = (factoryStructures.length > 0)
-      ? (factoryStructures[0].structure_name || 'Vaniti Phân Xưởng 1')
-      : 'Vaniti Phân Xưởng 1';
-    const facCode = (factoryStructures.length > 0)
-      ? (factoryStructures[0].structure_code || 'NM1')
-      : 'NM1';
+    const primaryFac = (factoryStructures.length > 0) ? (factoryStructures[0].structure_name || 'Vaniti Phân Xưởng 1') : 'Vaniti Phân Xưởng 1';
+    const facCode = (factoryStructures.length > 0) ? (factoryStructures[0].structure_code || 'NM1') : 'NM1';
     const code = `TO-${facCode}-${Math.floor(100 + Math.random() * 900)}`;
-    const firstStage = (dbStages && dbStages.length > 0) ? dbStages[0] : { id: 1, code: 'CD01', name: 'Nhập Kho/Đầu Vào' };
-    const firstStageName = firstStage.name || firstStage.stage_name || 'Nhập Kho/Đầu Vào';
-
+    const firstStageName = dbStages.length > 0 ? (dbStages[0].name || dbStages[0].stage_name) : 'Nhập Kho/Đầu Vào';
     setNewTeamForm({
-      factory: defaultFac,
-      stageId: firstStage.id,
+      editingTeamId: null,
+      factories: [primaryFac],
+      selectedStages: [firstStageName],
+      stageId: dbStages.length > 0 ? dbStages[0].id : 1,
       stageName: firstStageName,
       teamCode: code,
       teamName: `Tổ ${firstStageName}`,
-      selectedStages: [firstStageName],
       members: 10,
       desc: `Tổ sản xuất thuộc công đoạn ${firstStageName}`
     });
+    setIsFactoryComboboxOpen(false);
+    setIsStageComboboxOpen(false);
     setIsStageDropdownOpen(false);
+    setShowAddTeamModal(true);
+  };
+
+  const handleOpenEditTeamModal = (team) => {
+    const rawFacs = (team.factories && team.factories.length > 0)
+      ? team.factories
+      : (team.factory ? team.factory.split(',').map(f => f.trim()) : ['Vaniti Phân Xưởng 1']);
+    const rawStages = (team.stages && team.stages.length > 0)
+      ? team.stages
+      : (team.stageName ? team.stageName.split(',').map(s => s.trim()) : ['Nhập Kho/Đầu Vào']);
+
+    setNewTeamForm({
+      editingTeamId: team.numericId || team.id,
+      factories: rawFacs,
+      selectedStages: rawStages,
+      stageId: team.stageId || null,
+      stageName: rawStages.join(', '),
+      teamCode: team.teamCode || team.code,
+      teamName: team.teamName || team.name,
+      members: team.members || team.members_count || 10,
+      desc: team.desc || team.description || ''
+    });
+    setIsFactoryComboboxOpen(false);
+    setIsStageComboboxOpen(false);
     setShowAddTeamModal(true);
   };
 
@@ -1192,7 +1289,7 @@ const ProductionRoutingView = () => {
     e.preventDefault();
     const finalTeamName = (newTeamForm.teamName && newTeamForm.teamName.trim())
       ? newTeamForm.teamName.trim()
-      : (newTeamForm.stageName ? `Tổ ${newTeamForm.stageName}` : 'Tổ sản xuất');
+      : (newTeamForm.selectedStages && newTeamForm.selectedStages.length > 0 ? `Tổ ${newTeamForm.selectedStages[0]}` : 'Tổ sản xuất');
 
     if (!finalTeamName) {
       if (toast) toast('warning', 'Vui lòng nhập Tên tổ sản xuất hoặc chọn Công đoạn!');
@@ -1200,18 +1297,60 @@ const ProductionRoutingView = () => {
     }
     const tCode = newTeamForm.teamCode || `TO-NM1-${Math.floor(100 + Math.random() * 900)}`;
 
+    const selectedFacs = (newTeamForm.factories && newTeamForm.factories.length > 0) ? newTeamForm.factories : ['Vaniti Phân Xưởng 1'];
+    const selectedStgs = (newTeamForm.selectedStages && newTeamForm.selectedStages.length > 0) ? newTeamForm.selectedStages : ['Nhập Kho/Đầu Vào'];
+
     const payload = {
       team_code: tCode,
       team_name: finalTeamName,
-      factory: newTeamForm.factory || 'Vaniti Phân Xưởng 1',
+      factory: selectedFacs.join(', '),
+      factories: selectedFacs,
       stage_id: newTeamForm.stageId ? Number(newTeamForm.stageId) : null,
-      stage_name: newTeamForm.stageName || null,
+      stage_name: selectedStgs.join(', '),
+      stages: selectedStgs,
       members_count: Number(newTeamForm.members) || 10,
       description: newTeamForm.desc || `Tổ sản xuất ${finalTeamName}`,
-      color: getFactoryColor(newTeamForm.factory)
+      color: getFactoryColor(selectedFacs[0])
     };
 
     try {
+      if (newTeamForm.editingTeamId) {
+        // UPDATE MODE
+        const res = await api.put(`/production/teams/${newTeamForm.editingTeamId}`, payload);
+        const updated = (res && res.id) ? res : (res && res.data ? res.data : (res || {}));
+
+        const updatedTeamObj = {
+          id: String(newTeamForm.editingTeamId),
+          numericId: Number(newTeamForm.editingTeamId),
+          teamCode: updated.team_code || tCode,
+          teamName: updated.team_name || finalTeamName,
+          factory: updated.factory || selectedFacs.join(', '),
+          factories: selectedFacs,
+          stageId: updated.stage_id || newTeamForm.stageId,
+          stageName: updated.stage_name || selectedStgs.join(', '),
+          stages: selectedStgs,
+          members: updated.members_count || Number(newTeamForm.members) || 10,
+          desc: updated.description || newTeamForm.desc || '',
+          color: getFactoryColor(selectedFacs[0])
+        };
+
+        setTeamsList(prev => prev.map(t => (String(t.id) === String(newTeamForm.editingTeamId) || String(t.numericId) === String(newTeamForm.editingTeamId)) ? { ...t, ...updatedTeamObj } : t));
+
+        setRoutingTeamsMap(prev => {
+          const next = { ...prev };
+          Object.keys(next).forEach(k => {
+            next[k] = next[k].map(t => (String(t.id) === String(newTeamForm.editingTeamId) || String(t.numericId) === String(newTeamForm.editingTeamId)) ? { ...t, ...updatedTeamObj } : t);
+          });
+          return next;
+        });
+
+        setShowAddTeamModal(false);
+        setNewTeamForm({ editingTeamId: null, factories: ['Vaniti Phân Xưởng 1'], selectedStages: ['Nhập Kho/Đầu Vào'], teamCode: '', teamName: '', stageId: null, stageName: '', members: 10, desc: '' });
+        if (toast) toast('success', `Đã cập nhật thành công Tổ ${finalTeamName}!`);
+        return;
+      }
+
+      // CREATE MODE
       const res = await api.post('/production/teams', payload);
       const created = (res && res.id) ? res : (res && res.data ? res.data : (res || {}));
       const newTeamObj = {
@@ -1219,13 +1358,14 @@ const ProductionRoutingView = () => {
         numericId: created.id,
         teamCode: created.team_code || tCode,
         teamName: created.team_name || finalTeamName,
-        factory: created.factory || newTeamForm.factory,
+        factory: created.factory || selectedFacs.join(', '),
+        factories: selectedFacs,
         stageId: created.stage_id || newTeamForm.stageId,
-        stageName: created.stage_name || newTeamForm.stageName,
+        stageName: created.stage_name || selectedStgs.join(', '),
+        stages: selectedStgs,
         members: created.members_count || 10,
-        stages: newTeamForm.selectedStages || [],
         desc: created.description || '',
-        color: getFactoryColor(newTeamForm.factory)
+        color: getFactoryColor(selectedFacs[0])
       };
 
       // Gọi API thêm tổ vào quy trình (tạo routing_node trong CSDL)
@@ -1263,7 +1403,7 @@ const ProductionRoutingView = () => {
                 factory: newTeamObj.factory,
                 stageId: newTeamObj.stageId,
                 stageName: newTeamObj.stageName,
-                color: getFactoryColor(newTeamObj.factory)
+                color: getFactoryColor(selectedFacs[0])
               }]
             };
           }
@@ -1272,29 +1412,12 @@ const ProductionRoutingView = () => {
       }));
 
       setShowAddTeamModal(false);
-      setNewTeamForm({ factory: 'Vaniti Phân Xưởng 1', teamCode: '', teamName: '', stageId: null, stageName: '', members: 10, desc: '' });
+      setNewTeamForm({ editingTeamId: null, factories: ['Vaniti Phân Xưởng 1'], selectedStages: ['Nhập Kho/Đầu Vào'], teamCode: '', teamName: '', stageId: null, stageName: '', members: 10, desc: '' });
       if (toast) toast('success', `Đã lưu CSDL thành công Tổ ${newTeamForm.teamName} (${tCode})!`);
     } catch (err) {
       console.error('Lỗi khi lưu Tổ vào CSDL:', err);
-      const fallbackObj = {
-        id: Date.now(),
-        teamCode: tCode,
-        teamName: newTeamForm.teamName,
-        factory: newTeamForm.factory,
-        stageId: newTeamForm.stageId,
-        stageName: newTeamForm.stageName,
-        members: Number(newTeamForm.members) || 10,
-        desc: newTeamForm.desc || 'Tổ sản xuất mới'
-      };
-      const routingKey = (currentRouting && currentRouting.id) || selectedRoutingId || 'QT-TU-01';
-      const currentList = currentRoutingTeams || [];
-      setRoutingTeamsMap(prev => ({
-        ...prev,
-        [routingKey]: [...currentList, fallbackObj]
-      }));
-      setShowAddTeamModal(false);
-      const msg = err?.response?.data?.detail || err?.message || 'Lỗi server khi lưu';
-      if (toast) toast('warning', `Lỗi kết nối CSDL: ${msg}`);
+      const msg = err?.response?.data?.detail || err?.message || 'Lỗi kết nối CSDL';
+      if (toast) toast('error', `Lỗi khi lưu Tổ: ${msg}`);
     }
   };
 
@@ -1827,10 +1950,10 @@ const ProductionRoutingView = () => {
               })))
             ].map(fTab => {
               const isSelected = selectedFactoryTab === fTab.id;
-              const fGroup = factoryPipelineGroups.find(fg => fg.factory === fTab.id);
-              const nodeCount = fTab.id === 'ALL'
-                ? (validPipelineNodes || []).length
-                : (fGroup?.nodes?.length || 0);
+              const fGroup = currentFactoryStagesTeamsGrouped.find(fg => fg.factory === fTab.id);
+              const totalTeamsInFac = fTab.id === 'ALL'
+                ? (teamsList.length > 0 ? teamsList.length : (currentRoutingTeams || []).length)
+                : (fGroup?.teams?.length || 0);
 
               return (
                 <button
@@ -1870,7 +1993,7 @@ const ProductionRoutingView = () => {
                       color: isSelected ? '#FFFFFF' : '#5D3B32',
                       border: isSelected ? 'none' : '1px solid #EADCC9'
                     }}>
-                      {nodeCount} tổ
+                      {totalTeamsInFac} tổ
                     </span>
                   </div>
                   <span style={{ fontSize: '0.73rem', color: isSelected ? 'rgba(255,255,255,0.75)' : '#78716C' }}>
@@ -2539,11 +2662,16 @@ const ProductionRoutingView = () => {
                     }}>
                       🏭 {fGroup.factory}
                     </span>
-                    <span style={{ fontSize: '0.94rem', fontWeight: '800', color: '#1F2937' }}>
-                      Chuỗi Luồng Sản xuất ({fGroup.totalNodes} Tổ • {fGroup.clusters.length} Công đoạn)
-                    </span>
-                    <span style={{ fontSize: '0.75rem', color: '#5D3B32', backgroundColor: '#FAF6F0', border: '1px solid #EADCC9', padding: '3px 10px', borderRadius: '20px', fontWeight: '700' }}>
-                      ✓ Khép kín 100% tại {fGroup.factory}
+                    <span style={{
+                      fontSize: '0.78rem',
+                      fontWeight: '700',
+                      color: '#5D3B32',
+                      backgroundColor: '#FAF6F0',
+                      border: '1px solid #EADCC9',
+                      padding: '3px 10px',
+                      borderRadius: '12px'
+                    }}>
+                      {fGroup.totalNodes} Tổ • {fGroup.clusters.length} Công đoạn
                     </span>
                   </div>
 
@@ -3871,43 +3999,64 @@ const ProductionRoutingView = () => {
                           </div>
                         </td>
 
-                        {/* Công đoạn */}
-                        <td style={{ padding: '14px 18px', whiteSpace: 'nowrap' }}>
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            backgroundColor: '#FAF6F0',
-                            color: '#5D3B32',
-                            border: '1px solid #EADCC9',
-                            padding: '3px 10px',
-                            borderRadius: '6px',
-                            fontWeight: '700',
-                            fontSize: '0.8rem',
-                            whiteSpace: 'nowrap'
-                          }}>
-                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#5D3B32' }} />
-                            {stageDisplay}
-                          </span>
+                        {/* Công đoạn (MULTI-STAGE CHIPS) */}
+                        <td style={{ padding: '14px 18px' }}>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                            {(() => {
+                              const rawStages = (t.stages && t.stages.length > 0)
+                                ? t.stages
+                                : (t.stageName ? t.stageName.split(',') : [stageDisplay]);
+                              return rawStages.map(s => s.trim()).filter(Boolean).map((stgItem, sIdx) => (
+                                <span key={sIdx} style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  backgroundColor: '#FAF6F0',
+                                  color: '#5D3B32',
+                                  border: '1px solid #EADCC9',
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  fontWeight: '700',
+                                  fontSize: '0.78rem',
+                                  whiteSpace: 'nowrap'
+                                }}>
+                                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#5D3B32' }} />
+                                  {stgItem}
+                                </span>
+                              ));
+                            })()}
+                          </div>
                         </td>
 
-                        {/* Nhà máy trực thuộc */}
-                        <td style={{ padding: '14px 18px', whiteSpace: 'nowrap' }}>
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            backgroundColor: `${facColor}12`,
-                            color: facColor,
-                            border: `1.5px solid ${facColor}35`,
-                            padding: '4px 12px',
-                            borderRadius: '20px',
-                            fontWeight: '700',
-                            fontSize: '0.82rem',
-                            whiteSpace: 'nowrap'
-                          }}>
-                            🏭 {t.factory}
-                          </span>
+                        {/* Nhà máy trực thuộc (MULTI-FACTORY CHIPS) */}
+                        <td style={{ padding: '14px 18px' }}>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                            {(() => {
+                              const rawFacs = (t.factories && t.factories.length > 0)
+                                ? t.factories
+                                : (t.factory ? t.factory.split(',') : ['Vaniti Phân Xưởng 1']);
+                              return rawFacs.map(f => f.trim()).filter(Boolean).map((facItem, fIdx) => {
+                                const fColor = getFactoryColor(facItem);
+                                return (
+                                  <span key={fIdx} style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    backgroundColor: `${fColor}12`,
+                                    color: fColor,
+                                    border: `1.5px solid ${fColor}35`,
+                                    padding: '2px 8px',
+                                    borderRadius: '20px',
+                                    fontWeight: '700',
+                                    fontSize: '0.78rem',
+                                    whiteSpace: 'nowrap'
+                                  }}>
+                                    🏭 {facItem}
+                                  </span>
+                                );
+                              });
+                            })()}
+                          </div>
                         </td>
 
                         {/* Mô tả công việc & Năng lực */}
@@ -3915,37 +4064,103 @@ const ProductionRoutingView = () => {
                           {t.desc || t.description || 'Chưa có mô tả chi tiết'}
                         </td>
 
-                        {/* Thao tác */}
-                        <td style={{ padding: '14px 18px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                          <button
-                            onClick={() => handleDeleteTeam(t)}
-                            title="Xóa tổ sản xuất khỏi hệ thống"
-                            style={{
-                              width: '32px',
-                              height: '32px',
-                              borderRadius: '8px',
-                              border: '1px solid #FEE2E2',
-                              backgroundColor: '#FEF2F2',
-                              color: '#DC2626',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              cursor: 'pointer',
-                              transition: 'all 0.15s ease'
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = '#DC2626';
-                              e.currentTarget.style.color = '#FFFFFF';
-                              e.currentTarget.style.borderColor = '#DC2626';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = '#FEF2F2';
-                              e.currentTarget.style.color = '#DC2626';
-                              e.currentTarget.style.borderColor = '#FEE2E2';
-                            }}
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                        {/* Thao tác (ACTION MENU ...) */}
+                        <td style={{ padding: '14px 18px', textAlign: 'center', whiteSpace: 'nowrap', position: 'relative', zIndex: actionMenuTeamId === (t.id || t.teamCode) ? 40 : 1 }}>
+                          <div style={{ position: 'relative', display: 'inline-block' }}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const rowKey = t.id || t.teamCode;
+                                setActionMenuTeamId(actionMenuTeamId === rowKey ? null : rowKey);
+                              }}
+                              style={{
+                                border: 'none',
+                                background: 'transparent',
+                                cursor: 'pointer',
+                                fontWeight: '900',
+                                fontSize: '1.25rem',
+                                color: '#6B7280',
+                                padding: '2px 8px',
+                                borderRadius: '6px',
+                                lineHeight: '1',
+                                letterSpacing: '1px'
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F3F4F6'; e.currentTarget.style.color = '#1F2937'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#6B7280'; }}
+                              title="Tùy chọn thao tác"
+                            >
+                              ...
+                            </button>
+
+                            {actionMenuTeamId === (t.id || t.teamCode) && (
+                              <div
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  position: 'absolute',
+                                  right: 0,
+                                  top: 'calc(100% + 2px)',
+                                  backgroundColor: '#FFFFFF',
+                                  borderRadius: '8px',
+                                  boxShadow: '0 6px 20px rgba(0,0,0,0.15)',
+                                  border: '1px solid #EADCC9',
+                                  zIndex: 70,
+                                  minWidth: '120px',
+                                  overflow: 'hidden',
+                                  display: 'flex',
+                                  flexDirection: 'column'
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActionMenuTeamId(null);
+                                    handleOpenEditTeamModal(t);
+                                  }}
+                                  style={{
+                                    width: '100%',
+                                    padding: '9px 14px',
+                                    textAlign: 'left',
+                                    border: 'none',
+                                    background: 'transparent',
+                                    cursor: 'pointer',
+                                    fontSize: '0.84rem',
+                                    fontWeight: '700',
+                                    color: '#374151',
+                                    transition: 'background-color 0.15s ease'
+                                  }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#FAF6F0'; e.currentTarget.style.color = '#5D3B32'; }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#374151'; }}
+                                >
+                                  Sửa
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActionMenuTeamId(null);
+                                    handleDeleteTeam(t);
+                                  }}
+                                  style={{
+                                    width: '100%',
+                                    padding: '9px 14px',
+                                    textAlign: 'left',
+                                    border: 'none',
+                                    borderTop: '1px solid #F3EDE5',
+                                    background: 'transparent',
+                                    cursor: 'pointer',
+                                    fontSize: '0.84rem',
+                                    fontWeight: '700',
+                                    color: '#DC2626',
+                                    transition: 'background-color 0.15s ease'
+                                  }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#FEF2F2'; }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                >
+                                  Xóa
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -3981,7 +4196,9 @@ const ProductionRoutingView = () => {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
               <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '800', color: '#2D1A12' }}>
-                Thêm Tổ vào Quy trình {currentRouting.code}
+                {newTeamForm.editingTeamId
+                  ? `Chỉnh sửa Tổ: ${newTeamForm.teamName || newTeamForm.teamCode}`
+                  : `Thêm Tổ vào Quy trình ${currentRouting.code}`}
               </h3>
               <button
                 type="button"
@@ -4019,77 +4236,349 @@ const ProductionRoutingView = () => {
                 />
               </div>
 
-              {/* FIELD 2: Thuộc Nhà máy / Xưởng */}
-              <div style={{ marginBottom: '14px' }}>
-                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#374151', marginBottom: '6px' }}>
-                  Thuộc Nhà máy / Phân xưởng *
-                </label>
-                <select
-                  value={newTeamForm.factory}
-                  onChange={(e) => {
-                    const fac = e.target.value;
-                    const facObj = factoryStructures.find(f => f.structure_name === fac);
-                    const facCode = facObj ? facObj.structure_code : (fac.replace(/\D/g, '') ? `NM${fac.replace(/\D/g, '')}` : 'NM1');
-                    setNewTeamForm({
-                      ...newTeamForm,
-                      factory: fac,
-                      teamCode: `TO-${facCode}-${Math.floor(100 + Math.random() * 900)}`
-                    });
+              {/* FIELD 2: Thuộc Nhà máy / Xưởng (MULTI-SELECT COMBOBOX) */}
+              <div style={{ marginBottom: '16px', position: 'relative' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '0.82rem', fontWeight: '800', color: '#374151', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>Thuộc Nhà máy / Phân xưởng *</span>
+                    <span style={{ fontSize: '0.74rem', fontWeight: '700', color: '#5D3B32', backgroundColor: '#FAF6F0', padding: '1px 8px', borderRadius: '12px', border: '1px solid #EADCC9' }}>
+                      Đã chọn: {(newTeamForm.factories || []).length}
+                    </span>
+                  </label>
+                </div>
+
+                {/* Combobox Trigger */}
+                <div
+                  onClick={() => {
+                    setIsFactoryComboboxOpen(!isFactoryComboboxOpen);
+                    setIsStageComboboxOpen(false);
                   }}
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #EADCC9', outline: 'none', fontSize: '0.88rem', fontWeight: '700' }}
+                  style={{
+                    minHeight: '42px',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    border: isFactoryComboboxOpen ? '1.5px solid #5D3B32' : '1.5px solid #EADCC9',
+                    backgroundColor: '#FFFFFF',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '8px',
+                    boxShadow: isFactoryComboboxOpen ? '0 0 0 3px rgba(93, 59, 50, 0.1)' : 'none',
+                    transition: 'all 0.15s ease'
+                  }}
                 >
-                  {factoryStructures.length > 0 ? (
-                    factoryStructures.map((fs, idx) => (
-                      <option key={fs.id || idx} value={fs.structure_name}>
-                        {fs.structure_name} ({fs.structure_code})
-                      </option>
-                    ))
-                  ) : (
-                    <>
-                      <option value="Vaniti Phân Xưởng 1">Vaniti Phân Xưởng 1 (NM1)</option>
-                      <option value="Vaniti Phân Xưởng 2">Vaniti Phân Xưởng 2 (NM2)</option>
-                      <option value="Vaniti Phân Xưởng 3">Vaniti Phân Xưởng 3 (NM3)</option>
-                    </>
-                  )}
-                </select>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', alignItems: 'center', flex: 1 }}>
+                    {(newTeamForm.factories || []).length === 0 ? (
+                      <span style={{ color: '#9CA3AF', fontSize: '0.84rem' }}>Chọn nhà máy trực thuộc...</span>
+                    ) : (
+                      (newTeamForm.factories || []).map((facName, fIdx) => {
+                        const fColor = getFactoryColor(facName);
+                        return (
+                          <span
+                            key={fIdx}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              backgroundColor: `${fColor}15`,
+                              color: fColor,
+                              border: `1px solid ${fColor}35`,
+                              padding: '2px 8px',
+                              borderRadius: '16px',
+                              fontWeight: '700',
+                              fontSize: '0.78rem'
+                            }}
+                          >
+                            <span>🏭 {facName}</span>
+                          </span>
+                        );
+                      })
+                    )}
+                  </div>
+                  <ChevronDown size={18} color="#6B7280" style={{ transform: isFactoryComboboxOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease', flexShrink: 0 }} />
+                </div>
+
+                {/* Combobox Popup Menu */}
+                {isFactoryComboboxOpen && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 4px)',
+                      left: 0,
+                      right: 0,
+                      zIndex: 60,
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '10px',
+                      border: '1.5px solid #EADCC9',
+                      boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
+                      padding: '8px',
+                      maxHeight: '220px',
+                      overflowY: 'auto'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px 8px 8px', borderBottom: '1px solid #F3EDE5', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '0.74rem', color: '#6B7280', fontWeight: '700' }}>Tùy chọn danh mục nhà máy</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const allFacs = (factoryStructures.length > 0 ? factoryStructures : [
+                            { structure_name: 'Vaniti Phân Xưởng 1' },
+                            { structure_name: 'Vaniti Phân Xưởng 2' },
+                            { structure_name: 'Vaniti Phân Xưởng 3' }
+                          ]).filter(f => (f.structure_code || '').toUpperCase() !== 'VP' && !(f.structure_name || '').toLowerCase().includes('văn phòng')).map(f => f.structure_name);
+                          
+                          const isAll = (newTeamForm.factories || []).length === allFacs.length;
+                          setNewTeamForm(prev => ({
+                            ...prev,
+                            factories: isAll ? [allFacs[0]] : allFacs
+                          }));
+                        }}
+                        style={{ border: 'none', background: 'transparent', color: '#5D3B32', fontSize: '0.74rem', fontWeight: '800', cursor: 'pointer', textDecoration: 'underline' }}
+                      >
+                        {(newTeamForm.factories || []).length === (factoryStructures.length || 3) ? 'Bỏ chọn' : 'Chọn tất cả'}
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {(factoryStructures.length > 0 ? factoryStructures : [
+                        { id: 1, structure_code: 'NM1', structure_name: 'Vaniti Phân Xưởng 1' },
+                        { id: 2, structure_code: 'NM2', structure_name: 'Vaniti Phân Xưởng 2' },
+                        { id: 3, structure_code: 'NM3', structure_name: 'Vaniti Phân Xưởng 3' }
+                      ]).filter(f => (f.structure_code || '').toUpperCase() !== 'VP' && !(f.structure_name || '').toLowerCase().includes('văn phòng')).map(fs => {
+                        const isSelected = (newTeamForm.factories || []).includes(fs.structure_name);
+                        const color = getFactoryColor(fs.structure_name);
+                        return (
+                          <div
+                            key={fs.id || fs.structure_name}
+                            onClick={() => {
+                              const current = newTeamForm.factories || [];
+                              let next;
+                              if (current.includes(fs.structure_name)) {
+                                next = current.filter(f => f !== fs.structure_name);
+                                if (next.length === 0) next = [fs.structure_name];
+                              } else {
+                                next = [...current, fs.structure_name];
+                              }
+                              const primaryFac = next[0] || 'NM1';
+                              const facDigits = primaryFac.replace(/\D/g, '');
+                              const facCode = facDigits ? `NM${facDigits}` : (fs.structure_code || 'NM1');
+                              setNewTeamForm(prev => ({
+                                ...prev,
+                                factories: next,
+                                teamCode: `TO-${facCode}-${Math.floor(100 + Math.random() * 900)}`
+                              }));
+                            }}
+                            style={{
+                              padding: '8px 10px',
+                              borderRadius: '6px',
+                              backgroundColor: isSelected ? '#FAF6F0' : '#FFFFFF',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              transition: 'background-color 0.15s ease'
+                            }}
+                            onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = '#F9FAFB'; }}
+                            onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <input
+                                type="checkbox"
+                                readOnly
+                                checked={isSelected}
+                                style={{ width: '16px', height: '16px', accentColor: '#5D3B32', cursor: 'pointer' }}
+                              />
+                              <span style={{ fontSize: '0.84rem', fontWeight: isSelected ? '800' : '600', color: isSelected ? '#2D1A12' : '#4B5563' }}>
+                                🏭 {fs.structure_name}
+                              </span>
+                            </div>
+                            {fs.structure_code && (
+                              <span style={{ fontSize: '0.72rem', fontWeight: '700', padding: '2px 6px', borderRadius: '4px', backgroundColor: `${color}18`, color: color }}>
+                                {fs.structure_code}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* FIELD 3: Thuộc Công đoạn sản xuất */}
-              <div style={{ marginBottom: '14px' }}>
-                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#374151', marginBottom: '6px' }}>
-                  Thuộc Công đoạn sản xuất *
-                </label>
-                <select
-                  value={newTeamForm.stageId || ''}
-                  onChange={(e) => {
-                    const sId = Number(e.target.value);
-                    const stg = dbStages.find(s => s.id === sId);
-                    const sName = stg ? (stg.name || stg.stage_name) : 'Tạo Phôi';
-                    setNewTeamForm(prev => ({
-                      ...prev,
-                      stageId: sId,
-                      stageName: sName,
-                      teamName: prev.teamName.startsWith('Tổ ') ? `Tổ ${sName}` : prev.teamName,
-                      selectedStages: [sName],
-                      desc: `Tổ sản xuất thuộc công đoạn ${sName}`
-                    }));
+              {/* FIELD 3: Thuộc Công đoạn sản xuất (MULTI-SELECT COMBOBOX) */}
+              <div style={{ marginBottom: '16px', position: 'relative' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '0.82rem', fontWeight: '800', color: '#374151', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>Thuộc Công đoạn sản xuất *</span>
+                    <span style={{ fontSize: '0.74rem', fontWeight: '700', color: '#5D3B32', backgroundColor: '#FAF6F0', padding: '1px 8px', borderRadius: '12px', border: '1px solid #EADCC9' }}>
+                      Đã chọn: {(newTeamForm.selectedStages || []).length}
+                    </span>
+                  </label>
+                </div>
+
+                {/* Combobox Trigger */}
+                <div
+                  onClick={() => {
+                    setIsStageComboboxOpen(!isStageComboboxOpen);
+                    setIsFactoryComboboxOpen(false);
                   }}
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #EADCC9', outline: 'none', fontSize: '0.88rem', fontWeight: '700', backgroundColor: '#FAF6F0' }}
+                  style={{
+                    minHeight: '42px',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    border: isStageComboboxOpen ? '1.5px solid #5D3B32' : '1.5px solid #EADCC9',
+                    backgroundColor: '#FFFFFF',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '8px',
+                    boxShadow: isStageComboboxOpen ? '0 0 0 3px rgba(93, 59, 50, 0.1)' : 'none',
+                    transition: 'all 0.15s ease'
+                  }}
                 >
-                  {(dbStages.length > 0 ? dbStages : [
-                    { id: 1, code: 'CD01', name: 'Nhập Kho/Đầu Vào' },
-                    { id: 2, code: 'CD02', name: 'Tạo Phôi' },
-                    { id: 3, code: 'CD03', name: 'Định Hình' },
-                    { id: 4, code: 'CD04', name: 'Lắp Ráp' },
-                    { id: 5, code: 'CD05', name: 'Sơn' },
-                    { id: 6, code: 'CD06', name: 'Đóng Gói' },
-                    { id: 7, code: 'CD07', name: 'Lưu Kho' }
-                  ]).map((stg) => (
-                    <option key={stg.id} value={stg.id}>
-                      {stg.code ? `[${stg.code}] ` : ''}{stg.name || stg.stage_name}
-                    </option>
-                  ))}
-                </select>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', alignItems: 'center', flex: 1 }}>
+                    {(newTeamForm.selectedStages || []).length === 0 ? (
+                      <span style={{ color: '#9CA3AF', fontSize: '0.84rem' }}>Chọn các công đoạn sản xuất...</span>
+                    ) : (
+                      (newTeamForm.selectedStages || []).map((sName, sIdx) => (
+                        <span
+                          key={sIdx}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            backgroundColor: '#FAF6F0',
+                            color: '#5D3B32',
+                            border: '1px solid #EADCC9',
+                            padding: '2px 8px',
+                            borderRadius: '6px',
+                            fontWeight: '700',
+                            fontSize: '0.78rem'
+                          }}
+                        >
+                          <span>{sName}</span>
+                        </span>
+                      ))
+                    )}
+                  </div>
+                  <ChevronDown size={18} color="#6B7280" style={{ transform: isStageComboboxOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease', flexShrink: 0 }} />
+                </div>
+
+                {/* Combobox Popup Menu */}
+                {isStageComboboxOpen && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 4px)',
+                      left: 0,
+                      right: 0,
+                      zIndex: 50,
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '10px',
+                      border: '1.5px solid #EADCC9',
+                      boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
+                      padding: '8px',
+                      maxHeight: '230px',
+                      overflowY: 'auto'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px 8px 8px', borderBottom: '1px solid #F3EDE5', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '0.74rem', color: '#6B7280', fontWeight: '700' }}>Tùy chọn danh mục công đoạn</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const allStageNames = (dbStages.length > 0 ? dbStages : [
+                            { name: 'Nhập Kho/Đầu Vào' },
+                            { name: 'Tạo Phôi' },
+                            { name: 'Định Hình' },
+                            { name: 'Lắp Ráp' },
+                            { name: 'Sơn' },
+                            { name: 'Đóng Gói' },
+                            { name: 'Lưu Kho' }
+                          ]).map(s => s.name || s.stage_name);
+
+                          const isAll = (newTeamForm.selectedStages || []).length === allStageNames.length;
+                          setNewTeamForm(prev => ({
+                            ...prev,
+                            selectedStages: isAll ? [allStageNames[0]] : allStageNames,
+                            desc: isAll ? `Tổ sản xuất thuộc ${allStageNames[0]}` : `Tổ sản xuất đa công đoạn (${allStageNames.join(', ')})`
+                          }));
+                        }}
+                        style={{ border: 'none', background: 'transparent', color: '#5D3B32', fontSize: '0.74rem', fontWeight: '800', cursor: 'pointer', textDecoration: 'underline' }}
+                      >
+                        {(newTeamForm.selectedStages || []).length === (dbStages.length || 7) ? 'Bỏ chọn' : 'Chọn tất cả'}
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {(dbStages.length > 0 ? dbStages : [
+                        { id: 1, code: 'CD01', name: 'Nhập Kho/Đầu Vào' },
+                        { id: 2, code: 'CD02', name: 'Tạo Phôi' },
+                        { id: 3, code: 'CD03', name: 'Định Hình' },
+                        { id: 4, code: 'CD04', name: 'Lắp Ráp' },
+                        { id: 5, code: 'CD05', name: 'Sơn' },
+                        { id: 6, code: 'CD06', name: 'Đóng Gói' },
+                        { id: 7, code: 'CD07', name: 'Lưu Kho' }
+                      ]).map((stg) => {
+                        const sName = stg.name || stg.stage_name;
+                        const isSelected = (newTeamForm.selectedStages || []).includes(sName);
+                        return (
+                          <div
+                            key={stg.id || sName}
+                            onClick={() => {
+                              const current = newTeamForm.selectedStages || [];
+                              let next;
+                              if (current.includes(sName)) {
+                                next = current.filter(s => s !== sName);
+                                if (next.length === 0) next = [sName];
+                              } else {
+                                next = [...current, sName];
+                              }
+                              setNewTeamForm(prev => ({
+                                ...prev,
+                                selectedStages: next,
+                                stageName: next.join(', '),
+                                teamName: next.length === 1 ? `Tổ ${next[0]}` : (prev.teamName.startsWith('Tổ ') ? `Tổ ${next.join(' - ')}` : prev.teamName),
+                                desc: `Tổ sản xuất thuộc công đoạn ${next.join(', ')}`
+                              }));
+                            }}
+                            style={{
+                              padding: '8px 10px',
+                              borderRadius: '6px',
+                              backgroundColor: isSelected ? '#FAF6F0' : '#FFFFFF',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              transition: 'background-color 0.15s ease'
+                            }}
+                            onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = '#F9FAFB'; }}
+                            onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <input
+                                type="checkbox"
+                                readOnly
+                                checked={isSelected}
+                                style={{ width: '16px', height: '16px', accentColor: '#5D3B32', cursor: 'pointer' }}
+                              />
+                              <span style={{ fontSize: '0.84rem', fontWeight: isSelected ? '800' : '600', color: isSelected ? '#2D1A12' : '#4B5563' }}>
+                                {sName}
+                              </span>
+                            </div>
+                            {stg.code && (
+                              <span style={{ fontSize: '0.72rem', fontWeight: '700', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#EADCC9', color: '#5D3B32' }}>
+                                [{stg.code}]
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* FIELD 4: Tên Tổ sản xuất */}
@@ -4176,7 +4665,7 @@ const ProductionRoutingView = () => {
                   type="submit"
                   style={{ padding: '8px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#5D3B32', color: '#FFF', fontWeight: '800', cursor: 'pointer' }}
                 >
-                  Thêm Tổ mới
+                  {newTeamForm.editingTeamId ? 'Lưu thay đổi' : 'Thêm Tổ mới'}
                 </button>
               </div>
             </form>

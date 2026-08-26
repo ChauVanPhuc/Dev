@@ -1570,3 +1570,215 @@ async def upload_delivery_image(
 
     return {"url": f"/static/uploads/deliveries/{new_filename}", "success": True}
 
+@router.get("/po/{po_code}")
+def get_deliveries_by_po(po_code: str, db: Session = Depends(get_db)):
+    """
+    [GET] Lấy toàn bộ lịch sử bàn giao theo mã PO / Đơn hàng / Mã Pallet.
+    Phục vụ cho Tab 1 Lịch sử bàn giao tại /admin/quality-records/:id.
+    """
+    from modules.delivery.models.order import Order as OrderModel
+    from modules.auth.models.accounts import Account as AccountModel
+    
+    clean_code = (po_code or "").strip()
+    
+    # 1. Tìm order theo order_code
+    order = db.query(OrderModel).filter(
+        or_(
+            OrderModel.order_code == clean_code,
+            OrderModel.order_code.ilike(f"%{clean_code}%")
+        )
+    ).first()
+    
+    # 2. Truy vấn deliveries thuộc riêng về order này
+    deliveries = []
+    if order:
+        order_delivery_ids = db.query(DeliveryDetailsModel.delivery_id).filter(DeliveryDetailsModel.order_id == order.id).all()
+        deliv_ids = [r[0] for r in order_delivery_ids]
+        specific_filters = [
+            DeliveryModel.order_id == order.id,
+            DeliveryModel.note.ilike(f"%{clean_code}%"),
+            DeliveryModel.backup_qr.ilike(f"%{clean_code}%")
+        ]
+        if deliv_ids:
+            specific_filters.append(DeliveryModel.id.in_(deliv_ids))
+            
+        deliveries = db.query(DeliveryModel).filter(or_(*specific_filters)).order_by(DeliveryModel.created_at.asc()).all()
+        
+    if not deliveries:
+        deliveries = db.query(DeliveryModel).filter(
+            or_(
+                DeliveryModel.note.ilike(f"%{clean_code}%"),
+                DeliveryModel.backup_qr.ilike(f"%{clean_code}%"),
+                DeliveryModel.part_name.ilike(f"%{clean_code}%")
+            )
+        ).order_by(DeliveryModel.created_at.asc()).limit(30).all()
+        
+    if not deliveries and order and order.plan_id:
+        deliveries = db.query(DeliveryModel).filter(DeliveryModel.plan_id == order.plan_id).order_by(DeliveryModel.created_at.asc()).limit(30).all()
+    elif not deliveries:
+        deliveries = db.query(DeliveryModel).order_by(DeliveryModel.created_at.desc()).limit(20).all()
+        
+    # Batch load accounts
+    acc_ids = set()
+    for d in deliveries:
+        if d.sx_delivery: acc_ids.add(d.sx_delivery)
+        if d.sx_receipt: acc_ids.add(d.sx_receipt)
+        if d.qc_receipt: acc_ids.add(d.qc_receipt)
+        
+    acc_map = {}
+    if acc_ids:
+        accs = db.query(AccountModel.id, AccountModel.full_name).filter(AccountModel.id.in_(list(acc_ids))).all()
+        acc_map = {a.id: a.full_name for a in accs}
+        
+    # Batch load images
+    deliv_ids_list = [d.id for d in deliveries]
+    img_map = {}
+    if deliv_ids_list:
+        imgs = db.query(DeliveryImage).filter(DeliveryImage.delivery_id.in_(deliv_ids_list)).all()
+        for img in imgs:
+            if img.delivery_id not in img_map:
+                img_map[img.delivery_id] = []
+            img_map[img.delivery_id].append({"image_path": img.image_path, "description": img.description})
+            
+    results = []
+    for d in deliveries:
+        q_tot = d.quantity_total or 0
+        q_err = d.quantity_error or 0
+        q_ok = max(0, q_tot - q_err)
+        
+        results.append({
+            "id": d.id,
+            "delivery_id": d.backup_qr or f"BG-{d.created_at.strftime('%y%m%d') if d.created_at else '260726'}-{d.id:03d}",
+            "po_code": clean_code,
+            "created_at": d.created_at,
+            "status": d.status or "Hoàn thành",
+            "delivery_stage": d.delivery_stage or "Lắp Ráp 1",
+            "receiving_stage": d.receiving_stage or "Sơn 1",
+            "part_name": d.part_name or "Chi tiết sản phẩm",
+            "product_name": d.part_name or "Chi tiết sản phẩm",
+            "specification": d.specification or "Tiêu chuẩn kỹ thuật",
+            "quantity_total": q_tot,
+            "quantity_ok": q_ok,
+            "quantity_ng": q_err,
+            "quantity_returned": d.quantity_returned or 0,
+            "residual": d.residual or 0,
+            "note": d.note or "",
+            "sx_delivery_name": acc_map.get(d.sx_delivery, "Công nhân giao"),
+            "sx_receipt_name": acc_map.get(d.sx_receipt, "Công nhân nhận"),
+            "qc_receipt_name": acc_map.get(d.qc_receipt, "QC xác nhận"),
+            "images": img_map.get(d.id, [])
+        })
+        
+    return results
+
+@router.get("/history")
+def get_deliveries_history(
+    plan_id: Optional[str] = Query(None),
+    po_code: Optional[str] = Query(None),
+    limit: int = Query(10000),
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy toàn bộ lịch sử bàn giao theo query params (plan_id, po_code).
+    """
+    return _do_get_deliveries_by_plan(plan_id, po_code, limit, db)
+
+@router.get("/plan/{plan_id}")
+def get_deliveries_by_plan(
+    plan_id: str,
+    po_code: Optional[str] = Query(None),
+    limit: int = Query(10000),
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy toàn bộ lịch sử bàn giao theo plan_id trong path.
+    """
+    return _do_get_deliveries_by_plan(plan_id, po_code, limit, db)
+
+def _do_get_deliveries_by_plan(plan_id: Optional[str], po_code: Optional[str], limit: int, db: Session):
+    from modules.delivery.models.order import Order as OrderModel
+    from modules.auth.models.accounts import Account as AccountModel
+    
+    clean_plan = str(plan_id or "").strip()
+    is_all = (clean_plan.lower() in ["all", "0", "-1", ""] and not po_code)
+    
+    orders_query = db.query(OrderModel)
+    if not is_all and clean_plan.isdigit():
+        orders_query = orders_query.filter(OrderModel.plan_id == int(clean_plan))
+    orders = orders_query.all()
+    order_map = {o.id: o.order_code for o in orders}
+    order_ids = list(order_map.keys())
+    
+    deliv_query = db.query(DeliveryModel)
+    if not is_all and clean_plan.isdigit():
+        deliv_query = deliv_query.filter(
+            or_(
+                DeliveryModel.plan_id == int(clean_plan),
+                DeliveryModel.order_id.in_(order_ids) if order_ids else False,
+                DeliveryModel.id.in_(
+                    db.query(DeliveryDetailsModel.delivery_id).filter(DeliveryDetailsModel.order_id.in_(order_ids))
+                ) if order_ids else False
+            )
+        )
+    if po_code:
+        deliv_query = deliv_query.filter(
+            or_(
+                DeliveryModel.note.ilike(f"%{po_code}%"),
+                DeliveryModel.backup_qr.ilike(f"%{po_code}%")
+            )
+        )
+        
+    deliveries = deliv_query.order_by(DeliveryModel.created_at.asc()).limit(limit).all()
+    
+    # Batch load accounts
+    acc_ids = set()
+    d_ids = []
+    for d in deliveries:
+        d_ids.append(d.id)
+        if d.sx_delivery: acc_ids.add(d.sx_delivery)
+        if d.sx_receipt: acc_ids.add(d.sx_receipt)
+        if d.qc_receipt: acc_ids.add(d.qc_receipt)
+        
+    acc_map = {}
+    if acc_ids:
+        accs = db.query(AccountModel.id, AccountModel.full_name).filter(AccountModel.id.in_(list(acc_ids))).all()
+        acc_map = {a.id: a.full_name for a in accs}
+        
+    deliv_order_map = {}
+    if d_ids:
+        for chunk in [d_ids[i:i + 1000] for i in range(0, len(d_ids), 1000)]:
+            dds = db.query(DeliveryDetailsModel.delivery_id, DeliveryDetailsModel.order_id).filter(DeliveryDetailsModel.delivery_id.in_(chunk)).all()
+            for d_id, o_id in dds:
+                if o_id in order_map:
+                    deliv_order_map[d_id] = order_map[o_id]
+                
+    results = []
+    for d in deliveries:
+        q_tot = d.quantity_total or 0
+        q_err = d.quantity_error or 0
+        q_ok = max(0, q_tot - q_err)
+        po_c = deliv_order_map.get(d.id) or (order_map.get(d.order_id) if d.order_id else (d.part_name or "---"))
+        
+        results.append({
+            "id": d.id,
+            "delivery_id": d.backup_qr or f"BG-{d.created_at.strftime('%y%m%d') if d.created_at else '260726'}-{d.id:03d}",
+            "po_code": po_c,
+            "created_at": d.created_at,
+            "status": d.status or "Hoàn thành",
+            "delivery_stage": d.delivery_stage or "Lắp Ráp 1",
+            "receiving_stage": d.receiving_stage or "Sơn 1",
+            "part_name": d.part_name or "Chi tiết sản phẩm",
+            "specification": d.specification or "Tiêu chuẩn kỹ thuật",
+            "quantity_total": q_tot,
+            "quantity_ok": q_ok,
+            "quantity_ng": q_err,
+            "quantity_returned": d.quantity_returned or 0,
+            "residual": d.residual or 0,
+            "note": d.note or "",
+            "sx_delivery_name": acc_map.get(d.sx_delivery, "Công nhân giao"),
+            "sx_receipt_name": acc_map.get(d.sx_receipt, "Công nhân nhận"),
+            "qc_receipt_name": acc_map.get(d.qc_receipt, "QC xác nhận")
+        })
+        
+    return results
+

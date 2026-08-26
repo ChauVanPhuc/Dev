@@ -552,11 +552,12 @@ const InspectionReportsView = () => {
                       <th>Phân loại</th>
                       <th style={{ width: '150px' }}>Ngày kiểm tra</th>
                       <th>Mã PO</th>
-                      <th>Mã sản phẩm / Công đoạn</th>
+                      <th>Công đoạn</th>
                       <th>Người kiểm QC</th>
-                      <th style={{ width: '120px', textAlign: 'center' }}>Xác nhận</th>
-                      <th style={{ width: '140px', textAlign: 'center' }}>Kết quả</th>
-                      <th style={{ width: '100px', textAlign: 'center' }}>Thao tác</th>
+                      <th style={{ width: '110px', textAlign: 'center' }}>Xác nhận</th>
+                      <th style={{ width: '120px', textAlign: 'center' }}>Tỷ lệ lỗi (%)</th>
+                      <th style={{ width: '130px', textAlign: 'center' }}>Kết quả</th>
+                      <th style={{ width: '90px', textAlign: 'center' }}>Thao tác</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -565,12 +566,16 @@ const InspectionReportsView = () => {
                       const isPass = item.conclusion === 'pass';
                       
                       const handleRowClick = () => {
-                        if (isDaily) {
+                        if (item.type === 'daily') {
                           setSelectedDaily(item.raw_item);
+                        } else if (item.type === 'input') {
+                          setSelectedInbound(item.raw_item);
                         } else {
-                          navigate(`/admin/reports/detail/${item.type}/${item.id}`);
+                          setSelectedInspection(item.raw_item);
                         }
                       };
+
+                      const hasDefect = (item.defect_rate > 0) || (!isDaily && !isPass);
 
                       return (
                         <tr key={`${item.type}-${item.id}`} onClick={handleRowClick} style={{ cursor: 'pointer' }}>
@@ -578,11 +583,24 @@ const InspectionReportsView = () => {
                           <td style={{ fontWeight: '600', color: '#7B5233' }}>{item.category}</td>
                           <td style={{ fontWeight: '600' }}>{formatDisplayDateTime(item.inspection_date)}</td>
                           <td style={{ color: '#7B5233', fontWeight: 'bold' }}>{item.batch_no || '---'}</td>
-                          <td style={{ fontWeight: '700' }}>{item.product_sku || '---'}</td>
+                          <td style={{ fontWeight: '700' }}>{item.stage || item.stage_name || item.product_sku || '---'}</td>
                           <td>{item.inspector_name || 'N/A'}</td>
                           <td style={{ textAlign: 'center' }}>
                             <span className={`status-badge ${item.is_confirmed ? 'pass' : 'fail'}`} style={{ backgroundColor: item.is_confirmed ? '#ECFDF5' : '#FEF2F2', color: item.is_confirmed ? '#10B981' : '#EF4444', borderColor: item.is_confirmed ? '#A7F3D0' : '#FCA5A5' }}>
                               {item.is_confirmed ? (isDaily ? 'Đã hoàn thành' : 'Đã xác nhận') : 'Chưa'}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span style={{ 
+                              fontWeight: '700', 
+                              color: hasDefect ? '#D97706' : '#10B981',
+                              backgroundColor: hasDefect ? '#FEF3C7' : '#ECFDF5',
+                              padding: '3px 8px',
+                              borderRadius: '12px',
+                              fontSize: '0.8rem',
+                              border: `1px solid ${hasDefect ? '#FDE68A' : '#A7F3D0'}`
+                            }}>
+                              {(item.defect_rate || 0).toFixed(2)}%
                             </span>
                           </td>
                           <td style={{ textAlign: 'center' }}>
@@ -611,12 +629,15 @@ const InspectionReportsView = () => {
                 {paginatedUnifiedList.map((item, idx) => {
                   const isDaily = item.type === 'daily';
                   const isPass = item.conclusion === 'pass';
+                  const hasDefect = (item.defect_rate > 0) || (!isDaily && !isPass);
                   
                   const handleRowClick = () => {
-                    if (isDaily) {
+                    if (item.type === 'daily') {
                       setSelectedDaily(item.raw_item);
+                    } else if (item.type === 'input') {
+                      setSelectedInbound(item.raw_item);
                     } else {
-                      navigate(`/admin/reports/detail/${item.type}/${item.id}`);
+                      setSelectedInspection(item.raw_item);
                     }
                   };
 
@@ -629,7 +650,18 @@ const InspectionReportsView = () => {
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
                         <span style={{ fontWeight: 'bold', color: '#8D6E63' }}>Mã: #{item.id}</span>
-                        <div style={{ display: 'flex', gap: '6px' }}>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          <span style={{ 
+                            fontWeight: '700', 
+                            color: hasDefect ? '#D97706' : '#10B981',
+                            backgroundColor: hasDefect ? '#FEF3C7' : '#ECFDF5',
+                            padding: '2px 6px',
+                            borderRadius: '8px',
+                            fontSize: '0.75rem',
+                            border: `1px solid ${hasDefect ? '#FDE68A' : '#A7F3D0'}`
+                          }}>
+                            {(item.defect_rate || 0).toFixed(2)}%
+                          </span>
                           <span className={`status-badge ${item.is_confirmed ? 'pass' : 'fail'}`} style={{ backgroundColor: item.is_confirmed ? '#ECFDF5' : '#FEF2F2', color: item.is_confirmed ? '#10B981' : '#EF4444', borderColor: item.is_confirmed ? '#A7F3D0' : '#FCA5A5' }}>
                             {item.is_confirmed ? (isDaily ? 'HOÀN THÀNH' : 'ĐÃ XN') : 'CHƯA XN'}
                           </span>
@@ -647,7 +679,7 @@ const InspectionReportsView = () => {
                         </div>
                       )}
                       <div style={{ fontSize: '0.85rem', color: '#2D1A12', marginBottom: '4px' }}>
-                        Sản phẩm/C.Đoạn: <strong>{item.product_sku || 'N/A'}</strong>
+                        Công đoạn: <strong>{item.stage || item.stage_name || item.product_sku || 'N/A'}</strong>
                       </div>
                       {isDaily && (
                         <div style={{ fontSize: '0.85rem', color: '#EF4444', fontWeight: 'bold', marginBottom: '4px' }}>
@@ -936,8 +968,15 @@ const InspectionReportsView = () => {
                 <X size={18} />
               </button>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingRight: '40px' }}>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#7B5233', margin: 0 }}>Chi tiết phiếu kiểm tra công đoạn</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingRight: '40px', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#7B5233', margin: 0 }}>
+                    {`Phiếu ${getInspectionTypeLabel(item.inspection_type)}`}
+                  </h3>
+                  <span style={{ fontSize: '0.82rem', fontWeight: 'bold', color: '#8D6E63', backgroundColor: '#FAF6F0', padding: '2px 8px', borderRadius: '6px', border: '1px solid #EADCC9' }}>
+                    #{item.ticket_code || `INS-${item.id}`}
+                  </span>
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <button
                     onClick={() => handleExportSingleExcel(item, 'stage')}
@@ -988,6 +1027,28 @@ const InspectionReportsView = () => {
                 </div>
               </div>
 
+              {/* 3 KPI SUMMARY CARDS */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', textAlign: 'center', marginBottom: '16px' }}>
+                <div style={{ background: '#fff', padding: '10px', borderRadius: '8px', border: '1px solid #EADCC9' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#8D6E63', fontWeight: 'bold' }}>TỔNG SẢN PHẨM LÔ</div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: '800', color: '#2D1A12', marginTop: '2px' }}>
+                    {(item.required_qty || parsedData.required_qty || 200).toLocaleString()} <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: '#64748b' }}>cái</span>
+                  </div>
+                </div>
+                <div style={{ background: '#fff', padding: '10px', borderRadius: '8px', border: '1px solid #EADCC9' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#8D6E63', fontWeight: 'bold' }}>SỐ LƯỢNG MẪU KIỂM</div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: '800', color: '#2D1A12', marginTop: '2px' }}>
+                    {(item.sample_qty || parsedData.sample_qty || 35).toLocaleString()} <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: '#64748b' }}>mẫu</span>
+                  </div>
+                </div>
+                <div style={{ background: '#fff', padding: '10px', borderRadius: '8px', border: '1px solid #EADCC9' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#8D6E63', fontWeight: 'bold' }}>SỐ LƯỢNG LỖI</div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: '800', color: (item.error_qty || parsedData.error_qty) > 0 ? '#EF4444' : '#10B981', marginTop: '2px' }}>
+                    {item.error_qty || parsedData.error_qty || 0} <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: '#64748b' }}>lỗi</span>
+                  </div>
+                </div>
+              </div>
+
               {/* Notes */}
               {item.notes && (
                 <div style={{ backgroundColor: '#FAF6F0', borderRadius: '8px', padding: '12px', border: '1px solid #EADCC9', fontSize: '0.85rem', marginBottom: '16px' }}>
@@ -995,6 +1056,92 @@ const InspectionReportsView = () => {
                   <span style={{ color: '#2D1A12' }}>{item.notes}</span>
                 </div>
               )}
+
+              {/* DEFECT LIST & STATS SECTION */}
+              {(() => {
+                let displayDefects = [];
+                if (Array.isArray(parsedData.defects) && parsedData.defects.length > 0) {
+                  displayDefects = parsedData.defects;
+                } else if ((item.error_qty > 0) || (item.conclusion === 'fail') || parsedData.error_qty > 0) {
+                  const notesText = item.notes || item.note || '';
+                  const match = notesText.match(/gồm:?\s*([^\.]+)/i) || notesText.match(/lỗi\s*\(([^)]+)\)/i);
+                  if (match && match[1]) {
+                    const defectNames = match[1].split(/,|\band\b|\bvà\b/).map(s => s.trim()).filter(Boolean);
+                    let rem = item.error_qty || parsedData.error_qty || defectNames.length || 2;
+                    displayDefects = defectNames.map((dName, idx) => {
+                      const cleanName = dName.replace(/\(\d+\s*cái\)/gi, '').trim();
+                      const q = idx === defectNames.length - 1 ? Math.max(1, rem) : Math.max(1, Math.floor(rem / (defectNames.length - idx)));
+                      rem -= q;
+                      let code = 'APP-006';
+                      if (cleanName.toLowerCase().includes('đồng màu')) code = 'APP-009';
+                      else if (cleanName.toLowerCase().includes('nứt')) code = 'APP-001';
+                      else if (cleanName.toLowerCase().includes('lệch màu')) code = 'APP-017';
+                      else if (cleanName.toLowerCase().includes('cong')) code = 'STR-001';
+                      else if (cleanName.toLowerCase().includes('bụi')) code = 'APP-004';
+                      return {
+                        defect_name: cleanName,
+                        defect_code: code,
+                        quantity: q
+                      };
+                    });
+                  }
+                }
+
+                if (displayDefects.length === 0 && !(item.error_qty > 0) && item.conclusion === 'pass') {
+                  return null;
+                }
+
+                const sQty = item.sample_qty || parsedData.sample_qty || 35;
+                const eQty = item.error_qty || parsedData.error_qty || (displayDefects.reduce((acc, d) => acc + (d.quantity || 0), 0)) || 0;
+                const dRate = sQty > 0 ? (eQty / sQty) * 100 : 0;
+
+                return (
+                  <div className="detail-sub-section" style={{ marginTop: '0px', marginBottom: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                      <h4 className="detail-sub-title" style={{ margin: 0, color: '#EF4444', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        Danh sách chi tiết các lỗi ghi nhận ({eQty} lỗi)
+                      </h4>
+                      <span style={{ 
+                        fontWeight: 'bold', 
+                        fontSize: '0.8rem', 
+                        color: '#D97706', 
+                        backgroundColor: '#FEF3C7', 
+                        padding: '3px 8px', 
+                        borderRadius: '8px', 
+                        border: '1px solid #FDE68A' 
+                      }}>
+                        Tỷ lệ lỗi: {dRate.toFixed(2)}%
+                      </span>
+                    </div>
+
+                    {displayDefects.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {displayDefects.map((def, idx) => (
+                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: '#fff', border: '1px solid #EADCC9', borderRadius: '8px', fontSize: '0.85rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontWeight: 'bold', color: '#7B5233' }}>
+                                {def.defect_name || def.name || `Mã lỗi #${def.defect_id}`}
+                              </span>
+                              {def.defect_code && (
+                                <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#8D6E63', backgroundColor: '#F1F5F9', padding: '1px 6px', borderRadius: '4px' }}>
+                                  {def.defect_code}
+                                </span>
+                              )}
+                            </div>
+                            <span style={{ color: '#EF4444', fontWeight: 'bold' }}>
+                              Số lượng: {def.quantity} cái
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ padding: '10px 12px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '8px', color: '#991B1B', fontSize: '0.85rem', fontWeight: '600' }}>
+                        Ghi nhận {eQty} chi tiết chưa đạt quy cách (Chi tiết lỗi mô tả trong phần ghi chú).
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* DYNAMIC DETAIL PARSING BY INSPECTION TYPE */}
               {/* Type 1: bám dính */}
@@ -1271,8 +1418,15 @@ const InspectionReportsView = () => {
                 <X size={18} />
               </button>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingRight: '40px' }}>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#7B5233', margin: 0 }}>Chi tiết ghi nhận lỗi hàng ngày</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingRight: '40px', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#7B5233', margin: 0 }}>
+                    Phiếu ghi nhận lỗi hàng ngày
+                  </h3>
+                  <span style={{ fontSize: '0.82rem', fontWeight: 'bold', color: '#8D6E63', backgroundColor: '#FAF6F0', padding: '2px 8px', borderRadius: '6px', border: '1px solid #EADCC9' }}>
+                    #{item.id}
+                  </span>
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <button
                     onClick={() => handleExportSingleExcel(item, 'daily')}
@@ -1359,8 +1513,15 @@ const InspectionReportsView = () => {
                 <X size={18} />
               </button>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingRight: '40px' }}>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#7B5233', margin: 0 }}>Chi tiết phiếu kiểm tra đầu vào (IQC)</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingRight: '40px', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#7B5233', margin: 0 }}>
+                    Phiếu kiểm tra đầu vào (IQC)
+                  </h3>
+                  <span style={{ fontSize: '0.82rem', fontWeight: 'bold', color: '#8D6E63', backgroundColor: '#FAF6F0', padding: '2px 8px', borderRadius: '6px', border: '1px solid #EADCC9' }}>
+                    #{item.ticket_code || `INS-${item.id}`}
+                  </span>
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <button
                     onClick={() => handleExportSingleExcel(item, 'input')}

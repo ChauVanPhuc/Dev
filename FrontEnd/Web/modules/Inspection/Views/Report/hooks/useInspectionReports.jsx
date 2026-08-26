@@ -188,8 +188,7 @@ export const useInspectionReports = () => {
               onClick={() => {
                 setActiveActionMenu(null);
                 if (tabType === 'daily') setSelectedDaily(item);
-                else if (tabType === 'input') navigate(`/admin/reports/detail/input/${item.id}`);
-                else if (tabType === 'stage' || tabType === 'process') navigate(`/admin/reports/detail/stage/${item.id}`);
+                else if (tabType === 'input') setSelectedInbound(item);
                 else setSelectedInspection(item);
               }}
               style={{
@@ -568,6 +567,11 @@ export const useInspectionReports = () => {
         typeLabel = "input";
       }
       
+      const sQty = item.sample_qty || item.required_qty || 1;
+      const eQty = item.error_qty || 0;
+      const isPass = item.conclusion === 'pass';
+      const dRate = isPass ? 0 : (sQty > 0 ? (eQty / sQty) * 100 : 0);
+
       list.push({
         id: item.id,
         raw_item: item,
@@ -576,19 +580,24 @@ export const useInspectionReports = () => {
         inspection_date: item.inspection_date,
         created_at: item.created_at,
         batch_no: item.batch_no,
-        product_sku: item.product_sku || "N/A",
+        stage: item.stage || item.stage_name || "N/A",
+        product_sku: item.stage || item.stage_name || item.product_sku || "N/A",
         inspector_name: item.inspector_name || getDisplayInspector(item),
         is_confirmed: item.is_confirmed,
         confirmed_at: item.confirmed_at,
         confirmed_by: item.confirmed_by,
         conclusion: item.conclusion,
-        result_label: item.conclusion === 'pass' ? 'Đạt' : 'Lỗi',
+        defect_rate: dRate,
+        sample_qty: sQty,
+        error_qty: eQty,
+        result_label: isPass ? 'Đạt' : `Lỗi (${eQty}/${sQty})`,
         notes: item.notes || item.notes_json || ""
       });
     });
     
     // 2. Daily Inspections
     dailyInspections.forEach(item => {
+      const dRate = Number(item.defect_rate || 0);
       list.push({
         id: item.id,
         raw_item: item,
@@ -597,11 +606,15 @@ export const useInspectionReports = () => {
         inspection_date: item.created_at || item.inspection_date,
         created_at: item.created_at,
         batch_no: item.batch_no || "APT-0041-01",
-        product_sku: item.stage_name || item.product_sku || "N/A",
+        stage: item.stage_name || item.stage || "N/A",
+        product_sku: item.stage_name || item.stage || item.product_sku || "N/A",
         inspector_name: item.inspector_name || getDisplayInspector(item),
         is_confirmed: true,
         conclusion: null,
-        result_label: `Lỗi: ${item.total_defects || 0}/${item.total_products || item.total_inspected || 0} (${item.defect_rate || 0}%)`,
+        defect_rate: dRate,
+        sample_qty: item.total_products || item.total_inspected || 0,
+        error_qty: item.total_defects || 0,
+        result_label: `Lỗi: ${item.total_defects || 0}/${item.total_products || item.total_inspected || 0}`,
         notes: item.notes || ""
       });
     });

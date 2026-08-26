@@ -6,9 +6,12 @@ from datetime import datetime
 class ProductionTeamBase(BaseModel):
     team_code: str
     team_name: str
-    factory: str
+    factory: Optional[str] = None
+    factories: Optional[List[str]] = []
     stage_id: Optional[int] = None
     stage_name: Optional[str] = None
+    stages: Optional[List[str]] = []
+    stage_ids: Optional[List[int]] = []
     members_count: Optional[int] = 10
     description: Optional[str] = None
     color: Optional[str] = '#2D1A12'
@@ -19,6 +22,8 @@ class ProductionTeamCreate(ProductionTeamBase):
 class ProductionTeamResponse(ProductionTeamBase):
     id: int
     created_at: Optional[datetime] = None
+    factories_list: Optional[List[str]] = []
+    stages_list: Optional[List[str]] = []
 
     class Config:
         from_attributes = True

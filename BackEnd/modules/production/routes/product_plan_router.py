@@ -734,7 +734,7 @@ async def get_product_progress(product_id: int, db: Session = Depends(get_db)):
 @router.get("/{id}")
 @_plan_detail_swr_cache
 def get_plan_detail(
-    id: int, 
+    id: str, 
     stage: Optional[str] = None, 
     skip: int = 0, 
     limit: int = 15, 
@@ -760,13 +760,27 @@ def get_plan_detail(
         else:
             simple = False
 
+    is_all = (str(id).lower() in ['all', '0'])
+
     # 1. Lấy thông tin kế hoạch
     print(f"[DEBUG API] get_plan_detail called: id={id}, stage={stage}, order_ids={order_ids}")
-    plan_info = db.query(ProductPlan).filter(ProductPlan.id == id).first()
-    if not plan_info:
-        plan_info = db.query(ProductPlan).filter(ProductPlan.code == str(id)).first()
-    if not plan_info:
-        raise HTTPException(status_code=404, detail=f"Không tìm thấy kế hoạch: {id}")
+    if is_all:
+        class VirtualPlan:
+            id = 0
+            name = "Toàn Hệ Thống"
+            code = "ALL"
+            status = 1
+            estimated_date = None
+            finished_date = None
+            month = None
+            year = None
+        plan_info = VirtualPlan()
+    else:
+        plan_info = db.query(ProductPlan).filter(ProductPlan.id == id).first() if str(id).isdigit() else None
+        if not plan_info:
+            plan_info = db.query(ProductPlan).filter(ProductPlan.code == str(id)).first()
+        if not plan_info:
+            raise HTTPException(status_code=404, detail=f"Không tìm thấy kế hoạch: {id}")
 
     # Lọc theo nhà máy (factory) từ user_stage
     factory = None
@@ -777,7 +791,9 @@ def get_plan_detail(
             factory = match.group(1)
 
     # [QUAN TRỌNG] Lấy tất cả Prefixes cho toàn bộ kế hoạch ngay từ đầu
-    if factory:
+    if is_all:
+        all_codes_rows = db.execute(text("SELECT order_code FROM orders WHERE order_code IS NOT NULL AND order_code <> ''")).fetchall()
+    elif factory:
         all_orders_codes_sql = """
             SELECT o.order_code FROM orders o 
             WHERE o.plan_id = :pid AND o.order_code IS NOT NULL AND o.order_code <> ''
@@ -814,7 +830,9 @@ def get_plan_detail(
                 allowed_order_ids = {r[0] for r in rows if r[0] is not None}
 
             from sqlalchemy.orm import selectinload
-            orders_query = db.query(Order).options(selectinload(Order.products)).filter(Order.plan_id == plan_info.id)
+            orders_query = db.query(Order).options(selectinload(Order.products))
+            if not is_all:
+                orders_query = orders_query.filter(Order.plan_id == plan_info.id)
             if factory:
                 orders_query = orders_query.filter(Order.id.in_(list(allowed_order_ids)))
             
@@ -832,15 +850,21 @@ def get_plan_detail(
                     UNION
                     SELECT DISTINCT order_id FROM delivery_details WITH (NOLOCK) WHERE order_id IN :ids AND order_id IS NOT NULL
                 """).bindparams(bindparam("ids", expanding=True))
-                has_data_ids = {r[0] for r in db.execute(union_sql, {"ids": tuple(order_ids_list)}).fetchall() if r[0] is not None}
+                # Batch chunk to avoid 2100 limit
+                has_data_ids = set()
+                for chunk in [order_ids_list[i:i + 1000] for i in range(0, len(order_ids_list), 1000)]:
+                    rows = db.execute(union_sql, {"ids": tuple(chunk)}).fetchall()
+                    for r in rows:
+                        if r[0] is not None:
+                            has_data_ids.add(r[0])
             else:
                 has_data_ids = set()
 
             # 3. Từ InputInspection (Kiểm tra đầu vào) - Khớp theo mã PO trong cùng KHSX
-            has_inspection_codes = {r[0] for r in db.query(InputInspection.cont_name).filter(
-                InputInspection.plan_id == plan_info.id, 
-                InputInspection.cont_name != None
-            ).distinct().all()}
+            insp_query = db.query(InputInspection.cont_name).filter(InputInspection.cont_name != None)
+            if not is_all:
+                insp_query = insp_query.filter(InputInspection.plan_id == plan_info.id)
+            has_inspection_codes = {r[0] for r in insp_query.distinct().all()}
 
             result_orders = []
             total_plan_qty = 0

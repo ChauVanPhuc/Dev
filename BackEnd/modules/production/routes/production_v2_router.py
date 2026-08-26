@@ -116,22 +116,27 @@ def get_available_months(db: Session = Depends(get_db)):
     try:
         plans = db.query(ProductPlan.id, ProductPlan.month, ProductPlan.year, ProductPlan.code, ProductPlan.name).order_by(ProductPlan.year.desc(), ProductPlan.month.desc()).all()
         months = []
+        seen_months = set()
         for p in plans:
-            months.append({
-                "plan_id": p.id,
-                "month": p.month,
-                "year": p.year,
-                "code": p.code,
-                "label": f"Tháng {p.month}"
-            })
+            key = (p.year, p.month)
+            if key not in seen_months:
+                seen_months.add(key)
+                months.append({
+                    "plan_id": p.id,
+                    "month": p.month,
+                    "year": p.year,
+                    "code": p.code,
+                    "label": f"Tháng {p.month}"
+                })
         if not months:
             months = [{"plan_id": None, "month": m, "year": datetime.now().year, "code": "", "label": f"Tháng {m}"} for m in range(1, 13)]
 
-        # Default to current month if available
+        # Default to current month if available, otherwise latest month
         current_month = datetime.now().month
+        default_month = current_month if any(m["month"] == current_month for m in months) else (months[0]["month"] if months else current_month)
         return {
             "months": months,
-            "default_month": current_month
+            "default_month": default_month
         }
     except Exception as e:
         logger.error(f"Lỗi khi lấy danh sách tháng: {e}")
@@ -298,9 +303,26 @@ def get_production_orders(
                     continue
                 seen_pos.add(po_code)
                 
-                # Map Factory & Category
-                cat_type = "Vanity 1" if idx % 3 == 0 else ("Vanity 2" if idx % 3 == 1 else "Furniture")
-                factory_code = "NM1" if cat_type == "Vanity 1" else ("NM2" if cat_type == "Vanity 2" else "NM3")
+                # Map Factory & Category from real Product data or fallback
+                saved_factory = None
+                if o.products:
+                    for p in o.products:
+                        if p.factory:
+                            saved_factory = p.factory
+                            break
+                        if p.description and any(fac in p.description for fac in ['NM1', 'NM2', 'NM3', 'Vanity 1', 'Vanity 2', 'Furniture']):
+                            for fac in ['NM1', 'NM2', 'NM3']:
+                                if fac in p.description:
+                                    saved_factory = fac
+                                    break
+                            if saved_factory: break
+                
+                if saved_factory:
+                    factory_code = saved_factory
+                    cat_type = "Vanity 1" if factory_code == "NM1" else ("Vanity 2" if factory_code == "NM2" else "Furniture")
+                else:
+                    cat_type = "Vanity 1" if idx % 3 == 0 else ("Vanity 2" if idx % 3 == 1 else "Furniture")
+                    factory_code = "NM1" if cat_type == "Vanity 1" else ("NM2" if cat_type == "Vanity 2" else "NM3")
 
                 # Get pre-fetched deliveries from batch dictionary
                 deliveries_query = deliveries_by_order.get(o.id, []) or (deliveries_by_plan.get(o.plan_id, []) if o.plan_id else [])

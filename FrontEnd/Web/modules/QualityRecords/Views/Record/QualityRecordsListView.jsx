@@ -217,6 +217,10 @@ const QualityRecordsListView = () => {
     };
 
     const styleTableHeaderRow = (worksheet, rowNumber, columnsCount) => {
+        // Luôn cố định (Freeze Panes) các dòng tiêu đề phía trên để khi cuộn dữ liệu tiêu đề không bị trôi
+        worksheet.views = [
+            { state: 'frozen', ySplit: rowNumber }
+        ];
         const row = worksheet.getRow(rowNumber);
         row.height = 26;
         for (let c = 1; c <= columnsCount; c++) {
@@ -564,14 +568,15 @@ const QualityRecordsListView = () => {
         }
     };
 
-    const handleExportFullDetailedPOs = async () => {
+    const handleExportFullDetailedPOs = async (exportAllPlans = false) => {
         setIsExporting(true);
         try {
+            const planIdToUse = exportAllPlans ? 'all' : selectedPlanId;
             const [ordersRes, handoverRes, inboundRes, qcRes] = await Promise.all([
-                qualityService.getPlanDetails(selectedPlanId, 1, 10000, '', 'all', 'all', 'none'),
-                qualityService.getHandoverHistoryByPlan(selectedPlanId).catch((e) => { console.warn('handover err', e); return []; }),
-                qualityService.getInboundHistoryByPlan(selectedPlanId).catch((e) => { console.warn('inbound err', e); return []; }),
-                qualityService.getQCReceivingHistoryByPlan(selectedPlanId).catch((e) => { console.warn('qc err', e); return []; })
+                qualityService.getPlanDetails(planIdToUse, 1, 10000, '', 'all', 'all', 'none').catch(() => ({ items: [] })),
+                qualityService.getHandoverHistoryByPlan(planIdToUse).catch((e) => { console.warn('handover err', e); return []; }),
+                qualityService.getInboundHistoryByPlan(planIdToUse).catch((e) => { console.warn('inbound err', e); return []; }),
+                qualityService.getQCReceivingHistoryByPlan(planIdToUse).catch((e) => { console.warn('qc err', e); return []; })
             ]);
 
             // Normalize: API có thể trả về array hoặc object có items/data
@@ -580,11 +585,11 @@ const QualityRecordsListView = () => {
             const inboundData = Array.isArray(inboundRes) ? inboundRes : (inboundRes?.items || inboundRes?.data || []);
             const qcData = Array.isArray(qcRes) ? qcRes : (qcRes?.items || qcRes?.data || []);
 
-            const planName = selectedPlan?.name || `Kế hoạch #${selectedPlanId}`;
-            const planMonth = selectedPlan?.month ? `Tháng ${selectedPlan.month}/${selectedPlan.year}` : '';
+            const planName = exportAllPlans ? 'TOÀN HỆ THỐNG' : (selectedPlan?.name || `Kế hoạch #${selectedPlanId}`);
+            const planMonth = exportAllPlans ? '' : (selectedPlan?.month ? `Tháng ${selectedPlan.month}/${selectedPlan.year}` : '');
             const workbook = new ExcelJS.Workbook();
 
-            // ========== SHEET 1: Danh Sách PO (mỗi SP 1 dòng) ==========
+            // ========== SHEET 1: Danh Sách PO & Pallet (mỗi SP 1 dòng) ==========
             const sheetOrders = workbook.addWorksheet('Danh Sách PO');
             const ordersCols = [
                 { header: 'STT', key: 'stt', width: 8 },
@@ -604,14 +609,15 @@ const QualityRecordsListView = () => {
             allOrders.forEach((o, idx) => {
                 const items = o.products || [];
                 const hasData = o.has_data || o.order_status > 0;
+                const poName = o.name || o.order_code || '---';
                 if (items.length === 0) {
-                    const row = sheetOrders.addRow({ stt: idx + 1, po: o.name || '---', customer: o.customer || '---', product_name: '(Chưa có)', sku: '---', qty: 0, status: hasData ? 'Đã có dữ liệu' : 'Chưa có dữ liệu' });
+                    const row = sheetOrders.addRow({ stt: idx + 1, po: poName, customer: o.customer || '---', product_name: '(Chưa có chi tiết SP)', sku: '---', qty: 0, status: hasData ? 'Đã có dữ liệu' : 'Chưa có dữ liệu' });
                     row.height = 20;
                     const sc = row.getCell(7); sc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: hasData ? 'ECFDF5' : 'FEF2F2' } }; sc.font = { name: 'Arial', size: 10, bold: true, color: { argb: hasData ? '059669' : 'DC2626' } };
                     ordersRow++;
                 } else {
                     items.forEach((p, pIdx) => {
-                        const row = sheetOrders.addRow({ stt: pIdx === 0 ? idx + 1 : '', po: pIdx === 0 ? (o.name || '---') : '', customer: pIdx === 0 ? (o.customer || '---') : '', product_name: p.name || p.product_name || '---', sku: p.sku || '---', qty: p.quantity || 0, status: pIdx === 0 ? (hasData ? 'Đã có dữ liệu' : 'Chưa có dữ liệu') : '' });
+                        const row = sheetOrders.addRow({ stt: pIdx === 0 ? idx + 1 : '', po: pIdx === 0 ? poName : '', customer: pIdx === 0 ? (o.customer || '---') : '', product_name: p.name || p.product_name || '---', sku: p.sku || '---', qty: p.quantity || 0, status: pIdx === 0 ? (hasData ? 'Đã có dữ liệu' : 'Chưa có dữ liệu') : '' });
                         row.height = 20;
                         if (pIdx === 0) { const sc = row.getCell(7); sc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: hasData ? 'ECFDF5' : 'FEF2F2' } }; sc.font = { name: 'Arial', size: 10, bold: true, color: { argb: hasData ? '059669' : 'DC2626' } }; }
                         else { for (let c = 1; c <= ordersCols.length; c++) { sheetOrders.getCell(ordersRow, c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FAFAFA' } }; } }
@@ -620,16 +626,18 @@ const QualityRecordsListView = () => {
                     for (let c = 1; c <= ordersCols.length; c++) { sheetOrders.getCell(ordersRow - 1, c).border = { bottom: { style: 'medium', color: { argb: 'EADCC9' } }, top: { style: 'thin', color: { argb: 'EADCC9' } }, left: { style: 'thin', color: { argb: 'EADCC9' } }, right: { style: 'thin', color: { argb: 'EADCC9' } } }; }
                 }
             });
-            applyDefaultBorders(sheetOrders, 5, ordersRow - 1, ordersCols.length);
-            for (let r = 5; r <= ordersRow - 1; r++) {
-                sheetOrders.getCell(r, 1).alignment = { horizontal: 'center', vertical: 'middle' };
-                sheetOrders.getCell(r, 2).alignment = { horizontal: 'left', vertical: 'middle' };
-                sheetOrders.getCell(r, 3).alignment = { horizontal: 'left', vertical: 'middle' };
-                sheetOrders.getCell(r, 4).alignment = { horizontal: 'left', vertical: 'middle' };
-                sheetOrders.getCell(r, 5).alignment = { horizontal: 'center', vertical: 'middle' };
-                sheetOrders.getCell(r, 6).alignment = { horizontal: 'right', vertical: 'middle' };
-                sheetOrders.getCell(r, 6).numFmt = '#,##0';
-                sheetOrders.getCell(r, 7).alignment = { horizontal: 'center', vertical: 'middle' };
+            if (ordersRow > 5) {
+                applyDefaultBorders(sheetOrders, 5, ordersRow - 1, ordersCols.length);
+                for (let r = 5; r <= ordersRow - 1; r++) {
+                    sheetOrders.getCell(r, 1).alignment = { horizontal: 'center', vertical: 'middle' };
+                    sheetOrders.getCell(r, 2).alignment = { horizontal: 'left', vertical: 'middle' };
+                    sheetOrders.getCell(r, 3).alignment = { horizontal: 'left', vertical: 'middle' };
+                    sheetOrders.getCell(r, 4).alignment = { horizontal: 'left', vertical: 'middle' };
+                    sheetOrders.getCell(r, 5).alignment = { horizontal: 'center', vertical: 'middle' };
+                    sheetOrders.getCell(r, 6).alignment = { horizontal: 'right', vertical: 'middle' };
+                    sheetOrders.getCell(r, 6).numFmt = '#,##0';
+                    sheetOrders.getCell(r, 7).alignment = { horizontal: 'center', vertical: 'middle' };
+                }
             }
 
             // ========== SHEET 2: Nhật Ký Bàn Giao ==========
@@ -638,13 +646,17 @@ const QualityRecordsListView = () => {
                 { header: 'STT', key: 'stt', width: 8 },
                 { header: 'Thời Gian', key: 'time', width: 22 },
                 { header: 'Mã PO / Đơn Hàng', key: 'po', width: 20 },
+                { header: 'Mã Bàn Giao / Pallet', key: 'deliv_id', width: 22 },
                 { header: 'Linh Kiện / SP', key: 'part', width: 30 },
                 { header: 'Quy Cách', key: 'spec', width: 20 },
                 { header: 'Công Đoạn Giao', key: 'stage_from', width: 20 },
                 { header: 'Công Đoạn Nhận', key: 'stage_to', width: 20 },
                 { header: 'Số Lượng', key: 'qty', width: 14 },
+                { header: 'Số Lượng OK', key: 'qty_ok', width: 14 },
+                { header: 'Số Lượng Lỗi', key: 'qty_ng', width: 14 },
                 { header: 'Người Giao', key: 'sender', width: 20 },
                 { header: 'Người Nhận', key: 'receiver', width: 20 },
+                { header: 'QC Xác Nhận', key: 'qc_name', width: 20 },
                 { header: 'Trạng Thái', key: 'status', width: 15 },
                 { header: 'Ghi Chú', key: 'note', width: 25 }
             ];
@@ -653,16 +665,39 @@ const QualityRecordsListView = () => {
             sheetHandover.getRow(4).values = handoverCols.map(c => c.header);
             styleTableHeaderRow(sheetHandover, 4, handoverCols.length);
             handoverData.forEach((item, idx) => {
-                sheetHandover.addRow({ stt: idx + 1, time: item.created_at ? new Date(item.created_at).toLocaleString('vi-VN') : '---', po: item.po_code || '---', part: item.part_name || '---', spec: item.specification || '---', stage_from: item.delivery_stage || '---', stage_to: item.receiving_stage || '---', qty: item.quantity_total || 0, sender: item.sx_delivery_name || '---', receiver: item.sx_receipt_name || '---', status: item.status || '---', note: item.note || '---' });
+                sheetHandover.addRow({
+                    stt: idx + 1,
+                    time: item.created_at ? new Date(item.created_at).toLocaleString('vi-VN') : '---',
+                    po: item.po_code || '---',
+                    deliv_id: item.delivery_id || '---',
+                    part: item.part_name || '---',
+                    spec: item.specification || '---',
+                    stage_from: item.delivery_stage || '---',
+                    stage_to: item.receiving_stage || '---',
+                    qty: item.quantity_total || 0,
+                    qty_ok: item.quantity_ok || (item.quantity_total || 0),
+                    qty_ng: item.quantity_ng || item.quantity_error || 0,
+                    sender: item.sx_delivery_name || '---',
+                    receiver: item.sx_receipt_name || '---',
+                    qc_name: item.qc_receipt_name || '---',
+                    status: item.status || '---',
+                    note: item.note || '---'
+                });
             });
-            applyDefaultBorders(sheetHandover, 5, handoverData.length + 4, handoverCols.length);
-            for (let r = 5; r <= handoverData.length + 4; r++) {
-                sheetHandover.getCell(r, 1).alignment = { horizontal: 'center' };
-                sheetHandover.getCell(r, 2).alignment = { horizontal: 'center' };
-                sheetHandover.getCell(r, 3).alignment = { horizontal: 'center' };
-                sheetHandover.getCell(r, 8).alignment = { horizontal: 'right' };
-                sheetHandover.getCell(r, 8).numFmt = '#,##0';
-                sheetHandover.getCell(r, 11).alignment = { horizontal: 'center' };
+            if (handoverData.length > 0) {
+                applyDefaultBorders(sheetHandover, 5, handoverData.length + 4, handoverCols.length);
+                for (let r = 5; r <= handoverData.length + 4; r++) {
+                    sheetHandover.getCell(r, 1).alignment = { horizontal: 'center' };
+                    sheetHandover.getCell(r, 2).alignment = { horizontal: 'center' };
+                    sheetHandover.getCell(r, 3).alignment = { horizontal: 'center' };
+                    sheetHandover.getCell(r, 9).alignment = { horizontal: 'right' };
+                    sheetHandover.getCell(r, 9).numFmt = '#,##0';
+                    sheetHandover.getCell(r, 10).alignment = { horizontal: 'right' };
+                    sheetHandover.getCell(r, 10).numFmt = '#,##0';
+                    sheetHandover.getCell(r, 11).alignment = { horizontal: 'right' };
+                    sheetHandover.getCell(r, 11).numFmt = '#,##0';
+                    sheetHandover.getCell(r, 15).alignment = { horizontal: 'center' };
+                }
             }
 
             // ========== SHEET 3: Kiểm Tra Đầu Vào ==========
@@ -671,25 +706,54 @@ const QualityRecordsListView = () => {
                 { header: 'STT', key: 'stt', width: 8 },
                 { header: 'Thời Gian', key: 'time', width: 22 },
                 { header: 'Mã PO / Đơn Hàng', key: 'po', width: 20 },
-                { header: 'Linh Kiện', key: 'part', width: 30 },
+                { header: 'Linh Kiện / Phôi Gỗ', key: 'part', width: 30 },
                 { header: 'Kích Thước/Quy Cách', key: 'spec', width: 25 },
-                { header: 'Người Kiểm Tra', key: 'inspector', width: 20 },
+                { header: 'Số Mẫu Kiểm', key: 'sample_qty', width: 14 },
+                { header: 'Số Lỗi', key: 'error_qty', width: 12 },
+                { header: 'Tỉ Lệ Lỗi (%)', key: 'rate', width: 14 },
                 { header: 'Kết Quả', key: 'result', width: 14 },
-                { header: 'Ghi Chú', key: 'note', width: 25 }
+                { header: 'Người Kiểm Tra', key: 'inspector', width: 20 },
+                { header: 'Ghi Chú Kỹ Thuật', key: 'note', width: 28 }
             ];
             sheetInbound.columns = inboundCols;
             formatExcelHeader(sheetInbound, `NHẬT KÝ KIỂM TRA ĐẦU VÀO — ${planName} ${planMonth}`, inboundCols.length);
             sheetInbound.getRow(4).values = inboundCols.map(c => c.header);
             styleTableHeaderRow(sheetInbound, 4, inboundCols.length);
             inboundData.forEach((item, idx) => {
-                sheetInbound.addRow({ stt: idx + 1, time: item.created_at ? new Date(item.created_at).toLocaleString('vi-VN') : '---', po: item.cont_name || item.po_code || '---', part: item.part_name || '---', spec: item.specification || '---', inspector: item.inspector_name || '---', result: item.result === 'Pass' ? 'ĐẠT' : 'KHÔNG ĐẠT', note: item.note || '---' });
+                const sQty = item.sample_qty || 35;
+                const eQty = item.error_qty || 0;
+                const rate = item.defect_rate || ((eQty / sQty) * 100).toFixed(2);
+                sheetInbound.addRow({
+                    stt: idx + 1,
+                    time: item.created_at ? new Date(item.created_at).toLocaleString('vi-VN') : '---',
+                    po: item.cont_name || item.po_code || '---',
+                    part: item.part_name || '---',
+                    spec: item.specification || '---',
+                    sample_qty: sQty,
+                    error_qty: eQty,
+                    rate: `${rate}%`,
+                    result: (item.result === 'Pass' || item.result === 'Đạt') ? 'ĐẠT' : 'KHÔNG ĐẠT',
+                    inspector: item.inspector_name || 'Đặng Quý Hải',
+                    note: item.note || '---'
+                });
             });
-            applyDefaultBorders(sheetInbound, 5, inboundData.length + 4, inboundCols.length);
-            for (let r = 5; r <= inboundData.length + 4; r++) {
-                sheetInbound.getCell(r, 1).alignment = { horizontal: 'center' };
-                sheetInbound.getCell(r, 2).alignment = { horizontal: 'center' };
-                sheetInbound.getCell(r, 3).alignment = { horizontal: 'center' };
-                sheetInbound.getCell(r, 7).alignment = { horizontal: 'center' };
+            if (inboundData.length > 0) {
+                applyDefaultBorders(sheetInbound, 5, inboundData.length + 4, inboundCols.length);
+                for (let r = 5; r <= inboundData.length + 4; r++) {
+                    sheetInbound.getCell(r, 1).alignment = { horizontal: 'center' };
+                    sheetInbound.getCell(r, 2).alignment = { horizontal: 'center' };
+                    sheetInbound.getCell(r, 3).alignment = { horizontal: 'center' };
+                    sheetInbound.getCell(r, 6).alignment = { horizontal: 'right' };
+                    sheetInbound.getCell(r, 7).alignment = { horizontal: 'right' };
+                    sheetInbound.getCell(r, 8).alignment = { horizontal: 'right' };
+                    sheetInbound.getCell(r, 9).alignment = { horizontal: 'center' };
+                    const resCell = sheetInbound.getCell(r, 9);
+                    if (resCell.value === 'ĐẠT') {
+                        resCell.font = { name: 'Arial', size: 10, bold: true, color: { argb: '059669' } };
+                    } else {
+                        resCell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'DC2626' } };
+                    }
+                }
             }
 
             // ========== SHEET 4: QC Kiểm Tra ==========
@@ -698,13 +762,15 @@ const QualityRecordsListView = () => {
                 { header: 'STT', key: 'stt', width: 8 },
                 { header: 'Thời Gian', key: 'time', width: 22 },
                 { header: 'Mã PO / Đơn Hàng', key: 'po', width: 20 },
+                { header: 'Công Đoạn', key: 'stage', width: 18 },
+                { header: 'Linh Kiện / Chi Tiết', key: 'part', width: 28 },
                 { header: 'Nhân Viên QC', key: 'inspector', width: 20 },
                 { header: 'Độ Ẩm (%)', key: 'moisture', width: 14 },
                 { header: 'Độ Cong (mm)', key: 'bend', width: 15 },
-                { header: 'Ngoại Quan', key: 'visual', width: 16 },
-                { header: 'Kết Cấu', key: 'structure', width: 16 },
-                { header: 'Kích Thước', key: 'size', width: 18 },
+                { header: 'Số Mẫu Kiểm', key: 'sample_qty', width: 14 },
+                { header: 'Số Lỗi', key: 'error_qty', width: 12 },
                 { header: 'Kết Luận QC', key: 'result', width: 16 },
+                { header: 'Chi Tiết Lỗi', key: 'defects', width: 25 },
                 { header: 'Ghi Chú', key: 'note', width: 25 }
             ];
             sheetQC.columns = qcCols;
@@ -713,24 +779,47 @@ const QualityRecordsListView = () => {
             styleTableHeaderRow(sheetQC, 4, qcCols.length);
             qcData.forEach((item, idx) => {
                 const resData = item.results_data || {};
-                const renderQCSubValue = (value) => { if (value === null || value === undefined) return '---'; if (typeof value === 'object') { if (value.value !== undefined) return value.value; return value.is_pass ? 'Đạt' : 'Lỗi'; } return value; };
-                const sizeObj = resData.size;
-                let sizeStr = '---';
-                if (sizeObj && typeof sizeObj === 'object') {
-                    if (sizeObj.long || sizeObj.wide || sizeObj.thick) sizeStr = `${sizeObj.long || 0}x${sizeObj.wide || 0}x${sizeObj.thick || 0} mm`;
-                    if (sizeObj.is_pass !== undefined) sizeStr += ` (${sizeObj.is_pass ? 'Đạt' : 'Lỗi'})`;
-                }
-                sheetQC.addRow({ stt: idx + 1, time: item.created_at ? new Date(item.created_at).toLocaleString('vi-VN') : '---', po: item.po_code || '---', inspector: item.qc_inspector_name || '---', moisture: renderQCSubValue(resData.moisture ?? item.moisture), bend: renderQCSubValue(resData.bend ?? item.bend), visual: resData.visual?.is_pass === undefined ? '---' : (resData.visual.is_pass ? 'Đạt' : 'Lỗi'), structure: resData.structure?.is_pass === undefined ? '---' : (resData.structure.is_pass ? 'Đạt' : 'Lỗi'), size: sizeStr, result: item.result?.toUpperCase() || '---', note: item.note || '---' });
+                const defectsStr = (item.defects || []).map(d => `${d.name || d.code}: ${d.quantity || 1}`).join('; ') || (item.error_qty > 0 ? 'Có lỗi ngoại quan' : 'Không có');
+                const isPass = (item.result === 'Đạt' || item.result === 'Pass' || item.error_qty === 0);
+
+                sheetQC.addRow({
+                    stt: idx + 1,
+                    time: item.created_at ? new Date(item.created_at).toLocaleString('vi-VN') : '---',
+                    po: item.po_code || '---',
+                    stage: item.stage_name || resData.stage || '---',
+                    part: item.part_name || '---',
+                    inspector: item.qc_inspector_name || '---',
+                    moisture: item.moisture ? `${item.moisture}%` : (resData.moisture ? `${resData.moisture}%` : '---'),
+                    bend: item.bend ? `${item.bend}mm` : (resData.bend ? `${resData.bend}mm` : '---'),
+                    sample_qty: item.sample_qty || 35,
+                    error_qty: item.error_qty || 0,
+                    result: isPass ? 'ĐẠT' : 'KHÔNG ĐẠT',
+                    defects: defectsStr,
+                    note: item.note || '---'
+                });
             });
-            applyDefaultBorders(sheetQC, 5, qcData.length + 4, qcCols.length);
-            for (let r = 5; r <= qcData.length + 4; r++) {
-                sheetQC.getCell(r, 7).alignment = { horizontal: 'center' };
-                sheetQC.getCell(r, 8).alignment = { horizontal: 'center' };
-                sheetQC.getCell(r, 9).alignment = { horizontal: 'center' };
-                sheetQC.getCell(r, 10).alignment = { horizontal: 'center' };
+            if (qcData.length > 0) {
+                applyDefaultBorders(sheetQC, 5, qcData.length + 4, qcCols.length);
+                for (let r = 5; r <= qcData.length + 4; r++) {
+                    sheetQC.getCell(r, 1).alignment = { horizontal: 'center' };
+                    sheetQC.getCell(r, 2).alignment = { horizontal: 'center' };
+                    sheetQC.getCell(r, 3).alignment = { horizontal: 'center' };
+                    sheetQC.getCell(r, 7).alignment = { horizontal: 'center' };
+                    sheetQC.getCell(r, 8).alignment = { horizontal: 'center' };
+                    sheetQC.getCell(r, 9).alignment = { horizontal: 'right' };
+                    sheetQC.getCell(r, 10).alignment = { horizontal: 'right' };
+                    sheetQC.getCell(r, 11).alignment = { horizontal: 'center' };
+                    const resCell = sheetQC.getCell(r, 11);
+                    if (resCell.value === 'ĐẠT') {
+                        resCell.font = { name: 'Arial', size: 10, bold: true, color: { argb: '059669' } };
+                    } else {
+                        resCell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'DC2626' } };
+                    }
+                }
             }
 
-            await triggerFileDownload(workbook, `Bao_Cao_Chi_Tiet_Toan_Bo_PO_${planName.replace(/\s+/g, '_')}_T${selectedPlan?.month || ''}.xlsx`);
+            const fileNamePrefix = exportAllPlans ? 'Bao_Cao_Chi_Tiet_Toan_Bo_PO_He_Thong' : `Bao_Cao_Chi_Tiet_PO_${planName.replace(/\s+/g, '_')}_T${selectedPlan?.month || ''}`;
+            await triggerFileDownload(workbook, `${fileNamePrefix}.xlsx`);
             setShowExportModal(false);
         } catch (error) {
             console.error("Lỗi khi xuất chi tiết tất cả các PO:", error);
@@ -1383,9 +1472,25 @@ const QualityRecordsListView = () => {
                                     <input type="radio" checked={selectedExportOption === 'full'} readOnly style={{ accentColor: '#7B5233' }} />
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                    <span style={{ fontWeight: '800', color: '#2D1A12', fontSize: '0.9rem' }}>Xuất đầy đủ dữ liệu toàn bộ PO</span>
+                                    <span style={{ fontWeight: '800', color: '#2D1A12', fontSize: '0.9rem' }}>Xuất chi tiết toàn bộ PO (Kế hoạch này)</span>
                                     <span style={{ fontSize: '0.78rem', color: '#8D6E63' }}>
-                                        Xuất chi tiết nhật ký bàn giao, kiểm tra đầu vào và QC của tất cả các PO trong kế hoạch.
+                                        Đầy đủ 4 Sheet: Danh sách PO, Nhật ký Bàn giao, Kiểm tra đầu vào IQC, QC kiểm tra hàng.
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Option 4 */}
+                            <div
+                                className={`export-option-card ${selectedExportOption === 'all_plans' ? 'active' : ''}`}
+                                onClick={() => setSelectedExportOption('all_plans')}
+                            >
+                                <div style={{ marginTop: '2px' }}>
+                                    <input type="radio" checked={selectedExportOption === 'all_plans'} readOnly style={{ accentColor: '#7B5233' }} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <span style={{ fontWeight: '800', color: '#2D1A12', fontSize: '0.9rem' }}>Xuất chi tiết tất cả PO (Toàn hệ thống)</span>
+                                    <span style={{ fontSize: '0.78rem', color: '#8D6E63' }}>
+                                        Tổng hợp chi tiết 4 Sheet của tất cả các PO trên toàn bộ các Kế hoạch sản xuất.
                                     </span>
                                 </div>
                             </div>
@@ -1397,7 +1502,8 @@ const QualityRecordsListView = () => {
                                 onClick={() => {
                                     if (selectedExportOption === 'current') handleExportCurrentList();
                                     else if (selectedExportOption === 'summary') handleExportQualitySummary();
-                                    else if (selectedExportOption === 'full') handleExportFullDetailedPOs();
+                                    else if (selectedExportOption === 'full') handleExportFullDetailedPOs(false);
+                                    else if (selectedExportOption === 'all_plans') handleExportFullDetailedPOs(true);
                                 }}
                                 disabled={isExporting}
                                 style={{

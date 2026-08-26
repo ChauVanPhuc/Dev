@@ -33,18 +33,42 @@ def create_team(db: Session, team_data: ProductionTeamCreate):
     if existing:
         raise HTTPException(status_code=400, detail=f"Mã tổ '{team_data.team_code}' đã tồn tại trong hệ thống!")
     
+    # Format factories
+    if team_data.factories and len(team_data.factories) > 0:
+        factory_val = ", ".join([f.strip() for f in team_data.factories if f and f.strip()])
+    else:
+        factory_val = team_data.factory or "NM1"
+
+    # Format stages & resolve stage_id
+    from modules.production.models.stages import Stage
+    all_db_stages = db.query(Stage).all()
+    stage_id_val = team_data.stage_id
+
     stage_name = team_data.stage_name
-    if team_data.stage_id and not stage_name:
-        from modules.production.models.stages import Stage
-        stg = db.query(Stage).filter(Stage.id == team_data.stage_id).first()
-        if stg:
-            stage_name = stg.name
+    if team_data.stages and len(team_data.stages) > 0:
+        stage_name = ", ".join([s.strip() for s in team_data.stages if s and s.strip()])
+        first_stg_name = team_data.stages[0].strip().lower()
+        for stg in all_db_stages:
+            if (stg.name or '').strip().lower() == first_stg_name:
+                stage_id_val = stg.id
+                break
+    elif stage_id_val and not stage_name:
+        for stg in all_db_stages:
+            if stg.id == stage_id_val:
+                stage_name = stg.name
+                break
+    elif stage_name and not stage_id_val:
+        first_stg_name = stage_name.split(',')[0].strip().lower()
+        for stg in all_db_stages:
+            if (stg.name or '').strip().lower() == first_stg_name:
+                stage_id_val = stg.id
+                break
 
     new_team = ProductionTeam(
         team_code=team_data.team_code,
         team_name=team_data.team_name,
-        factory=team_data.factory,
-        stage_id=team_data.stage_id,
+        factory=factory_val,
+        stage_id=stage_id_val,
         stage_name=stage_name,
         members_count=team_data.members_count or 10,
         description=team_data.description,
@@ -55,6 +79,54 @@ def create_team(db: Session, team_data: ProductionTeamCreate):
     db.refresh(new_team)
 
     return new_team
+
+def update_team(db: Session, team_id: str, team_data: ProductionTeamCreate):
+    team = None
+    if str(team_id).isdigit():
+        team = db.query(ProductionTeam).filter(ProductionTeam.id == int(team_id)).first()
+    if not team:
+        team = db.query(ProductionTeam).filter(ProductionTeam.team_code == str(team_id)).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Không tìm thấy Tổ sản xuất!")
+
+    if team_data.team_name:
+        team.team_name = team_data.team_name
+    
+    if team_data.factories and len(team_data.factories) > 0:
+        team.factory = ", ".join([f.strip() for f in team_data.factories if f and f.strip()])
+    elif team_data.factory:
+        team.factory = team_data.factory
+
+    from modules.production.models.stages import Stage
+    all_db_stages = db.query(Stage).all()
+
+    if team_data.stages and len(team_data.stages) > 0:
+        team.stage_name = ", ".join([s.strip() for s in team_data.stages if s and s.strip()])
+        first_stg_name = team_data.stages[0].strip().lower()
+        for stg in all_db_stages:
+            if (stg.name or '').strip().lower() == first_stg_name:
+                team.stage_id = stg.id
+                break
+    elif team_data.stage_name:
+        team.stage_name = team_data.stage_name
+        first_stg_name = team_data.stage_name.split(',')[0].strip().lower()
+        for stg in all_db_stages:
+            if (stg.name or '').strip().lower() == first_stg_name:
+                team.stage_id = stg.id
+                break
+    elif team_data.stage_id is not None:
+        team.stage_id = team_data.stage_id
+
+    if team_data.members_count is not None:
+        team.members_count = team_data.members_count
+    if team_data.description is not None:
+        team.description = team_data.description
+    if team_data.color:
+        team.color = team_data.color
+
+    db.commit()
+    db.refresh(team)
+    return team
 
 
 # --- ROUTINGS CONTROLLERS ---

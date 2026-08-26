@@ -52,6 +52,7 @@ def create_order(db: Session, order: OrderCreate):
                 sku=p_sku_std,
                 quantity=p_data.quantity,
                 order_id=db_order.id,
+                description=p_data.factory if p_data.factory else None,
                 status="Active",
                 created_at=datetime.datetime.utcnow()
             )
@@ -132,6 +133,7 @@ def update_order(db: Session, order_id: int, order: OrderUpdate):
                     sku=p_sku_std,
                     quantity=p_data.quantity,
                     order_id=db_order.id,
+                    description=p_data.factory if p_data.factory else None,
                     status="Active",
                     created_at=datetime.datetime.utcnow()
                 )

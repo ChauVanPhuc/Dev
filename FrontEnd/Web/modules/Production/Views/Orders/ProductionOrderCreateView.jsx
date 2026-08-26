@@ -78,31 +78,44 @@ const ProductionOrderCreateView = () => {
     'NM3 - Tạo phôi 3', 'NM3 - Định hình 3', 'NM3 - Lắp ráp 3', 'NM3 - Sơn 3', 'NM3 - Đóng gói 3'
   ];
   const [stageOptions, setStageOptions] = useState(defaultDbStages);
+  const [dbFactories, setDbFactories] = useState([]);
 
   useEffect(() => {
-    const fetchStagesFromDb = async () => {
+    const fetchStagesAndFactories = async () => {
       try {
-        const res = await api.get('/stages/').catch(() => api.get('/stages')).catch(() => null);
-        if (res && Array.isArray(res) && res.length > 0) {
-          const rawDbStages = res.map(s => (s.name || s.stage_name || '').trim()).filter(Boolean);
+        const [stagesRes, factoriesRes] = await Promise.all([
+          api.get('/stages/').catch(() => api.get('/stages')).catch(() => null),
+          api.get('/production-v2/factories').catch(() => null)
+        ]);
+
+        if (stagesRes && Array.isArray(stagesRes) && stagesRes.length > 0) {
+          const rawDbStages = stagesRes.map(s => (s.name || s.stage_name || '').trim()).filter(Boolean);
           const uniqueDbStages = Array.from(new Set(rawDbStages));
           if (uniqueDbStages.length > 0) setStageOptions(uniqueDbStages);
         }
+
+        if (factoriesRes && Array.isArray(factoriesRes) && factoriesRes.length > 0) {
+          const validFacs = factoriesRes.filter(f => f.code && f.code !== 'VP');
+          if (validFacs.length > 0) {
+            setDbFactories(validFacs.map(f => f.code.trim()));
+          }
+        }
       } catch (err) {
-        console.warn('Lỗi lấy danh sách công đoạn từ DB:', err);
+        console.warn('Lỗi lấy danh sách công đoạn hoặc nhà máy từ DB:', err);
       }
     };
-    fetchStagesFromDb();
+    fetchStagesAndFactories();
   }, []);
 
   const uniqueFactories = useMemo(() => {
+    if (dbFactories.length > 0) return dbFactories;
     const extracted = stageOptions.map(stg => {
       const parts = stg.split(' - ');
       return parts.length > 1 ? parts[0].trim() : '';
     }).filter(Boolean);
-    const unique = Array.from(new Set(extracted));
+    const unique = Array.from(new Set(extracted)).filter(f => f !== 'VP');
     return unique.length > 0 ? unique : ['NM1', 'NM2', 'NM3'];
-  }, [stageOptions]);
+  }, [dbFactories, stageOptions]);
 
   const getStagesForFactory = (factoryName, allStages = stageOptions) => {
     if (!factoryName) return allStages;
@@ -400,13 +413,9 @@ const ProductionOrderCreateView = () => {
     const fetchOrderDetail = async () => {
       setLoadingDetail(true);
       try {
-        // First check state from navigation
-        const itemState = location.state?.item;
-        let item = itemState;
-        if (!item) {
-          const res = await api.get(`/orders/${editingOrderId}`).catch(() => null);
-          item = res;
-        }
+        // Always fetch fresh details from API to ensure accurate DB state
+        const res = await api.get(`/orders/${editingOrderId}`).catch(() => null);
+        const item = res || location.state?.item;
 
         if (item) {
           setOrderForm({
@@ -425,12 +434,36 @@ const ProductionOrderCreateView = () => {
               const spare = p.spare_qty !== undefined ? Number(p.spare_qty) : Math.ceil(qty * 0.05);
               const total = p.total_qty !== undefined ? Number(p.total_qty) : (qty + spare);
               const code = p.sku || p.productCode || `SP-${idx + 1}`;
+
+              // Determine saved factory
+              let detectedFactory = p.factory;
+              if (!detectedFactory && p.description && (p.description.includes('NM1') || p.description.includes('NM2') || p.description.includes('NM3'))) {
+                for (const fac of ['NM1', 'NM2', 'NM3']) {
+                  if (p.description.includes(fac)) {
+                    detectedFactory = fac;
+                    break;
+                  }
+                }
+              }
+              if (!detectedFactory && p.bom_details && p.bom_details.length > 0) {
+                for (const b of p.bom_details) {
+                  const stg = b.input_stage || b.output_stage || '';
+                  for (const fac of ['NM1', 'NM2', 'NM3']) {
+                    if (stg.includes(fac)) {
+                      detectedFactory = fac;
+                      break;
+                    }
+                  }
+                  if (detectedFactory) break;
+                }
+              }
+
               return {
                 id: p.id || idx + 1,
                 productCode: code,
                 productName: p.name || p.productName || 'Sản phẩm sản xuất',
                 lineType: p.category || p.lineType || p.group_name || 'Nội thất',
-                factory: p.factory || defaultFac,
+                factory: detectedFactory || defaultFac,
                 orderQty: qty,
                 spareQty: spare,
                 totalQty: total,

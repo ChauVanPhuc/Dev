@@ -46,3 +46,22 @@ class Product(Base):
     order = relationship("Order", back_populates="products")
     bom_details = relationship("BOMDetail", back_populates="product", cascade="all, delete-orphan")
 
+    @property
+    def factory(self):
+        if self.description and any(fac in self.description for fac in ['NM1', 'NM2', 'NM3', 'Vanity 1', 'Vanity 2', 'Furniture']):
+            for fac in ['NM1', 'NM2', 'NM3']:
+                if fac in self.description:
+                    return fac
+            if 'Vanity 1' in self.description: return 'NM1'
+            if 'Vanity 2' in self.description: return 'NM2'
+            if 'Furniture' in self.description: return 'NM3'
+            return self.description
+        if self.bom_details:
+            for b in self.bom_details:
+                for stg in [b.input_stage, b.output_stage]:
+                    if stg and 'NM' in stg:
+                        for fac in ['NM1', 'NM2', 'NM3']:
+                            if fac in stg:
+                                return fac
+        return None
+
