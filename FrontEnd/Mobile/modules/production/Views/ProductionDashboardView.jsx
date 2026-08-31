@@ -17,7 +17,7 @@ const ProductionDashboardView = () => {
       } catch (err) {
         console.error('Lỗi khi tải dữ liệu Production Dashboard:', err);
         // Fallback demo data
-        setData({
+        setData(prev => prev || {
           notifications: [
             { id: 1, title: 'Hiển thị thông báo mới', content: 'Cập nhật tiến độ sản xuất lô hàng APT007 cần chú ý tiến độ công đoạn Lắp ráp.', is_urgent: true }
           ],
@@ -49,7 +49,11 @@ const ProductionDashboardView = () => {
         setLoading(false);
       }
     };
+
     fetchData();
+    // Đồng bộ tự động sau mỗi 5 giây
+    const pollInterval = setInterval(fetchData, 5000);
+    return () => clearInterval(pollInterval);
   }, []);
 
   // Tự động xoay vòng trượt thông báo sau 5 giây nếu có trên 1 thông báo
@@ -89,7 +93,7 @@ const ProductionDashboardView = () => {
             <div style={{
               backgroundColor: '#fff',
               borderRadius: '16px',
-              padding: '20px 16px 14px 16px',
+              padding: '18px 14px 14px 14px',
               textAlign: 'center',
               border: '1px solid #e2e8f0',
               boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
@@ -105,13 +109,13 @@ const ProductionDashboardView = () => {
                   type="button"
                   onClick={() => setCurrentNotifIndex(prev => (prev - 1 + notifs.length) % notifs.length)}
                   style={{
-                    position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)',
-                    border: 'none', background: 'rgba(241, 245, 249, 0.85)', borderRadius: '50%',
-                    width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    cursor: 'pointer', color: '#475569', zIndex: 2
+                    position: 'absolute', left: '6px', top: '50%', transform: 'translateY(-50%)',
+                    border: 'none', background: 'rgba(241, 245, 249, 0.95)', borderRadius: '50%',
+                    width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer', color: '#475569', zIndex: 2, boxShadow: '0 2px 4px rgba(0,0,0,0.08)'
                   }}
                 >
-                  <ChevronLeft size={18} />
+                  <ChevronLeft size={20} />
                 </button>
               )}
 
@@ -121,22 +125,22 @@ const ProductionDashboardView = () => {
                   type="button"
                   onClick={() => setCurrentNotifIndex(prev => (prev + 1) % notifs.length)}
                   style={{
-                    position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)',
-                    border: 'none', background: 'rgba(241, 245, 249, 0.85)', borderRadius: '50%',
-                    width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    cursor: 'pointer', color: '#475569', zIndex: 2
+                    position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)',
+                    border: 'none', background: 'rgba(241, 245, 249, 0.95)', borderRadius: '50%',
+                    width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer', color: '#475569', zIndex: 2, boxShadow: '0 2px 4px rgba(0,0,0,0.08)'
                   }}
                 >
-                  <ChevronRight size={18} />
+                  <ChevronRight size={20} />
                 </button>
               )}
 
-              {/* Nội dung thông báo */}
-              <div style={{ padding: hasMultiple ? '0 24px' : '0' }}>
-                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: '900', color: '#432818' }}>
+              {/* Nội dung thông báo - Có khoảng đệm 38px hai bên để KHÔNG ĐÈ LÊN MŨI TÊN */}
+              <div style={{ padding: hasMultiple ? '0 38px' : '0 10px' }}>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '900', color: '#432818', wordBreak: 'break-word' }}>
                   {currentNotif.title || 'Hiển thị thông báo mới'}
                 </h3>
-                <p style={{ margin: '8px 0 0 0', fontSize: '0.84rem', color: '#475569', lineHeight: '1.4' }}>
+                <p style={{ margin: '8px 0 0 0', fontSize: '0.84rem', color: '#475569', lineHeight: '1.4', wordBreak: 'break-word' }}>
                   {currentNotif.content}
                 </p>
               </div>
@@ -144,7 +148,7 @@ const ProductionDashboardView = () => {
               {/* Các chấm chuyển đổi (Carousel Dots) */}
               {hasMultiple && (
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', marginTop: '12px' }}>
-                  {notifs.map((_, idx) => (
+                  {notifs.slice(0, 8).map((_, idx) => (
                     <span
                       key={idx}
                       onClick={() => setCurrentNotifIndex(idx)}

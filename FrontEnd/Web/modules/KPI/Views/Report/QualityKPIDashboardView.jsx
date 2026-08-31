@@ -25,7 +25,7 @@ import {
   ExternalLink,
   RefreshCw
 } from 'lucide-react';
-import api from '@webShared/Services/api.service';
+import api, { getFullImageUrl } from '@webShared/Services/api.service';
 import '@styles/components.css';
 
 // Import Modals
@@ -177,13 +177,14 @@ const QualityKPIDashboardView = () => {
       const checklistResp = await api.get('/kpi-management/checklists?employee_id=admin').catch(() => null);
       if (checklistResp && Array.isArray(checklistResp) && checklistResp.length > 0) {
         const mappedPlans = checklistResp.map((c, idx) => ({
-          id: c.id || idx + 1,
+          id: c.id !== undefined && c.id !== null ? c.id : idx + 1,
           code: c.task_code || `KH-ĐT-${String(idx + 1).padStart(2, '0')}`,
           name: c.content,
           target: 'Nhân viên QC & Tổ trưởng',
           time: c.last_performed || '15/09/2026',
           teacher: 'Phòng Đào Tạo',
-          fileName: 'TaiLieu_DaoTao_QC.pdf',
+          fileName: c.result || 'TaiLieu_DaoTao_QC.pdf',
+          fileUrl: c.result ? (c.result.startsWith('http') ? c.result : getFullImageUrl(`/uploads/${c.result}`)) : null,
           status: c.status_today || 'Sắp diễn ra'
         }));
         setTrainingPlans(mappedPlans);
@@ -203,21 +204,6 @@ const QualityKPIDashboardView = () => {
 
       // 5. Fetch Notifications / Alerts from DB `/notifications/?all=true`
       let notifResp = await api.get('/notifications/?all=true').catch(() => null);
-
-      // Auto-seed default alert if DB is empty so Mobile and Web are immediately connected
-      if (!notifResp || !Array.isArray(notifResp) || notifResp.length === 0) {
-        const seedPayload = JSON.stringify({
-          title: 'Hiển thị thông báo mới',
-          content: "Bùi Công Sự đã giao 'APT8-48-GRY' (SL: 12). Mời bộ phận Sản xuất công đoạn Đóng Gói tiếp nhận."
-        });
-        await api.post('/notifications/', {
-          content: seedPayload,
-          target_group: 'Tổ Đóng Gói',
-          target_stage: 'MOBILE_BANNER',
-          priority_status: 'BANNER:Hiển thị thông báo mới'
-        }).catch(() => null);
-        notifResp = await api.get('/notifications/?all=true').catch(() => null);
-      }
 
       if (notifResp && Array.isArray(notifResp) && notifResp.length > 0) {
         const mappedNotifs = notifResp.map((n, idx) => {
@@ -245,6 +231,8 @@ const QualityKPIDashboardView = () => {
           };
         });
         setAlertsList(mappedNotifs);
+      } else {
+        setAlertsList([]);
       }
 
     } catch (err) {
@@ -292,6 +280,7 @@ const QualityKPIDashboardView = () => {
         const newId = createRes?.id || Date.now();
         setKpiTargets(prev => [...prev, { ...targetItem, id: newId }]);
       }
+      await fetchDatabaseData();
     } catch (err) {
       console.error('Error saving KPI target in DB:', err);
     }
@@ -326,9 +315,31 @@ const QualityKPIDashboardView = () => {
 
   const handleSaveTrainingPlan = async (newPlan) => {
     try {
+      let fileName = newPlan.fileName || 'TaiLieu.pdf';
+      if (newPlan.fileObject) {
+        const formData = new FormData();
+        formData.append('file', newPlan.fileObject);
+        const uploadRes = await api.post('/kpi-management/upload-file', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        }).catch(err => console.error('Upload file error:', err));
+        if (uploadRes && uploadRes.fileName) {
+          fileName = uploadRes.fileName;
+        }
+      }
+
       if (editingTrainingPlan) {
         // Edit mode
-        setTrainingPlans(prev => prev.map(p => p.id === newPlan.id ? newPlan : p));
+        await api.put(`/kpi-management/checklists/${editingTrainingPlan.id}`, {
+          employee_id: 'admin',
+          task_code: newPlan.code,
+          content: newPlan.name,
+          frequency: 'Đào tạo',
+          status_today: newPlan.status || 'Sắp diễn ra',
+          perform_count: 1,
+          last_performed: newPlan.time || '15/09/2026',
+          result: fileName
+        }).catch(() => null);
+        setTrainingPlans(prev => prev.map(p => p.id === newPlan.id ? { ...newPlan, fileName, fileUrl: `/uploads/${fileName}` } : p));
       } else {
         // Create mode
         await api.post('/kpi-management/checklists', {
@@ -339,11 +350,12 @@ const QualityKPIDashboardView = () => {
           status_today: newPlan.status || 'Sắp diễn ra',
           perform_count: 1,
           last_performed: newPlan.time || '15/09/2026',
-          result: newPlan.fileName || 'TaiLieu.pdf'
+          result: fileName
         }).catch(() => null);
 
-        setTrainingPlans(prev => [...prev, { ...newPlan, id: Date.now() }]);
+        setTrainingPlans(prev => [...prev, { ...newPlan, fileName, fileUrl: `/uploads/${fileName}`, id: Date.now() }]);
       }
+      await fetchDatabaseData();
     } catch (err) {
       console.error('Error saving training plan to DB:', err);
     } finally {
@@ -357,19 +369,21 @@ const QualityKPIDashboardView = () => {
 
     try {
       if (deleteConfirmState.isTrainingPlan) {
-        if (item.id) {
-          await api.delete(`/kpi-management/checklists/${item.id}`).catch(() => null);
+        if (item.id !== undefined && item.id !== null) {
+          await api.delete(`/kpi-management/checklists/${item.id}`).catch(err => console.error('Delete checklist error:', err));
         }
         setTrainingPlans(prev => prev.filter(p => p.id !== item.id));
       } else if (deleteConfirmState.isAlert) {
-        if (item.id) {
-          await api.delete(`/notifications/${item.id}`).catch(() => null);
+        if (item.id !== undefined && item.id !== null) {
+          await api.delete(`/notifications/${item.id}`).catch(err => console.error('Delete alert error:', err));
         }
-        await fetchDatabaseData();
       } else {
-        await api.delete(`/kpi-management/kpi-pool/${item.id}`).catch(() => null);
+        if (item.id !== undefined && item.id !== null) {
+          await api.delete(`/kpi-management/kpi-pool/${item.id}`).catch(err => console.error('Delete kpi pool error:', err));
+        }
         setKpiTargets(prev => prev.filter(t => t.id !== item.id));
       }
+      await fetchDatabaseData();
     } catch (err) {
       console.error('Error deleting item from DB:', err);
     } finally {
@@ -1204,7 +1218,7 @@ const QualityKPIDashboardView = () => {
                 🔔 Thiết lập Cảnh báo & Phát Thông báo Mới đến Mobile App Banner
               </div>
               <button
-                onClick={() => setIsAlertModalOpen(true)}
+                onClick={() => { setEditingAlert(null); setIsAlertModalOpen(true); }}
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '8px', fontWeight: '800', fontSize: '0.8rem', cursor: 'pointer' }}
               >
                 <Send size={16} /> Bắn thông báo mới đến Mobile

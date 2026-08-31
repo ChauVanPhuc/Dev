@@ -663,8 +663,8 @@ os.makedirs(os.path.join(STATIC_DIR, "uploads", "products"), exist_ok=True)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 UPLOADS_DIR = os.path.join(STATIC_DIR, "uploads")
-if os.path.exists(UPLOADS_DIR):
-    app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
 
 
@@ -698,7 +698,7 @@ async def serve_ui(request: Request, full_path: str):
     full_path_clean = full_path.lstrip("/")
 
     # Loại trừ các đường dẫn hệ thống
-    if full_path_clean.startswith(("api/", "static/", "accounts/")):
+    if full_path_clean.startswith(("api/", "static/", "uploads/", "accounts/")):
         raise HTTPException(status_code=404)
 
     # Nhận diện tên miền và nguồn gốc (referer) để phục vụ đúng UI (Dashboard vs Mobile)

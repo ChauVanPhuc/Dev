@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+import os
+import shutil
 from sqlalchemy.orm import Session
 from config.database import get_db
 from modules.kpi.models.kpi_management import KPIChecklist, KPIEmployeeItem, KPIViolation, KPIFeedback, KPIPointRule, KPIChecklistPool, KPIItemPool
@@ -299,6 +301,21 @@ def delete_checklist(id: int, db: Session = Depends(get_db)):
     db.delete(db_item)
     db.commit()
     return {"status": "success", "message": "Xóa công việc checklist thành công"}
+
+@router.post("/upload-file", response_model=dict)
+async def upload_kpi_file(file: UploadFile = File(...)):
+    static_uploads = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "static", "uploads"))
+    os.makedirs(static_uploads, exist_ok=True)
+    
+    file_location = os.path.join(static_uploads, file.filename)
+    with open(file_location, "wb+") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    return {
+        "status": "success",
+        "fileName": file.filename,
+        "fileUrl": f"/uploads/{file.filename}"
+    }
 
 # 3. Danh sách KPI CRUD
 @router.get("/employee-items", response_model=List[dict])

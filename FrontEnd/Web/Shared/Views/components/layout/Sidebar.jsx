@@ -180,7 +180,6 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     }
     if (group.title === 'Quản lý KPI' || group.title === 'KPI') {
       return [
-        { id: 101, parent_id: group.id, title: 'Dashboard KPI', route_path: '/admin/kpi/dashboard', icon: 'BarChart2' },
         { id: 102, parent_id: group.id, title: 'Danh sách & Sơ đồ nhân sự', route_path: '/admin/kpi/personnel', icon: 'Users' },
         { id: 103, parent_id: group.id, title: 'Hồ sơ chất lượng', route_path: '/admin/kpi/quality-profiles', icon: 'ShieldCheck' },
         { id: 104, parent_id: group.id, title: 'Danh sách vi phạm', route_path: '/admin/violations', icon: 'AlertTriangle' },
@@ -190,6 +189,14 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     }
     let list = group.children || [];
     if (group.title === 'Quản lý chất lượng' || group.title === 'Quản lý Chất Lượng') {
+      list = list.filter(item => item.route_path !== '/admin/quality-targets');
+      const hasTargetMenu = list.some(item => item.route_path === '/admin/kpi/dashboard');
+      if (!hasTargetMenu) {
+        list = [{ id: 101, parent_id: group.id, title: 'Mục tiêu Chất Lượng', route_path: '/admin/kpi/dashboard', icon: 'Target' }, ...list];
+      } else {
+        list = list.map(item => item.route_path === '/admin/kpi/dashboard' ? { ...item, title: 'Mục tiêu Chất Lượng', icon: 'Target' } : item);
+      }
+
       const hasEmpMenu = list.some(item => item.route_path === '/admin/kpi/quality-employees');
       if (!hasEmpMenu) {
         list = [...list, { id: 107, parent_id: group.id, title: 'Danh sách nhân sự', route_path: '/admin/kpi/quality-employees', icon: 'UserCheck' }];
@@ -208,15 +215,15 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     if ((group.title === 'Quản lý chất lượng' || group.title === 'Quản lý Chất Lượng') && (
       location.pathname === '/admin/quality' || 
       location.pathname === '/admin/quality/' ||
-      location.pathname === '/admin/quality-targets' ||
-      location.pathname === '/admin/quality-targets/' ||
+      location.pathname === '/admin/kpi/dashboard' ||
+      location.pathname === '/admin/kpi/dashboard/' ||
       location.pathname === '/admin/kpi/quality-employees' ||
       location.pathname === '/admin/kpi/quality-employees/'
     )) {
       return true;
     }
     if ((group.title === 'Quản lý KPI' || group.title === 'KPI') && (
-      location.pathname.startsWith('/admin/kpi') ||
+      (location.pathname.startsWith('/admin/kpi') && location.pathname !== '/admin/kpi/dashboard') ||
       location.pathname.startsWith('/admin/violations')
     )) {
       return true;

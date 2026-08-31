@@ -160,8 +160,8 @@ def get_production_dashboard(db: Session = Depends(get_db)):
             )
         ).order_by(NotificationModel.created_at.desc()).all()
 
-
         if banner_notis and len(banner_notis) > 0:
+            seen_entries = set()
             for b_noti in banner_notis:
                 title_text = "Hiển thị thông báo mới"
                 content_text = b_noti.content or ""
@@ -177,13 +177,16 @@ def get_production_dashboard(db: Session = Depends(get_db)):
                     except Exception:
                         pass
 
-                notifications_data.append({
-                    "id": b_noti.id,
-                    "title": title_text,
-                    "content": content_text,
-                    "created_at": b_noti.created_at.strftime("%H:%M | %d/%m/%Y") if b_noti.created_at else "",
-                    "is_urgent": True
-                })
+                entry_key = f"{title_text}|||{content_text}"
+                if entry_key not in seen_entries:
+                    seen_entries.add(entry_key)
+                    notifications_data.append({
+                        "id": b_noti.id,
+                        "title": title_text,
+                        "content": content_text,
+                        "created_at": b_noti.created_at.strftime("%H:%M | %d/%m/%Y") if b_noti.created_at else "",
+                        "is_urgent": True
+                    })
         else:
             notifications_data = [
                 {

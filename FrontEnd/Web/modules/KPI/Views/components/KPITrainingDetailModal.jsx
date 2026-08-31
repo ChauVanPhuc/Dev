@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { X, FileText, Calendar, User, Users, Download, ExternalLink, Eye, EyeOff } from 'lucide-react';
+import { getFullImageUrl } from '@webShared/Services/api.service';
 import '@styles/components.css';
 
 /**
@@ -13,28 +14,39 @@ const KPITrainingDetailModal = ({ isOpen, onClose, planData }) => {
   if (!isOpen || !planData) return null;
 
   const [showPreview, setShowPreview] = useState(true);
+  const rawFileUrl = planData.fileUrl || (planData.fileName ? (planData.fileName.startsWith('http') || planData.fileName.startsWith('/') ? planData.fileName : `/uploads/${planData.fileName}`) : null);
 
-  const hasRealFile = !!(planData.fileUrl);
+  const fileUrl = useMemo(() => {
+    if (!rawFileUrl) return null;
+    if (rawFileUrl.startsWith('data:') || rawFileUrl.startsWith('blob:')) return rawFileUrl;
+    try {
+      return getFullImageUrl(encodeURI(rawFileUrl));
+    } catch (e) {
+      return getFullImageUrl(rawFileUrl);
+    }
+  }, [rawFileUrl]);
+
+  const hasRealFile = !!(planData.fileUrl || planData.fileName);
 
   // Determine preview type from file extension
   const fileExtension = useMemo(() => {
     const name = planData.fileName || '';
     const ext = name.split('.').pop()?.toLowerCase();
-    return ext || '';
+    return ext || 'pdf';
   }, [planData.fileName]);
 
   const canPreviewInBrowser = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'bmp', 'webp', 'txt', 'html'].includes(fileExtension);
 
   const handleOpenNewTab = () => {
-    if (planData.fileUrl) {
-      window.open(planData.fileUrl, '_blank');
+    if (fileUrl) {
+      window.open(fileUrl, '_blank');
     }
   };
 
   const handleDownload = () => {
-    if (planData.fileUrl) {
+    if (fileUrl) {
       const a = document.createElement('a');
-      a.href = planData.fileUrl;
+      a.href = fileUrl;
       a.download = planData.fileName || 'TaiLieu.pdf';
       document.body.appendChild(a);
       a.click();
@@ -202,7 +214,7 @@ const KPITrainingDetailModal = ({ isOpen, onClose, planData }) => {
               {/* Iframe showing actual file content */}
               {canPreviewInBrowser ? (
                 <iframe
-                  src={planData.fileUrl}
+                  src={fileUrl}
                   title={`Xem trước: ${planData.fileName}`}
                   style={{ width: '100%', height: '450px', border: 'none', display: 'block', backgroundColor: '#FFFFFF' }}
                 />

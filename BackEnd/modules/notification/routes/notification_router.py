@@ -2,6 +2,7 @@ from typing import List, Optional
 import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, and_
 from config.database import get_db
 from modules.notification.models.notifications import Notification as NotificationModel
 from modules.notification.schemas.notifications import Notification as NotificationSchema, NotificationCreate, NotificationMarkRead
