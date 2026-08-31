@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Pencil } from 'lucide-react';
+import { Pencil, ChevronLeft, ChevronRight } from 'lucide-react';
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout';
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader';
 import apiClient from '@shared/services/api';
@@ -7,6 +7,7 @@ import apiClient from '@shared/services/api';
 const ProductionDashboardView = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [currentNotifIndex, setCurrentNotifIndex] = useState(0);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -51,6 +52,16 @@ const ProductionDashboardView = () => {
     fetchData();
   }, []);
 
+  // Tự động xoay vòng trượt thông báo sau 5 giây nếu có trên 1 thông báo
+  useEffect(() => {
+    if (data && data.notifications && data.notifications.length > 1) {
+      const timer = setInterval(() => {
+        setCurrentNotifIndex(prev => (prev + 1) % data.notifications.length);
+      }, 5000);
+      return () => clearInterval(timer);
+    }
+  }, [data]);
+
   if (loading || !data) {
     return (
       <Layout>
@@ -68,24 +79,90 @@ const ProductionDashboardView = () => {
 
       <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, padding: '14px', display: 'flex', flexDirection: 'column', gap: '14px', boxSizing: 'border-box' }}>
         
-        {/* Card 1: Hiển thị thông báo mới */}
-        <div style={{
-          backgroundColor: '#fff',
-          borderRadius: '16px',
-          padding: '24px 16px',
-          textAlign: 'center',
-          border: '1px solid #e2e8f0',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.03)'
-        }}>
-          <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '900', color: '#432818' }}>
-            Hiển thị thông báo mới
-          </h3>
-          {data.notifications && data.notifications.length > 0 && (
-            <p style={{ margin: '8px 0 0 0', fontSize: '0.84rem', color: '#64748b', lineHeight: '1.4' }}>
-              {data.notifications[0].content}
-            </p>
-          )}
-        </div>
+        {/* Card 1: Hiển thị thông báo mới (Hỗ trợ trượt tự động 5s) */}
+        {data.notifications && data.notifications.length > 0 && (() => {
+          const notifs = data.notifications;
+          const currentNotif = notifs[currentNotifIndex % notifs.length] || notifs[0];
+          const hasMultiple = notifs.length > 1;
+
+          return (
+            <div style={{
+              backgroundColor: '#fff',
+              borderRadius: '16px',
+              padding: '20px 16px 14px 16px',
+              textAlign: 'center',
+              border: '1px solid #e2e8f0',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              minHeight: '105px'
+            }}>
+              {/* Nút mũi tên trái */}
+              {hasMultiple && (
+                <button
+                  type="button"
+                  onClick={() => setCurrentNotifIndex(prev => (prev - 1 + notifs.length) % notifs.length)}
+                  style={{
+                    position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)',
+                    border: 'none', background: 'rgba(241, 245, 249, 0.85)', borderRadius: '50%',
+                    width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer', color: '#475569', zIndex: 2
+                  }}
+                >
+                  <ChevronLeft size={18} />
+                </button>
+              )}
+
+              {/* Nút mũi tên phải */}
+              {hasMultiple && (
+                <button
+                  type="button"
+                  onClick={() => setCurrentNotifIndex(prev => (prev + 1) % notifs.length)}
+                  style={{
+                    position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)',
+                    border: 'none', background: 'rgba(241, 245, 249, 0.85)', borderRadius: '50%',
+                    width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer', color: '#475569', zIndex: 2
+                  }}
+                >
+                  <ChevronRight size={18} />
+                </button>
+              )}
+
+              {/* Nội dung thông báo */}
+              <div style={{ padding: hasMultiple ? '0 24px' : '0' }}>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: '900', color: '#432818' }}>
+                  {currentNotif.title || 'Hiển thị thông báo mới'}
+                </h3>
+                <p style={{ margin: '8px 0 0 0', fontSize: '0.84rem', color: '#475569', lineHeight: '1.4' }}>
+                  {currentNotif.content}
+                </p>
+              </div>
+
+              {/* Các chấm chuyển đổi (Carousel Dots) */}
+              {hasMultiple && (
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', marginTop: '12px' }}>
+                  {notifs.map((_, idx) => (
+                    <span
+                      key={idx}
+                      onClick={() => setCurrentNotifIndex(idx)}
+                      style={{
+                        width: idx === (currentNotifIndex % notifs.length) ? '18px' : '6px',
+                        height: '6px',
+                        borderRadius: '3px',
+                        backgroundColor: idx === (currentNotifIndex % notifs.length) ? '#5D3B32' : '#CBD5E1',
+                        transition: 'all 0.3s ease',
+                        cursor: 'pointer'
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Card 2: KPI tháng 3 */}
         <div style={{

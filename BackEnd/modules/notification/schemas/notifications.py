@@ -11,12 +11,12 @@ class NotificationBase(BaseModel):
 
 # Schema dùng để gửi lên khi tạo mới
 class NotificationCreate(NotificationBase):
-    announcer_id: int
+    announcer_id: Optional[int] = None
 
 # Schema dùng để phản hồi về Client (Chứa ID và Thời gian)
 class Notification(NotificationBase):
     id: int
-    announcer_id: int
+    announcer_id: Optional[int] = None
     created_at: datetime
 
     class Config:

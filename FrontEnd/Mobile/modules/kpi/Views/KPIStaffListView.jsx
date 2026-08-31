@@ -164,6 +164,30 @@ const KPIStaffList = () => {
           </div>
         </div>
  
+        {/* Nút Đánh giá nhân sự mới & Quick Actions */}
+        <button
+          onClick={() => navigate('/staff-evaluation/new')}
+          style={{
+            width: '100%',
+            backgroundColor: '#32251E',
+            color: '#FFFFFF',
+            border: 'none',
+            borderRadius: '12px',
+            padding: '14px',
+            fontSize: '0.95rem',
+            fontWeight: '800',
+            display: 'flex',
+            alignItems: 'center',
+            justify: 'center',
+            gap: '8px',
+            boxShadow: '0 4px 12px rgba(50, 37, 30, 0.25)',
+            cursor: 'pointer'
+          }}
+        >
+          <UserRoundCheck size={20} />
+          + ĐÁNH GIÁ NHÂN SỰ MỚI
+        </button>
+
         {/* Search Bar */}
         <div style={{ position: 'relative', width: '100%' }}>
           <input

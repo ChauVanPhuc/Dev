@@ -103,6 +103,13 @@ const Sidebar = () => {
             route_path: '/kpi-staff',
             icon: 'Heart',
             is_active: true
+          },
+          {
+            id: 'm-quality-employees',
+            title: 'Nhân sự Quản lý Chất lượng',
+            route_path: '/kpi-quality-employees',
+            icon: 'UserCheck',
+            is_active: true
           }
         ])
       } finally {

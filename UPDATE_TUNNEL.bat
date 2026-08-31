@@ -16,10 +16,10 @@ echo ========================================================
 echo.
 
 echo [1/3] Dang go bo Tunnel cu...
-"C:\Program Files (x86)\cloudflared\cloudflared.exe" service uninstall
+"C:\Users\Administrator\cloudflared.exe" service uninstall
 
-echo [2/3] Dang cai dat Tunnel moi (cfb4fa0a)...
-"C:\Program Files (x86)\cloudflared\cloudflared.exe" service install eyJhIjoiMDRhMGU4YTdkYmQwM2VhYzhiZmE4OTVhOTFlNWUwNjQiLCJ0IjoiY2ZiNGZhMGEtMGRjNS00NzM0LThmMDUtMGZhN2Q2OWRkNDMxIiwicyI6Ik9HRTBNalkzWlRJdFkyWmpOeTAwT1RVMkxUZzJOalF0TldFek5ERTRaVGczTlRreSJ9
+echo [2/3] Dang cai dat Tunnel moi...
+"C:\Users\Administrator\cloudflared.exe" service install eyJhIjoiMDRhMGU4YTdkYmQwM2VhYzhiZmE4OTVhOTFlNWUwNjQiLCJ0IjoiMzYyMjkwMmItNTQ5Zi00YjhmLWE1N2YtYWQ3NjMzMWFiYTdjIiwicyI6IllXTXdZelEzTURZdFl6Vm1OUzAwT1dRNExUazVObUl0TldReE5XSmlNR05oWW1KaSJ9
 
 echo [3/3] Dang khoi dong Service...
 net start Cloudflared

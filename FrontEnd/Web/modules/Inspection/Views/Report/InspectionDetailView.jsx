@@ -1,10 +1,122 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
-import { ChevronLeft, FileSpreadsheet, Printer, X, Image as ImageIcon, CheckCircle, CheckCircle2, User, Calendar, Info } from 'lucide-react';
+import { ChevronLeft, FileSpreadsheet, Printer, X, Image as ImageIcon, CheckCircle, CheckCircle2, User, Calendar, Info, AlertTriangle, XCircle, AlertCircle } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import { getInspectionTypeLabel } from './hooks/useInspectionReports';
 import '@styles/components.css';
+
+/**
+ * Trích xuất danh sách các lỗi / hạng mục không đạt từ data_json hoặc thông tin phiếu
+ */
+const extractDefects = (item) => {
+  if (!item) return [];
+  let parsed = {};
+  try {
+    parsed = typeof item.data_json === 'string' ? JSON.parse(item.data_json || '{}') : (item.data_json || {});
+  } catch (e) {}
+
+  let rawList = parsed.defects || parsed.errors || parsed.defect_list || parsed.defectsList || item.defects || [];
+  const defects = [];
+
+  if (Array.isArray(rawList) && rawList.length > 0) {
+    rawList.forEach((d, idx) => {
+      if (typeof d === 'string') {
+        defects.push({
+          id: idx,
+          name: d,
+          quantity: 1,
+          severity: 'Không đạt',
+          note: ''
+        });
+      } else if (typeof d === 'object' && d !== null) {
+        defects.push({
+          id: d.defectId || d.id || idx,
+          name: d.defect_name || d.name || d.code || `Lỗi #${idx + 1}`,
+          code: d.code || d.defect_code || '',
+          quantity: d.quantity || d.qty || d.count || 1,
+          severity: d.isHeavy ? 'Lỗi nặng (Major)' : (d.isCTQ ? 'Lỗi chí mạng (CTQ)' : (d.severity || 'Lỗi kiểm tra')),
+          isCTQ: !!d.isCTQ,
+          isHeavy: !!d.isHeavy,
+          note: d.note || d.description || '',
+          images: d.images || []
+        });
+      }
+    });
+  }
+
+  // Check steps for failed steps
+  if (parsed.steps) {
+    Object.entries(parsed.steps).forEach(([stepName, val]) => {
+      if (val && (val.result === 'fail' || val.result === 'Lỗi' || val.status === 'FAIL')) {
+        if (!defects.some(d => d.name.toLowerCase().includes(stepName.toLowerCase()))) {
+          defects.push({
+            id: `step_${stepName}`,
+            name: stepName,
+            quantity: 1,
+            severity: 'Không đạt tiêu chuẩn',
+            note: val.value ? `Giá trị đo: ${val.value}` : (val.note || ''),
+            isFailedStep: true
+          });
+        }
+      }
+    });
+  }
+
+  // Check samples for failed samples
+  if (Array.isArray(parsed.samples)) {
+    parsed.samples.forEach((s, idx) => {
+      if (s.result === 'fail' || s.visual === 'fail' || s.function === 'fail') {
+        let reasons = [];
+        if (s.visual === 'fail') reasons.push('Lỗi ngoại quan');
+        if (s.function === 'fail') reasons.push('Lỗi chức năng');
+        if (s.moisture?.result === 'fail') reasons.push('Lỗi độ ẩm');
+        if (s.size?.result === 'fail') reasons.push('Lỗi kích thước');
+        const failText = reasons.length > 0 ? reasons.join(', ') : 'Không đạt yêu cầu';
+        
+        defects.push({
+          id: `sample_${idx}`,
+          name: `Mẫu #${s.stt || idx + 1}: ${failText}`,
+          quantity: 1,
+          severity: 'Mẫu không đạt',
+          note: s.note || ''
+        });
+      }
+    });
+  }
+
+  // Fallback: extract listed defects from text notes if no structured defects found but record is failed
+  const noteText = item.notes || item.note || parsed.note || '';
+  const isFailedRecord = (item.conclusion === 'fail' || item.result === 'KHÔNG ĐẠT' || item.result === 'Lỗi' || item.result === 'fail');
+
+  if (defects.length === 0 && isFailedRecord) {
+    if (noteText) {
+      const matchParen = noteText.match(/\((.*?)\)/);
+      if (matchParen && matchParen[1]) {
+        const errorItems = matchParen[1].split(/,|và|&/).map(s => s.trim()).filter(Boolean);
+        errorItems.forEach((errName, idx) => {
+          defects.push({
+            id: `note_extracted_${idx}`,
+            name: errName.charAt(0).toUpperCase() + errName.slice(1),
+            quantity: 'Ghi nhận trong phiếu',
+            severity: 'Lỗi phát hiện',
+            note: noteText
+          });
+        });
+      } else {
+        defects.push({
+          id: `note_general`,
+          name: 'Phát hiện lỗi không đạt quy cách / tiêu chuẩn',
+          quantity: item.error_qty || 1,
+          severity: 'Không đạt',
+          note: noteText
+        });
+      }
+    }
+  }
+
+  return defects;
+};
 
 const InspectionDetailView = () => {
   const { type, id } = useParams();
@@ -209,6 +321,36 @@ const InspectionDetailView = () => {
       }
     }
 
+    const printDefects = extractDefects(item);
+    let defectsPdfHtml = '';
+    if (printDefects.length > 0) {
+      defectsPdfHtml = `
+        <div style="margin-top:15px; font-weight:bold; color:#dc2626; font-size:14px;">DANH SÁCH LỖI / HẠNG MỤC PHÁT HIỆN KHÔNG ĐẠT:</div>
+        <table style="width:100%; border-collapse:collapse; margin-top:8px;">
+          <thead>
+            <tr style="background:#fee2e2; color:#991b1b;">
+              <th style="padding:8px; border:1px solid #fca5a5; width:40px; text-align:center;">STT</th>
+              <th style="padding:8px; border:1px solid #fca5a5; text-align:left;">Tên loại lỗi / Hạng mục vi phạm</th>
+              <th style="padding:8px; border:1px solid #fca5a5; text-align:center;">Số lượng</th>
+              <th style="padding:8px; border:1px solid #fca5a5; text-align:center;">Mức độ</th>
+              <th style="padding:8px; border:1px solid #fca5a5; text-align:left;">Ghi chú / Chi tiết</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${printDefects.map((d, i) => `
+              <tr>
+                <td style="padding:8px; border:1px solid #fca5a5; text-align:center; font-weight:bold;">${i + 1}</td>
+                <td style="padding:8px; border:1px solid #fca5a5; font-weight:bold; color:#991b1b;">${d.name}</td>
+                <td style="padding:8px; border:1px solid #fca5a5; text-align:center; font-weight:bold;">${d.quantity}</td>
+                <td style="padding:8px; border:1px solid #fca5a5; text-align:center;"><span style="color:${d.isCTQ || d.isHeavy ? '#dc2626' : '#d97706'}; font-weight:bold;">${d.severity}</span></td>
+                <td style="padding:8px; border:1px solid #fca5a5;">${d.note || item.notes || item.note || '-'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
     const imagesHtml = imagesList.length > 0 ? `
       <div style="margin-top:20px;">
         <div style="font-weight:bold; color:#7B5233; margin-bottom:10px; font-size:14px;">HÌNH ẢNH MINH CHỨNG:</div>
@@ -284,6 +426,7 @@ const InspectionDetailView = () => {
 
         ${item.notes || item.note ? `<div style="background:#fffbeb; padding:10px; border-radius:6px; border:1px solid #fef3c7; margin:15px 0; font-size:13px; color:#92400e;"><b>Ghi chú:</b> ${item.notes || item.note}</div>` : ''}
 
+        ${defectsPdfHtml}
         ${detailsHtml}
         ${imagesHtml}
 
@@ -338,6 +481,7 @@ const InspectionDetailView = () => {
   const isPass = isInput ? item.result === 'Đạt' : item.conclusion === 'pass';
   const dateVal = isInput ? item.inspected_at : item.inspection_date;
   const imagesList = isInput ? [item.image_path_1, item.image_path_2, item.image_path_3].filter(Boolean) : getStageImages(item);
+  const defectsList = extractDefects(item);
 
   return (
     <div className="quality-records-container" style={{ fontFamily: "'Outfit', 'Inter', sans-serif" }}>
@@ -470,6 +614,67 @@ const InspectionDetailView = () => {
             </div>
           )}
         </div>
+
+        {/* CARD DEFECTS BREAKDOWN (DANH SÁCH CÁC LỖI PHÁT HIỆN KHÔNG ĐẠT) */}
+        {defectsList.length > 0 && (
+          <div className="card" style={{ padding: '24px', backgroundColor: '#FEF2F2', borderRadius: '12px', border: '2px solid #FCA5A5', boxShadow: '0 4px 15px rgba(239, 68, 68, 0.08)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0 0 16px 0', borderBottom: '2px solid #FEE2E2', paddingBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+              <h3 style={{ fontSize: '1.15rem', color: '#991B1B', margin: 0, display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '800' }}>
+                <AlertTriangle size={22} color="#DC2626" /> Danh sách các lỗi phát hiện / Hạng mục không đạt ({defectsList.length} lỗi)
+              </h3>
+              <span style={{ backgroundColor: '#DC2626', color: '#FFFFFF', padding: '4px 12px', borderRadius: '20px', fontWeight: '800', fontSize: '0.8rem' }}>
+                CẢNH BÁO LỖI CHẤT LƯỢNG
+              </span>
+            </div>
+
+            <div className="table-responsive" style={{ overflowX: 'auto' }}>
+              <table className="data-table" style={{ width: '100%', backgroundColor: '#FFFFFF', borderRadius: '8px', overflow: 'hidden', border: '1px solid #FECACA' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#FEE2E2', color: '#991B1B' }}>
+                    <th style={{ width: '50px', textAlign: 'center', padding: '10px' }}>STT</th>
+                    <th style={{ padding: '10px' }}>Tên loại lỗi / Hạng mục không đạt</th>
+                    <th style={{ width: '130px', textAlign: 'center', padding: '10px' }}>Số lượng</th>
+                    <th style={{ width: '160px', textAlign: 'center', padding: '10px' }}>Mức độ / Phân loại</th>
+                    <th style={{ padding: '10px' }}>Ghi chú / Chi tiết phát hiện</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {defectsList.map((d, index) => (
+                    <tr key={d.id || index} style={{ borderBottom: '1px solid #FEE2E2' }}>
+                      <td style={{ textAlign: 'center', fontWeight: '700', color: '#991B1B' }}>{index + 1}</td>
+                      <td style={{ fontWeight: '800', color: '#DC2626', fontSize: '0.95rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <XCircle size={16} color="#DC2626" />
+                          <span>{d.name}</span>
+                          {d.code && <span style={{ fontSize: '0.75rem', backgroundColor: '#FEE2E2', color: '#991B1B', padding: '1px 6px', borderRadius: '4px' }}>[{d.code}]</span>}
+                        </div>
+                      </td>
+                      <td style={{ textAlign: 'center', fontWeight: '800', color: '#1E293B' }}>
+                        {d.quantity}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span style={{
+                          padding: '3px 10px',
+                          borderRadius: '12px',
+                          fontWeight: '800',
+                          fontSize: '0.75rem',
+                          backgroundColor: d.isCTQ ? '#7F1D1D' : (d.isHeavy ? '#FEE2E2' : '#FEF3C7'),
+                          color: d.isCTQ ? '#FFFFFF' : (d.isHeavy ? '#991B1B' : '#92400E'),
+                          border: d.isCTQ ? 'none' : (d.isHeavy ? '1px solid #FCA5A5' : '1px solid #FDE68A')
+                        }}>
+                          {d.severity}
+                        </span>
+                      </td>
+                      <td style={{ color: '#475569', fontSize: '0.9rem' }}>
+                        {d.note || item.notes || item.note || 'Đã ghi nhận trong phiếu kiểm tra'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* CARD 2: MEASUREMENTS OR DETAILED RESULTS */}
         <div className="card" style={{ padding: '24px', backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #EADCC9' }}>

@@ -151,17 +151,38 @@ def get_production_dashboard(db: Session = Depends(get_db)):
     TRUY VẤN CSDL THỰC: Trả về dữ liệu tổng quan cho trang Trang chủ (CL01: Thông tin cần chú ý)
     """
     try:
-        # A. Hiển thị thông báo mới nhất
+        # A. Hiển thị thông báo mới nhất (Ưu tiên lấy từ Tab 6 "Thiết lập cảnh báo" - target_stage='MOBILE_BANNER')
         notifications_data = []
-        db_notis = db.query(NotificationModel).order_by(NotificationModel.created_at.desc()).limit(3).all()
-        if db_notis:
-            for n in db_notis:
+        banner_notis = db.query(NotificationModel).filter(
+            or_(
+                NotificationModel.target_stage == "MOBILE_BANNER",
+                NotificationModel.priority_status.like("BANNER:%")
+            )
+        ).order_by(NotificationModel.created_at.desc()).all()
+
+
+        if banner_notis and len(banner_notis) > 0:
+            for b_noti in banner_notis:
+                title_text = "Hiển thị thông báo mới"
+                content_text = b_noti.content or ""
+                if b_noti.priority_status and b_noti.priority_status.startswith("BANNER:"):
+                    title_text = b_noti.priority_status.replace("BANNER:", "").strip() or title_text
+                
+                # Nếu content lưu dưới dạng JSON {title, content}
+                if content_text.startswith("{") and "content" in content_text:
+                    try:
+                        c_json = json.loads(content_text)
+                        title_text = c_json.get("title") or title_text
+                        content_text = c_json.get("content") or content_text
+                    except Exception:
+                        pass
+
                 notifications_data.append({
-                    "id": n.id,
-                    "title": "Hiển thị thông báo mới",
-                    "content": n.content,
-                    "created_at": n.created_at.strftime("%H:%M | %d/%m/%Y") if n.created_at else "",
-                    "is_urgent": n.priority_status == "Chờ xử lý"
+                    "id": b_noti.id,
+                    "title": title_text,
+                    "content": content_text,
+                    "created_at": b_noti.created_at.strftime("%H:%M | %d/%m/%Y") if b_noti.created_at else "",
+                    "is_urgent": True
                 })
         else:
             notifications_data = [

@@ -253,8 +253,11 @@ def get_kpi_employees(db: Session = Depends(get_db)):
 
 # 2. Checklist công việc CRUD
 @router.get("/checklists", response_model=List[dict])
-def get_checklists(employee_id: str, db: Session = Depends(get_db)):
-    items = db.query(KPIChecklist).filter(KPIChecklist.employee_id == employee_id).order_by(KPIChecklist.id.desc()).all()
+def get_checklists(employee_id: Optional[str] = None, db: Session = Depends(get_db)):
+    query = db.query(KPIChecklist)
+    if employee_id:
+        query = query.filter(KPIChecklist.employee_id == employee_id)
+    items = query.order_by(KPIChecklist.id.desc()).all()
     return [
         {
             "id": idx.id,

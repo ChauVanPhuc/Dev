@@ -72,6 +72,12 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
       perm = activePermissions['/admin/inspection-guides'] || activePermissions['inspection-guides'];
     }
 
+    // Cho phép hiển thị Dashboard KPI nếu là kpi route
+    if (item.route_path === '/admin/kpi/dashboard' || item.permission_key === 'kpi') {
+      const kpiPerm = activePermissions['/admin/kpi/dashboard'] || activePermissions['kpi'];
+      if (kpiPerm !== 'none') return false;
+    }
+
     // 1. Kiểm tra chặn rõ ràng (Explicit block)
     if (perm === 'none') return true;
     if (Array.isArray(perm)) {
@@ -172,12 +178,47 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
         { id: 25, parent_id: 19, title: 'Danh sách bàn giao', route_path: '/admin/delivery-tracking', icon: 'Handshake' }
       ];
     }
-    return group.children || [];
+    if (group.title === 'Quản lý KPI' || group.title === 'KPI') {
+      return [
+        { id: 101, parent_id: group.id, title: 'Dashboard KPI', route_path: '/admin/kpi/dashboard', icon: 'BarChart2' },
+        { id: 102, parent_id: group.id, title: 'Danh sách & Sơ đồ nhân sự', route_path: '/admin/kpi/personnel', icon: 'Users' },
+        { id: 103, parent_id: group.id, title: 'Hồ sơ chất lượng', route_path: '/admin/kpi/quality-profiles', icon: 'ShieldCheck' },
+        { id: 104, parent_id: group.id, title: 'Danh sách vi phạm', route_path: '/admin/violations', icon: 'AlertTriangle' },
+        { id: 105, parent_id: group.id, title: 'Danh mục mẫu Checklist', route_path: '/admin/kpi/checklist', icon: 'CheckSquare' },
+        { id: 106, parent_id: group.id, title: 'Quy tắc cộng trừ điểm', route_path: '/admin/kpi/rules', icon: 'FileText' }
+      ];
+    }
+    let list = group.children || [];
+    if (group.title === 'Quản lý chất lượng' || group.title === 'Quản lý Chất Lượng') {
+      const hasEmpMenu = list.some(item => item.route_path === '/admin/kpi/quality-employees');
+      if (!hasEmpMenu) {
+        list = [...list, { id: 107, parent_id: group.id, title: 'Danh sách nhân sự', route_path: '/admin/kpi/quality-employees', icon: 'UserCheck' }];
+      } else {
+        list = list.map(item => item.route_path === '/admin/kpi/quality-employees' ? { ...item, title: 'Danh sách nhân sự' } : item);
+      }
+    }
+    return list;
   };
 
   // Helper check xem group co child nao dang active ko (bao gom ca sub-children)
   const hasActiveChild = (group) => {
     if (group.title === 'Quản lý hệ thống' && (location.pathname === '/admin/monitor' || location.pathname === '/admin/monitor/')) {
+      return true;
+    }
+    if ((group.title === 'Quản lý chất lượng' || group.title === 'Quản lý Chất Lượng') && (
+      location.pathname === '/admin/quality' || 
+      location.pathname === '/admin/quality/' ||
+      location.pathname === '/admin/quality-targets' ||
+      location.pathname === '/admin/quality-targets/' ||
+      location.pathname === '/admin/kpi/quality-employees' ||
+      location.pathname === '/admin/kpi/quality-employees/'
+    )) {
+      return true;
+    }
+    if ((group.title === 'Quản lý KPI' || group.title === 'KPI') && (
+      location.pathname.startsWith('/admin/kpi') ||
+      location.pathname.startsWith('/admin/violations')
+    )) {
       return true;
     }
     const children = getGroupChildren(group);
@@ -380,16 +421,7 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
                 if (isBlocked(item)) return null;
                 return item;
               } else {
-                let rawChildren = item.children || [];
-
-                // Yêu cầu: "Quản lý sản xuất" chỉ hiển thị 3 mục: Lệnh sản xuất, Quy trình - kế hoạch, Danh sách bàn giao. Các mục khác tạm ẩn.
-                if (item.title === 'Quản lý sản xuất') {
-                  rawChildren = [
-                    { id: 21, parent_id: 19, title: 'Lệnh sản xuất', route_path: '/admin/production-orders', icon: 'Handshake' },
-                    { id: 24, parent_id: 19, title: 'Quy trình - kế hoạch', route_path: '/admin/production-routing', icon: 'Handshake' },
-                    { id: 25, parent_id: 19, title: 'Danh sách bàn giao', route_path: '/admin/delivery-tracking', icon: 'Handshake' }
-                  ];
-                }
+                let rawChildren = getGroupChildren(item);
 
                 // Lọc các item con và sub-item con theo quyền
                 const visibleChildren = rawChildren.map(child => {
@@ -417,6 +449,10 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
                     <button
                       onClick={() => {
                         toggleGroup(item.id);
+                        if (item.title === 'Quản lý chất lượng') {
+                          navigate('/admin/quality');
+                          if (onClose) onClose();
+                        }
                       }}
                       className={`sidebar-group-header ${isGroupActive ? 'active' : ''}`}
                       style={{

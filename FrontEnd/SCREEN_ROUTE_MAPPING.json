@@ -240,6 +240,13 @@
       "title": "Quản lý chức vụ",
       "subtitle": "Danh sách chức vụ",
       "status": "inactive"
+    },
+    "AD38": {
+      "route": "/admin/kpi/dashboard",
+      "file": "KPI/Views/Report/QualityKPIDashboardView.jsx",
+      "title": "Dashboard Quản lý Chất lượng & KPI",
+      "subtitle": "Hệ thống hợp nhất theo dõi vi phạm QC, thẻ điểm KPI và biểu đồ xu hướng",
+      "status": "migrated"
     }
   },
   "statistics": {

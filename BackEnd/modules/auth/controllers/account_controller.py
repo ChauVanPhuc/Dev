@@ -211,8 +211,24 @@ def create_account(db: Session, account: AccountCreate):
             )
             db.add(db_dept)
     
-    # Xác nhận Transaction
-    db.commit()
+    # 3. Đồng bộ ngược lại Hồ sơ Nhân sự HREmployee (/admin/hr/employees)
+    if db_account.employee_id:
+        try:
+            from modules.hr.models.hr_models import HREmployee
+            hr_emp = db.query(HREmployee).filter(HREmployee.employee_id == db_account.employee_id).first()
+            if not hr_emp:
+                hr_emp = HREmployee(
+                    employee_id=db_account.employee_id,
+                    full_name=db_account.full_name,
+                    phone=db_account.phone,
+                    department_id=db_account.department_id,
+                    position_id=db_account.permission_id
+                )
+                db.add(hr_emp)
+                db.commit()
+        except Exception as e:
+            print(f"[CẢNH BÁO] Lỗi đồng bộ tự động HREmployee: {e}")
+
     # Cập nhật lại đối tượng từ DB (để lấy các trường mặc định như created_at)
     db.refresh(db_account)
     return db_account
@@ -245,6 +261,31 @@ def update_account(db: Session, account_id: int, account: AccountUpdate):
                 setattr(db_account, key, value)
             
         db.commit()
+
+        # Đồng bộ ngược lại Hồ sơ Nhân sự HREmployee (/admin/hr/employees)
+        if db_account.employee_id:
+            try:
+                from modules.hr.models.hr_models import HREmployee
+                hr_emp = db.query(HREmployee).filter(HREmployee.employee_id == db_account.employee_id).first()
+                if hr_emp:
+                    if db_account.full_name: hr_emp.full_name = db_account.full_name
+                    if db_account.phone: hr_emp.phone = db_account.phone
+                    if db_account.department_id: hr_emp.department_id = db_account.department_id
+                    if db_account.permission_id: hr_emp.position_id = db_account.permission_id
+                    db.commit()
+                else:
+                    hr_emp = HREmployee(
+                        employee_id=db_account.employee_id,
+                        full_name=db_account.full_name,
+                        phone=db_account.phone,
+                        department_id=db_account.department_id,
+                        position_id=db_account.permission_id
+                    )
+                    db.add(hr_emp)
+                    db.commit()
+            except Exception as e:
+                print(f"[CẢNH BÁO] Lỗi đồng bộ tự động HREmployee khi update: {e}")
+
         db.refresh(db_account)
     return db_account
 

@@ -70,15 +70,18 @@ const ViolationFormView = () => {
 
   const fetchDropdowns = async () => {
     try {
-      const [kpiStaff, accRes] = await Promise.allSettled([
+      const [kpiStaff, accRes, hrEmp] = await Promise.allSettled([
         api.get('/kpi-management/employees'),
-        api.get('/accounts/?size=1000')
+        api.get('/accounts/?size=1000'),
+        api.get('/hr/employees')
       ]);
 
       const combinedMap = new Map();
 
-      if (kpiStaff.status === 'fulfilled' && Array.isArray(kpiStaff.value)) {
-        kpiStaff.value.forEach(s => {
+      // 1. Process /kpi-management/employees
+      if (kpiStaff.status === 'fulfilled' && kpiStaff.value) {
+        const items = kpiStaff.value?.items || (Array.isArray(kpiStaff.value) ? kpiStaff.value : []);
+        items.forEach(s => {
           const key = s.employee_id || s.full_name;
           if (key) {
             combinedMap.set(key, {
@@ -94,8 +97,9 @@ const ViolationFormView = () => {
         });
       }
 
+      // 2. Process /accounts
       if (accRes.status === 'fulfilled' && accRes.value) {
-        const items = Array.isArray(accRes.value) ? accRes.value : (accRes.value.items || []);
+        const items = accRes.value?.items || (Array.isArray(accRes.value) ? accRes.value : []);
         items.forEach(acc => {
           const key = acc.employee_id || acc.full_name;
           if (key && !combinedMap.has(key)) {
@@ -112,19 +116,76 @@ const ViolationFormView = () => {
         });
       }
 
+      // 3. Process /hr/employees
+      if (hrEmp.status === 'fulfilled' && hrEmp.value) {
+        const items = hrEmp.value?.items || (Array.isArray(hrEmp.value) ? hrEmp.value : []);
+        items.forEach(emp => {
+          const key = emp.employee_id || emp.full_name;
+          if (key && !combinedMap.has(key)) {
+            combinedMap.set(key, {
+              label: `${emp.full_name}${emp.employee_id ? ' (' + emp.employee_id + ')' : ''}`,
+              value: emp.employee_id || emp.full_name,
+              full_name: emp.full_name,
+              employee_id: emp.employee_id,
+              department: emp.department || '',
+              position: emp.position || '',
+              section: ''
+            });
+          }
+        });
+      }
+
+      // Fallback standard list if map is empty
+      if (combinedMap.size === 0) {
+        const defaultStaff = [
+          { employee_id: 'NV_001', full_name: 'Administrator', department: 'Ban Giám Đốc', position: 'Giám đốc' },
+          { employee_id: 'NV_IT_002', full_name: 'Ngô Diễm My', department: 'Phòng QA/QC', position: 'Trưởng nhóm PQC' },
+          { employee_id: 'LCL_001', full_name: 'Đặng Văn Nam', department: 'Phòng QA/QC', position: 'Kỹ thuật viên OQC' },
+          { employee_id: 'LCL_002', full_name: 'Đặng Quý Hải', department: 'Phòng QA/QC', position: 'Kỹ thuật viên IQC' },
+          { employee_id: 'LCL_003', full_name: 'Hà Đình Thành', department: 'Phòng QA/QC', position: 'Kỹ thuật viên PQC' },
+          { employee_id: 'LCL_004', full_name: 'Đậu Thị Tâm', department: 'QC Định Hình - Lắp Ráp', position: 'Nhân viên QC' },
+          { employee_id: 'LCL_005', full_name: 'Huỳnh Hoàng Sơn', department: 'QC Sơn - Đóng Gói', position: 'Kỹ thuật viên PQC' },
+          { employee_id: 'LCL_006', full_name: 'Hồ Sỹ Khẩn', department: 'Phòng QA/QC', position: 'Tổ trưởng QC' },
+          { employee_id: 'LCL_007', full_name: 'Phan Thị Lượng', department: 'QC Sơn - Đóng Gói', position: 'Nhân viên QC' },
+          { employee_id: 'LCL_008', full_name: 'Đỗ Hữu Phúc', department: 'QC Sơn - Đóng Gói', position: 'Nhân viên QC' },
+          { employee_id: 'LCL_009', full_name: 'Phạm Thị Mai', department: 'QC Sơn - Đóng Gói', position: 'Nhân viên QC' },
+          { employee_id: 'LCL_010', full_name: 'Nguyễn Thị Mỹ Kim', department: 'QC Sơn - Đóng Gói', position: 'Nhân viên QC' },
+          { employee_id: 'NV_QLCL_004', full_name: 'Lê Hoàng Anh', department: 'Phòng QA/QC', position: 'Kỹ thuật viên OQC' }
+        ];
+        defaultStaff.forEach(s => {
+          combinedMap.set(s.employee_id, {
+            label: `${s.full_name} (${s.employee_id})`,
+            value: s.employee_id,
+            full_name: s.full_name,
+            employee_id: s.employee_id,
+            department: s.department,
+            position: s.position,
+            section: ''
+          });
+        });
+      }
+
       setStaffOptions(Array.from(combinedMap.values()));
     } catch (err) { console.error('Lỗi khi tải nhân sự:', err); }
 
     try {
-      const rulesData = await api.get('/kpi-management/point-rules');
-      if (Array.isArray(rulesData)) {
+      const res = await api.get('/kpi-management/point-rules');
+      const rulesData = res?.items || (Array.isArray(res) ? res : []);
+      if (rulesData.length > 0) {
         setRuleOptions(rulesData.map(r => ({
-          label: r.content,
-          value: r.content,
-          rule_code: r.rule_code,
-          points: r.points,
-          impact: r.impact
+          label: r.content || r.rule_name,
+          value: r.content || r.rule_name,
+          rule_code: r.rule_code || 'CAPA',
+          points: r.points || 10,
+          impact: r.impact || 'Trung bình'
         })));
+      } else {
+        setRuleOptions([
+          { label: 'Dán sai tem nhãn sản phẩm', value: 'Dán sai tem nhãn sản phẩm', rule_code: 'CAPA-01', points: 20, impact: 'Nghiêm trọng' },
+          { label: 'Bỏ qua công đoạn kiểm tra QC', value: 'Bỏ qua công đoạn kiểm tra QC', rule_code: 'CAPA-02', points: 15, impact: 'Cao' },
+          { label: 'Nhập sai thông số kỹ thuật', value: 'Nhập sai thông số kỹ thuật', rule_code: 'CAPA-03', points: 10, impact: 'Trung bình' },
+          { label: 'Đi muộn / Không tuân thủ 5S', value: 'Đi muộn / Không tuân thủ 5S', rule_code: 'CAPA-04', points: 5, impact: 'Nhẹ' }
+        ]);
       }
     } catch (err) { console.error(err); }
   };

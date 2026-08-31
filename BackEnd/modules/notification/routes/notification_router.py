@@ -33,10 +33,18 @@ def create_notification(
     [POST] Tạo một thông báo mới.
     """
     try:
+        announcer_id = request.announcer_id
+        if announcer_id:
+            acc = db.query(AccountModel).filter(AccountModel.id == announcer_id).first()
+            if not acc:
+                first_acc = db.query(AccountModel).first()
+                announcer_id = first_acc.id if first_acc else None
+
         new_notification = NotificationModel(
             content=request.content,
-            announcer_id=request.announcer_id,
+            announcer_id=announcer_id,
             target_group=request.target_group,
+            target_stage=request.target_stage,
             priority_status=request.priority_status
         )
         db.add(new_notification)
@@ -60,13 +68,25 @@ def create_notification(
 def get_notifications(
     target_group: Optional[str] = Query(None, description="Lọc theo bộ phận nhận"),
     target_stage: Optional[str] = Query(None, description="Lọc theo công đoạn nhận (cho QC)"),
+    all: Optional[bool] = Query(False, description="Lấy tất cả thông báo cho Web Dashboard"),
     db: Session = Depends(get_db)
 ):
     """
     [GET] Lấy danh sách thông báo. Có thể lọc theo bộ phận và công đoạn.
     """
     try:
-        # print(f"DEBUG: get_notifications -> group={target_group}, stage={target_stage}")
+        query = db.query(NotificationModel)
+
+        if all:
+            banner_items = query.filter(
+                or_(
+                    NotificationModel.target_stage == "MOBILE_BANNER",
+                    NotificationModel.priority_status.like("BANNER:%")
+                )
+            ).order_by(NotificationModel.created_at.desc()).all()
+            if banner_items and len(banner_items) > 0:
+                return banner_items
+            return query.order_by(NotificationModel.created_at.desc()).limit(50).all()
         
         # [VÁ LỖI TỐI THƯỢNG]: Ngăn chặn App cũ (chưa update code) gọi API trống gây ra hiện tượng nhận nhầm tin
         if not target_group and not target_stage:
@@ -344,6 +364,39 @@ def get_notification_detail(notification_id: int, db: Session = Depends(get_db))
     if not notification:
         raise HTTPException(status_code=404, detail="Không tìm thấy thông báo này.")
     return notification
+
+@router.put("/{notification_id}", response_model=NotificationSchema)
+def update_notification(
+    notification_id: int,
+    request: NotificationCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    [PUT] Cập nhật nội dung thông báo.
+    """
+    try:
+        notification = db.query(NotificationModel).filter(NotificationModel.id == notification_id).first()
+        if not notification:
+            raise HTTPException(status_code=404, detail="Không tìm thấy thông báo này để cập nhật.")
+        
+        notification.content = request.content
+        if request.target_group:
+            notification.target_group = request.target_group
+        if request.target_stage:
+            notification.target_stage = request.target_stage
+        if request.priority_status:
+            notification.priority_status = request.priority_status
+        if request.announcer_id:
+            acc = db.query(AccountModel).filter(AccountModel.id == request.announcer_id).first()
+            if acc:
+                notification.announcer_id = request.announcer_id
+            
+        db.commit()
+        db.refresh(notification)
+        return notification
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/{notification_id}")
 def delete_notification(notification_id: int, db: Session = Depends(get_db)):

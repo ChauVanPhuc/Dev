@@ -24,8 +24,13 @@ const HandoverList = lazy(() => import('@modules/Delivery/Views/Handover/Handove
 const IncidentLogs = lazy(() => import('@modules/System/Views/Monitor/IncidentLogsView'));
 const InspectionReports = lazy(() => import('@modules/Inspection/Views/Report/InspectionReportsView'));
 const QualityOverview = lazy(() => import('@modules/Inspection/Views/Report/QualityOverviewView'));
+const QualityObjectives = lazy(() => import('@modules/Inspection/Views/Report/QualityObjectivesView'));
 const InspectionDetail = lazy(() => import('@modules/Inspection/Views/Report/InspectionDetailView'));
 const KPIReports = lazy(() => import('@modules/KPI/Views/Report/KPIReportsView'));
+const QualityKPIDashboard = lazy(() => import('@modules/KPI/Views/Report/QualityKPIDashboardView'));
+const KPIPersonnel = lazy(() => import('@modules/KPI/Views/Personnel/KPIPersonnelView'));
+const QualityProfiles = lazy(() => import('@modules/KPI/Views/QualityProfiles/QualityProfilesView'));
+const QualityEmployeeListView = lazy(() => import('@modules/KPI/Views/QualityEmployeeListView'));
 const KPIChecklist = lazy(() => import('@modules/KPI/Views/Checklist/KPIChecklistView'));
 const KPIItems = lazy(() => import('@modules/KPI/Views/Item/KPIItemsView'));
 const KPIRules = lazy(() => import('@modules/KPI/Views/Rule/KPIRulesView'));
@@ -658,6 +663,7 @@ function App() {
                 <Route path="reports" element={<ProtectedRoute permissionKey="reports"><InspectionReports /></ProtectedRoute>} />
                 <Route path="reports/detail/:type/:id" element={<ProtectedRoute permissionKey="reports"><InspectionDetail /></ProtectedRoute>} />
                 <Route path="quality" element={<ProtectedRoute permissionKey="quality-records"><QualityOverview /></ProtectedRoute>} />
+                <Route path="quality-targets" element={<ProtectedRoute permissionKey="quality-records"><QualityObjectives /></ProtectedRoute>} />
                 <Route path="quality-records" element={<ProtectedRoute permissionKey="quality-records"><QualityRecords /></ProtectedRoute>} />
                 <Route path="quality-records/:id" element={<ProtectedRoute permissionKey="quality-records"><QualityRecordsDetail /></ProtectedRoute>} />
                 <Route path="iso-documents" element={<ProtectedRoute permissionKey="iso-documents"><ISODocumentList mode="documents" /></ProtectedRoute>} />
@@ -665,6 +671,10 @@ function App() {
                 <Route path="iso-documents/edit/:id" element={<ProtectedRoute permissionKey={["iso-documents", "iso-processes"]}><ISOFormEditor /></ProtectedRoute>} />
                 <Route path="iso-processes/edit/:id" element={<ProtectedRoute permissionKey="iso-processes"><ISOProcessEditor /></ProtectedRoute>} />
                 <Route path="kpi" element={<ProtectedRoute permissionKey="kpi"><KPIReports /></ProtectedRoute>} />
+                <Route path="kpi/dashboard" element={<ProtectedRoute permissionKey="kpi"><QualityKPIDashboard /></ProtectedRoute>} />
+                <Route path="kpi/personnel" element={<ProtectedRoute permissionKey="kpi"><KPIPersonnel /></ProtectedRoute>} />
+                <Route path="kpi/quality-profiles" element={<ProtectedRoute permissionKey="kpi"><QualityProfiles /></ProtectedRoute>} />
+                <Route path="kpi/quality-employees" element={<ProtectedRoute permissionKey="kpi"><QualityEmployeeListView /></ProtectedRoute>} />
                 <Route path="kpi/checklist" element={<ProtectedRoute permissionKey="kpi"><KPIChecklist /></ProtectedRoute>} />
                 <Route path="kpi/list" element={<ProtectedRoute permissionKey="kpi"><KPIItems /></ProtectedRoute>} />
                 <Route path="kpi/rules" element={<ProtectedRoute permissionKey="kpi"><KPIRules /></ProtectedRoute>} />

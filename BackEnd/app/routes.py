@@ -18,7 +18,7 @@ from modules.inspection.routes.inspection_routes import router as inspection_rou
 
 from modules.equipment.routes import equipment_router, machinery_router
 
-from modules.kpi.routes import kpi_router, award_discipline_router, staff_evaluation_router, kpi_management_router
+from modules.kpi.routes import kpi_router, award_discipline_router, staff_evaluation_router, kpi_management_router, kpi_task_router, quality_employee_router
 
 from modules.capa.routes import capa_router
 from modules.quick_report.routes import quick_report_router
@@ -30,12 +30,14 @@ from modules.claim.routes.claim_routes import router as claim_router
 
 from modules.purchasing.routes import purchase_requisition_router, purchase_order_item_router
 from modules.inspection.routes.iso_router import router as iso_router
+from modules.inspection.routes.quality_objective_routes import router as quality_objective_router
 from modules.hr.routes import hr_router
 from modules.inspection_guide.routes.inspection_guide_router import router as inspection_guide_router
 
-
-
 api_router = APIRouter()
+
+api_router.include_router(quality_objective_router, prefix="/quality-objectives", tags=["quality-objectives"])
+
 
 
 
@@ -91,7 +93,9 @@ api_router.include_router(kpi_router.router, prefix="/kpis", tags=["kpis"])
 api_router.include_router(award_discipline_router.router, prefix="/awards-discipline", tags=["awards-discipline"])
 
 api_router.include_router(staff_evaluation_router.router, prefix="/staff-evaluations", tags=["staff-evaluations"])
+api_router.include_router(quality_employee_router.router, prefix="/quality-employees", tags=["quality-employees"])
 api_router.include_router(kpi_management_router.router, prefix="/kpi-management", tags=["kpi-management"])
+api_router.include_router(kpi_task_router.router, prefix="/kpi-tasks", tags=["kpi-tasks"])
 
 api_router.include_router(screen_router.router, prefix="/screens", tags=["screens"])
 

@@ -107,40 +107,94 @@ const AwardDiscipline = () => {
   // Fetch staff and rules for form dropdowns
   useEffect(() => {
     const fetchDropdowns = async () => {
+      // 1. Fetch Staff List
       try {
-        const staffResp = await apiClient.get('/kpi-management/employees')
-        const staffData = staffResp.data || staffResp
-        if (Array.isArray(staffData) && staffData.length > 0) {
-          setStaffOptions(staffData.map(item => ({
-            label: `${item.full_name}${item.employee_id ? ' (' + item.employee_id + ')' : ''}`,
-            value: item.full_name,
-            full_name: item.full_name,
-            employee_id: item.employee_id,
-            department: item.department,
-            position: item.position
-          })))
+        let staffList = []
+        
+        // Try /kpi-management/employees first
+        try {
+          const resp = await apiClient.get('/kpi-management/employees')
+          const raw = resp.data || resp
+          staffList = raw?.items || (Array.isArray(raw) ? raw : [])
+        } catch (e) {
+          console.warn('/kpi-management/employees failed, trying /hr/employees...', e)
         }
+
+        // Backup: Try /hr/employees if empty
+        if (!staffList || staffList.length === 0) {
+          try {
+            const resp2 = await apiClient.get('/hr/employees')
+            const raw2 = resp2.data || resp2
+            staffList = raw2?.items || (Array.isArray(raw2) ? raw2 : [])
+          } catch (e) {
+            console.warn('/hr/employees failed...', e)
+          }
+        }
+
+        // Backup 2: System fallback list if APIs return empty
+        if (!staffList || staffList.length === 0) {
+          staffList = [
+            { employee_id: 'NV_001', full_name: 'Administrator', department: 'Ban Giám Đốc', position: 'Giám đốc' },
+            { employee_id: 'NV_IT_002', full_name: 'Ngô Diễm My', department: 'Phòng QA/QC', position: 'Trưởng nhóm PQC' },
+            { employee_id: 'LCL_001', full_name: 'Đặng Văn Nam', department: 'Phòng QA/QC', position: 'Kỹ thuật viên OQC' },
+            { employee_id: 'LCL_002', full_name: 'Đặng Quý Hải', department: 'Phòng QA/QC', position: 'Kỹ thuật viên IQC' },
+            { employee_id: 'LCL_003', full_name: 'Hà Đình Thành', department: 'Phòng QA/QC', position: 'Kỹ thuật viên PQC' },
+            { employee_id: 'LCL_004', full_name: 'Đậu Thị Tâm', department: 'QC Định Hình - Lắp Ráp', position: 'Nhân viên QC' },
+            { employee_id: 'LCL_005', full_name: 'Huỳnh Hoàng Sơn', department: 'QC Sơn - Đóng Gói', position: 'Kỹ thuật viên PQC' },
+            { employee_id: 'LCL_006', full_name: 'Hồ Sỹ Khẩn', department: 'Phòng QA/QC', position: 'Tổ trưởng QC' },
+            { employee_id: 'LCL_007', full_name: 'Phan Thị Lượng', department: 'QC Sơn - Đóng Gói', position: 'Nhân viên QC' },
+            { employee_id: 'LCL_008', full_name: 'Đỗ Hữu Phúc', department: 'QC Sơn - Đóng Gói', position: 'Nhân viên QC' },
+            { employee_id: 'LCL_009', full_name: 'Phạm Thị Mai', department: 'QC Sơn - Đóng Gói', position: 'Nhân viên QC' },
+            { employee_id: 'LCL_010', full_name: 'Nguyễn Thị Mỹ Kim', department: 'QC Sơn - Đóng Gói', position: 'Nhân viên QC' },
+            { employee_id: 'NV_QLCL_004', full_name: 'Lê Hoàng Anh', department: 'Phòng QA/QC', position: 'Kỹ thuật viên OQC' }
+          ]
+        }
+
+        setStaffOptions(staffList.map(item => ({
+          label: `${item.full_name || item.name}${item.employee_id ? ' (' + item.employee_id + ')' : ''}`,
+          value: item.full_name || item.name,
+          full_name: item.full_name || item.name,
+          employee_id: item.employee_id || '',
+          department: item.department || '',
+          position: item.position || ''
+        })))
       } catch (err) {
         console.error('Lỗi khi tải nhân sự:', err)
       }
 
+      // 2. Fetch Point Rules / Issues List
       try {
-        const rulesResp = await apiClient.get('/kpi-management/point-rules')
-        const rulesData = rulesResp.data || rulesResp
-        if (Array.isArray(rulesData) && rulesData.length > 0) {
+        let rulesData = []
+        try {
+          const rulesResp = await apiClient.get('/kpi-management/point-rules')
+          const rawRules = rulesResp.data || rulesResp
+          rulesData = rawRules?.items || (Array.isArray(rawRules) ? rawRules : [])
+        } catch (e) {
+          console.warn('/kpi-management/point-rules failed...', e)
+        }
+
+        if (rulesData && rulesData.length > 0) {
           setRulesList(rulesData)
           setIssueOptions(rulesData.map(item => ({
-            label: item.content,
-            value: item.content,
-            rule_code: item.rule_code,
-            points: item.points,
-            impact: item.impact
+            label: item.content || item.rule_name,
+            value: item.content || item.rule_name,
+            rule_code: item.rule_code || 'CAPA',
+            points: item.points || 10,
+            impact: item.impact || 'Trung bình'
           })))
+        } else {
+          setIssueOptions([
+            { label: 'Dán sai tem nhãn sản phẩm', value: 'Dán sai tem nhãn sản phẩm', rule_code: 'CAPA-01', points: 20, impact: 'Nghiêm trọng' },
+            { label: 'Bỏ qua công đoạn kiểm tra QC', value: 'Bỏ qua công đoạn kiểm tra QC', rule_code: 'CAPA-02', points: 15, impact: 'Cao' },
+            { label: 'Nhập sai thông số kỹ thuật', value: 'Nhập sai thông số kỹ thuật', rule_code: 'CAPA-03', points: 10, impact: 'Trung bình' },
+            { label: 'Đi muộn / Không tuân thủ 5S', value: 'Đi muộn / Không tuân thủ 5S', rule_code: 'CAPA-04', points: 5, impact: 'Nhẹ' }
+          ])
         }
       } catch (err) {
         console.error('Lỗi khi tải điều luật:', err)
       }
     }
+
     fetchDropdowns()
   }, [])
 

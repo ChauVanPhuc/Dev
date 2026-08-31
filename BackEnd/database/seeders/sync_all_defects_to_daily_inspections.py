@@ -10,8 +10,8 @@ import re
 import json
 from datetime import datetime, date
 
-if sys.stdout.encoding != 'utf-8':
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
@@ -21,6 +21,8 @@ from modules.inspection.models.daily_inspection import DailyInspectionRecord, Da
 from modules.inspection.models.defect_type import DefectType
 from modules.inspection.models.input_inspection import InputInspection
 from modules.delivery.models.deliveries import Delivery
+
+from database.migrations.fix_reports_stages_and_inspectors_migration import get_exact_inspector
 
 def run_sync():
     db = SessionLocal()
@@ -101,8 +103,12 @@ def run_sync():
         grouped_deliveries = {}
         for deliv in returned_deliveries:
             deliv_date = deliv.created_at.date() if isinstance(deliv.created_at, datetime) else (deliv.created_at or date.today())
-            stage_name = deliv.delivery_stage or "Kiểm tra bàn giao"
-            inspector_id = deliv.qc_receipt or deliv.sx_delivery or 4
+            raw_stage = deliv.delivery_stage or "Kiểm tra bàn giao"
+            inspector_id = deliv.qc_receipt or deliv.sx_delivery
+            if not inspector_id or inspector_id <= 4:
+                inspector_id, _, stage_name = get_exact_inspector(raw_stage, deliv.id)
+            else:
+                stage_name = raw_stage
 
             note_str = deliv.note or ""
             defect_id = None
@@ -150,8 +156,12 @@ def run_sync():
             else:
                 rec_date = date.today()
 
-            stage_name = inp.stage or "Nhập Kho/Đầu Vào"
-            inspector_id = inp.inspector_id or 4
+            raw_stage = inp.stage or "Nhập Kho/Đầu Vào"
+            inspector_id = inp.inspector_id
+            if not inspector_id or inspector_id <= 4:
+                inspector_id, _, stage_name = get_exact_inspector(raw_stage, inp.id)
+            else:
+                stage_name = raw_stage
 
             if not inp.data_json:
                 continue

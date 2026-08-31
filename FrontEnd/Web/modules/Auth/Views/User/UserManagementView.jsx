@@ -116,6 +116,7 @@ const UserManagement = () => {
   const [confirmDeleteModal, setConfirmDeleteModal] = useState({ show: false, user: null });
 
   // ─── State chế độ xem & phân quyền ──────────────────────────────────────────
+  const [displayMode, setDisplayMode] = useState('table'); // 'table' | 'tree'
   const [viewMode, setViewMode] = useState('account_info'); // 'account_info' | 'permissions_web' | 'permissions_mobile'
   const [showViewModePanel, setShowViewModePanel] = useState(false);
   const [userPermissions, setUserPermissions] = useState({});
@@ -832,7 +833,7 @@ const UserManagement = () => {
         )}
       </div>
 
-        {/* ── Bảng dữ liệu ── */}
+        {/* ── Nội dung hiển thị ── */}
         <div className="admin-list-layout">
           <div className="mgmt-table card admin-table-card">
             {loading ? (

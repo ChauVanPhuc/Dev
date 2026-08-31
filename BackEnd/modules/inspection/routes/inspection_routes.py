@@ -102,6 +102,8 @@ def get_daily_inspections(
     for r in records:
         if r.inspector_id and r.inspector_id in name_map:
             r.inspector_name = name_map[r.inspector_id]
+        elif hasattr(r, 'inspector_name') and r.inspector_name:
+            pass
         else:
             stage_str = str(r.stage_name or '').strip()
             factory = 2
@@ -122,7 +124,7 @@ def get_daily_inspections(
                 fallback_id = 40  # 40: Trần Thị Ánh (QC NM3)
             
             r.inspector_id = fallback_id
-            r.inspector_name = name_map.get(fallback_id, "Hà Đình Thành")
+            r.inspector_name = name_map.get(fallback_id, default_qc_name)
     return records
 
 @router.get("/inbound", response_model=List[InputInspectionRead])
@@ -3293,39 +3295,69 @@ def create_input_inspection(
 
 
 @router.get("/pending")
-def get_pending_inspections(db: Session = Depends(get_db)):
+def get_pending_inspections(
+    q: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
     """
-    [GET] Lấy danh sách phiếu kiểm tra chưa xác nhận trong 24 giờ qua.
-    Gộp cả phiếu đầu vào (Input) và phiếu công đoạn (Stage).
+    [GET] Lấy danh sách toàn bộ phiếu kiểm tra chưa xác nhận (is_confirmed == False).
+    Hỗ trợ tìm kiếm theo từ khóa q.
     """
-    time_limit = datetime.datetime.now() - datetime.timedelta(hours=24)
+    query = db.query(InputInspection).filter(
+        or_(InputInspection.is_confirmed == False, InputInspection.is_confirmed.is_(None))
+    )
     
-    # 1. Truy vấn các phiếu InputInspection chưa xác nhận trong 24h
-    inbound_query = db.query(InputInspection).filter(
-        InputInspection.is_confirmed == False,
-        InputInspection.inspected_at >= time_limit
-    ).order_by(InputInspection.inspected_at.desc()).all()
+    if q and q.strip():
+        search_kw = f"%{q.strip()}%"
+        query = query.filter(
+            or_(
+                InputInspection.ticket_code.ilike(search_kw),
+                InputInspection.part_name.ilike(search_kw),
+                InputInspection.batch_no.ilike(search_kw),
+                InputInspection.product_sku.ilike(search_kw),
+                InputInspection.note.ilike(search_kw),
+                InputInspection.inspection_type.ilike(search_kw),
+                InputInspection.stage.ilike(search_kw)
+            )
+        )
+        
+    inbound_query = query.order_by(
+        InputInspection.inspected_at.desc(),
+        InputInspection.created_at.desc(),
+        InputInspection.id.desc()
+    ).all()
     
     pending_tasks = []
     
     # Map InputInspections
     for item in inbound_query:
-        type_label = get_inspectionTypeLabel_local(item.inspection_type) if item.inspection_type else "Kiểm tra đầu vào (IQC)"
+        type_label = get_inspectionTypeLabel_local(item.inspection_type or item.stage) if (item.inspection_type or item.stage) else "Kiểm tra phiếu"
+        task_type = "stage" if (item.inspection_type and item.inspection_type != "first_sample" and not item.plan_id) else "input"
+        ticket_str = item.ticket_code or f"KT{item.id:03d}"
+        part_str = item.part_name or item.product_sku or item.batch_no or "N/A"
+        rec_date = item.inspected_at or item.created_at or datetime.datetime.now()
+        
         pending_tasks.append({
             "id": item.id,
-            "type": "input",
-            "task_name": f"Xác nhận phiếu kiểm tra #{item.ticket_code or item.id} - PO/Linh kiện: {item.batch_no or item.part_name or 'N/A'}",
+            "type": task_type,
+            "ticket_code": ticket_str,
+            "task_name": f"Xác nhận hồ sơ kiểm tra #{ticket_str} ({part_str})" if ticket_str else f"Xác nhận hồ sơ kiểm tra - {part_str}",
             "category": type_label,
             "priority": 3,
             "status": "Chưa Làm",
-            "recorded_date": item.inspected_at or item.created_at,
-            "completion_date": item.inspected_at or item.created_at,
-            "notes": item.note or item.notes or "Chờ xác nhận kết quả kiểm tra"
+            "recorded_date": rec_date.isoformat() if hasattr(rec_date, 'isoformat') else str(rec_date),
+            "completion_date": rec_date.isoformat() if hasattr(rec_date, 'isoformat') else str(rec_date),
+            "notes": item.note or item.notes or "Chờ xác nhận kết quả kiểm tra",
+            "part_name": item.part_name or item.product_sku or "",
+            "batch_no": item.batch_no or "",
+            "inspector_name": item.inspector_name or "QC",
+            "result": item.result or item.conclusion or "pass",
+            "image_path_1": item.image_path_1,
+            "image_path_2": item.image_path_2,
+            "image_path_3": item.image_path_3,
+            "is_confirmed": False
         })
         
-    # Sắp xếp theo ngày ghi nhận giảm dần
-    pending_tasks.sort(key=lambda x: x["recorded_date"] or datetime.datetime.now(), reverse=True)
-    
     # Thêm số thứ tự STT sau khi sắp xếp
     for i, task in enumerate(pending_tasks):
         task["stt"] = f"{(i+1):02d}"

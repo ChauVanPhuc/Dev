@@ -16,7 +16,7 @@ class Notification(Base):
     content = Column(NVARCHAR(None)) # NVARCHAR(MAX) trong SQL Server cho phép lưu nội dung rất dài
     
     # Người gửi thông báo (Khóa ngoại liên kết tới bảng accounts)
-    announcer_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
+    announcer_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
     
     # Đối tượng nhận (vd: Toàn công ty, Sản xuất, QC...)
     target_group = Column(NVARCHAR(100), default="Toàn công ty")
